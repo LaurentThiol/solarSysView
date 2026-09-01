@@ -1,0 +1,98 @@
+import rawDraws from "@/data/euromillions-2026.json"
+
+export type Draw = {
+  id: number
+  date: string
+  weekday: "mardi" | "vendredi" | string
+  numbers: number[]
+  stars: number[]
+}
+
+export const DRAWS: Draw[] = [...rawDraws].sort((a, b) =>
+  b.date.localeCompare(a.date)
+)
+
+export const MONTHS = [
+  { value: "all", label: "Tous les mois" },
+  { value: "01", label: "Janvier" },
+  { value: "02", label: "Février" },
+  { value: "03", label: "Mars" },
+  { value: "04", label: "Avril" },
+  { value: "05", label: "Mai" },
+  { value: "06", label: "Juin" },
+  { value: "07", label: "Juillet" },
+  { value: "08", label: "Août" },
+] as const
+
+export const FIRST_DRAW = DRAWS[DRAWS.length - 1]
+export const LAST_DRAW = DRAWS[0]
+
+export function formatDrawDate(isoDate: string) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(`${isoDate}T12:00:00`))
+}
+
+export function monthOf(isoDate: string) {
+  return isoDate.slice(5, 7)
+}
+
+export function parseQueryNumbers(query: string): number[] {
+  return [
+    ...new Set(
+      query
+        .split(/[\s,;+]+/)
+        .map((token) => Number.parseInt(token, 10))
+        .filter((n) => Number.isInteger(n) && n >= 1 && n <= 50)
+    ),
+  ]
+}
+
+export function drawMatchesQuery(draw: Draw, wanted: number[]) {
+  if (wanted.length === 0) return true
+  const pool = new Set([...draw.numbers, ...draw.stars])
+  return wanted.every((n) => pool.has(n))
+}
+
+export function toCsv(draws: Draw[]) {
+  const header = "date,jour,tirage,n1,n2,n3,n4,n5,etoile1,etoile2"
+  const rows = [...draws]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((draw) =>
+      [
+        draw.date,
+        draw.weekday,
+        draw.id,
+        ...draw.numbers,
+        ...draw.stars,
+      ].join(",")
+    )
+  return `${header}\n${rows.join("\n")}\n`
+}
+
+export function numberFrequencies(draws: Draw[]) {
+  const counts = new Map<number, number>()
+  for (const draw of draws) {
+    for (const n of draw.numbers) {
+      counts.set(n, (counts.get(n) ?? 0) + 1)
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0] - b[0])
+    .slice(0, 10)
+}
+
+export function starFrequencies(draws: Draw[]) {
+  const counts = new Map<number, number>()
+  for (const draw of draws) {
+    for (const n of draw.stars) {
+      counts.set(n, (counts.get(n) ?? 0) + 1)
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0] - b[0])
+    .slice(0, 6)
+}
