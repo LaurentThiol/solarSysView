@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Synchro — Tirages EuroMillions</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <span class="star" aria-hidden="true">★</span>
+        <div>
+          <h1>Synchro</h1>
+          <p>Tirages EuroMillions · archives FDJ · Neon</p>
+        </div>
+      </div>
+      <div class="meta">
+        <span id="mode-badge" class="badge">…</span>
+        <button id="btn-sync" class="btn" type="button" hidden>Synchroniser FDJ</button>
+      </div>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab is-active" data-tab="home" type="button">Dernier tirage</button>
+      <button class="tab" data-tab="history" type="button">Historique</button>
+      <button class="tab" data-tab="stats" type="button">Statistiques</button>
+      <button class="tab" data-tab="grids" type="button">Mes grilles</button>
+    </nav>
+
+    <main>
+      <section id="tab-home" class="panel is-active">
+        <p id="status" class="status">Chargement…</p>
+        <article class="card hero" id="latest-card">
+          <h2>Dernier tirage</h2>
+          <p id="latest-date" class="muted">—</p>
+          <div id="latest-balls" class="balls"></div>
+          <dl class="facts" id="latest-facts"></dl>
+        </article>
+        <article class="card">
+          <h2>Vérifier une grille</h2>
+          <p class="muted">5 numéros (1–50) et 2 étoiles (1–12), comparés au dernier tirage.</p>
+          <div id="picker-numbers" class="picker" data-kind="numbers"></div>
+          <div id="picker-stars" class="picker stars" data-kind="stars"></div>
+          <div class="row">
+            <label>Comparer aux
+              <select id="check-n">
+                <option value="1">dernier tirage</option>
+                <option value="10">10 derniers</option>
+                <option value="50">50 derniers</option>
+              </select>
+            </label>
+            <button id="btn-check" class="btn primary" type="button">Vérifier</button>
+            <button id="btn-save" class="btn" type="button">Enregistrer</button>
+          </div>
+          <div id="check-result"></div>
+        </article>
+      </section>
+
+      <section id="tab-history" class="panel">
+        <article class="card">
+          <div class="row">
+            <input id="history-q" type="search" placeholder="Rechercher une date ou un numéro…" />
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Jour</th>
+                  <th>Numéros</th>
+                  <th>Étoiles</th>
+                  <th>Rang 1 EU</th>
+                </tr>
+              </thead>
+              <tbody id="history-body"></tbody>
+            </table>
+          </div>
+          <div class="row">
+            <button id="btn-more" class="btn" type="button">Charger plus</button>
+            <span id="history-count" class="muted"></span>
+          </div>
+        </article>
+      </section>
+
+      <section id="tab-stats" class="panel">
+        <article class="card">
+          <div class="row">
+            <label>Période
+              <select id="stats-era">
+                <option value="current">Formule actuelle (depuis sept. 2016, 12 étoiles)</option>
+                <option value="all">Tout l’historique (2004 →)</option>
+              </select>
+            </label>
+          </div>
+          <p id="stats-summary" class="muted"></p>
+          <h3>Numéros les plus sortis</h3>
+          <div id="hot-numbers" class="balls"></div>
+          <h3>Numéros en retard</h3>
+          <div id="cold-numbers" class="chips"></div>
+          <h3>Étoiles</h3>
+          <div id="hot-stars" class="balls stars"></div>
+          <h3>Fréquence 1–50</h3>
+          <div id="freq-numbers" class="heat"></div>
+          <h3>Fréquence étoiles</h3>
+          <div id="freq-stars" class="heat"></div>
+          <p class="disclaimer">
+            Chaque tirage est indépendant. Les fréquences passées n’améliorent pas les chances
+            de gagner. Jeu interdit aux mineurs. Jouer comporte des risques.
+          </p>
+        </article>
+      </section>
+
+      <section id="tab-grids" class="panel">
+        <article class="card">
+          <h2>Grilles enregistrées</h2>
+          <p class="muted" id="grids-mode"></p>
+          <div id="grids-list"></div>
+        </article>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        Données publiques des archives FDJ. Application indépendante, non affiliée à La Française des Jeux.
+        <a href="https://www.anj.fr/" rel="noreferrer">ANJ</a>
+        ·
+        <a href="https://www.joueurs-info-service.fr/" rel="noreferrer">Joueurs Info Service 09 74 75 13 13</a>
+      </p>
+    </footer>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,4 +1,18 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Python
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+synchro/web/snapshot.json
+*.egg-info/
+dist/
+build/
 
 # dependencies
 /node_modules
@@ -17,11 +31,10 @@
 /.next/
 /out/
 
-# production
-/build
-
 # misc
 .DS_Store
+.idea/
+.vscode/
 *.pem
 
 # debug
@@ -30,13 +43,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files (.env.example stays tracked)
+.env.local
+.env.*.local
 
-# vercel
+# vercel / netlify
 .vercel
-
-# netlify
 .netlify
 
 # typescript
