@@ -6,7 +6,8 @@ import sys
 import uvicorn
 
 from synchro import db
-from synchro.app import export_snapshot, sync_draws
+from synchro.sync import ensure_draws, sync_draws
+from synchro.app import export_snapshot
 from synchro.config import get_settings
 
 
@@ -19,6 +20,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("init-db", help="Créer les tables Neon")
     sub.add_parser("sync", help="Télécharger l'historique FDJ et l'écrire dans Neon")
+    sub.add_parser(
+        "ensure",
+        help="Rattraper les derniers tirages FDJ si Neon est en retard (archive récente)",
+    )
     sub.add_parser("export", help="Exporter un snapshot JSON pour Netlify (site statique)")
     serve = sub.add_parser("serve", help="Lancer l'interface locale")
     serve.add_argument("--host", default=None)
@@ -36,6 +41,24 @@ def main(argv: list[str] | None = None) -> int:
         latest = result.get("latest") or {}
         print(
             f"Synchro OK — {result['fetched']} tirages FDJ, "
+            f"{result['upserted']} lignes écrites. "
+            f"Dernier: {latest.get('draw_date')} "
+            f"{latest.get('numbers')} ★ {latest.get('stars')}"
+        )
+        return 0
+
+    if args.command == "ensure":
+        result = ensure_draws()
+        latest = result.get("latest") or {}
+        if result.get("skipped"):
+            print(
+                f"Tirages déjà à jour — dernier {latest.get('draw_date')} "
+                f"(attendu {result.get('expected_draw_date')})."
+            )
+            return 0
+        archive = "archive récente" if result.get("latest_only") else "historique complet"
+        print(
+            f"Synchro OK ({archive}) — {result['fetched']} tirages FDJ, "
             f"{result['upserted']} lignes écrites. "
             f"Dernier: {latest.get('draw_date')} "
             f"{latest.get('numbers')} ★ {latest.get('stars')}"

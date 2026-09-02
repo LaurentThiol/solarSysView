@@ -44,6 +44,9 @@ export async function GET(request: Request) {
           neon?: Record<string, unknown>
           draws?: number | null
           latest?: Record<string, unknown> | null
+          last_sync?: Record<string, unknown> | null
+          stale?: boolean | null
+          expected_draw_date?: string | null
         } | null)
       : null
   const neon = health?.neon ?? {
@@ -57,6 +60,9 @@ export async function GET(request: Request) {
     git,
     draws: health?.draws ?? null,
     latest: health?.latest ?? null,
+    last_sync: health?.last_sync ?? null,
+    stale: health?.stale ?? null,
+    expected_draw_date: health?.expected_draw_date ?? null,
     quitAvailable: !isNetlify(),
     keys: {
       neon: secretSnapshot("neon").configured,

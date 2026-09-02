@@ -19,6 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { formatSyncStamp } from "@/lib/draws"
 
 type GitCommit = {
   sha: string
@@ -84,6 +85,10 @@ type AdminPayload = {
     error?: string
   }
   draws: number | null
+  latest?: { draw_date?: string } | null
+  last_sync?: { finished_at?: string; status?: string } | null
+  stale?: boolean | null
+  expected_draw_date?: string | null
 }
 
 type TestResult = { ok: boolean; detail: string }
@@ -521,6 +526,26 @@ export function AdminPanel() {
           <p className="text-sm">
             Tirages <strong>{data.draws ?? "—"}</strong>
           </p>
+          <p className="text-sm">
+            Dernier tirage{" "}
+            <strong>{data.latest?.draw_date || "—"}</strong>
+          </p>
+          <p className="text-sm">
+            Dernière MAJ{" "}
+            <strong>
+              {formatSyncStamp(data.last_sync?.finished_at) || "—"}
+            </strong>
+          </p>
+          {data.stale ? (
+            <p className="sm:col-span-3 text-sm text-amber-200">
+              En retard
+              {data.expected_draw_date
+                ? ` — tirage attendu ${data.expected_draw_date}`
+                : "."}{" "}
+              Le bouton ci-dessous importe l’historique complet ; au lancement,{" "}
+              <code>./launch</code> rattrape seulement l’archive récente.
+            </p>
+          ) : null}
           {typeof tests.neon === "object" ? (
             <p className={`sm:col-span-3 text-sm ${tests.neon.ok ? "text-emerald-300" : "text-red-300"}`}>
               {tests.neon.detail}
@@ -658,8 +683,10 @@ export function AdminPanel() {
         <CardHeader>
           <CardTitle>Synchro FDJ → Neon</CardTitle>
           <CardDescription>
-            Télécharge les archives publiques et les écrit dans PostgreSQL. Équivalent de{" "}
-            <code>python -m synchro sync</code>.
+            Télécharge les 6 archives publiques (historique complet) et les écrit
+            dans PostgreSQL. Équivalent de <code>python -m synchro sync</code>.
+            Au démarrage, <code>./launch</code> appelle{" "}
+            <code>python -m synchro ensure</code> (archive récente seulement).
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">

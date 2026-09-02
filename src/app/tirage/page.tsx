@@ -1,12 +1,11 @@
 import type { Metadata } from "next"
 
 import { DrawsExplorer } from "@/components/draws-explorer"
-import { FIRST_DRAW, LAST_DRAW } from "@/lib/draws"
 
 export const metadata: Metadata = {
   title: "Tirage — Synchro",
   description:
-    "Tous les tirages EuroMillions 2026, filtrables par mois et par numéros, avec export CSV.",
+    "Tirages EuroMillions, filtrables par mois et par numéros, avec export CSV.",
 }
 
 export default function TiragePage() {
@@ -14,13 +13,6 @@ export default function TiragePage() {
     <div className="flex flex-1 flex-col">
       <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         <h1 className="text-3xl font-semibold tracking-tight">Tirage · archives</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          {FIRST_DRAW.date.slice(0, 4) === LAST_DRAW.date.slice(0, 4)
-            ? `Les ${LAST_DRAW.id - FIRST_DRAW.id + 1} tirages de ${FIRST_DRAW.date.slice(0, 4)}, du ${FIRST_DRAW.weekday} ${FIRST_DRAW.date} au ${LAST_DRAW.weekday} ${LAST_DRAW.date}.`
-            : "Historique des tirages EuroMillions."}{" "}
-          5 numéros (1–50) et 2 étoiles (1–12). Données recoupées avec les archives
-          publiques ; source officielle : FDJ.
-        </p>
       </div>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-12 sm:px-6">
         <DrawsExplorer />

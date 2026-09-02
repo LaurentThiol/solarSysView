@@ -59,6 +59,9 @@ export async function GET(request: Request) {
     },
     draws: health?.draws ?? null,
     latest: health?.latest ?? null,
+    last_sync: health?.last_sync ?? null,
+    stale: health?.stale ?? null,
+    expected_draw_date: health?.expected_draw_date ?? null,
   })
 }
 

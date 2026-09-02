@@ -65,6 +65,8 @@ def test_health_ok_includes_draws() -> None:
     assert body["ok"] is True
     assert body["draws"] == 1976
     assert body["neon"]["latency_ms"] == 12
+    assert body["stale"] is True
+    assert body["expected_draw_date"]
 
 
 def test_shutdown_localhost_schedules_stop(tmp_path) -> None:
@@ -212,3 +214,23 @@ def test_reload_env_rereads_settings() -> None:
     assert body["neon"]["configured"] is False
     assert body["neon"]["connected"] is False
     assert body["neon"].get("host") in (None, "")
+
+
+def test_sync_ensure_endpoint_skips_when_fresh() -> None:
+    payload = {
+        "ok": True,
+        "skipped": True,
+        "stale": False,
+        "expected_draw_date": "2026-09-01",
+        "fetched": 0,
+        "upserted": 0,
+        "latest": {"draw_date": "2026-09-01"},
+    }
+    with patch("synchro.app.ensure_draws", return_value=payload):
+        with _client() as client:
+            response = client.post("/api/sync/ensure")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["skipped"] is True
+    assert body["stale"] is False

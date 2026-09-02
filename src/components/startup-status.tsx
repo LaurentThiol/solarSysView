@@ -7,6 +7,7 @@ import { LogOut } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { isLocalHost } from "@/lib/api-base"
+import { formatSyncStamp } from "@/lib/draws"
 
 type GitPayload = {
   ok: boolean
@@ -35,6 +36,9 @@ type StartupPayload = {
   git: GitPayload
   draws: number | null
   latest: { draw_date?: string } | null
+  last_sync?: { finished_at?: string; status?: string } | null
+  stale?: boolean | null
+  expected_draw_date?: string | null
   quitAvailable?: boolean
 }
 
@@ -90,6 +94,7 @@ export function StartupStatus() {
   const [quitting, setQuitting] = useState(false)
   const [quitDone, setQuitDone] = useState(false)
   const [localApp, setLocalApp] = useState(false)
+  const [ensuring, setEnsuring] = useState(false)
 
   useEffect(() => {
     setLocalApp(isLocalHost(window.location.hostname))
@@ -133,6 +138,22 @@ export function StartupStatus() {
       window.removeEventListener("focus", onFocus)
     }
   }, [refresh])
+
+  const onNeon = useCallback(async () => {
+    if (ensuring) return
+    const stale = Boolean(data?.stale)
+    if (localApp && stale) {
+      setEnsuring(true)
+      try {
+        await fetch("/api/sync/ensure", { method: "POST", cache: "no-store" })
+      } catch {
+        // le rattrapage peut échouer si FDJ/Neon sont lents
+      } finally {
+        setEnsuring(false)
+      }
+    }
+    await refresh({ silent: true })
+  }, [data?.stale, ensuring, localApp, refresh])
 
   const quit = useCallback(async () => {
     if (quitting) return
@@ -224,21 +245,41 @@ export function StartupStatus() {
     : data.backend.error || "arrêtée"
 
   const neonOk = Boolean(data.neon.ok || data.neon.connected)
+  const maj = formatSyncStamp(data.last_sync?.finished_at)
   let neonTone: Tone = "off"
   let neonDetail = "non configuré"
   if (neonOk && data.neon.waking) {
     neonTone = "warn"
-    neonDetail = "réveil"
+    neonDetail = ensuring ? "rattrapage…" : "réveil"
+  } else if (neonOk && data.stale) {
+    neonTone = "warn"
+    neonDetail = ensuring ? "rattrapage…" : maj ? `en retard · ${maj}` : "en retard"
   } else if (neonOk) {
     neonTone = "ok"
-    neonDetail =
-      data.neon.latency_ms != null
+    neonDetail = maj
+      ? `MAJ ${maj}`
+      : data.neon.latency_ms != null
         ? `${data.neon.latency_ms} ms`
         : data.latest?.draw_date || "en ligne"
   } else if (data.neon.configured) {
     neonTone = "err"
     neonDetail = "hors ligne"
   }
+
+  const neonTitle = [
+    neonOk ? "Neon en ligne" : data.neon.error || "Neon",
+    data.neon.host ? data.neon.host : null,
+    data.latest?.draw_date ? `dernier tirage ${data.latest.draw_date}` : null,
+    data.neon.latency_ms != null ? `${data.neon.latency_ms} ms` : null,
+    data.stale && data.expected_draw_date
+      ? `attendu ${data.expected_draw_date}`
+      : null,
+    localApp && data.stale
+      ? "cliquer pour rattraper les tirages"
+      : "cliquer pour retester",
+  ]
+    .filter(Boolean)
+    .join(" · ")
 
   let gitTone: Tone = "off"
   let gitDetail = "inconnu"
@@ -287,12 +328,8 @@ export function StartupStatus() {
           label="Neon"
           detail={neonDetail}
           tone={neonTone}
-          title={
-            neonOk
-              ? `Neon en ligne${data.neon.host ? ` · ${data.neon.host}` : ""} · cliquer pour retester`
-              : data.neon.error || "Cliquer pour retester"
-          }
-          onClick={() => void refresh()}
+          title={neonTitle}
+          onClick={() => void onNeon()}
         />
         <Pill
           label="GitHub"

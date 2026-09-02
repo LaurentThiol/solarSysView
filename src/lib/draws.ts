@@ -22,10 +22,49 @@ export const MONTHS = [
   { value: "06", label: "Juin" },
   { value: "07", label: "Juillet" },
   { value: "08", label: "Août" },
+  { value: "09", label: "Septembre" },
+  { value: "10", label: "Octobre" },
+  { value: "11", label: "Novembre" },
+  { value: "12", label: "Décembre" },
 ] as const
 
 export const FIRST_DRAW = DRAWS[DRAWS.length - 1]
 export const LAST_DRAW = DRAWS[0]
+
+export function monthsPresent(draws: Draw[]) {
+  const present = new Set(draws.map((draw) => monthOf(draw.date)))
+  return [
+    { value: "all", label: "Tous les mois" },
+    ...MONTHS.filter((item) => item.value !== "all" && present.has(item.value)),
+  ]
+}
+
+export function archiveSummary(draws: Draw[]) {
+  if (draws.length === 0) {
+    return "Historique des tirages EuroMillions."
+  }
+  const sorted = [...draws].sort((a, b) => a.date.localeCompare(b.date))
+  const first = sorted[0]
+  const last = sorted[sorted.length - 1]
+  const year = first.date.slice(0, 4)
+  const sameYear = year === last.date.slice(0, 4)
+  if (sameYear) {
+    return `Les ${draws.length} tirages de ${year}, du ${first.weekday} ${first.date} au ${last.weekday} ${last.date}.`
+  }
+  return `Les ${draws.length} tirages, du ${first.weekday} ${first.date} au ${last.weekday} ${last.date}.`
+}
+
+export function formatSyncStamp(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
+}
 
 export function formatDrawDate(isoDate: string) {
   return new Intl.DateTimeFormat("fr-FR", {

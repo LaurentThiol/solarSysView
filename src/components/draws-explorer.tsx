@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Download, Search, Sparkles } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -26,12 +26,12 @@ import { DrawBalls } from "@/components/draw-balls"
 import { DrawChart } from "@/components/draw-chart"
 import {
   DRAWS,
-  FIRST_DRAW,
-  LAST_DRAW,
-  MONTHS,
+  type Draw,
+  archiveSummary,
   drawMatchesQuery,
   formatDrawDate,
   monthOf,
+  monthsPresent,
   numberFrequencies,
   parseQueryNumbers,
   starFrequencies,
@@ -39,21 +39,59 @@ import {
 } from "@/lib/draws"
 
 export function DrawsExplorer() {
+  const [draws, setDraws] = useState<Draw[]>(DRAWS)
+  const [source, setSource] = useState<"json" | "neon">("json")
   const [month, setMonth] = useState("all")
   const [query, setQuery] = useState("")
   const wanted = useMemo(() => parseQueryNumbers(query), [query])
+  const monthOptions = useMemo(() => monthsPresent(draws), [draws])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const response = await fetch("/api/draws", { cache: "no-store" })
+        if (!response.ok) return
+        const payload = (await response.json()) as {
+          ok?: boolean
+          items?: Draw[]
+          source?: string
+        }
+        if (cancelled || !payload.ok || !payload.items?.length) return
+        setDraws(
+          [...payload.items].sort((a, b) => b.date.localeCompare(a.date))
+        )
+        setSource("neon")
+      } catch {
+        // repli JSON
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (month !== "all" && !monthOptions.some((item) => item.value === month)) {
+      setMonth("all")
+    }
+  }, [month, monthOptions])
+
+  const first = draws[draws.length - 1]
+  const last = draws[0]
 
   const filtered = useMemo(() => {
-    return DRAWS.filter((draw) => {
+    return draws.filter((draw) => {
       if (month !== "all" && monthOf(draw.date) !== month) return false
       return drawMatchesQuery(draw, wanted)
     })
-  }, [month, wanted])
+  }, [draws, month, wanted])
 
   const hotNumbers = useMemo(() => numberFrequencies(filtered), [filtered])
   const hotStars = useMemo(() => starFrequencies(filtered), [filtered])
 
   function downloadCsv() {
+    const year = last?.date.slice(0, 4) || "tirages"
     const blob = new Blob([toCsv(filtered)], {
       type: "text/csv;charset=utf-8",
     })
@@ -62,24 +100,37 @@ export function DrawsExplorer() {
     link.href = url
     link.download =
       month === "all"
-        ? "euromillions-2026.csv"
-        : `euromillions-2026-${month}.csv`
+        ? `euromillions-${year}.csv`
+        : `euromillions-${year}-${month}.csv`
     link.click()
     URL.revokeObjectURL(url)
   }
 
   return (
     <div className="flex flex-col gap-6">
+      <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+        {archiveSummary(draws)} 5 numéros (1–50) et 2 étoiles (1–12). Données
+        recoupées avec les archives publiques ; source officielle : FDJ
+        {source === "neon" ? " · Neon." : " · fichier local."}
+      </p>
       <section className="grid gap-3 sm:grid-cols-3">
         <StatCard
           label="Tirages archivés"
-          value={String(DRAWS.length)}
-          hint={`${formatDrawDate(FIRST_DRAW.date)} → ${formatDrawDate(LAST_DRAW.date)}`}
+          value={String(draws.length)}
+          hint={
+            first && last
+              ? `${formatDrawDate(first.date)} → ${formatDrawDate(last.date)}`
+              : "—"
+          }
         />
         <StatCard
           label="Dernier tirage"
-          value={LAST_DRAW.numbers.join(" · ")}
-          hint={`Étoiles ${LAST_DRAW.stars.join(" et ")} · n° ${LAST_DRAW.id}`}
+          value={last ? last.numbers.join(" · ") : "—"}
+          hint={
+            last
+              ? `Étoiles ${last.stars.join(" et ")} · n° ${last.id}`
+              : "Aucun tirage"
+          }
         />
         <StatCard
           label="Filtre actuel"
@@ -109,7 +160,7 @@ export function DrawsExplorer() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {MONTHS.map((item) => (
+                {monthOptions.map((item) => (
                   <SelectItem key={item.value} value={item.value}>
                     {item.label}
                   </SelectItem>
@@ -151,7 +202,7 @@ export function DrawsExplorer() {
                   </TableHeader>
                   <TableBody>
                     {filtered.map((draw) => (
-                      <TableRow key={draw.id}>
+                      <TableRow key={`${draw.date}-${draw.id}`}>
                         <TableCell className="whitespace-nowrap capitalize">
                           {formatDrawDate(draw.date)}
                         </TableCell>
@@ -173,7 +224,7 @@ export function DrawsExplorer() {
               <div className="flex flex-col gap-3 md:hidden">
                 {filtered.map((draw) => (
                   <article
-                    key={draw.id}
+                    key={`${draw.date}-${draw.id}`}
                     className="rounded-xl border border-border bg-card/60 p-4"
                   >
                     <div className="mb-3 flex items-center justify-between gap-2">

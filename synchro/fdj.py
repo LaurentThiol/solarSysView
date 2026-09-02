@@ -244,12 +244,24 @@ def download_archive(archive_id: str, timeout: float = 60.0) -> bytes:
         return response.content
 
 
-def fetch_all_draws(progress: list[str] | None = None) -> list[Draw]:
+def fetch_draws(
+    archive_ids: list[str] | None = None,
+    progress: list[str] | None = None,
+) -> list[Draw]:
     by_date: dict[date, Draw] = {}
-    for archive_id in ARCHIVES:
+    for archive_id in archive_ids or ARCHIVES:
         if progress is not None:
             progress.append(archive_id)
         payload = download_archive(archive_id)
         for draw in parse_zip(payload):
             by_date[draw.draw_date] = draw
     return sorted(by_date.values(), key=lambda item: item.draw_date)
+
+
+def fetch_all_draws(progress: list[str] | None = None) -> list[Draw]:
+    return fetch_draws(ARCHIVES, progress)
+
+
+def fetch_latest_draws(progress: list[str] | None = None) -> list[Draw]:
+    """Archive FDJ la plus récente (fév. 2020 → aujourd'hui)."""
+    return fetch_draws(ARCHIVES[:1], progress)

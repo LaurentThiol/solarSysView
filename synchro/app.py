@@ -18,9 +18,9 @@ from pydantic import BaseModel, Field
 
 from synchro import db
 from synchro.config import ROOT, WEB_DIR, get_settings
-from synchro.fdj import Draw, fetch_all_draws
 from synchro.ranks import evaluate_grid, validate_grid
 from synchro.stats import compute_stats
+from synchro.sync import ensure_draws, freshness, sync_draws
 
 _LOCAL_SHUTDOWN_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
 
@@ -123,15 +123,21 @@ def create_app() -> FastAPI:
             "draws": None,
             "latest": None,
             "last_sync": None,
+            "expected_draw_date": None,
+            "stale": None,
         }
         if not neon.get("ok"):
             return payload
         try:
             db.init_db()
             latest = db.latest_draw()
+            last_ok = db.last_sync(ok_only=True)
+            fresh = freshness(latest=latest)
             payload["draws"] = db.count_draws()
             payload["latest"] = _json(db.serialize_draw(latest)) if latest else None
-            payload["last_sync"] = _json(db.last_sync())
+            payload["last_sync"] = _json(db.serialize_row(last_ok) if last_ok else None)
+            payload["expected_draw_date"] = fresh["expected_draw_date"]
+            payload["stale"] = fresh["stale"]
         except Exception as exc:
             payload["ok"] = False
             payload["neon"] = {**neon, "ok": False, "error": str(exc)}
@@ -162,9 +168,17 @@ def create_app() -> FastAPI:
         limit: int = Query(50, ge=1, le=500),
         offset: int = Query(0, ge=0),
         q: str | None = None,
+        year: int | None = Query(None, ge=2004, le=2100),
     ) -> dict[str, Any]:
-        rows = [db.serialize_draw(r) for r in db.list_draws(limit=limit, offset=offset, query=q)]
-        return {"items": _json(rows), "total": db.count_draws()}
+        rows = [
+            db.serialize_draw(r)
+            for r in db.list_draws(limit=limit, offset=offset, query=q, year=year)
+        ]
+        return {
+            "items": _json(rows),
+            "total": db.count_draws(year=year),
+            "year": year,
+        }
 
     @app.get("/api/draws/latest")
     def latest() -> dict[str, Any]:
@@ -222,34 +236,28 @@ def create_app() -> FastAPI:
     def sync() -> dict[str, Any]:
         return run_sync()
 
+    @app.post("/api/sync/ensure")
+    def sync_ensure() -> dict[str, Any]:
+        return run_ensure()
+
     if WEB_DIR.exists():
         app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
 
     return app
 
 
-def sync_draws() -> dict[str, Any]:
-    db.init_db()
-    sync_id = db.log_sync_start()
+def run_sync(*, latest_only: bool = False) -> dict[str, Any]:
     try:
-        draws: list[Draw] = fetch_all_draws()
-        upserted = db.upsert_draws([item.as_row() for item in draws])
-        db.log_sync_end(sync_id, "ok", fetched=len(draws), upserted=upserted)
-        latest = db.latest_draw()
-        return {
-            "ok": True,
-            "fetched": len(draws),
-            "upserted": upserted,
-            "latest": _json(db.serialize_draw(latest)) if latest else None,
-        }
-    except Exception as exc:
-        db.log_sync_end(sync_id, "error", error=str(exc))
+        return sync_draws(latest_only=latest_only)
+    except HTTPException:
         raise
+    except Exception as exc:
+        raise HTTPException(502, f"Synchro FDJ impossible: {exc}") from exc
 
 
-def run_sync() -> dict[str, Any]:
+def run_ensure() -> dict[str, Any]:
     try:
-        return sync_draws()
+        return ensure_draws()
     except HTTPException:
         raise
     except Exception as exc:

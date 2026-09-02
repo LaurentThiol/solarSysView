@@ -41,7 +41,7 @@ usage() {
 ${C_BOLD}Synchro${C_RESET} — lanceur local (EuroMillions)
 
 Usage:
-  ./launch                 Démarre API + UI (install si besoin, vérifie le statut)
+  ./launch                 Démarre API + UI, vérifie Neon et rattrape les tirages si besoin
   ./launch start           Idem
   ./launch stop            Arrêt propre (ports ${BACKEND_PORT} / ${FRONTEND_PORT})
   ./launch status          Affiche l'état des services (alive, Neon, UI)
@@ -366,6 +366,26 @@ except Exception:
 PY
 }
 
+http_post_body() {
+  local url="$1"
+  local timeout="${2:-90}"
+  if command -v curl >/dev/null 2>&1; then
+    curl -sS --max-time "$timeout" -X POST "$url" 2>/dev/null || true
+    return 0
+  fi
+  local py
+  py="$(command -v python3 || command -v python || true)"
+  [[ -n "$py" ]] || return 0
+  "$py" - "$url" "$timeout" <<'PY' 2>/dev/null || true
+import sys, urllib.request
+req = urllib.request.Request(sys.argv[1], method="POST", data=b"")
+try:
+    print(urllib.request.urlopen(req, timeout=float(sys.argv[2])).read().decode())
+except Exception:
+    pass
+PY
+}
+
 wait_http() {
   local url="$1" pid="$2"
   local retries="${3:-240}"
@@ -452,7 +472,11 @@ if neon.get("ok"):
     draws = data.get("draws")
     ms = neon.get("latency_ms")
     extra = f", {ms} ms" if ms is not None else ""
-    print(f"Neon OK ({draws} tirages, dernier {latest}{extra})")
+    sync = data.get("last_sync") or {}
+    finished = (sync.get("finished_at") or "")[:16].replace("T", " ")
+    maj = f", MAJ {finished}" if finished else ""
+    stale = " — en retard" if data.get("stale") else ""
+    print(f"Neon OK ({draws} tirages, dernier {latest}{extra}{maj}{stale})")
 elif neon.get("configured") is False:
     print("Neon non configuré (DATABASE_URL)")
 else:
@@ -783,6 +807,45 @@ cmd_doctor() {
   fi
 }
 
+ensure_fdj_draws() {
+  info "Vérification des derniers tirages FDJ → Neon…"
+  local body py
+  body="$(http_post_body "${BACKEND_URL}/api/sync/ensure" 90)"
+  py="$(command -v python3 || command -v python || true)"
+  if [[ -z "$py" || -z "$body" ]]; then
+    warn "Rattrapage FDJ : pas de réponse (l'UI démarre quand même)."
+    return 0
+  fi
+  "$py" -c '
+import json, sys
+raw = sys.argv[1]
+try:
+    data = json.loads(raw)
+except Exception:
+    print("warn:" + raw[:160].replace("\n", " "))
+    raise SystemExit(0)
+if not data.get("ok"):
+    print("warn:" + str(data.get("detail") or data.get("error") or "échec")[:160])
+    raise SystemExit(0)
+latest = (data.get("latest") or {}).get("draw_date") or "?"
+upserted = data.get("upserted") or 0
+if data.get("skipped"):
+    print(f"ok:Tirages déjà à jour (dernier {latest})")
+elif data.get("latest_only"):
+    print(f"ok:Archive récente — {upserted} lignes, dernier {latest}")
+else:
+    print(f"ok:Historique importé — {upserted} lignes, dernier {latest}")
+if data.get("stale"):
+    print(f"warn:Neon encore en retard (attendu {data.get(\"expected_draw_date\")}, dernier {latest})")
+' "$body" 2>/dev/null | while IFS= read -r line; do
+    case "$line" in
+      ok:*) ok "${line#ok:}" ;;
+      warn:*) warn "${line#warn:}" ;;
+      *) [[ -n "$line" ]] && info "$line" ;;
+    esac
+  done
+}
+
 cmd_start() {
   local backend_pid= frontend_pid= tail_pid= stopping=0 body summary
 
@@ -872,6 +935,7 @@ cmd_start() {
   summary="$(summarize_health "$body")"
   if [[ -n "$summary" && "$summary" == Neon\ OK* ]]; then
     ok "Statut Neon : ${summary}"
+    ensure_fdj_draws
   elif [[ -n "$summary" ]]; then
     warn "Statut Neon : ${summary}"
   else

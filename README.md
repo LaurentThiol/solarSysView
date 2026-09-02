@@ -16,8 +16,9 @@ Le lanceur (même modèle que PaxVideo) installe les dépendances si besoin, lib
 
 1. Python, Node, `.env` / `DATABASE_URL`, Git
 2. `/api/alive` (liveness, sans ping Neon)
-3. `/api/health` (Neon, nombre de tirages, dernier tirage)
-4. HTTP 200 sur l’UI
+3. `/api/health` (Neon, nombre de tirages, dernier tirage, fraîcheur)
+4. `POST /api/sync/ensure` si Neon est joignable (rattrape l’archive FDJ récente si besoin)
+5. HTTP 200 sur l’UI
 
 `/api/health` peut prendre quelques secondes si Neon réveille le compute (timeout 20 s). L’UI démarre même si Neon est rouge.
 
@@ -36,11 +37,11 @@ Sur macOS, un double-clic sur `Synchro.command` à la racine du dépôt lance au
 
 Options : `--skip-install`, `--force-install`, `--no-open`. Ports : `SYNCHRO_BACKEND_PORT` (8000), `SYNCHRO_FRONTEND_PORT` (43147). Logs : `.run/`.
 
-Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. Clic = retest. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections **Tirage** et **Admin** sont des onglets du bandeau.
+Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections **Tirage** et **Admin** sont des onglets du bandeau.
 
 ## Tirage (`/tirage`)
 
-Archives 2026 (fichier `src/data/euromillions-2026.json`) : tableau filtrable, graphique, fréquences, export CSV. L’accueil `/` redirige vers cet onglet.
+Archives EuroMillions : tableau filtrable, graphique, fréquences, export CSV. En local, les données viennent de **Neon** (année du dernier tirage) dès que l’API répond ; sinon repli sur `src/data/euromillions-2026.json`. L’accueil `/` redirige vers cet onglet.
 
 ## Admin (`/admin`)
 
@@ -66,9 +67,10 @@ Import de l’historique complet FDJ (2004 → aujourd’hui) dans PostgreSQL Ne
 ```bash
 cp .env.example .env
 # Coller DATABASE_URL (console Neon → projet Synchro → connection pooled)
-./launch                 # ou : python -m synchro serve
+./launch                 # vérifie Neon et rattrape les derniers tirages si besoin
 ./launch doctor          # statut Neon
-python -m synchro sync   # une fois DATABASE_URL collé
+python -m synchro ensure # rattrapage (archive récente) sans relancer l’UI
+python -m synchro sync   # historique complet (6 archives), aussi via Admin
 ```
 
 Puis http://127.0.0.1:8000 (docs : `/docs`).
@@ -76,10 +78,11 @@ Puis http://127.0.0.1:8000 (docs : `/docs`).
 | Commande | Rôle |
 |---|---|
 | `python -m synchro init-db` | Crée les tables `draws`, `grids`, `sync_log` |
+| `python -m synchro ensure` | Rattrape l’archive FDJ récente si Neon est en retard |
 | `python -m synchro sync` | Télécharge les 6 archives FDJ et les écrit dans Neon |
 | `python -m synchro serve` | API locale `/api/*` |
 | `python -m synchro export` | Snapshot JSON (`synchro/web/snapshot.json`) |
-| `make test` | Tests unitaires (parse FDJ, rangs, stats, `/api/alive`) |
+| `make test` | Tests unitaires (parse FDJ, rangs, stats, `/api/alive`, ensure) |
 
 `DATABASE_URL` ne doit **jamais** être commitée. `.env` en local, variables d’environnement / secret GitHub Actions en déployé. Au premier `./launch`, le fichier `.env` est créé depuis `.env.example` s’il manque.
 
@@ -90,15 +93,16 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 ### API locale
 
 - `GET /api/alive` — liveness (pas de Neon)
-- `GET /api/health` — ping Neon, tirages, dernier sync
+- `GET /api/health` — ping Neon, tirages, dernier sync, `stale` / `expected_draw_date`
 - `POST /api/shutdown` — arrêt propre (localhost uniquement)
-- `GET /api/draws?limit=&offset=&q=`
+- `GET /api/draws?limit=&offset=&q=&year=`
 - `GET /api/draws/latest`
 - `GET /api/stats?era=current|all`
 - `POST /api/check` `{ numbers, stars, last_n }`
 - `GET\|POST /api/grids` · `DELETE /api/grids/{id}`
 - `POST /api/reload-env` — relit `.env` et recrée le pool Neon
-- `POST /api/sync`
+- `POST /api/sync` — historique complet (bouton Admin)
+- `POST /api/sync/ensure` — rattrapage si Neon est en retard (`./launch`)
 
 ## Avertissement
 

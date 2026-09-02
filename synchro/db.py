@@ -246,10 +246,15 @@ def upsert_draws(rows: list[dict[str, Any]]) -> int:
     return count
 
 
-def count_draws() -> int:
+def count_draws(year: int | None = None) -> int:
+    sql = "SELECT COUNT(*) AS n FROM draws"
+    params: dict[str, Any] = {}
+    if year is not None:
+        sql += " WHERE EXTRACT(YEAR FROM draw_date) = %(year)s"
+        params["year"] = year
     with connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) AS n FROM draws")
+            cur.execute(sql, params)
             return int(cur.fetchone()["n"])
 
 
@@ -261,18 +266,31 @@ def latest_draw() -> dict[str, Any] | None:
             return dict(row) if row else None
 
 
-def list_draws(limit: int = 50, offset: int = 0, query: str | None = None) -> list[dict[str, Any]]:
+def list_draws(
+    limit: int = 50,
+    offset: int = 0,
+    query: str | None = None,
+    year: int | None = None,
+) -> list[dict[str, Any]]:
     sql = "SELECT * FROM draws"
     params: dict[str, Any] = {"limit": limit, "offset": offset}
+    clauses: list[str] = []
+    if year is not None:
+        clauses.append("EXTRACT(YEAR FROM draw_date) = %(year)s")
+        params["year"] = year
     if query:
-        sql += """
-            WHERE CAST(draw_date AS TEXT) ILIKE %(q)s
-               OR COALESCE(draw_code, '') ILIKE %(q)s
-               OR COALESCE(weekday, '') ILIKE %(q)s
-               OR array_to_string(numbers, ',') ILIKE %(q)s
-               OR array_to_string(stars, ',') ILIKE %(q)s
-        """
+        clauses.append(
+            """(
+                CAST(draw_date AS TEXT) ILIKE %(q)s
+                OR COALESCE(draw_code, '') ILIKE %(q)s
+                OR COALESCE(weekday, '') ILIKE %(q)s
+                OR array_to_string(numbers, ',') ILIKE %(q)s
+                OR array_to_string(stars, ',') ILIKE %(q)s
+            )"""
+        )
         params["q"] = f"%{query.strip()}%"
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY draw_date DESC LIMIT %(limit)s OFFSET %(offset)s"
     with connection() as conn:
         with conn.cursor() as cur:
@@ -363,10 +381,16 @@ def log_sync_end(
         conn.commit()
 
 
-def last_sync() -> dict[str, Any] | None:
+def last_sync(*, ok_only: bool = False) -> dict[str, Any] | None:
+    sql = "SELECT * FROM sync_log"
+    params: dict[str, Any] = {}
+    if ok_only:
+        sql += " WHERE status = %(status)s"
+        params["status"] = "ok"
+    sql += " ORDER BY COALESCE(finished_at, started_at) DESC LIMIT 1"
     with connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM sync_log ORDER BY started_at DESC LIMIT 1")
+            cur.execute(sql, params)
             row = cur.fetchone()
             return dict(row) if row else None
 

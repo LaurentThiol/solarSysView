@@ -1,4 +1,4 @@
-.PHONY: help install start stop status update doctor shortcut test sync serve export
+.PHONY: help install start stop status update doctor shortcut test sync ensure serve export
 
 help:
 	@./launch help
@@ -30,6 +30,9 @@ test:
 
 sync:
 	./.venv/bin/python -m synchro sync
+
+ensure:
+	./.venv/bin/python -m synchro ensure
 
 export:
 	./.venv/bin/python -m synchro export
