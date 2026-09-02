@@ -36,6 +36,13 @@ export function formatDrawDate(isoDate: string) {
   }).format(new Date(`${isoDate}T12:00:00`))
 }
 
+export function formatShortDate(isoDate: string) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(new Date(`${isoDate}T12:00:00`))
+}
+
 export function monthOf(isoDate: string) {
   return isoDate.slice(5, 7)
 }
@@ -95,4 +102,56 @@ export function starFrequencies(draws: Draw[]) {
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0] - b[0])
     .slice(0, 6)
+}
+
+export type DrawSeriesPoint = {
+  date: string
+  id: number
+  n1: number
+  n2: number
+  n3: number
+  n4: number
+  n5: number
+  sumNumbers: number
+  e1: number
+  e2: number
+  sumStars: number
+}
+
+export function toDrawSeries(draws: Draw[]): DrawSeriesPoint[] {
+  return [...draws]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((draw) => {
+      const numbers = [...draw.numbers].sort((a, b) => a - b)
+      const stars = [...draw.stars].sort((a, b) => a - b)
+      const [n1, n2, n3, n4, n5] = numbers
+      const [e1, e2] = stars
+      return {
+        date: draw.date,
+        id: draw.id,
+        n1,
+        n2,
+        n3,
+        n4,
+        n5,
+        sumNumbers: n1 + n2 + n3 + n4 + n5,
+        e1,
+        e2,
+        sumStars: e1 + e2,
+      }
+    })
+}
+
+export type SeriesSummary = {
+  min: number
+  max: number
+  avg: number
+}
+
+export function summarizeValues(values: number[]): SeriesSummary | null {
+  if (values.length === 0) return null
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const avg = values.reduce((sum, value) => sum + value, 0) / values.length
+  return { min, max, avg }
 }

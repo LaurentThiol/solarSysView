@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { DrawBalls } from "@/components/draw-balls"
+import { DrawChart } from "@/components/draw-chart"
 import {
   DRAWS,
   FIRST_DRAW,
@@ -193,6 +194,8 @@ export function DrawsExplorer() {
           )}
         </CardContent>
       </Card>
+
+      <DrawChart draws={filtered} />
 
       <section className="grid gap-4 lg:grid-cols-2">
         <FrequencyCard
