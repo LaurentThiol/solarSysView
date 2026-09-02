@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any, Iterator
 from urllib.parse import urlparse
 
+import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
@@ -14,6 +15,9 @@ from psycopg_pool import ConnectionPool
 from synchro.config import get_settings
 
 _PLACEHOLDER_MARKERS = ("USER:PASSWORD", "PASSWORD@", "changeme")
+# Neon scale-to-zero : le compute peut mettre plusieurs secondes à se réveiller.
+CONNECT_TIMEOUT_SEC = 15
+PING_TIMEOUT_SEC = 15
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS draws (
@@ -67,6 +71,23 @@ def _neon_host(url: str | None) -> str | None:
         return None
 
 
+def _statement_timeout_sql(timeout_sec: float) -> str:
+    """Postgres n'accepte pas de placeholder ($1) dans SET.
+
+    psycopg transforme ``SET … = %s`` en ``SET … = $1``, ce qui casse le test
+    Neon (syntax error at or near "$1") — souvent lu comme une erreur de timeout.
+    """
+    timeout_ms = max(1, int(timeout_sec * 1000))
+    return f"SET LOCAL statement_timeout = {timeout_ms}"
+
+
+def _should_retry_ping(exc: BaseException) -> bool:
+    if isinstance(exc, psycopg.OperationalError):
+        return True
+    text = str(exc).lower()
+    return "timed out" in text or "timeout expired" in text or "could not connect" in text
+
+
 def database_configured() -> bool:
     url = (get_settings().database_url or "").strip()
     if not url:
@@ -92,7 +113,9 @@ def get_pool() -> ConnectionPool:
             kwargs={
                 "row_factory": dict_row,
                 "autocommit": False,
-                "connect_timeout": 5,
+                "connect_timeout": CONNECT_TIMEOUT_SEC,
+                # PgBouncer (URI -pooler) : pas de prepared statements nommés.
+                "prepare_threshold": None,
             },
             open=True,
         )
@@ -110,7 +133,7 @@ def reset_pool() -> None:
     _pool = None
 
 
-def ping(timeout_sec: float = 5.0) -> dict[str, Any]:
+def ping(timeout_sec: float = PING_TIMEOUT_SEC) -> dict[str, Any]:
     """Ping Neon without raising. Used by /api/health and the launcher."""
     url = (get_settings().database_url or "").strip()
     host = _neon_host(url)
@@ -124,32 +147,39 @@ def ping(timeout_sec: float = 5.0) -> dict[str, Any]:
             "error": "DATABASE_URL absent (copiez .env.example → .env et collez l'URI Neon).",
         }
     started = time.perf_counter()
-    try:
-        with connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SET statement_timeout = %s", (int(timeout_sec * 1000),))
-                cur.execute("SELECT 1 AS ok")
-                cur.fetchone()
-        latency_ms = round((time.perf_counter() - started) * 1000)
-        return {
-            "ok": True,
-            "connected": True,
-            "configured": True,
-            "latency_ms": latency_ms,
-            "host": host,
-            "waking": latency_ms >= 2500,
-        }
-    except Exception as exc:
-        latency_ms = round((time.perf_counter() - started) * 1000)
-        return {
-            "ok": False,
-            "connected": False,
-            "configured": True,
-            "latency_ms": latency_ms,
-            "host": host,
-            "waking": False,
-            "error": str(exc),
-        }
+    last_error: BaseException | None = None
+    for attempt in range(2):
+        try:
+            with connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(_statement_timeout_sql(timeout_sec))
+                    cur.execute("SELECT 1 AS ok")
+                    cur.fetchone()
+            latency_ms = round((time.perf_counter() - started) * 1000)
+            return {
+                "ok": True,
+                "connected": True,
+                "configured": True,
+                "latency_ms": latency_ms,
+                "host": host,
+                "waking": latency_ms >= 2500,
+            }
+        except Exception as exc:
+            last_error = exc
+            if attempt == 0 and _should_retry_ping(exc):
+                reset_pool()
+                continue
+            break
+    latency_ms = round((time.perf_counter() - started) * 1000)
+    return {
+        "ok": False,
+        "connected": False,
+        "configured": True,
+        "latency_ms": latency_ms,
+        "host": host,
+        "waking": False,
+        "error": str(last_error) if last_error else "échec",
+    }
 
 
 @contextmanager

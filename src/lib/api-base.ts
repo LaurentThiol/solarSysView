@@ -8,6 +8,9 @@ export function apiBase(): string {
   return "http://127.0.0.1:8000"
 }
 
+/** Attente /api/health : réveil Neon (scale-to-zero) + SELECT 1. */
+export const HEALTH_TIMEOUT_MS = 20_000
+
 export function isNetlify(): boolean {
   return process.env.NETLIFY === "true"
 }

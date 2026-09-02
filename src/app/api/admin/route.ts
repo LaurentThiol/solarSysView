@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { apiBase, isNetlify } from "@/lib/api-base"
+import { apiBase, HEALTH_TIMEOUT_MS, isNetlify } from "@/lib/api-base"
 import { upsertEnv } from "@/lib/env-file"
 import {
   adminPassword,
@@ -24,7 +24,7 @@ async function backendHealth() {
   try {
     const response = await fetch(`${url}/api/health`, {
       cache: "no-store",
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
     })
     if (!response.ok) return null
     return (await response.json()) as Record<string, unknown>

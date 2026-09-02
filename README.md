@@ -19,7 +19,7 @@ Le lanceur (même modèle que PaxVideo) installe les dépendances si besoin, lib
 3. `/api/health` (Neon, nombre de tirages, dernier tirage)
 4. HTTP 200 sur l’UI
 
-`/api/health` peut prendre quelques secondes si Neon réveille le compute (timeout 8 s). L’UI démarre même si Neon est rouge.
+`/api/health` peut prendre quelques secondes si Neon réveille le compute (timeout 20 s). L’UI démarre même si Neon est rouge.
 
 | Commande | Rôle |
 |----------|------|

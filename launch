@@ -606,7 +606,7 @@ cmd_status() {
   fe="$(listening_pids "$FRONTEND_PORT" | first_line || true)"
   if http_ok "$ALIVE_URL" 2; then
     api_up=1
-    body="$(http_body "$HEALTH_URL" 8)"
+    body="$(http_body "$HEALTH_URL" 20)"
     summary="$(summarize_health "$body")"
     if [[ -n "$summary" ]]; then
       ok "API      ${BACKEND_URL}  (${be:+PID ${be}, }/api/alive OK — ${summary})"
@@ -868,7 +868,7 @@ cmd_start() {
   fi
   ok "API vivante (${ALIVE_URL})"
 
-  body="$(http_body "$HEALTH_URL" 8)"
+  body="$(http_body "$HEALTH_URL" 20)"
   summary="$(summarize_health "$body")"
   if [[ -n "$summary" && "$summary" == Neon\ OK* ]]; then
     ok "Statut Neon : ${summary}"

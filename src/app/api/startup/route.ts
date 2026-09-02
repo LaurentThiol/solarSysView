@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { apiBase, isNetlify } from "@/lib/api-base"
+import { apiBase, HEALTH_TIMEOUT_MS, isNetlify } from "@/lib/api-base"
 import { gitStatus } from "@/lib/git"
 import { secretSnapshot } from "@/lib/secrets"
 
@@ -20,7 +20,7 @@ async function backendStatus(url: string) {
     }
     const healthRes = await fetch(`${url}/api/health`, {
       cache: "no-store",
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
     })
     const health = await healthRes.json().catch(() => null)
     return { ok: true, url, health }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { apiBase } from "@/lib/api-base"
+import { apiBase, HEALTH_TIMEOUT_MS } from "@/lib/api-base"
 import { isAuthenticated } from "@/lib/admin-auth"
 import { liveEnv } from "@/lib/env-file"
 import { parseDatabaseUrl, type ServiceId } from "@/lib/secrets"
@@ -15,7 +15,7 @@ async function testNeon(value?: string) {
     try {
       const response = await fetch(`${python}/api/health`, {
         cache: "no-store",
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
       })
       const health = (await response.json()) as {
         neon?: { ok?: boolean; configured?: boolean; latency_ms?: number; error?: string; host?: string }

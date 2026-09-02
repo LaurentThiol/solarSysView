@@ -136,6 +136,73 @@ def test_neon_host_from_url() -> None:
     assert _neon_host(None) is None
 
 
+def test_statement_timeout_sql_is_literal_integer() -> None:
+    from synchro.db import _statement_timeout_sql
+
+    sql = _statement_timeout_sql(5)
+    assert sql == "SET LOCAL statement_timeout = 5000"
+    assert "$1" not in sql
+    assert "%s" not in sql
+    assert _statement_timeout_sql(0.4) == "SET LOCAL statement_timeout = 400"
+    assert _statement_timeout_sql(0) == "SET LOCAL statement_timeout = 1"
+
+
+def test_ping_does_not_bind_statement_timeout() -> None:
+    from contextlib import contextmanager
+
+    from synchro import db
+
+    executed: list[tuple[str, object]] = []
+
+    class FakeCursor:
+        def __enter__(self) -> FakeCursor:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def execute(self, sql: str, params: object = None) -> None:
+            executed.append((sql, params))
+
+        def fetchone(self) -> dict[str, int]:
+            return {"ok": 1}
+
+    class FakeConn:
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConn()
+
+    with (
+        patch("synchro.db.database_configured", return_value=True),
+        patch("synchro.db.connection", fake_connection),
+        patch(
+            "synchro.db.get_settings",
+            return_value=type(
+                "S",
+                (),
+                {"database_url": "postgresql://u:p@ep-x.neon.tech/neondb"},
+            )(),
+        ),
+    ):
+        result = db.ping(timeout_sec=5)
+
+    assert result["ok"] is True
+    assert executed[0] == ("SET LOCAL statement_timeout = 5000", None)
+    assert executed[1][0] == "SELECT 1 AS ok"
+
+
+def test_should_not_retry_set_placeholder_syntax_error() -> None:
+    from synchro.db import _should_retry_ping
+
+    err = Exception(
+        'syntax error at or near "$1" LINE 1: SET statement_timeout = $1'
+    )
+    assert _should_retry_ping(err) is False
+
+
 def test_reload_env_rereads_settings() -> None:
     with _client() as client:
         response = client.post("/api/reload-env")
