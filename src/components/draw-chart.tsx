@@ -15,7 +15,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import {
@@ -109,7 +108,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
             onValueChange={(value) => changeMode(value as DrawChartMode)}
           >
             <SelectTrigger className="w-full sm:w-56" aria-label="Série affichée">
-              <SelectValue />
+              <span className="flex flex-1 text-left">
+                {MODES.find((item) => item.value === mode)?.label}
+              </span>
             </SelectTrigger>
             <SelectContent>
               {MODES.map((item) => (
