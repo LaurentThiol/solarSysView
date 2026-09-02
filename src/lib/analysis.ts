@@ -277,12 +277,12 @@ export function rankProbabilities(starPool = 12) {
   const rows = RANK_TABLE.map(([k, s, rank, label]) => {
     const p =
       hypergeometricMatch(k, 5, 50, 5) * hypergeometricMatch(s, 2, starPool, 2)
-    return { rank, k, s, label, p, oneIn: p ? Math.round(1 / p) : null }
+    return { rank, k, s, label, p, oneIn: p && p < 0.5 ? Math.round(1 / p) : null }
   })
   const pWin = rows.reduce((a, r) => a + r.p, 0)
   return [
     ...rows,
-    { rank: null as number | null, k: null, s: null, label: "Pas de gain", p: 1 - pWin, oneIn: Math.round(1 / (1 - pWin)) },
+    { rank: null as number | null, k: null, s: null, label: "Pas de gain", p: 1 - pWin, oneIn: null },
   ]
 }
 

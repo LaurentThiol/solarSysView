@@ -166,7 +166,9 @@ export function AnalysisLab() {
       <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap">
         <Select value={era} onValueChange={(v) => setEra(v as "current" | "all")}>
           <SelectTrigger className="w-full sm:w-56" aria-label="Ère">
-            <SelectValue />
+            <span className="flex flex-1 text-left">
+              {era === "all" ? "Tout l’historique" : "Formule actuelle (12 ★)"}
+            </span>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="current">Formule actuelle (12 ★)</SelectItem>
@@ -175,7 +177,9 @@ export function AnalysisLab() {
         </Select>
         <Select value={month} onValueChange={(v) => setMonth(String(v))}>
           <SelectTrigger className="w-full sm:w-44" aria-label="Mois">
-            <SelectValue />
+            <span className="flex flex-1 text-left">
+              {monthOptions.find((item) => item.value === month)?.label ?? "Tous les mois"}
+            </span>
           </SelectTrigger>
           <SelectContent>
             {monthOptions.map((item) => (
@@ -196,7 +200,7 @@ export function AnalysisLab() {
           onValueChange={(v) => setVariable(v as VariableName)}
         >
           <SelectTrigger className="w-full sm:w-56" aria-label="Variable">
-            <SelectValue />
+            <span className="flex flex-1 text-left">{VARIABLE_LABELS[variable]}</span>
           </SelectTrigger>
           <SelectContent>
             {VARIABLE_NAMES.map((name) => (
@@ -341,7 +345,9 @@ function VariablesPanel({
           <div className="flex flex-wrap gap-2">
             <Select value={block} onValueChange={(v) => setBlock(v as typeof block)}>
               <SelectTrigger className="w-40" aria-label="Bloc">
-                <SelectValue />
+                <span className="flex flex-1 text-left">
+                  {block === "month" ? "Mois" : block === "week" ? "Semaine" : "Paquets de X"}
+                </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="month">Mois</SelectItem>
