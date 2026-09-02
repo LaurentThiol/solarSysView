@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Iterator
+from urllib.parse import urlparse
 
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -57,6 +58,15 @@ CREATE TABLE IF NOT EXISTS sync_log (
 _pool: ConnectionPool | None = None
 
 
+def _neon_host(url: str | None) -> str | None:
+    if not url:
+        return None
+    try:
+        return urlparse(url).hostname
+    except Exception:
+        return None
+
+
 def database_configured() -> bool:
     url = (get_settings().database_url or "").strip()
     if not url:
@@ -89,12 +99,28 @@ def get_pool() -> ConnectionPool:
     return _pool
 
 
+def reset_pool() -> None:
+    global _pool
+    if _pool is None:
+        return
+    try:
+        _pool.close()
+    except Exception:
+        pass
+    _pool = None
+
+
 def ping(timeout_sec: float = 5.0) -> dict[str, Any]:
     """Ping Neon without raising. Used by /api/health and the launcher."""
+    url = (get_settings().database_url or "").strip()
+    host = _neon_host(url)
     if not database_configured():
         return {
             "ok": False,
+            "connected": False,
             "configured": False,
+            "host": host,
+            "waking": False,
             "error": "DATABASE_URL absent (copiez .env.example → .env et collez l'URI Neon).",
         }
     started = time.perf_counter()
@@ -104,16 +130,24 @@ def ping(timeout_sec: float = 5.0) -> dict[str, Any]:
                 cur.execute("SET statement_timeout = %s", (int(timeout_sec * 1000),))
                 cur.execute("SELECT 1 AS ok")
                 cur.fetchone()
+        latency_ms = round((time.perf_counter() - started) * 1000)
         return {
             "ok": True,
+            "connected": True,
             "configured": True,
-            "latency_ms": round((time.perf_counter() - started) * 1000),
+            "latency_ms": latency_ms,
+            "host": host,
+            "waking": latency_ms >= 2500,
         }
     except Exception as exc:
+        latency_ms = round((time.perf_counter() - started) * 1000)
         return {
             "ok": False,
+            "connected": False,
             "configured": True,
-            "latency_ms": round((time.perf_counter() - started) * 1000),
+            "latency_ms": latency_ms,
+            "host": host,
+            "waking": False,
             "error": str(exc),
         }
 

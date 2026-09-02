@@ -1,26 +1,34 @@
 "use client"
 
+import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
+
+type GitPayload = {
+  ok: boolean
+  status?: "up_to_date" | "behind" | "ahead" | "diverged" | "unavailable"
+  sha?: string | null
+  current_short?: string | null
+  branch?: string | null
+  dirty?: boolean
+  ahead?: number
+  behind?: number
+  error?: string
+}
 
 type StartupPayload = {
   frontend: { ok: boolean }
   backend: { ok: boolean; url?: string; error?: string }
   neon: {
     ok?: boolean
+    connected?: boolean
     configured?: boolean
     latency_ms?: number
+    host?: string
+    waking?: boolean
     error?: string
   }
-  git:
-    | {
-        ok: true
-        sha: string
-        branch: string
-        dirty: boolean
-        ahead: number
-        behind: number
-      }
-    | { ok: false }
+  git: GitPayload
   draws: number | null
   latest: { draw_date?: string } | null
 }
@@ -32,11 +40,13 @@ function Pill({
   detail,
   tone,
   onClick,
+  title,
 }: {
   label: string
   detail?: string
   tone: Tone
   onClick: () => void
+  title?: string
 }) {
   const tones: Record<Tone, string> = {
     ok: "border-emerald-500/40 bg-emerald-500/15 text-emerald-200",
@@ -56,7 +66,7 @@ function Pill({
     <button
       type="button"
       onClick={onClick}
-      title="Retester"
+      title={title || "Retester"}
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium tracking-wide ${tones[tone]}`}
     >
       <span className={`size-1.5 rounded-full ${dots[tone]}`} />
@@ -67,37 +77,57 @@ function Pill({
 }
 
 export function StartupStatus() {
+  const router = useRouter()
+  const pathname = usePathname()
   const [data, setData] = useState<StartupPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const refresh = useCallback(async (opts?: { git?: boolean; silent?: boolean }) => {
     try {
-      const response = await fetch("/api/startup", { cache: "no-store" })
+      const query = opts?.git ? "?refresh=1" : ""
+      const response = await fetch(`/api/startup${query}`, { cache: "no-store" })
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`)
       }
       setData((await response.json()) as StartupPayload)
+      setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : "échec")
-      setData(null)
+      if (!opts?.silent) setData(null)
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    void refresh()
+    const t = window.setTimeout(() => {
+      void refresh()
+    }, 0)
+    const neonId = window.setInterval(() => {
+      void refresh({ silent: true })
+    }, 20_000)
+    const gitId = window.setInterval(() => {
+      void refresh({ git: true, silent: true })
+    }, 300_000)
+    const onFocus = () => {
+      void refresh({ silent: true })
+    }
+    window.addEventListener("focus", onFocus)
+    return () => {
+      window.clearTimeout(t)
+      window.clearInterval(neonId)
+      window.clearInterval(gitId)
+      window.removeEventListener("focus", onFocus)
+    }
   }, [refresh])
 
   if (loading && !data) {
     return (
       <div className="flex flex-wrap gap-2">
-        <Pill label="API" tone="load" onClick={refresh} />
-        <Pill label="Neon" tone="load" onClick={refresh} />
-        <Pill label="GitHub" tone="load" onClick={refresh} />
+        <Pill label="API" tone="load" onClick={() => void refresh()} />
+        <Pill label="Neon" tone="load" onClick={() => void refresh()} />
+        <Pill label="GitHub" tone="load" onClick={() => void refresh({ git: true })} />
       </div>
     )
   }
@@ -109,7 +139,7 @@ export function StartupStatus() {
           label="Statut"
           detail={error || "injoignable"}
           tone="err"
-          onClick={refresh}
+          onClick={() => void refresh()}
         />
       </div>
     )
@@ -122,9 +152,13 @@ export function StartupStatus() {
       : "vivante"
     : data.backend.error || "arrêtée"
 
+  const neonOk = Boolean(data.neon.ok || data.neon.connected)
   let neonTone: Tone = "off"
   let neonDetail = "non configuré"
-  if (data.neon.ok) {
+  if (neonOk && data.neon.waking) {
+    neonTone = "warn"
+    neonDetail = "réveil"
+  } else if (neonOk) {
     neonTone = "ok"
     neonDetail =
       data.neon.latency_ms != null
@@ -137,30 +171,83 @@ export function StartupStatus() {
 
   let gitTone: Tone = "off"
   let gitDetail = "inconnu"
-  if (data.git.ok) {
-    gitDetail = data.git.sha
-    if (data.git.behind > 0) {
+  const git = data.git
+  if (git.ok) {
+    if (git.status === "behind" || (git.behind ?? 0) > 0) {
       gitTone = "warn"
-      gitDetail = `${data.git.behind} à tirer`
-    } else if (data.git.dirty) {
+      gitDetail =
+        (git.behind ?? 0) > 0
+          ? `${git.behind} à tirer`
+          : "mise à jour"
+    } else if (git.status === "ahead" || git.status === "diverged") {
+      gitTone = "warn"
+      gitDetail = git.status === "ahead" ? "commits locaux" : "divergé"
+    } else if (git.dirty) {
       gitTone = "warn"
       gitDetail = "modifs locales"
+    } else if (git.status === "unavailable") {
+      gitTone = "off"
+      gitDetail = "hors ligne"
     } else {
       gitTone = "ok"
-      gitDetail = `${data.git.sha} · ${data.git.branch}`
+      gitDetail = `${git.current_short || git.sha || "ok"}${git.branch ? ` · ${git.branch}` : ""}`
+    }
+  }
+
+  const onGithub = () => {
+    void refresh({ git: true })
+    const behind = git.status === "behind" || git.status === "diverged" || (git.behind ?? 0) > 0
+    if (behind && pathname !== "/admin") {
+      router.push("/admin#github")
     }
   }
 
   return (
     <div className="flex flex-wrap gap-2">
-      <Pill label="API" detail={apiDetail} tone={apiTone} onClick={refresh} />
-      <Pill label="Neon" detail={neonDetail} tone={neonTone} onClick={refresh} />
+      <Pill label="API" detail={apiDetail} tone={apiTone} onClick={() => void refresh()} />
+      <Pill
+        label="Neon"
+        detail={neonDetail}
+        tone={neonTone}
+        title={
+          neonOk
+            ? `Neon en ligne${data.neon.host ? ` · ${data.neon.host}` : ""} · cliquer pour retester`
+            : data.neon.error || "Cliquer pour retester"
+        }
+        onClick={() => void refresh()}
+      />
       <Pill
         label="GitHub"
         detail={gitDetail}
         tone={gitTone}
-        onClick={refresh}
+        title="Contrôler origin (Admin si une mise à jour est disponible)"
+        onClick={onGithub}
       />
     </div>
+  )
+}
+
+export function SiteHeader() {
+  const pathname = usePathname()
+  return (
+    <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/"
+            className="text-xs font-medium tracking-[0.2em] text-primary uppercase"
+          >
+            Synchro
+          </Link>
+          <Link
+            href="/admin"
+            className={`text-xs ${pathname === "/admin" ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Admin
+          </Link>
+        </div>
+        <StartupStatus />
+      </div>
+    </header>
   )
 }

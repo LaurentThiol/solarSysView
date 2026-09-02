@@ -36,7 +36,13 @@ Sur macOS, un double-clic sur `Synchro.command` à la racine du dépôt lance au
 
 Options : `--skip-install`, `--force-install`, `--no-open`. Ports : `SYNCHRO_BACKEND_PORT` (8000), `SYNCHRO_FRONTEND_PORT` (43147). Logs : `.run/`.
 
-Dans l’UI, les pastilles **API / Neon / GitHub** (bandeau haut) refont les mêmes contrôles au chargement. Clic = retest.
+Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. Clic = retest. GitHub en retard ouvre **Admin**.
+
+## Admin (`/admin`)
+
+Page locale pour les consoles et les secrets (Neon, Google, OpenAI, Brave Search). Les valeurs sont lues/écrites dans `.env` — **jamais commitées**. Révélation / copie, test de connexion, mise à jour GitHub (`git fetch` / `git pull --ff-only`, équivalent `./launch update`), synchro FDJ.
+
+En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, définissez `ADMIN_PASSWORD`. Sur Netlify, les secrets se configurent dans les variables d’environnement du site.
 
 ## Interface web (Next.js)
 
@@ -87,6 +93,7 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 - `GET /api/stats?era=current|all`
 - `POST /api/check` `{ numbers, stars, last_n }`
 - `GET\|POST /api/grids` · `DELETE /api/grids/{id}`
+- `POST /api/reload-env` — relit `.env` et recrée le pool Neon
 - `POST /api/sync`
 
 ## Avertissement

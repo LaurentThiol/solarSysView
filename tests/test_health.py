@@ -32,7 +32,10 @@ def test_health_reports_neon_when_unconfigured() -> None:
         "synchro.db.ping",
         return_value={
             "ok": False,
+            "connected": False,
             "configured": False,
+            "host": None,
+            "waking": False,
             "error": "DATABASE_URL absent",
         },
     ):
@@ -47,7 +50,7 @@ def test_health_reports_neon_when_unconfigured() -> None:
 
 
 def test_health_ok_includes_draws() -> None:
-    neon = {"ok": True, "configured": True, "latency_ms": 12}
+    neon = {"ok": True, "connected": True, "configured": True, "latency_ms": 12, "host": "ep.neon.tech", "waking": False}
     with (
         patch("synchro.db.ping", return_value=neon),
         patch("synchro.db.init_db"),
@@ -82,3 +85,24 @@ def test_shutdown_localhost_schedules_stop() -> None:
         assert response.status_code == 200
         assert response.json() == {"ok": True}
         assert kill.called
+
+
+def test_neon_host_from_url() -> None:
+    from synchro.db import _neon_host
+
+    assert (
+        _neon_host("postgresql://u:p@ep-x.eu-central-1.aws.neon.tech/neondb")
+        == "ep-x.eu-central-1.aws.neon.tech"
+    )
+    assert _neon_host(None) is None
+
+
+def test_reload_env_rereads_settings() -> None:
+    with _client() as client:
+        response = client.post("/api/reload-env")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["neon"]["configured"] is False
+    assert body["neon"]["connected"] is False
+

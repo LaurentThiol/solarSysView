@@ -1,5 +1,4 @@
 import { DrawsExplorer } from "@/components/draws-explorer"
-import { StartupStatus } from "@/components/startup-status"
 import { FIRST_DRAW, LAST_DRAW } from "@/lib/draws"
 
 export default function Home() {
@@ -7,12 +6,6 @@ export default function Home() {
     <div className="flex flex-1 flex-col">
       <header className="border-b border-border">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-8 sm:px-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs font-medium tracking-[0.2em] text-primary uppercase">
-              Synchro
-            </p>
-            <StartupStatus />
-          </div>
           <h1 className="max-w-2xl text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
             Archives des tirages EuroMillions
           </h1>

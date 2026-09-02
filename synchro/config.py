@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     database_url: str | None = None
     host: str = "127.0.0.1"
     port: int = 8000
+    openai_api_key: str | None = None
+    google_api_key: str | None = None
+    brave_api_key: str | None = None
+    admin_password: str | None = None
 
 
 @lru_cache

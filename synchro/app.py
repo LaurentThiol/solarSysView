@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from synchro import db
-from synchro.config import WEB_DIR
+from synchro.config import WEB_DIR, get_settings
 from synchro.fdj import Draw, fetch_all_draws
 from synchro.ranks import evaluate_grid, validate_grid
 from synchro.stats import compute_stats
@@ -108,6 +108,13 @@ def create_app() -> FastAPI:
 
         threading.Thread(target=_stop, daemon=True).start()
         return {"ok": True}
+
+    @app.post("/api/reload-env")
+    def reload_env() -> dict[str, Any]:
+        get_settings.cache_clear()
+        db.reset_pool()
+        neon = db.ping()
+        return {"ok": True, "neon": neon}
 
     @app.get("/api/draws")
     def draws(
