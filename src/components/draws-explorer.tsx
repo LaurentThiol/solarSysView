@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Download, Search, Sparkles } from "lucide-react"
+import { Download, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,53 +23,23 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { DrawBalls } from "@/components/draw-balls"
-import { DrawChart } from "@/components/draw-chart"
 import {
-  DRAWS,
-  type Draw,
   archiveSummary,
   drawMatchesQuery,
   formatDrawDate,
   monthOf,
   monthsPresent,
-  numberFrequencies,
   parseQueryNumbers,
-  starFrequencies,
   toCsv,
 } from "@/lib/draws"
+import { useDraws } from "@/lib/use-draws"
 
 export function DrawsExplorer() {
-  const [draws, setDraws] = useState<Draw[]>(DRAWS)
-  const [source, setSource] = useState<"json" | "neon">("json")
+  const { draws, source } = useDraws("year")
   const [month, setMonth] = useState("all")
   const [query, setQuery] = useState("")
   const wanted = useMemo(() => parseQueryNumbers(query), [query])
   const monthOptions = useMemo(() => monthsPresent(draws), [draws])
-
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const response = await fetch("/api/draws", { cache: "no-store" })
-        if (!response.ok) return
-        const payload = (await response.json()) as {
-          ok?: boolean
-          items?: Draw[]
-          source?: string
-        }
-        if (cancelled || !payload.ok || !payload.items?.length) return
-        setDraws(
-          [...payload.items].sort((a, b) => b.date.localeCompare(a.date))
-        )
-        setSource("neon")
-      } catch {
-        // repli JSON
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   useEffect(() => {
     if (month !== "all" && !monthOptions.some((item) => item.value === month)) {
@@ -86,9 +56,6 @@ export function DrawsExplorer() {
       return drawMatchesQuery(draw, wanted)
     })
   }, [draws, month, wanted])
-
-  const hotNumbers = useMemo(() => numberFrequencies(filtered), [filtered])
-  const hotStars = useMemo(() => starFrequencies(filtered), [filtered])
 
   function downloadCsv() {
     const year = last?.date.slice(0, 4) || "tirages"
@@ -245,22 +212,6 @@ export function DrawsExplorer() {
           )}
         </CardContent>
       </Card>
-
-      <DrawChart draws={filtered} />
-
-      <section className="grid gap-4 lg:grid-cols-2">
-        <FrequencyCard
-          title="Numéros les plus sortis"
-          items={hotNumbers}
-          empty={filtered.length === 0}
-        />
-        <FrequencyCard
-          title="Étoiles les plus sorties"
-          items={hotStars}
-          empty={filtered.length === 0}
-          star
-        />
-      </section>
     </div>
   )
 }
@@ -286,48 +237,6 @@ function StatCard({
       </CardHeader>
       <CardContent className="text-sm text-muted-foreground capitalize">
         {hint}
-      </CardContent>
-    </Card>
-  )
-}
-
-function FrequencyCard({
-  title,
-  items,
-  empty,
-  star = false,
-}: {
-  title: string
-  items: [number, number][]
-  empty: boolean
-  star?: boolean
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base font-medium">
-          {star ? <Sparkles className="size-4 text-[oklch(0.82_0.12_85)]" /> : null}
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {empty ? (
-          <p className="text-sm text-muted-foreground">
-            Aucune statistique : affinez le filtre.
-          </p>
-        ) : (
-          <ol className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {items.map(([n, count]) => (
-              <li
-                key={`${star ? "s" : "n"}-${n}`}
-                className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm"
-              >
-                <span className="font-medium tabular-nums">{n}</span>
-                <span className="text-muted-foreground">{count}×</span>
-              </li>
-            ))}
-          </ol>
-        )}
       </CardContent>
     </Card>
   )

@@ -346,6 +346,7 @@ export function StartupStatus() {
 
 const NAV_ITEMS = [
   { href: "/tirage", label: "Tirage" },
+  { href: "/evolution", label: "Évolution" },
   { href: "/analyse", label: "Analyse" },
   { href: "/admin", label: "Admin" },
 ] as const
