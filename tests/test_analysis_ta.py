@@ -78,3 +78,10 @@ def test_indicators_disclaimer_and_lasts():
     assert payload["last"]["rsi"] is not None
     assert payload["last"]["atr"] is not None
     assert len(payload["rsi"]) == 30
+
+
+def test_atr_period_clamps_to_available_candles():
+    candles = [{"o": float(i), "h": float(i + 1), "l": float(i - 1), "c": float(i)} for i in range(8)]
+    payload = indicators([c["c"] for c in candles], candles)
+    assert payload["periods"]["atr"] == 8
+    assert payload["last"]["atr"] is not None

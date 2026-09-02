@@ -399,7 +399,7 @@ export function technicalIndicators(
 ) {
   const window = Math.max(2, Math.floor(periods.window ?? 20))
   const rsiPeriod = periods.rsi ?? 14
-  const atrPeriod = periods.atr ?? 14
+  const atrPeriod = Math.max(1, Math.min(periods.atr ?? 14, candles.length || 14))
   const smaLine = sma(values, window)
   const emaLine = ema(values, window)
   const rsiLine = rsi(values, rsiPeriod)

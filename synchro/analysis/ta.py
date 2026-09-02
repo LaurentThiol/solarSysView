@@ -204,7 +204,10 @@ def indicators(
     rsi_line = rsi(values, rsi_period)
     macd_pack = macd(values, macd_fast, macd_slow, macd_signal)
     bands = bollinger(values, bb_period, bb_k)
-    atr_line = atr(candles, atr_period) if candles else []
+    atr_p = atr_period
+    if candles:
+        atr_p = max(1, min(atr_period, len(candles)))
+    atr_line = atr(candles, atr_p) if candles else []
     return {
         "disclaimer": (
             "Chaque tirage est indépendant. SMA, EMA, RSI, MACD, Bollinger et ATR "
@@ -216,7 +219,7 @@ def indicators(
             "rsi": rsi_period,
             "bollinger": bb_period,
             "bollinger_k": bb_k,
-            "atr": atr_period,
+            "atr": atr_p,
             "macd_fast": macd_fast,
             "macd_slow": macd_slow,
             "macd_signal": macd_signal,
