@@ -61,9 +61,7 @@ function Pill({
     >
       <span className={`size-1.5 rounded-full ${dots[tone]}`} />
       <span>{label}</span>
-      {detail ? (
-        <span className="hidden font-normal opacity-80 sm:inline">{detail}</span>
-      ) : null}
+      {detail ? <span className="font-normal opacity-80">{detail}</span> : null}
     </button>
   )
 }

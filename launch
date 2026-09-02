@@ -237,24 +237,69 @@ first_line() {
 
 listening_pids() {
   local port="$1"
+  local pids=""
+
   if command -v lsof >/dev/null 2>&1; then
-    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true
-    return 0
+    pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)"
   fi
-  if command -v fuser >/dev/null 2>&1; then
-    fuser "${port}/tcp" 2>/dev/null | tr -s '[:space:]' '\n' || true
-    return 0
+  if [[ -z "$pids" ]] && command -v fuser >/dev/null 2>&1; then
+    pids="$(fuser "${port}/tcp" 2>/dev/null | tr -s '[:space:]' '\n' || true)"
   fi
-  if command -v ss >/dev/null 2>&1; then
-    ss -tlnp 2>/dev/null | awk -v p=":${port}" '
+  if [[ -z "$pids" ]] && command -v ss >/dev/null 2>&1; then
+    pids="$(ss -tlnp 2>/dev/null | awk -v p=":${port}" '
       $4 ~ p"$" {
         while (match($0, /pid=[0-9]+/)) {
           print substr($0, RSTART+4, RLENGTH-4)
           $0 = substr($0, RSTART+RLENGTH)
         }
-      }' || true
-    return 0
+      }' || true)"
   fi
+  # Next.js (io_uring) n'apparaît souvent pas dans lsof — netstat /proc restent fiables.
+  if [[ -z "$pids" ]] && command -v netstat >/dev/null 2>&1; then
+    pids="$(netstat -tlnp 2>/dev/null | awk -v p=":${port}" '
+      $4 ~ p"$" {
+        split($7, a, "/")
+        if (a[1] ~ /^[0-9]+$/) print a[1]
+      }' || true)"
+  fi
+  if [[ -z "$pids" ]]; then
+    local py
+    py="$(command -v python3 || command -v python || true)"
+    if [[ -n "$py" ]]; then
+      pids="$("$py" - "$port" <<'PY' 2>/dev/null || true
+import glob, os, sys
+port = int(sys.argv[1])
+needle = f":{port:04X}"
+inodes: set[str] = set()
+for path in ("/proc/net/tcp", "/proc/net/tcp6"):
+    try:
+        lines = open(path, encoding="utf-8").read().splitlines()[1:]
+    except OSError:
+        continue
+    for line in lines:
+        parts = line.split()
+        if len(parts) < 10:
+            continue
+        if parts[3] == "0A" and parts[1].upper().endswith(needle):
+            inodes.add(parts[9])
+if not inodes:
+    raise SystemExit(0)
+seen: set[str] = set()
+for fd in glob.glob("/proc/[0-9]*/fd/[0-9]*"):
+    try:
+        target = os.readlink(fd)
+    except OSError:
+        continue
+    if target.startswith("socket:[") and target[8:-1] in inodes:
+        pid = fd.split("/")[2]
+        if pid not in seen:
+            seen.add(pid)
+            print(pid)
+PY
+)"
+    fi
+  fi
+  printf '%s\n' "$pids"
 }
 
 free_port() {
@@ -535,7 +580,7 @@ startup_checks() {
 }
 
 cmd_stop() {
-  local graceful=1
+  local graceful=1 pid
   if [[ "${1:-}" == "--force" ]]; then
     graceful=0
   fi
@@ -544,6 +589,11 @@ cmd_stop() {
   if [[ "$graceful" -eq 1 ]]; then
     request_api_shutdown || true
   fi
+  for pid in "$RUN_DIR/backend.pid" "$RUN_DIR/frontend.pid"; do
+    if [[ -f "$pid" ]]; then
+      kill "$(cat "$pid")" 2>/dev/null || true
+    fi
+  done
   free_port "$BACKEND_PORT"
   free_port "$FRONTEND_PORT"
   rm -f "$RUN_DIR/backend.pid" "$RUN_DIR/frontend.pid"
@@ -551,30 +601,32 @@ cmd_stop() {
 }
 
 cmd_status() {
-  local be fe body summary
+  local be fe body summary api_up=0 ui_up=0
   be="$(listening_pids "$BACKEND_PORT" | first_line || true)"
   fe="$(listening_pids "$FRONTEND_PORT" | first_line || true)"
-  if [[ -n "$be" ]] && http_ok "$ALIVE_URL" 2; then
+  if http_ok "$ALIVE_URL" 2; then
+    api_up=1
     body="$(http_body "$HEALTH_URL" 8)"
     summary="$(summarize_health "$body")"
     if [[ -n "$summary" ]]; then
-      ok "API      ${BACKEND_URL}  (PID ${be}, /api/alive OK — ${summary})"
+      ok "API      ${BACKEND_URL}  (${be:+PID ${be}, }/api/alive OK — ${summary})"
     else
-      ok "API      ${BACKEND_URL}  (PID ${be}, /api/alive OK)"
+      ok "API      ${BACKEND_URL}  (${be:+PID ${be}, }/api/alive OK)"
     fi
   elif [[ -n "$be" ]]; then
     warn "API      :${BACKEND_PORT} occupé (PID ${be}) mais /api/alive ne répond pas."
   else
     printf '%sAPI      arrêtée.%s\n' "$C_DIM" "$C_RESET"
   fi
-  if [[ -n "$fe" ]] && http_ok "$FRONTEND_URL" 3; then
-    ok "UI       ${FRONTEND_URL}  (PID ${fe}, HTTP OK)"
+  if http_ok "$FRONTEND_URL" 3; then
+    ui_up=1
+    ok "UI       ${FRONTEND_URL}  (${fe:+PID ${fe}, }HTTP OK)"
   elif [[ -n "$fe" ]]; then
     warn "UI       :${FRONTEND_PORT} occupé (PID ${fe}) mais la page ne répond pas encore."
   else
     printf '%sUI       arrêtée.%s\n' "$C_DIM" "$C_RESET"
   fi
-  if [[ -z "$be" && -z "$fe" ]]; then
+  if [[ "$api_up" -eq 0 && "$ui_up" -eq 0 && -z "$be" && -z "$fe" ]]; then
     return 1
   fi
 }
