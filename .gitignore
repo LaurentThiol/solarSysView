@@ -51,6 +51,7 @@ yarn-error.log*
 .run/
 AGENTS.md
 CLAUDE.md
+.playwright-mcp/
 
 # vercel / netlify
 .vercel
