@@ -10,7 +10,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select"
 import {
   archiveSummary,
@@ -76,7 +75,9 @@ function EvolutionContent() {
         </Select>
         <Select value={month} onValueChange={(value) => setMonth(String(value))}>
           <SelectTrigger className="w-full sm:w-52" aria-label="Mois">
-            <SelectValue />
+            <span className="flex flex-1 text-left">
+              {monthOptions.find((item) => item.value === month)?.label ?? "Tous les mois"}
+            </span>
           </SelectTrigger>
           <SelectContent>
             {monthOptions.map((item) => (
