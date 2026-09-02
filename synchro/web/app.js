@@ -410,10 +410,15 @@ async function loadLab() {
 function renderLab(lab) {
   if (!lab) return;
   const roll = lab.rolling || {};
+  const ta = lab.ta || {};
+  const taLast = ta.last || null;
   $("lab-summary").textContent =
     `${lab.draw_count} tirages ${lab.from_date} → ${lab.to_date} · ` +
-    `moyenne fenêtre ${roll.mean ?? "—"} · z ${roll.zscore ?? "—"} · couverture ${roll.coverage ?? "—"}/50. ` +
-    (lab.disclaimer || "");
+    `moyenne fenêtre ${roll.mean ?? "—"} · z ${roll.zscore ?? "—"} · couverture ${roll.coverage ?? "—"}/50` +
+    (taLast
+      ? ` · SMA ${taLast.sma ?? "—"} · RSI ${taLast.rsi ?? "—"} · MACD ${taLast.macd ?? "—"} · ATR ${taLast.atr ?? "—"}`
+      : "") +
+    `. ${lab.disclaimer || ""} ${ta.disclaimer || ""}`;
   const candles = (lab.ohlc && lab.ohlc.candles) || [];
   const max = Math.max(...candles.map((c) => c.h), 1);
   const box = $("lab-candles");

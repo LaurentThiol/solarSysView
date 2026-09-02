@@ -7,20 +7,28 @@ from synchro.analysis.diagnostics import diagnostics_report
 from synchro.analysis.inference import inference_report
 from synchro.analysis.lab import lab_report
 from synchro.analysis.montecarlo import montecarlo_report
+from synchro.analysis.ta import atr, bollinger, ema, indicators, macd, rsi, sma
 from synchro.analysis.variables import VARIABLE_NAMES, series
 from synchro.analysis.windows import heikin_ashi, ohlc_blocks, rolling_stats
 
 __all__ = [
     "VARIABLE_NAMES",
+    "atr",
     "bayes_report",
+    "bollinger",
     "dependence_report",
     "diagnostics_report",
+    "ema",
     "heikin_ashi",
+    "indicators",
     "inference_report",
     "lab_report",
+    "macd",
     "montecarlo_report",
     "ohlc_blocks",
     "proba_tables",
     "rolling_stats",
+    "rsi",
     "series",
+    "sma",
 ]

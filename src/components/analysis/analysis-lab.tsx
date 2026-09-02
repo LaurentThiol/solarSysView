@@ -6,8 +6,10 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Line,
   LineChart,
+  ReferenceLine,
   Scatter,
   ScatterChart,
   XAxis,
@@ -44,6 +46,7 @@ import {
   rankProbabilities,
   rollingStats,
   series,
+  technicalIndicators,
 } from "@/lib/analysis"
 import { type Draw, formatDrawDate, monthOf, monthsPresent } from "@/lib/draws"
 import { useDraws } from "@/lib/use-draws"
@@ -60,6 +63,15 @@ type TabId = (typeof TABS)[number]["id"]
 
 const lineConfig = {
   value: { label: "Valeur", color: "var(--chart-1)" },
+  sma: { label: "SMA", color: "var(--chart-2)" },
+  ema: { label: "EMA", color: "var(--chart-4)" },
+  bbUpper: { label: "Bollinger +", color: "var(--chart-5)" },
+  bbMiddle: { label: "Bollinger", color: "var(--chart-2)" },
+  bbLower: { label: "Bollinger −", color: "var(--chart-5)" },
+  rsi: { label: "RSI", color: "var(--chart-1)" },
+  line: { label: "MACD", color: "var(--chart-1)" },
+  signal: { label: "Signal", color: "var(--chart-4)" },
+  histogram: { label: "Histogramme", color: "var(--chart-2)" },
 } satisfies ChartConfig
 
 function formatStat(value: number) {
@@ -158,7 +170,9 @@ export function AnalysisLab() {
     <div className="flex flex-col gap-6">
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
         Chaque outil lit les <strong>mêmes tirages</strong> ({chrono.length} après filtre,
-        source {source === "neon" ? "Neon" : "JSON local"}).
+        source {source === "neon" ? "Neon" : "JSON local"}). Les tirages sont
+        indépendants : SMA, EMA, RSI, MACD, Bollinger et ATR décrivent la série
+        observée, ce ne sont pas des signaux de jeu. Jeu interdit aux mineurs.
       </p>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap">
@@ -259,6 +273,7 @@ export function AnalysisLab() {
           setBlock={setBlock}
           heikin={heikin}
           setHeikin={setHeikin}
+          windowSize={window}
         />
       ) : null}
       {tab === "proba" ? <ProbaPanel ranks={ranks} /> : null}
@@ -280,6 +295,31 @@ export function AnalysisLab() {
   )
 }
 
+function OverlayToggle({
+  label,
+  on,
+  onClick,
+}: {
+  label: string
+  on: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={`rounded-md border px-2 py-1 text-xs ${
+        on
+          ? "border-primary bg-primary/15 text-foreground"
+          : "border-border text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
 function VariablesPanel({
   payload,
   rolling,
@@ -289,6 +329,7 @@ function VariablesPanel({
   setBlock,
   heikin,
   setHeikin,
+  windowSize,
 }: {
   payload: ReturnType<typeof series>
   rolling: ReturnType<typeof rollingStats>
@@ -298,10 +339,60 @@ function VariablesPanel({
   setBlock: (v: "month" | "week" | "window") => void
   heikin: boolean
   setHeikin: (v: boolean) => void
+  windowSize: number
 }) {
+  const [showSma, setShowSma] = useState(true)
+  const [showEma, setShowEma] = useState(true)
+  const [showBb, setShowBb] = useState(true)
+  const [showRsi, setShowRsi] = useState(true)
+  const [showMacd, setShowMacd] = useState(true)
+
+  const seriesTa = useMemo(
+    () => technicalIndicators(payload.values, candles, { window: windowSize }),
+    [payload.values, candles, windowSize]
+  )
+  const candleTa = useMemo(
+    () => technicalIndicators(candles.map((c) => c.c), candles, { window: windowSize }),
+    [candles, windowSize]
+  )
+  const seriesData = useMemo(
+    () =>
+      payload.points.map((point, index) => ({
+        date: point.date,
+        value: point.value,
+        sma: seriesTa.sma[index],
+        ema: seriesTa.ema[index],
+        bbUpper: seriesTa.bollinger.upper[index],
+        bbMiddle: seriesTa.bollinger.middle[index],
+        bbLower: seriesTa.bollinger.lower[index],
+        rsi: seriesTa.rsi[index],
+        line: seriesTa.macd.line[index],
+        signal: seriesTa.macd.signal[index],
+        histogram: seriesTa.macd.histogram[index],
+      })),
+    [payload.points, seriesTa]
+  )
+  const overlays = useMemo(() => {
+    const rows = []
+    if (showSma) {
+      rows.push({ key: "sma", values: candleTa.sma, color: "var(--chart-2)" })
+    }
+    if (showEma) {
+      rows.push({ key: "ema", values: candleTa.ema, color: "var(--chart-4)" })
+    }
+    if (showBb) {
+      rows.push(
+        { key: "bbUpper", values: candleTa.bollinger.upper, color: "var(--chart-5)", dashed: true },
+        { key: "bbMiddle", values: candleTa.bollinger.middle, color: "var(--chart-2)", dashed: true },
+        { key: "bbLower", values: candleTa.bollinger.lower, color: "var(--chart-5)", dashed: true }
+      )
+    }
+    return rows
+  }, [candleTa, showSma, showEma, showBb])
+
   return (
     <div className="flex flex-col gap-4">
-      <section className="grid gap-3 sm:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <Stat label="Tirages" value={String(payload.drawCount)} />
         <Stat
           label={`Moyenne / ${rolling.window}`}
@@ -311,8 +402,26 @@ function VariablesPanel({
           label="z-score"
           value={rolling.zscore != null ? formatStat(rolling.zscore) : "—"}
         />
-        <Stat label="Couverture 1–50" value={`${rolling.coverage}`} />
+        <Stat
+          label={`RSI ${seriesTa.periods.rsi}`}
+          value={seriesTa.last.rsi != null ? formatStat(seriesTa.last.rsi) : "—"}
+        />
+        <Stat
+          label="MACD"
+          value={seriesTa.last.macd != null ? formatStat(seriesTa.last.macd) : "—"}
+        />
+        <Stat
+          label={`ATR ${seriesTa.periods.atr}`}
+          value={seriesTa.last.atr != null ? formatStat(seriesTa.last.atr) : "—"}
+        />
       </section>
+      <div className="flex flex-wrap gap-2">
+        <OverlayToggle label={`SMA ${windowSize}`} on={showSma} onClick={() => setShowSma(!showSma)} />
+        <OverlayToggle label={`EMA ${windowSize}`} on={showEma} onClick={() => setShowEma(!showEma)} />
+        <OverlayToggle label="Bollinger" on={showBb} onClick={() => setShowBb(!showBb)} />
+        <OverlayToggle label="RSI" on={showRsi} onClick={() => setShowRsi(!showRsi)} />
+        <OverlayToggle label="MACD" on={showMacd} onClick={() => setShowMacd(!showMacd)} />
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Série · {VARIABLE_LABELS[payload.name]}</CardTitle>
@@ -322,18 +431,32 @@ function VariablesPanel({
             <p className="text-sm text-muted-foreground">Aucun tirage.</p>
           ) : (
             <ChartContainer config={lineConfig} className="aspect-auto h-[280px] w-full">
-              <LineChart data={payload.points} margin={{ left: 4, right: 8, top: 8 }}>
+              <LineChart data={seriesData} margin={{ left: 4, right: 8, top: 8 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} />
                 <YAxis width={40} tickLine={false} axisLine={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Line type="monotone" dataKey="value" stroke="var(--color-value)" dot={false} strokeWidth={2} />
+                {showSma ? (
+                  <Line type="monotone" dataKey="sma" stroke="var(--color-sma)" dot={false} strokeWidth={1.5} connectNulls={false} />
+                ) : null}
+                {showEma ? (
+                  <Line type="monotone" dataKey="ema" stroke="var(--color-ema)" dot={false} strokeWidth={1.5} connectNulls={false} />
+                ) : null}
+                {showBb ? (
+                  <>
+                    <Line type="monotone" dataKey="bbUpper" stroke="var(--color-bbUpper)" dot={false} strokeDasharray="4 3" connectNulls={false} />
+                    <Line type="monotone" dataKey="bbMiddle" stroke="var(--color-bbMiddle)" dot={false} strokeDasharray="4 3" connectNulls={false} />
+                    <Line type="monotone" dataKey="bbLower" stroke="var(--color-bbLower)" dot={false} strokeDasharray="4 3" connectNulls={false} />
+                  </>
+                ) : null}
               </LineChart>
             </ChartContainer>
           )}
           <p className="mt-2 text-xs text-muted-foreground">
-            Fenêtre X={rolling.window} · σ {formatStat(rolling.std)} · RSI-like{" "}
-            {formatStat(rolling.rsiLike)} (descriptif, pas un signal).
+            Fenêtre X={rolling.window} · σ {formatStat(rolling.std)} · RSI Wilder{" "}
+            {seriesTa.last.rsi != null ? formatStat(seriesTa.last.rsi) : "—"}{" "}
+            (descriptif, pas un signal).
           </p>
         </CardContent>
       </Card>
@@ -363,9 +486,59 @@ function VariablesPanel({
           </div>
         </CardHeader>
         <CardContent>
-          <CandleChart candles={candles} />
+          <CandleChart candles={candles} overlays={overlays} />
         </CardContent>
       </Card>
+      {showRsi ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>RSI Wilder ({seriesTa.periods.rsi})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={lineConfig} className="aspect-auto h-[160px] w-full">
+              <LineChart data={seriesData} margin={{ left: 4, right: 8, top: 8 }}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} />
+                <YAxis domain={[0, 100]} width={32} tickLine={false} axisLine={false} />
+                <ReferenceLine y={70} stroke="var(--chart-5)" strokeDasharray="3 3" />
+                <ReferenceLine y={30} stroke="var(--chart-3)" strokeDasharray="3 3" />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Line type="monotone" dataKey="rsi" stroke="var(--color-rsi)" dot={false} strokeWidth={2} connectNulls={false} />
+              </LineChart>
+            </ChartContainer>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Seuils 30 / 70 à titre visuel. Un RSI extrême sur une série de tirages
+              indépendants n’indique pas le prochain résultat.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+      {showMacd ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              MACD ({seriesTa.periods.macdFast}, {seriesTa.periods.macdSlow},{" "}
+              {seriesTa.periods.macdSignal})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={lineConfig} className="aspect-auto h-[180px] w-full">
+              <ComposedChart data={seriesData} margin={{ left: 4, right: 8, top: 8 }}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} />
+                <YAxis width={40} tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar dataKey="histogram" fill="var(--color-histogram)" radius={1} />
+                <Line type="monotone" dataKey="line" stroke="var(--color-line)" dot={false} strokeWidth={2} connectNulls={false} />
+                <Line type="monotone" dataKey="signal" stroke="var(--color-signal)" dot={false} strokeWidth={1.5} connectNulls={false} />
+              </ComposedChart>
+            </ChartContainer>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Croisements MACD / signal : lecture analogique, pas un conseil de jeu.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>Histogramme observé</CardTitle>

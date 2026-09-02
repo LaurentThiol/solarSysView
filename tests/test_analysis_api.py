@@ -79,8 +79,13 @@ def test_ohlc_and_inference_and_lab() -> None:
             inf = client.get("/api/analysis/inference")
             mc = client.get("/api/analysis/montecarlo?n=20&seed=0")
             lab = client.get("/api/analysis/lab?n_sim=20")
+            ta = client.get("/api/analysis/ta?name=sum&window=2")
     assert ohlc.status_code == 200
     assert "heikin_ashi" in ohlc.json()
     assert inf.json()["draw_count"] == 3
     assert mc.json()["seed"] == 0
     assert lab.json()["variable"]["values"] == [15.0, 31.0, 47.0]
+    assert "indépendant" in lab.json()["ta"]["disclaimer"]
+    assert lab.json()["ta"]["periods"]["sma"] == 20
+    assert ta.status_code == 200
+    assert ta.json()["last"]["sma"] == 39.0

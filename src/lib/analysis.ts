@@ -242,6 +242,202 @@ export function heikinAshi(candles: Candle[]): Candle[] {
   return out
 }
 
+function lastNumber(values: Array<number | null>): number | null {
+  for (let i = values.length - 1; i >= 0; i -= 1) {
+    const value = values[i]
+    if (value != null) return value
+  }
+  return null
+}
+
+export function sma(values: number[], period: number): Array<number | null> {
+  const p = Math.max(1, Math.floor(period))
+  const out: Array<number | null> = Array(values.length).fill(null)
+  if (p > values.length) return out
+  let running = 0
+  for (let i = 0; i < values.length; i += 1) {
+    running += values[i]
+    if (i >= p) running -= values[i - p]
+    if (i >= p - 1) out[i] = running / p
+  }
+  return out
+}
+
+export function ema(values: number[], period: number): Array<number | null> {
+  const p = Math.max(1, Math.floor(period))
+  const out: Array<number | null> = Array(values.length).fill(null)
+  if (p > values.length) return out
+  let prev = values.slice(0, p).reduce((a, b) => a + b, 0) / p
+  out[p - 1] = prev
+  const alpha = 2 / (p + 1)
+  for (let i = p; i < values.length; i += 1) {
+    prev = alpha * values[i] + (1 - alpha) * prev
+    out[i] = prev
+  }
+  return out
+}
+
+export function rsi(values: number[], period = 14): Array<number | null> {
+  const p = Math.max(1, Math.floor(period))
+  const out: Array<number | null> = Array(values.length).fill(null)
+  if (values.length <= p) return out
+
+  function toRsi(avgGain: number, avgLoss: number) {
+    if (avgLoss === 0) return avgGain > 0 ? 100 : 50
+    if (avgGain === 0) return 0
+    const rs = avgGain / avgLoss
+    return 100 - 100 / (1 + rs)
+  }
+
+  let avgGain = 0
+  let avgLoss = 0
+  for (let i = 1; i <= p; i += 1) {
+    const delta = values[i] - values[i - 1]
+    avgGain += Math.max(delta, 0)
+    avgLoss += Math.max(-delta, 0)
+  }
+  avgGain /= p
+  avgLoss /= p
+  out[p] = toRsi(avgGain, avgLoss)
+  for (let i = p + 1; i < values.length; i += 1) {
+    const delta = values[i] - values[i - 1]
+    avgGain = (avgGain * (p - 1) + Math.max(delta, 0)) / p
+    avgLoss = (avgLoss * (p - 1) + Math.max(-delta, 0)) / p
+    out[i] = toRsi(avgGain, avgLoss)
+  }
+  return out
+}
+
+export function macd(
+  values: number[],
+  fast = 12,
+  slow = 26,
+  signal = 9
+): {
+  line: Array<number | null>
+  signal: Array<number | null>
+  histogram: Array<number | null>
+} {
+  const fastLine = ema(values, fast)
+  const slowLine = ema(values, slow)
+  const line = fastLine.map((a, i) =>
+    a == null || slowLine[i] == null ? null : a - (slowLine[i] as number)
+  )
+  const compact = line.filter((v): v is number => v != null)
+  const signalCompact = ema(compact, signal)
+  const signalLine: Array<number | null> = Array(line.length).fill(null)
+  const histogram: Array<number | null> = Array(line.length).fill(null)
+  let compactI = 0
+  for (let i = 0; i < line.length; i += 1) {
+    const value = line[i]
+    if (value == null) continue
+    const sig = signalCompact[compactI]
+    compactI += 1
+    if (sig == null) continue
+    signalLine[i] = sig
+    histogram[i] = value - sig
+  }
+  return { line, signal: signalLine, histogram }
+}
+
+function sampleStd(chunk: number[]) {
+  if (chunk.length < 2) return 0
+  const m = mean(chunk)
+  return Math.sqrt(chunk.reduce((acc, v) => acc + (v - m) ** 2, 0) / (chunk.length - 1))
+}
+
+export function bollinger(
+  values: number[],
+  period = 20,
+  k = 2
+): {
+  middle: Array<number | null>
+  upper: Array<number | null>
+  lower: Array<number | null>
+} {
+  const p = Math.max(1, Math.floor(period))
+  const middle = sma(values, p)
+  const upper: Array<number | null> = Array(values.length).fill(null)
+  const lower: Array<number | null> = Array(values.length).fill(null)
+  for (let i = 0; i < values.length; i += 1) {
+    const mid = middle[i]
+    if (mid == null) continue
+    const sigma = sampleStd(values.slice(i - p + 1, i + 1))
+    upper[i] = mid + k * sigma
+    lower[i] = mid - k * sigma
+  }
+  return { middle, upper, lower }
+}
+
+export function atr(candles: Candle[], period = 14): Array<number | null> {
+  const p = Math.max(1, Math.floor(period))
+  const out: Array<number | null> = Array(candles.length).fill(null)
+  if (p > candles.length) return out
+  const tr: number[] = []
+  let prevC: number | null = null
+  for (const candle of candles) {
+    let range = candle.h - candle.l
+    if (prevC != null) {
+      range = Math.max(range, Math.abs(candle.h - prevC), Math.abs(candle.l - prevC))
+    }
+    tr.push(range)
+    prevC = candle.c
+  }
+  let prev = tr.slice(0, p).reduce((a, b) => a + b, 0) / p
+  out[p - 1] = prev
+  for (let i = p; i < tr.length; i += 1) {
+    prev = (prev * (p - 1) + tr[i]) / p
+    out[i] = prev
+  }
+  return out
+}
+
+export function technicalIndicators(
+  values: number[],
+  candles: Candle[] = [],
+  periods: { window?: number; rsi?: number; atr?: number } = {}
+) {
+  const window = Math.max(2, Math.floor(periods.window ?? 20))
+  const rsiPeriod = periods.rsi ?? 14
+  const atrPeriod = periods.atr ?? 14
+  const smaLine = sma(values, window)
+  const emaLine = ema(values, window)
+  const rsiLine = rsi(values, rsiPeriod)
+  const macdPack = macd(values)
+  const bands = bollinger(values, window)
+  const atrLine = atr(candles, atrPeriod)
+  return {
+    periods: {
+      sma: window,
+      ema: window,
+      rsi: rsiPeriod,
+      bollinger: window,
+      atr: atrPeriod,
+      macdFast: 12,
+      macdSlow: 26,
+      macdSignal: 9,
+    },
+    sma: smaLine,
+    ema: emaLine,
+    rsi: rsiLine,
+    macd: macdPack,
+    bollinger: bands,
+    atr: atrLine,
+    last: {
+      sma: lastNumber(smaLine),
+      ema: lastNumber(emaLine),
+      rsi: lastNumber(rsiLine),
+      macd: lastNumber(macdPack.line),
+      macdSignal: lastNumber(macdPack.signal),
+      macdHistogram: lastNumber(macdPack.histogram),
+      bbMiddle: lastNumber(bands.middle),
+      bbUpper: lastNumber(bands.upper),
+      bbLower: lastNumber(bands.lower),
+      atr: lastNumber(atrLine),
+    },
+  }
+}
+
 export function comb(n: number, k: number) {
   if (k < 0 || k > n) return 0
   const kk = Math.min(k, n - k)

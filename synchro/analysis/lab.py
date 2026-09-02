@@ -9,6 +9,7 @@ from synchro.analysis.dependence import dependence_report
 from synchro.analysis.diagnostics import diagnostics_report
 from synchro.analysis.inference import inference_report
 from synchro.analysis.montecarlo import montecarlo_report
+from synchro.analysis.ta import indicators
 from synchro.analysis.variables import series
 from synchro.analysis.windows import heikin_ashi, ohlc_blocks, rolling_stats
 
@@ -29,6 +30,7 @@ def lab_report(
     ball = n if variable in {"delay", "hit"} else None
     var_n = n if variable in {"delay", "hit"} else None
     ohlc = ohlc_blocks(ordered, name=variable, block=block, window=window, n=var_n)
+    variable_series = series(ordered, variable, n=var_n)
     inference = inference_report(ordered)
     bayes = bayes_report(ordered)
     return {
@@ -36,8 +38,15 @@ def lab_report(
         "from_date": as_date(ordered[0]["draw_date"]).isoformat() if ordered else None,
         "to_date": as_date(ordered[-1]["draw_date"]).isoformat() if ordered else None,
         "disclaimer": "Chaque tirage est indépendant. Ces outils décrivent l’archive, ils ne prédisent pas le prochain.",
-        "variable": series(ordered, variable, n=var_n),
+        "variable": variable_series,
         "rolling": rolling_stats(ordered, variable, window=window, n=var_n),
+        "ta": indicators(
+            [float(v) for v in variable_series["values"]],
+            ohlc["candles"],
+            sma_period=window,
+            ema_period=window,
+            bb_period=window,
+        ),
         "ohlc": ohlc,
         "heikin_ashi": heikin_ashi(ohlc["candles"]),
         "proba": proba_tables(),

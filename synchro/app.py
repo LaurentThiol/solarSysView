@@ -25,6 +25,7 @@ from synchro.analysis.diagnostics import diagnostics_report
 from synchro.analysis.inference import inference_report
 from synchro.analysis.lab import lab_report
 from synchro.analysis.montecarlo import montecarlo_report
+from synchro.analysis.ta import indicators
 from synchro.analysis.variables import VARIABLE_NAMES, series
 from synchro.analysis.windows import heikin_ashi, ohlc_blocks, rolling_stats
 from synchro.config import ROOT, WEB_DIR, get_settings
@@ -246,6 +247,12 @@ def create_app() -> FastAPI:
         draws = _analysis_draws(era, from_date, to_date)
         payload = series(draws, name, n=n)
         payload["rolling"] = rolling_stats(draws, name, window=window, n=n)
+        payload["ta"] = indicators(
+            [float(v) for v in payload["values"]],
+            sma_period=window,
+            ema_period=window,
+            bb_period=window,
+        )
         return payload
 
     @app.get("/api/analysis/ohlc")
@@ -265,7 +272,38 @@ def create_app() -> FastAPI:
         payload = ohlc_blocks(draws, name=name, block=block, window=window, n=n)
         if heikin:
             payload["heikin_ashi"] = heikin_ashi(payload["candles"])
+        closes = [float(c["c"]) for c in payload["candles"]]
+        payload["ta"] = indicators(
+            closes,
+            payload["candles"],
+            sma_period=window,
+            ema_period=window,
+            bb_period=window,
+        )
         return payload
+
+    @app.get("/api/analysis/ta")
+    def analysis_ta(
+        name: str = Query("sum"),
+        window: int = Query(20, ge=2, le=500),
+        block: str = Query("month", pattern="^(month|week|window)$"),
+        n: int | None = Query(None, ge=1, le=50),
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        if name not in VARIABLE_NAMES:
+            raise HTTPException(400, f"Variable inconnue: {name}")
+        draws = _analysis_draws(era, from_date, to_date)
+        payload = series(draws, name, n=n)
+        candles = ohlc_blocks(draws, name=name, block=block, window=window, n=n)["candles"]
+        return indicators(
+            [float(v) for v in payload["values"]],
+            candles,
+            sma_period=window,
+            ema_period=window,
+            bb_period=window,
+        )
 
     @app.get("/api/analysis/inference")
     def analysis_inference(
