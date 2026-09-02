@@ -26,6 +26,7 @@
       <button class="tab is-active" data-tab="home" type="button">Dernier tirage</button>
       <button class="tab" data-tab="history" type="button">Historique</button>
       <button class="tab" data-tab="stats" type="button">Statistiques</button>
+      <button class="tab" data-tab="lab" type="button">Laboratoire</button>
       <button class="tab" data-tab="grids" type="button">Mes grilles</button>
     </nav>
 
@@ -108,6 +109,43 @@
           <p class="disclaimer">
             Chaque tirage est indépendant. Les fréquences passées n’améliorent pas les chances
             de gagner. Jeu interdit aux mineurs. Jouer comporte des risques.
+          </p>
+        </article>
+      </section>
+
+      <section id="tab-lab" class="panel">
+        <article class="card">
+          <h2>Laboratoire</h2>
+          <p class="muted">
+            Les outils lisent les tirages Neon (même archive que les stats). Pas un second moteur :
+            <code>/api/analysis/lab</code>.
+          </p>
+          <div class="row">
+            <label>Période
+              <select id="lab-era">
+                <option value="current">Formule actuelle</option>
+                <option value="all">Tout l’historique</option>
+              </select>
+            </label>
+            <label>Variable
+              <select id="lab-var">
+                <option value="sum">Somme</option>
+                <option value="spread">Étendue</option>
+                <option value="parity">Pairs</option>
+                <option value="star_sum">Somme étoiles</option>
+                <option value="consecutive">Consécutifs</option>
+              </select>
+            </label>
+            <label>X
+              <input id="lab-window" type="number" min="5" max="200" value="20" style="width:5rem" />
+            </label>
+            <button id="btn-lab" class="btn primary" type="button">Calculer</button>
+          </div>
+          <p id="lab-summary" class="muted"></p>
+          <div id="lab-candles" class="candles"></div>
+          <div id="lab-ranks"></div>
+          <p class="disclaimer">
+            Chaque tirage est indépendant. Ces chiffres décrivent l’archive, ils ne prédisent pas le prochain tirage.
           </p>
         </article>
       </section>

@@ -384,6 +384,60 @@ $("stats-era").addEventListener("change", async (ev) => {
   else renderStats(state.era === "all" ? state.snapshot.stats_all : state.snapshot.stats_current);
 });
 
+async function loadLab() {
+  const era = $("lab-era").value;
+  const name = $("lab-var").value;
+  const win = $("lab-window").value;
+  $("lab-summary").textContent = "Calcul…";
+  try {
+    let lab;
+    if (state.live) {
+      lab = await tryLive(
+        `/analysis/lab?era=${encodeURIComponent(era)}&name=${encodeURIComponent(name)}&window=${win}&n_sim=200`
+      );
+    } else {
+      lab = state.snapshot?.analysis_current;
+      if (!lab) throw new Error("Pas de laboratoire dans le snapshot.");
+    }
+    renderLab(lab);
+  } catch (err) {
+    $("lab-summary").textContent = String(err.message || err);
+    $("lab-candles").innerHTML = "";
+    $("lab-ranks").innerHTML = "";
+  }
+}
+
+function renderLab(lab) {
+  if (!lab) return;
+  const roll = lab.rolling || {};
+  $("lab-summary").textContent =
+    `${lab.draw_count} tirages ${lab.from_date} → ${lab.to_date} · ` +
+    `moyenne fenêtre ${roll.mean ?? "—"} · z ${roll.zscore ?? "—"} · couverture ${roll.coverage ?? "—"}/50. ` +
+    (lab.disclaimer || "");
+  const candles = (lab.ohlc && lab.ohlc.candles) || [];
+  const max = Math.max(...candles.map((c) => c.h), 1);
+  const box = $("lab-candles");
+  box.innerHTML = "";
+  for (const c of candles.slice(-48)) {
+    const el = document.createElement("div");
+    el.className = "candle";
+    el.style.height = `${Math.max(4, (c.c / max) * 72)}px`;
+    el.title = `${c.key} O${c.o} H${c.h} L${c.l} C${c.c}`;
+    box.appendChild(el);
+  }
+  const ranks = (lab.proba && lab.proba.ranks) || [];
+  const chi = lab.inference && lab.inference.chi_square;
+  const mc = lab.montecarlo && lab.montecarlo.max_frequency;
+  $("lab-ranks").innerHTML = `
+    <p class="muted">${chi ? `χ² = ${Number(chi.stat).toFixed(1)} (p≈${Number(chi.pvalue).toFixed(3)})` : ""}
+    ${mc ? ` · fréquence max observée ${mc.observed}, P(≥obs) ${Number(mc.p_ge_observed).toFixed(2)}` : ""}</p>
+    <table class="lab-table"><thead><tr><th>Rang</th><th>Libellé</th><th>P</th></tr></thead>
+    <tbody>${ranks.slice(0, 8).map((r) => `<tr><td>${r.rank ?? "—"}</td><td>${r.label}</td><td>${Number(r.p).toExponential(2)}</td></tr>`).join("")}</tbody></table>
+  `;
+}
+
+$("btn-lab").addEventListener("click", loadLab);
+
 $("btn-more").addEventListener("click", async () => {
   if (state.live) {
     state.historyOffset += 50;

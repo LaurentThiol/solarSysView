@@ -1,6 +1,6 @@
 # Synchro — tirages EuroMillions
 
-Deux couches sur les mêmes tirages : **Next.js** (consultation 2026) et **Python / Neon** (historique FDJ complet). Les résultats officiels restent ceux de la [FDJ](https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique). Ce n’est pas un outil de prédiction. Jeu interdit aux mineurs.
+Deux couches sur les mêmes tirages : **Next.js** (consultation + laboratoire d’analyse) et **Python / Neon** (historique FDJ complet). Les résultats officiels restent ceux de la [FDJ](https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique). Ce n’est pas un outil de prédiction. Jeu interdit aux mineurs.
 
 ## Démarrage
 
@@ -37,11 +37,15 @@ Sur macOS, un double-clic sur `Synchro.command` à la racine du dépôt lance au
 
 Options : `--skip-install`, `--force-install`, `--no-open`. Ports : `SYNCHRO_BACKEND_PORT` (8000), `SYNCHRO_FRONTEND_PORT` (43147). Logs : `.run/`.
 
-Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections **Tirage** et **Admin** sont des onglets du bandeau.
+Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections **Tirage**, **Analyse** et **Admin** sont des onglets du bandeau.
 
 ## Tirage (`/tirage`)
 
 Archives EuroMillions : tableau filtrable, graphique, fréquences, export CSV. En local, les données viennent de **Neon** (année du dernier tirage) dès que l’API répond ; sinon repli sur `src/data/euromillions-2026.json`. L’accueil `/` redirige vers cet onglet.
+
+## Analyse (`/analyse`)
+
+Laboratoire : variables (somme, étendue, parité, retard, …), fenêtre de X tirages, chandeliers OHLC / Heikin-Ashi, probabilités exactes des 13 rangs, tests vs hasard (χ², IC Wilson), Beta-Binomial, paires / lift, backtest des numéros « chauds ». Tous les outils lisent le **même** ensemble de tirages (Neon `era=current|all`, sinon JSON 2026). Monte-Carlo des records via l’API Python quand elle est joignable. Disclaimer : tirages indépendants, pas de prédiction.
 
 ## Admin (`/admin`)
 
@@ -51,7 +55,7 @@ En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, défini
 
 ## Interface web (Next.js)
 
-App Next.js (onglets **Tirage** `/tirage` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
+App Next.js (onglets **Tirage** `/tirage`, **Analyse** `/analyse` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install
@@ -95,9 +99,11 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 - `GET /api/alive` — liveness (pas de Neon)
 - `GET /api/health` — ping Neon, tirages, dernier sync, `stale` / `expected_draw_date`
 - `POST /api/shutdown` — arrêt propre (localhost uniquement)
-- `GET /api/draws?limit=&offset=&q=&year=`
+- `GET /api/draws?limit=&offset=&q=&year=&era=current|all`
 - `GET /api/draws/latest`
 - `GET /api/stats?era=current|all`
+- `GET /api/analysis/proba` — combinatoire exacte (sans Neon)
+- `GET /api/analysis/variables|ohlc|inference|montecarlo|bayes|dependence|lab` — calculés sur les tirages (`era`, `from_date`, `to_date`)
 - `POST /api/check` `{ numbers, stars, last_n }`
 - `GET\|POST /api/grids` · `DELETE /api/grids/{id}`
 - `POST /api/reload-env` — relit `.env` et recrée le pool Neon

@@ -1,15 +1,17 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 
 import { apiBase, HEALTH_TIMEOUT_MS } from "@/lib/api-base"
 
 export const dynamic = "force-dynamic"
 
 type NeonDraw = {
+  id?: number | string
   draw_date?: string
   draw_code?: string | null
   weekday?: string | null
   numbers?: number[]
   stars?: number[]
+  star_pool?: number
 }
 
 function drawId(row: NeonDraw, date: string): number {
@@ -19,12 +21,58 @@ function drawId(row: NeonDraw, date: string): number {
   return Number.isFinite(fromDate) ? fromDate : 0
 }
 
-export async function GET() {
+function toUi(row: NeonDraw) {
+  const iso = String(row.draw_date || "").slice(0, 10)
+  return {
+    id: Number(row.id) || drawId(row, iso),
+    date: iso,
+    weekday: String(row.weekday || "").toLowerCase(),
+    numbers: Array.isArray(row.numbers) ? row.numbers : [],
+    stars: Array.isArray(row.stars) ? row.stars : [],
+    star_pool: row.star_pool,
+  }
+}
+
+async function fetchEra(base: string, era: "current" | "all") {
+  const items: ReturnType<typeof toUi>[] = []
+  let offset = 0
+  let total = Number.POSITIVE_INFINITY
+  const page = 2000
+  while (items.length < total) {
+    const response = await fetch(
+      `${base}/api/draws?limit=${page}&offset=${offset}&era=${era}`,
+      { cache: "no-store", signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) }
+    )
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const body = (await response.json()) as { items?: NeonDraw[]; total?: number }
+    const batch = (body.items || []).map(toUi).filter((d) => d.date)
+    total = Number(body.total ?? batch.length)
+    if (batch.length === 0) break
+    items.push(...batch)
+    offset += batch.length
+  }
+  return items
+}
+
+export async function GET(request: NextRequest) {
   const url = apiBase()
+  const eraParam = request.nextUrl.searchParams.get("era")
+  const era = eraParam === "all" || eraParam === "current" ? eraParam : null
   if (!url) {
-    return NextResponse.json({ ok: false, items: [], year: null, source: "json" })
+    return NextResponse.json({ ok: false, items: [], year: null, source: "json", era })
   }
   try {
+    if (era) {
+      const items = await fetchEra(url, era)
+      return NextResponse.json({
+        ok: items.length > 0,
+        items,
+        total: items.length,
+        year: null,
+        era,
+        source: "neon",
+      })
+    }
     const latestRes = await fetch(`${url}/api/draws/latest`, {
       cache: "no-store",
       signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
@@ -46,16 +94,7 @@ export async function GET() {
       return NextResponse.json({ ok: false, items: [], year, source: "json" })
     }
     const payload = (await drawsRes.json()) as { items?: NeonDraw[] }
-    const items = (payload.items || []).map((row) => {
-      const iso = String(row.draw_date || "").slice(0, 10)
-      return {
-        id: drawId(row, iso),
-        date: iso,
-        weekday: String(row.weekday || "").toLowerCase(),
-        numbers: Array.isArray(row.numbers) ? row.numbers : [],
-        stars: Array.isArray(row.stars) ? row.stars : [],
-      }
-    })
+    const items = (payload.items || []).map(toUi)
     return NextResponse.json({
       ok: items.length > 0,
       items,
@@ -63,6 +102,6 @@ export async function GET() {
       source: "neon",
     })
   } catch {
-    return NextResponse.json({ ok: false, items: [], year: null, source: "json" })
+    return NextResponse.json({ ok: false, items: [], year: null, source: "json", era })
   }
 }

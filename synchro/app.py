@@ -17,6 +17,16 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from synchro import db
+from synchro.analysis.bayes import bayes_report
+from synchro.analysis.combinatorics import proba_tables
+from synchro.analysis.common import as_date
+from synchro.analysis.dependence import dependence_report
+from synchro.analysis.diagnostics import diagnostics_report
+from synchro.analysis.inference import inference_report
+from synchro.analysis.lab import lab_report
+from synchro.analysis.montecarlo import montecarlo_report
+from synchro.analysis.variables import VARIABLE_NAMES, series
+from synchro.analysis.windows import heikin_ashi, ohlc_blocks, rolling_stats
 from synchro.config import ROOT, WEB_DIR, get_settings
 from synchro.ranks import evaluate_grid, validate_grid
 from synchro.stats import compute_stats
@@ -165,11 +175,22 @@ def create_app() -> FastAPI:
 
     @app.get("/api/draws")
     def draws(
-        limit: int = Query(50, ge=1, le=500),
+        limit: int = Query(50, ge=1, le=5000),
         offset: int = Query(0, ge=0),
         q: str | None = None,
         year: int | None = Query(None, ge=2004, le=2100),
+        era: str | None = Query(None, pattern="^(current|all)$"),
     ) -> dict[str, Any]:
+        if era:
+            rows = db.all_draws(era=era)
+            total = len(rows)
+            sliced = list(reversed(rows))[offset : offset + limit]
+            return {
+                "items": _json([db.serialize_draw(r) for r in sliced]),
+                "total": total,
+                "year": year,
+                "era": era,
+            }
         rows = [
             db.serialize_draw(r)
             for r in db.list_draws(limit=limit, offset=offset, query=q, year=year)
@@ -190,6 +211,124 @@ def create_app() -> FastAPI:
     @app.get("/api/stats")
     def stats(era: str = Query("current", pattern="^(current|all)$")) -> dict[str, Any]:
         return compute_stats(db.all_draws(era=era))
+
+    def _analysis_draws(
+        era: str,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré.")
+        rows = db.all_draws(era=era)
+        start = date.fromisoformat(from_date[:10]) if from_date else None
+        end = date.fromisoformat(to_date[:10]) if to_date else None
+        if start:
+            rows = [d for d in rows if as_date(d["draw_date"]) >= start]
+        if end:
+            rows = [d for d in rows if as_date(d["draw_date"]) <= end]
+        return rows
+
+    @app.get("/api/analysis/proba")
+    def analysis_proba() -> dict[str, Any]:
+        return proba_tables()
+
+    @app.get("/api/analysis/variables")
+    def analysis_variables(
+        name: str = Query("sum"),
+        n: int | None = Query(None, ge=1, le=50),
+        window: int = Query(20, ge=1, le=500),
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        if name not in VARIABLE_NAMES:
+            raise HTTPException(400, f"Variable inconnue: {name}")
+        draws = _analysis_draws(era, from_date, to_date)
+        payload = series(draws, name, n=n)
+        payload["rolling"] = rolling_stats(draws, name, window=window, n=n)
+        return payload
+
+    @app.get("/api/analysis/ohlc")
+    def analysis_ohlc(
+        name: str = Query("sum"),
+        block: str = Query("month", pattern="^(month|week|window)$"),
+        window: int = Query(10, ge=1, le=200),
+        n: int | None = Query(None, ge=1, le=50),
+        heikin: bool = False,
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        if name not in VARIABLE_NAMES:
+            raise HTTPException(400, f"Variable inconnue: {name}")
+        draws = _analysis_draws(era, from_date, to_date)
+        payload = ohlc_blocks(draws, name=name, block=block, window=window, n=n)
+        if heikin:
+            payload["heikin_ashi"] = heikin_ashi(payload["candles"])
+        return payload
+
+    @app.get("/api/analysis/inference")
+    def analysis_inference(
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        return inference_report(_analysis_draws(era, from_date, to_date))
+
+    @app.get("/api/analysis/montecarlo")
+    def analysis_montecarlo(
+        era: str = Query("current", pattern="^(current|all)$"),
+        n: int = Query(1000, ge=1, le=5000),
+        seed: int = Query(0),
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        return montecarlo_report(_analysis_draws(era, from_date, to_date), n_sim=n, seed=seed)
+
+    @app.get("/api/analysis/bayes")
+    def analysis_bayes(
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        return bayes_report(_analysis_draws(era, from_date, to_date))
+
+    @app.get("/api/analysis/dependence")
+    def analysis_dependence(
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        draws = _analysis_draws(era, from_date, to_date)
+        payload = dependence_report(draws)
+        payload["diagnostics"] = diagnostics_report(draws)
+        return payload
+
+    @app.get("/api/analysis/lab")
+    def analysis_lab(
+        era: str = Query("current", pattern="^(current|all)$"),
+        name: str = Query("sum"),
+        window: int = Query(20, ge=1, le=500),
+        block: str = Query("month", pattern="^(month|week|window)$"),
+        n: int = Query(7, ge=1, le=50),
+        n_sim: int = Query(400, ge=1, le=5000),
+        seed: int = Query(0),
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        if name not in VARIABLE_NAMES:
+            raise HTTPException(400, f"Variable inconnue: {name}")
+        draws = _analysis_draws(era, from_date, to_date)
+        return lab_report(
+            draws,
+            variable=name,
+            window=window,
+            block=block,
+            n=n,
+            n_sim=n_sim,
+            seed=seed,
+            include_mc=True,
+        )
 
     @app.post("/api/check")
     def check(payload: CheckIn) -> dict[str, Any]:
@@ -276,6 +415,11 @@ def export_snapshot(path: Path | None = None) -> Path:
         "draws": list(reversed(draws)),
         "stats_current": compute_stats(db.all_draws(era="current")),
         "stats_all": compute_stats(db.all_draws(era="all")),
+        "analysis_proba": proba_tables(),
+        "analysis_current": lab_report(
+            db.all_draws(era="current"),
+            include_mc=False,
+        ),
         "last_sync": _json(db.last_sync()),
     }
     target.parent.mkdir(parents=True, exist_ok=True)

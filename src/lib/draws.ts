@@ -6,6 +6,7 @@ export type Draw = {
   weekday: "mardi" | "vendredi" | string
   numbers: number[]
   stars: number[]
+  star_pool?: number
 }
 
 export const DRAWS: Draw[] = [...rawDraws].sort((a, b) =>
