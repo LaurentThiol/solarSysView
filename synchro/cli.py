@@ -6,7 +6,7 @@ import sys
 import uvicorn
 
 from synchro import db
-from synchro.app import create_app, export_snapshot, sync_draws
+from synchro.app import export_snapshot, sync_draws
 from synchro.config import get_settings
 
 
@@ -49,9 +49,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "serve":
         settings = get_settings()
-        db.init_db()
         uvicorn.run(
-            create_app(),
+            "synchro.app:create_app",
+            factory=True,
             host=args.host or settings.host,
             port=args.port or settings.port,
             log_level="info",

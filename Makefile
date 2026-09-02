@@ -1,16 +1,39 @@
-.PHONY: install test sync serve export
+.PHONY: help install start stop status update doctor shortcut test sync serve export
+
+help:
+	@./launch help
 
 install:
-	python3 -m pip install -r requirements.txt
+	./launch install
+
+# Un seul terminal : install si besoin, API + UI, vérifications /api/alive, Ctrl+C = tout arrêter
+start:
+	./launch start
+
+shortcut:
+	./launch shortcut
+
+stop:
+	./launch stop
+
+status:
+	@./launch status || true
+
+update:
+	./launch update
+
+doctor:
+	./launch doctor
 
 test:
-	python3 -m pytest -q
+	@if [ -x ./.venv/bin/python ]; then ./.venv/bin/python -m pytest -q; else python3 -m pytest -q; fi
 
 sync:
-	python3 -m synchro sync
+	./.venv/bin/python -m synchro sync
 
 export:
-	python3 -m synchro export
+	./.venv/bin/python -m synchro export
 
-serve:
-	python3 -m synchro serve
+# À lancer dans un terminal dédié (bloque) — préférez `make start` / `./launch`
+serve: stop
+	./.venv/bin/python -m synchro serve

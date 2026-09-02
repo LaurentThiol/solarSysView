@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
+import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -45,7 +49,12 @@ def _json(value: Any) -> Any:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    db.init_db()
+    # Ne pas bloquer /api/alive si Neon dort ou n'est pas configuré.
+    try:
+        if db.database_configured():
+            db.init_db()
+    except Exception:
+        pass
     yield
 
 
@@ -58,16 +67,47 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.get("/api/alive")
+    def alive() -> dict[str, Any]:
+        return {"ok": True, "service": "synchro"}
+
     @app.get("/api/health")
     def health() -> dict[str, Any]:
-        latest = db.latest_draw()
-        return {
-            "ok": True,
-            "mode": "live",
-            "draws": db.count_draws(),
-            "latest": _json(db.serialize_draw(latest)) if latest else None,
-            "last_sync": _json(db.last_sync()),
+        neon = db.ping()
+        payload: dict[str, Any] = {
+            "ok": bool(neon.get("ok")),
+            "alive": True,
+            "service": "synchro",
+            "neon": neon,
+            "draws": None,
+            "latest": None,
+            "last_sync": None,
         }
+        if not neon.get("ok"):
+            return payload
+        try:
+            db.init_db()
+            latest = db.latest_draw()
+            payload["draws"] = db.count_draws()
+            payload["latest"] = _json(db.serialize_draw(latest)) if latest else None
+            payload["last_sync"] = _json(db.last_sync())
+        except Exception as exc:
+            payload["ok"] = False
+            payload["neon"] = {**neon, "ok": False, "error": str(exc)}
+        return payload
+
+    @app.post("/api/shutdown")
+    def shutdown(request: Request) -> dict[str, bool]:
+        host = request.client.host if request.client else ""
+        if host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+            raise HTTPException(403, "Arrêt autorisé uniquement depuis localhost.")
+
+        def _stop() -> None:
+            time.sleep(0.2)
+            os.kill(os.getpid(), signal.SIGTERM)
+
+        threading.Thread(target=_stop, daemon=True).start()
+        return {"ok": True}
 
     @app.get("/api/draws")
     def draws(

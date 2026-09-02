@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str
+    database_url: str | None = None
     host: str = "127.0.0.1"
     port: int = 8000
 

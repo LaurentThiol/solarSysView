@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Synchro">
+  <rect width="64" height="64" rx="14" fill="#1a1f33"/>
+  <circle cx="22" cy="28" r="10" fill="#e8c07d"/>
+  <circle cx="42" cy="28" r="10" fill="#7ee0c8"/>
+  <circle cx="32" cy="44" r="8" fill="#d4d8e8"/>
+  <path d="M14 14h8v3H14zM42 14h8v3h-8z" fill="#e8c07d"/>
+</svg>

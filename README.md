@@ -1,52 +1,77 @@
 # Synchro — tirages EuroMillions
 
-Deux façons de travailler sur les mêmes tirages :
+Deux couches sur les mêmes tirages : **Next.js** (consultation 2026) et **Python / Neon** (historique FDJ complet). Les résultats officiels restent ceux de la [FDJ](https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique). Ce n’est pas un outil de prédiction. Jeu interdit aux mineurs.
 
-| Couche | Rôle | Lancer |
-|---|---|---|
-| **Next.js** | Interface web (filtre, recherche, fréquences, export CSV) | `npm run dev` |
-| **Python** | Synchro des archives FDJ vers Neon, stats et grilles | `python -m synchro serve` |
+## Démarrage
 
-Les résultats officiels restent ceux de la [FDJ](https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique). Ce n’est pas un outil de prédiction. Jeu interdit aux mineurs.
+Prérequis : **Python 3.10+**, **Node.js 20+** / npm.
+
+```bash
+./launch
+```
+
+Équivalent : `make start`. Arrêt : **Ctrl+C** ou `./launch stop`.
+
+Le lanceur (même modèle que PaxVideo) installe les dépendances si besoin, libère les ports, démarre l’API FastAPI et l’UI Next.js, puis **vérifie le statut** :
+
+1. Python, Node, `.env` / `DATABASE_URL`, Git
+2. `/api/alive` (liveness, sans ping Neon)
+3. `/api/health` (Neon, nombre de tirages, dernier tirage)
+4. HTTP 200 sur l’UI
+
+`/api/health` peut prendre quelques secondes si Neon réveille le compute (timeout 8 s). L’UI démarre même si Neon est rouge.
+
+| Commande | Rôle |
+|----------|------|
+| `./launch` / `./launch start` | API + UI, install si besoin, ouvre le navigateur |
+| `./launch stop` / `make stop` | Arrêt propre via `/api/shutdown`, puis libère 8000 et 43147 |
+| `./launch status` | Qui écoute, `/api/alive`, santé Neon |
+| `./launch update` / `make update` | Contrôle GitHub (`git fetch`) et tire `origin` en fast-forward |
+| `./launch doctor` | Python, venv, Node, `.env`, ports |
+| `./launch install` | Dépendances seulement |
+| `./launch shortcut` | Raccourci Bureau / menu applications (Linux) ou `~/Desktop/Synchro.command` (macOS) |
+| `make test` | Tests (`pytest`) |
+
+Sur macOS, un double-clic sur `Synchro.command` à la racine du dépôt lance aussi le projet.
+
+Options : `--skip-install`, `--force-install`, `--no-open`. Ports : `SYNCHRO_BACKEND_PORT` (8000), `SYNCHRO_FRONTEND_PORT` (43147). Logs : `.run/`.
+
+Dans l’UI, les pastilles **API / Neon / GitHub** (bandeau haut) refont les mêmes contrôles au chargement. Clic = retest.
 
 ## Interface web (Next.js)
 
-Consultation des tirages 2026 (fichier `src/data/euromillions-2026.json`, 69 tirages du 2 janvier au 28 août 2026).
+Consultation des tirages 2026 (fichier `src/data/euromillions-2026.json`, 69 tirages du 2 janvier au 28 août 2026). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install
 npm run dev
 ```
 
-Ouvrir [http://127.0.0.1:43147](http://127.0.0.1:43147) (port défini dans `package.json`). Build : `npm run build && npm start`.
-
-Le déploiement **Netlify** utilise cette app (`@netlify/plugin-nextjs`).
+Build : `npm run build && npm start`. Le déploiement **Netlify** utilise cette app (`@netlify/plugin-nextjs`).
 
 ## Synchro Python → Neon
 
-Import de l’historique complet FDJ (2004 → aujourd’hui) dans PostgreSQL Neon, plus une interface FastAPI locale (vérification de grilles, stats sur la formule actuelle).
+Import de l’historique complet FDJ (2004 → aujourd’hui) dans PostgreSQL Neon, plus une API FastAPI locale (vérification de grilles, stats sur la formule actuelle).
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
 cp .env.example .env
 # Coller DATABASE_URL (console Neon → projet Synchro → connection pooled)
-python -m synchro sync
-python -m synchro serve
+./launch                 # ou : python -m synchro serve
+./launch doctor          # statut Neon
+python -m synchro sync   # une fois DATABASE_URL collé
 ```
 
-Puis http://127.0.0.1:8000
+Puis http://127.0.0.1:8000 (docs : `/docs`).
 
 | Commande | Rôle |
 |---|---|
 | `python -m synchro init-db` | Crée les tables `draws`, `grids`, `sync_log` |
 | `python -m synchro sync` | Télécharge les 6 archives FDJ et les écrit dans Neon |
-| `python -m synchro serve` | Interface locale + API `/api/*` |
+| `python -m synchro serve` | API locale `/api/*` |
 | `python -m synchro export` | Snapshot JSON (`synchro/web/snapshot.json`) |
-| `make test` | Tests unitaires (parse FDJ, rangs, stats) |
+| `make test` | Tests unitaires (parse FDJ, rangs, stats, `/api/alive`) |
 
-`DATABASE_URL` ne doit **jamais** être commitée. `.env` en local, variables d’environnement / secret GitHub Actions en déployé.
+`DATABASE_URL` ne doit **jamais** être commitée. `.env` en local, variables d’environnement / secret GitHub Actions en déployé. Au premier `./launch`, le fichier `.env` est créé depuis `.env.example` s’il manque.
 
 Chaque ligne de `draws` contient la date, le jour, 5 numéros et 2 étoiles, `star_pool` (9 / 11 / **12 depuis le 27/09/2016**), les gagnants rang 1 FR/EU, et le code My Million s’il est dans l’archive.
 
@@ -54,7 +79,9 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 
 ### API locale
 
-- `GET /api/health`
+- `GET /api/alive` — liveness (pas de Neon)
+- `GET /api/health` — ping Neon, tirages, dernier sync
+- `POST /api/shutdown` — arrêt propre (localhost uniquement)
 - `GET /api/draws?limit=&offset=&q=`
 - `GET /api/draws/latest`
 - `GET /api/stats?era=current|all`

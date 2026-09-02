@@ -47,6 +47,9 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# lanceur local
+.run/
+
 # vercel / netlify
 .vercel
 .netlify

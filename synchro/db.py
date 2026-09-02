@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
@@ -10,6 +11,8 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
 from synchro.config import get_settings
+
+_PLACEHOLDER_MARKERS = ("USER:PASSWORD", "PASSWORD@", "changeme")
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS draws (
@@ -54,18 +57,65 @@ CREATE TABLE IF NOT EXISTS sync_log (
 _pool: ConnectionPool | None = None
 
 
+def database_configured() -> bool:
+    url = (get_settings().database_url or "").strip()
+    if not url:
+        return False
+    if any(marker in url for marker in _PLACEHOLDER_MARKERS):
+        return False
+    return url.startswith("postgres")
+
+
 def get_pool() -> ConnectionPool:
     global _pool
     if _pool is None or _pool.closed:
-        url = get_settings().database_url
+        if not database_configured():
+            raise RuntimeError(
+                "DATABASE_URL manquant ou placeholder. "
+                "Copiez .env.example vers .env et collez l'URI Neon pooled."
+            )
+        url = (get_settings().database_url or "").strip()
         _pool = ConnectionPool(
             conninfo=url,
             min_size=1,
             max_size=8,
-            kwargs={"row_factory": dict_row, "autocommit": False},
+            kwargs={
+                "row_factory": dict_row,
+                "autocommit": False,
+                "connect_timeout": 5,
+            },
             open=True,
         )
     return _pool
+
+
+def ping(timeout_sec: float = 5.0) -> dict[str, Any]:
+    """Ping Neon without raising. Used by /api/health and the launcher."""
+    if not database_configured():
+        return {
+            "ok": False,
+            "configured": False,
+            "error": "DATABASE_URL absent (copiez .env.example → .env et collez l'URI Neon).",
+        }
+    started = time.perf_counter()
+    try:
+        with connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SET statement_timeout = %s", (int(timeout_sec * 1000),))
+                cur.execute("SELECT 1 AS ok")
+                cur.fetchone()
+        return {
+            "ok": True,
+            "configured": True,
+            "latency_ms": round((time.perf_counter() - started) * 1000),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "configured": True,
+            "latency_ms": round((time.perf_counter() - started) * 1000),
+            "error": str(exc),
+        }
 
 
 @contextmanager

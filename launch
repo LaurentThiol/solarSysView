@@ -1,0 +1,897 @@
+#!/usr/bin/env bash
+# Synchro — lanceur local (API Python + UI Next.js) depuis un seul terminal.
+# Même modèle que ./paxvideo : install si besoin, vérifications de statut, Ctrl+C = tout arrêter.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUN_DIR="$ROOT/.run"
+BACKEND_PORT="${SYNCHRO_BACKEND_PORT:-8000}"
+FRONTEND_PORT="${SYNCHRO_FRONTEND_PORT:-43147}"
+BACKEND_HOST="${SYNCHRO_BACKEND_HOST:-127.0.0.1}"
+FRONTEND_HOST="${SYNCHRO_FRONTEND_HOST:-127.0.0.1}"
+FRONTEND_URL="http://${FRONTEND_HOST}:${FRONTEND_PORT}"
+BACKEND_URL="http://${BACKEND_HOST}:${BACKEND_PORT}"
+ALIVE_URL="${BACKEND_URL}/api/alive"
+HEALTH_URL="${BACKEND_URL}/api/health"
+
+SKIP_INSTALL=0
+FORCE_INSTALL=0
+OPEN_BROWSER=1
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'
+  C_DIM=$'\033[2m'
+  C_BOLD=$'\033[1m'
+  C_RED=$'\033[31m'
+  C_GREEN=$'\033[32m'
+  C_YELLOW=$'\033[33m'
+  C_CYAN=$'\033[36m'
+  C_MAGENTA=$'\033[35m'
+else
+  C_RESET= C_DIM= C_BOLD= C_RED= C_GREEN= C_YELLOW= C_CYAN= C_MAGENTA=
+fi
+
+info() { printf '%s▸%s %s\n' "$C_CYAN" "$C_RESET" "$*"; }
+ok()   { printf '%s✓%s %s\n' "$C_GREEN" "$C_RESET" "$*"; }
+warn() { printf '%s!%s %s\n' "$C_YELLOW" "$C_RESET" "$*" >&2; }
+die()  { printf '%s✗%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; exit 1; }
+
+usage() {
+  cat <<EOF
+${C_BOLD}Synchro${C_RESET} — lanceur local (EuroMillions)
+
+Usage:
+  ./launch                 Démarre API + UI (install si besoin, vérifie le statut)
+  ./launch start           Idem
+  ./launch stop            Arrêt propre (ports ${BACKEND_PORT} / ${FRONTEND_PORT})
+  ./launch status          Affiche l'état des services (alive, Neon, UI)
+  ./launch update          Contrôle GitHub et tire origin (ff-only), puis réinstalle si besoin
+  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon
+  ./launch install         Installe uniquement les dépendances
+  ./launch shortcut        Installe un raccourci bureau / menu applications
+  ./launch help            Cette aide
+
+Options (start):
+  --skip-install             Ne pas installer / mettre à jour les dépendances
+  --force-install            Forcer pip + npm install
+  --no-open                  Ne pas ouvrir le navigateur
+
+Variables:
+  SYNCHRO_BACKEND_PORT       Port API  (défaut: 8000)
+  SYNCHRO_FRONTEND_PORT      Port UI   (défaut: 43147)
+  SYNCHRO_PYTHON             Interpréteur Python 3.10+ (sinon auto)
+
+Arrêt propre : Ctrl+C, ou ./launch stop.
+EOF
+}
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "Commande introuvable : $1. Installez-la puis relancez."
+}
+
+python_supported() {
+  local exe="$1"
+  [[ -n "$exe" ]] || return 1
+  if [[ ! -x "$exe" ]]; then
+    command -v "$exe" >/dev/null 2>&1 || return 1
+  fi
+  "$exe" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null
+}
+
+node_supported() {
+  command -v node >/dev/null 2>&1 || return 1
+  node -e 'process.exit(Number.parseInt(process.versions.node, 10) >= 20 ? 0 : 1)' 2>/dev/null
+}
+
+python_version_label() {
+  local exe="$1"
+  [[ -n "$exe" ]] || { printf '?\n'; return 0; }
+  "$exe" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null || printf '?\n'
+}
+
+resolve_python() {
+  local c="$1"
+  [[ -n "$c" ]] || return 1
+  if [[ -x "$c" ]]; then
+    printf '%s\n' "$c"
+    return 0
+  fi
+  command -v "$c" 2>/dev/null || return 1
+}
+
+collect_python_candidates() {
+  local c
+  if [[ -n "${SYNCHRO_PYTHON:-}" ]]; then
+    printf '%s\n' "$SYNCHRO_PYTHON"
+  fi
+  for c in python3.13 python3.12 python3.11 python3.10 python3 python; do
+    command -v "$c" 2>/dev/null || true
+  done
+  for c in \
+      /opt/homebrew/bin/python3.13 \
+      /opt/homebrew/bin/python3.12 \
+      /opt/homebrew/opt/python@3.12/bin/python3.12 \
+      /usr/local/bin/python3.12 \
+      /Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12
+  do
+    [[ -x "$c" ]] && printf '%s\n' "$c"
+  done
+}
+
+pick_python() {
+  local candidate resolved seen=""
+  if [[ -n "${SYNCHRO_PYTHON:-}" ]]; then
+    if resolved="$(resolve_python "$SYNCHRO_PYTHON")" && python_supported "$resolved"; then
+      printf '%s\n' "$resolved"
+      return 0
+    fi
+    return 1
+  fi
+  while IFS= read -r candidate; do
+    [[ -n "$candidate" ]] || continue
+    resolved="$(resolve_python "$candidate")" || continue
+    case " $seen " in
+      *" $resolved "*) continue ;;
+    esac
+    seen+=" $resolved"
+    if python_supported "$resolved"; then
+      printf '%s\n' "$resolved"
+      return 0
+    fi
+  done <<EOF
+$(collect_python_candidates)
+EOF
+  return 1
+}
+
+python_howto() {
+  local found="" syspy
+  syspy="$(command -v python3 || command -v python || true)"
+  if [[ -n "$syspy" ]]; then
+    found=" Trouvé : ${syspy} ($(python_version_label "$syspy"))."
+  fi
+  cat <<EOF
+Python 3.10+ est requis pour l'API FastAPI / Neon.${found}
+  macOS (Homebrew) : brew install python@3.12
+  Ubuntu/Debian    : sudo apt install python3 python3-venv python3-pip
+  Forcer un binaire : SYNCHRO_PYTHON=/chemin/vers/python3 ./launch
+  Diagnostic        : ./launch doctor
+EOF
+}
+
+require_python() {
+  local py
+  if py="$(pick_python)"; then
+    printf '%s\n' "$py"
+    return 0
+  fi
+  if [[ -n "${SYNCHRO_PYTHON:-}" ]]; then
+    die "SYNCHRO_PYTHON=${SYNCHRO_PYTHON} n'est pas un Python 3.10+ ($(python_version_label "$SYNCHRO_PYTHON"))."
+  fi
+  die "$(python_howto)"
+}
+
+require_node() {
+  need_cmd node
+  need_cmd npm
+  if ! node_supported; then
+    die "Node.js 20+ est requis (trouvé : $(node --version 2>/dev/null || echo '?')). https://nodejs.org/"
+  fi
+}
+
+file_hash() {
+  cksum "$1" | awk '{print $1" "$2}'
+}
+
+venv_pip_ok() {
+  [[ -x "$1/bin/python" ]] && "$1/bin/python" -m pip --version >/dev/null 2>&1
+}
+
+bootstrap_venv_pip() {
+  local venv="$1"
+  need_cmd curl
+  info "ensurepip absent — bootstrap pip dans le venv…"
+  curl -fsSL https://bootstrap.pypa.io/get-pip.py | "$venv/bin/python" - \
+    || die "Impossible d'installer pip dans le venv."
+}
+
+create_venv() {
+  local py="$1" venv="$2"
+  rm -rf "$venv"
+  "$py" -m venv "$venv" 2>/dev/null || true
+  if [[ -x "$venv/bin/python" ]]; then
+    if venv_pip_ok "$venv"; then
+      return 0
+    fi
+    bootstrap_venv_pip "$venv"
+    venv_pip_ok "$venv" && return 0
+  fi
+  rm -rf "$venv"
+  "$py" -m pip install --user virtualenv -q 2>/dev/null || true
+  if "$py" -m virtualenv "$venv" 2>/dev/null && venv_pip_ok "$venv"; then
+    return 0
+  fi
+  die "Impossible de créer le venv avec pip. Installez python3-venv (ex. apt install python3-venv) ou: pip install --user virtualenv"
+}
+
+ensure_venv() {
+  local py="$1" venv="$2"
+  if venv_pip_ok "$venv" && python_supported "$venv/bin/python"; then
+    return 0
+  fi
+  if [[ -x "$venv/bin/python" ]]; then
+    if python_supported "$venv/bin/python"; then
+      bootstrap_venv_pip "$venv"
+      venv_pip_ok "$venv" && return 0
+    else
+      warn "Venv Python $(python_version_label "$venv/bin/python") incompatible (il faut 3.10+). Recréation…"
+    fi
+    rm -rf "$venv"
+  fi
+  create_venv "$py" "$venv"
+}
+
+first_line() {
+  awk 'NF { print; exit }'
+}
+
+listening_pids() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true
+    return 0
+  fi
+  if command -v fuser >/dev/null 2>&1; then
+    fuser "${port}/tcp" 2>/dev/null | tr -s '[:space:]' '\n' || true
+    return 0
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    ss -tlnp 2>/dev/null | awk -v p=":${port}" '
+      $4 ~ p"$" {
+        while (match($0, /pid=[0-9]+/)) {
+          print substr($0, RSTART+4, RLENGTH-4)
+          $0 = substr($0, RSTART+RLENGTH)
+        }
+      }' || true
+    return 0
+  fi
+}
+
+free_port() {
+  local port="$1"
+  local pid remaining=0
+  while read -r pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    remaining=1
+    warn "Port ${port} occupé (PID ${pid}) — arrêt…"
+    kill "$pid" 2>/dev/null || true
+  done <<EOF
+$(listening_pids "$port")
+EOF
+  [[ "$remaining" -eq 1 ]] || return 0
+  sleep 0.3
+  remaining=0
+  while read -r pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    remaining=1
+    kill -9 "$pid" 2>/dev/null || true
+  done <<EOF
+$(listening_pids "$port")
+EOF
+  if [[ "$remaining" -eq 1 ]]; then
+    sleep 0.2
+  fi
+}
+
+http_ok() {
+  local url="$1"
+  local timeout="${2:-8}"
+  if command -v curl >/dev/null 2>&1; then
+    curl -sf --max-time "$timeout" "$url" >/dev/null 2>&1
+    return $?
+  fi
+  local py
+  py="$(command -v python3 || command -v python || true)"
+  [[ -n "$py" ]] || return 1
+  "$py" - "$url" "$timeout" <<'PY'
+import sys, urllib.request
+try:
+    urllib.request.urlopen(sys.argv[1], timeout=float(sys.argv[2]))
+except Exception:
+    raise SystemExit(1)
+PY
+}
+
+http_body() {
+  local url="$1"
+  local timeout="${2:-8}"
+  if command -v curl >/dev/null 2>&1; then
+    curl -sf --max-time "$timeout" "$url" 2>/dev/null || true
+    return 0
+  fi
+  local py
+  py="$(command -v python3 || command -v python || true)"
+  [[ -n "$py" ]] || return 0
+  "$py" - "$url" "$timeout" <<'PY' 2>/dev/null || true
+import sys, urllib.request
+try:
+    print(urllib.request.urlopen(sys.argv[1], timeout=float(sys.argv[2])).read().decode())
+except Exception:
+    pass
+PY
+}
+
+wait_http() {
+  local url="$1" pid="$2"
+  local retries="${3:-240}"
+  local i
+  for ((i = 1; i <= retries; i++)); do
+    if http_ok "$url" 2; then
+      return 0
+    fi
+    if ! kill -0 "$pid" 2>/dev/null; then
+      return 1
+    fi
+    if (( i % 20 == 0 )); then
+      info "Toujours en attente de ${url}…"
+    fi
+    sleep 0.25
+  done
+  return 1
+}
+
+open_browser() {
+  local url="$1"
+  if [[ "$OPEN_BROWSER" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] && [[ "$(uname -s)" != "Darwin" ]]; then
+    return 0
+  fi
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url" >/dev/null 2>&1 || true
+  elif command -v open >/dev/null 2>&1; then
+    open "$url" >/dev/null 2>&1 || true
+  fi
+}
+
+desktop_quote() {
+  local s="$1"
+  case "$s" in
+    *[\ \"]*)
+      s="${s//\\/\\\\}"
+      s="${s//\"/\\\"}"
+      printf '"%s"' "$s"
+      ;;
+    *)
+      printf '%s' "$s"
+      ;;
+  esac
+}
+
+env_database_ok() {
+  local url=""
+  if [[ -f "$ROOT/.env" ]]; then
+    url="$(awk -F= '/^DATABASE_URL=/{sub(/^DATABASE_URL=/, ""); print; exit}' "$ROOT/.env" | tr -d '"' | tr -d "'")"
+  fi
+  url="${DATABASE_URL:-$url}"
+  [[ -n "$url" ]] || return 1
+  case "$url" in
+    *USER:PASSWORD*|*PASSWORD@*|*changeme*) return 1 ;;
+  esac
+  [[ "$url" == postgres* ]]
+}
+
+ensure_env_file() {
+  if [[ ! -f "$ROOT/.env" && -f "$ROOT/.env.example" ]]; then
+    cp "$ROOT/.env.example" "$ROOT/.env"
+    info ".env créé depuis .env.example — collez l'URI Neon pooled dans DATABASE_URL."
+  fi
+}
+
+summarize_health() {
+  local body="$1"
+  local py
+  py="$(command -v python3 || command -v python || true)"
+  [[ -n "$py" && -n "$body" ]] || return 0
+  "$py" -c '
+import json, sys
+raw = sys.argv[1]
+try:
+    data = json.loads(raw)
+except Exception:
+    sys.exit(0)
+neon = data.get("neon") or {}
+if neon.get("ok"):
+    latest = (data.get("latest") or {}).get("draw_date") or "?"
+    draws = data.get("draws")
+    ms = neon.get("latency_ms")
+    extra = f", {ms} ms" if ms is not None else ""
+    print(f"Neon OK ({draws} tirages, dernier {latest}{extra})")
+elif neon.get("configured") is False:
+    print("Neon non configuré (DATABASE_URL)")
+else:
+    err = (neon.get("error") or "injoignable")[:120]
+    print(f"Neon indisponible — {err}")
+' "$body" 2>/dev/null || true
+}
+
+ensure_install() {
+  local py venv req_hash stamp npm_hash npm_stamp lockfile
+  py="$(require_python)"
+  require_node
+  mkdir -p "$RUN_DIR"
+  ensure_env_file
+
+  venv="$ROOT/.venv"
+  stamp="$venv/.synchro-requirements.cksum"
+  req_hash="$(file_hash "$ROOT/requirements.txt")"
+  info "Python API : ${py} ($(python_version_label "$py"))"
+
+  if [[ "$FORCE_INSTALL" -eq 1 || ! -f "$stamp" || "$(cat "$stamp" 2>/dev/null)" != "$req_hash" ]] \
+      || ! venv_pip_ok "$venv" || ! python_supported "$venv/bin/python"; then
+    info "Installation API (venv + pip)…"
+    if [[ "$FORCE_INSTALL" -eq 1 ]]; then
+      create_venv "$py" "$venv"
+    else
+      ensure_venv "$py" "$venv"
+    fi
+    "$venv/bin/python" -m pip install -U pip
+    if ! "$venv/bin/python" -m pip install -r "$ROOT/requirements.txt"; then
+      die "pip install a échoué. Vérifiez Python 3.10+ : ./launch doctor"
+    fi
+    printf '%s\n' "$req_hash" >"$stamp"
+    ok "API Python prête."
+  else
+    ok "API déjà installée (requirements inchangés)."
+  fi
+
+  lockfile="$ROOT/package-lock.json"
+  npm_stamp="$ROOT/node_modules/.synchro-lock.cksum"
+  if [[ -f "$lockfile" ]]; then
+    npm_hash="$(file_hash "$lockfile")"
+  else
+    npm_hash="$(file_hash "$ROOT/package.json")"
+  fi
+  if [[ "$FORCE_INSTALL" -eq 1 || ! -d "$ROOT/node_modules" || ! -f "$npm_stamp" || "$(cat "$npm_stamp")" != "$npm_hash" ]]; then
+    info "Installation UI (npm)…"
+    (
+      cd "$ROOT"
+      if [[ -f package-lock.json ]]; then
+        npm ci
+      else
+        npm install
+      fi
+    )
+    mkdir -p "$ROOT/node_modules"
+    printf '%s\n' "$npm_hash" >"$npm_stamp"
+    ok "UI Next.js prête."
+  else
+    ok "UI déjà installée (lockfile inchangé)."
+  fi
+}
+
+prefix_stream() {
+  local tag="$1" color="$2"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    printf '%s%s%s %s\n' "$color" "$tag" "$C_RESET" "$line"
+  done
+}
+
+request_api_shutdown() {
+  if ! http_ok "$ALIVE_URL" 2; then
+    return 1
+  fi
+  info "Arrêt propre via /api/shutdown…"
+  if command -v curl >/dev/null 2>&1; then
+    curl -sf --max-time 3 -X POST "${BACKEND_URL}/api/shutdown" >/dev/null 2>&1 || true
+  else
+    local py
+    py="$(command -v python3 || command -v python || true)"
+    [[ -n "$py" ]] || return 1
+    "$py" - "${BACKEND_URL}/api/shutdown" <<'PY' >/dev/null 2>&1 || true
+import sys, urllib.request
+req = urllib.request.Request(sys.argv[1], method="POST", data=b"")
+try:
+    urllib.request.urlopen(req, timeout=3)
+except Exception:
+    raise SystemExit(1)
+PY
+  fi
+  local i
+  for ((i = 0; i < 50; i++)); do
+    local be fe
+    be="$(listening_pids "$BACKEND_PORT" | first_line || true)"
+    fe="$(listening_pids "$FRONTEND_PORT" | first_line || true)"
+    if [[ -z "$be" && -z "$fe" ]]; then
+      return 0
+    fi
+    sleep 0.3
+  done
+  return 1
+}
+
+startup_checks() {
+  info "Vérifications de statut au démarrage"
+  local py=""
+  if py="$(pick_python)"; then
+    ok "Python $(python_version_label "$py")  (${py})"
+  else
+    die "$(python_howto)"
+  fi
+  require_node
+  ok "Node $(node --version) · npm $(npm --version 2>/dev/null || echo '?')"
+  ensure_env_file
+  if env_database_ok; then
+    ok "DATABASE_URL présent (Neon)"
+  else
+    warn "DATABASE_URL absent ou placeholder — l'UI Next.js démarrera, Neon restera rouge."
+  fi
+  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    ok "Git $(git -C "$ROOT" rev-parse --short HEAD) ($(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?'))"
+  else
+    warn "Pas un clone git — ./launch update indisponible."
+  fi
+}
+
+cmd_stop() {
+  local graceful=1
+  if [[ "${1:-}" == "--force" ]]; then
+    graceful=0
+  fi
+  mkdir -p "$RUN_DIR"
+  date +%s >"$RUN_DIR/stopped"
+  if [[ "$graceful" -eq 1 ]]; then
+    request_api_shutdown || true
+  fi
+  free_port "$BACKEND_PORT"
+  free_port "$FRONTEND_PORT"
+  rm -f "$RUN_DIR/backend.pid" "$RUN_DIR/frontend.pid"
+  ok "Ports ${BACKEND_PORT} et ${FRONTEND_PORT} libérés."
+}
+
+cmd_status() {
+  local be fe body summary
+  be="$(listening_pids "$BACKEND_PORT" | first_line || true)"
+  fe="$(listening_pids "$FRONTEND_PORT" | first_line || true)"
+  if [[ -n "$be" ]] && http_ok "$ALIVE_URL" 2; then
+    body="$(http_body "$HEALTH_URL" 8)"
+    summary="$(summarize_health "$body")"
+    if [[ -n "$summary" ]]; then
+      ok "API      ${BACKEND_URL}  (PID ${be}, /api/alive OK — ${summary})"
+    else
+      ok "API      ${BACKEND_URL}  (PID ${be}, /api/alive OK)"
+    fi
+  elif [[ -n "$be" ]]; then
+    warn "API      :${BACKEND_PORT} occupé (PID ${be}) mais /api/alive ne répond pas."
+  else
+    printf '%sAPI      arrêtée.%s\n' "$C_DIM" "$C_RESET"
+  fi
+  if [[ -n "$fe" ]] && http_ok "$FRONTEND_URL" 3; then
+    ok "UI       ${FRONTEND_URL}  (PID ${fe}, HTTP OK)"
+  elif [[ -n "$fe" ]]; then
+    warn "UI       :${FRONTEND_PORT} occupé (PID ${fe}) mais la page ne répond pas encore."
+  else
+    printf '%sUI       arrêtée.%s\n' "$C_DIM" "$C_RESET"
+  fi
+  if [[ -z "$be" && -z "$fe" ]]; then
+    return 1
+  fi
+}
+
+cmd_update() {
+  need_cmd git
+  if ! git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    die "Ce dossier n'est pas un clone git. Clonez https://github.com/LaurentThiol/Synchro.git"
+  fi
+  local current branch remote_url local_sha remote_sha short_local
+  current="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  branch="$(git -C "$ROOT" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+  if [[ "$branch" == origin/* ]]; then
+    branch="${branch#origin/}"
+  elif [[ -n "$current" && "$current" != "HEAD" ]] && git -C "$ROOT" ls-remote --exit-code origin "refs/heads/${current}" >/dev/null 2>&1; then
+    branch="$current"
+  else
+    branch="main"
+  fi
+  remote_url="$(git -C "$ROOT" remote get-url origin 2>/dev/null || true)"
+  if [[ "$remote_url" == *github.com* ]]; then
+    remote_url="https://github.com/${remote_url#*github.com[:/]}"
+    remote_url="${remote_url%.git}"
+    remote_url="${remote_url%/}"
+  fi
+  info "Contrôle GitHub (${remote_url:-origin} · ${branch})…"
+  if ! git -C "$ROOT" fetch --quiet origin "$branch"; then
+    die "git fetch origin ${branch} a échoué (réseau ou identifiants GitHub)."
+  fi
+  local_sha="$(git -C "$ROOT" rev-parse HEAD)"
+  remote_sha="$(git -C "$ROOT" rev-parse "origin/${branch}" 2>/dev/null || true)"
+  if [[ -z "$remote_sha" ]]; then
+    die "Branche origin/${branch} introuvable après fetch."
+  fi
+  short_local="${local_sha:0:7}"
+  if [[ "$local_sha" == "$remote_sha" ]]; then
+    ok "Déjà à jour (${short_local} = origin/${branch})."
+    return 0
+  fi
+  info "Commits à tirer depuis origin/${branch} :"
+  git -C "$ROOT" --no-pager log --oneline "HEAD..origin/${branch}" | head -n 20 || true
+  if [[ "$current" != "$branch" ]]; then
+    die "Branche locale ${current} — passez sur ${branch} pour appliquer (git checkout ${branch} && ./launch update)."
+  fi
+  if [[ -n "$(git -C "$ROOT" status --porcelain)" ]]; then
+    die "Arbre de travail modifié — committez ou stash avant de mettre à jour."
+  fi
+  info "git pull --ff-only origin ${branch}…"
+  git -C "$ROOT" pull --ff-only origin "$branch" || die "git pull a échoué (historique divergé ?)."
+  ok "Code mis à jour ($(git -C "$ROOT" rev-parse --short HEAD))."
+  if [[ "$SKIP_INSTALL" -eq 0 ]]; then
+    ensure_install
+  else
+    info "Dépendances non réinstallées (--skip-install)."
+  fi
+  ok "Relancez ./launch pour prendre en compte le nouveau code."
+}
+
+cmd_shortcut() {
+  local desktop_dir apps_dir target icon_path
+  icon_path="$ROOT/scripts/synchro.svg"
+
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    target="${HOME}/Desktop/Synchro.command"
+    cat >"$target" <<EOF
+#!/usr/bin/env bash
+cd $(printf '%q' "$ROOT")
+exec ./launch start
+EOF
+    chmod +x "$target"
+    xattr -d com.apple.quarantine "$target" 2>/dev/null || true
+    ok "Raccourci macOS : ${target}"
+    info "Double-clic dans le Finder pour lancer Synchro."
+    return 0
+  fi
+
+  apps_dir="${HOME}/.local/share/applications"
+  desktop_dir="${XDG_DESKTOP_DIR:-${HOME}/Desktop}"
+  mkdir -p "$apps_dir"
+  cat >"${apps_dir}/synchro.desktop" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Synchro
+Comment=Archives EuroMillions (FDJ → Neon + UI)
+Exec=$(desktop_quote "$ROOT/launch") start
+Path=$ROOT
+Terminal=true
+Icon=$icon_path
+Categories=Office;Education;
+StartupNotify=false
+EOF
+  chmod +x "${apps_dir}/synchro.desktop"
+  ok "Menu applications : ${apps_dir}/synchro.desktop"
+
+  if [[ -d "$desktop_dir" ]]; then
+    cp "${apps_dir}/synchro.desktop" "${desktop_dir}/synchro.desktop"
+    chmod +x "${desktop_dir}/synchro.desktop"
+    if command -v gio >/dev/null 2>&1; then
+      gio set "${desktop_dir}/synchro.desktop" metadata::trusted true 2>/dev/null || true
+    fi
+    ok "Bureau : ${desktop_dir}/synchro.desktop"
+  else
+    info "Pas de dossier Bureau — raccourci disponible dans le menu applications."
+  fi
+}
+
+cmd_install() {
+  SKIP_INSTALL=0
+  ensure_install
+}
+
+cmd_doctor() {
+  info "Diagnostic Synchro (${ROOT})"
+  local py="" syspy venv="$ROOT/.venv"
+  if py="$(pick_python)"; then
+    ok "Interpréteur : ${py} ($(python_version_label "$py"))"
+  else
+    warn "Aucun Python 3.10+ trouvé."
+    python_howto >&2
+  fi
+  if [[ -x "$venv/bin/python" ]]; then
+    if python_supported "$venv/bin/python"; then
+      ok "Venv API : Python $(python_version_label "$venv/bin/python")"
+    else
+      warn "Venv API : Python $(python_version_label "$venv/bin/python") (incompatible — recréé au prochain start)"
+    fi
+  else
+    printf '%sPas de venv encore.%s\n' "$C_DIM" "$C_RESET"
+  fi
+  if command -v node >/dev/null 2>&1; then
+    if node_supported; then
+      ok "Node $(node --version) · npm $(npm --version 2>/dev/null || echo '?')"
+    else
+      warn "Node $(node --version) — il faut 20+"
+    fi
+  else
+    warn "node introuvable"
+  fi
+  if [[ -f "$ROOT/.env" ]]; then
+    if env_database_ok; then
+      ok ".env : DATABASE_URL renseigné"
+    else
+      warn ".env présent mais DATABASE_URL placeholder / invalide"
+    fi
+  else
+    warn "Pas de .env (copié depuis .env.example au prochain start)"
+  fi
+  cmd_status || true
+  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    ok "Git : $(git -C "$ROOT" rev-parse --short HEAD) ($(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?'))"
+  else
+    warn "Pas un clone git — les mises à jour GitHub sont indisponibles."
+  fi
+}
+
+cmd_start() {
+  local backend_pid= frontend_pid= tail_pid= stopping=0 body summary
+
+  startup_checks
+  mkdir -p "$RUN_DIR"
+
+  if [[ "$SKIP_INSTALL" -eq 0 ]]; then
+    ensure_install
+  elif [[ ! -x "$ROOT/.venv/bin/python" || ! -d "$ROOT/node_modules" ]]; then
+    die "Dépendances manquantes. Relancez sans --skip-install (ou : ./launch install)."
+  elif ! python_supported "$ROOT/.venv/bin/python"; then
+    die "Le venv utilise Python $(python_version_label "$ROOT/.venv/bin/python") (incompatible). Relancez sans --skip-install."
+  fi
+
+  cmd_stop --force >/dev/null
+  rm -f "$RUN_DIR/stopped"
+  ensure_env_file
+
+  cleanup() {
+    local code=$?
+    if [[ "$stopping" -eq 1 ]]; then
+      return 0
+    fi
+    stopping=1
+    trap - INT TERM EXIT
+    printf '\n'
+    info "Arrêt de Synchro…"
+    if [[ -n "${frontend_pid:-}" ]]; then
+      kill "$frontend_pid" 2>/dev/null || true
+      pkill -P "$frontend_pid" 2>/dev/null || true
+    fi
+    if [[ -n "${backend_pid:-}" ]]; then
+      kill "$backend_pid" 2>/dev/null || true
+      pkill -P "$backend_pid" 2>/dev/null || true
+    fi
+    if [[ -n "${tail_pid:-}" ]]; then
+      kill "$tail_pid" 2>/dev/null || true
+      pkill -P "$tail_pid" 2>/dev/null || true
+    fi
+    free_port "$BACKEND_PORT" >/dev/null 2>&1 || true
+    free_port "$FRONTEND_PORT" >/dev/null 2>&1 || true
+    rm -f "$RUN_DIR/backend.pid" "$RUN_DIR/frontend.pid"
+    wait 2>/dev/null || true
+    ok "Arrêté."
+    exit "$code"
+  }
+  trap cleanup INT TERM EXIT
+
+  : >"$RUN_DIR/backend.log"
+  : >"$RUN_DIR/frontend.log"
+
+  info "Démarrage API ${BACKEND_URL} …"
+  (
+    cd "$ROOT"
+    export PYTHONUNBUFFERED=1
+    export SYNCHRO_RUN_DIR="$RUN_DIR"
+    exec .venv/bin/python -m uvicorn synchro.app:create_app --factory --reload \
+      --reload-exclude '.env' \
+      --reload-exclude '.env.*' \
+      --reload-exclude '.venv/*' \
+      --reload-exclude '.next/*' \
+      --reload-exclude 'node_modules/*' \
+      --host "$BACKEND_HOST" --port "$BACKEND_PORT"
+  ) >>"$RUN_DIR/backend.log" 2>&1 &
+  backend_pid=$!
+  printf '%s\n' "$backend_pid" >"$RUN_DIR/backend.pid"
+
+  info "Démarrage UI ${FRONTEND_URL} …"
+  (
+    cd "$ROOT"
+    export NEXT_PUBLIC_API_URL="$BACKEND_URL"
+    export SYNCHRO_API_URL="$BACKEND_URL"
+    exec ./node_modules/.bin/next dev --port "$FRONTEND_PORT" --hostname "$FRONTEND_HOST"
+  ) >>"$RUN_DIR/frontend.log" 2>&1 &
+  frontend_pid=$!
+  printf '%s\n' "$frontend_pid" >"$RUN_DIR/frontend.pid"
+
+  if ! wait_http "$ALIVE_URL" "$backend_pid" 240; then
+    warn "Journal API :"
+    tail -n 40 "$RUN_DIR/backend.log" >&2 || true
+    die "L'API n'a pas répondu sur ${ALIVE_URL}."
+  fi
+  ok "API vivante (${ALIVE_URL})"
+
+  body="$(http_body "$HEALTH_URL" 8)"
+  summary="$(summarize_health "$body")"
+  if [[ -n "$summary" && "$summary" == Neon\ OK* ]]; then
+    ok "Statut Neon : ${summary}"
+  elif [[ -n "$summary" ]]; then
+    warn "Statut Neon : ${summary}"
+  else
+    warn "Statut Neon : /api/health n'a pas renvoyé de détail (l'API reste disponible)."
+  fi
+
+  if ! wait_http "$FRONTEND_URL" "$frontend_pid" 240; then
+    warn "Journal UI :"
+    tail -n 40 "$RUN_DIR/frontend.log" >&2 || true
+    die "L'UI n'a pas répondu sur ${FRONTEND_URL}."
+  fi
+  ok "UI prête (${FRONTEND_URL})"
+
+  printf '\n%sSynchro est lancé%s\n' "$C_BOLD" "$C_RESET"
+  printf '  UI   %s\n' "$FRONTEND_URL"
+  printf '  API  %s  (alive : %s · docs : %s/docs)\n' "$BACKEND_URL" "$ALIVE_URL" "$BACKEND_URL"
+  printf '  Logs %s\n' "$RUN_DIR"
+  printf '%s  Arrêt : Ctrl+C, ou ./launch stop.%s\n\n' "$C_DIM" "$C_RESET"
+
+  open_browser "$FRONTEND_URL"
+
+  (
+    tail -n +1 -F "$RUN_DIR/backend.log" 2>/dev/null | prefix_stream "[api] " "$C_MAGENTA" &
+    tail -n +1 -F "$RUN_DIR/frontend.log" 2>/dev/null | prefix_stream "[ui]  " "$C_CYAN" &
+    wait
+  ) &
+  tail_pid=$!
+
+  while kill -0 "$backend_pid" 2>/dev/null && kill -0 "$frontend_pid" 2>/dev/null; do
+    sleep 0.5
+  done
+
+  if [[ -f "$RUN_DIR/stopped" ]]; then
+    exit 0
+  fi
+
+  if ! kill -0 "$backend_pid" 2>/dev/null; then
+    warn "L'API s'est arrêtée. Dernières lignes :"
+    tail -n 30 "$RUN_DIR/backend.log" >&2 || true
+    exit 1
+  fi
+  warn "L'UI s'est arrêtée. Dernières lignes :"
+  tail -n 30 "$RUN_DIR/frontend.log" >&2 || true
+  exit 1
+}
+
+CMD="start"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    start|stop|status|update|shortcut|help|doctor|install|-h|--help)
+      CMD="$1"
+      shift
+      ;;
+    --skip-install) SKIP_INSTALL=1; shift ;;
+    --force-install) FORCE_INSTALL=1; shift ;;
+    --no-open) OPEN_BROWSER=0; shift ;;
+    -*)
+      die "Option inconnue : $1 (voir ./launch help)"
+      ;;
+    *)
+      die "Argument inattendu : $1 (voir ./launch help)"
+      ;;
+  esac
+done
+
+case "$CMD" in
+  help|-h|--help) usage ;;
+  start) cmd_start ;;
+  stop) cmd_stop ;;
+  status) cmd_status ;;
+  update) cmd_update ;;
+  doctor) cmd_doctor ;;
+  install) cmd_install ;;
+  shortcut) cmd_shortcut ;;
+  *) die "Commande inconnue : $CMD" ;;
+esac
