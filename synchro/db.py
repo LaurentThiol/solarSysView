@@ -119,7 +119,7 @@ def ping(timeout_sec: float = 5.0) -> dict[str, Any]:
             "ok": False,
             "connected": False,
             "configured": False,
-            "host": host,
+            "host": None,
             "waking": False,
             "error": "DATABASE_URL absent (copiez .env.example → .env et collez l'URI Neon).",
         }

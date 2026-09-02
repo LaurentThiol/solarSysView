@@ -246,6 +246,11 @@ export function AdminPanel() {
           ...prev,
           [id]: { value: payload.service!.value, password: payload.service!.password },
         }))
+        setTests((prev) => {
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
       }
       await load()
     } finally {

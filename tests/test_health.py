@@ -105,4 +105,5 @@ def test_reload_env_rereads_settings() -> None:
     assert body["ok"] is True
     assert body["neon"]["configured"] is False
     assert body["neon"]["connected"] is False
+    assert body["neon"].get("host") in (None, "")
 
