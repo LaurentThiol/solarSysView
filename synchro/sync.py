@@ -116,3 +116,28 @@ def ensure_draws() -> dict[str, Any]:
         if count > 0 and not info["stale"]:
             return _result(skipped=True, latest_only=False)
         return _run_sync_unlocked(latest_only=count > 0)
+
+
+def format_ensure_messages(data: dict[str, Any]) -> list[tuple[str, str]]:
+    """Lignes (ok|warn, texte) pour ./launch après POST /api/sync/ensure."""
+    if not data.get("ok"):
+        detail = data.get("detail") if "detail" in data else data.get("error")
+        if isinstance(detail, list):
+            detail = "; ".join(str(item) for item in detail)
+        text = str(detail or "échec").replace("\n", " ")[:160]
+        return [("warn", text)]
+    latest = (data.get("latest") or {}).get("draw_date") or "?"
+    upserted = data.get("upserted") or 0
+    lines: list[tuple[str, str]] = []
+    if data.get("skipped"):
+        lines.append(("ok", f"Tirages déjà à jour (dernier {latest})"))
+    elif data.get("latest_only"):
+        lines.append(("ok", f"Archive récente — {upserted} lignes, dernier {latest}"))
+    else:
+        lines.append(("ok", f"Historique importé — {upserted} lignes, dernier {latest}"))
+    if data.get("stale"):
+        expected = data.get("expected_draw_date") or "?"
+        lines.append(
+            ("warn", f"Neon encore en retard (attendu {expected}, dernier {latest})")
+        )
+    return lines

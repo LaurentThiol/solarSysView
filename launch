@@ -808,46 +808,52 @@ cmd_doctor() {
 }
 
 ensure_fdj_draws() {
+  # Ne jamais faire échouer ./launch ici : set -euo pipefail + python -c
+  # cassait toute la stack (trap EXIT) dès qu'un snippet JSON était invalide.
   info "Vérification des derniers tirages FDJ → Neon…"
-  local body py
-  body="$(http_post_body "${BACKEND_URL}/api/sync/ensure" 90)"
-  py="$(command -v python3 || command -v python || true)"
+  local body py line
+  body="$(http_post_body "${BACKEND_URL}/api/sync/ensure" 90)" || true
+  py="$ROOT/.venv/bin/python"
+  if [[ ! -x "$py" ]]; then
+    py="$(command -v python3 || command -v python || true)"
+  fi
   if [[ -z "$py" || -z "$body" ]]; then
     warn "Rattrapage FDJ : pas de réponse (l'UI démarre quand même)."
     return 0
   fi
-  "$py" -c '
-import json, sys
-raw = sys.argv[1]
-try:
-    data = json.loads(raw)
-except Exception:
-    print("warn:" + raw[:160].replace("\n", " "))
-    raise SystemExit(0)
-if not data.get("ok"):
-    print("warn:" + str(data.get("detail") or data.get("error") or "échec")[:160])
-    raise SystemExit(0)
-latest = (data.get("latest") or {}).get("draw_date") or "?"
-upserted = data.get("upserted") or 0
-if data.get("skipped"):
-    print(f"ok:Tirages déjà à jour (dernier {latest})")
-elif data.get("latest_only"):
-    print(f"ok:Archive récente — {upserted} lignes, dernier {latest}")
-else:
-    print(f"ok:Historique importé — {upserted} lignes, dernier {latest}")
-if data.get("stale"):
-    print(f"warn:Neon encore en retard (attendu {data.get(\"expected_draw_date\")}, dernier {latest})")
-' "$body" 2>/dev/null | while IFS= read -r line; do
+  local printed=0
+  while IFS= read -r line || [[ -n "${line:-}" ]]; do
+    printed=1
     case "$line" in
       ok:*) ok "${line#ok:}" ;;
       warn:*) warn "${line#warn:}" ;;
       *) [[ -n "$line" ]] && info "$line" ;;
     esac
-  done
+  done < <(
+    cd "$ROOT" && printf '%s' "$body" | "$py" -c '
+from synchro.sync import format_ensure_messages
+import json, sys
+raw = sys.stdin.read()
+try:
+    data = json.loads(raw)
+except Exception:
+    print("warn:" + raw[:160].replace("\n", " "))
+    raise SystemExit(0)
+if not isinstance(data, dict):
+    print("warn:réponse inattendue")
+    raise SystemExit(0)
+for kind, msg in format_ensure_messages(data):
+    print(f"{kind}:{msg}")
+' 2>/dev/null
+  ) || true
+  if [[ "$printed" -eq 0 ]]; then
+    warn "Rattrapage FDJ : impossible d'interpréter la réponse (l'UI démarre quand même)."
+  fi
+  return 0
 }
 
 cmd_start() {
-  local backend_pid= frontend_pid= tail_pid= stopping=0 body summary
+  local backend_pid= frontend_pid= tail_pid= stopping=0 body summary do_ensure=0
 
   startup_checks
   mkdir -p "$RUN_DIR"
@@ -935,7 +941,7 @@ cmd_start() {
   summary="$(summarize_health "$body")"
   if [[ -n "$summary" && "$summary" == Neon\ OK* ]]; then
     ok "Statut Neon : ${summary}"
-    ensure_fdj_draws
+    do_ensure=1
   elif [[ -n "$summary" ]]; then
     warn "Statut Neon : ${summary}"
   else
@@ -956,6 +962,10 @@ cmd_start() {
   printf '%s  Arrêt : bouton Quitter dans l’UI, Ctrl+C, ou ./launch stop.%s\n\n' "$C_DIM" "$C_RESET"
 
   open_browser "$FRONTEND_URL"
+
+  if [[ "$do_ensure" -eq 1 ]]; then
+    ensure_fdj_draws || true
+  fi
 
   (
     tail -n +1 -F "$RUN_DIR/backend.log" 2>/dev/null | prefix_stream "[api] " "$C_MAGENTA" &

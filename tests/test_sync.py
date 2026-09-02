@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 
 from synchro.fdj import Draw
-from synchro.sync import PARIS, ensure_draws, expected_last_draw_date, freshness
+from synchro.sync import (
+    PARIS,
+    ensure_draws,
+    expected_last_draw_date,
+    format_ensure_messages,
+    freshness,
+)
 
 
 def _draw(day: date) -> Draw:
@@ -134,3 +144,91 @@ def test_ensure_full_sync_when_empty() -> None:
     assert result["latest_only"] is False
     full_fetch.assert_called_once()
     latest_fetch.assert_not_called()
+
+
+def test_format_ensure_messages_skipped() -> None:
+    lines = format_ensure_messages(
+        {
+            "ok": True,
+            "skipped": True,
+            "latest": {"draw_date": "2026-09-01"},
+            "stale": False,
+        }
+    )
+    assert lines == [("ok", "Tirages déjà à jour (dernier 2026-09-01)")]
+
+
+def test_format_ensure_messages_latest_archive() -> None:
+    lines = format_ensure_messages(
+        {
+            "ok": True,
+            "latest_only": True,
+            "upserted": 12,
+            "latest": {"draw_date": "2026-09-01"},
+            "stale": False,
+        }
+    )
+    assert lines == [("ok", "Archive récente — 12 lignes, dernier 2026-09-01")]
+
+
+def test_format_ensure_messages_stale_warning_without_backslash_fstring() -> None:
+    lines = format_ensure_messages(
+        {
+            "ok": True,
+            "latest_only": True,
+            "upserted": 0,
+            "latest": {"draw_date": "2026-08-28"},
+            "stale": True,
+            "expected_draw_date": "2026-09-01",
+        }
+    )
+    assert lines[0] == ("ok", "Archive récente — 0 lignes, dernier 2026-08-28")
+    assert lines[1] == (
+        "warn",
+        "Neon encore en retard (attendu 2026-09-01, dernier 2026-08-28)",
+    )
+
+
+def test_format_ensure_messages_api_error() -> None:
+    lines = format_ensure_messages({"detail": "Synchro FDJ impossible: timeout"})
+    assert lines == [("warn", "Synchro FDJ impossible: timeout")]
+
+
+def test_launch_ensure_parser_survives_set_e_pipefail() -> None:
+    """Regress the bug: invalid python -c + pipefail stopped the whole stack."""
+    root = Path(__file__).resolve().parents[1]
+    launch = (root / "launch").read_text(encoding="utf-8")
+    assert r'data.get(\"' not in launch
+    payload = {
+        "ok": True,
+        "skipped": True,
+        "stale": True,
+        "expected_draw_date": "2026-09-01",
+        "latest": {"draw_date": "2026-08-28"},
+    }
+    script = r"""
+set -euo pipefail
+python3 -c '
+from synchro.sync import format_ensure_messages
+import json, sys
+raw = sys.stdin.read()
+data = json.loads(raw)
+for kind, msg in format_ensure_messages(data):
+    print(f"{kind}:{msg}")
+' <<'JSON'
+%s
+JSON
+echo SURVIVED
+""" % json.dumps(payload)
+    result = subprocess.run(
+        ["bash", "-c", script],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(root)},
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "ok:Tirages déjà à jour (dernier 2026-08-28)" in result.stdout
+    assert "warn:Neon encore en retard (attendu 2026-09-01, dernier 2026-08-28)" in result.stdout
+    assert "SURVIVED" in result.stdout
