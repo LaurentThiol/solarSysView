@@ -307,6 +307,11 @@ export function StartupStatus() {
   )
 }
 
+const NAV_ITEMS = [
+  { href: "/tirage", label: "Tirage" },
+  { href: "/admin", label: "Admin" },
+] as const
+
 export function SiteHeader() {
   const pathname = usePathname()
   return (
@@ -314,17 +319,27 @@ export function SiteHeader() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="flex items-center gap-4">
           <Link
-            href="/"
+            href="/tirage"
             className="text-xs font-medium tracking-[0.2em] text-primary uppercase"
           >
             Synchro
           </Link>
-          <Link
-            href="/admin"
-            className={`text-xs ${pathname === "/admin" ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-          >
-            Admin
-          </Link>
+          <nav className="flex items-center gap-4" aria-label="Sections">
+            {NAV_ITEMS.map((item) => {
+              const active =
+                pathname === item.href || pathname.startsWith(`${item.href}/`)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`text-xs ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
+          </nav>
         </div>
         <StartupStatus />
       </div>

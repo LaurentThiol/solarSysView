@@ -36,7 +36,11 @@ Sur macOS, un double-clic sur `Synchro.command` à la racine du dépôt lance au
 
 Options : `--skip-install`, `--force-install`, `--no-open`. Ports : `SYNCHRO_BACKEND_PORT` (8000), `SYNCHRO_FRONTEND_PORT` (43147). Logs : `.run/`.
 
-Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. Clic = retest. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface.
+Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. Clic = retest. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections **Tirage** et **Admin** sont des onglets du bandeau.
+
+## Tirage (`/tirage`)
+
+Archives 2026 (fichier `src/data/euromillions-2026.json`) : tableau filtrable, graphique, fréquences, export CSV. L’accueil `/` redirige vers cet onglet.
 
 ## Admin (`/admin`)
 
@@ -46,7 +50,7 @@ En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, défini
 
 ## Interface web (Next.js)
 
-Consultation des tirages 2026 (fichier `src/data/euromillions-2026.json`, 69 tirages du 2 janvier au 28 août 2026). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
+App Next.js (onglets **Tirage** `/tirage` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install
