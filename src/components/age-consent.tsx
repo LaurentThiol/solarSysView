@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 
 export const CONSENT_STORAGE_KEY = "synchro.consent.v1"
 
-export function AgeConsent() {
+export function AgeConsent({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(true)
   const [blocked, setBlocked] = useState(false)
 
@@ -30,11 +30,11 @@ export function AgeConsent() {
     setBlocked(false)
   }
 
-  if (!open) return null
+  if (!open) return <>{children}</>
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-background/95 p-6"
+      className="fixed inset-0 z-50 grid place-items-center bg-background p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="consent-title"
