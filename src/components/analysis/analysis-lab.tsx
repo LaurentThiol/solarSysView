@@ -158,9 +158,7 @@ export function AnalysisLab() {
     <div className="flex flex-col gap-6">
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
         Chaque outil lit les <strong>mêmes tirages</strong> ({chrono.length} après filtre,
-        source {source === "neon" ? "Neon" : "JSON local"}). Les tirages sont
-        indépendants : rien ici n’améliore les chances de gagner. Jeu interdit aux
-        mineurs.
+        source {source === "neon" ? "Neon" : "JSON local"}).
       </p>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap">

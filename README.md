@@ -1,6 +1,6 @@
 # Synchro — tirages EuroMillions
 
-Deux couches sur les mêmes tirages : **Next.js** (consultation + laboratoire d’analyse) et **Python / Neon** (historique FDJ complet). Les résultats officiels restent ceux de la [FDJ](https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique). Ce n’est pas un outil de prédiction. Jeu interdit aux mineurs.
+Deux couches sur les mêmes tirages : **Next.js** (consultation + laboratoire d’analyse) et **Python / Neon** (historique FDJ complet). Les résultats officiels restent ceux de la [FDJ](https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique). Au premier lancement, un consentement (majeur, pas un outil de prédiction) est demandé.
 
 ## Démarrage
 
@@ -45,7 +45,7 @@ Archives EuroMillions : tableau filtrable, graphique, fréquences, export CSV. E
 
 ## Analyse (`/analyse`)
 
-Laboratoire : variables (somme, étendue, parité, retard, …), fenêtre de X tirages, chandeliers OHLC / Heikin-Ashi, probabilités exactes des 13 rangs, tests vs hasard (χ², IC Wilson), Beta-Binomial, paires / lift, backtest des numéros « chauds ». Tous les outils lisent le **même** ensemble de tirages (Neon `era=current|all`, sinon JSON 2026). Monte-Carlo des records via l’API Python quand elle est joignable. Disclaimer : tirages indépendants, pas de prédiction.
+Laboratoire : variables (somme, étendue, parité, retard, …), fenêtre de X tirages, chandeliers OHLC / Heikin-Ashi, probabilités exactes des 13 rangs, tests vs hasard (χ², IC Wilson), Beta-Binomial, paires / lift, backtest des numéros « chauds ». Tous les outils lisent le **même** ensemble de tirages (Neon `era=current|all`, sinon JSON 2026). Monte-Carlo des records via l’API Python quand elle est joignable.
 
 ## Admin (`/admin`)
 

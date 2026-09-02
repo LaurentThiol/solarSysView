@@ -471,4 +471,36 @@ $("history-q").addEventListener("input", () => {
   }, 250);
 });
 
+const CONSENT_KEY = "synchro.consent.v1";
+
+function hideConsent() {
+  const el = $("consent");
+  if (el) el.hidden = true;
+}
+
+function showConsentMain() {
+  $("consent-main").hidden = false;
+  $("consent-blocked").hidden = true;
+}
+
+try {
+  if (window.localStorage.getItem(CONSENT_KEY) === "1") hideConsent();
+} catch {
+  // navigation privée
+}
+
+$("btn-consent")?.addEventListener("click", () => {
+  try {
+    window.localStorage.setItem(CONSENT_KEY, "1");
+  } catch {
+    // ignore
+  }
+  hideConsent();
+});
+$("btn-consent-no")?.addEventListener("click", () => {
+  $("consent-main").hidden = true;
+  $("consent-blocked").hidden = false;
+});
+$("btn-consent-back")?.addEventListener("click", showConsentMain);
+
 boot();

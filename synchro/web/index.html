@@ -107,8 +107,7 @@
           <h3>Fréquence étoiles</h3>
           <div id="freq-stars" class="heat"></div>
           <p class="disclaimer">
-            Chaque tirage est indépendant. Les fréquences passées n’améliorent pas les chances
-            de gagner. Jeu interdit aux mineurs. Jouer comporte des risques.
+            Chaque tirage est indépendant. Les fréquences décrivent l’archive, pas le prochain tirage.
           </p>
         </article>
       </section>
@@ -167,6 +166,35 @@
         <a href="https://www.joueurs-info-service.fr/" rel="noreferrer">Joueurs Info Service 09 74 75 13 13</a>
       </p>
     </footer>
+
+    <div id="consent" class="consent" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+      <div class="consent-card">
+        <div id="consent-main">
+          <p class="consent-brand">Synchro</p>
+          <h2 id="consent-title">Avant de continuer</h2>
+          <p>
+            Archives et analyses de tirages déjà sortis. Rien ici n’améliore les chances
+            de gagner. Jeu interdit aux mineurs.
+          </p>
+          <p class="muted">
+            Aide aux joueurs :
+            <a href="https://www.joueurs-info-service.fr/" rel="noreferrer">Joueurs Info Service</a>
+            · 09 74 75 13 13
+          </p>
+          <div class="row">
+            <button id="btn-consent" class="btn primary" type="button">J’ai 18 ans ou plus</button>
+            <button id="btn-consent-no" class="btn" type="button">Je n’ai pas 18 ans</button>
+          </div>
+        </div>
+        <div id="consent-blocked" hidden>
+          <h2>Accès réservé aux majeurs</h2>
+          <p>Synchro est interdit aux mineurs. Vous pouvez fermer cet onglet.</p>
+          <div class="row">
+            <button id="btn-consent-back" class="btn" type="button">Revenir</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <script src="app.js"></script>
   </body>
 </html>
