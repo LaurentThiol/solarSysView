@@ -17,10 +17,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from synchro import db
-from synchro.config import WEB_DIR, get_settings
+from synchro.config import ROOT, WEB_DIR, get_settings
 from synchro.fdj import Draw, fetch_all_draws
 from synchro.ranks import evaluate_grid, validate_grid
 from synchro.stats import compute_stats
+
+_LOCAL_SHUTDOWN_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
 
 
 class GridIn(BaseModel):
@@ -45,6 +47,45 @@ def _json(value: Any) -> Any:
     if isinstance(value, Decimal):
         return float(value)
     return value
+
+
+def _run_dir() -> Path:
+    env = os.environ.get("SYNCHRO_RUN_DIR")
+    return Path(env) if env else ROOT / ".run"
+
+
+def _read_pid(path: Path) -> int | None:
+    try:
+        pid = int(path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+    return pid if pid > 1 else None
+
+
+def _terminate_pid(pid: int) -> None:
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+
+
+def stop_local_stack() -> None:
+    """Marque l'arrêt volontaire, puis signale l'UI et l'API (PIDs du lanceur)."""
+    directory = _run_dir()
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "stopped").write_text(str(int(time.time())), encoding="utf-8")
+    except OSError:
+        pass
+    seen: set[int] = set()
+    for name in ("frontend.pid", "backend.pid"):
+        pid = _read_pid(directory / name)
+        if pid and pid not in seen:
+            seen.add(pid)
+            _terminate_pid(pid)
+    me = os.getpid()
+    if me not in seen:
+        _terminate_pid(me)
 
 
 @asynccontextmanager
@@ -99,12 +140,12 @@ def create_app() -> FastAPI:
     @app.post("/api/shutdown")
     def shutdown(request: Request) -> dict[str, bool]:
         host = request.client.host if request.client else ""
-        if host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        if host not in _LOCAL_SHUTDOWN_HOSTS:
             raise HTTPException(403, "Arrêt autorisé uniquement depuis localhost.")
 
         def _stop() -> None:
             time.sleep(0.2)
-            os.kill(os.getpid(), signal.SIGTERM)
+            stop_local_stack()
 
         threading.Thread(target=_stop, daemon=True).start()
         return {"ok": True}

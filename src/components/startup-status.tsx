@@ -3,6 +3,10 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
+import { LogOut } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { isLocalHost } from "@/lib/api-base"
 
 type GitPayload = {
   ok: boolean
@@ -31,6 +35,7 @@ type StartupPayload = {
   git: GitPayload
   draws: number | null
   latest: { draw_date?: string } | null
+  quitAvailable?: boolean
 }
 
 type Tone = "ok" | "warn" | "err" | "off" | "load"
@@ -82,6 +87,13 @@ export function StartupStatus() {
   const [data, setData] = useState<StartupPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [quitting, setQuitting] = useState(false)
+  const [quitDone, setQuitDone] = useState(false)
+  const [localApp, setLocalApp] = useState(false)
+
+  useEffect(() => {
+    setLocalApp(isLocalHost(window.location.hostname))
+  }, [])
 
   const refresh = useCallback(async (opts?: { git?: boolean; silent?: boolean }) => {
     try {
@@ -122,26 +134,85 @@ export function StartupStatus() {
     }
   }, [refresh])
 
+  const quit = useCallback(async () => {
+    if (quitting) return
+    const confirmed = window.confirm(
+      "Quitter Synchro ? L’API et l’interface vont s’arrêter."
+    )
+    if (!confirmed) return
+    setQuitting(true)
+    try {
+      await fetch("/api/shutdown", { method: "POST", cache: "no-store" })
+    } catch {
+      // le serveur peut déjà être coupé
+    } finally {
+      setQuitDone(true)
+    }
+  }, [quitting])
+
+  const showQuit =
+    localApp && !quitDone && data?.quitAvailable !== false
+
+  const quitButton =
+    showQuit ? (
+      <Button
+        type="button"
+        variant="destructive"
+        size="sm"
+        disabled={quitting}
+        onClick={() => void quit()}
+        title="Quitter le programme"
+        aria-label="Quitter le programme"
+        className="h-[26px] rounded-full px-2.5 text-[11px] font-medium tracking-wide"
+      >
+        <LogOut data-icon="inline-start" />
+        {quitting ? "Arrêt…" : "Quitter"}
+      </Button>
+    ) : null
+
+  const overlay = quitDone ? (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-background/95 p-6">
+      <div className="max-w-sm text-center">
+        <p className="text-lg font-medium tracking-tight">Synchro est arrêté</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Vous pouvez fermer cet onglet.
+        </p>
+      </div>
+    </div>
+  ) : null
+
   if (loading && !data) {
     return (
-      <div className="flex flex-wrap gap-2">
-        <Pill label="API" tone="load" onClick={() => void refresh()} />
-        <Pill label="Neon" tone="load" onClick={() => void refresh()} />
-        <Pill label="GitHub" tone="load" onClick={() => void refresh({ git: true })} />
-      </div>
+      <>
+        {overlay}
+        <div className="flex flex-wrap items-center gap-2">
+          <Pill label="API" tone="load" onClick={() => void refresh()} />
+          <Pill label="Neon" tone="load" onClick={() => void refresh()} />
+          <Pill
+            label="GitHub"
+            tone="load"
+            onClick={() => void refresh({ git: true })}
+          />
+          {quitButton}
+        </div>
+      </>
     )
   }
 
   if (error || !data) {
     return (
-      <div className="flex flex-wrap gap-2">
-        <Pill
-          label="Statut"
-          detail={error || "injoignable"}
-          tone="err"
-          onClick={() => void refresh()}
-        />
-      </div>
+      <>
+        {overlay}
+        <div className="flex flex-wrap items-center gap-2">
+          <Pill
+            label="Statut"
+            detail={error || "injoignable"}
+            tone="err"
+            onClick={() => void refresh()}
+          />
+          {quitButton}
+        </div>
+      </>
     )
   }
 
@@ -203,27 +274,36 @@ export function StartupStatus() {
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <Pill label="API" detail={apiDetail} tone={apiTone} onClick={() => void refresh()} />
-      <Pill
-        label="Neon"
-        detail={neonDetail}
-        tone={neonTone}
-        title={
-          neonOk
-            ? `Neon en ligne${data.neon.host ? ` · ${data.neon.host}` : ""} · cliquer pour retester`
-            : data.neon.error || "Cliquer pour retester"
-        }
-        onClick={() => void refresh()}
-      />
-      <Pill
-        label="GitHub"
-        detail={gitDetail}
-        tone={gitTone}
-        title="Contrôler origin (Admin si une mise à jour est disponible)"
-        onClick={onGithub}
-      />
-    </div>
+    <>
+      {overlay}
+      <div className="flex flex-wrap items-center gap-2">
+        <Pill
+          label="API"
+          detail={apiDetail}
+          tone={apiTone}
+          onClick={() => void refresh()}
+        />
+        <Pill
+          label="Neon"
+          detail={neonDetail}
+          tone={neonTone}
+          title={
+            neonOk
+              ? `Neon en ligne${data.neon.host ? ` · ${data.neon.host}` : ""} · cliquer pour retester`
+              : data.neon.error || "Cliquer pour retester"
+          }
+          onClick={() => void refresh()}
+        />
+        <Pill
+          label="GitHub"
+          detail={gitDetail}
+          tone={gitTone}
+          title="Contrôler origin (Admin si une mise à jour est disponible)"
+          onClick={onGithub}
+        />
+        {quitButton}
+      </div>
+    </>
   )
 }
 

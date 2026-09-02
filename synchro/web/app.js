@@ -48,6 +48,7 @@ async function boot() {
     $("mode-badge").textContent = `Live Neon · ${health.draws} tirages`;
     $("mode-badge").classList.add("live");
     $("btn-sync").hidden = false;
+    $("btn-quit").hidden = false;
     $("grids-mode").textContent = "Stockées dans Neon.";
     await refreshFromLive();
   } catch {
@@ -358,6 +359,23 @@ $("btn-sync").addEventListener("click", async () => {
   } finally {
     $("btn-sync").disabled = false;
   }
+});
+
+$("btn-quit").addEventListener("click", async () => {
+  if ($("btn-quit").disabled) return;
+  if (!window.confirm("Quitter Synchro ? L’API et l’interface vont s’arrêter.")) return;
+  $("btn-quit").disabled = true;
+  $("btn-quit").textContent = "Arrêt…";
+  $("status").textContent = "Arrêt du programme…";
+  try {
+    await tryLive("/shutdown", { method: "POST" });
+  } catch {
+    // le serveur peut déjà être coupé
+  }
+  document.body.innerHTML = `<main class="panel is-active" style="padding:48px 24px;text-align:center">
+    <h1>Synchro est arrêté</h1>
+    <p class="muted">Vous pouvez fermer cet onglet.</p>
+  </main>`;
 });
 
 $("stats-era").addEventListener("change", async (ev) => {

@@ -61,7 +61,7 @@ Variables:
   SYNCHRO_FRONTEND_PORT      Port UI   (défaut: 43147)
   SYNCHRO_PYTHON             Interpréteur Python 3.10+ (sinon auto)
 
-Arrêt propre : Ctrl+C, ou ./launch stop.
+Arrêt propre : bouton Quitter dans l'UI, Ctrl+C, ou ./launch stop.
 EOF
 }
 
@@ -855,6 +855,7 @@ cmd_start() {
     cd "$ROOT"
     export NEXT_PUBLIC_API_URL="$BACKEND_URL"
     export SYNCHRO_API_URL="$BACKEND_URL"
+    export SYNCHRO_RUN_DIR="$RUN_DIR"
     exec ./node_modules/.bin/next dev --port "$FRONTEND_PORT" --hostname "$FRONTEND_HOST"
   ) >>"$RUN_DIR/frontend.log" 2>&1 &
   frontend_pid=$!
@@ -888,7 +889,7 @@ cmd_start() {
   printf '  UI   %s\n' "$FRONTEND_URL"
   printf '  API  %s  (alive : %s · docs : %s/docs)\n' "$BACKEND_URL" "$ALIVE_URL" "$BACKEND_URL"
   printf '  Logs %s\n' "$RUN_DIR"
-  printf '%s  Arrêt : Ctrl+C, ou ./launch stop.%s\n\n' "$C_DIM" "$C_RESET"
+  printf '%s  Arrêt : bouton Quitter dans l’UI, Ctrl+C, ou ./launch stop.%s\n\n' "$C_DIM" "$C_RESET"
 
   open_browser "$FRONTEND_URL"
 

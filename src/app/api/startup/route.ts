@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { apiBase } from "@/lib/api-base"
+import { apiBase, isNetlify } from "@/lib/api-base"
 import { gitStatus } from "@/lib/git"
 import { secretSnapshot } from "@/lib/secrets"
 
@@ -57,6 +57,7 @@ export async function GET(request: Request) {
     git,
     draws: health?.draws ?? null,
     latest: health?.latest ?? null,
+    quitAvailable: !isNetlify(),
     keys: {
       neon: secretSnapshot("neon").configured,
       google: secretSnapshot("google").configured,

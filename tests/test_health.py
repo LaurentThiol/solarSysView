@@ -67,7 +67,7 @@ def test_health_ok_includes_draws() -> None:
     assert body["neon"]["latency_ms"] == 12
 
 
-def test_shutdown_localhost_schedules_stop() -> None:
+def test_shutdown_localhost_schedules_stop(tmp_path) -> None:
     class Immediate:
         def __init__(self, target=None, daemon=None):
             self.target = target
@@ -77,14 +77,53 @@ def test_shutdown_localhost_schedules_stop() -> None:
                 self.target()
 
     with (
+        patch.dict("os.environ", {"SYNCHRO_RUN_DIR": str(tmp_path)}),
         patch("synchro.app.threading.Thread", side_effect=lambda **kw: Immediate(**kw)),
         patch("synchro.app.os.kill") as kill,
+        patch("synchro.app.time.sleep"),
     ):
         with _client() as client:
             response = client.post("/api/shutdown")
         assert response.status_code == 200
         assert response.json() == {"ok": True}
         assert kill.called
+        assert (tmp_path / "stopped").is_file()
+
+
+def test_shutdown_rejects_remote_host() -> None:
+    with TestClient(create_app(), client=("8.8.8.8", 1234)) as client:
+        response = client.post("/api/shutdown")
+    assert response.status_code == 403
+    assert "localhost" in response.json()["detail"]
+
+
+def test_shutdown_marks_stopped_and_signals_launcher_pids(tmp_path) -> None:
+    run_dir = tmp_path
+    (run_dir / "frontend.pid").write_text("4242\n", encoding="utf-8")
+    (run_dir / "backend.pid").write_text("4343\n", encoding="utf-8")
+
+    class Immediate:
+        def __init__(self, target=None, daemon=None):
+            self.target = target
+
+        def start(self) -> None:
+            if self.target:
+                self.target()
+
+    with (
+        patch.dict("os.environ", {"SYNCHRO_RUN_DIR": str(run_dir)}),
+        patch("synchro.app.threading.Thread", side_effect=lambda **kw: Immediate(**kw)),
+        patch("synchro.app.os.kill") as kill,
+        patch("synchro.app.time.sleep"),
+    ):
+        with _client() as client:
+            response = client.post("/api/shutdown")
+    assert response.status_code == 200
+    assert (run_dir / "stopped").is_file()
+    signaled = {call.args[0] for call in kill.call_args_list}
+    assert {4242, 4343}.issubset(signaled)
+    for call in kill.call_args_list:
+        assert call.args[1] == __import__("signal").SIGTERM
 
 
 def test_neon_host_from_url() -> None:
@@ -106,4 +145,3 @@ def test_reload_env_rereads_settings() -> None:
     assert body["neon"]["configured"] is False
     assert body["neon"]["connected"] is False
     assert body["neon"].get("host") in (None, "")
-
