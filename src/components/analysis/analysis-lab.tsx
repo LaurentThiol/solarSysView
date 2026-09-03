@@ -455,8 +455,7 @@ function VariablesPanel({
           )}
           <p className="mt-2 text-xs text-muted-foreground">
             Fenêtre X={rolling.window} · σ {formatStat(rolling.std)} · RSI Wilder{" "}
-            {seriesTa.last.rsi != null ? formatStat(seriesTa.last.rsi) : "—"}{" "}
-            (descriptif, pas un signal).
+            {seriesTa.last.rsi != null ? formatStat(seriesTa.last.rsi) : "—"}.
           </p>
         </CardContent>
       </Card>
@@ -507,8 +506,7 @@ function VariablesPanel({
               </LineChart>
             </ChartContainer>
             <p className="mt-2 text-xs text-muted-foreground">
-              Seuils 30 / 70 à titre visuel. Un RSI extrême sur une série de tirages
-              indépendants n’indique pas le prochain résultat.
+              Seuils 30 / 70.
             </p>
           </CardContent>
         </Card>

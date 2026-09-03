@@ -28,6 +28,12 @@ async function proxy(request: NextRequest, path: string[]) {
   try {
     const response = await fetch(`${base}/api/morpho/${suffix}${search}`, init)
     const body = await response.json().catch(() => ({ error: "réponse invalide" }))
+    if (response.status === 503) {
+      return NextResponse.json(
+        { ok: false, items: [], ...(typeof body === "object" && body ? body : {}) },
+        { status: 200 }
+      )
+    }
     return NextResponse.json(body, { status: response.status })
   } catch (error) {
     return NextResponse.json(
