@@ -46,8 +46,9 @@ Usage:
   ./launch stop            Arrêt propre (ports ${BACKEND_PORT} / ${FRONTEND_PORT})
   ./launch status          Affiche l'état des services (alive, Neon, UI)
   ./launch update          Contrôle GitHub et tire origin (ff-only), puis réinstalle si besoin
-  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon
+  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM
   ./launch install         Installe uniquement les dépendances
+  ./launch install-vlm     Installe Moondream (torch + transformers)
   ./launch shortcut        Installe un raccourci bureau / menu applications
   ./launch help            Cette aide
 
@@ -763,6 +764,33 @@ cmd_install() {
   ensure_install
 }
 
+cmd_install_vlm() {
+  local venv="$ROOT/.venv"
+  SKIP_INSTALL=0
+  ensure_install
+  info "Installation Moondream (torch + transformers, ~2 Go)…"
+  if ! "$venv/bin/python" -m pip install -r "$ROOT/requirements-morpho.txt"; then
+    die "pip install -r requirements-morpho.txt a échoué. Voir ./launch doctor"
+  fi
+  ok "Moondream prêt. Dans Morpho : bouton Charger / interroger (télécharge les poids HF au premier coup)."
+}
+
+vlm_doctor() {
+  local venv="$ROOT/.venv" py="$ROOT/.venv/bin/python"
+  if [[ ! -x "$py" ]]; then
+    printf '%sVLM : pas de venv — ./launch install puis ./launch install-vlm%s\n' "$C_DIM" "$C_RESET"
+    return 0
+  fi
+  if "$py" -c 'import transformers, torch' 2>/dev/null; then
+    ok "VLM : transformers + torch (Moondream via ./launch install-vlm)"
+  else
+    warn "VLM : transformers/torch absents — Morpho → Installer et charger, ou ./launch install-vlm"
+  fi
+  if "$py" -c 'import moondream' 2>/dev/null; then
+    ok "VLM : photon (paquet moondream)"
+  fi
+}
+
 cmd_doctor() {
   info "Diagnostic Synchro (${ROOT})"
   local py="" syspy venv="$ROOT/.venv"
@@ -800,6 +828,7 @@ cmd_doctor() {
     warn "Pas de .env (copié depuis .env.example au prochain start)"
   fi
   cmd_status || true
+  vlm_doctor
   if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     ok "Git : $(git -C "$ROOT" rev-parse --short HEAD) ($(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?'))"
   else
@@ -995,7 +1024,7 @@ cmd_start() {
 CMD="start"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    start|stop|status|update|shortcut|help|doctor|install|-h|--help)
+    start|stop|status|update|shortcut|help|doctor|install|install-vlm|-h|--help)
       CMD="$1"
       shift
       ;;
@@ -1019,6 +1048,7 @@ case "$CMD" in
   update) cmd_update ;;
   doctor) cmd_doctor ;;
   install) cmd_install ;;
+  install-vlm) cmd_install_vlm ;;
   shortcut) cmd_shortcut ;;
   *) die "Commande inconnue : $CMD" ;;
 esac

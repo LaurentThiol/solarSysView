@@ -1,10 +1,13 @@
-.PHONY: help install start stop status update doctor shortcut test sync ensure serve export
+.PHONY: help install install-vlm start stop status update doctor shortcut test sync ensure serve export
 
 help:
 	@./launch help
 
 install:
 	./launch install
+
+install-vlm:
+	./launch install-vlm
 
 # Un seul terminal : install si besoin, API + UI, vérifications /api/alive, Ctrl+C = tout arrêter
 start:

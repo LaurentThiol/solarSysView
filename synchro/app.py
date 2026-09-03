@@ -35,7 +35,8 @@ from synchro.morpho.neighbors import neighbors_of_grid
 from synchro.morpho.render import glyph_svg, portrait_render
 from synchro.morpho.rules import evaluate_rules, normalize_rule
 from synchro.morpho.vlm import analyze as vlm_analyze
-from synchro.morpho.vlm import contrastive_query, draft_rule, load as vlm_load
+from synchro.morpho.vlm import contrastive_query, draft_rule
+from synchro.morpho.vlm import ensure_loaded as vlm_ensure_loaded
 from synchro.morpho.vlm import sequence_query
 from synchro.morpho.vlm import status as vlm_status
 from synchro.ranks import evaluate_grid, validate_grid
@@ -596,7 +597,7 @@ def create_app() -> FastAPI:
     @app.post("/api/morpho/vlm/load")
     def morpho_vlm_load() -> dict[str, Any]:
         try:
-            return {"ok": True, **vlm_load()}
+            return vlm_ensure_loaded()
         except Exception as exc:
             return {"ok": False, "error": str(exc), **vlm_status()}
 

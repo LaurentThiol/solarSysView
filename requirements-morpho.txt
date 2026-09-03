@@ -1,6 +1,8 @@
-# Extra local VLM (lazy, pas installé par ./launch).
-# Défaut : vikhyatk/moondream2 via transformers.
+# Extra local VLM (Moondream). Pas dans ./launch start — trop lourd (~2 Go).
+# Installer : ./launch install-vlm  ou bouton Morpho « Charger / interroger ».
+# Défaut : vikhyatk/moondream2 via transformers (révision 2025-06-21).
 # Photon (Ampere / Apple Silicon) : pip install moondream
 transformers>=4.45.0
 torch>=2.6.0
+einops>=0.8.0
 pillow>=10.4.0

@@ -1,11 +1,15 @@
 from synchro.morpho.board import cell_center, number_cell, numbers_origin, pixel_to_norm
 from synchro.morpho.vlm import (
+    INSTALL_HINT,
     analyze,
+    backend_order,
     geometry_queries,
     grounding_score,
+    load,
     parse_label,
     project_points,
     status,
+    unload,
 )
 
 
@@ -37,3 +41,37 @@ def test_analyze_without_backend_uses_geometry() -> None:
     assert queries["stars"] == "adjacent"
     assert status()["loaded"] is False
     assert "prompt_id" in status()
+
+
+def test_backend_order_skips_gguf_unless_configured(monkeypatch) -> None:
+    monkeypatch.delenv("MORPHO_GGUF_PATH", raising=False)
+    assert backend_order() == ["transformers", "photon"]
+    monkeypatch.setenv("MORPHO_GGUF_PATH", "/tmp/missing.gguf")
+    assert backend_order()[-1] == "gguf"
+    assert backend_order("photon") == ["photon"]
+
+
+def test_load_without_backends_is_actionable(monkeypatch) -> None:
+    unload()
+    monkeypatch.delenv("MORPHO_GGUF_PATH", raising=False)
+    monkeypatch.setenv("MORPHO_VLM_NO_INSTALL", "1")
+
+    def missing_transformers() -> dict:
+        raise ModuleNotFoundError("No module named 'transformers'")
+
+    def missing_photon() -> dict:
+        raise ModuleNotFoundError("No module named 'moondream'")
+
+    monkeypatch.setattr("synchro.morpho.vlm._load_transformers", missing_transformers)
+    monkeypatch.setattr("synchro.morpho.vlm._load_photon", missing_photon)
+    try:
+        load(install=False)
+    except RuntimeError as exc:
+        msg = str(exc)
+        assert "aucun backend VLM local" in msg
+        assert "install-vlm" in msg
+        assert "MORPHO_GGUF_PATH" not in msg
+        assert "gguf:" not in msg
+        assert INSTALL_HINT.split(".")[0] in msg
+        return
+    raise AssertionError("load() aurait dû échouer sans backend")

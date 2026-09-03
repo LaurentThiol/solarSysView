@@ -34,6 +34,32 @@ import { useDraws } from "@/lib/use-draws"
 
 type Anticipate = ReturnType<typeof anticipateLocal>
 
+type VlmLoadStatus = {
+  ok?: boolean
+  loaded?: boolean
+  busy?: boolean
+  phase?: string | null
+  error?: string | null
+  hint?: string | null
+  message?: string | null
+  available?: string[]
+  install_cmd?: string
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function vlmProgress(status: VlmLoadStatus | null): string {
+  if (status?.phase === "installing" || status?.message?.toLowerCase().includes("installation")) {
+    return status.message || "Installation de torch + transformers (une fois, ~2 Go)…"
+  }
+  if (status?.phase === "loading" || status?.busy) {
+    return status?.message || "Chargement de Moondream2…"
+  }
+  return status?.error || status?.hint || ""
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T | null> {
   try {
     const response = await fetch(`/api/morpho/${path}`, {
@@ -86,6 +112,7 @@ export function MorphoLab() {
     contrast?: { difference?: string | null }
   } | null>(null)
   const [vlmBusy, setVlmBusy] = useState(false)
+  const [vlmStatus, setVlmStatus] = useState<VlmLoadStatus | null>(null)
   const [clipBusy, setClipBusy] = useState(false)
   const [clipNeighbors, setClipNeighbors] = useState<{ date: string; score: number; numbers: number[]; stars: number[] }[]>(
     []
@@ -99,6 +126,9 @@ export function MorphoLab() {
         setRules(incoming)
         saveRules(incoming)
       }
+    })
+    void api<VlmLoadStatus>("vlm/status").then((body) => {
+      if (body) setVlmStatus(body)
     })
   }, [])
 
@@ -188,10 +218,33 @@ export function MorphoLab() {
     if (!selected) return
     setVlmBusy(true)
     setVlm(null)
-    const loaded = await api<{ ok: boolean; error?: string; loaded?: boolean }>("vlm/load", {
+    const started = await api<VlmLoadStatus>("vlm/load", {
       method: "POST",
       body: "{}",
     })
+    if (started) setVlmStatus(started)
+    const deadline = Date.now() + 15 * 60 * 1000
+    let latest: VlmLoadStatus | null = started
+    while (Date.now() < deadline) {
+      if (!latest || latest.loaded || !latest.busy) break
+      setVlm({
+        error: vlmProgress(latest),
+        loaded: false,
+      })
+      await sleep(2000)
+      latest = await api<VlmLoadStatus>("vlm/status")
+      if (latest) setVlmStatus(latest)
+    }
+    if (!latest?.loaded) {
+      setVlmBusy(false)
+      setVlm({
+        caption: portrait?.caption,
+        queries: undefined,
+        error: latest?.error || latest?.hint || vlmProgress(latest) || "API VLM injoignable — caption géométrique seule",
+        loaded: false,
+      })
+      return
+    }
     const body = await api<{
       ok: boolean
       state?: Portrait & {
@@ -219,7 +272,7 @@ export function MorphoLab() {
       setVlm({
         caption: portrait?.caption,
         queries: undefined,
-        error: loaded?.error || "API VLM injoignable — caption géométrique seule",
+        error: "Analyse VLM injoignable — caption géométrique seule",
         loaded: false,
       })
       return
@@ -230,7 +283,7 @@ export function MorphoLab() {
       grounding_score: body.state?.grounding_score,
       residual: body.state?.residual,
       loaded: body.state?.vlm,
-      error: body.error || loaded?.error,
+      error: body.error,
       sequence: body.sequence,
       contrast: body.contrast,
     })
@@ -415,8 +468,19 @@ export function MorphoLab() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <Button type="button" onClick={() => void runVlm()} disabled={vlmBusy}>
-              {vlmBusy ? "Analyse VLM…" : "Charger / interroger"}
+              {vlmBusy
+                ? vlmStatus?.phase === "installing"
+                  ? "Installation…"
+                  : "Analyse VLM…"
+                : vlmStatus?.loaded
+                  ? "Interroger"
+                  : vlmStatus?.available?.length
+                    ? "Charger / interroger"
+                    : "Installer et charger"}
             </Button>
+            {!vlmBusy && !vlmStatus?.loaded && vlmStatus?.hint && !vlm?.error ? (
+              <p className="text-xs text-muted-foreground">{vlmStatus.hint}</p>
+            ) : null}
             {vlm?.error ? <p className="text-xs text-muted-foreground">{vlm.error}</p> : null}
             {vlm?.caption ? <p className="text-sm leading-6">{vlm.caption}</p> : null}
             {vlm?.queries ? (

@@ -89,3 +89,37 @@ def test_evaluate_rules_without_neon() -> None:
             )
     assert response.status_code == 200
     assert response.json()["firings"] == []
+
+
+def test_vlm_status_exposes_install_hint() -> None:
+    with _client() as client:
+        status = client.get("/api/morpho/vlm/status")
+    assert status.status_code == 200
+    body = status.json()
+    assert "available" in body
+    assert body.get("install_cmd") == "./launch install-vlm"
+    if not body.get("loaded") and not body.get("available"):
+        assert body.get("hint")
+        assert "install-vlm" in body["hint"]
+
+
+def test_vlm_load_without_extras_skips_gguf() -> None:
+    import os
+    import time
+
+    os.environ["MORPHO_VLM_NO_INSTALL"] = "1"
+    os.environ.pop("MORPHO_GGUF_PATH", None)
+    with _client() as client:
+        first = client.post("/api/morpho/vlm/load")
+        assert first.status_code == 200
+        body = first.json()
+        for _ in range(40):
+            if body.get("loaded") or not body.get("busy"):
+                break
+            time.sleep(0.05)
+            body = client.get("/api/morpho/vlm/status").json()
+    blob = f"{body.get('error') or ''} {body.get('hint') or ''}"
+    if body.get("loaded"):
+        return
+    assert "install-vlm" in blob or "Moondream" in blob
+    assert "MORPHO_GGUF_PATH" not in blob

@@ -15,7 +15,7 @@ async function proxy(request: NextRequest, path: string[]) {
   }
   const search = request.nextUrl.search
   const heavy = suffix === "vlm" || suffix === "vlm/load" || suffix === "anticipate"
-  const timeout = heavy ? 180_000 : HEALTH_TIMEOUT_MS
+  const timeout = heavy ? 300_000 : HEALTH_TIMEOUT_MS
   const init: RequestInit = {
     method: request.method,
     cache: "no-store",
