@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { GlyphBoard, GlyphThumb } from "@/components/morpho/glyph-board"
 import { Button } from "@/components/ui/button"
@@ -102,9 +102,14 @@ export function MorphoLab() {
     })
   }, [])
 
+  const evalKey = useRef("")
   useEffect(() => {
     if (!portrait) return
+    const key = `${portrait.date}|${rules.map((r) => r.id).join(",")}|${vlm?.caption ?? ""}`
+    if (evalKey.current === key) return
     const frame = window.requestAnimationFrame(() => {
+      if (evalKey.current === key) return
+      evalKey.current = key
       const hits = runRulesAgainst(
         {
           date: portrait.date,
