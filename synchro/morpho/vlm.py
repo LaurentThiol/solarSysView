@@ -24,9 +24,12 @@ DEFAULT_REVISION = "2025-06-21"
 INSTALL_CMD = "./launch install-vlm"
 INSTALL_HINT = (
     "Moondream n'est pas installé. Lancez ./launch install-vlm "
-    "(torch + transformers, ~2 Go, une fois) puis recliquez "
+    "(torch + transformers + accelerate, ~2 Go, une fois) puis recliquez "
     "Charger / interroger — ou laissez le bouton installer tout seul."
 )
+INSTALL_PROGRESS = "Installation de torch + transformers + accelerate (une fois, ~2 Go)…"
+LOAD_PROGRESS = "Chargement de Moondream2 (poids Hugging Face)…"
+TRANSFORMERS_MODULES = ("transformers", "torch", "accelerate", "einops")
 
 _QUERY_SPECS = (
     ("region", "top|bottom|center|periphery|mixed", "Reply with exactly one of: top, bottom, center, periphery, mixed. Where are the filled dots concentrated?"),
@@ -127,6 +130,52 @@ def install_allowed() -> bool:
     return True
 
 
+def _module_available(name: str) -> bool:
+    try:
+        __import__(name)
+        return True
+    except Exception:
+        return False
+
+
+def _transformers_ready() -> bool:
+    return all(_module_available(name) for name in TRANSFORMERS_MODULES)
+
+
+def extras_missing() -> bool:
+    return not _probe_available()
+
+
+def _looks_like_missing_extra(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return any(
+        token in text
+        for token in (
+            "accelerate",
+            "einops",
+            "no module named 'transformers'",
+            "no module named 'torch'",
+            "no module named 'moondream'",
+            "pip install accelerate",
+        )
+    )
+
+
+def _optional_backend_noise(name: str, exc: BaseException) -> bool:
+    if name == "photon" and _is_missing_module(exc, "moondream"):
+        return True
+    if name == "gguf":
+        return True
+    return False
+
+
+def _is_missing_module(exc: BaseException, module: str) -> bool:
+    if isinstance(exc, ModuleNotFoundError):
+        missing = getattr(exc, "name", None) or str(exc)
+        return module in str(missing)
+    return f"no module named '{module}'" in str(exc).lower()
+
+
 def status() -> dict[str, Any]:
     loaded = _backend is not None
     busy = _worker is not None and _worker.is_alive()
@@ -150,37 +199,19 @@ def status() -> dict[str, Any]:
 
 def _probe_available() -> list[str]:
     found: list[str] = []
-    try:
-        import transformers  # noqa: F401
-
+    if _transformers_ready():
         found.append("transformers")
-    except Exception:
-        pass
-    try:
-        import moondream  # noqa: F401
-
+    if _module_available("moondream"):
         found.append("photon")
-    except Exception:
-        pass
-    if gguf_configured():
-        try:
-            from llama_cpp import Llama  # noqa: F401
-
-            found.append("gguf")
-        except Exception:
-            pass
+    if gguf_configured() and _module_available("llama_cpp"):
+        found.append("gguf")
     return found
 
 
-def load(backend: str | None = None, *, install: bool = False) -> dict[str, Any]:
-    """Charge le premier backend disponible. No-op si déjà chargé."""
+def _load_first_backend(preferred: str | None = None) -> dict[str, Any]:
     global _backend, _last_error
-    if _backend is not None:
-        return status()
-    if install and not _probe_available() and install_allowed():
-        _pip_install_extras()
     errors: list[str] = []
-    for name in backend_order(backend):
+    for name in backend_order(preferred):
         try:
             if name == "photon":
                 _backend = _load_photon()
@@ -193,28 +224,42 @@ def load(backend: str | None = None, *, install: bool = False) -> dict[str, Any]
             _last_error = None
             return status()
         except Exception as exc:
-            errors.append(f"{name}: {exc}")
+            if preferred or not _optional_backend_noise(name, exc):
+                errors.append(f"{name}: {exc}")
     detail = " | ".join(errors)
     if errors:
         raise RuntimeError(f"aucun backend VLM local. {INSTALL_HINT} — {detail}")
     raise RuntimeError(f"aucun backend VLM local. {INSTALL_HINT}")
 
 
+def load(backend: str | None = None, *, install: bool = False) -> dict[str, Any]:
+    """Charge le premier backend disponible. No-op si déjà chargé."""
+    if _backend is not None:
+        return status()
+    tried_install = False
+    if install and extras_missing() and install_allowed():
+        _pip_install_extras()
+        tried_install = True
+    try:
+        return _load_first_backend(backend)
+    except RuntimeError as exc:
+        if install and install_allowed() and not tried_install and _looks_like_missing_extra(exc):
+            _pip_install_extras()
+            return _load_first_backend(backend)
+        raise
+
+
 def ensure_loaded(backend: str | None = None, *, install: bool = True) -> dict[str, Any]:
     """Démarre le chargement (et l'install pip si besoin) en arrière-plan."""
-    global _worker
+    global _worker, _phase, _last_error, _last_message
     if _backend is not None:
         return {"ok": True, **status()}
     with _lock:
         if _worker is not None and _worker.is_alive():
             return {"ok": False, **status()}
-        will_install = install and not _probe_available() and install_allowed()
+        will_install = install and extras_missing() and install_allowed()
         _phase = "installing" if will_install else "loading"
-        _last_message = (
-            "Installation de torch + transformers (une fois, ~2 Go)…"
-            if will_install
-            else "Chargement de Moondream2 (poids Hugging Face)…"
-        )
+        _last_message = INSTALL_PROGRESS if will_install else LOAD_PROGRESS
         _last_error = None
         _worker = threading.Thread(
             target=_load_worker,
@@ -229,24 +274,44 @@ def ensure_loaded(backend: str | None = None, *, install: bool = True) -> dict[s
 def _load_worker(backend: str | None, install: bool) -> None:
     global _phase, _last_error, _last_message
     try:
-        if install and not _probe_available() and install_allowed():
+        if install and extras_missing() and install_allowed():
             _phase = "installing"
-            _last_message = "Installation de torch + transformers (une fois, ~2 Go)…"
+            _last_message = INSTALL_PROGRESS
             _last_error = None
             _pip_install_extras()
         _phase = "loading"
-        _last_message = "Chargement de Moondream2 (poids Hugging Face)…"
+        _last_message = LOAD_PROGRESS
         load(backend, install=False)
         _last_error = None
         _last_message = None
         _phase = None
     except Exception as exc:
+        if install and install_allowed() and _looks_like_missing_extra(exc):
+            try:
+                _phase = "installing"
+                _last_message = INSTALL_PROGRESS
+                _last_error = None
+                _pip_install_extras()
+                _phase = "loading"
+                _last_message = LOAD_PROGRESS
+                load(backend, install=False)
+                _last_error = None
+                _last_message = None
+                _phase = None
+                return
+            except Exception as retry_exc:
+                _last_error = str(retry_exc)
+                _last_message = None
+                _phase = None
+                return
         _last_error = str(exc)
         _last_message = None
         _phase = None
 
 
 def _pip_install_extras() -> None:
+    import importlib
+
     req = extras_requirements_path()
     if not req.is_file():
         raise RuntimeError(f"fichier introuvable : {req}")
@@ -259,6 +324,7 @@ def _pip_install_extras() -> None:
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout or "").strip()[-800:]
         raise RuntimeError(f"pip install -r requirements-morpho.txt a échoué : {tail}")
+    importlib.invalidate_caches()
 
 
 def unload() -> None:
@@ -281,19 +347,38 @@ def _load_photon() -> dict[str, Any]:
     return {"name": "photon", "model": model, "model_id": "moondream2", "revision": None}
 
 
-def _load_transformers() -> dict[str, Any]:
+def _target_torch_device() -> str:
     import torch
+
+    if torch.cuda.is_available():
+        return "cuda"
+    mps = getattr(torch.backends, "mps", None)
+    if mps is not None and mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+def _load_transformers() -> dict[str, Any]:
     from transformers import AutoModelForCausalLM
 
+    device = _target_torch_device()
     kwargs: dict[str, Any] = {
         "revision": DEFAULT_REVISION,
         "trust_remote_code": True,
     }
-    if torch.cuda.is_available():
-        kwargs["device_map"] = {"": "cuda"}
-    elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-        kwargs["device_map"] = {"": "mps"}
-    model = AutoModelForCausalLM.from_pretrained(DEFAULT_MODEL_ID, **kwargs)
+    use_device_map = device != "cpu" and _module_available("accelerate")
+    if use_device_map:
+        kwargs["device_map"] = {"": device}
+    try:
+        model = AutoModelForCausalLM.from_pretrained(DEFAULT_MODEL_ID, **kwargs)
+    except Exception as exc:
+        if use_device_map and "accelerate" in str(exc).lower():
+            kwargs.pop("device_map", None)
+            model = AutoModelForCausalLM.from_pretrained(DEFAULT_MODEL_ID, **kwargs)
+        else:
+            raise
+    if "device_map" not in kwargs and device != "cpu":
+        model = model.to(device)
     tokenizer = None
     try:
         from transformers import AutoTokenizer

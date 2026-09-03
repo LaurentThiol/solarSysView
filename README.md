@@ -30,7 +30,7 @@ Le lanceur (même modèle que PaxVideo) installe les dépendances si besoin, lib
 | `./launch update` / `make update` | Contrôle GitHub (`git fetch`) et tire `origin` en fast-forward |
 | `./launch doctor` | Python, venv, Node, `.env`, ports, VLM |
 | `./launch install` | Dépendances seulement |
-| `./launch install-vlm` | Moondream local (torch + transformers) |
+| `./launch install-vlm` | Moondream local (torch + transformers + accelerate) |
 | `./launch shortcut` | Raccourci Bureau / menu applications (Linux) ou `~/Desktop/Synchro.command` (macOS) |
 | `make test` | Tests (`pytest`) |
 
@@ -61,7 +61,7 @@ Laboratoire visuel : chaque tirage est un glyphe sur la grille 5×10 + étoiles.
 # équivalent : .venv/bin/pip install -r requirements-morpho.txt
 ```
 
-Puis bouton **Charger / interroger** dans Morpho (poids HF en cache, pas dans le git). Si les extras ne sont pas là, le bouton les installe tout seul (torch + transformers, ~2 Go, une fois). CLIP navigateur : `@huggingface/transformers`, chargé au clic **Œil local CLIP**.
+Puis bouton **Charger / interroger** dans Morpho (poids HF en cache, pas dans le git). Si les extras ne sont pas là, le bouton les installe tout seul (torch + transformers + accelerate, ~2 Go, une fois). CLIP navigateur : `@huggingface/transformers`, chargé au clic **Œil local CLIP**.
 
 ## Admin (`/admin`)
 

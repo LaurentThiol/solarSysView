@@ -48,7 +48,7 @@ Usage:
   ./launch update          Contrôle GitHub et tire origin (ff-only), puis réinstalle si besoin
   ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM
   ./launch install         Installe uniquement les dépendances
-  ./launch install-vlm     Installe Moondream (torch + transformers)
+  ./launch install-vlm     Installe Moondream (torch + transformers + accelerate)
   ./launch shortcut        Installe un raccourci bureau / menu applications
   ./launch help            Cette aide
 
@@ -768,7 +768,7 @@ cmd_install_vlm() {
   local venv="$ROOT/.venv"
   SKIP_INSTALL=0
   ensure_install
-  info "Installation Moondream (torch + transformers, ~2 Go)…"
+  info "Installation Moondream (torch + transformers + accelerate, ~2 Go)…"
   if ! "$venv/bin/python" -m pip install -r "$ROOT/requirements-morpho.txt"; then
     die "pip install -r requirements-morpho.txt a échoué. Voir ./launch doctor"
   fi
@@ -781,8 +781,10 @@ vlm_doctor() {
     printf '%sVLM : pas de venv — ./launch install puis ./launch install-vlm%s\n' "$C_DIM" "$C_RESET"
     return 0
   fi
-  if "$py" -c 'import transformers, torch' 2>/dev/null; then
-    ok "VLM : transformers + torch (Moondream via ./launch install-vlm)"
+  if "$py" -c 'import transformers, torch, accelerate, einops' 2>/dev/null; then
+    ok "VLM : transformers + torch + accelerate (Moondream via ./launch install-vlm)"
+  elif "$py" -c 'import transformers, torch' 2>/dev/null; then
+    warn "VLM : accelerate manquant — relancez ./launch install-vlm (device_map CUDA/MPS)"
   else
     warn "VLM : transformers/torch absents — Morpho → Installer et charger, ou ./launch install-vlm"
   fi

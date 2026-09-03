@@ -1,4 +1,5 @@
 from synchro.morpho.board import cell_center, number_cell, numbers_origin, pixel_to_norm
+from synchro.morpho import vlm as vlm_mod
 from synchro.morpho.vlm import (
     INSTALL_HINT,
     analyze,
@@ -75,3 +76,109 @@ def test_load_without_backends_is_actionable(monkeypatch) -> None:
         assert INSTALL_HINT.split(".")[0] in msg
         return
     raise AssertionError("load() aurait dû échouer sans backend")
+
+
+def test_probe_requires_accelerate_for_transformers(monkeypatch) -> None:
+    monkeypatch.delenv("MORPHO_GGUF_PATH", raising=False)
+
+    def partial(name: str) -> bool:
+        return name in {"transformers", "torch", "einops"}
+
+    monkeypatch.setattr(vlm_mod, "_module_available", partial)
+    assert vlm_mod._probe_available() == []
+
+    def complete(name: str) -> bool:
+        return name in {"transformers", "torch", "einops", "accelerate"}
+
+    monkeypatch.setattr(vlm_mod, "_module_available", complete)
+    assert vlm_mod._probe_available() == ["transformers"]
+
+
+def test_load_retries_install_when_accelerate_missing(monkeypatch) -> None:
+    unload()
+    monkeypatch.delenv("MORPHO_GGUF_PATH", raising=False)
+    calls = {"pip": 0}
+
+    monkeypatch.setattr(vlm_mod, "install_allowed", lambda: True)
+    monkeypatch.setattr(vlm_mod, "_probe_available", lambda: ["transformers"])
+
+    def fake_pip() -> None:
+        calls["pip"] += 1
+
+    def fake_transformers() -> dict:
+        if calls["pip"] == 0:
+            raise ValueError(
+                "Using a `device_map` requires `accelerate`. You can install it with `pip install accelerate`"
+            )
+        return {"name": "transformers", "model": object(), "model_id": "x", "revision": None}
+
+    monkeypatch.setattr(vlm_mod, "_pip_install_extras", fake_pip)
+    monkeypatch.setattr(vlm_mod, "_load_transformers", fake_transformers)
+    monkeypatch.setattr(
+        vlm_mod,
+        "_load_photon",
+        lambda: (_ for _ in ()).throw(ModuleNotFoundError("No module named 'moondream'")),
+    )
+    try:
+        body = load(install=True)
+        assert calls["pip"] == 1
+        assert body["loaded"] is True
+        assert body["backend"] == "transformers"
+    finally:
+        unload()
+
+
+def test_load_installs_when_transformers_stack_incomplete(monkeypatch) -> None:
+    unload()
+    monkeypatch.delenv("MORPHO_GGUF_PATH", raising=False)
+    calls = {"pip": 0}
+    monkeypatch.setattr(vlm_mod, "install_allowed", lambda: True)
+    monkeypatch.setattr(vlm_mod, "_probe_available", lambda: [])
+
+    def fake_pip() -> None:
+        calls["pip"] += 1
+
+    monkeypatch.setattr(vlm_mod, "_pip_install_extras", fake_pip)
+    monkeypatch.setattr(
+        vlm_mod,
+        "_load_transformers",
+        lambda: {"name": "transformers", "model": object(), "model_id": "x", "revision": None},
+    )
+    monkeypatch.setattr(
+        vlm_mod,
+        "_load_photon",
+        lambda: (_ for _ in ()).throw(ModuleNotFoundError("No module named 'moondream'")),
+    )
+    try:
+        body = load(install=True)
+        assert calls["pip"] == 1
+        assert body["loaded"] is True
+    finally:
+        unload()
+
+
+def test_load_hides_optional_photon_missing(monkeypatch) -> None:
+    unload()
+    monkeypatch.delenv("MORPHO_GGUF_PATH", raising=False)
+    monkeypatch.setenv("MORPHO_VLM_NO_INSTALL", "1")
+    monkeypatch.setattr(
+        vlm_mod,
+        "_load_transformers",
+        lambda: (_ for _ in ()).throw(
+            ValueError("Using a `device_map` requires `accelerate`. pip install accelerate")
+        ),
+    )
+    monkeypatch.setattr(
+        vlm_mod,
+        "_load_photon",
+        lambda: (_ for _ in ()).throw(ModuleNotFoundError("No module named 'moondream'")),
+    )
+    try:
+        load(install=False)
+    except RuntimeError as exc:
+        msg = str(exc)
+        assert "accelerate" in msg
+        assert "photon" not in msg
+        assert "install-vlm" in msg
+        return
+    raise AssertionError("load() aurait dû échouer sans accelerate")

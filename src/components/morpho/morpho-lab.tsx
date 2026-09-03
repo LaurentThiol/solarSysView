@@ -52,7 +52,7 @@ function sleep(ms: number) {
 
 function vlmProgress(status: VlmLoadStatus | null): string {
   if (status?.phase === "installing" || status?.message?.toLowerCase().includes("installation")) {
-    return status.message || "Installation de torch + transformers (une fois, ~2 Go)…"
+    return status.message || "Installation de torch + transformers + accelerate (une fois, ~2 Go)…"
   }
   if (status?.phase === "loading" || status?.busy) {
     return status?.message || "Chargement de Moondream2…"
