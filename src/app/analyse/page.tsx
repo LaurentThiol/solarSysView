@@ -16,7 +16,7 @@ export default function AnalysePage() {
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Variables, chandeliers, SMA / EMA / RSI / MACD / Bollinger / ATR,
           probabilités exactes, inférence, bayésien et dépendances — calculés sur
-          les tirages chargés, sans prédiction.
+          les tirages chargés.
         </p>
       </div>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-12 sm:px-6">
@@ -24,8 +24,7 @@ export default function AnalysePage() {
       </main>
       <footer className="border-t border-border">
         <p className="mx-auto max-w-6xl px-4 py-6 text-xs text-muted-foreground sm:px-6">
-          Jeu de hasard. Ces outils ne constituent ni un pronostic ni un conseil de
-          jeu. Résultats officiels :{" "}
+          Archives FDJ :{" "}
           <a
             className="underline underline-offset-2 hover:text-foreground"
             href="https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique"

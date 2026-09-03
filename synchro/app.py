@@ -29,6 +29,15 @@ from synchro.analysis.ta import indicators
 from synchro.analysis.variables import VARIABLE_NAMES, series
 from synchro.analysis.windows import heikin_ashi, ohlc_blocks, rolling_stats
 from synchro.config import ROOT, WEB_DIR, get_settings
+from synchro.morpho.anticipation import anticipate
+from synchro.morpho.geometry import analyze_draw, detect
+from synchro.morpho.neighbors import neighbors_of_grid
+from synchro.morpho.render import glyph_svg, portrait_render
+from synchro.morpho.rules import evaluate_rules, normalize_rule
+from synchro.morpho.vlm import analyze as vlm_analyze
+from synchro.morpho.vlm import contrastive_query, draft_rule, load as vlm_load
+from synchro.morpho.vlm import sequence_query
+from synchro.morpho.vlm import status as vlm_status
 from synchro.ranks import evaluate_grid, validate_grid
 from synchro.stats import compute_stats
 from synchro.sync import ensure_draws, freshness, sync_draws
@@ -46,6 +55,43 @@ class CheckIn(BaseModel):
     numbers: list[int] = Field(min_length=5, max_length=5)
     stars: list[int] = Field(min_length=2, max_length=2)
     last_n: int = Field(default=1, ge=1, le=200)
+
+
+class MorphoGridIn(BaseModel):
+    numbers: list[int] = Field(min_length=5, max_length=5)
+    stars: list[int] = Field(min_length=2, max_length=2)
+    weekday: str | None = None
+    date: str | None = None
+
+
+class MorphoRuleIn(BaseModel):
+    id: str | None = None
+    name: str = "Règle"
+    condition: dict[str, Any] = Field(default_factory=dict)
+    actions: list[dict[str, Any]] = Field(default_factory=list)
+    active: bool = True
+
+
+class MorphoEvaluateIn(BaseModel):
+    numbers: list[int] = Field(min_length=5, max_length=5)
+    stars: list[int] = Field(min_length=2, max_length=2)
+    date: str | None = None
+    weekday: str | None = None
+    caption: str | None = None
+    queries: dict[str, str] = Field(default_factory=dict)
+    grounding_score: float | None = None
+    persist: bool = False
+
+
+class MorphoVlmIn(BaseModel):
+    numbers: list[int] | None = None
+    stars: list[int] | None = None
+    date: str | None = None
+    era: str = "current"
+    sequence: int = Field(default=0, ge=0, le=8)
+    contrast_numbers: list[int] | None = None
+    contrast_stars: list[int] | None = None
+    persist: bool = False
 
 
 def _json(value: Any) -> Any:
@@ -416,6 +462,204 @@ def create_app() -> FastAPI:
     @app.post("/api/sync/ensure")
     def sync_ensure() -> dict[str, Any]:
         return run_ensure()
+
+    def _morpho_state(payload: MorphoGridIn) -> dict[str, Any]:
+        try:
+            validate_grid(payload.numbers, payload.stars)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        portrait = detect(payload.numbers, payload.stars)
+        portrait["date"] = payload.date
+        portrait["weekday"] = (payload.weekday or "").lower()
+        return portrait
+
+    @app.get("/api/morpho/status")
+    def morpho_status() -> dict[str, Any]:
+        return {"ok": True, "vlm": vlm_status()}
+
+    @app.post("/api/morpho/analyze")
+    def morpho_analyze(payload: MorphoGridIn) -> dict[str, Any]:
+        state = _morpho_state(payload)
+        return portrait_render(state)
+
+    @app.get("/api/morpho/glyphs")
+    def morpho_glyphs(
+        era: str = Query("current", pattern="^(current|all)$"),
+        limit: int = Query(24, ge=1, le=200),
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        draws = list(reversed(_analysis_draws(era, from_date, to_date)))[:limit]
+        items = []
+        for draw in draws:
+            portrait = analyze_draw(draw)
+            items.append(portrait_render(portrait))
+        return {"items": items, "total": len(items)}
+
+    @app.post("/api/morpho/neighbors")
+    def morpho_neighbors(
+        payload: MorphoGridIn,
+        era: str = Query("current", pattern="^(current|all)$"),
+        k: int = Query(8, ge=1, le=30),
+    ) -> dict[str, Any]:
+        state = _morpho_state(payload)
+        draws = _analysis_draws(era)
+        items = neighbors_of_grid(
+            payload.numbers, payload.stars, draws, k=k, date=payload.date
+        )
+        return {"query": portrait_render(state), "items": [portrait_render(p) for p in items]}
+
+    @app.get("/api/morpho/anticipate")
+    def morpho_anticipate(
+        era: str = Query("current", pattern="^(current|all)$"),
+        n: int = Query(400, ge=50, le=2000),
+        seed: int = Query(0),
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        return anticipate(_analysis_draws(era, from_date, to_date), n_sim=n, seed=seed)
+
+    @app.get("/api/morpho/rules")
+    def morpho_rules() -> dict[str, Any]:
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré.")
+        return {"items": [_json(db.serialize_row(r)) for r in db.list_morpho_rules()]}
+
+    @app.post("/api/morpho/rules")
+    def morpho_save_rule(payload: MorphoRuleIn) -> dict[str, Any]:
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré.")
+        rule = normalize_rule(payload.model_dump())
+        return _json(db.serialize_row(db.upsert_morpho_rule(rule)))
+
+    @app.delete("/api/morpho/rules/{rule_id}")
+    def morpho_delete_rule(rule_id: str) -> dict[str, bool]:
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré.")
+        if not db.delete_morpho_rule(rule_id):
+            raise HTTPException(404, "Règle introuvable")
+        return {"ok": True}
+
+    @app.get("/api/morpho/firings")
+    def morpho_firings(limit: int = Query(40, ge=1, le=200)) -> dict[str, Any]:
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré.")
+        return {"items": [_json(db.serialize_row(r)) for r in db.list_morpho_firings(limit)]}
+
+    @app.post("/api/morpho/rules/evaluate")
+    def morpho_evaluate(payload: MorphoEvaluateIn) -> dict[str, Any]:
+        try:
+            validate_grid(payload.numbers, payload.stars)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        state = detect(payload.numbers, payload.stars)
+        state["date"] = payload.date
+        state["weekday"] = (payload.weekday or "").lower()
+        if payload.caption:
+            state["caption"] = payload.caption
+        if payload.queries:
+            state["queries"] = payload.queries
+        state["grounding_score"] = payload.grounding_score
+        rules = []
+        if db.database_configured():
+            try:
+                rules = [normalize_rule(db.serialize_row(r)) for r in db.list_morpho_rules()]
+            except Exception:
+                rules = []
+        firings = evaluate_rules(rules, state)
+        if payload.persist and db.database_configured():
+            for firing in firings:
+                try:
+                    db.insert_morpho_firing(
+                        firing["rule_id"],
+                        firing.get("draw_date"),
+                        firing["motif_snapshot"],
+                    )
+                except Exception:
+                    pass
+        return {"state": portrait_render(state), "firings": firings}
+
+    @app.get("/api/morpho/svg")
+    def morpho_svg(
+        numbers: str = Query(...),
+        stars: str = Query(...),
+        labels: bool = True,
+    ) -> dict[str, str]:
+        nums = [int(x) for x in numbers.split(",") if x.strip()]
+        sts = [int(x) for x in stars.split(",") if x.strip()]
+        try:
+            validate_grid(nums, sts)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"svg": glyph_svg(nums, sts, show_labels=labels)}
+
+    @app.post("/api/morpho/vlm/load")
+    def morpho_vlm_load() -> dict[str, Any]:
+        try:
+            return {"ok": True, **vlm_load()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc), **vlm_status()}
+
+    @app.get("/api/morpho/vlm/status")
+    def morpho_vlm_status() -> dict[str, Any]:
+        return vlm_status()
+
+    @app.post("/api/morpho/vlm")
+    def morpho_vlm(payload: MorphoVlmIn) -> dict[str, Any]:
+        numbers = payload.numbers
+        stars = payload.stars
+        if (numbers is None or stars is None) and payload.date:
+            draws = _analysis_draws(payload.era)
+            match = next(
+                (
+                    d
+                    for d in draws
+                    if str(d.get("draw_date"))[:10] == payload.date[:10]
+                ),
+                None,
+            )
+            if not match:
+                raise HTTPException(404, "Tirage introuvable")
+            numbers = list(match["numbers"])
+            stars = list(match["stars"])
+        if numbers is None or stars is None:
+            raise HTTPException(400, "numbers/stars ou date requis")
+        try:
+            validate_grid(numbers, stars)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        state = vlm_analyze(numbers, stars)
+        state["date"] = payload.date
+        extra: dict[str, Any] = {}
+        if payload.sequence >= 2:
+            history = _analysis_draws(payload.era)
+            recent = history[-payload.sequence :]
+            extra["sequence"] = sequence_query(
+                [([int(n) for n in d["numbers"]], [int(s) for s in d["stars"]]) for d in recent]
+            )
+        if payload.contrast_numbers and payload.contrast_stars:
+            extra["contrast"] = contrastive_query(
+                (numbers, stars),
+                (payload.contrast_numbers, payload.contrast_stars),
+            )
+        extra["draft"] = draft_rule(state)
+        if payload.persist and payload.date and db.database_configured() and state.get("vlm"):
+            try:
+                db.upsert_morpho_caption(
+                    {
+                        "draw_date": payload.date[:10],
+                        "model_id": state.get("model_id") or "geometry",
+                        "revision": state.get("revision"),
+                        "prompt_id": state.get("prompt_id") or "morpho-vqa-v1",
+                        "caption": state.get("caption"),
+                        "queries": state.get("queries") or {},
+                        "grounding_score": state.get("grounding_score"),
+                        "image_hash": state.get("image_hash"),
+                    }
+                )
+            except Exception:
+                pass
+        return {"ok": True, "state": portrait_render(state), **extra}
 
     if WEB_DIR.exists():
         app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")

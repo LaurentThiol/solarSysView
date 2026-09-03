@@ -19,8 +19,7 @@ export default function TiragePage() {
       </main>
       <footer className="border-t border-border">
         <p className="mx-auto max-w-6xl px-4 py-6 text-xs text-muted-foreground sm:px-6">
-          Jeu de hasard. Ces archives ne constituent ni un pronostic ni un conseil
-          de jeu. Résultats officiels :{" "}
+          Archives FDJ :{" "}
           <a
             className="underline underline-offset-2 hover:text-foreground"
             href="https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique"

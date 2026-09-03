@@ -1,6 +1,6 @@
 # Synchro — tirages EuroMillions
 
-Deux couches sur les mêmes tirages : **Next.js** (consultation + laboratoire d’analyse) et **Python / Neon** (historique FDJ complet). Les résultats officiels restent ceux de la [FDJ](https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique). Au premier lancement, un consentement (majeur, pas un outil de prédiction) est demandé.
+Deux couches sur les mêmes tirages : **Next.js** (consultation + laboratoire d’analyse + Morpho) et **Python / Neon** (historique FDJ complet). Les résultats officiels restent ceux de la [FDJ](https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique).
 
 ## Démarrage
 
@@ -37,7 +37,7 @@ Sur macOS, un double-clic sur `Synchro.command` à la racine du dépôt lance au
 
 Options : `--skip-install`, `--force-install`, `--no-open`. Ports : `SYNCHRO_BACKEND_PORT` (8000), `SYNCHRO_FRONTEND_PORT` (43147). Logs : `.run/`.
 
-Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections **Tirage**, **Évolution**, **Analyse** et **Admin** sont des onglets du bandeau.
+Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections **Tirage**, **Évolution**, **Analyse**, **Morpho** et **Admin** sont des onglets du bandeau.
 
 ## Tirage (`/tirage`)
 
@@ -51,6 +51,16 @@ Onglet admin : **évolution dans le temps**, **numéros les plus sortis**, **ét
 
 Laboratoire : variables (somme, étendue, parité, retard, …), fenêtre de X tirages, chandeliers OHLC / Heikin-Ashi, probabilités exactes des 13 rangs, tests vs hasard (χ², IC Wilson), Beta-Binomial, paires / lift, backtest des numéros « chauds ». Tous les outils lisent le **même** ensemble de tirages (Neon `era=current|all`, sinon JSON 2026). Monte-Carlo des records via l’API Python quand elle est joignable.
 
+## Morpho (`/morpho`)
+
+Laboratoire visuel : chaque tirage est un glyphe sur la grille 5×10 + étoiles. Détecteurs géométriques (alignements, grappe, miroir, …), kNN visuel, règles QUAND/ALORS, anticipation `P(forme suivante | contexte)` vs tirages uniformes. Moondream local (optionnel) :
+
+```bash
+.venv/bin/pip install -r requirements-morpho.txt
+```
+
+Puis bouton **Charger / interroger** dans Morpho (poids HF en cache, pas dans le git). CLIP navigateur : `@huggingface/transformers`, chargé au clic **Œil local CLIP**.
+
 ## Admin (`/admin`)
 
 Page locale pour les consoles et les secrets (Neon, Google, OpenAI, Brave Search). Les valeurs sont lues/écrites dans `.env` — **jamais commitées**. Révélation / copie, test de connexion, mise à jour GitHub (`git fetch` / `git pull --ff-only`, équivalent `./launch update`), synchro FDJ.
@@ -59,7 +69,7 @@ En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, défini
 
 ## Interface web (Next.js)
 
-App Next.js (onglets **Tirage** `/tirage`, **Évolution** `/evolution`, **Analyse** `/analyse` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
+App Next.js (onglets **Tirage** `/tirage`, **Évolution** `/evolution`, **Analyse** `/analyse`, **Morpho** `/morpho` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install
@@ -113,8 +123,6 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 - `POST /api/reload-env` — relit `.env` et recrée le pool Neon
 - `POST /api/sync` — historique complet (bouton Admin)
 - `POST /api/sync/ensure` — rattrapage si Neon est en retard (`./launch`)
+- `GET\|POST /api/morpho/*` — glyphes, voisins, règles, anticipation, VLM
 
-## Avertissement
-
-Application indépendante, non affiliée à La Française des Jeux.  
-[Joueurs Info Service](https://www.joueurs-info-service.fr/) — 09 74 75 13 13.
+Application indépendante, non affiliée à La Française des Jeux.

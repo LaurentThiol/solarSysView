@@ -57,6 +57,48 @@ CREATE TABLE IF NOT EXISTS sync_log (
     status          TEXT NOT NULL,
     error           TEXT
 );
+
+CREATE TABLE IF NOT EXISTS morpho_rules (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    condition       JSONB NOT NULL,
+    actions         JSONB NOT NULL,
+    active          BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS morpho_firings (
+    id              BIGSERIAL PRIMARY KEY,
+    rule_id         TEXT NOT NULL REFERENCES morpho_rules(id) ON DELETE CASCADE,
+    draw_date       DATE,
+    motif_snapshot  JSONB NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS morpho_firings_draw ON morpho_firings (draw_date DESC);
+CREATE INDEX IF NOT EXISTS morpho_firings_rule ON morpho_firings (rule_id);
+
+CREATE TABLE IF NOT EXISTS morpho_embeddings (
+    draw_date       DATE PRIMARY KEY,
+    vector          DOUBLE PRECISION[] NOT NULL,
+    model_id        TEXT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS morpho_captions (
+    id              BIGSERIAL PRIMARY KEY,
+    draw_date       DATE NOT NULL,
+    model_id        TEXT NOT NULL,
+    revision        TEXT,
+    prompt_id       TEXT NOT NULL,
+    caption         TEXT,
+    queries         JSONB,
+    grounding_score DOUBLE PRECISION,
+    image_hash      TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (draw_date, model_id, prompt_id)
+);
+CREATE INDEX IF NOT EXISTS morpho_captions_draw ON morpho_captions (draw_date DESC);
 """
 
 _pool: ConnectionPool | None = None
@@ -411,3 +453,125 @@ def serialize_row(row: dict[str, Any], drop: tuple[str, ...] = ("raw",)) -> dict
 
 def serialize_draw(row: dict[str, Any]) -> dict[str, Any]:
     return serialize_row(row)
+
+
+def list_morpho_rules() -> list[dict[str, Any]]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM morpho_rules ORDER BY updated_at DESC")
+            return [dict(r) for r in cur.fetchall()]
+
+
+def upsert_morpho_rule(rule: dict[str, Any]) -> dict[str, Any]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO morpho_rules (id, name, condition, actions, active)
+                VALUES (%(id)s, %(name)s, %(condition)s, %(actions)s, %(active)s)
+                ON CONFLICT (id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    condition = EXCLUDED.condition,
+                    actions = EXCLUDED.actions,
+                    active = EXCLUDED.active,
+                    updated_at = now()
+                RETURNING *
+                """,
+                {
+                    "id": rule["id"],
+                    "name": rule["name"],
+                    "condition": Jsonb(rule["condition"]),
+                    "actions": Jsonb(rule["actions"]),
+                    "active": rule.get("active", True),
+                },
+            )
+            row = dict(cur.fetchone())
+        conn.commit()
+        return row
+
+
+def delete_morpho_rule(rule_id: str) -> bool:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM morpho_rules WHERE id = %s", (rule_id,))
+            deleted = cur.rowcount > 0
+        conn.commit()
+        return deleted
+
+
+def insert_morpho_firing(rule_id: str, draw_date: str | None, snapshot: dict[str, Any]) -> dict[str, Any]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO morpho_firings (rule_id, draw_date, motif_snapshot)
+                VALUES (%s, %s, %s)
+                RETURNING *
+                """,
+                (rule_id, draw_date, Jsonb(snapshot)),
+            )
+            row = dict(cur.fetchone())
+        conn.commit()
+        return row
+
+
+def list_morpho_firings(limit: int = 40) -> list[dict[str, Any]]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT f.*, r.name AS rule_name
+                  FROM morpho_firings f
+             LEFT JOIN morpho_rules r ON r.id = f.rule_id
+              ORDER BY f.created_at DESC
+                 LIMIT %s
+                """,
+                (limit,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+
+def upsert_morpho_caption(row: dict[str, Any]) -> dict[str, Any]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO morpho_captions (
+                    draw_date, model_id, revision, prompt_id, caption,
+                    queries, grounding_score, image_hash
+                ) VALUES (
+                    %(draw_date)s, %(model_id)s, %(revision)s, %(prompt_id)s, %(caption)s,
+                    %(queries)s, %(grounding_score)s, %(image_hash)s
+                )
+                ON CONFLICT (draw_date, model_id, prompt_id) DO UPDATE SET
+                    caption = EXCLUDED.caption,
+                    queries = EXCLUDED.queries,
+                    grounding_score = EXCLUDED.grounding_score,
+                    image_hash = EXCLUDED.image_hash
+                RETURNING *
+                """,
+                {
+                    **row,
+                    "queries": Jsonb(row.get("queries") or {}),
+                },
+            )
+            saved = dict(cur.fetchone())
+        conn.commit()
+        return saved
+
+
+def get_morpho_caption(draw_date: str) -> dict[str, Any] | None:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM morpho_captions
+                 WHERE draw_date = %s
+              ORDER BY created_at DESC
+                 LIMIT 1
+                """,
+                (draw_date,),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
+

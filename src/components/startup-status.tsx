@@ -8,6 +8,7 @@ import { LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { isLocalHost } from "@/lib/api-base"
 import { formatSyncStamp } from "@/lib/draws"
+import { FIRING_EVENT, readLastFiring, type StoredFiring } from "@/lib/morpho/store"
 
 type GitPayload = {
   ok: boolean
@@ -338,9 +339,35 @@ export function StartupStatus() {
           title="Contrôler origin (Admin si une mise à jour est disponible)"
           onClick={onGithub}
         />
+        <MorphoFiringPill />
         {quitButton}
       </div>
     </>
+  )
+}
+
+function MorphoFiringPill() {
+  const router = useRouter()
+  const [firing, setFiring] = useState<StoredFiring | null>(() =>
+    typeof window === "undefined" ? null : readLastFiring()
+  )
+  useEffect(() => {
+    const onFire = (event: Event) => {
+      const detail = (event as CustomEvent<StoredFiring>).detail
+      setFiring(detail ?? readLastFiring())
+    }
+    window.addEventListener(FIRING_EVENT, onFire)
+    return () => window.removeEventListener(FIRING_EVENT, onFire)
+  }, [])
+  if (!firing) return null
+  return (
+    <Pill
+      label="Morpho"
+      detail={firing.name}
+      tone="warn"
+      title={`${firing.name} · ${firing.draw_date ?? ""}`}
+      onClick={() => router.push("/morpho")}
+    />
   )
 }
 
@@ -348,6 +375,7 @@ const NAV_ITEMS = [
   { href: "/tirage", label: "Tirage" },
   { href: "/evolution", label: "Évolution" },
   { href: "/analyse", label: "Analyse" },
+  { href: "/morpho", label: "Morpho" },
   { href: "/admin", label: "Admin" },
 ] as const
 

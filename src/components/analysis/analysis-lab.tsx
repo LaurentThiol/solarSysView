@@ -172,7 +172,7 @@ export function AnalysisLab() {
         Chaque outil lit les <strong>mêmes tirages</strong> ({chrono.length} après filtre,
         source {source === "neon" ? "Neon" : "JSON local"}). Les tirages sont
         indépendants : SMA, EMA, RSI, MACD, Bollinger et ATR décrivent la série
-        observée, ce ne sont pas des signaux de jeu. Jeu interdit aux mineurs.
+        observée.
       </p>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap">
@@ -534,7 +534,7 @@ function VariablesPanel({
               </ComposedChart>
             </ChartContainer>
             <p className="mt-2 text-xs text-muted-foreground">
-              Croisements MACD / signal : lecture analogique, pas un conseil de jeu.
+              Croisements MACD / signal.
             </p>
           </CardContent>
         </Card>

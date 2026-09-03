@@ -1,0 +1,6 @@
+# Extra local VLM (lazy, pas installé par ./launch).
+# Défaut : vikhyatk/moondream2 via transformers.
+# Photon (Ampere / Apple Silicon) : pip install moondream
+transformers>=4.45.0
+torch>=2.6.0
+pillow>=10.4.0
