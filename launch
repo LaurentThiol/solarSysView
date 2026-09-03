@@ -782,7 +782,14 @@ vlm_doctor() {
     return 0
   fi
   if "$py" -c 'import transformers, torch, accelerate, einops' 2>/dev/null; then
-    ok "VLM : transformers + torch + accelerate (Moondream via ./launch install-vlm)"
+    local ver
+    ver="$("$py" -c 'import transformers; print(transformers.__version__)' 2>/dev/null || true)"
+    local major="${ver%%.*}"
+    if [[ "$major" =~ ^[0-9]+$ ]] && (( major >= 5 )); then
+      warn "VLM : transformers ${ver} (5.x) incompatible avec Moondream2 (all_tied_weights_keys) — ./launch install-vlm pour rétrograder en 4.x"
+    else
+      ok "VLM : transformers ${ver:-?} + torch + accelerate (Moondream via ./launch install-vlm)"
+    fi
   elif "$py" -c 'import transformers, torch' 2>/dev/null; then
     warn "VLM : accelerate manquant — relancez ./launch install-vlm (device_map CUDA/MPS)"
   else

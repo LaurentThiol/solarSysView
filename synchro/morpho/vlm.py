@@ -27,7 +27,17 @@ INSTALL_HINT = (
     "(torch + transformers + accelerate, ~2 Go, une fois) puis recliquez "
     "Charger / interroger — ou laissez le bouton installer tout seul."
 )
+COMPAT_HINT = (
+    "Incompatibilité transformers 5 / Moondream2 : HfMoondream n'expose pas "
+    "all_tied_weights_keys. Relancez ./launch install-vlm (transformers 4.x, <5) "
+    "puis redémarrez — ou recliquez Charger / interroger."
+)
+LOAD_HINT = (
+    "Échec du chargement de Moondream (paquets présents — ce n'est pas une "
+    "installation manquante)."
+)
 INSTALL_PROGRESS = "Installation de torch + transformers + accelerate (une fois, ~2 Go)…"
+PIN_PROGRESS = "Rétrogradation de transformers vers 4.x (compatible Moondream2)…"
 LOAD_PROGRESS = "Chargement de Moondream2 (poids Hugging Face)…"
 TRANSFORMERS_MODULES = ("transformers", "torch", "accelerate", "einops")
 
@@ -146,7 +156,53 @@ def extras_missing() -> bool:
     return not _probe_available()
 
 
-def _looks_like_missing_extra(exc: BaseException) -> bool:
+def package_major(version: str | None) -> int | None:
+    if not version:
+        return None
+    match = re.match(r"\d+", str(version).lstrip("vV"))
+    return int(match.group(0)) if match else None
+
+
+def transformers_needs_pin(version: str | None) -> bool:
+    major = package_major(version)
+    return major is not None and major >= 5
+
+
+def _transformers_version() -> str | None:
+    try:
+        import transformers
+
+        return getattr(transformers, "__version__", None)
+    except Exception:
+        return None
+
+
+def _installed_transformers_needs_pin() -> bool:
+    return transformers_needs_pin(_transformers_version())
+
+
+def _stack_needs_install() -> bool:
+    return extras_missing() or _installed_transformers_needs_pin()
+
+
+def _install_progress_message() -> str:
+    if extras_missing():
+        return INSTALL_PROGRESS
+    if _installed_transformers_needs_pin():
+        return PIN_PROGRESS
+    return INSTALL_PROGRESS
+
+
+def looks_like_compat_error(exc: BaseException | str) -> bool:
+    text = str(exc).lower()
+    return "all_tied_weights_keys" in text or (
+        "hfmoondream" in text and "has no attribute" in text
+    )
+
+
+def _looks_like_missing_extra(exc: BaseException | str) -> bool:
+    if looks_like_compat_error(exc):
+        return False
     text = str(exc).lower()
     return any(
         token in text
@@ -159,6 +215,98 @@ def _looks_like_missing_extra(exc: BaseException) -> bool:
             "pip install accelerate",
         )
     )
+
+
+def _should_retry_install(exc: BaseException | str) -> bool:
+    return _looks_like_missing_extra(exc) or looks_like_compat_error(exc)
+
+
+def format_vlm_load_error(errors: list[str]) -> str:
+    detail = " | ".join(item for item in errors if item)
+    if looks_like_compat_error(detail) or any(looks_like_compat_error(item) for item in errors):
+        prefix = COMPAT_HINT
+    elif not _probe_available() or _looks_like_missing_extra(detail):
+        prefix = f"aucun backend VLM local. {INSTALL_HINT}"
+    else:
+        prefix = LOAD_HINT
+    if detail:
+        return f"{prefix} — {detail}"
+    return prefix
+
+
+def _has_tied_weights_attr(model: Any) -> bool:
+    return "all_tied_weights_keys" in getattr(model, "__dict__", {})
+
+
+def ensure_tied_weights_attr(model: Any, *, allow_post_init: bool = True) -> None:
+    """HfMoondream skips post_init(); transformers 5 reads all_tied_weights_keys after __init__."""
+    if _has_tied_weights_attr(model):
+        return
+    if allow_post_init:
+        method = getattr(model, "post_init", None)
+        if callable(method):
+            try:
+                method()
+            except Exception:
+                pass
+    if not _has_tied_weights_attr(model):
+        try:
+            model.all_tied_weights_keys = {}
+        except Exception:
+            pass
+
+
+def apply_hf_moondream_compat(cls: type) -> type:
+    """Wrap a remote-code HfMoondream class so __init__ runs post_init() (upstream v5 fix)."""
+    if getattr(cls, "_morpho_tied_compat", False):
+        return cls
+    orig_init = cls.__init__
+
+    def wrapped_init(self, *args, **kwargs):
+        orig_init(self, *args, **kwargs)
+        ensure_tied_weights_attr(self, allow_post_init=True)
+
+    cls.__init__ = wrapped_init  # type: ignore[method-assign]
+    cls._morpho_tied_compat = True
+    return cls
+
+
+def patch_loaded_hf_moondream_classes() -> list[type]:
+    patched: list[type] = []
+    for module in list(sys.modules.values()):
+        try:
+            cls = getattr(module, "HfMoondream", None)
+        except Exception:
+            continue
+        if isinstance(cls, type):
+            apply_hf_moondream_compat(cls)
+            patched.append(cls)
+    return patched
+
+
+def _install_tied_weights_getattr_patch():
+    """Fallback if HfMoondream is constructed before we can wrap its __init__."""
+    try:
+        import torch.nn as nn
+    except Exception:
+        return lambda: None
+    orig = nn.Module.__getattr__
+    if getattr(orig, "_morpho_tied_patch", False):
+        return lambda: None
+
+    def patched(self, name):
+        if name == "all_tied_weights_keys":
+            return {}
+        return orig(self, name)
+
+    patched._morpho_tied_patch = True  # type: ignore[attr-defined]
+    nn.Module.__getattr__ = patched
+
+    def restore() -> None:
+        if nn.Module.__getattr__ is patched:
+            nn.Module.__getattr__ = orig
+
+    return restore
 
 
 def _optional_backend_noise(name: str, exc: BaseException) -> bool:
@@ -180,7 +328,14 @@ def status() -> dict[str, Any]:
     loaded = _backend is not None
     busy = _worker is not None and _worker.is_alive()
     available = _probe_available()
-    hint = None if loaded or available else INSTALL_HINT
+    if loaded:
+        hint = None
+    elif _installed_transformers_needs_pin():
+        hint = COMPAT_HINT
+    elif available:
+        hint = None
+    else:
+        hint = INSTALL_HINT
     return {
         "loaded": loaded,
         "busy": busy,
@@ -226,10 +381,7 @@ def _load_first_backend(preferred: str | None = None) -> dict[str, Any]:
         except Exception as exc:
             if preferred or not _optional_backend_noise(name, exc):
                 errors.append(f"{name}: {exc}")
-    detail = " | ".join(errors)
-    if errors:
-        raise RuntimeError(f"aucun backend VLM local. {INSTALL_HINT} — {detail}")
-    raise RuntimeError(f"aucun backend VLM local. {INSTALL_HINT}")
+    raise RuntimeError(format_vlm_load_error(errors))
 
 
 def load(backend: str | None = None, *, install: bool = False) -> dict[str, Any]:
@@ -237,13 +389,13 @@ def load(backend: str | None = None, *, install: bool = False) -> dict[str, Any]
     if _backend is not None:
         return status()
     tried_install = False
-    if install and extras_missing() and install_allowed():
+    if install and _stack_needs_install() and install_allowed():
         _pip_install_extras()
         tried_install = True
     try:
         return _load_first_backend(backend)
     except RuntimeError as exc:
-        if install and install_allowed() and not tried_install and _looks_like_missing_extra(exc):
+        if install and install_allowed() and not tried_install and _should_retry_install(exc):
             _pip_install_extras()
             return _load_first_backend(backend)
         raise
@@ -257,9 +409,9 @@ def ensure_loaded(backend: str | None = None, *, install: bool = True) -> dict[s
     with _lock:
         if _worker is not None and _worker.is_alive():
             return {"ok": False, **status()}
-        will_install = install and extras_missing() and install_allowed()
+        will_install = install and _stack_needs_install() and install_allowed()
         _phase = "installing" if will_install else "loading"
-        _last_message = INSTALL_PROGRESS if will_install else LOAD_PROGRESS
+        _last_message = _install_progress_message() if will_install else LOAD_PROGRESS
         _last_error = None
         _worker = threading.Thread(
             target=_load_worker,
@@ -274,9 +426,9 @@ def ensure_loaded(backend: str | None = None, *, install: bool = True) -> dict[s
 def _load_worker(backend: str | None, install: bool) -> None:
     global _phase, _last_error, _last_message
     try:
-        if install and extras_missing() and install_allowed():
+        if install and _stack_needs_install() and install_allowed():
             _phase = "installing"
-            _last_message = INSTALL_PROGRESS
+            _last_message = _install_progress_message()
             _last_error = None
             _pip_install_extras()
         _phase = "loading"
@@ -286,10 +438,10 @@ def _load_worker(backend: str | None, install: bool) -> None:
         _last_message = None
         _phase = None
     except Exception as exc:
-        if install and install_allowed() and _looks_like_missing_extra(exc):
+        if install and install_allowed() and _should_retry_install(exc):
             try:
                 _phase = "installing"
-                _last_message = INSTALL_PROGRESS
+                _last_message = _install_progress_message()
                 _last_error = None
                 _pip_install_extras()
                 _phase = "loading"
@@ -358,8 +510,19 @@ def _target_torch_device() -> str:
     return "cpu"
 
 
-def _load_transformers() -> dict[str, Any]:
+def _load_pretrained_causal_lm(config, kwargs: dict[str, Any]):
     from transformers import AutoModelForCausalLM
+
+    patch_loaded_hf_moondream_classes()
+    restore = _install_tied_weights_getattr_patch()
+    try:
+        return AutoModelForCausalLM.from_pretrained(DEFAULT_MODEL_ID, config=config, **kwargs)
+    finally:
+        restore()
+
+
+def _load_transformers() -> dict[str, Any]:
+    from transformers import AutoConfig
 
     device = _target_torch_device()
     kwargs: dict[str, Any] = {
@@ -369,14 +532,24 @@ def _load_transformers() -> dict[str, Any]:
     use_device_map = device != "cpu" and _module_available("accelerate")
     if use_device_map:
         kwargs["device_map"] = {"": device}
+    config = AutoConfig.from_pretrained(
+        DEFAULT_MODEL_ID,
+        revision=DEFAULT_REVISION,
+        trust_remote_code=True,
+    )
+    patch_loaded_hf_moondream_classes()
     try:
-        model = AutoModelForCausalLM.from_pretrained(DEFAULT_MODEL_ID, **kwargs)
+        model = _load_pretrained_causal_lm(config, kwargs)
     except Exception as exc:
         if use_device_map and "accelerate" in str(exc).lower():
             kwargs.pop("device_map", None)
-            model = AutoModelForCausalLM.from_pretrained(DEFAULT_MODEL_ID, **kwargs)
+            model = _load_pretrained_causal_lm(config, kwargs)
+        elif looks_like_compat_error(exc):
+            patch_loaded_hf_moondream_classes()
+            model = _load_pretrained_causal_lm(config, kwargs)
         else:
             raise
+    ensure_tied_weights_attr(model, allow_post_init=False)
     if "device_map" not in kwargs and device != "cpu":
         model = model.to(device)
     tokenizer = None

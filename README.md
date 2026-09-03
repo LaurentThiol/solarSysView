@@ -61,7 +61,7 @@ Laboratoire visuel : chaque tirage est un glyphe sur la grille 5×10 + étoiles.
 # équivalent : .venv/bin/pip install -r requirements-morpho.txt
 ```
 
-Puis bouton **Charger / interroger** dans Morpho (poids HF en cache, pas dans le git). Si les extras ne sont pas là, le bouton les installe tout seul (torch + transformers + accelerate, ~2 Go, une fois). CLIP navigateur : `@huggingface/transformers`, chargé au clic **Œil local CLIP**.
+Puis bouton **Charger / interroger** dans Morpho (poids HF en cache, pas dans le git). Si les extras ne sont pas là, le bouton les installe tout seul (torch + transformers 4.x + accelerate, ~2 Go, une fois). `transformers` est épinglé `<5` : la 5.x casse le chargement de `HfMoondream` (`all_tied_weights_keys`). CLIP navigateur : `@huggingface/transformers`, chargé au clic **Œil local CLIP**.
 
 ## Admin (`/admin`)
 
