@@ -89,3 +89,18 @@ def test_ohlc_and_inference_and_lab() -> None:
     assert lab.json()["ta"]["periods"]["sma"] == 20
     assert ta.status_code == 200
     assert ta.json()["last"]["sma"] == 39.0
+    assert "extended" in ta.json()
+    assert "window" in ta.json()
+
+
+def test_lab_last_n_window() -> None:
+    with (
+        patch("synchro.db.database_configured", return_value=True),
+        patch("synchro.db.all_draws", return_value=DRAWS),
+    ):
+        with _client() as client:
+            lab = client.get("/api/analysis/lab?n_sim=5&last_n=2&warmup=1")
+    body = lab.json()
+    assert body["variable"]["values"] == [31.0, 47.0]
+    assert body["window"]["warmup_count"] == 1
+    assert body["draw_count"] == 2

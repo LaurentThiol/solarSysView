@@ -26,7 +26,9 @@ from synchro.analysis.inference import inference_report
 from synchro.analysis.lab import lab_report
 from synchro.analysis.montecarlo import montecarlo_report
 from synchro.analysis.ta import indicators
+from synchro.analysis.tech import tech_pack
 from synchro.analysis.variables import VARIABLE_NAMES, series
+from synchro.analysis.windowing import resolve_window
 from synchro.analysis.windows import heikin_ashi, ohlc_blocks, rolling_stats
 from synchro.config import ROOT, WEB_DIR, get_settings
 from synchro.morpho.anticipation import anticipate
@@ -338,19 +340,49 @@ def create_app() -> FastAPI:
         era: str = Query("current", pattern="^(current|all)$"),
         from_date: str | None = None,
         to_date: str | None = None,
+        preset: str = Query("all"),
+        last_n: int | None = Query(None, ge=1, le=2000),
+        warmup: int = Query(52, ge=0, le=400),
     ) -> dict[str, Any]:
         if name not in VARIABLE_NAMES:
             raise HTTPException(400, f"Variable inconnue: {name}")
-        draws = _analysis_draws(era, from_date, to_date)
-        payload = series(draws, name, n=n)
-        candles = ohlc_blocks(draws, name=name, block=block, window=window, n=n)["candles"]
-        return indicators(
+        archive = _analysis_draws(era, None, None)
+        resolved = resolve_window(
+            archive,
+            preset=preset,
+            from_date=from_date,
+            to_date=to_date,
+            last_n=last_n,
+            warmup=warmup,
+        )
+        work = resolved["work"]
+        with_warmup = resolved["with_warmup"]
+        payload = series(work, name, n=n)
+        full = series(with_warmup, name, n=n)
+        candles = ohlc_blocks(work, name=name, block=block, window=window, n=n)["candles"]
+        pack = indicators(
             [float(v) for v in payload["values"]],
             candles,
             sma_period=window,
             ema_period=window,
             bb_period=window,
         )
+        pack["extended"] = tech_pack(
+            [float(v) for v in full["values"]],
+            [],
+            [p["date"] for p in full["points"]],
+            sma_period=window,
+            warmup_count=resolved["warmup_count"],
+        )
+        pack["window"] = {
+            "preset": resolved["preset"],
+            "from_date": resolved["from_date"],
+            "to_date": resolved["to_date"],
+            "draw_count": resolved["draw_count"],
+            "warmup_count": resolved["warmup_count"],
+            "star_pool_break": resolved["star_pool_break"],
+        }
+        return pack
 
     @app.get("/api/analysis/inference")
     def analysis_inference(
@@ -400,10 +432,13 @@ def create_app() -> FastAPI:
         seed: int = Query(0),
         from_date: str | None = None,
         to_date: str | None = None,
+        preset: str = Query("all"),
+        last_n: int | None = Query(None, ge=1, le=2000),
+        warmup: int = Query(52, ge=0, le=400),
     ) -> dict[str, Any]:
         if name not in VARIABLE_NAMES:
             raise HTTPException(400, f"Variable inconnue: {name}")
-        draws = _analysis_draws(era, from_date, to_date)
+        draws = _analysis_draws(era, None, None)
         return lab_report(
             draws,
             variable=name,
@@ -413,6 +448,11 @@ def create_app() -> FastAPI:
             n_sim=n_sim,
             seed=seed,
             include_mc=True,
+            preset=preset,
+            last_n=last_n,
+            warmup=warmup,
+            from_date=from_date,
+            to_date=to_date,
         )
 
     @app.post("/api/check")

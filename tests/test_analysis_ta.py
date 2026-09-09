@@ -1,6 +1,7 @@
 from pytest import approx
 
 from synchro.analysis.ta import atr, bollinger, ema, indicators, macd, rsi, sma
+from synchro.analysis.tech import wma
 
 
 def test_sma_known_window():
@@ -85,3 +86,10 @@ def test_atr_period_clamps_to_available_candles():
     payload = indicators([c["c"] for c in candles], candles)
     assert payload["periods"]["atr"] == 8
     assert payload["last"]["atr"] is not None
+
+
+def test_wma_linear_weights():
+    values = [1.0, 2.0, 3.0]
+    line = wma(values, 3)
+    assert line[:2] == [None, None]
+    assert line[2] == (1 * 1 + 2 * 2 + 3 * 3) / 6

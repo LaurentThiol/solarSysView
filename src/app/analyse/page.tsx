@@ -14,9 +14,9 @@ export default function AnalysePage() {
       <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         <h1 className="text-3xl font-semibold tracking-tight">Analyse · laboratoire</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          Variables, chandeliers, SMA / EMA / RSI / MACD / Bollinger / ATR,
-          probabilités exactes, inférence, bayésien et dépendances — calculés sur
-          les tirages chargés.
+          Fenêtre temporelle globale, puis onglets : graphiques, tendance, momentum,
+          volatilité, niveaux, figures, flux, moyennes, système, hasard, bayésien,
+          dépendances. X = période d’indicateur, distincte de la plage calendaire.
         </p>
       </div>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-12 sm:px-6">
