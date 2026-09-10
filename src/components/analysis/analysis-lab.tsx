@@ -8,6 +8,8 @@ import { FlowPanel } from "@/components/analysis/flow-panel"
 import { LevelsPanel } from "@/components/analysis/levels-panel"
 import { MemoPanel } from "@/components/analysis/memo-panel"
 import { MomentumPanel } from "@/components/analysis/momentum-panel"
+import { NumbersPanel } from "@/components/analysis/numbers-panel"
+import { ParityPanel } from "@/components/analysis/parity-panel"
 import {
   BayesPanel,
   DependencePanel,
@@ -56,6 +58,8 @@ const TECH_TABS = [
 ] as const
 
 const DRAW_TABS = [
+  { id: "numeros", label: "Numéros" },
+  { id: "parite", label: "Pair / impair" },
   { id: "hasard", label: "Hasard" },
   { id: "bayes", label: "Bayésien" },
   { id: "dependence", label: "Dépendance" },
@@ -362,6 +366,31 @@ export function AnalysisLab() {
         />
       ) : null}
       {tab === "systeme" ? <SystemPanel tech={tech} /> : null}
+      {tab === "numeros" ? (
+        <NumbersPanel
+          draws={work}
+          ball={ball}
+          onSelectBall={setBall}
+          onAnalyze={(variable, n) => {
+            setBall(n)
+            setVariable(variable)
+            setTab("vue")
+          }}
+        />
+      ) : null}
+      {tab === "parite" ? (
+        <ParityPanel
+          draws={work}
+          onSelectBall={(n) => {
+            setBall(n)
+            setTab("numeros")
+          }}
+          onAnalyze={() => {
+            setVariable("parity")
+            setTab("vue")
+          }}
+        />
+      ) : null}
       {tab === "hasard" ? (
         <InferencePanel draws={work} mc={mc} mcError={mcError} onMc={loadMc} />
       ) : null}

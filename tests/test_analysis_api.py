@@ -80,6 +80,7 @@ def test_ohlc_and_inference_and_lab() -> None:
             mc = client.get("/api/analysis/montecarlo?n=20&seed=0")
             lab = client.get("/api/analysis/lab?n_sim=20")
             ta = client.get("/api/analysis/ta?name=sum&window=2")
+            numbers = client.get("/api/analysis/numbers")
     assert ohlc.status_code == 200
     assert "heikin_ashi" in ohlc.json()
     assert inf.json()["draw_count"] == 3
@@ -91,6 +92,11 @@ def test_ohlc_and_inference_and_lab() -> None:
     assert ta.json()["last"]["sma"] == 39.0
     assert "extended" in ta.json()
     assert "window" in ta.json()
+    assert numbers.status_code == 200
+    assert numbers.json()["balls"]["balls"][0]["value"] == 1
+    assert numbers.json()["parity"]["even_balls"] == 6
+    assert lab.json()["balls"]["draw_count"] == 3
+    assert lab.json()["parity"]["mean_even"] == 2.0
 
 
 def test_lab_last_n_window() -> None:

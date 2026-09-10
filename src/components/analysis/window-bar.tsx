@@ -46,6 +46,7 @@ export function WindowBar({
   onCompare: (v: boolean) => void
 }) {
   const showLastN = preset.startsWith("last_") || lastN !== ""
+  const showDates = preset === "custom"
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">

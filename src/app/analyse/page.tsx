@@ -15,8 +15,9 @@ export default function AnalysePage() {
         <h1 className="text-3xl font-semibold tracking-tight">Analyse · laboratoire</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Fenêtre temporelle globale, puis onglets : graphiques, tendance, momentum,
-          volatilité, niveaux, figures, flux, moyennes, système, hasard, bayésien,
-          dépendances. X = période d’indicateur, distincte de la plage calendaire.
+          volatilité, niveaux, figures, flux, moyennes, système, numéros, pair/impair,
+          hasard, bayésien, dépendances. X = période d’indicateur, distincte de la plage
+          calendaire.
         </p>
       </div>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-12 sm:px-6">

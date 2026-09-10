@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from synchro import db
 from synchro.analysis.bayes import bayes_report
+from synchro.analysis.balls import ball_board, parity_report
 from synchro.analysis.combinatorics import proba_tables
 from synchro.analysis.common import as_date
 from synchro.analysis.dependence import dependence_report
@@ -420,6 +421,18 @@ def create_app() -> FastAPI:
         payload = dependence_report(draws)
         payload["diagnostics"] = diagnostics_report(draws)
         return payload
+
+    @app.get("/api/analysis/numbers")
+    def analysis_numbers(
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        draws = _analysis_draws(era, from_date, to_date)
+        return {
+            "balls": ball_board(draws),
+            "parity": parity_report(draws),
+        }
 
     @app.get("/api/analysis/lab")
     def analysis_lab(

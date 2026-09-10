@@ -1,6 +1,7 @@
 """Laboratoire d’analyse des tirages — fonctions pures sur une liste de tirages."""
 
 from synchro.analysis.bayes import bayes_report
+from synchro.analysis.balls import ball_board, parity_report
 from synchro.analysis.combinatorics import proba_tables
 from synchro.analysis.dependence import dependence_report
 from synchro.analysis.diagnostics import diagnostics_report
@@ -16,6 +17,7 @@ from synchro.analysis.windows import heikin_ashi, ohlc_blocks, rolling_stats
 __all__ = [
     "VARIABLE_NAMES",
     "atr",
+    "ball_board",
     "bayes_report",
     "bollinger",
     "compare_windows",
@@ -29,6 +31,7 @@ __all__ = [
     "macd",
     "montecarlo_report",
     "ohlc_blocks",
+    "parity_report",
     "proba_tables",
     "resolve_window",
     "rolling_profile",

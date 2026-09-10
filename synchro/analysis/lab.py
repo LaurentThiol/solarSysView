@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from synchro.analysis.bayes import bayes_report
+from synchro.analysis.balls import ball_board, parity_report
 from synchro.analysis.combinatorics import proba_tables
 from synchro.analysis.common import as_date, ordered_draws
 from synchro.analysis.dependence import dependence_report
@@ -116,6 +117,8 @@ def lab_report(
         },
         "dependence": dependence_report(work),
         "diagnostics": diagnostics_report(work, window=window),
+        "balls": ball_board(work),
+        "parity": parity_report(work),
         "montecarlo": montecarlo_report(work, n_sim=n_sim, seed=seed) if include_mc else None,
         "delay_ball": series(work, "delay", n=ball or 7),
     }

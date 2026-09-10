@@ -23,7 +23,7 @@ export type VariableName = (typeof VARIABLE_NAMES)[number]
 export const VARIABLE_LABELS: Record<VariableName, string> = {
   sum: "Somme des numéros",
   spread: "Étendue (max − min)",
-  parity: "Nombre de pairs",
+  parity: "Pairs / impairs",
   high_low: "Numéros ≥ 26",
   consecutive: "Paires consécutives",
   star_sum: "Somme des étoiles",
@@ -490,6 +490,149 @@ export function wilson(successes: number, n: number, z = 1.96) {
   const center = (p + z2 / (2 * n)) / denom
   const margin = (z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n)) / denom
   return { p, lo: Math.max(0, center - margin), hi: Math.min(1, center + margin) }
+}
+
+function daysBetween(from: string, to: string) {
+  const a = Date.parse(`${from.slice(0, 10)}T12:00:00Z`)
+  const b = Date.parse(`${to.slice(0, 10)}T12:00:00Z`)
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null
+  return Math.round((b - a) / 86_400_000)
+}
+
+export function evenCount(numbers: number[]) {
+  return numbers.filter((n) => n % 2 === 0).length
+}
+
+export type ParitySplit = {
+  even: number
+  odd: number
+  ways: number
+  p: number
+  label: string
+}
+
+export function parityLaw(): ParitySplit[] {
+  const evenPool = 25
+  const oddPool = 25
+  const total = comb(50, 5)
+  return Array.from({ length: 6 }, (_, k) => {
+    const ways = comb(evenPool, k) * comb(oddPool, 5 - k)
+    return {
+      even: k,
+      odd: 5 - k,
+      ways,
+      p: ways / total,
+      label: `${k}p / ${5 - k}i`,
+    }
+  })
+}
+
+export type BallRow = {
+  value: number
+  even: boolean
+  count: number
+  expected: number
+  rate: number
+  lastSeen: string | null
+  delayDraws: number
+  delayDays: number | null
+  p: number
+  lo: number
+  hi: number
+}
+
+export function ballBoard(draws: AnalysisDraw[]): {
+  drawCount: number
+  expected: number
+  p0: number
+  balls: BallRow[]
+} {
+  const rows = ordered(draws)
+  const n = rows.length
+  const counts = Array(51).fill(0)
+  const lastIndex: Array<number | null> = Array(51).fill(null)
+  const lastDate: Array<string | null> = Array(51).fill(null)
+  for (let i = 0; i < rows.length; i += 1) {
+    for (const value of rows[i].numbers) {
+      counts[value] += 1
+      lastIndex[value] = i
+      lastDate[value] = rows[i].date
+    }
+  }
+  const expected = n * (5 / 50)
+  const lastDrawDate = rows.at(-1)?.date ?? null
+  const balls: BallRow[] = Array.from({ length: 50 }, (_, i) => {
+    const value = i + 1
+    const hits = counts[value]
+    const interval = wilson(hits, n)
+    const seenAt = lastIndex[value]
+    const lastSeen = lastDate[value]
+    return {
+      value,
+      even: value % 2 === 0,
+      count: hits,
+      expected,
+      rate: n ? hits / n : 0,
+      lastSeen,
+      delayDraws: seenAt == null ? n : n - 1 - seenAt,
+      delayDays:
+        lastSeen && lastDrawDate ? daysBetween(lastSeen, lastDrawDate) : null,
+      ...interval,
+    }
+  })
+  return { drawCount: n, expected, p0: 0.1, balls }
+}
+
+export type ParityPoint = { date: string; even: number; odd: number }
+
+export type ParitySplitRow = ParitySplit & {
+  count: number
+  expected: number
+}
+
+export function parityReport(draws: AnalysisDraw[]): {
+  drawCount: number
+  evenBalls: number
+  oddBalls: number
+  expectedEvenBalls: number
+  meanEven: number
+  chiSquare: number
+  splits: ParitySplitRow[]
+  points: ParityPoint[]
+} {
+  const rows = ordered(draws)
+  const law = parityLaw()
+  const observed = Array(6).fill(0)
+  const points: ParityPoint[] = []
+  let evenBalls = 0
+  for (const draw of rows) {
+    const even = evenCount(draw.numbers)
+    observed[even] += 1
+    evenBalls += even
+    points.push({ date: draw.date, even, odd: 5 - even })
+  }
+  const n = rows.length
+  const splits: ParitySplitRow[] = law.map((row, k) => ({
+    ...row,
+    count: observed[k],
+    expected: n * row.p,
+  }))
+  let chiSquare = 0
+  for (const row of splits) {
+    if (row.expected > 0) {
+      chiSquare += (row.count - row.expected) ** 2 / row.expected
+    }
+  }
+  return {
+    drawCount: n,
+    evenBalls,
+    oddBalls: 5 * n - evenBalls,
+    expectedEvenBalls: 2.5 * n,
+    meanEven: n ? evenBalls / n : 0,
+    chiSquare,
+    splits,
+    points,
+  }
 }
 
 export function chiSquareUniform(draws: AnalysisDraw[]) {

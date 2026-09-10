@@ -52,7 +52,7 @@ Onglet admin : **évolution dans le temps**, **numéros les plus sortis**, **ét
 
 Laboratoire borné par une **fenêtre de travail** (presets : 20/50/100/200 tirages, 3/6/12 mois, année civile, formule actuelle, tout, ou dates Du/Au). Tous les onglets — y compris χ², Bayes et Monte-Carlo — lisent ce même jeu. Un **warmup** (52 tirages avant la fenêtre par défaut) alimente EMA / RSI / Ichimoku sans entrer dans les agrégats. `X` reste la période des indicateurs, distincte de la plage calendaire.
 
-Onglets technique : Vue (série, OHLC / Heikin-Ashi / Renko, profil temporel, comparaison A/B), Tendance, Momentum, Volatilité, Niveaux, Figures, Flux (activité-proxy, pas un volume de marché), Moyennes, Système. Onglets tirage : Hasard, Bayésien, Dépendance, Probabilités (combinatoire, indépendante de la fenêtre), Mémo.
+Onglets technique : Vue (série, OHLC / Heikin-Ashi / Renko, profil temporel, comparaison A/B), Tendance, Momentum, Volatilité, Niveaux, Figures, Flux (activité-proxy, pas un volume de marché), Moyennes, Système. Onglets tirage : Numéros (grille 1–50), Pair / impair, Hasard, Bayésien, Dépendance, Probabilités (combinatoire, indépendante de la fenêtre), Mémo.
 
 Les tirages sont indépendants : ces outils décrivent l’archive, ils ne prédisent pas le prochain. Monte-Carlo via l’API Python quand elle est joignable (`from_date` / `to_date` de la fenêtre).
 
@@ -123,7 +123,7 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 - `GET /api/draws/latest`
 - `GET /api/stats?era=current|all`
 - `GET /api/analysis/proba` — combinatoire exacte (sans Neon)
-- `GET /api/analysis/variables|ohlc|inference|montecarlo|bayes|dependence|lab|ta` — calculés sur les tirages (`era`, `from_date`, `to_date`, `preset`, `last_n`, `warmup`)
+- `GET /api/analysis/variables|ohlc|inference|montecarlo|bayes|dependence|lab|ta|numbers` — calculés sur les tirages (`era`, `from_date`, `to_date`, `preset`, `last_n`, `warmup`)
 - `POST /api/check` `{ numbers, stars, last_n }`
 - `GET\|POST /api/grids` · `DELETE /api/grids/{id}`
 - `POST /api/reload-env` — relit `.env` et recrée le pool Neon

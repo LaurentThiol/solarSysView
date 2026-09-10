@@ -108,6 +108,27 @@ def consecutive_distribution() -> dict[str, Any]:
     return {"total": total, "density": density}
 
 
+@lru_cache(maxsize=4)
+def parity_distribution() -> dict[str, Any]:
+    """Loi du nombre de pairs dans un tirage 5/50 (25 pairs, 25 impairs)."""
+    even_pool = odd_pool = 25
+    total = math.comb(N_POOL, N_DRAW)
+    density = []
+    for even in range(N_DRAW + 1):
+        odd = N_DRAW - even
+        ways = math.comb(even_pool, even) * math.comb(odd_pool, odd)
+        density.append(
+            {
+                "even": even,
+                "odd": odd,
+                "ways": ways,
+                "p": ways / total,
+                "label": f"{even}p / {odd}i",
+            }
+        )
+    return {"total": total, "density": density}
+
+
 def rank_probabilities(star_pool: int = S_POOL) -> list[dict[str, Any]]:
     rows = []
     p_win = 0.0
@@ -187,6 +208,7 @@ def proba_tables(star_pool: int = S_POOL) -> dict[str, Any]:
     sums = sum_distribution()
     spreads = spread_distribution()
     consec = consecutive_distribution()
+    parity = parity_distribution()
     coupon = coupon_collector()
     p_no_rank = next(r["p"] for r in ranks if r["rank"] is None)
     return {
@@ -198,6 +220,7 @@ def proba_tables(star_pool: int = S_POOL) -> dict[str, Any]:
         "sum": {"min": sums["min"], "max": sums["max"], "density": sums["density"]},
         "spread": spreads,
         "consecutive": consec,
+        "parity": parity,
         "coupon_collector": coupon,
         "coverage_after_100": coverage_prob(100, 50),
         "disclaimer": "Probabilités exactes sous tirage uniforme sans remise. Les tirages sont indépendants.",
