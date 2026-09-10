@@ -28,15 +28,29 @@ function placePanel(
   const pad = 8
   let left = rect.left + rect.width / 2 - PANEL_WIDTH / 2
   left = Math.max(pad, Math.min(left, window.innerWidth - PANEL_WIDTH - pad))
+
+  const panelHeight = panel?.offsetHeight ?? 160
   const spaceBelow = window.innerHeight - rect.bottom - pad
   const spaceAbove = rect.top - pad
-  const preferBelow = spaceBelow >= 140 || spaceBelow >= spaceAbove
-  const maxHeight = Math.min(360, Math.max(120, preferBelow ? spaceBelow : spaceAbove))
-  const height = panel?.offsetHeight ?? Math.min(200, maxHeight)
-  const top = preferBelow
-    ? rect.bottom + 6
-    : Math.max(pad, rect.top - 6 - height)
-  return { top, left, maxHeight }
+  const showBelow =
+    spaceBelow >= panelHeight || (spaceBelow >= spaceAbove && spaceBelow >= 96)
+
+  if (showBelow) {
+    const top = rect.bottom + 6
+    return {
+      top,
+      left,
+      maxHeight: Math.min(360, Math.max(96, window.innerHeight - top - pad)),
+    }
+  }
+
+  const maxHeight = Math.min(360, Math.max(96, spaceAbove))
+  const used = Math.min(panelHeight, maxHeight)
+  return {
+    top: Math.max(pad, rect.top - 6 - used),
+    left,
+    maxHeight,
+  }
 }
 
 export function HelpTip({
@@ -58,9 +72,11 @@ export function HelpTip({
       setCoords(placePanel(btnRef.current, panelRef.current))
     }
     update()
+    const frame = window.requestAnimationFrame(update)
     window.addEventListener("resize", update)
     window.addEventListener("scroll", update, true)
     return () => {
+      window.cancelAnimationFrame(frame)
       window.removeEventListener("resize", update)
       window.removeEventListener("scroll", update, true)
     }
@@ -117,7 +133,7 @@ export function HelpTip({
                 width: PANEL_WIDTH,
                 maxHeight: coords.maxHeight,
               }}
-              className="fixed z-[80] overflow-auto rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl"
+              className="fixed z-[200] overflow-auto rounded-lg border border-amber-400/35 bg-popover p-3 text-popover-foreground shadow-xl ring-1 ring-amber-400/20"
             >
               <p className="text-sm font-medium text-foreground">{title}</p>
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{body}</p>

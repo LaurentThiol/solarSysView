@@ -138,20 +138,20 @@ export function WindowBar({
             aria-label="Tirages de warmup"
           />
         </LabelHelp>
-        <label className="flex items-center gap-2 pb-1 text-sm">
-          <input
-            type="checkbox"
-            checked={compareOn}
-            onChange={(e) => onCompare(e.target.checked)}
-          />
-          <span className="inline-flex items-center gap-1">
-            Comparer à la fenêtre précédente
-            <HelpTip
-              title="Comparer"
-              body="Calcule les écarts de moyenne / σ / couverture par rapport à la fenêtre de même longueur qui précède immédiatement celle-ci."
+        <div className="flex items-center gap-2 pb-1 text-sm">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={compareOn}
+              onChange={(e) => onCompare(e.target.checked)}
             />
-          </span>
-        </label>
+            Comparer à la fenêtre précédente
+          </label>
+          <HelpTip
+            title="Comparer"
+            body="Calcule les écarts de moyenne / σ / couverture par rapport à la fenêtre de même longueur qui précède immédiatement celle-ci."
+          />
+        </div>
       </div>
       <p className="text-sm text-foreground">{formatWindowBanner(window)}</p>
       <p className="text-xs text-muted-foreground">
