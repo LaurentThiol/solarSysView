@@ -120,28 +120,95 @@ export function toCsv(draws: Draw[]) {
   return `${header}\n${rows.join("\n")}\n`
 }
 
-export function numberFrequencies(draws: Draw[]) {
-  const counts = new Map<number, number>()
-  for (const draw of draws) {
-    for (const n of draw.numbers) {
-      counts.set(n, (counts.get(n) ?? 0) + 1)
+export function takeLastDraws(draws: Draw[], n: number) {
+  return [...draws]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, Math.max(0, n))
+}
+
+export type FrequencyItem = {
+  value: number
+  count: number
+  lastSeen: string | null
+  delayDraws: number
+}
+
+function frequencyTable(
+  draws: Draw[],
+  pool: number,
+  pick: (draw: Draw) => number[]
+): FrequencyItem[] {
+  const ordered = [...draws].sort((a, b) => a.date.localeCompare(b.date))
+  const counts = Array(pool + 1).fill(0)
+  const lastIndex: Array<number | null> = Array(pool + 1).fill(null)
+  const lastDate: Array<string | null> = Array(pool + 1).fill(null)
+  for (let i = 0; i < ordered.length; i += 1) {
+    for (const value of pick(ordered[i])) {
+      if (value < 1 || value > pool) continue
+      counts[value] += 1
+      lastIndex[value] = i
+      lastDate[value] = ordered[i].date
     }
   }
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0] - b[0])
-    .slice(0, 10)
+  const n = ordered.length
+  return Array.from({ length: pool }, (_, i) => {
+    const value = i + 1
+    const seenAt = lastIndex[value]
+    return {
+      value,
+      count: counts[value] as number,
+      lastSeen: lastDate[value],
+      delayDraws: seenAt == null ? n : n - 1 - seenAt,
+    }
+  })
+}
+
+export function numberFrequencyTable(draws: Draw[]) {
+  return frequencyTable(draws, 50, (draw) => draw.numbers)
+}
+
+export function starFrequencyTable(draws: Draw[], pool = 12) {
+  return frequencyTable(draws, pool, (draw) => draw.stars)
+}
+
+export function expectedNumberHits(drawCount: number) {
+  return drawCount * (5 / 50)
+}
+
+export function expectedStarHits(drawCount: number, pool = 12) {
+  return pool > 0 ? drawCount * (2 / pool) : 0
+}
+
+export function hottest(items: FrequencyItem[], n: number) {
+  return [...items]
+    .sort((a, b) => b.count - a.count || a.value - b.value)
+    .slice(0, n)
+}
+
+export function overdue(items: FrequencyItem[], n: number) {
+  return [...items]
+    .sort((a, b) => b.delayDraws - a.delayDraws || a.value - b.value)
+    .slice(0, n)
+}
+
+export function numberCoverage(draws: Draw[]) {
+  const seen = new Set<number>()
+  for (const draw of draws) {
+    for (const n of draw.numbers) seen.add(n)
+  }
+  return seen.size
+}
+
+export function numberFrequencies(draws: Draw[]) {
+  return hottest(numberFrequencyTable(draws), 10).map(
+    (item) => [item.value, item.count] as [number, number]
+  )
 }
 
 export function starFrequencies(draws: Draw[]) {
-  const counts = new Map<number, number>()
-  for (const draw of draws) {
-    for (const n of draw.stars) {
-      counts.set(n, (counts.get(n) ?? 0) + 1)
-    }
-  }
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0] - b[0])
-    .slice(0, 6)
+  return hottest(starFrequencyTable(draws), 6).map(
+    (item) => [item.value, item.count] as [number, number]
+  )
 }
 
 export type DrawSeriesPoint = {

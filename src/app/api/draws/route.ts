@@ -54,14 +54,50 @@ async function fetchEra(base: string, era: "current" | "all") {
   return items
 }
 
+function parseLastN(raw: string | null) {
+  if (!raw || !/^\d+$/.test(raw)) return null
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n) || n < 2 || n > 200) return null
+  return n
+}
+
+async function fetchLast(base: string, lastN: number) {
+  const response = await fetch(
+    `${base}/api/draws?limit=${lastN}&offset=0`,
+    { cache: "no-store", signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) }
+  )
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const body = (await response.json()) as { items?: NeonDraw[] }
+  return (body.items || []).map(toUi).filter((d) => d.date)
+}
+
 export async function GET(request: NextRequest) {
   const url = apiBase()
   const eraParam = request.nextUrl.searchParams.get("era")
   const era = eraParam === "all" || eraParam === "current" ? eraParam : null
+  const lastN = parseLastN(request.nextUrl.searchParams.get("last"))
   if (!url) {
-    return NextResponse.json({ ok: false, items: [], year: null, source: "json", era })
+    return NextResponse.json({
+      ok: false,
+      items: [],
+      year: null,
+      source: "json",
+      era,
+      last: lastN,
+    })
   }
   try {
+    if (lastN) {
+      const items = await fetchLast(url, lastN)
+      return NextResponse.json({
+        ok: items.length > 0,
+        items,
+        total: items.length,
+        year: null,
+        last: lastN,
+        source: "neon",
+      })
+    }
     if (era) {
       const items = await fetchEra(url, era)
       return NextResponse.json({

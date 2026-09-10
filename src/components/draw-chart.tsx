@@ -5,6 +5,7 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import { HelpTip, LabelHelp, TitleHelp } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { sma } from "@/lib/analysis"
 import {
   ChartContainer,
   ChartTooltip,
@@ -49,9 +50,10 @@ const chartConfig = {
   sumStars: { label: "Somme étoiles", color: "var(--chart-4)" },
   e1: { label: "e1", color: "var(--chart-1)" },
   e2: { label: "e2", color: "var(--chart-2)" },
+  sma: { label: "SMA", color: "var(--chart-2)" },
 } satisfies ChartConfig
 
-type SeriesKey = keyof typeof chartConfig
+type SeriesKey = Exclude<keyof typeof chartConfig, "sma">
 
 const MODE_KEYS: Record<DrawChartMode, SeriesKey[]> = {
   sumNumbers: ["sumNumbers"],
@@ -74,13 +76,32 @@ function formatStat(value: number) {
   })
 }
 
+function smaPeriodFor(length: number) {
+  if (length >= 40) return 10
+  if (length >= 10) return 5
+  return 0
+}
+
 export function DrawChart({ draws }: { draws: Draw[] }) {
   const [mode, setMode] = useState<DrawChartMode>("sumNumbers")
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({})
+  const [showSma, setShowSma] = useState(true)
 
   const series = useMemo(() => toDrawSeries(draws), [draws])
   const keys = MODE_KEYS[mode]
   const visibleKeys = keys.filter((key) => !hidden[key])
+  const canSma = mode === "sumNumbers" || mode === "sumStars"
+  const smaPeriod = canSma ? smaPeriodFor(series.length) : 0
+
+  const chartData = useMemo(() => {
+    if (!smaPeriod) return series
+    const key = mode === "sumStars" ? "sumStars" : "sumNumbers"
+    const values = sma(
+      series.map((point) => point[key]),
+      smaPeriod
+    )
+    return series.map((point, i) => ({ ...point, sma: values[i] }))
+  }, [series, smaPeriod, mode])
 
   const summaries = useMemo(() => {
     return visibleKeys
@@ -105,7 +126,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
             <TitleHelp
               help={{
                 title: "Évolution dans le temps",
-                body: "Chaque point est un tirage. Choisissez la série (somme, chaque boule, étoiles). Cliquez une pastille sous le graphe pour masquer une courbe.",
+                body: "Chaque point est un tirage. Sur 20 ou 50 tirages la courbe se lit mieux. La SMA (5 ou 10) lisse la somme ; ce n’est pas un signal de jeu.",
               }}
             >
               Évolution dans le temps
@@ -151,7 +172,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
             >
               <LineChart
                 accessibilityLayer
-                data={series}
+                data={chartData}
                 margin={{ left: 4, right: 8, top: 8, bottom: 4 }}
               >
                 <CartesianGrid vertical={false} />
@@ -191,9 +212,45 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     activeDot={{ r: 4 }}
                   />
                 ))}
+                {smaPeriod > 0 && showSma ? (
+                  <Line
+                    dataKey="sma"
+                    type="monotone"
+                    stroke="var(--color-sma)"
+                    strokeWidth={2}
+                    strokeDasharray="5 4"
+                    dot={false}
+                    connectNulls
+                    name={`SMA ${smaPeriod}`}
+                  />
+                ) : null}
               </LineChart>
             </ChartContainer>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              {smaPeriod > 0 ? (
+                <span className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-pressed={showSma}
+                    title={`Afficher ou masquer la SMA ${smaPeriod}`}
+                    onClick={() => setShowSma((current) => !current)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs transition-opacity hover:bg-muted",
+                      !showSma && "opacity-40"
+                    )}
+                  >
+                    <span
+                      className="size-2 shrink-0 rounded-[2px]"
+                      style={{ background: chartConfig.sma.color }}
+                    />
+                    SMA {smaPeriod}
+                  </button>
+                  <HelpTip
+                    title={`SMA ${smaPeriod}`}
+                    body={`Moyenne simple sur ${smaPeriod} tirages, affichée sur la somme. Lissage descriptif, pas une prédiction.`}
+                  />
+                </span>
+              ) : null}
               {keys.map((key) => (
                 <span key={key} className="inline-flex items-center gap-1">
                   <button

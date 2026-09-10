@@ -2,12 +2,28 @@
 
 import { useEffect, useState } from "react"
 
-import { DRAWS, type Draw } from "@/lib/draws"
+import { DRAWS, takeLastDraws, type Draw } from "@/lib/draws"
 
 export type DrawSource = "json" | "neon"
+export type DrawEra = "current" | "all" | "year"
+export type DrawWindow = DrawEra | "last_20" | "last_50"
 
-export function useDraws(era: "current" | "all" | "year" = "year") {
-  const [draws, setDraws] = useState<Draw[]>(DRAWS)
+function seedDraws(window: DrawWindow, current: Draw[]) {
+  const pool = current.length > 0 ? current : DRAWS
+  if (window === "last_20") return takeLastDraws(pool, 20)
+  if (window === "last_50") return takeLastDraws(pool, 50)
+  return pool
+}
+
+function queryFor(window: DrawWindow) {
+  if (window === "year") return ""
+  if (window === "last_20") return "?last=20"
+  if (window === "last_50") return "?last=50"
+  return `?era=${window}`
+}
+
+export function useDraws(window: DrawWindow = "year") {
+  const [draws, setDraws] = useState<Draw[]>(() => seedDraws(window, DRAWS))
   const [source, setSource] = useState<DrawSource>("json")
   const [loading, setLoading] = useState(true)
 
@@ -15,8 +31,9 @@ export function useDraws(era: "current" | "all" | "year" = "year") {
     let cancelled = false
     void (async () => {
       try {
-        const query = era === "year" ? "" : `?era=${era}`
-        const response = await fetch(`/api/draws${query}`, { cache: "no-store" })
+        const response = await fetch(`/api/draws${queryFor(window)}`, {
+          cache: "no-store",
+        })
         if (!response.ok) return
         const payload = (await response.json()) as {
           ok?: boolean
@@ -24,7 +41,10 @@ export function useDraws(era: "current" | "all" | "year" = "year") {
           source?: string
         }
         if (cancelled || !payload.ok || !payload.items?.length) return
-        setDraws([...payload.items].sort((a, b) => b.date.localeCompare(a.date)))
+        const items = [...payload.items].sort((a, b) =>
+          b.date.localeCompare(a.date)
+        )
+        setDraws(seedDraws(window, items))
         setSource("neon")
       } catch {
         // JSON local
@@ -35,7 +55,7 @@ export function useDraws(era: "current" | "all" | "year" = "year") {
     return () => {
       cancelled = true
     }
-  }, [era])
+  }, [window])
 
   return { draws, source, loading }
 }

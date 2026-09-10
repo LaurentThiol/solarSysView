@@ -15,7 +15,7 @@ export default function EvolutionPage() {
       <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         <h1 className="text-3xl font-semibold tracking-tight">Évolution · statistiques</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          Courbe dans le temps, numéros et étoiles les plus sortis. Accès admin,
+          Courbe, 20 ou 50 derniers tirages, fréquences et retards. Accès admin,
           comme les services.
         </p>
       </div>
