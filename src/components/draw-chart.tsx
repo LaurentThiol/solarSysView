@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
+import { HelpTip, LabelHelp, TitleHelp } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ChartContainer,
@@ -101,25 +102,40 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       <CardHeader className="gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-base font-medium">
-            Évolution dans le temps
+            <TitleHelp
+              help={{
+                title: "Évolution dans le temps",
+                body: "Chaque point est un tirage. Choisissez la série (somme, chaque boule, étoiles). Cliquez une pastille sous le graphe pour masquer une courbe.",
+              }}
+            >
+              Évolution dans le temps
+            </TitleHelp>
           </CardTitle>
-          <Select
-            value={mode}
-            onValueChange={(value) => changeMode(value as DrawChartMode)}
+          <LabelHelp
+            label="Série"
+            help={{
+              title: "Série affichée",
+              body: "Somme des 5 numéros, chacune des 5 boules, somme des 2 étoiles, ou chaque étoile. L’axe Y s’adapte (1–50 ou 1–12).",
+            }}
           >
-            <SelectTrigger className="w-full sm:w-56" aria-label="Série affichée">
-              <span className="flex flex-1 text-left">
-                {MODES.find((item) => item.value === mode)?.label}
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {MODES.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select
+              value={mode}
+              onValueChange={(value) => changeMode(value as DrawChartMode)}
+            >
+              <SelectTrigger className="w-full sm:w-56" aria-label="Série affichée">
+                <span className="flex flex-1 text-left">
+                  {MODES.find((item) => item.value === mode)?.label}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {MODES.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </LabelHelp>
         </div>
       </CardHeader>
       <CardContent>
@@ -179,27 +195,33 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
             </ChartContainer>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
               {keys.map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={!hidden[key]}
-                  onClick={() =>
-                    setHidden((current) => ({
-                      ...current,
-                      [key]: !current[key],
-                    }))
-                  }
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs transition-opacity hover:bg-muted",
-                    hidden[key] && "opacity-40"
-                  )}
-                >
-                  <span
-                    className="size-2 shrink-0 rounded-[2px]"
-                    style={{ background: chartConfig[key].color }}
+                <span key={key} className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-pressed={!hidden[key]}
+                    title={`Afficher ou masquer ${chartConfig[key].label}`}
+                    onClick={() =>
+                      setHidden((current) => ({
+                        ...current,
+                        [key]: !current[key],
+                      }))
+                    }
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs transition-opacity hover:bg-muted",
+                      hidden[key] && "opacity-40"
+                    )}
+                  >
+                    <span
+                      className="size-2 shrink-0 rounded-[2px]"
+                      style={{ background: chartConfig[key].color }}
+                    />
+                    {chartConfig[key].label}
+                  </button>
+                  <HelpTip
+                    title={chartConfig[key].label}
+                    body={`Cliquez la pastille pour afficher ou masquer la série « ${chartConfig[key].label} » sur le graphique.`}
                   />
-                  {chartConfig[key].label}
-                </button>
+                </span>
               ))}
             </div>
             {summaries.length > 0 ? (

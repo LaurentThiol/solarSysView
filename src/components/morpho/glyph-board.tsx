@@ -123,6 +123,7 @@ export function GlyphThumb({
     <button
       type="button"
       onClick={onClick}
+      title={label ? `Afficher le tirage ${label}` : "Afficher ce tirage"}
       className={`min-w-[88px] rounded-lg border p-1 text-left ${
         selected ? "border-primary" : "border-border hover:border-foreground/40"
       }`}

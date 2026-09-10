@@ -3,12 +3,14 @@
 import { useMemo, useState } from "react"
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
+import { HelpTip, TitleHelp, WithHelp } from "@/components/help"
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   Disclaimer,
   OverlayToggle,
+  HELP,
   Stat,
   formatStat,
 } from "@/components/analysis/shared"
@@ -122,7 +124,16 @@ export function NumbersPanel({
 
       <Card className="min-w-0 max-w-full overflow-visible">
         <CardHeader className="gap-3">
-          <CardTitle>Grille 1–50</CardTitle>
+          <CardTitle>
+            <TitleHelp
+              help={{
+                title: "Grille 1–50",
+                body: "Cliquez un numéro pour le détail (sorties, retard, IC). Or = pair, bleu = impair. L’intensité suit le nombre de sorties dans la fenêtre. Les filtres Tous / Pairs / Impairs n’effacent pas la grille, ils atténuent l’autre camp.",
+              }}
+            >
+              Grille 1–50
+            </TitleHelp>
+          </CardTitle>
           <p className="text-sm text-muted-foreground">
             Cliquez un numéro pour le détail. Or = pair, bleu = impair. L’intensité suit le
             nombre de sorties dans la fenêtre.
@@ -134,6 +145,13 @@ export function NumbersPanel({
                 label={item.label}
                 on={filter === item.id}
                 onClick={() => setFilter(item.id)}
+                help={
+                  item.id === "all"
+                    ? HELP.filterAll
+                    : item.id === "even"
+                      ? HELP.filterEven
+                      : HELP.filterOdd
+                }
               />
             ))}
           </div>
@@ -148,6 +166,7 @@ export function NumbersPanel({
                   type="button"
                   aria-pressed={row.value === selected.value}
                   aria-label={`Numéro ${row.value}, ${row.even ? "pair" : "impair"}, ${row.count} sortie${row.count === 1 ? "" : "s"}`}
+                  title={`Sélectionner ${row.value} (${row.even ? "pair" : "impair"}, ${row.count} sortie${row.count === 1 ? "" : "s"})`}
                   onClick={() => onSelectBall(row.value)}
                   style={heatStyle(row.count, maxCount, row.even)}
                   className={cn(
@@ -216,17 +235,31 @@ export function NumbersPanel({
             </div>
           </dl>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" onClick={() => onAnalyze("hit", selected.value)}>
-              Analyser la présence
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => onAnalyze("delay", selected.value)}
+            <WithHelp
+              help={{
+                title: "Analyser la présence",
+                body: "Passe la variable sur « Présence d’une boule » pour ce numéro et ouvre l’onglet Vue (série 0/1 + indicateurs).",
+              }}
             >
-              Analyser le retard
-            </Button>
+              <Button type="button" size="sm" onClick={() => onAnalyze("hit", selected.value)}>
+                Analyser la présence
+              </Button>
+            </WithHelp>
+            <WithHelp
+              help={{
+                title: "Analyser le retard",
+                body: "Passe la variable sur « Retard d’une boule » pour ce numéro et ouvre Vue : la courbe compte les tirages depuis la dernière sortie.",
+              }}
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => onAnalyze("delay", selected.value)}
+              >
+                Analyser le retard
+              </Button>
+            </WithHelp>
           </div>
           {appearances.length > 0 ? (
             <p className="text-xs text-muted-foreground">
@@ -291,7 +324,16 @@ export function NumbersPanel({
 
       <Card>
         <CardHeader>
-          <CardTitle>Tableau des 50 numéros</CardTitle>
+          <CardTitle>
+            <TitleHelp
+              help={{
+                title: "Tableau des 50 numéros",
+                body: "Cliquez N°, Sorties ou Retard pour trier. Cliquez un numéro pour le sélectionner (même action que la grille).",
+              }}
+            >
+              Tableau des 50 numéros
+            </TitleHelp>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -299,21 +341,39 @@ export function NumbersPanel({
               <thead>
                 <tr className="text-left text-muted-foreground">
                   <th className="py-1 pr-3">
-                    <button type="button" className="hover:text-foreground" onClick={() => toggleSort("value")}>
-                      N°
-                    </button>
+                    <span className="inline-flex items-center gap-1">
+                      <button type="button" className="hover:text-foreground" onClick={() => toggleSort("value")}>
+                        N°
+                      </button>
+                      <HelpTip
+                        title="Trier par numéro"
+                        body="Cliquez pour trier 1→50 ou 50→1. Un second clic inverse le sens."
+                      />
+                    </span>
                   </th>
                   <th className="py-1 pr-3">P/I</th>
                   <th className="py-1 pr-3">
-                    <button type="button" className="hover:text-foreground" onClick={() => toggleSort("count")}>
-                      Sorties
-                    </button>
+                    <span className="inline-flex items-center gap-1">
+                      <button type="button" className="hover:text-foreground" onClick={() => toggleSort("count")}>
+                        Sorties
+                      </button>
+                      <HelpTip
+                        title="Trier par sorties"
+                        body="Nombre de fois où la boule est sortie dans la fenêtre. Cliquez pour trier, recliquez pour inverser."
+                      />
+                    </span>
                   </th>
                   <th className="py-1 pr-3">Δ attendu</th>
                   <th className="py-1">
-                    <button type="button" className="hover:text-foreground" onClick={() => toggleSort("delayDraws")}>
-                      Retard
-                    </button>
+                    <span className="inline-flex items-center gap-1">
+                      <button type="button" className="hover:text-foreground" onClick={() => toggleSort("delayDraws")}>
+                        Retard
+                      </button>
+                      <HelpTip
+                        title="Trier par retard"
+                        body="Tirages depuis la dernière sortie. Un retard élevé ne change pas la chance au tirage suivant."
+                      />
+                    </span>
                   </th>
                 </tr>
               </thead>
@@ -330,6 +390,7 @@ export function NumbersPanel({
                       <button
                         type="button"
                         className="tabular-nums font-medium hover:underline"
+                        title={`Sélectionner le numéro ${row.value}`}
                         onClick={() => onSelectBall(row.value)}
                       >
                         {row.value}

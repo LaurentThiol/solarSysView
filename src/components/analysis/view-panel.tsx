@@ -21,10 +21,12 @@ import {
   ChartTooltipContent,
   Disclaimer,
   OverlayToggle,
+  HELP,
   Stat,
   formatStat,
   lineConfig,
 } from "@/components/analysis/shared"
+import { LabelHelp, TitleHelp } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Select,
@@ -201,9 +203,9 @@ export function ViewPanel({
         </CardContent>
       </Card>
       <div className="flex flex-wrap gap-2">
-        <OverlayToggle label={`SMA ${windowSize}`} on={showSma} onClick={() => setShowSma(!showSma)} />
-        <OverlayToggle label={`EMA ${windowSize}`} on={showEma} onClick={() => setShowEma(!showEma)} />
-        <OverlayToggle label="Bollinger" on={showBb} onClick={() => setShowBb(!showBb)} />
+        <OverlayToggle label={`SMA ${windowSize}`} on={showSma} onClick={() => setShowSma(!showSma)} help={HELP.sma} />
+        <OverlayToggle label={`EMA ${windowSize}`} on={showEma} onClick={() => setShowEma(!showEma)} help={HELP.ema} />
+        <OverlayToggle label="Bollinger" on={showBb} onClick={() => setShowBb(!showBb)} help={HELP.bollinger} />
       </div>
       <Card>
         <CardHeader>
@@ -240,32 +242,57 @@ export function ViewPanel({
       </Card>
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle>Chandeliers</CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <Select value={block} onValueChange={(v) => setBlock(v as typeof block)}>
-              <SelectTrigger className="w-40" aria-label="Bloc">
-                <span className="flex flex-1 text-left">
-                  {block === "month" ? "Mois" : block === "week" ? "Semaine" : "Paquets de X"}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="month">Mois</SelectItem>
-                <SelectItem value="week">Semaine</SelectItem>
-                <SelectItem value="window">Paquets de X</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={style} onValueChange={(v) => setStyle(v as typeof style)}>
-              <SelectTrigger className="w-40" aria-label="Style">
-                <span className="flex flex-1 text-left">
-                  {style === "ohlc" ? "OHLC" : style === "heikin" ? "Heikin-Ashi" : "Renko"}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ohlc">OHLC</SelectItem>
-                <SelectItem value="heikin">Heikin-Ashi</SelectItem>
-                <SelectItem value="renko">Renko</SelectItem>
-              </SelectContent>
-            </Select>
+          <CardTitle>
+            <TitleHelp
+              help={{
+                title: "Chandeliers",
+                body: "Agrège la variable en bougies (open/high/low/close) par mois, semaine ou paquets de X tirages. OHLC classique, Heikin-Ashi (lissé) ou Renko (briques de taille fixe).",
+              }}
+            >
+              Chandeliers
+            </TitleHelp>
+          </CardTitle>
+          <div className="flex flex-wrap items-end gap-2">
+            <LabelHelp
+              label="Bloc"
+              help={{
+                title: "Bloc",
+                body: "Mois civil, semaine ISO, ou paquets successifs de X tirages (X = période des indicateurs, plus haut dans la page).",
+              }}
+            >
+              <Select value={block} onValueChange={(v) => setBlock(v as typeof block)}>
+                <SelectTrigger className="w-40" aria-label="Bloc">
+                  <span className="flex flex-1 text-left">
+                    {block === "month" ? "Mois" : block === "week" ? "Semaine" : "Paquets de X"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="month">Mois</SelectItem>
+                  <SelectItem value="week">Semaine</SelectItem>
+                  <SelectItem value="window">Paquets de X</SelectItem>
+                </SelectContent>
+              </Select>
+            </LabelHelp>
+            <LabelHelp
+              label="Style"
+              help={{
+                title: "Style de bougie",
+                body: "OHLC = ouvert/haut/bas/clôture. Heikin-Ashi lisse le bruit. Renko ignore le temps et ne trace que les mouvements d’une brique.",
+              }}
+            >
+              <Select value={style} onValueChange={(v) => setStyle(v as typeof style)}>
+                <SelectTrigger className="w-40" aria-label="Style">
+                  <span className="flex flex-1 text-left">
+                    {style === "ohlc" ? "OHLC" : style === "heikin" ? "Heikin-Ashi" : "Renko"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ohlc">OHLC</SelectItem>
+                  <SelectItem value="heikin">Heikin-Ashi</SelectItem>
+                  <SelectItem value="renko">Renko</SelectItem>
+                </SelectContent>
+              </Select>
+            </LabelHelp>
           </div>
         </CardHeader>
         <CardContent>

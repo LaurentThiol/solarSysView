@@ -9,6 +9,7 @@ import {
   RefreshCw,
 } from "lucide-react"
 
+import { HelpTip, WithHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -108,12 +109,14 @@ function SecretRow({
   placeholder,
   disabled,
   onChange,
+  help,
 }: {
   label: string
   value: string
   placeholder: string
   disabled: boolean
   onChange: (value: string) => void
+  help: { title: string; body: string }
 }) {
   const [visible, setVisible] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -127,7 +130,10 @@ function SecretRow({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-xs text-muted-foreground">{label}</label>
+      <label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        {label}
+        <HelpTip {...help} />
+      </label>
       <div className="flex gap-2">
         <Input
           type={visible ? "text" : "password"}
@@ -141,25 +147,41 @@ function SecretRow({
           onChange={(event) => onChange(event.target.value)}
           className="font-mono text-xs"
         />
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          title={visible ? "Masquer" : "Afficher"}
-          onClick={() => setVisible((v) => !v)}
+        <WithHelp
+          help={{
+            title: visible ? "Masquer" : "Afficher",
+            body: visible
+              ? "Repasse le champ en puces pour éviter qu’un regard indiscret lise le secret."
+              : "Affiche le secret en clair dans ce champ uniquement (il n’est pas recopié ailleurs).",
+          }}
         >
-          {visible ? <EyeOff /> : <Eye />}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          title="Copier"
-          disabled={!value}
-          onClick={() => void copy()}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            title={visible ? "Masquer" : "Afficher"}
+            onClick={() => setVisible((v) => !v)}
+          >
+            {visible ? <EyeOff /> : <Eye />}
+          </Button>
+        </WithHelp>
+        <WithHelp
+          help={{
+            title: "Copier",
+            body: "Copie la valeur actuelle du champ dans le presse-papiers de ce navigateur.",
+          }}
         >
-          <Copy />
-        </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            title="Copier"
+            disabled={!value}
+            onClick={() => void copy()}
+          >
+            <Copy />
+          </Button>
+        </WithHelp>
       </div>
       {copied ? <p className="text-xs text-emerald-300">Copié</p> : null}
     </div>
@@ -340,18 +362,34 @@ export function AdminPanel() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex max-w-md flex-col gap-3">
-          <Input
-            type="password"
-            placeholder="ADMIN_PASSWORD"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void login()
+          <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              Mot de passe admin
+              <HelpTip
+                title="Mot de passe admin"
+                body="Saisissez ADMIN_PASSWORD (fichier .env). La touche Entrée ou le bouton Entrer envoie la requête. En local sur 127.0.0.1, le mot de passe peut être facultatif."
+              />
+            </span>
+            <Input
+              type="password"
+              placeholder="ADMIN_PASSWORD"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void login()
+              }}
+            />
+          </label>
+          <WithHelp
+            help={{
+              title: "Entrer",
+              body: "Vérifie le mot de passe puis affiche les clés, Neon, GitHub et la synchro FDJ.",
             }}
-          />
-          <Button type="button" onClick={() => void login()}>
-            Entrer
-          </Button>
+          >
+            <Button type="button" onClick={() => void login()}>
+              Entrer
+            </Button>
+          </WithHelp>
           {error ? <p className="text-sm text-red-300">{error}</p> : null}
         </CardContent>
       </Card>
@@ -409,22 +447,36 @@ export function AdminPanel() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={gitBusy}
-                onClick={() => void refreshGit()}
+              <WithHelp
+                help={{
+                  title: "Contrôler",
+                  body: "Relit origin/main (ou la branche suivie) et met à jour le statut : à jour, en retard, divergé, modifications locales.",
+                }}
               >
-                <RefreshCw />
-                {gitBusy ? "Contrôle…" : "Contrôler"}
-              </Button>
-              <Button
-                type="button"
-                disabled={gitBusy || !github.can_apply}
-                onClick={() => void applyGit()}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={gitBusy}
+                  onClick={() => void refreshGit()}
+                >
+                  <RefreshCw />
+                  {gitBusy ? "Contrôle…" : "Contrôler"}
+                </Button>
+              </WithHelp>
+              <WithHelp
+                help={{
+                  title: "Mettre à jour",
+                  body: "Tire les commits distants sur le clone local (git pull / fast-forward). Désactivé s’il y a des commits locaux non poussés, un historique divergé, ou si l’écriture n’est pas autorisée.",
+                }}
               >
-                Mettre à jour
-              </Button>
+                <Button
+                  type="button"
+                  disabled={gitBusy || !github.can_apply}
+                  onClick={() => void applyGit()}
+                >
+                  Mettre à jour
+                </Button>
+              </WithHelp>
             </div>
           </div>
         </CardHeader>
@@ -493,14 +545,21 @@ export function AdminPanel() {
                 réveil du compute.
               </CardDescription>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void test("neon")}
-              disabled={tests.neon === "loading"}
+            <WithHelp
+              help={{
+                title: "Retester Neon",
+                body: "Exécute SELECT 1 sur l’URI enregistrée et affiche latence, hôte, et éventuellement l’erreur. Ne modifie pas les données.",
+              }}
             >
-              {tests.neon === "loading" ? "Contrôle…" : "Retester Neon"}
-            </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void test("neon")}
+                disabled={tests.neon === "loading"}
+              >
+                {tests.neon === "loading" ? "Contrôle…" : "Retester Neon"}
+              </Button>
+            </WithHelp>
           </div>
         </CardHeader>
         <CardContent className="grid gap-3 pt-4 sm:grid-cols-3">
@@ -603,6 +662,17 @@ export function AdminPanel() {
                 ) : null}
                 <SecretRow
                   label={service.id === "neon" ? "URI Neon" : "Clé / mot de passe"}
+                  help={
+                    service.id === "neon"
+                      ? {
+                          title: "URI Neon",
+                          body: "Collez l’URI postgres://… (idéalement pooled). Si un mot de passe est déjà dans l’URI, le champ dédié ci-dessous peut le remplacer. Enregistrer écrit dans .env en local.",
+                        }
+                      : {
+                          title: "Clé / mot de passe",
+                          body: `Valeur de ${service.envKey}. Collez-la puis Enregistrer. Tester vérifie la clé sans l’écrire si le champ est vide (utilise la valeur déjà enregistrée).`,
+                        }
+                  }
                   value={draft.value}
                   placeholder={
                     service.configured
@@ -620,6 +690,10 @@ export function AdminPanel() {
                 {service.id === "neon" ? (
                   <SecretRow
                     label="Mot de passe Neon"
+                    help={{
+                      title: "Mot de passe Neon",
+                      body: "Mot de passe npg_… extrait ou injecté dans l’URI. Utile si vous collez une URI sans mot de passe puis le secret à part.",
+                    }}
                     value={draft.password}
                     placeholder={
                       service.password
@@ -636,30 +710,51 @@ export function AdminPanel() {
                   />
                 ) : null}
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    disabled={!data.writable || saving === service.id}
-                    onClick={() => void save(service.id)}
+                  <WithHelp
+                    help={{
+                      title: "Enregistrer",
+                      body: "Écrit la valeur dans .env (local) ou signale que Netlify ne persiste pas l’écriture. Le secret n’est jamais commité.",
+                    }}
                   >
-                    {saving === service.id ? "Enregistrement…" : "Enregistrer"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={testResult === "loading"}
-                    onClick={() => void test(service.id)}
-                  >
-                    Tester
-                  </Button>
-                  {service.configured ? (
                     <Button
                       type="button"
-                      variant="ghost"
                       disabled={!data.writable || saving === service.id}
-                      onClick={() => void save(service.id, { clear: true })}
+                      onClick={() => void save(service.id)}
                     >
-                      Effacer
+                      {saving === service.id ? "Enregistrement…" : "Enregistrer"}
                     </Button>
+                  </WithHelp>
+                  <WithHelp
+                    help={{
+                      title: "Tester",
+                      body: "Ping le service avec le brouillon du champ (ou la valeur déjà enregistrée). N’écrit rien dans .env.",
+                    }}
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={testResult === "loading"}
+                      onClick={() => void test(service.id)}
+                    >
+                      Tester
+                    </Button>
+                  </WithHelp>
+                  {service.configured ? (
+                    <WithHelp
+                      help={{
+                        title: "Effacer",
+                        body: "Supprime la variable de .env en local. Irréversible sauf à recoller la valeur. Sur Netlify, gérez plutôt les variables du site.",
+                      }}
+                    >
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={!data.writable || saving === service.id}
+                        onClick={() => void save(service.id, { clear: true })}
+                      >
+                        Effacer
+                      </Button>
+                    </WithHelp>
                   ) : null}
                 </div>
                 {typeof testResult === "object" ? (
@@ -690,9 +785,16 @@ export function AdminPanel() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <Button type="button" variant="outline" disabled={syncBusy} onClick={() => void syncFdj()}>
-            {syncBusy ? "Synchronisation…" : "Lancer une synchro FDJ"}
-          </Button>
+          <WithHelp
+            help={{
+              title: "Lancer une synchro FDJ",
+              body: "Télécharge les 6 archives publiques EuroMillions et les écrit dans Neon (historique complet). Plus long que le rattrapage au démarrage (./launch ensure).",
+            }}
+          >
+            <Button type="button" variant="outline" disabled={syncBusy} onClick={() => void syncFdj()}>
+              {syncBusy ? "Synchronisation…" : "Lancer une synchro FDJ"}
+            </Button>
+          </WithHelp>
           {syncMsg ? <p className="text-sm text-muted-foreground">{syncMsg}</p> : null}
         </CardContent>
       </Card>

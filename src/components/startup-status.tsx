@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
 import { LogOut } from "lucide-react"
 
+import { HelpModeToggle, HelpWrap, WithHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { isLocalHost } from "@/lib/api-base"
 import { formatSyncStamp } from "@/lib/draws"
@@ -177,19 +178,26 @@ export function StartupStatus() {
 
   const quitButton =
     showQuit ? (
-      <Button
-        type="button"
-        variant="destructive"
-        size="sm"
-        disabled={quitting}
-        onClick={() => void quit()}
-        title="Quitter le programme"
-        aria-label="Quitter le programme"
-        className="h-[26px] rounded-full px-2.5 text-[11px] font-medium tracking-wide"
+      <WithHelp
+        help={{
+          title: "Quitter",
+          body: "Arrête l’API et l’interface Synchro. Disponible seulement en local. Une confirmation est demandée.",
+        }}
       >
-        <LogOut data-icon="inline-start" />
-        {quitting ? "Arrêt…" : "Quitter"}
-      </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          disabled={quitting}
+          onClick={() => void quit()}
+          title="Quitter le programme"
+          aria-label="Quitter le programme"
+          className="h-[26px] rounded-full px-2.5 text-[11px] font-medium tracking-wide"
+        >
+          <LogOut data-icon="inline-start" />
+          {quitting ? "Arrêt…" : "Quitter"}
+        </Button>
+      </WithHelp>
     ) : null
 
   const overlay = quitDone ? (
@@ -208,13 +216,34 @@ export function StartupStatus() {
       <>
         {overlay}
         <div className="flex flex-wrap items-center gap-2">
-          <Pill label="API" tone="load" onClick={() => void refresh()} />
-          <Pill label="Neon" tone="load" onClick={() => void refresh()} />
-          <Pill
-            label="GitHub"
-            tone="load"
-            onClick={() => void refresh({ git: true })}
-          />
+          <HelpWrap
+            help={{
+              title: "API",
+              body: "Cliquez pour retester l’API. Vert = backend joignable et tirages chargés.",
+            }}
+          >
+            <Pill label="API" tone="load" onClick={() => void refresh()} />
+          </HelpWrap>
+          <HelpWrap
+            help={{
+              title: "Neon",
+              body: "Cliquez pour retester PostgreSQL Neon. En local, si les tirages sont en retard, un clic lance aussi le rattrapage.",
+            }}
+          >
+            <Pill label="Neon" tone="load" onClick={() => void refresh()} />
+          </HelpWrap>
+          <HelpWrap
+            help={{
+              title: "GitHub",
+              body: "Compare le clone local à origin. Si une mise à jour est disponible, ouvre Admin.",
+            }}
+          >
+            <Pill
+              label="GitHub"
+              tone="load"
+              onClick={() => void refresh({ git: true })}
+            />
+          </HelpWrap>
           {quitButton}
         </div>
       </>
@@ -226,12 +255,19 @@ export function StartupStatus() {
       <>
         {overlay}
         <div className="flex flex-wrap items-center gap-2">
-          <Pill
-            label="Statut"
-            detail={error || "injoignable"}
-            tone="err"
-            onClick={() => void refresh()}
-          />
+          <HelpWrap
+            help={{
+              title: "Statut",
+              body: "L’API de statut est injoignable. Cliquez pour réessayer.",
+            }}
+          >
+            <Pill
+              label="Statut"
+              detail={error || "injoignable"}
+              tone="err"
+              onClick={() => void refresh()}
+            />
+          </HelpWrap>
           {quitButton}
         </div>
       </>
@@ -319,26 +355,47 @@ export function StartupStatus() {
     <>
       {overlay}
       <div className="flex flex-wrap items-center gap-2">
-        <Pill
-          label="API"
-          detail={apiDetail}
-          tone={apiTone}
-          onClick={() => void refresh()}
-        />
-        <Pill
-          label="Neon"
-          detail={neonDetail}
-          tone={neonTone}
-          title={neonTitle}
-          onClick={() => void onNeon()}
-        />
-        <Pill
-          label="GitHub"
-          detail={gitDetail}
-          tone={gitTone}
-          title="Contrôler origin (Admin si une mise à jour est disponible)"
-          onClick={onGithub}
-        />
+        <HelpWrap
+          help={{
+            title: "API",
+            body: "Cliquez pour retester l’API. Vert = backend joignable. Le détail indique le nombre de tirages chargés.",
+          }}
+        >
+          <Pill
+            label="API"
+            detail={apiDetail}
+            tone={apiTone}
+            onClick={() => void refresh()}
+          />
+        </HelpWrap>
+        <HelpWrap
+          help={{
+            title: "Neon",
+            body: `${neonTitle}. En local, un clic sur un indicateur « en retard » rattrape les tirages FDJ.`,
+          }}
+        >
+          <Pill
+            label="Neon"
+            detail={neonDetail}
+            tone={neonTone}
+            title={neonTitle}
+            onClick={() => void onNeon()}
+          />
+        </HelpWrap>
+        <HelpWrap
+          help={{
+            title: "GitHub",
+            body: "Compare le clone à origin (retest au focus et toutes les 5 min). En retard : cliquez pour ouvrir Admin et tirer la mise à jour.",
+          }}
+        >
+          <Pill
+            label="GitHub"
+            detail={gitDetail}
+            tone={gitTone}
+            title="Contrôler origin (Admin si une mise à jour est disponible)"
+            onClick={onGithub}
+          />
+        </HelpWrap>
         <MorphoFiringPill />
         {quitButton}
       </div>
@@ -361,22 +418,64 @@ function MorphoFiringPill() {
   }, [])
   if (!firing) return null
   return (
-    <Pill
-      label="Morpho"
-      detail={firing.name}
-      tone="warn"
-      title={`${firing.name} · ${firing.draw_date ?? ""}`}
-      onClick={() => router.push("/morpho")}
-    />
+    <HelpWrap
+      help={{
+        title: "Alerte Morpho",
+        body: `La règle « ${firing.name} » s’est déclenchée${firing.draw_date ? ` sur le tirage ${firing.draw_date}` : ""}. Cliquez pour ouvrir Morpho.`,
+      }}
+    >
+      <Pill
+        label="Morpho"
+        detail={firing.name}
+        tone="warn"
+        title={`${firing.name} · ${firing.draw_date ?? ""}`}
+        onClick={() => router.push("/morpho")}
+      />
+    </HelpWrap>
   )
 }
 
 const NAV_ITEMS = [
-  { href: "/tirage", label: "Tirage" },
-  { href: "/evolution", label: "Évolution" },
-  { href: "/analyse", label: "Analyse" },
-  { href: "/morpho", label: "Morpho" },
-  { href: "/admin", label: "Admin" },
+  {
+    href: "/tirage",
+    label: "Tirage",
+    help: {
+      title: "Tirage",
+      body: "Archives EuroMillions : filtrer par mois ou par numéros, puis exporter en CSV.",
+    },
+  },
+  {
+    href: "/evolution",
+    label: "Évolution",
+    help: {
+      title: "Évolution",
+      body: "Courbes dans le temps et classements des numéros / étoiles. Accès protégé par mot de passe admin.",
+    },
+  },
+  {
+    href: "/analyse",
+    label: "Analyse",
+    help: {
+      title: "Analyse",
+      body: "Laboratoire : indicateurs, numéros, hasard, probabilités. Tous les onglets lisent la même fenêtre de tirages.",
+    },
+  },
+  {
+    href: "/morpho",
+    label: "Morpho",
+    help: {
+      title: "Morpho",
+      body: "Glyphes 5×10, lexique de formes, voisins visuels, Moondream, règles QUAND/ALORS et anticipation.",
+    },
+  },
+  {
+    href: "/admin",
+    label: "Admin",
+    help: {
+      title: "Admin",
+      body: "Secrets Neon / API, tests de connexion, mises à jour GitHub et synchro FDJ → Postgres.",
+    },
+  },
 ] as const
 
 export function SiteHeader() {
@@ -385,30 +484,41 @@ export function SiteHeader() {
     <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="flex items-center gap-4">
-          <Link
-            href="/tirage"
-            className="text-xs font-medium tracking-[0.2em] text-primary uppercase"
+          <HelpWrap
+            help={{
+              title: "Synchro",
+              body: "Retour à l’accueil : page Tirage, archives FDJ filtrables et export CSV.",
+            }}
           >
-            Synchro
-          </Link>
+            <Link
+              href="/tirage"
+              className="text-xs font-medium tracking-[0.2em] text-primary uppercase"
+            >
+              Synchro
+            </Link>
+          </HelpWrap>
           <nav className="flex items-center gap-4" aria-label="Sections">
             {NAV_ITEMS.map((item) => {
               const active =
                 pathname === item.href || pathname.startsWith(`${item.href}/`)
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`text-xs ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  {item.label}
-                </Link>
+                <HelpWrap key={item.href} help={item.help}>
+                  <Link
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className={`text-xs ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    {item.label}
+                  </Link>
+                </HelpWrap>
               )
             })}
           </nav>
         </div>
-        <StartupStatus />
+        <div className="flex flex-wrap items-center gap-2">
+          <HelpModeToggle />
+          <StartupStatus />
+        </div>
       </div>
     </header>
   )

@@ -9,6 +9,7 @@ import {
   ChartTooltipContent,
   Disclaimer,
   OverlayToggle,
+  HELP,
   Stat,
   formatStat,
   lineConfig,
@@ -68,11 +69,11 @@ export function AveragesPanel({
         <Stat label="HMA" value={formatStat(tech.last.hma)} />
       </section>
       <div className="flex flex-wrap gap-2">
-        <OverlayToggle label="SMA" on={showSma} onClick={() => setShowSma(!showSma)} />
-        <OverlayToggle label="EMA" on={showEma} onClick={() => setShowEma(!showEma)} />
-        <OverlayToggle label="WMA" on={showWma} onClick={() => setShowWma(!showWma)} />
-        <OverlayToggle label="HMA" on={showHma} onClick={() => setShowHma(!showHma)} />
-        <OverlayToggle label="VWMA (activité)" on={showVwma} onClick={() => setShowVwma(!showVwma)} />
+        <OverlayToggle label="SMA" on={showSma} onClick={() => setShowSma(!showSma)} help={HELP.sma} />
+        <OverlayToggle label="EMA" on={showEma} onClick={() => setShowEma(!showEma)} help={HELP.ema} />
+        <OverlayToggle label="WMA" on={showWma} onClick={() => setShowWma(!showWma)} help={HELP.wma} />
+        <OverlayToggle label="HMA" on={showHma} onClick={() => setShowHma(!showHma)} help={HELP.hma} />
+        <OverlayToggle label="VWMA (activité)" on={showVwma} onClick={() => setShowVwma(!showVwma)} help={HELP.vwma} />
       </div>
       <Card>
         <CardHeader>

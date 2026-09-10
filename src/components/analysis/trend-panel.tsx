@@ -9,6 +9,7 @@ import {
   ChartTooltipContent,
   Disclaimer,
   OverlayToggle,
+  HELP,
   Stat,
   formatStat,
   lineConfig,
@@ -66,10 +67,10 @@ export function TrendPanel({
         <Stat label="Niveaux S/R" value={String(tech.supportResistance.length)} />
       </section>
       <div className="flex flex-wrap gap-2">
-        <OverlayToggle label="ADX / DMI" on={showAdx} onClick={() => setShowAdx(!showAdx)} />
-        <OverlayToggle label="Supertrend" on={showSt} onClick={() => setShowSt(!showSt)} />
-        <OverlayToggle label="PSAR" on={showPsar} onClick={() => setShowPsar(!showPsar)} />
-        <OverlayToggle label="Aroon" on={showAroon} onClick={() => setShowAroon(!showAroon)} />
+        <OverlayToggle label="ADX / DMI" on={showAdx} onClick={() => setShowAdx(!showAdx)} help={HELP.adx} />
+        <OverlayToggle label="Supertrend" on={showSt} onClick={() => setShowSt(!showSt)} help={HELP.supertrend} />
+        <OverlayToggle label="PSAR" on={showPsar} onClick={() => setShowPsar(!showPsar)} help={HELP.psar} />
+        <OverlayToggle label="Aroon" on={showAroon} onClick={() => setShowAroon(!showAroon)} help={HELP.aroon} />
       </div>
       <Card>
         <CardHeader>

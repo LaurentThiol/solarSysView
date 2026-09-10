@@ -1,0 +1,214 @@
+"use client"
+
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
+import { createPortal } from "react-dom"
+
+import { useHelpMode } from "@/components/help/help-mode"
+import { cn } from "@/lib/utils"
+
+export type HelpCopy = {
+  title: string
+  body: string
+}
+
+const PANEL_WIDTH = 300
+
+function placePanel(
+  button: HTMLElement,
+  panel: HTMLElement | null
+): { top: number; left: number; maxHeight: number } {
+  const rect = button.getBoundingClientRect()
+  const pad = 8
+  let left = rect.left + rect.width / 2 - PANEL_WIDTH / 2
+  left = Math.max(pad, Math.min(left, window.innerWidth - PANEL_WIDTH - pad))
+  const spaceBelow = window.innerHeight - rect.bottom - pad
+  const spaceAbove = rect.top - pad
+  const preferBelow = spaceBelow >= 140 || spaceBelow >= spaceAbove
+  const maxHeight = Math.min(360, Math.max(120, preferBelow ? spaceBelow : spaceAbove))
+  const height = panel?.offsetHeight ?? Math.min(200, maxHeight)
+  const top = preferBelow
+    ? rect.bottom + 6
+    : Math.max(pad, rect.top - 6 - height)
+  return { top, left, maxHeight }
+}
+
+export function HelpTip({
+  title,
+  body,
+  className,
+}: HelpCopy & { className?: string }) {
+  const uid = useId()
+  const { enabled, openId, setOpenId } = useHelpMode()
+  const open = openId === uid
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [coords, setCoords] = useState({ top: 0, left: 0, maxHeight: 320 })
+
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) return
+    const update = () => {
+      if (!btnRef.current) return
+      setCoords(placePanel(btnRef.current, panelRef.current))
+    }
+    update()
+    window.addEventListener("resize", update)
+    window.addEventListener("scroll", update, true)
+    return () => {
+      window.removeEventListener("resize", update)
+      window.removeEventListener("scroll", update, true)
+    }
+  }, [open, title, body])
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (event: MouseEvent) => {
+      const node = event.target as Node
+      if (btnRef.current?.contains(node) || panelRef.current?.contains(node)) return
+      setOpenId(null)
+    }
+    document.addEventListener("mousedown", onDown)
+    return () => document.removeEventListener("mousedown", onDown)
+  }, [open, setOpenId])
+
+  if (!enabled) return null
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className={cn(
+          "inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-amber-400/70 bg-amber-400/20 text-[10px] font-bold leading-none text-amber-100 transition-colors hover:bg-amber-400/35 focus-visible:ring-2 focus-visible:ring-amber-300/60 focus-visible:outline-none",
+          open && "bg-amber-400/45 ring-2 ring-amber-300/40",
+          className
+        )}
+        aria-label={`Aide : ${title}`}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        title={`${title} — cliquer pour la fenêtre d’aide`}
+        onPointerDown={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          setOpenId(open ? null : uid)
+        }}
+      >
+        !
+      </button>
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={panelRef}
+              role="dialog"
+              aria-label={title}
+              style={{
+                top: coords.top,
+                left: coords.left,
+                width: PANEL_WIDTH,
+                maxHeight: coords.maxHeight,
+              }}
+              className="fixed z-[80] overflow-auto rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl"
+            >
+              <p className="text-sm font-medium text-foreground">{title}</p>
+              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{body}</p>
+            </div>,
+            document.body
+          )
+        : null}
+    </>
+  )
+}
+
+export function WithHelp({
+  help,
+  children,
+  className,
+}: {
+  help: HelpCopy
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn("inline-flex min-w-0 items-center gap-1.5", className)}>
+      <div className="min-w-0 flex-1">{children}</div>
+      <HelpTip {...help} />
+    </div>
+  )
+}
+
+export function LabelHelp({
+  label,
+  help,
+  children,
+  className,
+  row = false,
+}: {
+  label: ReactNode
+  help: HelpCopy
+  children: ReactNode
+  className?: string
+  row?: boolean
+}) {
+  return (
+    <label
+      className={cn(
+        row
+          ? "flex items-center gap-2 text-sm"
+          : "flex flex-col gap-1 text-xs text-muted-foreground",
+        className
+      )}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        <HelpTip {...help} />
+      </span>
+      {children}
+    </label>
+  )
+}
+
+export function HelpWrap({
+  help,
+  children,
+  className,
+}: {
+  help: HelpCopy
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <span className={cn("relative inline-flex pr-2.5 pt-1", className)}>
+      {children}
+      <span className="absolute top-0 right-0 z-10">
+        <HelpTip {...help} />
+      </span>
+    </span>
+  )
+}
+
+export function TitleHelp({
+  children,
+  help,
+  className,
+}: {
+  children: ReactNode
+  help: HelpCopy
+  className?: string
+}) {
+  return (
+    <span className={cn("inline-flex items-center gap-1.5", className)}>
+      {children}
+      <HelpTip {...help} />
+    </span>
+  )
+}

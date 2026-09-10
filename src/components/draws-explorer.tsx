@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Download, Search } from "lucide-react"
 
+import { LabelHelp, TitleHelp, WithHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -114,37 +115,69 @@ export function DrawsExplorer() {
         <CardHeader className="gap-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-base font-medium">
-              Explorer les tirages
+              <TitleHelp
+                help={{
+                  title: "Explorer les tirages",
+                  body: "Liste des tirages de l’archive. Filtrez par mois et/ou par numéros, puis exportez le résultat.",
+                }}
+              >
+                Explorer les tirages
+              </TitleHelp>
             </CardTitle>
-            <Button type="button" variant="outline" onClick={downloadCsv}>
-              <Download data-icon="inline-start" />
-              Télécharger le CSV
-            </Button>
+            <WithHelp
+              help={{
+                title: "Télécharger le CSV",
+                body: "Exporte les tirages actuellement affichés (après filtres mois et numéros) au format CSV, encodage UTF-8.",
+              }}
+            >
+              <Button type="button" variant="outline" onClick={downloadCsv}>
+                <Download data-icon="inline-start" />
+                Télécharger le CSV
+              </Button>
+            </WithHelp>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Select value={month} onValueChange={(value) => setMonth(String(value))}>
-              <SelectTrigger className="w-full sm:w-52" aria-label="Mois">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {monthOptions.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Filtrer par numéros, ex. 7 14 28"
-                className="pl-8"
-                inputMode="numeric"
-                aria-label="Filtrer par numéros"
-              />
-            </div>
+            <LabelHelp
+              label="Mois"
+              className="w-full sm:w-auto"
+              help={{
+                title: "Mois",
+                body: "Restreint la liste à un mois civil, ou « Tous les mois » pour toute l’année chargée.",
+              }}
+            >
+              <Select value={month} onValueChange={(value) => setMonth(String(value))}>
+                <SelectTrigger className="w-full sm:w-52" aria-label="Mois">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {monthOptions.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </LabelHelp>
+            <LabelHelp
+              label="Numéros"
+              className="flex-1"
+              help={{
+                title: "Filtrer par numéros",
+                body: "Tapez 1 à 7 valeurs séparées par un espace (boules 1–50 et/ou étoiles 1–12). Seuls les tirages qui les contiennent tous restent visibles.",
+              }}
+            >
+              <div className="relative">
+                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Filtrer par numéros, ex. 7 14 28"
+                  className="pl-8"
+                  inputMode="numeric"
+                  aria-label="Filtrer par numéros"
+                />
+              </div>
+            </LabelHelp>
           </div>
           {wanted.length > 0 ? (
             <p className="text-sm text-muted-foreground">

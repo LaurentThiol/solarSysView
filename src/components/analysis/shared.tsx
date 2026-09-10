@@ -1,5 +1,6 @@
 "use client"
 
+import { HelpTip, type HelpCopy } from "@/components/help"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ChartContainer,
@@ -71,28 +72,140 @@ export function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
+export const HELP = {
+  sma: {
+    title: "SMA",
+    body: "Moyenne mobile simple sur X tirages. Cliquez pour afficher ou masquer cette courbe.",
+  },
+  ema: {
+    title: "EMA",
+    body: "Moyenne exponentielle : les tirages récents pèsent plus. Cliquez pour afficher ou masquer.",
+  },
+  wma: {
+    title: "WMA",
+    body: "Moyenne pondérée linéaire. Cliquez pour afficher ou masquer.",
+  },
+  hma: {
+    title: "HMA",
+    body: "Hull Moving Average, plus réactive qu’une SMA. Cliquez pour afficher ou masquer.",
+  },
+  vwma: {
+    title: "VWMA",
+    body: "Moyenne pondérée par l’activité (true range × count), pas un volume de marché. Cliquez pour afficher ou masquer.",
+  },
+  bollinger: {
+    title: "Bollinger",
+    body: "Bandes SMA ± 2σ. Un squeeze (bandes étroites) précède souvent un élargissement. Afficher/masquer.",
+  },
+  keltner: {
+    title: "Keltner",
+    body: "Canal EMA ± k·ATR. Si Bollinger est à l’intérieur, c’est un squeeze. Afficher/masquer.",
+  },
+  donchian: {
+    title: "Donchian",
+    body: "Plus haut / plus bas sur X tirages (canal Turtle). Afficher/masquer.",
+  },
+  rsi: {
+    title: "RSI",
+    body: "Indice de force relative 14. Zones 70 / 30. Afficher ou masquer le graphe.",
+  },
+  macd: {
+    title: "MACD",
+    body: "12 / 26 / 9 : ligne, signal et histogramme. Afficher ou masquer.",
+  },
+  stoch: {
+    title: "Stochastique",
+    body: "%K / %D (14 / 3). Zones 80 / 20. Afficher ou masquer.",
+  },
+  cci: {
+    title: "CCI",
+    body: "Commodity Channel Index 20. Extrêmes ±100 / ±200. Afficher ou masquer.",
+  },
+  wr: {
+    title: "Williams %R",
+    body: "Oscillateur −100 à 0. Zones −20 / −80. Afficher ou masquer.",
+  },
+  adx: {
+    title: "ADX / DMI",
+    body: "Force de tendance (ADX) et direction (+DI / −DI). Seuil usuel 20–25. Afficher/masquer.",
+  },
+  supertrend: {
+    title: "Supertrend",
+    body: "Suivi de tendance ATR (10, mult=3). Afficher ou masquer.",
+  },
+  psar: {
+    title: "PSAR",
+    body: "Parabolic SAR : points de retournement / trailing. Afficher ou masquer.",
+  },
+  aroon: {
+    title: "Aroon",
+    body: "Aroon up/down : proximité du plus haut / plus bas récent. Afficher ou masquer.",
+  },
+  ichimoku: {
+    title: "Ichimoku",
+    body: "Nuage 9 / 26 / 52 : Tenkan, Kijun, Senkou, Chikou. Afficher ou masquer.",
+  },
+  fibonacci: {
+    title: "Fibonacci",
+    body: "Retracements 0,236…0,786 sur le swing ZigZag. Afficher ou masquer.",
+  },
+  obv: {
+    title: "OBV",
+    body: "On-Balance Volume transposé à l’activité des tirages. Afficher ou masquer.",
+  },
+  adl: {
+    title: "ADL",
+    body: "Accumulation / distribution, même transposition. Afficher ou masquer.",
+  },
+  mfi: {
+    title: "MFI",
+    body: "Money Flow Index 14 (80 / 20). Afficher ou masquer.",
+  },
+  vwap: {
+    title: "VWAP",
+    body: "Prix moyen pondéré recalé au début de la fenêtre de travail. Afficher ou masquer.",
+  },
+  filterAll: {
+    title: "Tous",
+    body: "Affiche les 50 numéros sur la grille, pairs et impairs.",
+  },
+  filterEven: {
+    title: "Pairs",
+    body: "Met en avant les numéros pairs (2, 4, … 50). Les impairs restent visibles en filigrane.",
+  },
+  filterOdd: {
+    title: "Impairs",
+    body: "Met en avant les numéros impairs. Les pairs restent visibles en filigrane.",
+  },
+} satisfies Record<string, HelpCopy>
+
 export function OverlayToggle({
   label,
   on,
   onClick,
+  help,
 }: {
   label: string
   on: boolean
   onClick: () => void
+  help: HelpCopy
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      className={`rounded-md border px-2 py-1 text-xs ${
-        on
-          ? "border-primary bg-primary/15 text-foreground"
-          : "border-border text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      {label}
-    </button>
+    <span className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        aria-pressed={on}
+        onClick={onClick}
+        className={`rounded-md border px-2 py-1 text-xs ${
+          on
+            ? "border-primary bg-primary/15 text-foreground"
+            : "border-border text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        {label}
+      </button>
+      <HelpTip {...help} />
+    </span>
   )
 }
 

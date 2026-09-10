@@ -8,6 +8,7 @@ import {
   type ResolvedWindow,
   type WindowPreset,
 } from "@/lib/analysis-window"
+import { HelpTip, LabelHelp } from "@/components/help"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -50,8 +51,13 @@ export function WindowBar({
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Fenêtre de travail
+        <LabelHelp
+          label="Fenêtre de travail"
+          help={{
+            title: "Fenêtre de travail",
+            body: "Jeu de tirages lu par tous les onglets (Vue, Numéros, Hasard…). Un preset fixe N tirages, une durée ou l’année ; Personnalisé suit les dates Du / Au.",
+          }}
+        >
           <Select value={preset} onValueChange={(v) => onPreset(v as WindowPreset)}>
             <SelectTrigger className="w-full sm:w-64" aria-label="Fenêtre">
               <span className="flex flex-1 text-left">{WINDOW_PRESET_LABELS[preset]}</span>
@@ -64,9 +70,14 @@ export function WindowBar({
               ))}
             </SelectContent>
           </Select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Du
+        </LabelHelp>
+        <LabelHelp
+          label="Du"
+          help={{
+            title: "Date de début",
+            body: "Premier tirage inclus. Modifier une date passe automatiquement en fenêtre personnalisée.",
+          }}
+        >
           <Input
             type="date"
             value={fromDate}
@@ -74,9 +85,14 @@ export function WindowBar({
             className="w-40"
             aria-label="Date de début"
           />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Au
+        </LabelHelp>
+        <LabelHelp
+          label="Au"
+          help={{
+            title: "Date de fin",
+            body: "Dernier tirage inclus. Laisser vide pour aller jusqu’au plus récent de l’archive chargée.",
+          }}
+        >
           <Input
             type="date"
             value={toDate}
@@ -84,10 +100,15 @@ export function WindowBar({
             className="w-40"
             aria-label="Date de fin"
           />
-        </label>
+        </LabelHelp>
         {showLastN || showDates ? (
-          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-            Derniers N
+          <LabelHelp
+            label="Derniers N"
+            help={{
+              title: "Derniers N tirages",
+              body: "Force les N derniers tirages de la plage. « auto » suit le preset (20, 50, 100…). Utile pour recaler un preset last_* après avoir touché les dates.",
+            }}
+          >
             <Input
               type="number"
               min={2}
@@ -98,10 +119,15 @@ export function WindowBar({
               className="w-24"
               aria-label="Derniers N tirages"
             />
-          </label>
+          </LabelHelp>
         ) : null}
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Warmup
+        <LabelHelp
+          label="Warmup"
+          help={{
+            title: "Warmup",
+            body: `Tirages situés juste avant la fenêtre (défaut ${DEFAULT_WARMUP}). Ils initialisent EMA, RSI, Ichimoku, sans entrer dans χ², Bayes ni le VWAP de fenêtre.`,
+          }}
+        >
           <Input
             type="number"
             min={0}
@@ -111,14 +137,20 @@ export function WindowBar({
             className="w-24"
             aria-label="Tirages de warmup"
           />
-        </label>
+        </LabelHelp>
         <label className="flex items-center gap-2 pb-1 text-sm">
           <input
             type="checkbox"
             checked={compareOn}
             onChange={(e) => onCompare(e.target.checked)}
           />
-          Comparer à la fenêtre précédente
+          <span className="inline-flex items-center gap-1">
+            Comparer à la fenêtre précédente
+            <HelpTip
+              title="Comparer"
+              body="Calcule les écarts de moyenne / σ / couverture par rapport à la fenêtre de même longueur qui précède immédiatement celle-ci."
+            />
+          </span>
         </label>
       </div>
       <p className="text-sm text-foreground">{formatWindowBanner(window)}</p>

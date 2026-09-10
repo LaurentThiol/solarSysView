@@ -9,6 +9,7 @@ import {
   ChartTooltipContent,
   Disclaimer,
   OverlayToggle,
+  HELP,
   Stat,
   formatStat,
   lineConfig,
@@ -65,9 +66,9 @@ export function VolatilityPanel({
         />
       </section>
       <div className="flex flex-wrap gap-2">
-        <OverlayToggle label="Bollinger" on={showBb} onClick={() => setShowBb(!showBb)} />
-        <OverlayToggle label="Keltner" on={showKc} onClick={() => setShowKc(!showKc)} />
-        <OverlayToggle label="Donchian" on={showDc} onClick={() => setShowDc(!showDc)} />
+        <OverlayToggle label="Bollinger" on={showBb} onClick={() => setShowBb(!showBb)} help={HELP.bollinger} />
+        <OverlayToggle label="Keltner" on={showKc} onClick={() => setShowKc(!showKc)} help={HELP.keltner} />
+        <OverlayToggle label="Donchian" on={showDc} onClick={() => setShowDc(!showDc)} help={HELP.donchian} />
       </div>
       <Card>
         <CardHeader>

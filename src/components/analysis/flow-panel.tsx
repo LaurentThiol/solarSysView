@@ -9,6 +9,7 @@ import {
   ChartTooltipContent,
   Disclaimer,
   OverlayToggle,
+  HELP,
   Stat,
   formatStat,
   lineConfig,
@@ -58,10 +59,10 @@ export function FlowPanel({
         est recalé au début de la fenêtre, pas sur tout l’historique.
       </Disclaimer>
       <div className="flex flex-wrap gap-2">
-        <OverlayToggle label="OBV" on={showObv} onClick={() => setShowObv(!showObv)} />
-        <OverlayToggle label="ADL" on={showAdl} onClick={() => setShowAdl(!showAdl)} />
-        <OverlayToggle label="MFI" on={showMfi} onClick={() => setShowMfi(!showMfi)} />
-        <OverlayToggle label="VWAP" on={showVwap} onClick={() => setShowVwap(!showVwap)} />
+        <OverlayToggle label="OBV" on={showObv} onClick={() => setShowObv(!showObv)} help={HELP.obv} />
+        <OverlayToggle label="ADL" on={showAdl} onClick={() => setShowAdl(!showAdl)} help={HELP.adl} />
+        <OverlayToggle label="MFI" on={showMfi} onClick={() => setShowMfi(!showMfi)} help={HELP.mfi} />
+        <OverlayToggle label="VWAP" on={showVwap} onClick={() => setShowVwap(!showVwap)} help={HELP.vwap} />
       </div>
       <Card>
         <CardHeader>

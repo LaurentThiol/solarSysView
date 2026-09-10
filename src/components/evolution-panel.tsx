@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 
+import { LabelHelp } from "@/components/help"
 import { AdminGate } from "@/components/admin-gate"
 import { DrawChart } from "@/components/draw-chart"
 import { FrequencyCard } from "@/components/frequency-card"
@@ -60,33 +61,49 @@ function EvolutionContent() {
         {filtered.length} tirage{filtered.length > 1 ? "s" : ""}.
       </p>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <Select value={era} onValueChange={(value) => setEra(value as Era)}>
-          <SelectTrigger className="w-full sm:w-64" aria-label="Période">
-            <span className="flex flex-1 text-left">{ERA_LABELS[era]}</span>
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(ERA_LABELS) as Era[]).map((value) => (
-              <SelectItem key={value} value={value}>
-                {ERA_LABELS[value]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={month} onValueChange={(value) => setMonth(String(value))}>
-          <SelectTrigger className="w-full sm:w-52" aria-label="Mois">
-            <span className="flex flex-1 text-left">
-              {monthOptions.find((item) => item.value === month)?.label ?? "Tous les mois"}
-            </span>
-          </SelectTrigger>
-          <SelectContent>
-            {monthOptions.map((item) => (
-              <SelectItem key={item.value} value={item.value}>
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <LabelHelp
+          label="Période"
+          help={{
+            title: "Période",
+            body: "Année en cours, formule actuelle (12 étoiles depuis 2016) ou tout l’historique. Change les tirages du graphique et des classements.",
+          }}
+        >
+          <Select value={era} onValueChange={(value) => setEra(value as Era)}>
+            <SelectTrigger className="w-full sm:w-64" aria-label="Période">
+              <span className="flex flex-1 text-left">{ERA_LABELS[era]}</span>
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(ERA_LABELS) as Era[]).map((value) => (
+                <SelectItem key={value} value={value}>
+                  {ERA_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </LabelHelp>
+        <LabelHelp
+          label="Mois"
+          help={{
+            title: "Mois",
+            body: "Affine la courbe et les fréquences à un mois, ou conserve tous les mois de la période.",
+          }}
+        >
+          <Select value={month} onValueChange={(value) => setMonth(String(value))}>
+            <SelectTrigger className="w-full sm:w-52" aria-label="Mois">
+              <span className="flex flex-1 text-left">
+                {monthOptions.find((item) => item.value === month)?.label ?? "Tous les mois"}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </LabelHelp>
       </div>
 
       <DrawChart draws={filtered} />

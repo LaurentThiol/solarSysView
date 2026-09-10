@@ -19,6 +19,7 @@ import {
   Stat,
   formatStat,
 } from "@/components/analysis/shared"
+import { TitleHelp, WithHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { type AnalysisDraw, ballBoard, parityReport } from "@/lib/analysis"
@@ -75,14 +76,30 @@ export function ParityPanel({
 
       <Card>
         <CardHeader className="gap-3">
-          <CardTitle>Composition pair / impair du tirage</CardTitle>
+          <CardTitle>
+            <TitleHelp
+              help={{
+                title: "Composition pair / impair",
+                body: "25 pairs et 25 impairs dans l’urne. Chaque tirage de 5 boules a en moyenne 2,5 pairs. Les barres comparent la fenêtre à cette loi hypergéométrique.",
+              }}
+            >
+              Composition pair / impair du tirage
+            </TitleHelp>
+          </CardTitle>
           <p className="text-sm text-muted-foreground">
             25 pairs et 25 impairs dans l’urne. Chaque tirage de 5 boules a en moyenne 2,5
             pairs. Les barres comparent la fenêtre à cette loi hypergéométrique.
           </p>
-          <Button type="button" size="sm" className="w-fit" onClick={onAnalyze}>
-            Analyser la série (nombre de pairs)
-          </Button>
+          <WithHelp
+            help={{
+              title: "Analyser la série (nombre de pairs)",
+              body: "Passe la variable sur « Nombre de pairs » et ouvre l’onglet Vue pour tracer 0–5 pairs par tirage avec les indicateurs.",
+            }}
+          >
+            <Button type="button" size="sm" className="w-fit" onClick={onAnalyze}>
+              Analyser la série (nombre de pairs)
+            </Button>
+          </WithHelp>
         </CardHeader>
         <CardContent>
           <ChartContainer
@@ -170,7 +187,16 @@ export function ParityPanel({
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Numéros pairs (plus sortis)</CardTitle>
+            <CardTitle>
+              <TitleHelp
+                help={{
+                  title: "Numéros pairs",
+                  body: "Les 10 pairs les plus sortis dans la fenêtre. Cliquez un numéro pour l’ouvrir dans l’onglet Numéros.",
+                }}
+              >
+                Numéros pairs (plus sortis)
+              </TitleHelp>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="flex flex-col gap-1">
@@ -179,6 +205,7 @@ export function ParityPanel({
                   <button
                     type="button"
                     className="tabular-nums font-medium hover:underline"
+                    title={`Ouvrir le numéro pair ${row.value} dans l’onglet Numéros`}
                     onClick={() => onSelectBall(row.value)}
                   >
                     {row.value}
@@ -193,7 +220,16 @@ export function ParityPanel({
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Numéros impairs (plus sortis)</CardTitle>
+            <CardTitle>
+              <TitleHelp
+                help={{
+                  title: "Numéros impairs",
+                  body: "Les 10 impairs les plus sortis dans la fenêtre. Cliquez un numéro pour l’ouvrir dans l’onglet Numéros.",
+                }}
+              >
+                Numéros impairs (plus sortis)
+              </TitleHelp>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="flex flex-col gap-1">
@@ -202,6 +238,7 @@ export function ParityPanel({
                   <button
                     type="button"
                     className="tabular-nums font-medium hover:underline"
+                    title={`Ouvrir le numéro impair ${row.value} dans l’onglet Numéros`}
                     onClick={() => onSelectBall(row.value)}
                   >
                     {row.value}

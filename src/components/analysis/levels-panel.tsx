@@ -9,6 +9,7 @@ import {
   ChartTooltipContent,
   Disclaimer,
   OverlayToggle,
+  HELP,
   Stat,
   formatStat,
   lineConfig,
@@ -63,8 +64,8 @@ export function LevelsPanel({
         <Stat label="Objectif report" value={formatStat(targets?.measuredMove ?? null)} />
       </section>
       <div className="flex flex-wrap gap-2">
-        <OverlayToggle label="Ichimoku" on={showIchi} onClick={() => setShowIchi(!showIchi)} />
-        <OverlayToggle label="Fibonacci" on={showFib} onClick={() => setShowFib(!showFib)} />
+        <OverlayToggle label="Ichimoku" on={showIchi} onClick={() => setShowIchi(!showIchi)} help={HELP.ichimoku} />
+        <OverlayToggle label="Fibonacci" on={showFib} onClick={() => setShowFib(!showFib)} help={HELP.fibonacci} />
       </div>
       {showIchi ? (
         <Card>

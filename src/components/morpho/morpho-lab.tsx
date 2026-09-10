@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import { HelpTip, LabelHelp, TitleHelp, WithHelp } from "@/components/help"
 import { GlyphBoard, GlyphThumb } from "@/components/morpho/glyph-board"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -332,19 +333,27 @@ export function MorphoLab() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
-        <Select value={era} onValueChange={(v) => setEra(v as "current" | "all")}>
-          <SelectTrigger className="w-full sm:w-56" aria-label="Ère">
-            <span className="flex flex-1 text-left">
-              {era === "all" ? "Tout l’historique" : "Formule actuelle (12 ★)"}
-            </span>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="current">Formule actuelle (12 ★)</SelectItem>
-            <SelectItem value="all">Tout l’historique</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-sm text-muted-foreground">
+      <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
+        <LabelHelp
+          label="Archive"
+          help={{
+            title: "Ère Morpho",
+            body: "Formule actuelle (12 étoiles) ou tout l’historique. Change les glyphes, voisins, anticipation et l’appel VLM.",
+          }}
+        >
+          <Select value={era} onValueChange={(v) => setEra(v as "current" | "all")}>
+            <SelectTrigger className="w-full sm:w-56" aria-label="Ère">
+              <span className="flex flex-1 text-left">
+                {era === "all" ? "Tout l’historique" : "Formule actuelle (12 ★)"}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="current">Formule actuelle (12 ★)</SelectItem>
+              <SelectItem value="all">Tout l’historique</SelectItem>
+            </SelectContent>
+          </Select>
+        </LabelHelp>
+        <p className="pb-1 text-sm text-muted-foreground">
           {chrono.length} tirages · source {source === "neon" ? "Neon" : "JSON"}
         </p>
       </div>
@@ -353,7 +362,14 @@ export function MorphoLab() {
         <Card>
           <CardHeader>
             <CardTitle>
-              {selected.weekday} {formatShortDate(selected.date)} · {selected.date}
+              <TitleHelp
+                help={{
+                  title: "Glyphe",
+                  body: "Grille 5×10 (numéros 1–50) et étoiles, comme un ticket. Les motifs à droite décrivent la forme de ce tirage.",
+                }}
+              >
+                {selected.weekday} {formatShortDate(selected.date)} · {selected.date}
+              </TitleHelp>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -370,7 +386,16 @@ export function MorphoLab() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Motifs</CardTitle>
+            <CardTitle>
+              <TitleHelp
+                help={{
+                  title: "Motifs",
+                  body: "Étiquettes du lexique géométrique (alignement, grappe, périphérie…). Elles alimentent les règles QUAND/ALORS plus bas.",
+                }}
+              >
+                Motifs
+              </TitleHelp>
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-1.5">
@@ -400,7 +425,16 @@ export function MorphoLab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Pellicule</CardTitle>
+            <CardTitle>
+              <TitleHelp
+                help={{
+                  title: "Pellicule",
+                  body: "16 derniers tirages. Cliquez une vignette pour en faire le glyphe courant (voisins, VLM, règles).",
+                }}
+              >
+                Pellicule
+              </TitleHelp>
+            </CardTitle>
         </CardHeader>
         <CardContent className="flex gap-2 overflow-x-auto pb-1">
           {film.map((draw: Draw) => (
@@ -419,7 +453,16 @@ export function MorphoLab() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Voisins (signature géométrique)</CardTitle>
+            <CardTitle>
+              <TitleHelp
+                help={{
+                  title: "Voisins géométriques",
+                  body: "Tirages dont la signature (centroïde, compacité, motifs) est proche. Cliquez un voisin pour l’ouvrir. CLIP ci-dessous compare les glyphes en embedding visuel local.",
+                }}
+              >
+                Voisins (signature géométrique)
+              </TitleHelp>
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {geoNeighbors.map((n) => (
@@ -427,6 +470,7 @@ export function MorphoLab() {
                 key={n.date}
                 type="button"
                 className="flex items-center gap-3 text-left"
+                title={`Ouvrir le glyphe du ${n.date}`}
                 onClick={() => n.date && setSelectedDate(n.date)}
               >
                 <div className="w-20 shrink-0">
@@ -441,9 +485,16 @@ export function MorphoLab() {
               </button>
             ))}
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => void runClip()} disabled={clipBusy}>
-                {clipBusy ? "CLIP…" : "Œil local CLIP"}
-              </Button>
+              <WithHelp
+                help={{
+                  title: "Œil local CLIP",
+                  body: "Charge CLIP dans le navigateur, embarque le glyphe courant et classe les 40 derniers tirages par similarité cosinus. Premier chargement : téléchargement du modèle.",
+                }}
+              >
+                <Button type="button" variant="outline" onClick={() => void runClip()} disabled={clipBusy}>
+                  {clipBusy ? "CLIP…" : "Œil local CLIP"}
+                </Button>
+              </WithHelp>
               {clipNote ? <span className="text-xs text-muted-foreground">{clipNote}</span> : null}
             </div>
             {clipNeighbors.length ? (
@@ -464,20 +515,36 @@ export function MorphoLab() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Moondream</CardTitle>
+            <CardTitle>
+              <TitleHelp
+                help={{
+                  title: "Moondream",
+                  body: "Vision locale (Moondream2) : caption, questions de forme, ancrage. Premier clic installe torch/transformers si besoin (~2 Go), puis charge le modèle.",
+                }}
+              >
+                Moondream
+              </TitleHelp>
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <Button type="button" onClick={() => void runVlm()} disabled={vlmBusy}>
-              {vlmBusy
-                ? vlmStatus?.phase === "installing"
-                  ? "Installation…"
-                  : "Analyse VLM…"
-                : vlmStatus?.loaded
-                  ? "Interroger"
-                  : vlmStatus?.available?.length
-                    ? "Charger / interroger"
-                    : "Installer et charger"}
-            </Button>
+            <WithHelp
+              help={{
+                title: "Interroger Moondream",
+                body: "Lance le chargement du VLM si besoin, puis décrit le glyphe courant (caption, requêtes, score d’ancrage). Sans API, la caption géométrique du lexique reste affichée.",
+              }}
+            >
+              <Button type="button" onClick={() => void runVlm()} disabled={vlmBusy}>
+                {vlmBusy
+                  ? vlmStatus?.phase === "installing"
+                    ? "Installation…"
+                    : "Analyse VLM…"
+                  : vlmStatus?.loaded
+                    ? "Interroger"
+                    : vlmStatus?.available?.length
+                      ? "Charger / interroger"
+                      : "Installer et charger"}
+              </Button>
+            </WithHelp>
             {!vlmBusy && !vlmStatus?.loaded && vlmStatus?.hint && !vlm?.error ? (
               <p className="text-xs text-muted-foreground">{vlmStatus.hint}</p>
             ) : null}
@@ -504,30 +571,69 @@ export function MorphoLab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Règles</CardTitle>
+            <CardTitle>
+              <TitleHelp
+                help={{
+                  title: "Règles",
+                  body: "QUAND ces motifs sont présents sur un glyphe, ALORS alerte + hypothèse. Les motifs se cochent ci-dessous, puis Ajouter. Brouillon reprend les motifs du glyphe courant.",
+                }}
+              >
+                Règles
+              </TitleHelp>
+            </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Input
-              value={ruleName}
-              onChange={(e) => setRuleName(e.target.value)}
-              aria-label="Nom de la règle"
-              className="sm:w-56"
-            />
-            <Button type="button" onClick={addRule} disabled={!ruleMotifs.length}>
-              Ajouter
-            </Button>
-            <Button type="button" variant="outline" onClick={draftFromCurrent}>
-              Brouillon depuis le glyphe
-            </Button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <LabelHelp
+              label="Nom"
+              help={{
+                title: "Nom de la règle",
+                body: "Libellé affiché dans le journal et le bandeau Morpho quand la règle se déclenche.",
+              }}
+            >
+              <Input
+                value={ruleName}
+                onChange={(e) => setRuleName(e.target.value)}
+                aria-label="Nom de la règle"
+                className="sm:w-56"
+              />
+            </LabelHelp>
+            <WithHelp
+              help={{
+                title: "Ajouter",
+                body: "Crée une règle active : QUAND tous les motifs cochés ALORS hypothese + alerte. Cochez au moins un motif.",
+              }}
+            >
+              <Button type="button" onClick={addRule} disabled={!ruleMotifs.length}>
+                Ajouter
+              </Button>
+            </WithHelp>
+            <WithHelp
+              help={{
+                title: "Brouillon depuis le glyphe",
+                body: "Génère une règle à partir des motifs du tirage affiché, sans passer par les cases à cocher.",
+              }}
+            >
+              <Button type="button" variant="outline" onClick={draftFromCurrent}>
+                Brouillon depuis le glyphe
+              </Button>
+            </WithHelp>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
+              Motifs
+              <HelpTip
+                title="Motifs de la condition"
+                body="Cochez les formes que la règle exige toutes (ET). Cliquez de nouveau pour retirer. Ces pastilles ne changent pas le glyphe, seulement la future règle."
+              />
+            </span>
             {MOTIF_IDS.map((id) => {
               const on = ruleMotifs.includes(id)
               return (
                 <button
                   key={id}
                   type="button"
+                  title={`${on ? "Retirer" : "Ajouter"} « ${labelOf(id)} » à la condition`}
                   onClick={() =>
                     setRuleMotifs((cur) => (on ? cur.filter((x) => x !== id) : [...cur, id]))
                   }
@@ -550,9 +656,16 @@ export function MorphoLab() {
                     {rule.actions.map((a) => a.type).join(", ")}
                   </p>
                 </div>
-                <Button type="button" variant="ghost" size="sm" onClick={() => removeRule(rule.id)}>
-                  Retirer
-                </Button>
+                <WithHelp
+                  help={{
+                    title: "Retirer la règle",
+                    body: `Supprime « ${rule.name} » du navigateur et, si l’API Morpho est joignable, du stockage serveur.`,
+                  }}
+                >
+                  <Button type="button" variant="ghost" size="sm" onClick={() => removeRule(rule.id)}>
+                    Retirer
+                  </Button>
+                </WithHelp>
               </li>
             ))}
           </ul>
@@ -566,18 +679,25 @@ export function MorphoLab() {
                   </li>
                 ))}
               </ul>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="mt-1"
-                onClick={() => {
-                  persistFirings([])
-                  setFirings([])
+              <WithHelp
+                help={{
+                  title: "Vider le journal",
+                  body: "Efface les déclenchements enregistrés (bandeau Morpho compris) sans supprimer les règles.",
                 }}
               >
-                Vider le journal
-              </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1"
+                  onClick={() => {
+                    persistFirings([])
+                    setFirings([])
+                  }}
+                >
+                  Vider le journal
+                </Button>
+              </WithHelp>
             </div>
           ) : null}
         </CardContent>
@@ -585,7 +705,16 @@ export function MorphoLab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Anticipation</CardTitle>
+            <CardTitle>
+              <TitleHelp
+                help={{
+                  title: "Anticipation",
+                  body: "Compare P(forme suivante | contextes proches) à une loi nulle simulée. Un écart n’est pas un pronostic : les tirages restent indépendants.",
+                }}
+              >
+                Anticipation
+              </TitleHelp>
+            </CardTitle>
         </CardHeader>
         <CardContent>
           {anticipation && anticipation.ok ? (

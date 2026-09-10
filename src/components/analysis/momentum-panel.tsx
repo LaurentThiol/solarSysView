@@ -9,6 +9,7 @@ import {
   ChartTooltipContent,
   Disclaimer,
   OverlayToggle,
+  HELP,
   Stat,
   formatStat,
   lineConfig,
@@ -69,11 +70,11 @@ export function MomentumPanel({
         <Stat label="CCI" value={formatStat(tech.last.cci)} />
       </section>
       <div className="flex flex-wrap gap-2">
-        <OverlayToggle label="RSI" on={showRsi} onClick={() => setShowRsi(!showRsi)} />
-        <OverlayToggle label="MACD" on={showMacd} onClick={() => setShowMacd(!showMacd)} />
-        <OverlayToggle label="Stochastique" on={showStoch} onClick={() => setShowStoch(!showStoch)} />
-        <OverlayToggle label="CCI" on={showCci} onClick={() => setShowCci(!showCci)} />
-        <OverlayToggle label="Williams %R" on={showWr} onClick={() => setShowWr(!showWr)} />
+        <OverlayToggle label="RSI" on={showRsi} onClick={() => setShowRsi(!showRsi)} help={HELP.rsi} />
+        <OverlayToggle label="MACD" on={showMacd} onClick={() => setShowMacd(!showMacd)} help={HELP.macd} />
+        <OverlayToggle label="Stochastique" on={showStoch} onClick={() => setShowStoch(!showStoch)} help={HELP.stoch} />
+        <OverlayToggle label="CCI" on={showCci} onClick={() => setShowCci(!showCci)} help={HELP.cci} />
+        <OverlayToggle label="Williams %R" on={showWr} onClick={() => setShowWr(!showWr)} help={HELP.wr} />
       </div>
       {tech.divergences.length ? (
         <p className="text-sm">

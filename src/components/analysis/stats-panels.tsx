@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { Bar, BarChart, CartesianGrid, Scatter, ScatterChart, XAxis, YAxis } from "recharts"
 
+import { TitleHelp, WithHelp } from "@/components/help"
 import {
   ChartContainer,
   ChartTooltip,
@@ -107,16 +108,32 @@ export function InferencePanel({
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Monte-Carlo des records (fenêtre)</CardTitle>
+          <CardTitle>
+            <TitleHelp
+              help={{
+                title: "Monte-Carlo des records",
+                body: "Simule 400 historiques synthétiques sous tirages indépendants, puis compare vos records (fréquence max, retard max) à cette loi nulle.",
+              }}
+            >
+              Monte-Carlo des records (fenêtre)
+            </TitleHelp>
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-sm">
-          <button
-            type="button"
-            onClick={onMc}
-            className="w-fit rounded-md border border-border px-3 py-1 text-xs"
+          <WithHelp
+            help={{
+              title: "Lancer 400 historiques synthétiques",
+              body: "Appelle l’API Python /analysis/montecarlo (400 simulations, seed 0) sur la fenêtre courante. Si l’API est absente, le reste du labo continue sur les tirages chargés.",
+            }}
           >
-            Lancer 400 historiques synthétiques (API Python)
-          </button>
+            <button
+              type="button"
+              onClick={onMc}
+              className="w-fit rounded-md border border-border px-3 py-1 text-xs"
+            >
+              Lancer 400 historiques synthétiques (API Python)
+            </button>
+          </WithHelp>
           {mcError ? <p className="text-muted-foreground">{mcError}</p> : null}
           {mc?.max_frequency ? (
             <p>

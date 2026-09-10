@@ -20,6 +20,7 @@ import { SystemPanel } from "@/components/analysis/system-panel"
 import { TrendPanel } from "@/components/analysis/trend-panel"
 import { ViewPanel } from "@/components/analysis/view-panel"
 import { VolatilityPanel } from "@/components/analysis/volatility-panel"
+import { HelpTip, LabelHelp, type HelpCopy } from "@/components/help"
 import { WindowBar } from "@/components/analysis/window-bar"
 import { Input } from "@/components/ui/input"
 import {
@@ -46,25 +47,137 @@ import { techPack } from "@/lib/ta"
 import { useDraws } from "@/lib/use-draws"
 
 const TECH_TABS = [
-  { id: "vue", label: "Vue" },
-  { id: "tendance", label: "Tendance" },
-  { id: "momentum", label: "Momentum" },
-  { id: "volatilite", label: "Volatilité" },
-  { id: "niveaux", label: "Niveaux" },
-  { id: "figures", label: "Figures" },
-  { id: "flux", label: "Flux" },
-  { id: "moyennes", label: "Moyennes" },
-  { id: "systeme", label: "Système" },
+  {
+    id: "vue",
+    label: "Vue",
+    help: {
+      title: "Vue",
+      body: "Vue d’ensemble de la variable choisie : stats, profil glissant, série et chandeliers. Tous les onglets lisent la même fenêtre.",
+    },
+  },
+  {
+    id: "tendance",
+    label: "Tendance",
+    help: {
+      title: "Tendance",
+      body: "ADX / DMI, Supertrend, PSAR, Aroon et structure de Dow sur la série de la fenêtre.",
+    },
+  },
+  {
+    id: "momentum",
+    label: "Momentum",
+    help: {
+      title: "Momentum",
+      body: "RSI, MACD, stochastique, CCI et Williams %R. Oscillateurs de la variable, pas un pronostic.",
+    },
+  },
+  {
+    id: "volatilite",
+    label: "Volatilité",
+    help: {
+      title: "Volatilité",
+      body: "Bollinger, Keltner, Donchian, ATR et squeezes autour de la série.",
+    },
+  },
+  {
+    id: "niveaux",
+    label: "Niveaux",
+    help: {
+      title: "Niveaux",
+      body: "Ichimoku, Fibonacci, pivots et supports / résistances détectés sur la fenêtre.",
+    },
+  },
+  {
+    id: "figures",
+    label: "Figures",
+    help: {
+      title: "Figures",
+      body: "Chandeliers japonais et figures chartistes (heuristique ZigZag). Pédagogique, pas un signal de jeu.",
+    },
+  },
+  {
+    id: "flux",
+    label: "Flux",
+    help: {
+      title: "Flux",
+      body: "OBV, ADL, MFI, VWAP transposés à l’activité des tirages (pas un volume de marché).",
+    },
+  },
+  {
+    id: "moyennes",
+    label: "Moyennes",
+    help: {
+      title: "Moyennes",
+      body: "SMA, EMA, WMA, HMA et VWMA sur la période X, distincte de la plage calendaire.",
+    },
+  },
+  {
+    id: "systeme",
+    label: "Système",
+    help: {
+      title: "Système",
+      body: "Backtest Donchian + ADX, walk-forward et analogie de sizing (nombre de grilles). Squelette pédagogique.",
+    },
+  },
 ] as const
 
 const DRAW_TABS = [
-  { id: "numeros", label: "Numéros" },
-  { id: "parite", label: "Pair / impair" },
-  { id: "hasard", label: "Hasard" },
-  { id: "bayes", label: "Bayésien" },
-  { id: "dependence", label: "Dépendance" },
-  { id: "proba", label: "Probabilités" },
-  { id: "memo", label: "Mémo" },
+  {
+    id: "numeros",
+    label: "Numéros",
+    help: {
+      title: "Numéros",
+      body: "Grille 1–50 : cliquer un numéro pour voir sorties, retard, IC Wilson, puis envoyer présence ou retard vers Vue.",
+    },
+  },
+  {
+    id: "parite",
+    label: "Pair / impair",
+    help: {
+      title: "Pair / impair",
+      body: "Composition de chaque tirage vs la loi hypergéométrique (25 pairs / 25 impairs dans l’urne).",
+    },
+  },
+  {
+    id: "hasard",
+    label: "Hasard",
+    help: {
+      title: "Hasard",
+      body: "χ² d’adéquation, intervalles de Wilson, Monte-Carlo des records de fréquence et de retard.",
+    },
+  },
+  {
+    id: "bayes",
+    label: "Bayésien",
+    help: {
+      title: "Bayésien",
+      body: "Prédictive beta-binomiale P(boule au prochain tirage) avec prior uniforme. Les barres se resserrent vers 10 %.",
+    },
+  },
+  {
+    id: "dependence",
+    label: "Dépendance",
+    help: {
+      title: "Dépendance",
+      body: "Lift des paires, backtest « 5 plus chauds » et nuage somme × étendue. Toujours sous l’hypothèse d’indépendance.",
+    },
+  },
+  {
+    id: "proba",
+    label: "Probabilités",
+    help: {
+      title: "Probabilités",
+      body: "Rangs officiels 5/50 + 2/12. Indépendant de la fenêtre temporelle (139 838 160 grilles).",
+    },
+  },
+  {
+    id: "memo",
+    label: "Mémo",
+    help: {
+      title: "Mémo",
+      body: "Aide-mémoire des périodes d’indicateurs et des biais (sur-optimisation, look-ahead, indépendance des tirages).",
+    },
+  },
 ] as const
 
 type TabId = (typeof TECH_TABS)[number]["id"] | (typeof DRAW_TABS)[number]["id"]
@@ -75,7 +188,7 @@ function TabRow({
   setTab,
   label,
 }: {
-  items: readonly { id: string; label: string }[]
+  items: readonly { id: string; label: string; help: HelpCopy }[]
   tab: string
   setTab: (id: TabId) => void
   label: string
@@ -83,18 +196,20 @@ function TabRow({
   return (
     <nav className="flex flex-wrap gap-2" aria-label={label}>
       {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          onClick={() => setTab(item.id as TabId)}
-          className={`rounded-full border px-3 py-1 text-xs ${
-            tab === item.id
-              ? "border-primary bg-primary/15 text-foreground"
-              : "border-border text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {item.label}
-        </button>
+        <span key={item.id} className="inline-flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setTab(item.id as TabId)}
+            className={`rounded-full border px-3 py-1 text-xs ${
+              tab === item.id
+                ? "border-primary bg-primary/15 text-foreground"
+                : "border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {item.label}
+          </button>
+          <HelpTip {...item.help} />
+        </span>
       ))}
     </nav>
   )
@@ -242,43 +357,72 @@ export function AnalysisLab() {
         onCompare={setCompareOn}
       />
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap">
-        <Select value={era} onValueChange={(v) => setEra(v as "current" | "all")}>
-          <SelectTrigger className="w-full sm:w-56" aria-label="Ère">
-            <span className="flex flex-1 text-left">
-              {era === "all" ? "Archive : tout l’historique" : "Archive : formule actuelle (12 ★)"}
-            </span>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="current">Archive : formule actuelle (12 ★)</SelectItem>
-            <SelectItem value="all">Archive : tout l’historique</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={variable} onValueChange={(v) => setVariable(v as VariableName)}>
-          <SelectTrigger className="w-full sm:w-56" aria-label="Variable">
-            <span className="flex flex-1 text-left">{VARIABLE_LABELS[variable]}</span>
-          </SelectTrigger>
-          <SelectContent>
-            {VARIABLE_NAMES.map((name) => (
-              <SelectItem key={name} value={name}>
-                {VARIABLE_LABELS[name]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
+        <LabelHelp
+          label="Archive"
+          help={{
+            title: "Ère",
+            body: "Formule actuelle = pool de 12 étoiles. Tout l’historique mélange les anciennes formules (étoile 1–9 puis 1–11) : à réserver aux comparaisons longues.",
+          }}
+        >
+          <Select value={era} onValueChange={(v) => setEra(v as "current" | "all")}>
+            <SelectTrigger className="w-full sm:w-56" aria-label="Ère">
+              <span className="flex flex-1 text-left">
+                {era === "all" ? "Archive : tout l’historique" : "Archive : formule actuelle (12 ★)"}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="current">Archive : formule actuelle (12 ★)</SelectItem>
+              <SelectItem value="all">Archive : tout l’historique</SelectItem>
+            </SelectContent>
+          </Select>
+        </LabelHelp>
+        <LabelHelp
+          label="Variable"
+          help={{
+            title: "Variable",
+            body: "Grandeur tracée dans Vue / Tendance / etc. : somme, étendue, parité, haut-bas, consécutifs, étoiles, centroïde, retard ou présence d’une boule.",
+          }}
+        >
+          <Select value={variable} onValueChange={(v) => setVariable(v as VariableName)}>
+            <SelectTrigger className="w-full sm:w-56" aria-label="Variable">
+              <span className="flex flex-1 text-left">{VARIABLE_LABELS[variable]}</span>
+            </SelectTrigger>
+            <SelectContent>
+              {VARIABLE_NAMES.map((name) => (
+                <SelectItem key={name} value={name}>
+                  {VARIABLE_LABELS[name]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </LabelHelp>
         {(variable === "delay" || variable === "hit") && (
-          <Input
-            type="number"
-            min={1}
-            max={50}
-            value={ball}
-            onChange={(e) => setBall(Number(e.target.value) || 7)}
-            aria-label="Boule"
-            className="w-24"
-          />
+          <LabelHelp
+            label="Boule"
+            help={{
+              title: "Boule",
+              body: "Numéro 1–50 utilisé quand la variable est « Retard d’une boule » ou « Présence d’une boule ». L’onglet Numéros peut le remplir pour vous.",
+            }}
+          >
+            <Input
+              type="number"
+              min={1}
+              max={50}
+              value={ball}
+              onChange={(e) => setBall(Number(e.target.value) || 7)}
+              aria-label="Boule"
+              className="w-24"
+            />
+          </LabelHelp>
         )}
-        <label className="flex items-center gap-2 text-sm">
-          X
+        <LabelHelp
+          label="X"
+          help={{
+            title: "Période X",
+            body: "Période des indicateurs (SMA, RSI, Bollinger…). Ce n’est pas la plage calendaire : celle-ci se règle dans la barre Fenêtre, plus haut.",
+          }}
+        >
           <Input
             type="number"
             min={2}
@@ -288,13 +432,21 @@ export function AnalysisLab() {
             className="w-20"
             aria-label="Période des indicateurs"
           />
-        </label>
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filtrer par numéros"
-          className="sm:w-56"
-        />
+        </LabelHelp>
+        <LabelHelp
+          label="Filtre"
+          help={{
+            title: "Filtrer par numéros",
+            body: "Ne garde dans la fenêtre que les tirages contenant ces boules/étoiles (espace-séparés). Les stats et graphes se recalculent sur ce sous-ensemble.",
+          }}
+        >
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filtrer par numéros"
+            className="sm:w-56"
+          />
+        </LabelHelp>
       </div>
 
       <TabRow items={TECH_TABS} tab={tab} setTab={setTab} label="Analyse technique" />

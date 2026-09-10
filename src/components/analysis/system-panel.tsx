@@ -12,6 +12,7 @@ import {
   formatStat,
   lineConfig,
 } from "@/components/analysis/shared"
+import { LabelHelp } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { kellyFraction, positionSize, techPack } from "@/lib/ta"
@@ -100,43 +101,63 @@ export function SystemPanel({ tech }: { tech: Tech }) {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex flex-wrap gap-3">
-            <label className="text-xs text-muted-foreground">
-              Capital €
+            <LabelHelp
+              label="Capital €"
+              help={{
+                title: "Capital",
+                body: "Bankroll analogique en euros. Sert à calculer un nombre de grilles : (capital × risque) / |entrée − stop|.",
+              }}
+            >
               <Input
                 type="number"
                 value={capital}
                 onChange={(e) => setCapital(Number(e.target.value) || 0)}
-                className="mt-1 w-28"
+                className="w-28"
               />
-            </label>
-            <label className="text-xs text-muted-foreground">
-              Risque
+            </LabelHelp>
+            <LabelHelp
+              label="Risque"
+              help={{
+                title: "Risque",
+                body: "Fraction du capital risquée par « trade » (0,01 = 1 %). Usuel : 1–2 %. Ici transposé en nombre de grilles, pas un lot d’actions.",
+              }}
+            >
               <Input
                 type="number"
                 step="0.005"
                 value={risk}
                 onChange={(e) => setRisk(Number(e.target.value) || 0)}
-                className="mt-1 w-24"
+                className="w-24"
               />
-            </label>
-            <label className="text-xs text-muted-foreground">
-              Entrée (analogie)
+            </LabelHelp>
+            <LabelHelp
+              label="Entrée (analogie)"
+              help={{
+                title: "Entrée",
+                body: "Prix d’entrée analogique. L’écart avec le stop donne la « taille du risque » unitaire pour convertir le capital en grilles.",
+              }}
+            >
               <Input
                 type="number"
                 value={entry}
                 onChange={(e) => setEntry(Number(e.target.value) || 0)}
-                className="mt-1 w-24"
+                className="w-24"
               />
-            </label>
-            <label className="text-xs text-muted-foreground">
-              Stop
+            </LabelHelp>
+            <LabelHelp
+              label="Stop"
+              help={{
+                title: "Stop",
+                body: "Niveau de stop analogique. |entrée − stop| est le dénominateur du sizing. Ce n’est pas un conseil de jeu.",
+              }}
+            >
               <Input
                 type="number"
                 value={stop}
                 onChange={(e) => setStop(Number(e.target.value) || 0)}
-                className="mt-1 w-24"
+                className="w-24"
               />
-            </label>
+            </LabelHelp>
           </div>
           <p className="text-sm">
             Grilles = (capital × risque) / |entrée − stop| → <strong>{grids}</strong>

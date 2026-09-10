@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react"
 
+import { HelpTip, WithHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -77,18 +78,34 @@ export function AdminGate({ children }: { children: ReactNode }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex max-w-md flex-col gap-3">
-          <Input
-            type="password"
-            placeholder="ADMIN_PASSWORD"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void login()
+          <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              Mot de passe admin
+              <HelpTip
+                title="Mot de passe admin"
+                body="Saisissez ADMIN_PASSWORD (défini dans .env). Entrée ou le bouton Entrer valide. En local sur 127.0.0.1, le mot de passe peut être facultatif."
+              />
+            </span>
+            <Input
+              type="password"
+              placeholder="ADMIN_PASSWORD"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void login()
+              }}
+            />
+          </label>
+          <WithHelp
+            help={{
+              title: "Entrer",
+              body: "Vérifie le mot de passe auprès de /api/admin/login puis affiche la page protégée.",
             }}
-          />
-          <Button type="button" onClick={() => void login()}>
-            Entrer
-          </Button>
+          >
+            <Button type="button" onClick={() => void login()}>
+              Entrer
+            </Button>
+          </WithHelp>
           {error ? <p className="text-sm text-red-300">{error}</p> : null}
         </CardContent>
       </Card>
