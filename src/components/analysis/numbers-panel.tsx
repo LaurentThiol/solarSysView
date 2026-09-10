@@ -120,7 +120,7 @@ export function NumbersPanel({
         <Stat label="Retard" value={`${selected.delayDraws} tirage${selected.delayDraws > 1 ? "s" : ""}`} />
       </section>
 
-      <Card>
+      <Card className="min-w-0 max-w-full overflow-visible">
         <CardHeader className="gap-3">
           <CardTitle>Grille 1–50</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -138,8 +138,8 @@ export function NumbersPanel({
             ))}
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-10 gap-1">
+        <CardContent className="min-w-0">
+          <div className="euromillions-ball-grid">
             {board.balls.map((row) => {
               const muted = !matchesFilter(row, filter)
               return (
@@ -147,12 +147,12 @@ export function NumbersPanel({
                   key={row.value}
                   type="button"
                   aria-pressed={row.value === selected.value}
-                  aria-label={`Numéro ${row.value}, ${row.even ? "pair" : "impair"}, ${row.count} sorties`}
+                  aria-label={`Numéro ${row.value}, ${row.even ? "pair" : "impair"}, ${row.count} sortie${row.count === 1 ? "" : "s"}`}
                   onClick={() => onSelectBall(row.value)}
                   style={heatStyle(row.count, maxCount, row.even)}
                   className={cn(
-                    "flex aspect-square items-center justify-center rounded-md text-xs font-semibold tabular-nums sm:text-sm",
-                    row.value === selected.value && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+                    "flex aspect-square w-full min-w-0 max-w-full items-center justify-center overflow-hidden rounded-md p-0 text-[10px] font-semibold tabular-nums sm:text-sm",
+                    row.value === selected.value && "ring-2 ring-primary ring-offset-1 ring-offset-background",
                     muted && "opacity-25"
                   )}
                 >

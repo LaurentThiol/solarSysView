@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function AnalysePage() {
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
       <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         <h1 className="text-3xl font-semibold tracking-tight">Analyse · laboratoire</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -20,7 +20,7 @@ export default function AnalysePage() {
           calendaire.
         </p>
       </div>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-12 sm:px-6">
+      <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 pb-12 sm:px-6">
         <AnalysisLab />
       </main>
       <footer className="border-t border-border">

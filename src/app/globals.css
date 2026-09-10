@@ -128,3 +128,20 @@
     @apply font-sans;
   }
 }
+
+/* EuroMillions 1–50: 5 columns by default so the last numbers stay visible in
+   narrow panes; 10 columns from ~72rem when there is room. minmax(0, 1fr)
+   prevents flex/grid children from overflowing and clipping the last column. */
+.euromillions-ball-grid {
+  display: grid;
+  width: 100%;
+  max-width: 100%;
+  gap: 0.25rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (min-width: 72rem) {
+  .euromillions-ball-grid {
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+  }
+}
