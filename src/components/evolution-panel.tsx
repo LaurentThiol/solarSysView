@@ -16,10 +16,12 @@ import {
   SelectTrigger,
 } from "@/components/ui/select"
 import {
+  DRAWS,
   archiveSummary,
   expectedNumberHits,
   expectedStarHits,
   hottest,
+  mergeDraws,
   monthOf,
   monthsPresent,
   numberCoverage,
@@ -54,7 +56,8 @@ function EvolutionContent() {
   const [month, setMonth] = useState("all")
   const { draws, source, loading } = useDraws(period)
   const lastWindow = isLastWindow(period)
-  const monthOptions = useMemo(() => monthsPresent(draws), [draws])
+  const archive = useMemo(() => mergeDraws(draws, DRAWS), [draws])
+  const monthOptions = useMemo(() => monthsPresent(archive), [archive])
   const activeMonth = useMemo(() => {
     if (lastWindow) return "all"
     if (month !== "all" && !monthOptions.some((item) => item.value === month)) {
@@ -64,15 +67,18 @@ function EvolutionContent() {
   }, [lastWindow, month, monthOptions])
 
   const filtered = useMemo(() => {
-    const scoped =
-      period === "last_20"
-        ? takeLastDraws(draws, 20)
-        : period === "last_50"
-          ? takeLastDraws(draws, 50)
-          : draws
+    let scoped = archive
+    if (period === "last_20") scoped = takeLastDraws(archive, 20)
+    else if (period === "last_50") scoped = takeLastDraws(archive, 50)
+    else if (period === "year") {
+      const year = archive[0]?.date.slice(0, 4)
+      scoped = year
+        ? archive.filter((draw) => draw.date.startsWith(year))
+        : archive
+    }
     if (activeMonth === "all") return scoped
     return scoped.filter((draw) => monthOf(draw.date) === activeMonth)
-  }, [draws, period, activeMonth])
+  }, [archive, period, activeMonth])
 
   const numberBoard = useMemo(() => numberFrequencyTable(filtered), [filtered])
   const starBoard = useMemo(() => starFrequencyTable(filtered), [filtered])

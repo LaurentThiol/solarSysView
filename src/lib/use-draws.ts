@@ -34,20 +34,34 @@ export function useDraws(window: DrawWindow = "year") {
         const response = await fetch(`/api/draws${queryFor(window)}`, {
           cache: "no-store",
         })
-        if (!response.ok) return
+        if (!response.ok) {
+          if (!cancelled) {
+            setDraws(seedDraws(window, DRAWS))
+            setSource("json")
+          }
+          return
+        }
         const payload = (await response.json()) as {
           ok?: boolean
           items?: Draw[]
           source?: string
         }
-        if (cancelled || !payload.ok || !payload.items?.length) return
+        if (cancelled) return
+        if (!payload.ok || !payload.items?.length) {
+          setDraws(seedDraws(window, DRAWS))
+          setSource("json")
+          return
+        }
         const items = [...payload.items].sort((a, b) =>
           b.date.localeCompare(a.date)
         )
         setDraws(seedDraws(window, items))
         setSource("neon")
       } catch {
-        // JSON local
+        if (!cancelled) {
+          setDraws(seedDraws(window, DRAWS))
+          setSource("json")
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }

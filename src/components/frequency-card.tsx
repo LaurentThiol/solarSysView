@@ -64,12 +64,7 @@ export function FrequencyCard({
                 <span className="font-medium tabular-nums">{item.value}</span>
                 <span className="text-right text-xs text-muted-foreground tabular-nums">
                   {item.count}×
-                  {showDelay ? (
-                    <>
-                      <br />
-                      {delayLabel(item.delayDraws)}
-                    </>
-                  ) : null}
+                  {showDelay ? ` · ${delayLabel(item.delayDraws)}` : ""}
                 </span>
               </li>
             ))}

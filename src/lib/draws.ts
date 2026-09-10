@@ -120,6 +120,13 @@ export function toCsv(draws: Draw[]) {
   return `${header}\n${rows.join("\n")}\n`
 }
 
+export function mergeDraws(primary: Draw[], fallback: Draw[]) {
+  const byDate = new Map<string, Draw>()
+  for (const draw of fallback) byDate.set(draw.date, draw)
+  for (const draw of primary) byDate.set(draw.date, draw)
+  return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date))
+}
+
 export function takeLastDraws(draws: Draw[], n: number) {
   return [...draws]
     .sort((a, b) => b.date.localeCompare(a.date))
