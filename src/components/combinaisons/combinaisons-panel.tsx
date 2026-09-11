@@ -292,6 +292,14 @@ function writeSessionGrids(items: SavedGrid[]) {
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(items))
 }
 
+function friendlyGridsError(raw?: string) {
+  const text = raw?.trim() || "API grilles indisponible"
+  if (/fetch failed|ECONNREFUSED|injoignable|non configurée/i.test(text)) {
+    return "API grilles indisponible"
+  }
+  return text
+}
+
 function BallPicker({
   items,
   selected,
@@ -435,7 +443,7 @@ export function CombinaisonsPanel() {
         if (!response.ok || !Array.isArray(payload.items)) {
           setSaved(readSessionGrids())
           setGridsSource("session")
-          setGridsError(payload.error ?? "API grilles indisponible")
+          setGridsError(friendlyGridsError(payload.error))
           return
         }
         setSaved(payload.items)
@@ -445,7 +453,7 @@ export function CombinaisonsPanel() {
         if (cancelled) return
         setSaved(readSessionGrids())
         setGridsSource("session")
-        setGridsError("API grilles indisponible")
+        setGridsError(friendlyGridsError("API grilles indisponible"))
       }
     })()
     return () => {
@@ -854,22 +862,22 @@ export function CombinaisonsPanel() {
             <ul className="flex flex-col gap-3">
               {proposalRows.map((row) => (
                 <li key={`${row.grid.numbers.join("-")}-${row.grid.stars.join("-")}`}>
-                  <button
-                    type="button"
-                    onClick={() => loadGrid(row.grid)}
-                    className="flex w-full flex-col gap-2 rounded-lg border border-border px-3 py-2 text-left hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <DrawBalls numbers={row.grid.numbers} stars={row.grid.stars} />
-                    <span className="text-sm tabular-nums">
-                      <TitleHelp help={HELP.proposalP}>
+                  <HelpWrap help={HELP.proposalP}>
+                    <button
+                      type="button"
+                      onClick={() => loadGrid(row.grid)}
+                      className="flex w-full flex-col gap-2 rounded-lg border border-border px-3 py-2 text-left hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <DrawBalls numbers={row.grid.numbers} stars={row.grid.stars} />
+                      <span className="text-sm tabular-nums">
                         P̂ {formatPct(row.empirical.p, 1)}
-                      </TitleHelp>
-                      <span className="text-muted-foreground">
-                        {" "}
-                        · {row.empirical.wins}/{row.empirical.n}
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · {row.empirical.wins}/{row.empirical.n}
+                        </span>
                       </span>
-                    </span>
-                  </button>
+                    </button>
+                  </HelpWrap>
                 </li>
               ))}
             </ul>
