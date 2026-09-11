@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
-import { HelpTip, LabelHelp, TitleHelp } from "@/components/help"
+import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { sma } from "@/lib/analysis"
 import {
@@ -92,6 +92,99 @@ const MODE_KEYS: Record<DrawChartMode, SeriesKey[]> = {
   eachNumber: ["n1", "n2", "n3", "n4", "n5"],
   sumStars: ["sumStars"],
   eachStar: ["e1", "e2"],
+}
+
+const TITLE_HELP: Record<DrawChartMode, HelpCopy> = {
+  sumBoth: {
+    title: "Évolution dans le temps",
+    body: "Chaque point est un tirage. Le mode Sommes (relatif) superpose numéros et étoiles sur 0–100 %. Sur 20 ou 50 tirages la courbe se lit mieux. La SMA (5 ou 10) lisse la somme ; ce n’est pas un signal de jeu.",
+  },
+  sumNumbers: {
+    title: "Évolution dans le temps",
+    body: "Chaque point est un tirage. Sur 20 ou 50 tirages la courbe se lit mieux. La SMA (5 ou 10) lisse la somme ; ce n’est pas un signal de jeu.",
+  },
+  eachNumber: {
+    title: "n1 à n5 — statistiques d’ordre",
+    wide: true,
+    body: `n1 à n5 sont les 5 boules du tirage EuroMillions, triées du plus petit au plus grand. Ce n’est pas l’ordre de sortie des boules.
+
+n1 = plus petit, n2 = 2ᵉ plus petit, n3 = médian, n4 = 2ᵉ plus grand, n5 = plus grand. Exemple : {12, 41, 7, 28, 19} → n1 = 7, n2 = 12, n3 = 19, n4 = 28, n5 = 41.
+
+Chaque point est un tirage, en ordre chronologique. L’axe Y va de 1 à 50. Aucun lissage : la courbe relie les rangs d’un tirage au suivant. C’est pour cela que n1 reste bas et n5 haut.
+
+Les min / max / moy. sous le graphe décrivent chaque série sur la fenêtre affichée, pas un tirage isolé.`,
+  },
+  sumStars: {
+    title: "Évolution dans le temps",
+    body: "Chaque point est un tirage. La courbe est la somme des 2 étoiles. La SMA lisse cette somme ; ce n’est pas un signal de jeu.",
+  },
+  eachStar: {
+    title: "e1 et e2 — statistiques d’ordre",
+    wide: true,
+    body: `e1 et e2 sont les 2 étoiles du tirage, triées du plus petit au plus grand — pas l’ordre de sortie.
+
+e1 = plus petite étoile, e2 = plus grande. L’axe Y va de 1 à 12. Les min / max / moy. portent sur la fenêtre affichée.`,
+  },
+}
+
+const SERIES_HELP: Record<SeriesKey, HelpCopy> = {
+  relNumbers: {
+    title: "Somme numéros",
+    body: "Somme des 5 boules, tracée en % de l’échelle choisie. Cliquez la pastille pour masquer la courbe.",
+  },
+  relStars: {
+    title: "Somme étoiles",
+    body: "Somme des 2 étoiles, tracée en % de l’échelle choisie. Cliquez la pastille pour masquer la courbe.",
+  },
+  sumNumbers: {
+    title: "Somme",
+    body: "Somme des 5 boules du tirage (typiquement 80–180). Cliquez la pastille pour masquer la courbe.",
+  },
+  n1: {
+    title: "n1 — plus petit numéro",
+    body: "Plus petit des 5 numéros du tirage, après tri croissant. Ce n’est pas la première boule sortie.\n\nCliquez la pastille pour afficher ou masquer la courbe.",
+  },
+  n2: {
+    title: "n2 — 2ᵉ plus petit",
+    body: "Deuxième plus petit des 5 numéros du tirage (ordre croissant), pas la 2ᵉ boule sortie.\n\nCliquez la pastille pour afficher ou masquer la courbe.",
+  },
+  n3: {
+    title: "n3 — médian",
+    body: "Numéro du milieu des 5 boules, après tri croissant.\n\nCliquez la pastille pour afficher ou masquer la courbe.",
+  },
+  n4: {
+    title: "n4 — 2ᵉ plus grand",
+    body: "Deuxième plus grand des 5 numéros du tirage (ordre croissant).\n\nCliquez la pastille pour afficher ou masquer la courbe.",
+  },
+  n5: {
+    title: "n5 — plus grand numéro",
+    body: "Plus grand des 5 numéros du tirage, après tri croissant. Ce n’est pas la dernière boule sortie.\n\nCliquez la pastille pour afficher ou masquer la courbe.",
+  },
+  sumStars: {
+    title: "Somme étoiles",
+    body: "Somme des 2 étoiles du tirage. Cliquez la pastille pour masquer la courbe.",
+  },
+  e1: {
+    title: "e1 — plus petite étoile",
+    body: "Plus petite des 2 étoiles, après tri croissant — pas la première étoile sortie.\n\nCliquez la pastille pour afficher ou masquer la courbe.",
+  },
+  e2: {
+    title: "e2 — plus grande étoile",
+    body: "Plus grande des 2 étoiles, après tri croissant — pas la dernière étoile sortie.\n\nCliquez la pastille pour afficher ou masquer la courbe.",
+  },
+}
+
+const SERIES_SELECT_HELP: HelpCopy = {
+  title: "Série affichée",
+  wide: true,
+  body: `Sommes superposées (échelle relative 0–100 %), somme des 5 numéros, chacune des 5 boules, somme des 2 étoiles, ou chaque étoile. L’axe Y s’adapte (0–100 %, 1–50 ou 1–12).
+
+« Chaque numéro » trace n1 à n5 : les 5 boules triées du plus petit au plus grand, pas l’ordre de sortie. « Chaque étoile » fait de même pour e1 < e2.`,
+}
+
+const SUMMARY_HELP: HelpCopy = {
+  title: "min · max · moy.",
+  body: "Minimum, maximum et moyenne arithmétique de chaque série visible, calculés sur tous les tirages de la fenêtre — pas sur un seul tirage.",
 }
 
 function yDomain(mode: DrawChartMode): [number, number] | [number, "auto"] {
@@ -311,12 +404,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       <CardHeader className="gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-base font-medium">
-            <TitleHelp
-              help={{
-                title: "Évolution dans le temps",
-                body: "Chaque point est un tirage. Le mode Sommes (relatif) superpose numéros et étoiles sur 0–100 %. Sur 20 ou 50 tirages la courbe se lit mieux. La SMA (5 ou 10) lisse la somme ; ce n’est pas un signal de jeu.",
-              }}
-            >
+            <TitleHelp help={TITLE_HELP[mode]}>
               Évolution dans le temps
             </TitleHelp>
           </CardTitle>
@@ -350,13 +438,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                 </div>
               </div>
             ) : null}
-            <LabelHelp
-              label="Série"
-              help={{
-                title: "Série affichée",
-                body: "Sommes superposées (échelle relative), somme des 5 numéros, chacune des 5 boules, somme des 2 étoiles, ou chaque étoile. L’axe Y s’adapte (0–100 %, 1–50 ou 1–12).",
-              }}
-            >
+            <LabelHelp label="Série" help={SERIES_SELECT_HELP}>
               <Select
                 value={mode}
                 onValueChange={(value) => changeMode(value as DrawChartMode)}
@@ -535,10 +617,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     />
                     {chartConfig[key].label}
                   </button>
-                  <HelpTip
-                    title={chartConfig[key].label}
-                    body={`Cliquez la pastille pour afficher ou masquer la série « ${chartConfig[key].label} » sur le graphique.`}
-                  />
+                  <HelpTip {...SERIES_HELP[key]} />
                 </span>
               ))}
             </div>
@@ -550,15 +629,16 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               </p>
             ) : null}
             {summaries.length > 0 ? (
-              <p className="mt-3 flex flex-wrap items-center justify-center gap-x-1 gap-y-1 text-center text-xs text-muted-foreground">
-                <span>
+              <div className="mt-3 flex w-full flex-wrap items-start justify-center gap-1.5 text-center text-xs text-muted-foreground">
+                <p>
                   {summaries
                     .map(
                       (item) =>
                         `${item.label} : min ${item.min} · max ${item.max} · moy. ${formatStat(item.avg)}`
                     )
                     .join("  ·  ")}
-                </span>
+                </p>
+                <HelpTip {...SUMMARY_HELP} className="mt-0.5" />
                 {correlation != null ? (
                   <span className="inline-flex items-center gap-1">
                     <span>
@@ -570,7 +650,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     />
                   </span>
                 ) : null}
-              </p>
+              </div>
             ) : null}
           </>
         )}

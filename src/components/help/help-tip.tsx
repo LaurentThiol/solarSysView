@@ -22,18 +22,23 @@ export type HelpCopy = {
   title: string
   body: string
   items?: HelpItem[]
+  /** Wider popover for a multi-paragraph help sheet. */
+  wide?: boolean
 }
 
-const PANEL_WIDTH = 320
+const PANEL_NARROW = 320
+const PANEL_WIDE = 380
 
 function placePanel(
   button: HTMLElement,
-  panel: HTMLElement | null
+  panel: HTMLElement | null,
+  panelWidth: number,
+  maxCap: number
 ): { top: number; left: number; maxHeight: number } {
   const rect = button.getBoundingClientRect()
   const pad = 8
-  let left = rect.left + rect.width / 2 - PANEL_WIDTH / 2
-  left = Math.max(pad, Math.min(left, window.innerWidth - PANEL_WIDTH - pad))
+  let left = rect.left + rect.width / 2 - panelWidth / 2
+  left = Math.max(pad, Math.min(left, window.innerWidth - panelWidth - pad))
 
   const panelHeight = panel?.offsetHeight ?? 160
   const spaceBelow = window.innerHeight - rect.bottom - pad
@@ -46,11 +51,11 @@ function placePanel(
     return {
       top,
       left,
-      maxHeight: Math.min(480, Math.max(96, window.innerHeight - top - pad)),
+      maxHeight: Math.min(maxCap, Math.max(96, window.innerHeight - top - pad)),
     }
   }
 
-  const maxHeight = Math.min(480, Math.max(96, spaceAbove))
+  const maxHeight = Math.min(maxCap, Math.max(96, spaceAbove))
   const used = Math.min(panelHeight, maxHeight)
   return {
     top: Math.max(pad, rect.top - 6 - used),
@@ -59,10 +64,27 @@ function placePanel(
   }
 }
 
+function HelpBody({ body }: { body: string }) {
+  const paragraphs = body.trim().split(/\n\n+/)
+  return (
+    <>
+      {paragraphs.map((paragraph, index) => (
+        <p
+          key={index}
+          className="mt-1.5 text-xs leading-5 whitespace-pre-line text-muted-foreground"
+        >
+          {paragraph}
+        </p>
+      ))}
+    </>
+  )
+}
+
 export function HelpTip({
   title,
   body,
   items,
+  wide,
   className,
 }: HelpCopy & { className?: string }) {
   const uid = useId()
@@ -71,12 +93,14 @@ export function HelpTip({
   const btnRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const [coords, setCoords] = useState({ top: 0, left: 0, maxHeight: 320 })
+  const panelWidth = wide ? PANEL_WIDE : PANEL_NARROW
+  const maxCap = wide ? 520 : 480
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return
     const update = () => {
       if (!btnRef.current) return
-      setCoords(placePanel(btnRef.current, panelRef.current))
+      setCoords(placePanel(btnRef.current, panelRef.current, panelWidth, maxCap))
     }
     update()
     const frame = window.requestAnimationFrame(update)
@@ -87,7 +111,7 @@ export function HelpTip({
       window.removeEventListener("resize", update)
       window.removeEventListener("scroll", update, true)
     }
-  }, [open, title, body, items])
+  }, [open, title, body, items, panelWidth, maxCap])
 
   useEffect(() => {
     if (!open) return
@@ -137,13 +161,13 @@ export function HelpTip({
               style={{
                 top: coords.top,
                 left: coords.left,
-                width: PANEL_WIDTH,
+                width: panelWidth,
                 maxHeight: coords.maxHeight,
               }}
               className="fixed z-[200] overflow-auto rounded-lg border border-amber-400/35 bg-popover p-3 text-popover-foreground shadow-xl ring-1 ring-amber-400/20"
             >
               <p className="text-sm font-medium text-foreground">{title}</p>
-              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{body}</p>
+              <HelpBody body={body} />
               {items?.length ? (
                 <dl className="mt-2.5 space-y-2">
                   {items.map((item) => (
