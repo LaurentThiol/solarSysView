@@ -10,4 +10,5 @@ export {
   TitleHelp,
   WithHelp,
   type HelpCopy,
+  type HelpItem,
 } from "@/components/help/help-tip"

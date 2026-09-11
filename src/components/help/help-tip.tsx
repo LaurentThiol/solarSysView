@@ -13,12 +13,18 @@ import { createPortal } from "react-dom"
 import { useHelpMode } from "@/components/help/help-mode"
 import { cn } from "@/lib/utils"
 
+export type HelpItem = {
+  label: string
+  text: string
+}
+
 export type HelpCopy = {
   title: string
   body: string
+  items?: HelpItem[]
 }
 
-const PANEL_WIDTH = 300
+const PANEL_WIDTH = 320
 
 function placePanel(
   button: HTMLElement,
@@ -40,11 +46,11 @@ function placePanel(
     return {
       top,
       left,
-      maxHeight: Math.min(360, Math.max(96, window.innerHeight - top - pad)),
+      maxHeight: Math.min(480, Math.max(96, window.innerHeight - top - pad)),
     }
   }
 
-  const maxHeight = Math.min(360, Math.max(96, spaceAbove))
+  const maxHeight = Math.min(480, Math.max(96, spaceAbove))
   const used = Math.min(panelHeight, maxHeight)
   return {
     top: Math.max(pad, rect.top - 6 - used),
@@ -56,6 +62,7 @@ function placePanel(
 export function HelpTip({
   title,
   body,
+  items,
   className,
 }: HelpCopy & { className?: string }) {
   const uid = useId()
@@ -80,7 +87,7 @@ export function HelpTip({
       window.removeEventListener("resize", update)
       window.removeEventListener("scroll", update, true)
     }
-  }, [open, title, body])
+  }, [open, title, body, items])
 
   useEffect(() => {
     if (!open) return
@@ -137,6 +144,18 @@ export function HelpTip({
             >
               <p className="text-sm font-medium text-foreground">{title}</p>
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{body}</p>
+              {items?.length ? (
+                <dl className="mt-2.5 space-y-2">
+                  {items.map((item) => (
+                    <div key={item.label}>
+                      <dt className="text-xs font-medium text-foreground">{item.label}</dt>
+                      <dd className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                        {item.text}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
             </div>,
             document.body
           )

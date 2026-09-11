@@ -20,7 +20,7 @@ import { SystemPanel } from "@/components/analysis/system-panel"
 import { TrendPanel } from "@/components/analysis/trend-panel"
 import { ViewPanel } from "@/components/analysis/view-panel"
 import { VolatilityPanel } from "@/components/analysis/volatility-panel"
-import { HelpTip, LabelHelp, type HelpCopy } from "@/components/help"
+import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
 import { WindowBar } from "@/components/analysis/window-bar"
 import { Input } from "@/components/ui/input"
 import {
@@ -186,6 +186,33 @@ const DRAW_TABS = [
     },
   },
 ] as const
+
+const MEASURE_BAR_HELP: HelpCopy = {
+  title: "Bandeau de mesure",
+  body: "Il ne choisit pas quels tirages forment la fenêtre (c’est la barre Fenêtre de travail, plus haut) : il dit ce qu’on mesure sur cette fenêtre, et éventuellement quels tirages on garde. Tous les onglets d’analyse lisent ce même jeu.",
+  items: [
+    {
+      label: "Archive",
+      text: "Quelle base charger. Formule actuelle (12 ★) : uniquement les tirages avec le pool d’étoiles 1–12 (depuis 2016). Tout l’historique mélange les anciennes formules (étoiles 1–9 puis 1–11) ; à réserver aux comparaisons longues.",
+    },
+    {
+      label: "Variable",
+      text: "Grandeur envoyée aux onglets Vue, Tendance, Momentum, etc. Présence d’une boule : série 0/1 (sortie ou non à chaque tirage). Autres choix : somme, étendue, parité, haut-bas, consécutifs, étoiles, centroïde, retard.",
+    },
+    {
+      label: "Boule",
+      text: "Visible seulement pour Présence ou Retard. Numéro 1–50 suivi. L’onglet Numéros peut le remplir pour vous.",
+    },
+    {
+      label: "X",
+      text: "Période des indicateurs (SMA, RSI, Bollinger…). Ce n’est pas la plage calendaire : celle-ci se règle dans la barre Fenêtre, plus haut.",
+    },
+    {
+      label: "Filtre",
+      text: "Restreint la fenêtre aux tirages qui contiennent les boules/étoiles tapées (séparées par des espaces). Stats et graphes se recalculent sur ce sous-ensemble. Vide = toute la fenêtre.",
+    },
+  ],
+}
 
 type TabId = (typeof TECH_TABS)[number]["id"] | (typeof DRAW_TABS)[number]["id"]
 
@@ -367,7 +394,11 @@ export function AnalysisLab() {
         onCompare={setCompareOn}
       />
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
+        <p className="text-sm font-medium text-foreground">
+          <TitleHelp help={MEASURE_BAR_HELP}>Mesure</TitleHelp>
+        </p>
+        <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
         <LabelHelp
           label="Archive"
           help={{
@@ -488,6 +519,7 @@ export function AnalysisLab() {
             className="sm:w-56"
           />
         </LabelHelp>
+        </div>
       </div>
 
       <TabRow items={TECH_TABS} tab={tab} setTab={setTab} label="Analyse technique" />
