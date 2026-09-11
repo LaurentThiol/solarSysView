@@ -200,7 +200,7 @@ function CombinedTooltip({
             <span className="font-mono font-medium tabular-nums">
               {row.actual == null ? "—" : formatStat(row.actual)}
             </span>
-            <span className="w-10 text-right font-mono text-muted-foreground tabular-nums">
+            <span className="w-12 text-right font-mono text-muted-foreground tabular-nums">
               {row.rel == null ? "—" : formatPct(row.rel)}
             </span>
           </div>
@@ -322,13 +322,14 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           </CardTitle>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             {combined ? (
-              <LabelHelp
-                label="Échelle"
-                help={{
-                  title: "Échelle relative",
-                  body: "Plage possible : 0 % = minimum théorique (15 et 3), 100 % = maximum (240 et 23). 50 % = moyenne théorique. Fenêtre : chaque série est étirée entre son min et max de la période, pour comparer les formes.",
-                }}
-              >
+              <div className="flex flex-col gap-1">
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  Échelle
+                  <HelpTip
+                    title="Échelle relative"
+                    body="Plage possible : 0 % = minimum théorique (15 et 3), 100 % = maximum (240 et 23). 50 % = moyenne théorique. Fenêtre : chaque série est étirée entre son min et max de la période, pour comparer les formes."
+                  />
+                </span>
                 <div className="flex flex-wrap gap-1.5" role="group" aria-label="Échelle relative">
                   {SCALE_OPTIONS.map((item) => (
                     <button
@@ -347,7 +348,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     </button>
                   ))}
                 </div>
-              </LabelHelp>
+              </div>
             ) : null}
             <LabelHelp
               label="Série"
@@ -389,9 +390,10 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               className="aspect-auto h-[280px] w-full sm:h-[340px]"
             >
               <LineChart
+                key={`${mode}-${combined ? scale : "abs"}`}
                 accessibilityLayer
                 data={chartData}
-                margin={{ left: 4, right: 8, top: 8, bottom: 4 }}
+                margin={{ left: 4, right: 8, top: combined ? 16 : 8, bottom: 4 }}
               >
                 <CartesianGrid vertical={false} />
                 <XAxis
