@@ -555,12 +555,12 @@ export function CombinaisonsPanel() {
     if (next[0]) loadGrid(next[0])
   }
 
-  function handleSumMaxMode(value: string) {
-    const next = value as SumMaxMode
-    if (next === "manual" && sumMaxInput.trim() === "") {
+  function handleSumMaxMode(value: string | null) {
+    if (value !== "auto" && value !== "manual") return
+    if (value === "manual" && sumMaxInput.trim() === "") {
       setSumMaxInput(String(autoMaxSum(work)))
     }
-    setSumMaxMode(next)
+    setSumMaxMode(value)
   }
 
   async function saveGrid() {
