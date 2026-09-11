@@ -461,6 +461,14 @@ const NAV_ITEMS = [
     },
   },
   {
+    href: "/combinaisons",
+    label: "Combinaisons",
+    help: {
+      title: "Combinaisons",
+      body: "Composer, proposer et comparer des grilles EuroMillions. Retards et totaux pour choisir ; score = proba de gain (loi officielle + rétro-test), pas un pronostic.",
+    },
+  },
+  {
     href: "/morpho",
     label: "Morpho",
     help: {
