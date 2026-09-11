@@ -308,12 +308,16 @@ export function fitNumberSum(
       if (current[i] > current[largestIndex]) largestIndex = i
     }
     const largest = current[largestIndex]
-    let replacement: number | null = null
+    const deficit = sum - cap
+    const smaller: number[] = []
     for (const value of remaining) {
-      if (value >= largest) continue
-      if (replacement == null || value > replacement) replacement = value
+      if (value < largest) smaller.push(value)
     }
-    if (replacement == null) return null
+    if (smaller.length === 0) return null
+    const oneShot = smaller.filter((value) => largest - value >= deficit)
+    const replacement = oneShot.length
+      ? Math.max(...oneShot)
+      : Math.min(...smaller)
     remaining.delete(replacement)
     remaining.add(largest)
     current[largestIndex] = replacement
@@ -519,7 +523,9 @@ export function proposeGrids({
   const grids: CombinationGrid[] = []
   const target = Math.max(0, Math.min(10, Math.floor(count)))
   const cap = maxSum == null ? null : clampNumberSum(maxSum)
-  const maxAttempts = Math.max(target * (cap == null ? 40 : 80), cap == null ? 40 : 80)
+  const rejectAttempts = Math.max(target * 40, 40)
+  const fitAttempts = cap == null ? 0 : Math.max(target * 40, 40)
+  const maxAttempts = rejectAttempts + fitAttempts
 
   for (let attempt = 0; attempt < maxAttempts && grids.length < target; attempt += 1) {
     let numbers =
@@ -532,6 +538,7 @@ export function proposeGrids({
             rand
           ).map((item) => item.value)
     if (cap != null && numberSum({ numbers }) > cap) {
+      if (attempt < rejectAttempts) continue
       const fitted = fitNumberSum(numbers, cap)
       if (fitted == null) continue
       numbers = fitted

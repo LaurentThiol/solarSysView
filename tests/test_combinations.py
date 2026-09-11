@@ -143,14 +143,12 @@ def fit_number_sum(numbers: list[int], max_sum: int, pool: list[int] | None = No
             return sorted(current)
         largest_index = max(range(len(current)), key=lambda i: current[i])
         largest = current[largest_index]
-        replacement = None
-        for value in remaining:
-            if value >= largest:
-                continue
-            if replacement is None or value > replacement:
-                replacement = value
-        if replacement is None:
+        deficit = total - cap
+        smaller = [value for value in remaining if value < largest]
+        if not smaller:
             return None
+        one_shot = [value for value in smaller if largest - value >= deficit]
+        replacement = max(one_shot) if one_shot else min(smaller)
         remaining.remove(replacement)
         remaining.add(largest)
         current[largest_index] = replacement
@@ -272,6 +270,7 @@ def test_fit_number_sum_respects_cap():
     assert len(set(fitted)) == 5
     assert sum(fitted) <= 127
     assert fit_number_sum([1, 2, 3, 4, 5], 15) == [1, 2, 3, 4, 5]
+    assert fit_number_sum([10, 20, 30, 40, 50], 140) == [10, 20, 30, 39, 40]
 
 
 def test_propose_salve_respects_max_sum():
