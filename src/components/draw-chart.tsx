@@ -361,7 +361,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                 value={mode}
                 onValueChange={(value) => changeMode(value as DrawChartMode)}
               >
-                <SelectTrigger className="w-full sm:w-56" aria-label="Série affichée">
+                <SelectTrigger className="w-full sm:w-64 sm:shrink-0" aria-label="Série affichée">
                   <span className="flex flex-1 text-left">
                     {MODES.find((item) => item.value === mode)?.label}
                   </span>
