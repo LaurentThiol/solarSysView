@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from synchro.analysis.combinatorics import proba_tables
 from synchro.ranks import evaluate_grid
 
@@ -70,6 +72,89 @@ def percentile_rank(values: list[float], x: float) -> float | None:
     below = sum(1 for value in values if value < x)
     equal = sum(1 for value in values if value == x)
     return (below + 0.5 * equal) / len(values)
+
+
+NUMBER_SUM_MIN = 15
+NUMBER_SUM_MAX = 240
+THEORETICAL_NUMBER_SUM_MEAN = 128
+
+
+def quantile(values: list[float], q: float) -> float | None:
+    if not values:
+        return None
+    p = min(1.0, max(0.0, q))
+    ordered = sorted(values)
+    index = (len(ordered) - 1) * p
+    lo = math.floor(index)
+    hi = math.ceil(index)
+    if lo == hi:
+        return float(ordered[lo])
+    return ordered[lo] + (ordered[hi] - ordered[lo]) * (index - lo)
+
+
+def js_round(value: float) -> int:
+    return int(math.floor(value + 0.5)) if value >= 0 else int(math.ceil(value - 0.5))
+
+
+def clamp_number_sum(value: float) -> int:
+    return min(NUMBER_SUM_MAX, max(NUMBER_SUM_MIN, js_round(value)))
+
+
+def auto_max_sum(sums: list[float], q: float = 0.75) -> int:
+    resolved = quantile(sums, q)
+    if resolved is None:
+        return THEORETICAL_NUMBER_SUM_MEAN
+    return clamp_number_sum(resolved)
+
+
+def resolve_max_sum(mode: str, manual: str | int | None, sums: list[float]) -> int:
+    if mode == "manual" and manual not in (None, ""):
+        try:
+            parsed = float(manual)
+        except (TypeError, ValueError):
+            parsed = float("nan")
+        if parsed == parsed:
+            return clamp_number_sum(parsed)
+    return auto_max_sum(sums)
+
+
+def fit_number_sum(numbers: list[int], max_sum: int, pool: list[int] | None = None) -> list[int] | None:
+    cap = clamp_number_sum(max_sum)
+    universe = pool if pool is not None else list(range(1, 51))
+    current: list[int] = []
+    used: set[int] = set()
+    for value in numbers:
+        if value in used or value < 1 or value > 50:
+            continue
+        used.add(value)
+        current.append(value)
+    unused = [value for value in universe if value not in used]
+    unused.sort()
+    while len(current) < 5 and unused:
+        nxt = unused.pop(0)
+        current.append(nxt)
+        used.add(nxt)
+    if len(current) != 5:
+        return None
+    remaining = {value for value in universe if value not in used}
+    for _ in range(50):
+        total = sum(current)
+        if total <= cap:
+            return sorted(current)
+        largest_index = max(range(len(current)), key=lambda i: current[i])
+        largest = current[largest_index]
+        replacement = None
+        for value in remaining:
+            if value >= largest:
+                continue
+            if replacement is None or value > replacement:
+                replacement = value
+        if replacement is None:
+            return None
+        remaining.remove(replacement)
+        remaining.add(largest)
+        current[largest_index] = replacement
+    return None
 
 
 def test_official_p_sums_to_one():
@@ -154,3 +239,60 @@ def test_percentile_rank():
     assert percentile_rank([10, 20, 30], 20) == 0.5
     assert percentile_rank([10, 20, 30], 10) == 1 / 6
     assert percentile_rank([10, 20, 30], 5) == 0.0
+
+
+def test_quantile_linear():
+    assert quantile([], 0.75) is None
+    assert quantile([10, 20, 30, 40], 0) == 10
+    assert quantile([10, 20, 30, 40], 1) == 40
+    assert quantile([10, 20, 30, 40], 0.75) == 32.5
+
+
+def test_auto_max_sum_p75():
+    assert auto_max_sum([]) == 128
+    assert auto_max_sum([100, 120, 140, 160]) == 145
+    assert auto_max_sum([10, 20, 30, 40]) == 33
+    assert clamp_number_sum(10) == 15
+    assert clamp_number_sum(32.5) == 33
+    assert clamp_number_sum(999) == 240
+
+
+def test_resolve_max_sum_modes():
+    sums = [100, 120, 140, 160]
+    assert resolve_max_sum("auto", "90", sums) == auto_max_sum(sums)
+    assert resolve_max_sum("manual", "110", sums) == 110
+    assert resolve_max_sum("manual", "", sums) == auto_max_sum(sums)
+    assert resolve_max_sum("manual", "5", sums) == 15
+
+
+def test_fit_number_sum_respects_cap():
+    fitted = fit_number_sum([46, 47, 48, 49, 50], 127)
+    assert fitted is not None
+    assert len(fitted) == 5
+    assert len(set(fitted)) == 5
+    assert sum(fitted) <= 127
+    assert fit_number_sum([1, 2, 3, 4, 5], 15) == [1, 2, 3, 4, 5]
+
+
+def test_propose_salve_respects_max_sum():
+    rand = mulberry32(7)
+    numbers = list(range(1, 51))
+    seen: set[str] = set()
+    grids: list[list[int]] = []
+    cap = 110
+    for _ in range(80):
+        if len(grids) >= 5:
+            break
+        picked = pick_weighted(numbers, [1.0] * 50, 5, rand)
+        if sum(picked) > cap:
+            fitted = fit_number_sum(picked, cap)
+            if fitted is None:
+                continue
+            picked = fitted
+        key = ",".join(str(value) for value in sorted(picked))
+        if key in seen:
+            continue
+        seen.add(key)
+        grids.append(sorted(picked))
+    assert len(grids) == 5
+    assert all(sum(grid) <= cap for grid in grids)

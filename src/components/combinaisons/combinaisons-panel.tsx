@@ -41,13 +41,20 @@ import {
 import {
   STRATEGY_LABELS,
   STRATEGIES,
+  SUM_MAX_MODE_LABELS,
+  SUM_MAX_MODES,
+  autoMaxSum,
   empiricalWinRate,
   isCompleteGrid,
+  numberSum,
   officialWinProbability,
   profileGrid,
   proposeGrids,
+  resolveMaxSum,
+  windowSumExtent,
   type CombinationGrid,
   type CombinationStrategy,
+  type SumMaxMode,
 } from "@/lib/combinations"
 import {
   expectedNumberHits,
@@ -182,13 +189,27 @@ const HELP = {
     title: "Nombre",
     body: "Combien de grilles distinctes générer (1 à 10). La salve est dédoublonnée puis triée par P̂(gain).",
   },
+  sumMax: {
+    title: "Somme max",
+    body: "Plafond de la somme des 5 numéros (15–240). Bride les propositions, pas le composeur manuel. Cela ne change pas P(gain) officielle.",
+    items: [
+      {
+        label: "Auto",
+        text: "75e percentile des sommes de la fenêtre (arrondi). Coupe la queue haute sans caler sur la moyenne, trop sévère pour un max.",
+      },
+      {
+        label: "Manuel",
+        text: "Valeur saisie, ramenée à 15–240. 240 = aucun plafond utile. Vide = retombe sur Auto.",
+      },
+    ],
+  },
   generate: {
     title: "Générer",
-    body: "Recalcule une salve selon la stratégie. Les retards et totaux choisissent les boules ; le classement utilise P̂(gain) empirique.",
+    body: "Recalcule une salve selon la stratégie, puis ne garde que les grilles sous le plafond de somme. Les retards et totaux choisissent les boules ; le classement utilise P̂(gain) empirique.",
   },
   proposalP: {
     title: "P̂(gain) d’une ligne",
-    body: "Taux empirique de cette proposition sur la fenêtre. Cliquez la ligne pour l’envoyer dans le composeur.",
+    body: "Taux empirique de cette proposition sur la fenêtre, plus la somme des 5 numéros. Cliquez la ligne pour l’envoyer dans le composeur.",
   },
   label: {
     title: "Libellé",
@@ -365,7 +386,10 @@ export function CombinaisonsPanel() {
   const [intensity, setIntensity] = useState<Intensity>("count")
   const [strategy, setStrategy] = useState<CombinationStrategy>("balanced")
   const [proposeCount, setProposeCount] = useState("5")
+  const [sumMaxMode, setSumMaxMode] = useState<SumMaxMode>("auto")
+  const [sumMaxInput, setSumMaxInput] = useState("")
   const [proposals, setProposals] = useState<CombinationGrid[]>([])
+  const [proposeNote, setProposeNote] = useState<string | null>(null)
   const [label, setLabel] = useState("Grille")
   const [saved, setSaved] = useState<SavedGrid[]>([])
   const [gridsSource, setGridsSource] = useState<"api" | "session" | "loading">(
@@ -421,11 +445,23 @@ export function CombinaisonsPanel() {
     }
   }, [numberStats, work])
 
+  const sumExtent = useMemo(() => windowSumExtent(work), [work])
+  const resolvedMaxSum = useMemo(
+    () => resolveMaxSum({ mode: sumMaxMode, manual: sumMaxInput, draws: work }),
+    [sumMaxMode, sumMaxInput, work]
+  )
+  const requestedCount = useMemo(() => {
+    const parsed = Number.parseInt(proposeCount, 10)
+    if (!Number.isFinite(parsed)) return 5
+    return Math.max(1, Math.min(10, Math.floor(parsed)))
+  }, [proposeCount])
+
   const proposalRows = useMemo(
     () =>
       proposals.map((item) => ({
         grid: item,
         empirical: empiricalWinRate(item, work),
+        sum: numberSum(item),
       })),
     [proposals, work]
   )
@@ -495,17 +531,36 @@ export function CombinaisonsPanel() {
   }
 
   function generate() {
-    const count = Number.parseInt(proposeCount, 10)
     const next = proposeGrids({
       numberStats,
       starStats,
       draws: work,
       strategy,
-      count: Number.isFinite(count) ? count : 5,
+      count: requestedCount,
       seed: Date.now() % 1_000_000_007,
+      maxSum: resolvedMaxSum,
     })
     setProposals(next)
+    if (next.length === 0) {
+      setProposeNote(
+        `Aucune grille avec une somme ≤ ${resolvedMaxSum}. Relâchez le plafond ou changez de stratégie.`
+      )
+    } else if (next.length < requestedCount) {
+      setProposeNote(
+        `Salve incomplète : ${next.length}/${requestedCount} grilles ≤ ${resolvedMaxSum}.`
+      )
+    } else {
+      setProposeNote(null)
+    }
     if (next[0]) loadGrid(next[0])
+  }
+
+  function handleSumMaxMode(value: string) {
+    const next = value as SumMaxMode
+    if (next === "manual" && sumMaxInput.trim() === "") {
+      setSumMaxInput(String(autoMaxSum(work)))
+    }
+    setSumMaxMode(next)
   }
 
   async function saveGrid() {
@@ -848,12 +903,52 @@ export function CombinaisonsPanel() {
                 aria-label="Nombre de grilles"
               />
             </LabelHelp>
+            <LabelHelp label="Somme max" help={HELP.sumMax}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={sumMaxMode} onValueChange={handleSumMaxMode}>
+                  <SelectTrigger className="w-28" aria-label="Mode somme max">
+                    <span className="flex flex-1 text-left">
+                      {SUM_MAX_MODE_LABELS[sumMaxMode]}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUM_MAX_MODES.map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {SUM_MAX_MODE_LABELS[item]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  min={15}
+                  max={240}
+                  value={
+                    sumMaxMode === "auto" ? String(resolvedMaxSum) : sumMaxInput
+                  }
+                  onChange={(event) => setSumMaxInput(event.target.value)}
+                  disabled={sumMaxMode === "auto"}
+                  className="w-24"
+                  aria-label="Plafond de la somme des 5 numéros"
+                />
+              </div>
+            </LabelHelp>
             <HelpWrap help={HELP.generate}>
               <Button type="button" onClick={generate} disabled={work.length === 0}>
                 Générer
               </Button>
             </HelpWrap>
           </div>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            Sommes de la fenêtre
+            {sumExtent.min == null || sumExtent.max == null
+              ? " : —"
+              : ` : ${formatStat(sumExtent.min, 0)}–${formatStat(sumExtent.max, 0)} · moy. ${formatStat(sumExtent.mean, 1)} · auto ${formatStat(sumExtent.p75, 0)}`}
+            {` · plafond ${resolvedMaxSum}`}
+          </p>
+          {proposeNote ? (
+            <p className="text-sm text-muted-foreground">{proposeNote}</p>
+          ) : null}
           {proposalRows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Aucune proposition pour l’instant.
@@ -873,7 +968,7 @@ export function CombinaisonsPanel() {
                         P̂ {formatPct(row.empirical.p, 1)}
                         <span className="text-muted-foreground">
                           {" "}
-                          · {row.empirical.wins}/{row.empirical.n}
+                          · {row.empirical.wins}/{row.empirical.n} · Σ {row.sum}
                         </span>
                       </span>
                     </button>
