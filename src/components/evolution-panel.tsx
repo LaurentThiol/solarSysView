@@ -91,7 +91,10 @@ function EvolutionContent() {
   const coverage = numberCoverage(filtered)
   const sumStats = useMemo(() => {
     const series = toDrawSeries(filtered)
-    return summarizeValues(series.map((point) => point.sumNumbers))
+    return {
+      numbers: summarizeValues(series.map((point) => point.sumNumbers)),
+      stars: summarizeValues(series.map((point) => point.sumStars)),
+    }
   }, [filtered])
 
   if (loading && draws.length === 0) {
@@ -185,11 +188,15 @@ function EvolutionContent() {
           hint="boules vues au moins une fois"
         />
         <StatCard
-          label="Somme moyenne"
-          value={sumStats ? formatStat(sumStats.avg) : "—"}
+          label="Sommes moyennes"
+          value={
+            sumStats.numbers && sumStats.stars
+              ? `${formatStat(sumStats.numbers.avg)} · ${formatStat(sumStats.stars.avg)}`
+              : "—"
+          }
           hint={
-            sumStats
-              ? `min ${sumStats.min} · max ${sumStats.max}`
+            sumStats.numbers && sumStats.stars
+              ? `n° ${sumStats.numbers.min}–${sumStats.numbers.max} · ★ ${sumStats.stars.min}–${sumStats.stars.max}`
               : "aucun tirage"
           }
         />

@@ -269,3 +269,51 @@ export function summarizeValues(values: number[]): SeriesSummary | null {
   const avg = values.reduce((sum, value) => sum + value, 0) / values.length
   return { min, max, avg }
 }
+
+/** 5 distincts dans 1–50 : 1+2+3+4+5 … 46+47+48+49+50. Moyenne théorique 127,5 = 50 %. */
+export const NUMBER_SUM_RANGE = { min: 15, max: 240 } as const
+
+/** 2 distincts dans 1–12 : 1+2 … 11+12. Moyenne théorique 13 = 50 %. */
+export const STAR_SUM_RANGE = { min: 3, max: 23 } as const
+
+export type ValueRange = { min: number; max: number }
+
+export function relativeToRange(value: number, range: ValueRange): number {
+  const span = range.max - range.min
+  if (span <= 0) return 50
+  return ((value - range.min) / span) * 100
+}
+
+export function rangeFromValues(values: number[]): ValueRange | null {
+  if (values.length === 0) return null
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  if (min === max) return { min: min - 1, max: max + 1 }
+  return { min, max }
+}
+
+/** Pearson r. `null` si moins de 3 points ou variance nulle. */
+export function pearsonCorrelation(xs: number[], ys: number[]): number | null {
+  const n = Math.min(xs.length, ys.length)
+  if (n < 3) return null
+  let sumX = 0
+  let sumY = 0
+  for (let i = 0; i < n; i += 1) {
+    sumX += xs[i]
+    sumY += ys[i]
+  }
+  const meanX = sumX / n
+  const meanY = sumY / n
+  let num = 0
+  let dx = 0
+  let dy = 0
+  for (let i = 0; i < n; i += 1) {
+    const a = xs[i] - meanX
+    const b = ys[i] - meanY
+    num += a * b
+    dx += a * a
+    dy += b * b
+  }
+  if (dx === 0 || dy === 0) return null
+  return num / Math.sqrt(dx * dy)
+}
