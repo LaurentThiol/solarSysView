@@ -10,14 +10,19 @@ import {
 } from "@/components/analysis/shared"
 import { DrawBalls } from "@/components/draw-balls"
 import {
-  HelpTip,
   HelpWrap,
   LabelHelp,
   TitleHelp,
   type HelpCopy,
 } from "@/components/help"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -68,6 +73,7 @@ import { useDraws } from "@/lib/use-draws"
 import { cn } from "@/lib/utils"
 
 const SESSION_KEY = "synchro.combinaisons.grids"
+const OFFICIAL_TABLE_KEY = "synchro.combinaisons.officialTable"
 
 type Intensity = "count" | "delay"
 type SavedGrid = CombinationGrid & {
@@ -124,6 +130,10 @@ const HELP = {
   officialTable: {
     title: "Tableau des rangs",
     body: "Les 13 rangs FDJ plus « pas de gain ». P est exacte ; « 1 sur N » = arrondi de 1/P.",
+  },
+  officialCollapse: {
+    title: "Réduire le tableau",
+    body: "Masque ou réaffiche le détail des 13 rangs. La ligne 7,71 % reste visible : même loi pour toute grille 5+2.",
   },
   rankCol: {
     title: "Rang",
@@ -381,6 +391,26 @@ function writeSessionGrids(items: SavedGrid[]) {
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(items))
 }
 
+function readOfficialTableOpen(): boolean {
+  if (typeof window === "undefined") return true
+  try {
+    const raw = localStorage.getItem(OFFICIAL_TABLE_KEY)
+    if (raw === "0") return false
+    if (raw === "1") return true
+    return true
+  } catch {
+    return true
+  }
+}
+
+function writeOfficialTableOpen(open: boolean) {
+  try {
+    localStorage.setItem(OFFICIAL_TABLE_KEY, open ? "1" : "0")
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
 function friendlyGridsError(raw?: string) {
   const text = raw?.trim() || "API grilles indisponible"
   if (/fetch failed|ECONNREFUSED|injoignable|non configurée/i.test(text)) {
@@ -466,6 +496,7 @@ export function CombinaisonsPanel() {
     "loading"
   )
   const [gridsError, setGridsError] = useState<string | null>(null)
+  const [officialTableOpen, setOfficialTableOpen] = useState(true)
 
   const archive = useMemo(
     () => [...draws].sort((a, b) => a.date.localeCompare(b.date)),
@@ -542,6 +573,10 @@ export function CombinaisonsPanel() {
       })),
     [proposals, work]
   )
+
+  useEffect(() => {
+    setOfficialTableOpen(readOfficialTableOpen())
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -843,52 +878,82 @@ export function CombinaisonsPanel() {
           <CardTitle>
             <TitleHelp help={HELP.officialP}>P(gain) officielle</TitleHelp>
           </CardTitle>
+          <CardAction>
+            <HelpWrap help={HELP.officialCollapse}>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                aria-expanded={officialTableOpen}
+                aria-controls="official-ranks"
+                onClick={() => {
+                  setOfficialTableOpen((open) => {
+                    const next = !open
+                    writeOfficialTableOpen(next)
+                    return next
+                  })
+                }}
+              >
+                {officialTableOpen ? "Réduire" : "Déplier"}
+              </Button>
+            </HelpWrap>
+          </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
             {formatPct(official.pWin, 2)} d’obtenir au moins un rang — identique
             pour toute grille 5+2.
           </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-muted-foreground">
-                  <th className="py-1 pr-3">
-                    <TitleHelp help={HELP.rankCol}>Rang</TitleHelp>
-                  </th>
-                  <th className="py-1 pr-3">
-                    <TitleHelp help={HELP.gainCol}>Gain</TitleHelp>
-                  </th>
-                  <th className="py-1 pr-3">
-                    <TitleHelp help={HELP.pCol}>P</TitleHelp>
-                  </th>
-                  <th className="py-1">
-                    <TitleHelp help={HELP.oneInCol}>1 sur</TitleHelp>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {official.ranks.map((row) => (
-                  <tr key={row.label} className="border-t border-border">
-                    <td className="py-1 pr-3 tabular-nums">{row.rank ?? "—"}</td>
-                    <td className="py-1 pr-3">{row.label}</td>
-                    <td className="py-1 pr-3 tabular-nums">
-                      {row.p.toExponential(3)}
-                    </td>
-                    <td className="py-1 tabular-nums">
-                      {row.oneIn?.toLocaleString("fr-FR") ?? "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Disclaimer>
-            <TitleHelp help={HELP.officialTable}>
-              Référence combinatoire
-            </TitleHelp>
-            , indépendante de la fenêtre et des retards.
-          </Disclaimer>
+          {officialTableOpen ? (
+            <>
+              <div id="official-ranks" className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-muted-foreground">
+                      <th className="py-1 pr-3">
+                        <TitleHelp help={HELP.rankCol}>Rang</TitleHelp>
+                      </th>
+                      <th className="py-1 pr-3">
+                        <TitleHelp help={HELP.gainCol}>Gain</TitleHelp>
+                      </th>
+                      <th className="py-1 pr-3">
+                        <TitleHelp help={HELP.pCol}>P</TitleHelp>
+                      </th>
+                      <th className="py-1">
+                        <TitleHelp help={HELP.oneInCol}>1 sur</TitleHelp>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {official.ranks.map((row) => (
+                      <tr key={row.label} className="border-t border-border">
+                        <td className="py-1 pr-3 tabular-nums">
+                          {row.rank ?? "—"}
+                        </td>
+                        <td className="py-1 pr-3">{row.label}</td>
+                        <td className="py-1 pr-3 tabular-nums">
+                          {row.p.toExponential(3)}
+                        </td>
+                        <td className="py-1 tabular-nums">
+                          {row.oneIn?.toLocaleString("fr-FR") ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Disclaimer>
+                <TitleHelp help={HELP.officialTable}>
+                  Référence combinatoire
+                </TitleHelp>
+                , indépendante de la fenêtre et des retards.
+              </Disclaimer>
+            </>
+          ) : (
+            <p id="official-ranks" className="sr-only">
+              Tableau des rangs masqué.
+            </p>
+          )}
         </CardContent>
       </Card>
 
