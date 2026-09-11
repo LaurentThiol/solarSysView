@@ -41,20 +41,21 @@ import {
 import {
   STRATEGY_LABELS,
   STRATEGIES,
-  SUM_MAX_MODE_LABELS,
-  SUM_MAX_MODES,
+  SUM_BOUND_MODE_LABELS,
+  SUM_BOUND_MODES,
   autoMaxSum,
+  autoMinSum,
   empiricalWinRate,
   isCompleteGrid,
   numberSum,
   officialWinProbability,
   profileGrid,
   proposeGrids,
-  resolveMaxSum,
+  resolveSumBand,
   windowSumExtent,
   type CombinationGrid,
   type CombinationStrategy,
-  type SumMaxMode,
+  type SumBoundMode,
 } from "@/lib/combinations"
 import {
   expectedNumberHits,
@@ -189,9 +190,23 @@ const HELP = {
     title: "Nombre",
     body: "Combien de grilles distinctes générer (1 à 10). La salve est dédoublonnée puis triée par P̂(gain).",
   },
+  sumMin: {
+    title: "Somme mini",
+    body: "Plancher de la somme des 5 numéros (15–240). Bride les propositions, pas le composeur. Si mini > max, la bande est réordonnée. Cela ne change pas P(gain) officielle.",
+    items: [
+      {
+        label: "Auto",
+        text: "25e percentile des sommes de la fenêtre (arrondi). Coupe la queue basse sans caler sur la moyenne, trop sévère pour un min.",
+      },
+      {
+        label: "Manuel",
+        text: "Valeur saisie, ramenée à 15–240. 15 = aucun plancher utile. Vide = retombe sur Auto.",
+      },
+    ],
+  },
   sumMax: {
     title: "Somme max",
-    body: "Plafond de la somme des 5 numéros (15–240). Bride les propositions, pas le composeur manuel. Cela ne change pas P(gain) officielle.",
+    body: "Plafond de la somme des 5 numéros (15–240). Couple avec Somme mini. Bride les propositions, pas le composeur. Cela ne change pas P(gain) officielle.",
     items: [
       {
         label: "Auto",
@@ -205,7 +220,7 @@ const HELP = {
   },
   generate: {
     title: "Générer",
-    body: "Recalcule une salve selon la stratégie, puis ne garde que les grilles sous le plafond de somme. Les retards et totaux choisissent les boules ; le classement utilise P̂(gain) empirique.",
+    body: "Recalcule une salve selon la stratégie, puis ne garde que les grilles dont la somme est dans la bande mini–max. Les retards et totaux choisissent les boules ; le classement utilise P̂(gain) empirique.",
   },
   proposalP: {
     title: "P̂(gain) d’une ligne",
@@ -274,6 +289,59 @@ function heatStyle(value: number, max: number, even: boolean) {
   return {
     backgroundColor: `color-mix(in oklch, ${color} ${Math.round(14 + t * 62)}%, transparent)`,
   }
+}
+
+function SumBoundField({
+  label,
+  help,
+  mode,
+  onMode,
+  input,
+  onInput,
+  resolved,
+  modeAria,
+  valueAria,
+}: {
+  label: string
+  help: HelpCopy
+  mode: SumBoundMode
+  onMode: (value: string | null) => void
+  input: string
+  onInput: (value: string) => void
+  resolved: number
+  modeAria: string
+  valueAria: string
+}) {
+  return (
+    <LabelHelp label={label} help={help}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={mode} onValueChange={onMode}>
+          <SelectTrigger className="w-28" aria-label={modeAria}>
+            <span className="flex flex-1 text-left">
+              {SUM_BOUND_MODE_LABELS[mode]}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            {SUM_BOUND_MODES.map((item) => (
+              <SelectItem key={item} value={item}>
+                {SUM_BOUND_MODE_LABELS[item]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          type="number"
+          min={15}
+          max={240}
+          value={mode === "auto" ? String(resolved) : input}
+          onChange={(event) => onInput(event.target.value)}
+          disabled={mode === "auto"}
+          className="w-24"
+          aria-label={valueAria}
+        />
+      </div>
+    </LabelHelp>
+  )
 }
 
 function StatHelp({
@@ -386,7 +454,9 @@ export function CombinaisonsPanel() {
   const [intensity, setIntensity] = useState<Intensity>("count")
   const [strategy, setStrategy] = useState<CombinationStrategy>("balanced")
   const [proposeCount, setProposeCount] = useState("5")
-  const [sumMaxMode, setSumMaxMode] = useState<SumMaxMode>("auto")
+  const [sumMinMode, setSumMinMode] = useState<SumBoundMode>("auto")
+  const [sumMinInput, setSumMinInput] = useState("")
+  const [sumMaxMode, setSumMaxMode] = useState<SumBoundMode>("auto")
   const [sumMaxInput, setSumMaxInput] = useState("")
   const [proposals, setProposals] = useState<CombinationGrid[]>([])
   const [proposeNote, setProposeNote] = useState<string | null>(null)
@@ -446,9 +516,16 @@ export function CombinaisonsPanel() {
   }, [numberStats, work])
 
   const sumExtent = useMemo(() => windowSumExtent(work), [work])
-  const resolvedMaxSum = useMemo(
-    () => resolveMaxSum({ mode: sumMaxMode, manual: sumMaxInput, draws: work }),
-    [sumMaxMode, sumMaxInput, work]
+  const sumBand = useMemo(
+    () =>
+      resolveSumBand({
+        minMode: sumMinMode,
+        minManual: sumMinInput,
+        maxMode: sumMaxMode,
+        maxManual: sumMaxInput,
+        draws: work,
+      }),
+    [sumMinMode, sumMinInput, sumMaxMode, sumMaxInput, work]
   )
   const requestedCount = useMemo(() => {
     const parsed = Number.parseInt(proposeCount, 10)
@@ -538,16 +615,22 @@ export function CombinaisonsPanel() {
       strategy,
       count: requestedCount,
       seed: Date.now() % 1_000_000_007,
-      maxSum: resolvedMaxSum,
+      minSum: sumBand.min,
+      maxSum: sumBand.max,
     })
     setProposals(next)
+    const bandLabel = `${sumBand.min}–${sumBand.max}`
     if (next.length === 0) {
       setProposeNote(
-        `Aucune grille avec une somme ≤ ${resolvedMaxSum}. Relâchez le plafond ou changez de stratégie.`
+        `Aucune grille avec une somme dans ${bandLabel}. Élargissez la bande ou changez de stratégie.`
       )
     } else if (next.length < requestedCount) {
       setProposeNote(
-        `Salve incomplète : ${next.length}/${requestedCount} grilles ≤ ${resolvedMaxSum}.`
+        `Salve incomplète : ${next.length}/${requestedCount} grilles dans ${bandLabel}.`
+      )
+    } else if (sumBand.swapped) {
+      setProposeNote(
+        `Mini et max inversés : bande réordonnée ${bandLabel}.`
       )
     } else {
       setProposeNote(null)
@@ -555,8 +638,18 @@ export function CombinaisonsPanel() {
     if (next[0]) loadGrid(next[0])
   }
 
-  function handleSumMaxMode(value: string | null) {
+  function handleSumBoundMode(
+    side: "min" | "max",
+    value: string | null
+  ) {
     if (value !== "auto" && value !== "manual") return
+    if (side === "min") {
+      if (value === "manual" && sumMinInput.trim() === "") {
+        setSumMinInput(String(autoMinSum(work)))
+      }
+      setSumMinMode(value)
+      return
+    }
     if (value === "manual" && sumMaxInput.trim() === "") {
       setSumMaxInput(String(autoMaxSum(work)))
     }
@@ -903,36 +996,28 @@ export function CombinaisonsPanel() {
                 aria-label="Nombre de grilles"
               />
             </LabelHelp>
-            <LabelHelp label="Somme max" help={HELP.sumMax}>
-              <div className="flex flex-wrap items-center gap-2">
-                <Select value={sumMaxMode} onValueChange={handleSumMaxMode}>
-                  <SelectTrigger className="w-28" aria-label="Mode somme max">
-                    <span className="flex flex-1 text-left">
-                      {SUM_MAX_MODE_LABELS[sumMaxMode]}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SUM_MAX_MODES.map((item) => (
-                      <SelectItem key={item} value={item}>
-                        {SUM_MAX_MODE_LABELS[item]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  min={15}
-                  max={240}
-                  value={
-                    sumMaxMode === "auto" ? String(resolvedMaxSum) : sumMaxInput
-                  }
-                  onChange={(event) => setSumMaxInput(event.target.value)}
-                  disabled={sumMaxMode === "auto"}
-                  className="w-24"
-                  aria-label="Plafond de la somme des 5 numéros"
-                />
-              </div>
-            </LabelHelp>
+            <SumBoundField
+              label="Somme mini"
+              help={HELP.sumMin}
+              mode={sumMinMode}
+              onMode={(value) => handleSumBoundMode("min", value)}
+              input={sumMinInput}
+              onInput={setSumMinInput}
+              resolved={sumBand.autoMin}
+              modeAria="Mode somme mini"
+              valueAria="Plancher de la somme des 5 numéros"
+            />
+            <SumBoundField
+              label="Somme max"
+              help={HELP.sumMax}
+              mode={sumMaxMode}
+              onMode={(value) => handleSumBoundMode("max", value)}
+              input={sumMaxInput}
+              onInput={setSumMaxInput}
+              resolved={sumBand.autoMax}
+              modeAria="Mode somme max"
+              valueAria="Plafond de la somme des 5 numéros"
+            />
             <HelpWrap help={HELP.generate}>
               <Button type="button" onClick={generate} disabled={work.length === 0}>
                 Générer
@@ -943,8 +1028,9 @@ export function CombinaisonsPanel() {
             Sommes de la fenêtre
             {sumExtent.min == null || sumExtent.max == null
               ? " : —"
-              : ` : ${formatStat(sumExtent.min, 0)}–${formatStat(sumExtent.max, 0)} · moy. ${formatStat(sumExtent.mean, 1)} · auto ${formatStat(sumExtent.p75, 0)}`}
-            {` · plafond ${resolvedMaxSum}`}
+              : ` : ${formatStat(sumExtent.min, 0)}–${formatStat(sumExtent.max, 0)} · moy. ${formatStat(sumExtent.mean, 1)} · auto ${formatStat(sumExtent.p25, 0)}–${formatStat(sumExtent.p75, 0)}`}
+            {` · bande ${sumBand.min}–${sumBand.max}`}
+            {sumBand.swapped ? " (mini/max inversés)" : ""}
           </p>
           {proposeNote ? (
             <p className="text-sm text-muted-foreground">{proposeNote}</p>

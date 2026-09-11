@@ -194,13 +194,15 @@ export function percentileRank(values: number[], x: number) {
 /** 1+2+3+4+5 … 46+47+48+49+50 */
 export const NUMBER_SUM_MIN = 15
 export const NUMBER_SUM_MAX = 240
-export const AUTO_SUM_QUANTILE = 0.75
+export const AUTO_SUM_MIN_QUANTILE = 0.25
+export const AUTO_SUM_MAX_QUANTILE = 0.75
+export const AUTO_SUM_QUANTILE = AUTO_SUM_MAX_QUANTILE
 /** 5 × (1+50)/2, arrondi. */
 export const THEORETICAL_NUMBER_SUM_MEAN = 128
 
-export const SUM_MAX_MODES = ["auto", "manual"] as const
-export type SumMaxMode = (typeof SUM_MAX_MODES)[number]
-export const SUM_MAX_MODE_LABELS: Record<SumMaxMode, string> = {
+export const SUM_BOUND_MODES = ["auto", "manual"] as const
+export type SumBoundMode = (typeof SUM_BOUND_MODES)[number]
+export const SUM_BOUND_MODE_LABELS: Record<SumBoundMode, string> = {
   auto: "Auto",
   manual: "Manuel",
 }
@@ -236,23 +238,60 @@ export function clampNumberSum(value: number) {
 export function windowSumExtent(draws: Array<Pick<Draw, "numbers">>) {
   const sums = drawNumberSums(draws)
   if (sums.length === 0) {
-    return { min: null, max: null, mean: null, p75: null }
+    return { min: null, max: null, mean: null, p25: null, p75: null }
   }
   return {
     min: Math.min(...sums),
     max: Math.max(...sums),
     mean: mean(sums),
-    p75: quantile(sums, AUTO_SUM_QUANTILE),
+    p25: quantile(sums, AUTO_SUM_MIN_QUANTILE),
+    p75: quantile(sums, AUTO_SUM_MAX_QUANTILE),
   }
 }
 
-export function autoMaxSum(
+function autoSumAtQuantile(
   draws: Array<Pick<Draw, "numbers">>,
-  q = AUTO_SUM_QUANTILE
+  q: number
 ) {
   const resolved = quantile(drawNumberSums(draws), q)
   if (resolved == null) return THEORETICAL_NUMBER_SUM_MEAN
   return clampNumberSum(resolved)
+}
+
+export function autoMinSum(
+  draws: Array<Pick<Draw, "numbers">>,
+  q = AUTO_SUM_MIN_QUANTILE
+) {
+  return autoSumAtQuantile(draws, q)
+}
+
+export function autoMaxSum(
+  draws: Array<Pick<Draw, "numbers">>,
+  q = AUTO_SUM_MAX_QUANTILE
+) {
+  return autoSumAtQuantile(draws, q)
+}
+
+function parseManualSum(manual?: string | number | null) {
+  const parsed =
+    typeof manual === "number" ? manual : Number.parseInt(String(manual ?? ""), 10)
+  return Number.isFinite(parsed) ? clampNumberSum(parsed) : null
+}
+
+export function resolveMinSum({
+  mode,
+  manual,
+  draws,
+}: {
+  mode: SumBoundMode
+  manual?: string | number | null
+  draws: Array<Pick<Draw, "numbers">>
+}) {
+  if (mode === "manual") {
+    const parsed = parseManualSum(manual)
+    if (parsed != null) return parsed
+  }
+  return autoMinSum(draws)
 }
 
 export function resolveMaxSum({
@@ -260,28 +299,54 @@ export function resolveMaxSum({
   manual,
   draws,
 }: {
-  mode: SumMaxMode
+  mode: SumBoundMode
   manual?: string | number | null
   draws: Array<Pick<Draw, "numbers">>
 }) {
   if (mode === "manual") {
-    const parsed =
-      typeof manual === "number" ? manual : Number.parseInt(String(manual ?? ""), 10)
-    if (Number.isFinite(parsed)) return clampNumberSum(parsed)
+    const parsed = parseManualSum(manual)
+    if (parsed != null) return parsed
   }
   return autoMaxSum(draws)
 }
 
-/**
- * Remplace les plus grandes boules par les plus grandes encore
- * disponibles sous le plafond, pour garder au mieux le tirage d’origine.
- */
-export function fitNumberSum(
+export function orderSumBand(minSum: number, maxSum: number) {
+  const min = clampNumberSum(minSum)
+  const max = clampNumberSum(maxSum)
+  if (min <= max) return { min, max, swapped: false }
+  return { min: max, max: min, swapped: true }
+}
+
+export function inNumberSumBand(sum: number, minSum: number, maxSum: number) {
+  const band = orderSumBand(minSum, maxSum)
+  return sum >= band.min && sum <= band.max
+}
+
+export function resolveSumBand({
+  minMode,
+  minManual,
+  maxMode,
+  maxManual,
+  draws,
+}: {
+  minMode: SumBoundMode
+  minManual?: string | number | null
+  maxMode: SumBoundMode
+  maxManual?: string | number | null
+  draws: Array<Pick<Draw, "numbers">>
+}) {
+  const autoMin = autoMinSum(draws)
+  const autoMax = autoMaxSum(draws)
+  const rawMin = resolveMinSum({ mode: minMode, manual: minManual, draws })
+  const rawMax = resolveMaxSum({ mode: maxMode, manual: maxManual, draws })
+  const band = orderSumBand(rawMin, rawMax)
+  return { ...band, autoMin, autoMax }
+}
+
+function seedFiveNumbers(
   numbers: number[],
-  maxSum: number,
-  pool: number[] = Array.from({ length: 50 }, (_, index) => index + 1)
-): number[] | null {
-  const cap = clampNumberSum(maxSum)
+  pool: number[]
+): { current: number[]; remaining: Set<number> } | null {
   const current: number[] = []
   const used = new Set<number>()
   for (const value of numbers) {
@@ -298,31 +363,92 @@ export function fitNumberSum(
     used.add(next)
   }
   if (current.length !== 5) return null
+  return {
+    current,
+    remaining: new Set(pool.filter((value) => !used.has(value))),
+  }
+}
 
-  const remaining = new Set(pool.filter((value) => !used.has(value)))
+function replaceBall(
+  current: number[],
+  remaining: Set<number>,
+  fromIndex: number,
+  replacement: number
+) {
+  remaining.delete(replacement)
+  remaining.add(current[fromIndex])
+  current[fromIndex] = replacement
+}
+
+/**
+ * Ajuste les extrêmes pour entrer dans [minSum, maxSum] en changeant
+ * le moins possible le tirage d’origine.
+ */
+export function fitNumberSumBand(
+  numbers: number[],
+  minSum: number,
+  maxSum: number,
+  pool: number[] = Array.from({ length: 50 }, (_, index) => index + 1)
+): number[] | null {
+  const band = orderSumBand(minSum, maxSum)
+  const seeded = seedFiveNumbers(numbers, pool)
+  if (seeded == null) return null
+  const { current, remaining } = seeded
+
   for (let step = 0; step < 50; step += 1) {
     const sum = current.reduce((total, value) => total + value, 0)
-    if (sum <= cap) return [...current].sort((a, b) => a - b)
-    let largestIndex = 0
+    if (sum >= band.min && sum <= band.max) {
+      return [...current].sort((a, b) => a - b)
+    }
+    if (sum > band.max) {
+      let largestIndex = 0
+      for (let i = 1; i < current.length; i += 1) {
+        if (current[i] > current[largestIndex]) largestIndex = i
+      }
+      const largest = current[largestIndex]
+      const deficit = sum - band.max
+      const smaller: number[] = []
+      for (const value of remaining) {
+        if (value < largest) smaller.push(value)
+      }
+      if (smaller.length === 0) return null
+      const oneShot = smaller.filter((value) => largest - value >= deficit)
+      replaceBall(
+        current,
+        remaining,
+        largestIndex,
+        oneShot.length ? Math.max(...oneShot) : Math.min(...smaller)
+      )
+      continue
+    }
+    let smallestIndex = 0
     for (let i = 1; i < current.length; i += 1) {
-      if (current[i] > current[largestIndex]) largestIndex = i
+      if (current[i] < current[smallestIndex]) smallestIndex = i
     }
-    const largest = current[largestIndex]
-    const deficit = sum - cap
-    const smaller: number[] = []
+    const smallest = current[smallestIndex]
+    const need = band.min - sum
+    const larger: number[] = []
     for (const value of remaining) {
-      if (value < largest) smaller.push(value)
+      if (value > smallest) larger.push(value)
     }
-    if (smaller.length === 0) return null
-    const oneShot = smaller.filter((value) => largest - value >= deficit)
-    const replacement = oneShot.length
-      ? Math.max(...oneShot)
-      : Math.min(...smaller)
-    remaining.delete(replacement)
-    remaining.add(largest)
-    current[largestIndex] = replacement
+    if (larger.length === 0) return null
+    const oneShot = larger.filter((value) => value - smallest >= need)
+    replaceBall(
+      current,
+      remaining,
+      smallestIndex,
+      oneShot.length ? Math.min(...oneShot) : Math.max(...larger)
+    )
   }
   return null
+}
+
+export function fitNumberSum(
+  numbers: number[],
+  maxSum: number,
+  pool: number[] = Array.from({ length: 50 }, (_, index) => index + 1)
+): number[] | null {
+  return fitNumberSumBand(numbers, NUMBER_SUM_MIN, maxSum, pool)
 }
 
 function itemsFor(
@@ -506,6 +632,7 @@ export function proposeGrids({
   strategy,
   count,
   seed = 1,
+  minSum = null,
   maxSum = null,
 }: {
   numberStats: FrequencyItem[]
@@ -514,6 +641,7 @@ export function proposeGrids({
   strategy: CombinationStrategy
   count: number
   seed?: number
+  minSum?: number | null
   maxSum?: number | null
 }): CombinationGrid[] {
   const rand = mulberry32(seed)
@@ -522,9 +650,13 @@ export function proposeGrids({
   const seen = new Set<string>()
   const grids: CombinationGrid[] = []
   const target = Math.max(0, Math.min(10, Math.floor(count)))
-  const cap = maxSum == null ? null : clampNumberSum(maxSum)
+  const constrained = minSum != null || maxSum != null
+  const band = orderSumBand(
+    minSum == null ? NUMBER_SUM_MIN : minSum,
+    maxSum == null ? NUMBER_SUM_MAX : maxSum
+  )
   const rejectAttempts = Math.max(target * 40, 40)
-  const fitAttempts = cap == null ? 0 : Math.max(target * 40, 40)
+  const fitAttempts = constrained ? Math.max(target * 40, 40) : 0
   const maxAttempts = rejectAttempts + fitAttempts
 
   for (let attempt = 0; attempt < maxAttempts && grids.length < target; attempt += 1) {
@@ -537,9 +669,9 @@ export function proposeGrids({
             5,
             rand
           ).map((item) => item.value)
-    if (cap != null && numberSum({ numbers }) > cap) {
+    if (constrained && !inNumberSumBand(numberSum({ numbers }), band.min, band.max)) {
       if (attempt < rejectAttempts) continue
-      const fitted = fitNumberSum(numbers, cap)
+      const fitted = fitNumberSumBand(numbers, band.min, band.max)
       if (fitted == null) continue
       numbers = fitted
     }
@@ -554,7 +686,7 @@ export function proposeGrids({
           ).map((item) => item.value)
     const grid = sortedGrid({ numbers, stars })
     if (!isCompleteGrid(grid)) continue
-    if (cap != null && numberSum(grid) > cap) continue
+    if (constrained && !inNumberSumBand(numberSum(grid), band.min, band.max)) continue
     const key = gridKey(grid)
     if (seen.has(key)) continue
     seen.add(key)

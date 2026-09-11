@@ -100,14 +100,22 @@ def clamp_number_sum(value: float) -> int:
     return min(NUMBER_SUM_MAX, max(NUMBER_SUM_MIN, js_round(value)))
 
 
-def auto_max_sum(sums: list[float], q: float = 0.75) -> int:
+def auto_sum_at(sums: list[float], q: float) -> int:
     resolved = quantile(sums, q)
     if resolved is None:
         return THEORETICAL_NUMBER_SUM_MEAN
     return clamp_number_sum(resolved)
 
 
-def resolve_max_sum(mode: str, manual: str | int | None, sums: list[float]) -> int:
+def auto_min_sum(sums: list[float], q: float = 0.25) -> int:
+    return auto_sum_at(sums, q)
+
+
+def auto_max_sum(sums: list[float], q: float = 0.75) -> int:
+    return auto_sum_at(sums, q)
+
+
+def resolve_bound(mode: str, manual: str | int | None, auto_value: int) -> int:
     if mode == "manual" and manual not in (None, ""):
         try:
             parsed = float(manual)
@@ -115,11 +123,32 @@ def resolve_max_sum(mode: str, manual: str | int | None, sums: list[float]) -> i
             parsed = float("nan")
         if parsed == parsed:
             return clamp_number_sum(parsed)
-    return auto_max_sum(sums)
+    return auto_value
 
 
-def fit_number_sum(numbers: list[int], max_sum: int, pool: list[int] | None = None) -> list[int] | None:
-    cap = clamp_number_sum(max_sum)
+def resolve_max_sum(mode: str, manual: str | int | None, sums: list[float]) -> int:
+    return resolve_bound(mode, manual, auto_max_sum(sums))
+
+
+def resolve_min_sum(mode: str, manual: str | int | None, sums: list[float]) -> int:
+    return resolve_bound(mode, manual, auto_min_sum(sums))
+
+
+def order_sum_band(min_sum: float, max_sum: float) -> tuple[int, int, bool]:
+    lo = clamp_number_sum(min_sum)
+    hi = clamp_number_sum(max_sum)
+    if lo <= hi:
+        return lo, hi, False
+    return hi, lo, True
+
+
+def fit_number_sum_band(
+    numbers: list[int],
+    min_sum: int,
+    max_sum: int,
+    pool: list[int] | None = None,
+) -> list[int] | None:
+    floor, ceil, _ = order_sum_band(min_sum, max_sum)
     universe = pool if pool is not None else list(range(1, 51))
     current: list[int] = []
     used: set[int] = set()
@@ -139,20 +168,37 @@ def fit_number_sum(numbers: list[int], max_sum: int, pool: list[int] | None = No
     remaining = {value for value in universe if value not in used}
     for _ in range(50):
         total = sum(current)
-        if total <= cap:
+        if floor <= total <= ceil:
             return sorted(current)
-        largest_index = max(range(len(current)), key=lambda i: current[i])
-        largest = current[largest_index]
-        deficit = total - cap
-        smaller = [value for value in remaining if value < largest]
-        if not smaller:
+        if total > ceil:
+            largest_index = max(range(len(current)), key=lambda i: current[i])
+            largest = current[largest_index]
+            deficit = total - ceil
+            smaller = [value for value in remaining if value < largest]
+            if not smaller:
+                return None
+            one_shot = [value for value in smaller if largest - value >= deficit]
+            replacement = max(one_shot) if one_shot else min(smaller)
+            remaining.remove(replacement)
+            remaining.add(largest)
+            current[largest_index] = replacement
+            continue
+        smallest_index = min(range(len(current)), key=lambda i: current[i])
+        smallest = current[smallest_index]
+        need = floor - total
+        larger = [value for value in remaining if value > smallest]
+        if not larger:
             return None
-        one_shot = [value for value in smaller if largest - value >= deficit]
-        replacement = max(one_shot) if one_shot else min(smaller)
+        one_shot = [value for value in larger if value - smallest >= need]
+        replacement = min(one_shot) if one_shot else max(larger)
         remaining.remove(replacement)
-        remaining.add(largest)
-        current[largest_index] = replacement
+        remaining.add(smallest)
+        current[smallest_index] = replacement
     return None
+
+
+def fit_number_sum(numbers: list[int], max_sum: int, pool: list[int] | None = None) -> list[int] | None:
+    return fit_number_sum_band(numbers, NUMBER_SUM_MIN, max_sum, pool)
 
 
 def test_official_p_sums_to_one():
@@ -255,12 +301,25 @@ def test_auto_max_sum_p75():
     assert clamp_number_sum(999) == 240
 
 
+def test_auto_min_sum_p25():
+    assert auto_min_sum([]) == 128
+    assert auto_min_sum([100, 120, 140, 160]) == 115
+    assert auto_min_sum([10, 20, 30, 40]) == 18
+
+
+def test_order_sum_band_swaps():
+    assert order_sum_band(110, 150) == (110, 150, False)
+    assert order_sum_band(150, 110) == (110, 150, True)
+
+
 def test_resolve_max_sum_modes():
     sums = [100, 120, 140, 160]
     assert resolve_max_sum("auto", "90", sums) == auto_max_sum(sums)
     assert resolve_max_sum("manual", "110", sums) == 110
     assert resolve_max_sum("manual", "", sums) == auto_max_sum(sums)
     assert resolve_max_sum("manual", "5", sums) == 15
+    assert resolve_min_sum("auto", "200", sums) == auto_min_sum(sums)
+    assert resolve_min_sum("manual", "100", sums) == 100
 
 
 def test_fit_number_sum_respects_cap():
@@ -273,18 +332,25 @@ def test_fit_number_sum_respects_cap():
     assert fit_number_sum([10, 20, 30, 40, 50], 140) == [10, 20, 30, 39, 40]
 
 
-def test_propose_salve_respects_max_sum():
+def test_fit_number_sum_band_raises_floor():
+    fitted = fit_number_sum_band([1, 2, 3, 4, 5], 80, 140)
+    assert fitted is not None
+    assert 80 <= sum(fitted) <= 140
+    assert fit_number_sum_band([10, 20, 30, 40, 50], 140, 150) == [10, 20, 30, 40, 50]
+
+
+def test_propose_salve_respects_sum_band():
     rand = mulberry32(7)
     numbers = list(range(1, 51))
     seen: set[str] = set()
     grids: list[list[int]] = []
-    cap = 110
-    for _ in range(80):
+    floor, ceil = 100, 140
+    for _ in range(160):
         if len(grids) >= 5:
             break
         picked = pick_weighted(numbers, [1.0] * 50, 5, rand)
-        if sum(picked) > cap:
-            fitted = fit_number_sum(picked, cap)
+        if not (floor <= sum(picked) <= ceil):
+            fitted = fit_number_sum_band(picked, floor, ceil)
             if fitted is None:
                 continue
             picked = fitted
@@ -294,4 +360,4 @@ def test_propose_salve_respects_max_sum():
         seen.add(key)
         grids.append(sorted(picked))
     assert len(grids) == 5
-    assert all(sum(grid) <= cap for grid in grids)
+    assert all(floor <= sum(grid) <= ceil for grid in grids)
