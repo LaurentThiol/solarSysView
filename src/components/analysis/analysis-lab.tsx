@@ -26,14 +26,21 @@ import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
 } from "@/components/ui/select"
 import {
   type VariableName,
+  NUMBER_VARIABLE_NAMES,
+  STAR_VARIABLE_NAMES,
   VARIABLE_LABELS,
-  VARIABLE_NAMES,
   series,
+  seriesIndex,
+  variableNeedsBall,
+  variableNeedsStar,
 } from "@/lib/analysis"
 import {
   DEFAULT_WARMUP,
@@ -222,6 +229,7 @@ export function AnalysisLab() {
   const [variable, setVariable] = useState<VariableName>("sum")
   const [windowSize, setWindowSize] = useState(20)
   const [ball, setBall] = useState(7)
+  const [star, setStar] = useState(1)
   const [query, setQuery] = useState("")
   const [preset, setPreset] = useState<WindowPreset>("last_100")
   const [customFrom, setCustomFrom] = useState("")
@@ -263,13 +271,15 @@ export function AnalysisLab() {
   }, [resolved.withWarmup, resolved.warmup, work, wanted.length])
   const warmupCount = withWarmup.length - work.length
 
+  const variableN = seriesIndex(variable, ball, star)
+
   const workSeries = useMemo(
-    () => series(work, variable, ball),
-    [work, variable, ball]
+    () => series(work, variable, variableN),
+    [work, variable, variableN]
   )
   const fullSeries = useMemo(
-    () => series(withWarmup, variable, ball),
-    [withWarmup, variable, ball]
+    () => series(withWarmup, variable, variableN),
+    [withWarmup, variable, variableN]
   )
   const tech = useMemo(
     () =>
@@ -280,12 +290,12 @@ export function AnalysisLab() {
     [fullSeries, windowSize, warmupCount]
   )
   const profile = useMemo(
-    () => rollingProfile(archive, variable, windowSize, ball),
-    [archive, variable, windowSize, ball]
+    () => rollingProfile(archive, variable, windowSize, variableN),
+    [archive, variable, windowSize, variableN]
   )
   const comparison = useMemo(
-    () => compareWindows(work, resolved.compare.work, variable, ball),
-    [work, resolved.compare.work, variable, ball]
+    () => compareWindows(work, resolved.compare.work, variable, variableN),
+    [work, resolved.compare.work, variable, variableN]
   )
 
   async function loadMc() {
@@ -381,7 +391,7 @@ export function AnalysisLab() {
           label="Variable"
           help={{
             title: "Variable",
-            body: "Grandeur tracée dans Vue / Tendance / etc. : somme, étendue, parité, haut-bas, consécutifs, étoiles, centroïde, retard ou présence d’une boule.",
+            body: "Grandeur tracée dans Vue / Tendance / etc. Les métriques des numéros (1–50) sont listées en premier, puis celles des étoiles (1–12) : somme, retard ou présence.",
           }}
         >
           <Select value={variable} onValueChange={(v) => setVariable(v as VariableName)}>
@@ -389,15 +399,27 @@ export function AnalysisLab() {
               <span className="flex flex-1 text-left">{VARIABLE_LABELS[variable]}</span>
             </SelectTrigger>
             <SelectContent>
-              {VARIABLE_NAMES.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {VARIABLE_LABELS[name]}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                <SelectLabel>Numéros</SelectLabel>
+                {NUMBER_VARIABLE_NAMES.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {VARIABLE_LABELS[name]}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectSeparator />
+              <SelectGroup>
+                <SelectLabel>Étoiles</SelectLabel>
+                {STAR_VARIABLE_NAMES.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {VARIABLE_LABELS[name]}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
         </LabelHelp>
-        {(variable === "delay" || variable === "hit") && (
+        {variableNeedsBall(variable) && (
           <LabelHelp
             label="Boule"
             help={{
@@ -412,6 +434,25 @@ export function AnalysisLab() {
               value={ball}
               onChange={(e) => setBall(Number(e.target.value) || 7)}
               aria-label="Boule"
+              className="w-24"
+            />
+          </LabelHelp>
+        )}
+        {variableNeedsStar(variable) && (
+          <LabelHelp
+            label="Étoile"
+            help={{
+              title: "Étoile",
+              body: "Étoile 1–12 utilisée quand la variable est « Retard d’une étoile » ou « Présence d’une étoile ». Sur l’ancienne formule, les étoiles 10–12 n’existaient pas.",
+            }}
+          >
+            <Input
+              type="number"
+              min={1}
+              max={12}
+              value={star}
+              onChange={(e) => setStar(Number(e.target.value) || 1)}
+              aria-label="Étoile"
               className="w-24"
             />
           </LabelHelp>
@@ -458,7 +499,7 @@ export function AnalysisLab() {
           withWarmup={withWarmup}
           warmupCount={warmupCount}
           variable={variable}
-          ball={ball}
+          ball={variableN}
           windowSize={windowSize}
           fromDate={resolved.fromDate}
           toDate={resolved.toDate}

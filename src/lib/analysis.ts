@@ -6,16 +6,26 @@ export type AnalysisDraw = {
   star_pool?: number
 }
 
-export const VARIABLE_NAMES = [
+export const NUMBER_VARIABLE_NAMES = [
   "sum",
   "spread",
   "parity",
   "high_low",
   "consecutive",
-  "star_sum",
   "centroid",
   "delay",
   "hit",
+] as const
+
+export const STAR_VARIABLE_NAMES = [
+  "star_sum",
+  "star_delay",
+  "star_hit",
+] as const
+
+export const VARIABLE_NAMES = [
+  ...NUMBER_VARIABLE_NAMES,
+  ...STAR_VARIABLE_NAMES,
 ] as const
 
 export type VariableName = (typeof VARIABLE_NAMES)[number]
@@ -26,10 +36,25 @@ export const VARIABLE_LABELS: Record<VariableName, string> = {
   parity: "Pairs / impairs",
   high_low: "Numéros ≥ 26",
   consecutive: "Paires consécutives",
-  star_sum: "Somme des étoiles",
   centroid: "Centre de masse",
   delay: "Retard d’une boule",
   hit: "Présence d’une boule",
+  star_sum: "Somme des étoiles",
+  star_delay: "Retard d’une étoile",
+  star_hit: "Présence d’une étoile",
+}
+
+export function variableNeedsBall(name: VariableName) {
+  return name === "delay" || name === "hit"
+}
+
+export function variableNeedsStar(name: VariableName) {
+  return name === "star_delay" || name === "star_hit"
+}
+
+export function seriesIndex(name: VariableName, ball: number, star: number) {
+  if (variableNeedsStar(name)) return star
+  return ball
 }
 
 function isoWeekKey(iso: string) {
@@ -66,13 +91,39 @@ function scalar(draw: AnalysisDraw, name: VariableName): number {
       return nums.filter((n) => n >= 26).length
     case "consecutive":
       return consecutivePairs(nums)
-    case "star_sum":
-      return draw.stars.reduce((a, b) => a + b, 0)
     case "centroid":
       return nums.reduce((a, b) => a + b, 0) / 5
+    case "star_sum":
+      return draw.stars.reduce((a, b) => a + b, 0)
     default:
       return 0
   }
+}
+
+function poolOf(draw: AnalysisDraw, stars: boolean) {
+  return stars ? draw.stars : draw.numbers
+}
+
+function hitPoints(rows: AnalysisDraw[], n: number, stars: boolean): SeriesPoint[] {
+  return rows.map((draw) => {
+    const hit = poolOf(draw, stars).includes(n)
+    return { date: draw.date, value: hit ? 1 : 0, hit }
+  })
+}
+
+function delayPoints(rows: AnalysisDraw[], n: number, stars: boolean): SeriesPoint[] {
+  let lastIndex: number | null = null
+  return rows.map((draw, i) => {
+    const hit = poolOf(draw, stars).includes(n)
+    let delay = i + 1
+    if (hit) {
+      delay = 0
+      lastIndex = i
+    } else if (lastIndex != null) {
+      delay = i - lastIndex
+    }
+    return { date: draw.date, value: delay, hit }
+  })
 }
 
 export type SeriesPoint = {
@@ -88,26 +139,12 @@ export function series(
 ): { name: VariableName; n?: number; drawCount: number; points: SeriesPoint[]; values: number[] } {
   const rows = ordered(draws)
   let points: SeriesPoint[] = []
-  if (name === "hit") {
-    const ball = n ?? 7
-    points = rows.map((draw) => {
-      const hit = draw.numbers.includes(ball)
-      return { date: draw.date, value: hit ? 1 : 0, hit }
-    })
-  } else if (name === "delay") {
-    const ball = n ?? 7
-    let lastIndex: number | null = null
-    points = rows.map((draw, i) => {
-      const hit = draw.numbers.includes(ball)
-      let delay = i + 1
-      if (hit) {
-        delay = 0
-        lastIndex = i
-      } else if (lastIndex != null) {
-        delay = i - lastIndex
-      }
-      return { date: draw.date, value: delay, hit }
-    })
+  if (name === "hit" || name === "star_hit") {
+    const stars = name === "star_hit"
+    points = hitPoints(rows, n ?? (stars ? 1 : 7), stars)
+  } else if (name === "delay" || name === "star_delay") {
+    const stars = name === "star_delay"
+    points = delayPoints(rows, n ?? (stars ? 1 : 7), stars)
   } else {
     points = rows.map((draw) => ({ date: draw.date, value: scalar(draw, name) }))
   }

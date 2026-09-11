@@ -58,6 +58,17 @@ def test_variables_uses_provided_draws() -> None:
     loaded.assert_called_once_with(era="current")
 
 
+def test_star_hit_uses_stars_not_numbers() -> None:
+    with (
+        patch("synchro.db.database_configured", return_value=True),
+        patch("synchro.db.all_draws", return_value=DRAWS),
+    ):
+        with _client() as client:
+            response = client.get("/api/analysis/variables?name=star_hit&n=1&era=current")
+    assert response.status_code == 200
+    assert response.json()["values"] == [1.0, 1.0, 0.0]
+
+
 def test_from_date_filters_draws() -> None:
     with (
         patch("synchro.db.database_configured", return_value=True),

@@ -4,17 +4,27 @@ from typing import Any, Callable
 
 from synchro.analysis.common import as_date, iso, numbers_of, ordered_draws, stars_of
 
+# Numéros d’abord, étoiles ensuite — même ordre que l’UI.
 VARIABLE_NAMES = (
     "sum",
     "spread",
     "parity",
     "high_low",
     "consecutive",
-    "star_sum",
     "centroid",
     "delay",
     "hit",
+    "star_sum",
+    "star_delay",
+    "star_hit",
 )
+
+_NEEDS_N = {
+    "delay": "boule 1–50",
+    "hit": "boule 1–50",
+    "star_delay": "étoile 1–12",
+    "star_hit": "étoile 1–12",
+}
 
 _SCALAR: dict[str, Callable[[dict[str, Any]], float]] = {
     "sum": lambda d: float(sum(numbers_of(d))),
@@ -22,8 +32,8 @@ _SCALAR: dict[str, Callable[[dict[str, Any]], float]] = {
     "parity": lambda d: float(sum(1 for n in numbers_of(d) if n % 2 == 0)),
     "high_low": lambda d: float(sum(1 for n in numbers_of(d) if n >= 26)),
     "consecutive": lambda d: float(_consecutive_pairs(numbers_of(d))),
-    "star_sum": lambda d: float(sum(stars_of(d))),
     "centroid": lambda d: round(sum(numbers_of(d)) / 5, 4),
+    "star_sum": lambda d: float(sum(stars_of(d))),
 }
 
 
@@ -40,13 +50,19 @@ def decade_hist(draw: dict[str, Any]) -> list[int]:
     return bins
 
 
-def _delay_series(draws: list[dict[str, Any]], ball: int) -> list[dict[str, Any]]:
+def _pool(draw: dict[str, Any], stars: bool) -> list[int]:
+    return stars_of(draw) if stars else numbers_of(draw)
+
+
+def _delay_series(
+    draws: list[dict[str, Any]], ball: int, *, stars: bool = False
+) -> list[dict[str, Any]]:
     last_index: int | None = None
     last_date = None
     out: list[dict[str, Any]] = []
     for i, draw in enumerate(draws):
         dt = as_date(draw["draw_date"])
-        hit = ball in numbers_of(draw)
+        hit = ball in _pool(draw, stars)
         if hit:
             delay_draws = 0
             delay_days = 0
@@ -69,11 +85,12 @@ def _delay_series(draws: list[dict[str, Any]], ball: int) -> list[dict[str, Any]
     return out
 
 
-def _hit_series(draws: list[dict[str, Any]], ball: int) -> list[dict[str, Any]]:
+def _hit_series(
+    draws: list[dict[str, Any]], ball: int, *, stars: bool = False
+) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for draw in draws:
-        nums = numbers_of(draw)
-        hit = 1.0 if ball in nums else 0.0
+        hit = 1.0 if ball in _pool(draw, stars) else 0.0
         out.append({"date": iso(as_date(draw["draw_date"])), "value": hit, "hit": bool(hit)})
     return out
 
@@ -83,18 +100,18 @@ def series(
     name: str = "sum",
     n: int | None = None,
 ) -> dict[str, Any]:
-    """Série scalaire indexée par tirage. `n` obligatoire pour delay et hit."""
+    """Série scalaire indexée par tirage. `n` obligatoire pour delay/hit (boule ou étoile)."""
     if name not in VARIABLE_NAMES:
         raise ValueError(f"Variable inconnue: {name}. Choisir parmi {VARIABLE_NAMES}.")
     ordered = ordered_draws(draws)
-    if name == "delay":
+    if name in _NEEDS_N:
         if n is None:
-            raise ValueError("delay requiert n (boule 1–50).")
-        points = _delay_series(ordered, int(n))
-    elif name == "hit":
-        if n is None:
-            raise ValueError("hit requiert n (boule 1–50).")
-        points = _hit_series(ordered, int(n))
+            raise ValueError(f"{name} requiert n ({_NEEDS_N[name]}).")
+        stars = name.startswith("star_")
+        if name in {"delay", "star_delay"}:
+            points = _delay_series(ordered, int(n), stars=stars)
+        else:
+            points = _hit_series(ordered, int(n), stars=stars)
     else:
         fn = _SCALAR[name]
         points = [{"date": iso(as_date(d["draw_date"])), "value": fn(d)} for d in ordered]

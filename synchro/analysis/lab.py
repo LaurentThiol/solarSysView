@@ -65,8 +65,9 @@ def lab_report(
     work = resolved["work"]
     with_warmup = resolved["with_warmup"]
     warmup_count = resolved["warmup_count"]
-    ball = n if variable in {"delay", "hit"} else None
-    var_n = n if variable in {"delay", "hit"} else None
+    needs_n = variable in {"delay", "hit", "star_delay", "star_hit"}
+    ball = n if needs_n else None
+    var_n = n if needs_n else None
     ohlc = ohlc_blocks(work, name=variable, block=block, window=window, n=var_n)
     variable_series = series(work, variable, n=var_n)
     full_series = series(with_warmup, variable, n=var_n)

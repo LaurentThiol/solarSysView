@@ -35,6 +35,27 @@ def test_delay_and_hit():
     assert hit["values"] == [1.0, 1.0, 1.0]
 
 
+def test_star_delay_and_hit():
+    hit = series(SAMPLE, "star_hit", n=1)
+    assert hit["values"] == [1.0, 1.0, 0.0]
+    delay = series(SAMPLE, "star_delay", n=2)
+    assert delay["values"] == [0.0, 1.0, 2.0]
+    missing = series(SAMPLE, "star_hit", n=12)
+    assert missing["values"] == [0.0, 0.0, 0.0]
+    star_sum = series(SAMPLE, "star_sum")
+    assert star_sum["values"] == [3.0, 4.0, 9.0]
+
+
+def test_variable_order_numbers_then_stars():
+    from synchro.analysis.variables import VARIABLE_NAMES
+
+    names = list(VARIABLE_NAMES)
+    assert names.index("hit") < names.index("star_sum")
+    assert names[-3:] == ["star_sum", "star_delay", "star_hit"]
+    assert "centroid" in names
+    assert names.index("centroid") < names.index("delay")
+
+
 def test_rolling_window_uses_draws():
     stats = rolling_stats(SAMPLE, "sum", window=2)
     assert stats["sample_size"] == 2
