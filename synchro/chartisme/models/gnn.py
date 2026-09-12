@@ -108,6 +108,10 @@ class FigureGnn(nn.Module):
         super().__init__()
         self.classes = list(classes)
         self.dim = dim
+        # Gardé pour `config()` : recharger des poids avec une profondeur ou
+        # une tête de projection différentes échouerait sur les clés absentes.
+        self.layers = layers
+        self.proj_dim = proj_dim
         self.node_in = nn.Linear(node_dim, dim)
         self.edge_in = nn.Linear(edge_dim, dim)
         self.convs = nn.ModuleList(
@@ -151,6 +155,8 @@ class FigureGnn(nn.Module):
             "kind": "gnn",
             "classes": list(self.classes),
             "dim": self.dim,
+            "layers": self.layers,
+            "proj_dim": self.proj_dim,
             "node_dim": self.node_in.in_features,
             "edge_dim": self.edge_in.in_features,
         }

@@ -180,7 +180,12 @@ def supervised_contrastive(embeddings: Any, labels: Any, *, temperature: float =
     if not bool(has_positive.any()):
         return embeddings.sum() * 0.0
     log_prob = similarity - torch.logsumexp(similarity, dim=1, keepdim=True)
-    per_row = (log_prob * positive).sum(dim=1) / positive.sum(dim=1).clamp(min=1)
+    # La diagonale vaut -inf après le masque, et son coefficient vaut zéro :
+    # une multiplication donnerait `-inf * 0` = NaN. L'autograd n'en souffre
+    # pas — le masque ne laisse passer aucun gradient là — mais la valeur
+    # remontée dans l'historique, elle, serait NaN à chaque époque.
+    kept = torch.where(positive, log_prob, torch.zeros_like(log_prob))
+    per_row = kept.sum(dim=1) / positive.sum(dim=1).clamp(min=1)
     return -(per_row[has_positive]).mean()
 
 
@@ -412,7 +417,12 @@ def fit_temperature(
         # Appliquer une température à une probabilité déjà normalisée est une
         # approximation ; elle suffit à choisir entre « trop sûr » et « pas
         # assez », qui est tout ce qu'on demande ici.
-        adjusted = [min(1.0, max(0.0, s ** (1.0 / temperature))) for s in logit_scores]
+        #
+        # L'exposant est `temperature` et non son inverse : la température est
+        # appliquée plus loin par `softmax(logits / T)`, où T > 1 **adoucit**.
+        # Avec l'inverse, la grille renvoyait 0,5 pour un modèle trop sûr de
+        # lui, et `predict` durcissait alors une confiance déjà excessive.
+        adjusted = [min(1.0, max(0.0, s**temperature)) for s in logit_scores]
         error = sum(
             (a - (1.0 if c else 0.0)) ** 2 for a, c in zip(adjusted, correct)
         ) / len(adjusted)
@@ -466,17 +476,31 @@ def load(name: str, *, directory: Path | None = None) -> Any | None:
     payload = torch.load(path, map_location="cpu", weights_only=False)
     config = payload.get("config") or {}
     classes = config.get("classes") or list(FIGURE_IDS)
+    # L'architecture est relue du fichier, pas des constantes du module : des
+    # poids entraînés avec une autre profondeur doivent rester chargeables, et
+    # une valeur par défaut qui bouge ne doit pas les rendre illisibles.
     if config.get("kind") == "gnn":
         from synchro.chartisme.models import gnn as G
 
-        model = G.build(classes, dim=config.get("dim", G.DEFAULT_DIM))
+        model = G.build(classes, **_shape_args(config, ("dim", "layers", "proj_dim")))
     else:
         from synchro.chartisme.models import svgformer as S
 
-        model = S.build(classes, dim=config.get("dim", S.DEFAULT_DIM))
+        model = S.build(
+            classes,
+            **_shape_args(
+                config,
+                ("dim", "heads", "path_layers", "group_layers", "proj_dim", "max_cmds", "max_paths"),
+            ),
+        )
     model.load_state_dict(payload["state"])
     model.eval()
     return model
+
+
+def _shape_args(config: dict[str, Any], names: Sequence[str]) -> dict[str, Any]:
+    """Hyperparamètres de forme présents dans le fichier, les autres par défaut."""
+    return {name: config[name] for name in names if config.get(name) is not None}
 
 
 def write_report(report: dict[str, Any], *, path: Path | None = None) -> Path:
@@ -510,8 +534,16 @@ def run(
     with_gnn: bool = True,
     with_dtw: bool = True,
     directory: Path | None = None,
+    report_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Entraîne, mesure, compare, écrit le rapport."""
+    """Entraîne, mesure, compare, écrit le rapport.
+
+    `directory` et `report_path` vont ensemble : un entraînement d'essai qui
+    rangerait ses poids ailleurs tout en écrivant le rapport canonique
+    laisserait `.chartisme/training.json` pointer vers des poids absents.
+    """
+    if report_path is None and directory is not None:
+        report_path = directory / REPORT_PATH.name
     from synchro.chartisme.dataset import encode_all, split
     from synchro.chartisme.models import pyg_available, torch_available
 
@@ -614,7 +646,7 @@ def run(
         report["models"]["gnn"] = {"unavailable": "torch-geometric absent"}
 
     report["verdict"] = verdict(report["models"])
-    write_report(report)
+    write_report(report, path=report_path)
     return report
 
 

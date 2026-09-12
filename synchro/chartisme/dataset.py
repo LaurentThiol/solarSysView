@@ -282,7 +282,7 @@ def encode(
     activity = [float(a) for a in sample.get("activity") or []]
     # Les enveloppes haute et basse — celles qui portent « épaules à même
     # niveau » et « résistance plate » — se construisent sur les pivots.
-    swings = swing_pivots(values, [str(i) for i in range(len(values))])
+    swings = swing_pivots(values, None)
     group = build_group(values, activity=activity or None, pivots=swings, k=pips, cubic=cubic)
     tokens = tokenize_group(group)
     graph = build_graph(

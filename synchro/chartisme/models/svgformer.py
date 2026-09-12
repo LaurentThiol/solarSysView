@@ -110,6 +110,12 @@ class SvgFormer(nn.Module):
         self.dim = dim
         self.max_cmds = max_cmds
         self.max_paths = max_paths
+        # Gardés pour `config()` : recharger des poids avec une profondeur
+        # différente échouerait sur les clés absentes du `state_dict`.
+        self.heads = heads
+        self.path_layers = path_layers
+        self.group_layers = group_layers
+        self.proj_dim = proj_dim
         self.embedding = CommandEmbedding(dim, max_cmds)
         self.path_encoder = _encoder(dim, heads, path_layers, dropout)
         # Le rôle du tracé est une information de groupe : sans lui, l'étage
@@ -173,6 +179,10 @@ class SvgFormer(nn.Module):
             "kind": "svgformer",
             "classes": list(self.classes),
             "dim": self.dim,
+            "heads": self.heads,
+            "path_layers": self.path_layers,
+            "group_layers": self.group_layers,
+            "proj_dim": self.proj_dim,
             "max_cmds": self.max_cmds,
             "max_paths": self.max_paths,
             "path_roles": list(PATH_ROLES),
