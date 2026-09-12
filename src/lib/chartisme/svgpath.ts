@@ -82,8 +82,10 @@ function twoProduct(x: number, y: number): [number, number] {
 }
 
 // `x ** 3` passe par `pow()` de la libm côté Python et par une approximation
-// moins fine côté V8 : un cube sur dix diffère d'un ulp. On somme donc le cube
-// en double-double, ce qui donne l'arrondi correct.
+// moins fine côté V8 : un cube sur dix diffère d'un ulp. Le double-double, seule
+// voie sans `fma`, rejoint `pow()` partout sauf sur les rares entrées où la libm
+// s'écarte elle-même de l'arrondi correct ; il n'y reste que le dernier bit d'un
+// point de contrôle, qu'effacent la quantification et l'écriture à 4 décimales.
 function cube(x: number) {
   const [square, squareErr] = twoProduct(x, x)
   const [hi, lo] = twoProduct(square, x)
