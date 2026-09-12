@@ -74,7 +74,7 @@ const SERIES_HELP: Record<SeriesKey, HelpCopy> = {
 
 const BAND_HELP: HelpCopy = {
   title: "Bande ±1,96σ√t",
-  body: "Zone où la marche a environ 95 % de chances de se trouver si chaque tirage est indépendant, d’espérance 0. Elle s’élargit avec √t. Descriptif : sortir de la bande n’annonce pas le tirage suivant.",
+  body: "Zone où une marche d’espérance 0 a environ 95 % de chances de se trouver. Elle s’élargit avec √t. L’axe Y suit le cumul observé : si la marche reste calme, la bande sort du graphe. Descriptif, pas une prédiction.",
 }
 
 const SUMMARY_HELP: HelpCopy = {
@@ -94,14 +94,17 @@ function smaPeriodFor(length: number) {
 }
 
 function formatStat(value: number, digits = 1) {
-  return value.toLocaleString("fr-FR", {
+  const rounded = Number(value.toFixed(digits))
+  return (rounded === 0 ? 0 : rounded).toLocaleString("fr-FR", {
     maximumFractionDigits: digits,
     minimumFractionDigits: 0,
   })
 }
 
 function formatSigned(value: number, digits = 1) {
-  return value.toLocaleString("fr-FR", {
+  const rounded = Number(value.toFixed(digits))
+  const normalized = rounded === 0 ? 0 : rounded
+  return normalized.toLocaleString("fr-FR", {
     maximumFractionDigits: digits,
     minimumFractionDigits: 0,
     signDisplay: "exceptZero",
@@ -132,28 +135,17 @@ function formatStreak(sign: -1 | 0 | 1, length: number, kind: SeriesKey) {
 function yDomain(
   view: ParityView,
   points: ChartPoint[],
-  hidden: Partial<Record<SeriesKey, boolean>>,
-  showBand: boolean
+  hidden: Partial<Record<SeriesKey, boolean>>
 ): [number, number] {
   if (view === "step") return [-5, 5]
   const values: number[] = [0]
   for (const point of points) {
-    if (!hidden.numbers) {
-      values.push(point.walkNumbers)
-      if (showBand) {
-        values.push(point.bandHiNumbers, point.bandLoNumbers)
-      }
-    }
-    if (!hidden.stars) {
-      values.push(point.walkStars)
-      if (showBand) {
-        values.push(point.bandHiStars, point.bandLoStars)
-      }
-    }
+    if (!hidden.numbers) values.push(point.walkNumbers)
+    if (!hidden.stars) values.push(point.walkStars)
   }
   const lo = Math.min(...values)
   const hi = Math.max(...values)
-  const pad = Math.max(1, Math.ceil((hi - lo) * 0.08) || 1)
+  const pad = Math.max(1, Math.ceil((hi - lo) * 0.12) || 1)
   return [lo - pad, hi + pad]
 }
 
@@ -283,7 +275,7 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
     return pearsonCorrelation(xs, ys)
   }, [points, view, hidden.numbers, hidden.stars])
 
-  const domain = yDomain(view, chartData, hidden, view === "walk" && showBand)
+  const domain = yDomain(view, chartData, hidden)
   const bandOn = view === "walk" && showBand
 
   return (
