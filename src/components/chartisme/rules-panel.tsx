@@ -83,6 +83,10 @@ export function RulesPanel({
   const [evaluated, setEvaluated] = useState<number | null>(null)
 
   useEffect(() => {
+    // `localStorage` n'existe pas au rendu serveur : la lecture ne peut se
+    // faire qu'après hydratation, sans quoi le serveur et le navigateur
+    // rendraient deux journaux différents.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRules(loadRules())
     setFirings(loadFirings())
   }, [])

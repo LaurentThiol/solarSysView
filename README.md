@@ -38,7 +38,7 @@ Sur macOS, un double-clic sur `Synchro.command` à la racine du dépôt lance au
 
 Options : `--skip-install`, `--force-install`, `--no-open`. Ports : `SYNCHRO_BACKEND_PORT` (8000), `SYNCHRO_FRONTEND_PORT` (43147). Logs : `.run/`.
 
-Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections **Tirage**, **Évolution**, **Analyse**, **Combinaisons**, **Morpho** et **Admin** sont des onglets du bandeau.
+Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections **Tirage**, **Évolution**, **Analyse**, **Combinaisons**, **Morpho**, **Chartisme** et **Admin** sont des onglets du bandeau.
 
 ## Tirage (`/tirage`)
 
@@ -71,6 +71,44 @@ Laboratoire visuel : chaque tirage est un glyphe sur la grille 5×10 + étoiles.
 
 Puis bouton **Charger / interroger** dans Morpho (poids HF en cache, pas dans le git). Si les extras ne sont pas là, le bouton les installe tout seul (torch + transformers 4.x + accelerate, ~2 Go, une fois). `transformers` est épinglé `<5` : la 5.x casse le chargement de `HfMoondream` (`all_tied_weights_keys`). CLIP navigateur : `@huggingface/transformers`, chargé au clic **Œil local CLIP**.
 
+## Chartisme (`/chartisme`)
+
+Les **17 figures chartistes** de la table de référence (tête & épaules et son inverse, doubles / triples sommets et creux, biseaux, triangles, rectangle, drapeau / fanion, tasse avec anse, diamant, broadening top) cherchées sur les courbes du logiciel : somme, écart, pairs, retard et sorties de chaque boule, retard et sorties de chaque étoile — 131 courbes exportées de l’archive.
+
+La **règle d’or** est appliquée telle quelle : une cassure n’est retenue que si l’activité dépasse sa moyenne mobile 20 **et** que la cassure est confirmée en clôture (ou par le pull-back suivant). Le « et » n’est pas négociable — c’est lui qui distingue la cassure du *fake breakout*. L’objectif projeté suit la colonne « Objectif projeté » de la table, figure par figure.
+
+Quatre lectures de la même fenêtre, comparées sur le **même** jeu de validation :
+
+| Lecture | Ce qu’elle regarde |
+|---|---|
+| géométrique | règles écrites à la main : pivots de swing, niveaux, pentes |
+| DTW | plus proche voisin élastique, sans un poids appris |
+| `svgformer` | transformer hiérarchique façon DeepSVG : la fenêtre est une suite de commandes `m` / `l` / `c` / `z` à arguments quantifiés |
+| `gnn` | GINEConv de PyTorch Geometric sur un graphe de coordonnées : ancres et points de contrôle en nœuds, segments et cordes en arêtes |
+
+Les deux réseaux travaillent sur une fenêtre **ramenée au carré unité**, donc sans dépendre de la résolution ni de l’unité de la variable. Ils sont **optionnels** :
+
+```bash
+./launch install-chartisme   # torch + torch-geometric, ~2 Go, une fois
+./launch chartisme-train     # quelques minutes sur processeur
+```
+
+Sans eux, l’onglet reste entier : détecteurs géométriques et recherche par ressemblance DTW n’ont besoin de rien. Poids dans `.chartisme/weights/`, hors dépôt ; `./launch doctor` affiche le verdict du dernier entraînement.
+
+**Atelier d’étiquetage** : sélection au pinceau sur la courbe, catalogue des 17 figures ou classe libre, placement des rôles de pivots (tête, épaules, ligne de cou…), bloc-croquis pour dessiner une forme et retrouver les fenêtres qui lui ressemblent, et une liste des fenêtres les plus incertaines à trancher en priorité. Tes étiquettes pèsent trois fois plus que le synthétique et partent d’abord en **validation** : un score mesuré sur les étiquettes faibles ne dirait que l’accord avec le détecteur.
+
+**Espace de règles**, délibérément descriptif : QUAND figure ∧ courbe ∧ confiance ∧ cassure ∧ tendance, ALORS `tag` / `alert` / `note` / `hypothesize` / `watch`. Les cinq actions sont des écritures dans le journal — aucune ne touche aux grilles, et il n’y a pas de branchement vers `/combinaisons`. Le rétro-test dit ensuite ce qui valait quelque chose.
+
+**Rétro-test**, deux questions et un garde-fou :
+
+- *l’objectif a-t-il été atteint ?* comparé à un modèle nul qui applique la même mesure à des points tirés au hasard sur la même courbe (même distance, même niveau d’invalidation, même horizon), avec intervalles de Wilson ;
+- *y a-t-il un signal sur les numéros ?* les boules sorties après chaque déclenchement contre l’uniforme, chaque tirage postérieur compté une seule fois, avec correction de Benjamini-Hochberg — cinquante tests simultanés produisent deux ou trois « découvertes » par pur hasard ;
+- le **taux de base** : combien de marches aléatoires de même longueur portent la même figure. Mesure inconfortable et nécessaire — une figure fréquente sur du bruit n’apprend rien quand on la voit sur une vraie courbe.
+
+**Export automatique** : `run_ensure()` accroche un cycle complet dès qu’un tirage entre en base (réexport des courbes → balayage → règles → journal → état dans `.chartisme/state.json`). Le cycle est non fatal et silencieux : un balayage qui casse n’empêche jamais une synchro FDJ d’aboutir. Désactivable par `SYNCHRO_CHARTISME_AUTO_EXPORT=0`.
+
+Les tirages sont indépendants. Une figure sur une courbe de retards ou de sorties est une propriété du tracé, pas une prédiction. Cet onglet décrit, et le rétro-test mesure l’écart entre la figure et le hasard ; il ne le comble pas.
+
 ## Admin (`/admin`)
 
 Page locale pour les consoles et les secrets (Neon, Google, OpenAI, Brave Search). Les valeurs sont lues/écrites dans `.env` — **jamais commitées**. Révélation / copie, test de connexion, mise à jour GitHub (`git fetch` / `git pull --ff-only`, équivalent `./launch update`), synchro FDJ.
@@ -79,7 +117,7 @@ En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, défini
 
 ## Interface web (Next.js)
 
-App Next.js (onglets **Tirage** `/tirage`, **Évolution** `/evolution`, **Analyse** `/analyse`, **Combinaisons** `/combinaisons`, **Morpho** `/morpho` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
+App Next.js (onglets **Tirage** `/tirage`, **Évolution** `/evolution`, **Analyse** `/analyse`, **Combinaisons** `/combinaisons`, **Morpho** `/morpho`, **Chartisme** `/chartisme` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install
@@ -110,7 +148,8 @@ Puis http://127.0.0.1:8000 (docs : `/docs`).
 | `python -m synchro sync` | Télécharge les 6 archives FDJ et les écrit dans Neon |
 | `python -m synchro serve` | API locale `/api/*` |
 | `python -m synchro export` | Snapshot JSON (`synchro/web/snapshot.json`) |
-| `make test` | Tests unitaires (parse FDJ, rangs, stats, `/api/alive`, ensure) |
+| `python -m synchro chartisme export\|scan\|train\|report` | Module chartisme sans interface (usage cron) |
+| `make test` | Tests unitaires (parse FDJ, rangs, stats, `/api/alive`, ensure, chartisme) |
 
 `DATABASE_URL` ne doit **jamais** être commitée. `.env` en local, variables d’environnement / secret GitHub Actions en déployé. Au premier `./launch`, le fichier `.env` est créé depuis `.env.example` s’il manque.
 
@@ -134,5 +173,10 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 - `POST /api/sync` — historique complet (bouton Admin)
 - `POST /api/sync/ensure` — rattrapage si Neon est en retard (`./launch`)
 - `GET\|POST /api/morpho/*` — glyphes, voisins, règles, anticipation, VLM
+- `GET /api/chartisme/catalog|status|curves|figures|svg|training` — table de référence, état du module, courbes exportées, figures d’une courbe, annotation SVG, rapport d’entraînement
+- `POST /api/chartisme/detect|similar` — lecture d’une fenêtre envoyée par le navigateur, recherche par ressemblance DTW
+- `GET\|POST /api/chartisme/labels|rules` · `DELETE …/{id}` — atelier d’étiquetage et espace de règles (Neon)
+- `POST /api/chartisme/rules/evaluate` · `GET /api/chartisme/firings` — déclenchements et journal
+- `GET /api/chartisme/backtest` — objectif atteint, signal sur les numéros, taux de base
 
 Application indépendante, non affiliée à La Française des Jeux.

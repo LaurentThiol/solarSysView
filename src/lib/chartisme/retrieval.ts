@@ -114,7 +114,8 @@ export function search(
     if (figure !== null && entry.figure !== figure) continue
     const distance = dtwDistance(shape, entry.profile, band)
     if (!Number.isFinite(distance)) continue
-    const { profile: _drop, ...rest } = entry
+    const { profile: _profile, ...rest } = entry
+    void _profile
     scored.push({
       ...rest,
       distance: round(distance, 5),

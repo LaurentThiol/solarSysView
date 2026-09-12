@@ -46,9 +46,11 @@ Usage:
   ./launch stop            Arrêt propre (ports ${BACKEND_PORT} / ${FRONTEND_PORT})
   ./launch status          Affiche l'état des services (alive, Neon, UI)
   ./launch update          Contrôle GitHub et tire origin (ff-only), puis réinstalle si besoin
-  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM
+  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM / chartisme
   ./launch install         Installe uniquement les dépendances
   ./launch install-vlm     Installe Moondream (torch + transformers + accelerate)
+  ./launch install-chartisme  Installe les réseaux du chartisme (torch + torch-geometric)
+  ./launch chartisme-train    Entraîne les réseaux du chartisme (options passées au CLI)
   ./launch shortcut        Installe un raccourci bureau / menu applications
   ./launch help            Cette aide
 
@@ -775,6 +777,79 @@ cmd_install_vlm() {
   ok "Moondream prêt. Dans Morpho : bouton Charger / interroger (télécharge les poids HF au premier coup)."
 }
 
+cmd_install_chartisme() {
+  local venv="$ROOT/.venv"
+  SKIP_INSTALL=0
+  ensure_install
+  info "Installation des réseaux du chartisme (torch + torch-geometric, ~2 Go)…"
+  if ! "$venv/bin/python" -m pip install -r "$ROOT/requirements-chartisme.txt"; then
+    die "pip install -r requirements-chartisme.txt a échoué. Voir ./launch doctor"
+  fi
+  ok "Réseaux prêts. Entraînement : ./launch chartisme-train (quelques minutes sur processeur)."
+  info "L'onglet Chartisme marche sans : détecteurs géométriques et ressemblance DTW n'ont besoin de rien."
+}
+
+cmd_chartisme_train() {
+  local venv="$ROOT/.venv" py="$ROOT/.venv/bin/python"
+  [[ -x "$py" ]] || die "Pas de venv — ./launch install puis ./launch install-chartisme"
+  if ! "$py" -c 'import torch' 2>/dev/null; then
+    die "torch absent — ./launch install-chartisme d'abord"
+  fi
+  info "Entraînement des réseaux du chartisme (quelques minutes)…"
+  "$py" -m synchro chartisme train "$@"
+}
+
+chartisme_doctor() {
+  local py="$ROOT/.venv/bin/python"
+  if [[ ! -x "$py" ]]; then
+    printf '%sChartisme : pas de venv — ./launch install%s\n' "$C_DIM" "$C_RESET"
+    return 0
+  fi
+  # Les détecteurs géométriques sont le cœur du module : s'ils manquent,
+  # c'est l'onglet entier qui est cassé, pas une option.
+  if ! "$py" -c 'import synchro.chartisme.figures' 2>/dev/null; then
+    warn "Chartisme : module introuvable — dépôt incomplet ?"
+    return 0
+  fi
+  ok "Chartisme : 17 détecteurs géométriques + ressemblance DTW (sans dépendance)"
+  if "$py" -c 'import torch, torch_geometric' 2>/dev/null; then
+    ok "Chartisme : torch + torch-geometric (transformer hiérarchique et GNN)"
+  elif "$py" -c 'import torch' 2>/dev/null; then
+    warn "Chartisme : torch-geometric absent — le GNN ne tournera pas (./launch install-chartisme)"
+  else
+    printf '%sChartisme : réseaux non installés (optionnels) — ./launch install-chartisme%s\n' \
+      "$C_DIM" "$C_RESET"
+  fi
+  local report="$ROOT/.chartisme/training.json"
+  if [[ -f "$report" ]]; then
+    "$py" - "$report" <<'PY' || true
+import json
+import sys
+
+try:
+    report = json.loads(open(sys.argv[1], encoding="utf-8").read())
+except (OSError, ValueError):
+    print("  rapport d'entraînement illisible")
+    raise SystemExit(0)
+verdict = report.get("verdict") or {}
+best = verdict.get("best")
+baseline = verdict.get("baseline_macro_f1")
+scores = " · ".join(
+    f"{name} {row.get('macro_f1')}"
+    for name, row in (report.get("models") or {}).items()
+    if row.get("macro_f1") is not None
+)
+print(f"  entraîné le {report.get('trained_at')} — {scores}")
+if best and verdict.get("networks_earn_their_place"):
+    print(f"  les réseaux gagnent leur place (meilleur : {best}, règle géométrique à {baseline})")
+elif best:
+    print(f"  les réseaux ne battent pas la règle géométrique ({baseline}) — meilleur : {best}")
+PY
+  else
+    printf '%sChartisme : jamais entraîné — ./launch chartisme-train%s\n' "$C_DIM" "$C_RESET"
+  fi
+}
+
 vlm_doctor() {
   local venv="$ROOT/.venv" py="$ROOT/.venv/bin/python"
   if [[ ! -x "$py" ]]; then
@@ -838,6 +913,7 @@ cmd_doctor() {
   fi
   cmd_status || true
   vlm_doctor
+  chartisme_doctor
   if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     ok "Git : $(git -C "$ROOT" rev-parse --short HEAD) ($(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?'))"
   else
@@ -1031,11 +1107,19 @@ cmd_start() {
 }
 
 CMD="start"
+PASSTHROUGH=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    start|stop|status|update|shortcut|help|doctor|install|install-vlm|-h|--help)
+    start|stop|status|update|shortcut|help|doctor|install|install-vlm|install-chartisme|-h|--help)
       CMD="$1"
       shift
+      ;;
+    chartisme-train)
+      # Le reste part tel quel vers le CLI Python (--per-class, --epochs…).
+      CMD="$1"
+      shift
+      PASSTHROUGH=("$@")
+      break
       ;;
     --skip-install) SKIP_INSTALL=1; shift ;;
     --force-install) FORCE_INSTALL=1; shift ;;
@@ -1058,6 +1142,8 @@ case "$CMD" in
   doctor) cmd_doctor ;;
   install) cmd_install ;;
   install-vlm) cmd_install_vlm ;;
+  install-chartisme) cmd_install_chartisme ;;
+  chartisme-train) cmd_chartisme_train "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" ;;
   shortcut) cmd_shortcut ;;
   *) die "Commande inconnue : $CMD" ;;
 esac

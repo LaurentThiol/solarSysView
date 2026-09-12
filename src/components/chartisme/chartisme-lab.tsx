@@ -98,10 +98,16 @@ export function ChartismeLab() {
     )
   }, [curve, scaleChoice, minConfidence])
 
-  useEffect(() => {
+  // Changer de courbe ou de seuil renumérote les figures : la sélection
+  // précédente désignerait autre chose. Ajusté au rendu plutôt que dans un
+  // effet, qui provoquerait un rendu en cascade avec l'ancien index affiché.
+  const scanKey = `${curveId}|${scaleChoice}|${minConfidence}`
+  const [lastScanKey, setLastScanKey] = useState(scanKey)
+  if (scanKey !== lastScanKey) {
+    setLastScanKey(scanKey)
     setSelected(0)
     setSelection(null)
-  }, [curveId, scaleChoice, minConfidence])
+  }
 
   const hit = hits[selected] ?? null
 

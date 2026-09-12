@@ -60,13 +60,22 @@ export function LabelAtelier({
   const [saved, setSaved] = useState<string | null>(null)
 
   useEffect(() => {
+    // `localStorage` n'existe pas au rendu serveur : la lecture ne peut se
+    // faire qu'après hydratation, sans quoi le serveur et le navigateur
+    // rendraient deux listes différentes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setClasses(loadClasses())
     setLabels(loadLabels())
   }, [])
 
-  useEffect(() => {
+  // Les rôles sont placés sur des index de la fenêtre : en changer les bornes
+  // les ferait pointer ailleurs sur la courbe.
+  const windowKey = `${curve?.id ?? ""}|${selection?.fromIndex ?? ""}|${selection?.toIndex ?? ""}`
+  const [lastWindowKey, setLastWindowKey] = useState(windowKey)
+  if (windowKey !== lastWindowKey) {
+    setLastWindowKey(windowKey)
     setRoles([])
-  }, [selection?.fromIndex, selection?.toIndex, curve?.id])
+  }
 
   const window = useMemo(() => {
     if (!curve || !selection) return null
