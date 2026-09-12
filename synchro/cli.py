@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from typing import Any
 
 import uvicorn
 
@@ -28,6 +29,21 @@ def main(argv: list[str] | None = None) -> int:
     serve = sub.add_parser("serve", help="Lancer l'interface locale")
     serve.add_argument("--host", default=None)
     serve.add_argument("--port", type=int, default=None)
+
+    chartisme = sub.add_parser(
+        "chartisme",
+        help="Module chartisme : export des courbes, figures, entraînement, rétro-test",
+    )
+    chartisme.add_argument(
+        "action",
+        choices=("export", "scan", "train", "report", "auto"),
+    )
+    chartisme.add_argument("--era", default="all", choices=("current", "all"))
+    chartisme.add_argument("--curve", default=None, help="Limiter à une courbe (ex. delay:7)")
+    chartisme.add_argument("--epochs", type=int, default=None)
+    chartisme.add_argument("--per-class", type=int, default=300)
+    chartisme.add_argument("--min-confidence", type=float, default=0.6)
+    chartisme.add_argument("--max-curves", type=int, default=12)
 
     args = parser.parse_args(argv)
 
@@ -70,6 +86,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Snapshot écrit: {path}")
         return 0
 
+    if args.command == "chartisme":
+        return run_chartisme(args)
+
     if args.command == "serve":
         settings = get_settings()
         uvicorn.run(
@@ -82,6 +101,139 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     parser.print_help()
+    return 1
+
+
+def run_chartisme(args: argparse.Namespace) -> int:
+    """Module chartisme en ligne de commande — usage cron, sans interface."""
+    from synchro.chartisme.auto import run_cycle, status
+    from synchro.chartisme.backtest import run as backtest_run
+    from synchro.chartisme.export import export_curves, manifest, read_bundle, write_bundle
+    from synchro.chartisme.scan import outcome_stats, scan_curve
+
+    def draws_of() -> list[dict[str, Any]]:
+        db.init_db()
+        return [db.serialize_draw(row) for row in db.all_draws(era=args.era)]
+
+    def bundle_of() -> dict[str, Any]:
+        cached = read_bundle()
+        if cached:
+            return cached
+        bundle = export_curves(draws_of())
+        write_bundle(bundle)
+        return bundle
+
+    if args.action == "export":
+        bundle = export_curves(draws_of())
+        path = write_bundle(bundle)
+        info = manifest(bundle)
+        print(
+            f"Courbes exportées: {info['curve_count']} "
+            f"({info['draw_count']} tirages) → {path}"
+        )
+        return 0
+
+    if args.action == "scan":
+        bundle = bundle_of()
+        curves = bundle.get("curves") or []
+        if args.curve:
+            curves = [c for c in curves if c.get("id") == args.curve]
+            if not curves:
+                print(f"Courbe introuvable: {args.curve}", file=sys.stderr)
+                return 1
+        chosen = curves[: args.max_curves]
+        hits: list[dict[str, Any]] = []
+        for curve in chosen:
+            hits.extend(scan_curve(curve, min_confidence=args.min_confidence))
+        print(f"{len(hits)} figures sur {len(chosen)} courbes")
+        stats = outcome_stats(hits)
+        for figure, row in sorted(stats.items(), key=lambda kv: -(kv[1]["settled"] or 0)):
+            rate = row["hit_rate"]
+            share = "—" if rate is None else f"{rate:.1%}"
+            print(
+                f"  {figure:<16} {row['settled']:>4} tranchées, "
+                f"objectif atteint {share}"
+            )
+        return 0
+
+    if args.action == "train":
+        from synchro.chartisme.dataset import build_dataset
+        from synchro.chartisme.models import torch_available
+        from synchro.chartisme.models.train import DEFAULT_EPOCHS
+        from synchro.chartisme.models.train import run as train_run
+
+        if not torch_available():
+            print(
+                "torch absent — ./launch install-chartisme. Les détecteurs "
+                "géométriques et la recherche DTW fonctionnent sans.",
+                file=sys.stderr,
+            )
+            return 1
+        dataset = build_dataset(per_class=args.per_class)
+        report = train_run(dataset, epochs=args.epochs or DEFAULT_EPOCHS)
+        for name, row in report["models"].items():
+            if "unavailable" in row:
+                print(f"  {name:<12} indisponible ({row['unavailable']})")
+                continue
+            print(
+                f"  {name:<12} justesse {row.get('accuracy')} "
+                f"F1 macro {row.get('macro_f1')}"
+            )
+        verdict = report["verdict"]
+        print(
+            "Les réseaux gagnent leur place."
+            if verdict["networks_earn_their_place"]
+            else f"Meilleur classifieur: {verdict['best']} — les réseaux ne battent "
+            "pas encore la référence."
+        )
+        return 0
+
+    if args.action == "report":
+        bundle = bundle_of()
+        curves = bundle.get("curves") or []
+        if args.curve:
+            curves = [c for c in curves if c.get("id") == args.curve]
+        chosen = curves[: args.max_curves]
+        hits: list[dict[str, Any]] = []
+        for curve in chosen:
+            hits.extend(scan_curve(curve, min_confidence=args.min_confidence))
+        report = backtest_run(
+            {str(c.get("id")): c for c in chosen},
+            hits,
+            draws=draws_of(),
+            base_rate_trials=120,
+        )
+        print(f"{report['figure_count']} figures sur {report['curve_count']} courbes")
+        for row in report["targets"]["figures"][:12]:
+            print(
+                f"  {row['figure']:<16} atteint {row['hit_rate']} "
+                f"contre {row['null_rate']} au hasard "
+                f"(n={row['settled']})"
+            )
+        print("  " + report["targets"]["verdict"]["note"])
+        base = report["base_rates"]
+        print(
+            f"  Taux de base : {base['windows_with_any_figure']:.0%} des marches "
+            "aléatoires portent au moins une figure."
+        )
+        if report.get("numbers"):
+            print("  " + report["numbers"]["verdict"])
+        print("  " + report["disclaimer"])
+        return 0
+
+    if args.action == "auto":
+        state = run_cycle(draws_of(), reason="cli")
+        print(
+            f"Cycle terminé en {state['seconds']}s — "
+            f"{state['curves']['curve_count']} courbes, "
+            f"{state['figures']['count']} figures, "
+            f"{state['firings']['count']} déclenchements"
+        )
+        current = status()
+        models = current["models"]
+        print(f"  Réseaux disponibles: {', '.join(models['available']) or 'aucun'}")
+        return 0
+
     return 1
 
 

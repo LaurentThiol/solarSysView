@@ -31,6 +31,30 @@ from synchro.analysis.tech import tech_pack
 from synchro.analysis.variables import VARIABLE_NAMES, series
 from synchro.analysis.windowing import resolve_window
 from synchro.analysis.windows import heikin_ashi, ohlc_blocks, rolling_stats
+from synchro.chartisme.auto import status as chartisme_status_payload
+from synchro.chartisme.backtest import run as chartisme_backtest_run
+from synchro.chartisme.catalog import catalog as chartisme_catalog
+from synchro.chartisme.export import bundle_index as chartisme_bundle_index
+from synchro.chartisme.export import export_curves as chartisme_export_curves
+from synchro.chartisme.export import manifest as chartisme_manifest
+from synchro.chartisme.export import read_bundle as chartisme_read_bundle
+from synchro.chartisme.export import write_bundle as chartisme_write_bundle
+from synchro.chartisme.figures import detect_figures as chartisme_detect_figures
+from synchro.chartisme.figures import summarize as chartisme_summarize
+from synchro.chartisme.models import availability as chartisme_model_availability
+from synchro.chartisme.models.infer import annotate as chartisme_annotate
+from synchro.chartisme.models.train import read_report as chartisme_read_report
+from synchro.chartisme.render import figure_render as chartisme_figure_render
+from synchro.chartisme.retrieval import build_index as chartisme_build_index
+from synchro.chartisme.retrieval import search as chartisme_search
+from synchro.chartisme.retrieval import sketch_to_values as chartisme_sketch_to_values
+from synchro.chartisme.rules import ACTION_TYPES as CHARTISME_ACTION_TYPES
+from synchro.chartisme.rules import evaluate_all as chartisme_evaluate_all
+from synchro.chartisme.rules import normalize_rule as chartisme_normalize_rule
+from synchro.chartisme.rules import summarize_firings as chartisme_summarize_firings
+from synchro.chartisme.scan import collapse_zones as chartisme_collapse_zones
+from synchro.chartisme.scan import scan_curve as chartisme_scan_curve
+from synchro.chartisme.scan import windows_of as chartisme_windows_of
 from synchro.config import ROOT, WEB_DIR, get_settings
 from synchro.morpho.anticipation import anticipate
 from synchro.morpho.geometry import analyze_draw, detect
@@ -95,6 +119,47 @@ class MorphoVlmIn(BaseModel):
     sequence: int = Field(default=0, ge=0, le=8)
     contrast_numbers: list[int] | None = None
     contrast_stars: list[int] | None = None
+    persist: bool = False
+
+
+class ChartismeWindowIn(BaseModel):
+    values: list[float] = Field(min_length=8)
+    dates: list[str] | None = None
+    activity: list[float] | None = None
+    min_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    models: bool = False
+
+
+class ChartismeSketchIn(BaseModel):
+    values: list[float] | None = None
+    # Croquis à la souris : suite de points écran, `y` croissant vers le bas.
+    points: list[list[float]] | None = None
+    era: str = "all"
+    curve: str | None = None
+    size: int = Field(default=60, ge=16, le=200)
+    stride: int = Field(default=15, ge=1, le=120)
+    top: int = Field(default=12, ge=1, le=50)
+
+
+class ChartismeLabelIn(BaseModel):
+    id: str | None = None
+    curve_id: str
+    figure: str
+    from_index: int = Field(ge=0)
+    to_index: int = Field(ge=0)
+    from_date: str | None = None
+    to_date: str | None = None
+    window_values: list[float] = Field(default_factory=list)
+    pivots: list[dict[str, Any]] = Field(default_factory=list)
+    note: str | None = None
+
+
+class ChartismeEvaluateIn(BaseModel):
+    era: str = "all"
+    curve: str | None = None
+    rules: list[dict[str, Any]] | None = None
+    max_curves: int = Field(default=12, ge=1, le=131)
+    min_confidence: float = Field(default=0.6, ge=0.0, le=1.0)
     persist: bool = False
 
 
@@ -715,6 +780,291 @@ def create_app() -> FastAPI:
                 pass
         return {"ok": True, "state": portrait_render(state), **extra}
 
+    # --- Chartisme ------------------------------------------------------------
+
+    def _chartisme_bundle(era: str = "all", refresh: bool = False) -> dict[str, Any]:
+        """Bundle de courbes, relu du disque si possible.
+
+        Le réexport coûte un parcours complet de l'archive : on ne le refait
+        que sur demande explicite ou quand rien n'a encore été écrit.
+        """
+        if not refresh:
+            cached = chartisme_read_bundle()
+            if cached:
+                return cached
+        bundle = chartisme_export_curves(_analysis_draws(era))
+        try:
+            chartisme_write_bundle(bundle)
+        except OSError:
+            pass
+        return bundle
+
+    @app.get("/api/chartisme/catalog")
+    def chartisme_catalog_route() -> dict[str, Any]:
+        return {"ok": True, **chartisme_catalog()}
+
+    @app.get("/api/chartisme/status")
+    def chartisme_status() -> dict[str, Any]:
+        state = chartisme_status_payload()
+        state["auto_export"] = get_settings().chartisme_auto_export
+        if db.database_configured():
+            try:
+                state["pending_labels"] = db.count_chartisme_labels()
+            except Exception:
+                state["pending_labels"] = None
+        return state
+
+    @app.get("/api/chartisme/curves")
+    def chartisme_curves(
+        era: str = Query("all", pattern="^(current|all)$"),
+        refresh: bool = False,
+        curve: str | None = None,
+    ) -> dict[str, Any]:
+        bundle = _chartisme_bundle(era, refresh)
+        curves = bundle.get("curves") or []
+        if curve:
+            curves = [c for c in curves if c.get("id") == curve]
+            if not curves:
+                raise HTTPException(404, "Courbe introuvable")
+            return {"ok": True, "curve": curves[0]}
+        return {
+            "ok": True,
+            "manifest": chartisme_manifest(bundle),
+            # Sans les séries : le bundle complet pèse plusieurs mégaoctets et
+            # l'onglet n'affiche qu'une courbe à la fois.
+            "curves": [
+                {k: v for k, v in c.items() if k not in ("values", "dates", "activity")}
+                for c in curves
+            ],
+        }
+
+    @app.get("/api/chartisme/figures")
+    def chartisme_figures(
+        curve: str = Query(...),
+        era: str = Query("all", pattern="^(current|all)$"),
+        scale: int | None = Query(None, ge=16, le=400),
+        min_confidence: float = Query(0.5, ge=0.0, le=1.0),
+        zones: bool = True,
+        models: bool = False,
+    ) -> dict[str, Any]:
+        bundle = _chartisme_bundle(era)
+        found = next(
+            (c for c in (bundle.get("curves") or []) if c.get("id") == curve), None
+        )
+        if not found:
+            raise HTTPException(404, "Courbe introuvable")
+        hits = chartisme_scan_curve(
+            found,
+            scales=(scale,) if scale else None,
+            min_confidence=min_confidence,
+        )
+        if zones:
+            hits = chartisme_collapse_zones(hits)
+        payload: dict[str, Any] = {
+            "ok": True,
+            "curve": found,
+            "figures": hits,
+            "summary": chartisme_summarize(hits),
+        }
+        if models:
+            payload["models"] = chartisme_annotate(
+                hits, found.get("values") or [], activity=found.get("activity")
+            )
+        return payload
+
+    @app.get("/api/chartisme/svg")
+    def chartisme_svg(
+        curve: str = Query(...),
+        index: int = Query(0, ge=0),
+        era: str = Query("all", pattern="^(current|all)$"),
+        min_confidence: float = Query(0.5, ge=0.0, le=1.0),
+    ) -> dict[str, Any]:
+        bundle = _chartisme_bundle(era)
+        found = next(
+            (c for c in (bundle.get("curves") or []) if c.get("id") == curve), None
+        )
+        if not found:
+            raise HTTPException(404, "Courbe introuvable")
+        hits = chartisme_collapse_zones(
+            chartisme_scan_curve(found, min_confidence=min_confidence)
+        )
+        if not hits:
+            raise HTTPException(404, "Aucune figure sur cette courbe")
+        if index >= len(hits):
+            raise HTTPException(404, "Figure introuvable")
+        return {"ok": True, **chartisme_figure_render(found, hits[index])}
+
+    @app.post("/api/chartisme/detect")
+    def chartisme_detect(payload: ChartismeWindowIn) -> dict[str, Any]:
+        values = [float(v) for v in payload.values]
+        if len(values) < 8:
+            raise HTTPException(400, "Fenêtre trop courte (8 valeurs minimum)")
+        hits = chartisme_detect_figures(
+            values,
+            payload.dates,
+            payload.activity,
+            min_confidence=payload.min_confidence,
+        )
+        out: dict[str, Any] = {
+            "ok": True,
+            "figures": hits,
+            "summary": chartisme_summarize(hits),
+        }
+        if payload.models:
+            out["models"] = chartisme_annotate(hits, values, activity=payload.activity)
+        return out
+
+    @app.post("/api/chartisme/similar")
+    def chartisme_similar(payload: ChartismeSketchIn) -> dict[str, Any]:
+        values = list(payload.values or [])
+        if payload.points and not values:
+            values = chartisme_sketch_to_values(payload.points)
+        if len(values) < 8:
+            raise HTTPException(400, "Croquis trop court")
+        bundle = _chartisme_bundle(payload.era)
+        windows = chartisme_windows_of(
+            bundle, size=payload.size, stride=payload.stride, curve=payload.curve
+        )
+        index = chartisme_build_index(windows)
+        return {
+            "ok": True,
+            "query": values,
+            "matches": chartisme_search(values, index, top=payload.top),
+            "searched": len(index),
+            "method": "dtw",
+        }
+
+    @app.get("/api/chartisme/labels")
+    def chartisme_labels(limit: int = Query(200, ge=1, le=1000)) -> dict[str, Any]:
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré.")
+        return {"items": [_json(db.serialize_row(r)) for r in db.list_chartisme_labels(limit)]}
+
+    @app.post("/api/chartisme/labels")
+    def chartisme_add_label(payload: ChartismeLabelIn) -> dict[str, Any]:
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré.")
+        row = db.upsert_chartisme_label(payload.model_dump())
+        return _json(db.serialize_row(row))
+
+    @app.delete("/api/chartisme/labels/{label_id}")
+    def chartisme_delete_label(label_id: str) -> dict[str, bool]:
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré.")
+        if not db.delete_chartisme_label(label_id):
+            raise HTTPException(404, "Étiquette introuvable")
+        return {"ok": True}
+
+    @app.get("/api/chartisme/rules")
+    def chartisme_rules_list() -> dict[str, Any]:
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré.")
+        return {
+            "items": [_json(db.serialize_row(r)) for r in db.list_chartisme_rules()],
+            "action_types": list(CHARTISME_ACTION_TYPES),
+        }
+
+    @app.post("/api/chartisme/rules")
+    def chartisme_save_rule(payload: dict[str, Any]) -> dict[str, Any]:
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré.")
+        rule = chartisme_normalize_rule(payload)
+        return _json(db.serialize_row(db.upsert_chartisme_rule(rule)))
+
+    @app.delete("/api/chartisme/rules/{rule_id}")
+    def chartisme_delete_rule(rule_id: str) -> dict[str, bool]:
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré.")
+        if not db.delete_chartisme_rule(rule_id):
+            raise HTTPException(404, "Règle introuvable")
+        return {"ok": True}
+
+    @app.get("/api/chartisme/firings")
+    def chartisme_firings(limit: int = Query(60, ge=1, le=400)) -> dict[str, Any]:
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré.")
+        return {"items": [_json(db.serialize_row(r)) for r in db.list_chartisme_firings(limit)]}
+
+    @app.post("/api/chartisme/rules/evaluate")
+    def chartisme_evaluate(payload: ChartismeEvaluateIn) -> dict[str, Any]:
+        bundle = _chartisme_bundle(payload.era)
+        curves = bundle.get("curves") or []
+        if payload.curve:
+            curves = [c for c in curves if c.get("id") == payload.curve]
+        hits: list[dict[str, Any]] = []
+        for found in curves[: payload.max_curves]:
+            hits.extend(
+                chartisme_scan_curve(found, min_confidence=payload.min_confidence)
+            )
+        rules = [chartisme_normalize_rule(r) for r in (payload.rules or [])]
+        if not rules and db.database_configured():
+            try:
+                rules = [
+                    chartisme_normalize_rule(db.serialize_row(r))
+                    for r in db.list_chartisme_rules()
+                ]
+            except Exception:
+                rules = []
+        firings = chartisme_evaluate_all(
+            rules, hits, curves=chartisme_bundle_index(bundle)
+        )
+        if payload.persist and db.database_configured():
+            for firing in firings:
+                try:
+                    db.insert_chartisme_firing(
+                        firing["rule_id"],
+                        firing.get("curve_id"),
+                        firing.get("figure"),
+                        firing.get("figure_date"),
+                        firing.get("snapshot"),
+                    )
+                except Exception:
+                    pass
+        return {
+            "ok": True,
+            "firings": firings,
+            "summary": chartisme_summarize_firings(firings),
+            "scanned": len(hits),
+        }
+
+    @app.get("/api/chartisme/backtest")
+    def chartisme_backtest(
+        era: str = Query("all", pattern="^(current|all)$"),
+        curve: str | None = None,
+        max_curves: int = Query(12, ge=1, le=131),
+        min_confidence: float = Query(0.6, ge=0.0, le=1.0),
+        follow: int = Query(5, ge=1, le=20),
+        numbers: bool = True,
+    ) -> dict[str, Any]:
+        bundle = _chartisme_bundle(era)
+        curves = bundle.get("curves") or []
+        if curve:
+            curves = [c for c in curves if c.get("id") == curve]
+        chosen = curves[:max_curves]
+        hits: list[dict[str, Any]] = []
+        for found in chosen:
+            hits.extend(
+                chartisme_scan_curve(found, min_confidence=min_confidence)
+            )
+        return {
+            "ok": True,
+            **chartisme_backtest_run(
+                {str(c.get("id")): c for c in chosen},
+                hits,
+                draws=_analysis_draws(era) if numbers else None,
+                follow=follow,
+                base_rate_trials=120,
+            ),
+        }
+
+    @app.get("/api/chartisme/training")
+    def chartisme_training() -> dict[str, Any]:
+        return {
+            "ok": True,
+            "report": chartisme_read_report(),
+            "models": chartisme_model_availability(),
+        }
+
     if WEB_DIR.exists():
         app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
 
@@ -732,11 +1082,35 @@ def run_sync(*, latest_only: bool = False) -> dict[str, Any]:
 
 def run_ensure() -> dict[str, Any]:
     try:
-        return ensure_draws()
+        result = ensure_draws()
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(502, f"Synchro FDJ impossible: {exc}") from exc
+    if result.get("upserted"):
+        _chartisme_auto_cycle()
+    return result
+
+
+def _chartisme_auto_cycle() -> None:
+    """Accroche du module chartisme sur l'arrivée d'un tirage.
+
+    Silencieuse et non fatale : le module se remet à jour tout seul quand
+    l'option est active, mais une synchro de tirages n'échoue jamais à cause
+    de lui.
+    """
+    if not get_settings().chartisme_auto_export:
+        return
+    try:
+        from synchro.chartisme.auto import run_auto_cycle
+
+        run_auto_cycle(
+            [db.serialize_draw(row) for row in db.all_draws(era="all")],
+            reason="ensure",
+            rules=[db.serialize_row(r) for r in db.list_chartisme_rules()],
+        )
+    except Exception:  # noqa: BLE001 — rien ne remonte jusqu'à la synchro
+        pass
 
 
 def export_snapshot(path: Path | None = None) -> Path:

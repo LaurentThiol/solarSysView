@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     google_api_key: str | None = None
     brave_api_key: str | None = None
     admin_password: str | None = None
+    # Rejoue le cycle chartisme dès qu'un tirage entre en base. Coûteux — un
+    # balayage complet de l'archive — donc désactivé par défaut.
+    chartisme_auto_export: bool = False
 
 
 @lru_cache

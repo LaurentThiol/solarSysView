@@ -40,7 +40,7 @@ def window_starts(length: int, size: int, stride: int) -> list[int]:
 def scan_curve(
     curve: dict[str, Any],
     *,
-    scales: Sequence[int] = DEFAULT_SCALES,
+    scales: Sequence[int] | None = DEFAULT_SCALES,
     stride_ratio: float = DEFAULT_STRIDE_RATIO,
     zigzag_pct: float = DEFAULT_ZIGZAG_PCT,
     eps: float = DEFAULT_EPS,
@@ -61,7 +61,7 @@ def scan_curve(
     if len(values) < MIN_WINDOW:
         return []
     found: list[dict[str, Any]] = []
-    for size in scales:
+    for size in scales or DEFAULT_SCALES:
         if size < MIN_WINDOW or size > len(values):
             continue
         stride = max(1, int(size * stride_ratio))
@@ -217,6 +217,46 @@ def scan_bundle(
         "figures": hits,
         "summary": summarize(hits),
     }
+
+
+def windows_of(
+    bundle: dict[str, Any],
+    *,
+    size: int = 60,
+    stride: int = 15,
+    curve: str | None = None,
+    limit: int = 4000,
+) -> list[dict[str, Any]]:
+    """Toutes les fenêtres du bundle, sans détection — pour la recherche.
+
+    L'appariement DTW est quadratique : `limit` borne l'index pour que le
+    bloc-croquis réponde en une seconde plutôt qu'en une minute.
+    """
+    out: list[dict[str, Any]] = []
+    for entry in bundle.get("curves") or []:
+        if curve is not None and entry.get("id") != curve:
+            continue
+        values = [float(v) for v in entry.get("values") or []]
+        dates = list(entry.get("dates") or [])
+        if len(values) < size:
+            continue
+        for start in window_starts(len(values), size, stride):
+            stop = start + size
+            out.append(
+                {
+                    "curve_id": entry.get("id"),
+                    "variable": entry.get("variable"),
+                    "label": entry.get("label"),
+                    "from_index": start,
+                    "to_index": stop - 1,
+                    "from": dates[start] if start < len(dates) else None,
+                    "to": dates[stop - 1] if stop - 1 < len(dates) else None,
+                    "values": values[start:stop],
+                }
+            )
+            if len(out) >= limit:
+                return out
+    return out
 
 
 def outcome_stats(hits: Sequence[dict[str, Any]]) -> dict[str, Any]:
