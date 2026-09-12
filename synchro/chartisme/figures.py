@@ -66,10 +66,48 @@ def _line_fit_error(line: tuple[float, float], points: Sequence[tuple[float, flo
     return sum(abs(y - _at(line, x)) for x, y in points) / len(points)
 
 
+# Une droite passe exactement par deux points : son erreur d'ajustement nulle
+# ne prouve rien. Tant qu'un troisième appui manque, on facture l'ignorance —
+# sans quoi une marche aléatoire quelconque décroche la confiance maximale.
+NO_EVIDENCE = 0.07
+
+
+def _mean_step(values: Sequence[float]) -> float:
+    """Déplacement moyen par barre — la vitesse du tracé."""
+    if len(values) < 2:
+        return 0.0
+    return sum(abs(values[i] - values[i - 1]) for i in range(1, len(values))) / (len(values) - 1)
+
+
 def _score(*errors: float) -> float:
     """Erreurs relatives → confiance dans [0.05, 0.99]."""
     total = sum(max(0.0, e) for e in errors)
     return max(0.05, min(0.99, 1.0 / (1.0 + 6.0 * total)))
+
+
+def _weigh(fit: float, first: int, last: int, pivots: int, window: int) -> float:
+    """Qualité d'ajustement pondérée par l'appui de la figure.
+
+    Deux lignes se laissent toujours ajuster à quatre points quelconques : sur
+    un bout de fenêtre et sans appuis, un bel ajustement ne veut rien dire. On
+    escompte donc la confiance selon la part de fenêtre expliquée et le nombre
+    de pivots mobilisés. C'est une mesure de qualité géométrique, jamais une
+    probabilité que la figure annonce quoi que ce soit.
+    """
+    span = max(1, window - 1)
+    coverage = min(1.0, (last - first) / span / 0.6)
+    support = min(1.0, pivots / 5.0)
+    return max(0.01, min(0.99, fit * (0.35 + 0.65 * (0.55 * coverage + 0.45 * support))))
+
+
+def _interior(ctx: Context, pivots: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Pivots hors point d'ouverture de la fenêtre.
+
+    Le premier point d'une fenêtre est presque toujours un extrême : il vient
+    du découpage, pas du tracé. Le compter comme un appui fait passer
+    n'importe quelle fenêtre pour un range.
+    """
+    return [p for p in pivots if int(p["index"]) > 0]
 
 
 def _pivot(index: int, value: float, role: str, dates: Sequence[str]) -> dict[str, Any]:
@@ -168,7 +206,7 @@ def _hit(
         "label": label_of(figure),
         "kind": kind_of(figure),
         "signal": signal_of(figure),
-        "confidence": round(float(confidence), 4),
+        "confidence": round(_weigh(confidence, first, last, len(pivots), len(dates)), 4),
         "from_index": first,
         "to_index": last,
         "from": dates[first] if first < len(dates) else None,
@@ -320,17 +358,21 @@ def detect_multi_top(ctx: Context) -> list[dict[str, Any]]:
             for slot in range(len(extremes) - count + 1):
                 group = extremes[slot : slot + count]
                 prices = [float(p["price"]) for p in group]
-                if max(prices) - min(prices) > ctx.eps * ctx.scale:
+                # Tolérance de niveau plus large que `eps` : sur une courbe
+                # bruitée, trois sommets « au même niveau » se lisent à l'œil
+                # bien avant de tenir dans 5 % du range.
+                level_eps = ctx.eps * 1.6 * ctx.scale
+                if max(prices) - min(prices) > level_eps:
                     continue
                 # Un range à quatre touches est un rectangle, pas un double
                 # sommet : on exige que le niveau ne soit touché que `count` fois.
                 center = sum(prices) / len(prices)
                 touches = sum(
                     1
-                    for p in extremes
-                    if abs(float(p["price"]) - center) <= ctx.eps * ctx.scale
+                    for p in _interior(ctx, extremes)
+                    if abs(float(p["price"]) - center) <= level_eps
                 )
-                if touches != count:
+                if touches > count:
                     continue
                 mids = [
                     c
@@ -345,6 +387,17 @@ def detect_multi_top(ctx: Context) -> list[dict[str, Any]]:
                 height = abs(extreme - level)
                 # Un vrai repli entre les sommets, pas une simple ondulation.
                 if height <= 0.18 * ctx.scale:
+                    continue
+                # Le support ne doit pas être, lui aussi, une borne de range :
+                # autant d'appuis dessous que dessus, et la figure est un
+                # rectangle. Les pivots de bord de fenêtre ne comptent pas,
+                # ils viennent du découpage et non du tracé.
+                held = sum(
+                    1
+                    for c in _interior(ctx, counters)
+                    if abs(float(c["price"]) - level) <= level_eps
+                )
+                if held > count - 1:
                     continue
                 breakout = ctx.breakout(
                     start=group[-1]["index"],
@@ -388,7 +441,7 @@ def detect_multi_top(ctx: Context) -> list[dict[str, Any]]:
                                 kind="measure",
                             ),
                         ],
-                        confidence=_score(spread),
+                        confidence=_score(spread, 0.0 if count >= 3 else NO_EVIDENCE),
                         dates=ctx.dates,
                         breakout=breakout,
                         target=target,
@@ -409,6 +462,7 @@ def _bounds(ctx: Context, pivots_h: list[dict[str, Any]], pivots_l: list[dict[st
         _line_fit_error(upper, [ctx.xy(p) for p in pivots_h])
         + _line_fit_error(lower, [ctx.xy(p) for p in pivots_l])
     ) / ctx.scale
+    err += NO_EVIDENCE * sum(1 for side in (pivots_h, pivots_l) if len(side) < 3)
     return upper, lower, err
 
 
@@ -649,64 +703,88 @@ def detect_diamond(ctx: Context) -> list[dict[str, Any]]:
 # --- Continuations avec mât ---------------------------------------------------
 
 
+def _pause_groups(pivots: list[dict[str, Any]], sizes: Sequence[int] = (4, 3)):
+    """Sous-suites courtes servant de pause à un drapeau : une borne suffit.
+
+    `_pivot_groups` réclame deux appuis par borne, ce qu'une consolidation de
+    quelques barres ne fournit jamais.
+    """
+    for size in sizes:
+        for start in range(len(pivots) - size + 1):
+            group = pivots[start : start + size]
+            if any(p["type"] == "H" for p in group) and any(p["type"] == "L" for p in group):
+                yield group
+
+
+def _pause_holds(values: Sequence[float], first: int, last: int, anchor: float, reach: float) -> bool:
+    """La pause reste-t-elle collée au sommet du mât ?
+
+    Un drapeau ne rend pas la moitié de l'élan : s'il s'en éloigne, la jambe
+    précédente n'était pas un mât mais une simple oscillation de plus.
+    """
+    return all(abs(float(v) - anchor) <= reach for v in values[first : last + 1])
+
+
 def detect_flag_pennant(ctx: Context) -> list[dict[str, Any]]:
-    """Drapeau et fanion : un mât franc, puis une consolidation serrée."""
+    """Drapeau et fanion : un mât franc, puis une consolidation serrée.
+
+    Le mât est cherché sur les valeurs et non d'un pivot à l'autre : son départ
+    tombe souvent hors fenêtre ou sous le seuil de détection des pivots, et la
+    figure disparaîtrait alors qu'elle est là. Ce qui la définit reste l'écart
+    d'échelle entre l'élan et la pause qui suit.
+    """
     out: list[dict[str, Any]] = []
-    if len(ctx.pivots) < 4:
-        return out
-    for slot in range(len(ctx.pivots) - 3):
-        start, end = ctx.pivots[slot], ctx.pivots[slot + 1]
-        pole = float(end["price"]) - float(start["price"])
-        pole_len = abs(pole)
-        pole_bars = end["index"] - start["index"]
-        if pole_bars <= 0 or pole_len < 0.35 * ctx.scale:
-            continue
-        rest = [p for p in ctx.pivots if p["index"] > end["index"]]
-        if len(rest) < 2:
-            continue
-        # La consolidation s'arrête au premier pivot qui sort du canal : sinon
-        # le sommet de la cassure entre dans la mesure et annule la figure.
-        consolidation: list[dict[str, Any]] = []
-        for pivot in rest[:5]:
-            trial = consolidation + [pivot]
-            trial_prices = [float(p["price"]) for p in trial]
-            if len(trial) >= 2 and max(trial_prices) - min(trial_prices) > pole_len * 0.55:
-                break
-            consolidation = trial
-        if len(consolidation) < 2:
-            continue
-        prices = [float(p["price"]) for p in consolidation]
+    for group in _pause_groups(ctx.pivots):
+        first, last = group[0]["index"], group[-1]["index"]
+        prices = [float(p["price"]) for p in group]
         amplitude = max(prices) - min(prices)
-        cons_h = [p for p in consolidation if p["type"] == "H"]
-        cons_l = [p for p in consolidation if p["type"] == "L"]
-        if len(cons_h) < 1 or len(cons_l) < 1:
+        if last <= first or amplitude <= 0:
             continue
-        first = end["index"]
-        last = consolidation[-1]["index"]
-        if last <= first:
+        # Le mât : le plus grand déplacement net aboutissant au début de la
+        # pause, cherché sur une fenêtre arrière proportionnée à la pause.
+        lookback = max(4, min(first, 2 * (last - first)))
+        window = ctx.values[first - lookback : first + 1]
+        if len(window) < 3:
             continue
-        direction = "up" if pole > 0 else "down"
-        # Fanion = consolidation qui se resserre ; drapeau = canal d'amplitude
-        # constante. Mesuré sur les valeurs, pour rester valable quand la
-        # consolidation ne fournit pas deux pivots par borne.
-        segment = ctx.values[first : last + 1]
-        figure = "flag"
-        if len(segment) >= 6:
-            half = len(segment) // 2
-            head_amp = max(segment[:half]) - min(segment[:half])
-            tail_amp = max(segment[half:]) - min(segment[half:])
-            if head_amp > 0 and tail_amp < head_amp * 0.7:
-                figure = "pennant"
+        anchor = float(ctx.values[first])
+        low, high = min(window), max(window)
+        pole_up = anchor - low
+        pole_down = high - anchor
+        direction = "up" if pole_up >= pole_down else "down"
+        pole_len = max(pole_up, pole_down)
+        origin_value = low if direction == "up" else high
+        pole_start = first - lookback + (window.index(origin_value))
+        pole_bars = first - pole_start
+        if pole_bars <= 0 or pole_len < 0.3 * ctx.scale:
+            continue
+        # L'élan doit dominer la pause : c'est tout ce qui sépare un drapeau
+        # d'un triangle, où chaque jambe vaut la précédente.
+        if amplitude > pole_len * 0.5:
+            continue
+        if not _pause_holds(ctx.values, first, last, anchor, pole_len * 0.5):
+            continue
+        # Une pause est brève. Au-delà, c'est une figure à bornes qui suit une
+        # tendance, pas un drapeau.
+        if last - first > 3 * pole_bars:
+            continue
+        if _mean_step(ctx.values[pole_start : first + 1]) < 1.5 * _mean_step(ctx.values[first : last + 1]):
+            continue
+        cons_h = [p for p in group if p["type"] == "H"]
+        cons_l = [p for p in group if p["type"] == "L"]
         upper = _fit_line([ctx.xy(p) for p in cons_h]) if len(cons_h) >= 2 else None
         lower = _fit_line([ctx.xy(p) for p in cons_l]) if len(cons_l) >= 2 else None
         if upper and lower:
+            fit_err = (
+                _line_fit_error(upper, [ctx.xy(p) for p in cons_h])
+                + _line_fit_error(lower, [ctx.xy(p) for p in cons_l])
+            ) / ctx.scale
             guides = _bound_guides(upper, lower, first, last)
             level_fn: Callable[[int], float] = (
                 (lambda i: _at(upper, float(i))) if direction == "up" else (lambda i: _at(lower, float(i)))
             )
         else:
-            top = max(prices)
-            bottom = min(prices)
+            fit_err = NO_EVIDENCE
+            top, bottom = max(prices), min(prices)
             guides = [
                 _guide("upper", [(first, top), (last, top)], kind="level"),
                 _guide("lower", [(first, bottom), (last, bottom)], kind="level"),
@@ -715,13 +793,24 @@ def detect_flag_pennant(ctx: Context) -> list[dict[str, Any]]:
         breakout = ctx.breakout(start=last, level=level_fn, direction=direction)
         origin = breakout["value"] if breakout else ctx.values[ctx.last_index()]
         target = origin + pole_len if direction == "up" else origin - pole_len
+        # Fanion = pause qui se resserre ; drapeau = canal d'amplitude
+        # constante. Mesuré jusqu'à la cassure : le dernier pivot détecté
+        # arrive tôt quand le resserrement fait taire les oscillations.
+        figure = "flag"
+        pause = ctx.values[first : (breakout["index"] if breakout else len(ctx.values))]
+        if len(pause) >= 6:
+            half = len(pause) // 2
+            head_amp = max(pause[:half]) - min(pause[:half])
+            tail_amp = max(pause[half:]) - min(pause[half:])
+            if head_amp > 0 and tail_amp < head_amp * 0.75:
+                figure = "pennant"
         pivots = [
-            _pivot(start["index"], float(start["price"]), "pole_start", ctx.dates),
-            _pivot(end["index"], float(end["price"]), "pole_end", ctx.dates),
+            _pivot(pole_start, float(ctx.values[pole_start]), "pole_start", ctx.dates),
+            _pivot(first, anchor, "pole_end", ctx.dates),
         ]
         pivots.extend(
             _pivot(p["index"], float(p["price"]), "upper" if p["type"] == "H" else "lower", ctx.dates)
-            for p in consolidation
+            for p in group
         )
         out.append(
             _hit(
@@ -731,12 +820,14 @@ def detect_flag_pennant(ctx: Context) -> list[dict[str, Any]]:
                 + [
                     _guide(
                         "pole",
-                        [(start["index"], float(start["price"])), (end["index"], float(end["price"]))],
+                        [(pole_start, float(ctx.values[pole_start])), (first, anchor)],
                         kind="measure",
                         dashed=False,
                     )
                 ],
-                confidence=_score(amplitude / max(pole_len, 1e-9) * 0.6),
+                # Une pause serrée fait un bon drapeau : on ne facture que
+                # l'amplitude excessive, jamais la tenue du canal.
+                confidence=_score(fit_err, max(0.0, amplitude / pole_len - 0.35)),
                 dates=ctx.dates,
                 breakout=breakout,
                 target=target,
