@@ -99,6 +99,89 @@ CREATE TABLE IF NOT EXISTS morpho_captions (
     UNIQUE (draw_date, model_id, prompt_id)
 );
 CREATE INDEX IF NOT EXISTS morpho_captions_draw ON morpho_captions (draw_date DESC);
+
+CREATE TABLE IF NOT EXISTS chartisme_labels (
+    id              TEXT PRIMARY KEY,
+    curve_id        TEXT NOT NULL,
+    variable        TEXT NOT NULL,
+    n               SMALLINT,
+    figure          TEXT NOT NULL,
+    custom_label    TEXT,
+    from_date       DATE,
+    to_date         DATE,
+    from_index      INTEGER,
+    to_index        INTEGER,
+    roles           JSONB NOT NULL DEFAULT '[]'::jsonb,
+    window_values   DOUBLE PRECISION[],
+    source          TEXT NOT NULL DEFAULT 'user',
+    author          TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS chartisme_labels_curve ON chartisme_labels (curve_id);
+CREATE INDEX IF NOT EXISTS chartisme_labels_figure ON chartisme_labels (figure);
+
+CREATE TABLE IF NOT EXISTS chartisme_runs (
+    id              BIGSERIAL PRIMARY KEY,
+    reason          TEXT NOT NULL,
+    started_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at     TIMESTAMPTZ,
+    curve_count     INTEGER,
+    figure_count    INTEGER,
+    draw_count      INTEGER,
+    latest_draw     DATE,
+    status          TEXT NOT NULL,
+    error           TEXT
+);
+CREATE INDEX IF NOT EXISTS chartisme_runs_started ON chartisme_runs (started_at DESC);
+
+CREATE TABLE IF NOT EXISTS chartisme_figures (
+    id              BIGSERIAL PRIMARY KEY,
+    run_id          BIGINT REFERENCES chartisme_runs(id) ON DELETE CASCADE,
+    curve_id        TEXT NOT NULL,
+    variable        TEXT NOT NULL,
+    n               SMALLINT,
+    figure          TEXT NOT NULL,
+    kind            TEXT NOT NULL,
+    scale           INTEGER,
+    confidence      DOUBLE PRECISION NOT NULL,
+    from_date       DATE,
+    to_date         DATE,
+    from_index      INTEGER,
+    to_index        INTEGER,
+    confirmed       BOOLEAN,
+    fake            BOOLEAN,
+    target          DOUBLE PRECISION,
+    outcome         TEXT,
+    detector        TEXT NOT NULL DEFAULT 'geometric',
+    geometry        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS chartisme_figures_curve ON chartisme_figures (curve_id, to_date DESC);
+CREATE INDEX IF NOT EXISTS chartisme_figures_figure ON chartisme_figures (figure);
+CREATE INDEX IF NOT EXISTS chartisme_figures_run ON chartisme_figures (run_id);
+
+CREATE TABLE IF NOT EXISTS chartisme_rules (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    condition       JSONB NOT NULL,
+    actions         JSONB NOT NULL,
+    active          BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS chartisme_firings (
+    id              BIGSERIAL PRIMARY KEY,
+    rule_id         TEXT NOT NULL REFERENCES chartisme_rules(id) ON DELETE CASCADE,
+    curve_id        TEXT,
+    figure          TEXT,
+    draw_date       DATE,
+    snapshot        JSONB NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS chartisme_firings_draw ON chartisme_firings (draw_date DESC);
+CREATE INDEX IF NOT EXISTS chartisme_firings_rule ON chartisme_firings (rule_id);
 """
 
 _pool: ConnectionPool | None = None
@@ -575,3 +658,315 @@ def get_morpho_caption(draw_date: str) -> dict[str, Any] | None:
             row = cur.fetchone()
             return dict(row) if row else None
 
+
+
+# --- Chartisme ---------------------------------------------------------------
+
+
+def list_chartisme_labels(
+    curve_id: str | None = None,
+    figure: str | None = None,
+    limit: int = 2000,
+) -> list[dict[str, Any]]:
+    sql = "SELECT * FROM chartisme_labels"
+    where: list[str] = []
+    params: dict[str, Any] = {"limit": limit}
+    if curve_id:
+        where.append("curve_id = %(curve_id)s")
+        params["curve_id"] = curve_id
+    if figure:
+        where.append("figure = %(figure)s")
+        params["figure"] = figure
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY updated_at DESC LIMIT %(limit)s"
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return [dict(r) for r in cur.fetchall()]
+
+
+def upsert_chartisme_label(label: dict[str, Any]) -> dict[str, Any]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO chartisme_labels (
+                    id, curve_id, variable, n, figure, custom_label,
+                    from_date, to_date, from_index, to_index, roles, window_values,
+                    source, author
+                ) VALUES (
+                    %(id)s, %(curve_id)s, %(variable)s, %(n)s, %(figure)s, %(custom_label)s,
+                    %(from_date)s, %(to_date)s, %(from_index)s, %(to_index)s, %(roles)s,
+                    %(window_values)s, %(source)s, %(author)s
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    curve_id = EXCLUDED.curve_id,
+                    variable = EXCLUDED.variable,
+                    n = EXCLUDED.n,
+                    figure = EXCLUDED.figure,
+                    custom_label = EXCLUDED.custom_label,
+                    from_date = EXCLUDED.from_date,
+                    to_date = EXCLUDED.to_date,
+                    from_index = EXCLUDED.from_index,
+                    to_index = EXCLUDED.to_index,
+                    roles = EXCLUDED.roles,
+                    window_values = EXCLUDED.window_values,
+                    source = EXCLUDED.source,
+                    author = EXCLUDED.author,
+                    updated_at = now()
+                RETURNING *
+                """,
+                {
+                    "id": label["id"],
+                    "curve_id": label["curve_id"],
+                    "variable": label.get("variable") or label["curve_id"].split(":")[0],
+                    "n": label.get("n"),
+                    "figure": label["figure"],
+                    "custom_label": label.get("custom_label"),
+                    "from_date": label.get("from_date"),
+                    "to_date": label.get("to_date"),
+                    "from_index": label.get("from_index"),
+                    "to_index": label.get("to_index"),
+                    "roles": Jsonb(label.get("roles") or []),
+                    "window_values": [float(v) for v in (label.get("values") or [])],
+                    "source": label.get("source") or "user",
+                    "author": label.get("author"),
+                },
+            )
+            row = dict(cur.fetchone())
+        conn.commit()
+        return row
+
+
+def delete_chartisme_label(label_id: str) -> bool:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM chartisme_labels WHERE id = %s", (label_id,))
+            deleted = cur.rowcount > 0
+        conn.commit()
+        return deleted
+
+
+def count_chartisme_labels() -> int:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS n FROM chartisme_labels")
+            return int(cur.fetchone()["n"])
+
+
+def start_chartisme_run(reason: str) -> int:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO chartisme_runs (reason, status) VALUES (%s, 'running') RETURNING id",
+                (reason,),
+            )
+            run_id = int(cur.fetchone()["id"])
+        conn.commit()
+        return run_id
+
+
+def finish_chartisme_run(
+    run_id: int,
+    status: str,
+    *,
+    curve_count: int | None = None,
+    figure_count: int | None = None,
+    draw_count: int | None = None,
+    latest_draw: str | None = None,
+    error: str | None = None,
+) -> None:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE chartisme_runs
+                   SET status = %(status)s,
+                       finished_at = now(),
+                       curve_count = %(curve_count)s,
+                       figure_count = %(figure_count)s,
+                       draw_count = %(draw_count)s,
+                       latest_draw = %(latest_draw)s,
+                       error = %(error)s
+                 WHERE id = %(run_id)s
+                """,
+                {
+                    "run_id": run_id,
+                    "status": status,
+                    "curve_count": curve_count,
+                    "figure_count": figure_count,
+                    "draw_count": draw_count,
+                    "latest_draw": latest_draw,
+                    "error": error,
+                },
+            )
+        conn.commit()
+
+
+def last_chartisme_run() -> dict[str, Any] | None:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM chartisme_runs ORDER BY started_at DESC LIMIT 1")
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
+def replace_chartisme_figures(run_id: int, figures: list[dict[str, Any]]) -> int:
+    """Remplace l'inventaire : un cycle décrit l'archive entière, pas un delta."""
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM chartisme_figures")
+            written = 0
+            for row in figures:
+                breakout = row.get("breakout") or {}
+                cur.execute(
+                    """
+                    INSERT INTO chartisme_figures (
+                        run_id, curve_id, variable, n, figure, kind, scale, confidence,
+                        from_date, to_date, from_index, to_index, confirmed, fake,
+                        target, outcome, detector, geometry
+                    ) VALUES (
+                        %(run_id)s, %(curve_id)s, %(variable)s, %(n)s, %(figure)s, %(kind)s,
+                        %(scale)s, %(confidence)s, %(from_date)s, %(to_date)s,
+                        %(from_index)s, %(to_index)s, %(confirmed)s, %(fake)s,
+                        %(target)s, %(outcome)s, %(detector)s, %(geometry)s
+                    )
+                    """,
+                    {
+                        "run_id": run_id,
+                        "curve_id": row.get("curve_id"),
+                        "variable": row.get("variable") or "",
+                        "n": row.get("n"),
+                        "figure": row["figure"],
+                        "kind": row.get("kind") or "",
+                        "scale": row.get("scale"),
+                        "confidence": float(row.get("confidence") or 0.0),
+                        "from_date": row.get("from"),
+                        "to_date": row.get("to"),
+                        "from_index": row.get("from_index"),
+                        "to_index": row.get("to_index"),
+                        "confirmed": breakout.get("confirmed"),
+                        "fake": breakout.get("fake"),
+                        "target": (row.get("target") or {}).get("value"),
+                        "outcome": (row.get("outcome") or {}).get("status"),
+                        "detector": row.get("detector") or "geometric",
+                        "geometry": Jsonb(
+                            {
+                                "pivots": row.get("pivots") or [],
+                                "guides": row.get("guides") or [],
+                                "breakout": breakout or None,
+                                "alternatives": row.get("alternatives") or [],
+                            }
+                        ),
+                    },
+                )
+                written += 1
+        conn.commit()
+        return written
+
+
+def list_chartisme_figures(
+    curve_id: str | None = None,
+    figure: str | None = None,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    sql = "SELECT * FROM chartisme_figures"
+    where: list[str] = []
+    params: dict[str, Any] = {"limit": limit}
+    if curve_id:
+        where.append("curve_id = %(curve_id)s")
+        params["curve_id"] = curve_id
+    if figure:
+        where.append("figure = %(figure)s")
+        params["figure"] = figure
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY to_date DESC NULLS LAST, confidence DESC LIMIT %(limit)s"
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return [dict(r) for r in cur.fetchall()]
+
+
+def list_chartisme_rules() -> list[dict[str, Any]]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM chartisme_rules ORDER BY updated_at DESC")
+            return [dict(r) for r in cur.fetchall()]
+
+
+def upsert_chartisme_rule(rule: dict[str, Any]) -> dict[str, Any]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO chartisme_rules (id, name, condition, actions, active)
+                VALUES (%(id)s, %(name)s, %(condition)s, %(actions)s, %(active)s)
+                ON CONFLICT (id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    condition = EXCLUDED.condition,
+                    actions = EXCLUDED.actions,
+                    active = EXCLUDED.active,
+                    updated_at = now()
+                RETURNING *
+                """,
+                {
+                    "id": rule["id"],
+                    "name": rule["name"],
+                    "condition": Jsonb(rule["condition"]),
+                    "actions": Jsonb(rule["actions"]),
+                    "active": bool(rule.get("active", True)),
+                },
+            )
+            row = dict(cur.fetchone())
+        conn.commit()
+        return row
+
+
+def delete_chartisme_rule(rule_id: str) -> bool:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM chartisme_rules WHERE id = %s", (rule_id,))
+            deleted = cur.rowcount > 0
+        conn.commit()
+        return deleted
+
+
+def insert_chartisme_firing(
+    rule_id: str,
+    *,
+    curve_id: str | None,
+    figure: str | None,
+    draw_date: str | None,
+    snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO chartisme_firings (rule_id, curve_id, figure, draw_date, snapshot)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING *
+                """,
+                (rule_id, curve_id, figure, draw_date, Jsonb(snapshot)),
+            )
+            row = dict(cur.fetchone())
+        conn.commit()
+        return row
+
+
+def list_chartisme_firings(limit: int = 60) -> list[dict[str, Any]]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT f.*, r.name AS rule_name
+                  FROM chartisme_firings f
+             LEFT JOIN chartisme_rules r ON r.id = f.rule_id
+              ORDER BY f.created_at DESC
+                 LIMIT %s
+                """,
+                (limit,),
+            )
+            return [dict(r) for r in cur.fetchall()]

@@ -1,0 +1,274 @@
+"""Balayage de l'archive : toutes les fenêtres, toutes les courbes.
+
+`synchro.analysis.tech.detect_chart_patterns` ne regarde que les derniers pivots
+— elle répond « où en est-on », ce qui suffit à l'onglet Figures. L'entraînement,
+le rétro-test et la recherche par ressemblance ont besoin de l'inverse : chaque
+figure jamais formée, avec sa position. C'est le rôle de ce module.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Iterable, Sequence
+
+from synchro.chartisme.figures import (
+    DEFAULT_EPS,
+    DEFAULT_MAX_OVERLAP,
+    DEFAULT_ZIGZAG_PCT,
+    dedupe,
+    detect_figures,
+    rank_key,
+    summarize,
+    target_reached,
+)
+
+# Trois échelles : une figure courte n'a pas la même durée qu'un range annuel.
+DEFAULT_SCALES = (30, 60, 120)
+DEFAULT_STRIDE_RATIO = 0.25
+MIN_WINDOW = 16
+
+
+def window_starts(length: int, size: int, stride: int) -> list[int]:
+    if length < size:
+        return []
+    starts = list(range(0, length - size + 1, max(1, stride)))
+    tail = length - size
+    if starts and starts[-1] != tail:
+        starts.append(tail)
+    return starts or [0]
+
+
+def scan_curve(
+    curve: dict[str, Any],
+    *,
+    scales: Sequence[int] = DEFAULT_SCALES,
+    stride_ratio: float = DEFAULT_STRIDE_RATIO,
+    zigzag_pct: float = DEFAULT_ZIGZAG_PCT,
+    eps: float = DEFAULT_EPS,
+    min_confidence: float = 0.5,
+    max_overlap: float = DEFAULT_MAX_OVERLAP,
+    top_per_zone: bool = False,
+) -> list[dict[str, Any]]:
+    """Figures d'une courbe, indices ramenés au repère de la courbe entière.
+
+    `top_per_zone` ne garde que la meilleure lecture par zone. Plusieurs
+    lectures d'une même zone sont légitimes — la ligne de cou d'une ETE est
+    aussi un double creux — mais pour parcourir l'archive on veut une liste
+    courte.
+    """
+    values = [float(v) for v in curve.get("values") or []]
+    dates = list(curve.get("dates") or [])
+    activity = [float(a) for a in curve.get("activity") or []]
+    if len(values) < MIN_WINDOW:
+        return []
+    found: list[dict[str, Any]] = []
+    for size in scales:
+        if size < MIN_WINDOW or size > len(values):
+            continue
+        stride = max(1, int(size * stride_ratio))
+        for start in window_starts(len(values), size, stride):
+            stop = start + size
+            hits = detect_figures(
+                values[start:stop],
+                dates[start:stop],
+                activity[start:stop],
+                zigzag_pct=zigzag_pct,
+                eps=eps,
+                min_confidence=min_confidence,
+                max_overlap=max_overlap,
+            )
+            for hit in hits:
+                found.append(
+                    _rebase(
+                        hit,
+                        offset=start,
+                        scale=size,
+                        curve=curve,
+                        values=values,
+                        dates=dates,
+                    )
+                )
+    kept = dedupe(found, max_overlap=max_overlap)
+    return collapse_zones(kept, max_overlap=max_overlap) if top_per_zone else kept
+
+
+def collapse_zones(
+    hits: Sequence[dict[str, Any]],
+    *,
+    max_overlap: float = DEFAULT_MAX_OVERLAP,
+) -> list[dict[str, Any]]:
+    """Une seule figure par zone, la mieux classée ; les autres en `alternatives`."""
+    kept: list[dict[str, Any]] = []
+    for hit in sorted(hits, key=rank_key):
+        host = next(
+            (k for k in kept if _span_overlap(k, hit) > max_overlap),
+            None,
+        )
+        if host is None:
+            kept.append({**hit, "alternatives": []})
+            continue
+        host["alternatives"].append(
+            {"figure": hit["figure"], "label": hit["label"], "confidence": hit["confidence"]}
+        )
+    return kept
+
+
+def _span_overlap(a: dict[str, Any], b: dict[str, Any]) -> float:
+    lo = max(a["from_index"], b["from_index"])
+    hi = min(a["to_index"], b["to_index"])
+    if hi <= lo:
+        return 0.0
+    shortest = min(a["to_index"] - a["from_index"], b["to_index"] - b["from_index"])
+    return (hi - lo) / shortest if shortest > 0 else 0.0
+
+
+def sample_by_figure(
+    hits: Sequence[dict[str, Any]],
+    *,
+    per_figure: int = 200,
+    seed: int = 0,
+) -> list[dict[str, Any]]:
+    """Échantillon équilibré par classe — sinon l'entraînement voit surtout du bruit."""
+    import random
+
+    rng = random.Random(seed)
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for hit in hits:
+        buckets.setdefault(hit["figure"], []).append(hit)
+    out: list[dict[str, Any]] = []
+    for figure, rows in sorted(buckets.items()):
+        ranked = sorted(rows, key=rank_key)
+        if len(ranked) <= per_figure:
+            out.extend(ranked)
+            continue
+        # Les mieux classées d'abord, puis un tirage au sort pour la diversité.
+        head = ranked[: per_figure // 2]
+        tail = rng.sample(ranked[per_figure // 2 :], per_figure - len(head))
+        out.extend(head + tail)
+    return out
+
+
+def _rebase(
+    hit: dict[str, Any],
+    *,
+    offset: int,
+    scale: int,
+    curve: dict[str, Any],
+    values: Sequence[float],
+    dates: Sequence[str],
+) -> dict[str, Any]:
+    """Décale les indices d'une fenêtre vers le repère de la courbe."""
+    out = dict(hit)
+    out["curve_id"] = curve.get("id")
+    out["variable"] = curve.get("variable")
+    out["n"] = curve.get("n")
+    out["scale"] = scale
+    out["window_start"] = offset
+    out["from_index"] = hit["from_index"] + offset
+    out["to_index"] = hit["to_index"] + offset
+    out["pivots"] = [
+        {**pivot, "index": pivot["index"] + offset, "date": _date(dates, pivot["index"] + offset)}
+        for pivot in hit.get("pivots") or []
+    ]
+    out["guides"] = [
+        {
+            **guide,
+            "points": [
+                {**point, "index": point["index"] + offset} for point in guide.get("points") or []
+            ],
+        }
+        for guide in hit.get("guides") or []
+    ]
+    breakout = hit.get("breakout")
+    if breakout:
+        index = breakout["index"] + offset
+        out["breakout"] = {**breakout, "index": index, "date": _date(dates, index)}
+    out["from"] = _date(dates, out["from_index"])
+    out["to"] = _date(dates, out["to_index"])
+    out["outcome"] = target_reached(values, out)
+    return out
+
+
+def _date(dates: Sequence[str], index: int) -> str | None:
+    return dates[index] if 0 <= index < len(dates) else None
+
+
+def scan_bundle(
+    bundle: dict[str, Any],
+    *,
+    only: Iterable[str] | None = None,
+    limit_per_curve: int | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Balaie tout un bundle de courbes."""
+    wanted = set(only) if only is not None else None
+    hits: list[dict[str, Any]] = []
+    scanned = 0
+    for curve in bundle.get("curves") or []:
+        if wanted is not None and curve.get("id") not in wanted:
+            continue
+        scanned += 1
+        found = scan_curve(curve, **kwargs)
+        found.sort(key=rank_key)
+        hits.extend(found if limit_per_curve is None else found[:limit_per_curve])
+    hits.sort(key=rank_key)
+    return {
+        "exported_at": bundle.get("exported_at"),
+        "curve_count": scanned,
+        "figures": hits,
+        "summary": summarize(hits),
+    }
+
+
+def outcome_stats(hits: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Part des objectifs atteints, par figure — la base du rétro-test."""
+    per_figure: dict[str, dict[str, int]] = {}
+    for hit in hits:
+        outcome = hit.get("outcome") or {}
+        row = per_figure.setdefault(
+            hit["figure"], {"reached": 0, "invalidated": 0, "open": 0, "no_breakout": 0}
+        )
+        status = outcome.get("status", "no_breakout")
+        if status in row:
+            row[status] += 1
+    for row in per_figure.values():
+        settled = row["reached"] + row["invalidated"]
+        row["settled"] = settled
+        row["hit_rate"] = round(row["reached"] / settled, 4) if settled else None
+    return per_figure
+
+
+def windows_for_training(
+    curve: dict[str, Any],
+    hits: Sequence[dict[str, Any]],
+    *,
+    size: int = 60,
+) -> list[dict[str, Any]]:
+    """Fenêtres étiquetées par le détecteur — les étiquettes faibles."""
+    values = [float(v) for v in curve.get("values") or []]
+    dates = list(curve.get("dates") or [])
+    activity = [float(a) for a in curve.get("activity") or []]
+    out: list[dict[str, Any]] = []
+    for hit in hits:
+        if hit.get("curve_id") not in (None, curve.get("id")):
+            continue
+        end = hit["to_index"]
+        breakout = hit.get("breakout")
+        if breakout:
+            end = max(end, breakout["index"])
+        start = max(0, end - size + 1)
+        if end - start + 1 < MIN_WINDOW:
+            continue
+        out.append(
+            {
+                "curve_id": curve.get("id"),
+                "figure": hit["figure"],
+                "confidence": hit["confidence"],
+                "from_index": start,
+                "to_index": end,
+                "from": _date(dates, start),
+                "to": _date(dates, end),
+                "values": values[start : end + 1],
+                "activity": activity[start : end + 1],
+            }
+        )
+    return out
