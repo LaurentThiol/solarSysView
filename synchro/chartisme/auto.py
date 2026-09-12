@@ -94,7 +94,15 @@ def run_cycle(
     }
     if persist:
         write_state(state)
-    return {**state, "bundle": bundle, "scan": scan, "hits": hits, "firings": firings}
+    # Le détail sort sous un autre nom : sous `firings`, il masquerait le
+    # résumé, que `run_auto_cycle` retire ensuite avec le reste du volume.
+    return {
+        **state,
+        "bundle": bundle,
+        "scan": scan,
+        "hits": hits,
+        "firings_list": firings,
+    }
 
 
 def run_auto_cycle(
@@ -121,7 +129,8 @@ def run_auto_cycle(
         except OSError:
             pass
         return None
-    return {k: v for k, v in result.items() if k not in ("bundle", "scan", "hits", "firings")}
+    heavy = ("bundle", "scan", "hits", "firings_list")
+    return {k: v for k, v in result.items() if k not in heavy}
 
 
 def status() -> dict[str, Any]:
