@@ -1,0 +1,14 @@
+# Réseaux du module chartisme — optionnels.
+#
+# Sans eux, l'onglet reste entier : détecteurs géométriques, annotations,
+# recherche par ressemblance DTW, règles et rétro-test. Seuls le transformer
+# hiérarchique et le GNN demandent torch.
+#
+# Installation : ./launch install-chartisme
+#
+# Pour un poste sans carte graphique, la roue CPU suffit et pèse dix fois
+# moins :
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.6
+torch-geometric>=2.6
+numpy>=1.26
