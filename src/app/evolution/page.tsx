@@ -5,7 +5,7 @@ import { EvolutionPanel } from "@/components/evolution-panel"
 export const metadata: Metadata = {
   title: "Évolution — Synchro",
   description:
-    "Évolution des tirages EuroMillions, numéros et étoiles les plus sortis (accès admin).",
+    "Évolution des tirages EuroMillions, suivi pair/impair, numéros et étoiles les plus sortis (accès admin).",
   robots: { index: false, follow: false },
 }
 
@@ -15,8 +15,8 @@ export default function EvolutionPage() {
       <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         <h1 className="text-3xl font-semibold tracking-tight">Évolution · statistiques</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          Courbe, 20 ou 50 derniers tirages, fréquences et retards. Accès admin,
-          comme les services.
+          Courbe, suivi pair/impair, 20 ou 50 derniers tirages, fréquences et
+          retards. Accès admin, comme les services.
         </p>
       </div>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-12 sm:px-6">

@@ -449,7 +449,7 @@ const NAV_ITEMS = [
     label: "Évolution",
     help: {
       title: "Évolution",
-      body: "Courbes dans le temps et classements des numéros / étoiles. Accès protégé par mot de passe admin.",
+      body: "Courbes dans le temps, suivi pair/impair, classements des numéros / étoiles. Accès protégé par mot de passe admin.",
     },
   },
   {

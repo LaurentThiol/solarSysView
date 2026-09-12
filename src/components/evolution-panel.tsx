@@ -7,6 +7,7 @@ import { AdminGate } from "@/components/admin-gate"
 import { DrawChart } from "@/components/draw-chart"
 import { EvolutionDraws } from "@/components/evolution-draws"
 import { EvolutionHeat } from "@/components/evolution-heat"
+import { EvolutionParity } from "@/components/evolution-parity"
 import { FrequencyCard } from "@/components/frequency-card"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -204,6 +205,8 @@ function EvolutionContent() {
 
       <DrawChart draws={filtered} />
 
+      <EvolutionParity draws={filtered} />
+
       <section className="grid gap-4 lg:grid-cols-2">
         <FrequencyCard
           title="Numéros les plus sortis"
@@ -260,8 +263,9 @@ function EvolutionContent() {
       {lastWindow ? <EvolutionDraws draws={filtered} /> : null}
 
       <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
-        Chaque tirage est indépendant. Les fréquences et la SMA décrivent la
-        fenêtre choisie, elles ne prédisent pas le prochain tirage.
+        Chaque tirage est indépendant. Les fréquences, la SMA et le cumul
+        pair/impair décrivent la fenêtre choisie, elles ne prédisent pas le
+        prochain tirage.
       </p>
     </div>
   )

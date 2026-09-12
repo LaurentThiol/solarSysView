@@ -46,7 +46,7 @@ Archives EuroMillions : tableau filtrable et export CSV. En local, les données 
 
 ## Évolution (`/evolution`)
 
-Onglet admin : **évolution dans le temps**, **20 / 50 derniers tirages**, **numéros et étoiles les plus sortis / en retard**, grille 1–50. Même accès que **Admin** (`ADMIN_PASSWORD`, ou ouvert en local sur `127.0.0.1`). Fenêtres : 20 tirages, 50 tirages, année en cours, formule actuelle, tout l’historique ; filtre mois sur les plages calendaires.
+Onglet admin : **évolution dans le temps**, **suivi pair/impair** (pair = +1, impair = −1, cumul numéros et étoiles), **20 / 50 derniers tirages**, **numéros et étoiles les plus sortis / en retard**, grille 1–50. Même accès que **Admin** (`ADMIN_PASSWORD`, ou ouvert en local sur `127.0.0.1`). Fenêtres : 20 tirages, 50 tirages, année en cours, formule actuelle, tout l’historique ; filtre mois sur les plages calendaires.
 
 ## Analyse (`/analyse`)
 
