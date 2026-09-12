@@ -66,6 +66,65 @@ export function roundHalfEven(value: number, digits = 0) {
   return Number(value.toFixed(digits))
 }
 
+const DEKKER_SPLIT = 134217729
+
+// Produit exact : `hi` est l'arrondi, `lo` l'erreur. Découpage de Dekker, faute
+// de `fma` en JavaScript.
+function twoProduct(x: number, y: number): [number, number] {
+  const hi = x * y
+  const tx = x * DEKKER_SPLIT
+  const xh = tx - (tx - x)
+  const xl = x - xh
+  const ty = y * DEKKER_SPLIT
+  const yh = ty - (ty - y)
+  const yl = y - yh
+  return [hi, xh * yh - hi + xh * yl + xl * yh + xl * yl]
+}
+
+// `x ** 3` passe par `pow()` de la libm côté Python et par une approximation
+// moins fine côté V8 : un cube sur dix diffère d'un ulp. On somme donc le cube
+// en double-double, ce qui donne l'arrondi correct.
+function cube(x: number) {
+  const [square, squareErr] = twoProduct(x, x)
+  const [hi, lo] = twoProduct(square, x)
+  return hi + (lo + squareErr * x)
+}
+
+// `math.hypot` de CPython met la norme à l'échelle puis corrige l'arrondi par un
+// pas de Newton ; `Math.hypot` de V8 non. Un tiers des longueurs de corde
+// tomberaient à un ulp près, et les Béziers du jumeau ne seraient plus celles du
+// backend.
+function hypot(dx: number, dy: number) {
+  const ax = Math.abs(dx)
+  const ay = Math.abs(dy)
+  const max = Math.max(ax, ay)
+  if (!Number.isFinite(max) || max === 0) return max
+  let exponent = Math.floor(Math.log2(max)) + 1
+  while (max * 2 ** -exponent >= 1) exponent += 1
+  while (max * 2 ** -exponent < 0.5) exponent -= 1
+  const scale = 2 ** -exponent
+  let csum = 1
+  let frac1 = 0
+  let frac2 = 0
+  const accumulate = (value: number) => {
+    const [hi, lo] = twoProduct(value, value)
+    const total = csum + hi
+    frac2 += csum - total + hi
+    csum = total
+    frac1 += lo
+  }
+  accumulate(ax * scale)
+  accumulate(ay * scale)
+  let h = Math.sqrt(csum - 1 + (frac1 + frac2))
+  const [hi, lo] = twoProduct(-h, h)
+  const total = csum + hi
+  frac2 += csum - total + hi
+  csum = total
+  frac1 += lo
+  h += (csum - 1 + (frac1 + frac2)) / (2 * h)
+  return h / scale
+}
+
 export function makeCommand(cmd: number, args: CommandArg[] = []): Command {
   const raw = [...args]
   while (raw.length < N_ARGS) raw.push(null)
@@ -165,7 +224,7 @@ function chordParams(points: Point[]): number[] {
   for (let i = 1; i < points.length; i += 1) {
     const [x0, y0] = points[i - 1]
     const [x1, y1] = points[i]
-    total += Math.hypot(x1 - x0, y1 - y0)
+    total += hypot(x1 - x0, y1 - y0)
     dists.push(total)
   }
   if (total <= 0) return points.map((_, i) => i / (points.length - 1))
@@ -199,10 +258,10 @@ export function fitCubic(points: Point[]): [Point, Point] {
   points.forEach((point, i) => {
     const u = us[i]
     const mt = 1 - u
-    const b0 = mt ** 3
+    const b0 = cube(mt)
     const b1 = 3 * u * mt * mt
     const b2 = 3 * u * u * mt
-    const b3 = u ** 3
+    const b3 = cube(u)
     c11 += b1 * b1
     c12 += b1 * b2
     c22 += b2 * b2
@@ -508,8 +567,8 @@ export function sampleCommands(commands: Command[], count = 64): Point[] {
         const t = step / 16
         const mt = 1 - t
         dense.push([
-          mt ** 3 * p0[0] + 3 * mt * mt * t * p1[0] + 3 * mt * t * t * p2[0] + t ** 3 * p3[0],
-          mt ** 3 * p0[1] + 3 * mt * mt * t * p1[1] + 3 * mt * t * t * p2[1] + t ** 3 * p3[1],
+          cube(mt) * p0[0] + 3 * mt * mt * t * p1[0] + 3 * mt * t * t * p2[0] + cube(t) * p3[0],
+          cube(mt) * p0[1] + 3 * mt * mt * t * p1[1] + 3 * mt * t * t * p2[1] + cube(t) * p3[1],
         ])
       }
       cursor = p3

@@ -101,6 +101,21 @@ export type TargetOutcome = {
 
 // --- Outils géométriques ------------------------------------------------------
 
+// `sum()` de Python compense l'erreur d'arrondi (Kahan-Babuška-Neumaier) là où
+// une accumulation naïve dérive d'un ulp une fois sur cinq. Les confiances du
+// jumeau doivent tomber au dix-millième sur celles du backend.
+function sumOf(values: number[]) {
+  let total = 0
+  let compensation = 0
+  for (const value of values) {
+    const next = total + value
+    if (Math.abs(total) >= Math.abs(value)) compensation += total - next + value
+    else compensation += value - next + total
+    total = next
+  }
+  return total + compensation
+}
+
 /** Amplitude de référence de la fenêtre, pour rendre les seuils relatifs. */
 function windowScale(values: number[]) {
   if (!values.length) return 1
@@ -118,11 +133,11 @@ function fitLine(points: Point[]): Line | null {
   if (points.length < 2) return null
   const xs = points.map((p) => p[0])
   const ys = points.map((p) => p[1])
-  const xbar = xs.reduce((a, b) => a + b, 0) / xs.length
-  const ybar = ys.reduce((a, b) => a + b, 0) / ys.length
-  const den = xs.reduce((acc, x) => acc + (x - xbar) ** 2, 0)
+  const xbar = sumOf(xs) / xs.length
+  const ybar = sumOf(ys) / ys.length
+  const den = sumOf(xs.map((x) => (x - xbar) ** 2))
   if (den === 0) return null
-  const slope = xs.reduce((acc, x, i) => acc + (x - xbar) * (ys[i] - ybar), 0) / den
+  const slope = sumOf(xs.map((x, i) => (x - xbar) * (ys[i] - ybar))) / den
   return [slope, ybar - slope * xbar]
 }
 
@@ -132,7 +147,7 @@ function lineAt(line: Line, index: number) {
 
 function lineFitError(line: Line, points: Point[]) {
   if (!points.length) return 0
-  return points.reduce((acc, [x, y]) => acc + Math.abs(y - lineAt(line, x)), 0) / points.length
+  return sumOf(points.map(([x, y]) => Math.abs(y - lineAt(line, x)))) / points.length
 }
 
 // Une droite passe exactement par deux points : son erreur d'ajustement nulle
@@ -143,14 +158,13 @@ const NO_EVIDENCE = 0.07
 /** Déplacement moyen par barre — la vitesse du tracé. */
 function meanStep(values: number[]) {
   if (values.length < 2) return 0
-  let total = 0
-  for (let i = 1; i < values.length; i += 1) total += Math.abs(values[i] - values[i - 1])
-  return total / (values.length - 1)
+  const steps = values.slice(1).map((value, i) => Math.abs(value - values[i]))
+  return sumOf(steps) / (values.length - 1)
 }
 
 /** Erreurs relatives → confiance dans [0.05, 0.99]. */
 function score(...errors: number[]) {
-  const total = errors.reduce((acc, e) => acc + Math.max(0, e), 0)
+  const total = sumOf(errors.map((e) => Math.max(0, e)))
   return Math.max(0.05, Math.min(0.99, 1 / (1 + 6 * total)))
 }
 
@@ -213,7 +227,7 @@ export function activityRatio(activity: number[], index: number, period = ACTIVI
   const start = Math.max(0, index - period)
   const chunk = activity.slice(start, index)
   if (!chunk.length) return 0
-  const mean = chunk.reduce((a, b) => a + b, 0) / chunk.length
+  const mean = sumOf(chunk) / chunk.length
   if (mean <= 0) return 0
   return activity[index] / mean
 }
@@ -455,7 +469,7 @@ export function detectMultiTop(ctx: Context): FigureHit[] {
         if (Math.max(...prices) - Math.min(...prices) > levelEps) continue
         // Un range à quatre touches est un rectangle, pas un double sommet :
         // on exige que le niveau ne soit touché que `count` fois.
-        const center = prices.reduce((a, b) => a + b, 0) / prices.length
+        const center = sumOf(prices) / prices.length
         const touches = interior(extremes).filter((p) => Math.abs(p.price - center) <= levelEps)
         if (touches.length > count) continue
         const mids = counters.filter(
@@ -631,8 +645,8 @@ export function detectBounds(ctx: Context): FigureHit[] {
     let downLevel: (index: number) => number
     let guides: Guide[]
     if (figure === "rectangle") {
-      const top = highs.reduce((acc, p) => acc + p.price, 0) / highs.length
-      const bottom = lows.reduce((acc, p) => acc + p.price, 0) / lows.length
+      const top = sumOf(highs.map((p) => p.price)) / highs.length
+      const bottom = sumOf(lows.map((p) => p.price)) / lows.length
       base = top - bottom
       upLevel = () => top
       downLevel = () => bottom
