@@ -10,6 +10,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, AsyncIterator
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,6 +34,7 @@ from synchro.analysis.windowing import resolve_window
 from synchro.analysis.windows import heikin_ashi, ohlc_blocks, rolling_stats
 from synchro.chartisme.auto import status as chartisme_status_payload
 from synchro.chartisme.backtest import run as chartisme_backtest_run
+from synchro.chartisme.catalog import PIVOT_ROLE_LABELS as CHARTISME_PIVOT_ROLE_LABELS
 from synchro.chartisme.catalog import catalog as chartisme_catalog
 from synchro.chartisme.export import bundle_index as chartisme_bundle_index
 from synchro.chartisme.export import export_curves as chartisme_export_curves
@@ -144,14 +146,20 @@ class ChartismeSketchIn(BaseModel):
 class ChartismeLabelIn(BaseModel):
     id: str | None = None
     curve_id: str
+    variable: str | None = None
+    n: int | None = None
     figure: str
+    # Classe libre de l'atelier, hors table de référence.
+    custom_label: str | None = None
     from_index: int = Field(ge=0)
     to_index: int = Field(ge=0)
     from_date: str | None = None
     to_date: str | None = None
-    window_values: list[float] = Field(default_factory=list)
-    pivots: list[dict[str, Any]] = Field(default_factory=list)
-    note: str | None = None
+    values: list[float] = Field(default_factory=list)
+    activity: list[float] | None = None
+    # Rôles placés à la main : [{"role": "head", "index": 42, "value": 3.1}, …]
+    roles: list[dict[str, Any]] = Field(default_factory=list)
+    author: str | None = None
 
 
 class ChartismeEvaluateIn(BaseModel):
@@ -801,7 +809,11 @@ def create_app() -> FastAPI:
 
     @app.get("/api/chartisme/catalog")
     def chartisme_catalog_route() -> dict[str, Any]:
-        return {"ok": True, **chartisme_catalog()}
+        return {
+            "ok": True,
+            "figures": chartisme_catalog(),
+            "pivot_roles": dict(CHARTISME_PIVOT_ROLE_LABELS),
+        }
 
     @app.get("/api/chartisme/status")
     def chartisme_status() -> dict[str, Any]:
@@ -944,7 +956,9 @@ def create_app() -> FastAPI:
     def chartisme_add_label(payload: ChartismeLabelIn) -> dict[str, Any]:
         if not db.database_configured():
             raise HTTPException(503, "Neon non configuré.")
-        row = db.upsert_chartisme_label(payload.model_dump())
+        label = payload.model_dump()
+        label["id"] = label.get("id") or str(uuid4())
+        row = db.upsert_chartisme_label(label)
         return _json(db.serialize_row(row))
 
     @app.delete("/api/chartisme/labels/{label_id}")

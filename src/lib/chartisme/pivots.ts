@@ -16,14 +16,33 @@ export const DEFAULT_PCT = 0.08
 
 export type SwingPivot = {
   index: number
-  date: string
+  date: string | null
   price: number
   type: "H" | "L"
 }
 
+/**
+ * Seuil de swing : `pct` de l'amplitude, jambe dominante mise à part.
+ *
+ * Une jambe monotone gonfle l'amplitude sans rien dire des oscillations — le
+ * mât d'un drapeau vaut trois fois sa consolidation, et la sortie de cassure
+ * autant que la figure qu'elle clôt. Un seuil pris sur l'amplitude brute avale
+ * alors les pivots propres de la figure, qui devient invisible : un drapeau
+ * sur cinq ne renvoyait plus rien du tout.
+ *
+ * On retient donc la plus petite des deux amplitudes, brute et détendancée.
+ * Sur une fenêtre sans pente les deux coïncident et rien ne change ; sur une
+ * fenêtre emportée par une jambe, la seconde rend la main aux oscillations.
+ */
 export function swingThreshold(values: number[], pct: number = DEFAULT_PCT) {
   if (!values.length) return 0
-  const span = Math.max(...values) - Math.min(...values)
+  let span = Math.max(...values) - Math.min(...values)
+  const count = values.length
+  if (count >= 4) {
+    const slope = (values[count - 1] - values[0]) / (count - 1)
+    const residual = values.map((v, i) => v - slope * i)
+    span = Math.min(span, Math.max(...residual) - Math.min(...residual))
+  }
   if (span > 0) return span * pct
   return 0
 }
@@ -31,14 +50,16 @@ export function swingThreshold(values: number[], pct: number = DEFAULT_PCT) {
 /** Extrêmes alternés séparés d'au moins `pct` de l'amplitude de la fenêtre. */
 export function swingPivots(
   values: number[],
-  dates?: string[] | null,
+  dates?: Array<string | null> | null,
   pct: number = DEFAULT_PCT,
   options: { threshold?: number | null } = {}
 ): SwingPivot[] {
   const series = values.map(Number)
   const n = series.length
-  let labels = dates ? [...dates] : []
-  if (labels.length !== n) labels = series.map((_, i) => String(i))
+  let labels: Array<string | null> = dates ? [...dates] : []
+  // Faute de dates, le champ reste vide : une fenêtre sans calendrier ne doit
+  // pas faire passer un indice pour une date.
+  if (labels.length !== n) labels = series.map(() => null)
   if (n < 2) return []
   const threshold = options.threshold
   const limit = threshold == null ? swingThreshold(series, pct) : threshold

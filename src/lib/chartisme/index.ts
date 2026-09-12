@@ -1,4 +1,5 @@
 export * from "./catalog"
 export * from "./figures"
 export * from "./pivots"
+export * from "./scan"
 export * from "./svgpath"

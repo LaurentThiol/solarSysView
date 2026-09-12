@@ -199,7 +199,7 @@ function figurePivot(
   index: number,
   value: number,
   role: PivotRole,
-  dates: string[]
+  dates: Array<string | null>
 ): FigurePivot {
   return {
     index,
@@ -235,7 +235,7 @@ export function activityRatio(activity: number[], index: number, period = ACTIVI
 /** Premier franchissement du niveau après `start`, avec sa validation. */
 function findBreakout(
   values: number[],
-  dates: string[],
+  dates: Array<string | null>,
   activity: number[],
   options: {
     start: number
@@ -261,7 +261,11 @@ function findBreakout(
         break
       }
     }
-    const confirmed = volumeOk || holds
+    // Règle d'or : activité au-dessus de sa MM20 **et** confirmation en clôture
+    // (ou par le pull-back suivant). Le « et » n'est pas négociable — c'est lui
+    // qui distingue la cassure du fake breakout. Sans série d'activité la
+    // moitié volume du critère est indécidable, et on s'en tient à la tenue.
+    const confirmed = activity.length ? volumeOk && holds : holds
     return {
       index,
       date: index < dates.length ? dates[index] : null,
@@ -284,7 +288,7 @@ function hitOf(
     pivots: FigurePivot[]
     guides: Guide[]
     confidence: number
-    dates: string[]
+    dates: Array<string | null>
     breakout?: Breakout | null
     target?: number | null
     detector?: string
@@ -318,7 +322,7 @@ function hitOf(
 /** Fenêtre prête à détecter : valeurs, dates, activité, pivots. */
 export type Context = {
   values: number[]
-  dates: string[]
+  dates: Array<string | null>
   activity: number[]
   eps: number
   scale: number
@@ -334,8 +338,11 @@ export function makeContext(
   options: { zigzagPct?: number; eps?: number } = {}
 ): Context {
   const series = values.map(Number)
-  const labels = dates && dates.length ? [...dates] : series.map((_, i) => String(i))
-  while (labels.length < series.length) labels.push(String(labels.length))
+  // Rembourré à la longueur de la fenêtre pour que `dates[i]` soit toujours
+  // interrogeable, mais avec des trous plutôt que des indices déguisés en
+  // dates : le champ part tel quel vers Neon et l'UI.
+  const labels: Array<string | null> = dates ? [...dates] : []
+  while (labels.length < series.length) labels.push(null)
   const pivots = swingPivots(series, labels, options.zigzagPct ?? DEFAULT_ZIGZAG_PCT)
   return {
     values: series,

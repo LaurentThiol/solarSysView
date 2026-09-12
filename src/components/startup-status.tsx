@@ -477,6 +477,14 @@ const NAV_ITEMS = [
     },
   },
   {
+    href: "/chartisme",
+    label: "Chartisme",
+    help: {
+      title: "Chartisme",
+      body: "Figures chartistes sur les courbes du logiciel : détection, annotation dessinée, atelier d'étiquetage, règles descriptives et rétro-test contre le hasard. Ne touche pas aux grilles.",
+    },
+  },
+  {
     href: "/admin",
     label: "Admin",
     help: {

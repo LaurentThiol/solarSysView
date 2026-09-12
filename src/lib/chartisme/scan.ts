@@ -1,0 +1,265 @@
+import {
+  DEFAULT_EPS,
+  DEFAULT_MAX_OVERLAP,
+  DEFAULT_ZIGZAG_PCT,
+  dedupe,
+  detectFigures,
+  rankKey,
+  summarize,
+  targetReached,
+  type FigureHit,
+  type FigureSummary,
+  type TargetOutcome,
+} from "./figures"
+import type { Curve } from "./curves"
+
+/**
+ * Jumeau TS de `synchro/chartisme/scan.py`.
+ *
+ * Les détecteurs regardent une fenêtre ; le balayage la déplace. Sans lui on ne
+ * verrait qu'une lecture de la courbe entière, alors qu'une figure courte et un
+ * range annuel ne vivent pas à la même échelle.
+ */
+
+export const DEFAULT_SCALES = [30, 60, 120] as const
+export const DEFAULT_STRIDE_RATIO = 0.25
+export const MIN_WINDOW = 16
+
+/** Figure d'un balayage : indices dans le repère de la courbe entière. */
+export type ScanHit = FigureHit & {
+  curve_id?: string | null
+  variable?: string | null
+  n?: number | null
+  scale: number
+  window_start: number
+  outcome: TargetOutcome
+  alternatives?: Array<{ figure: string; label: string; confidence: number }>
+}
+
+export type ScanOptions = {
+  scales?: ReadonlyArray<number> | null
+  strideRatio?: number
+  zigzagPct?: number
+  eps?: number
+  minConfidence?: number
+  maxOverlap?: number
+  topPerZone?: boolean
+}
+
+export function windowStarts(length: number, size: number, stride: number): number[] {
+  if (length < size) return []
+  const step = Math.max(1, stride)
+  const starts: number[] = []
+  for (let start = 0; start <= length - size; start += step) starts.push(start)
+  const tail = length - size
+  if (starts.length && starts[starts.length - 1] !== tail) starts.push(tail)
+  return starts.length ? starts : [0]
+}
+
+function dateAt(dates: string[], index: number): string | null {
+  return index >= 0 && index < dates.length ? dates[index] : null
+}
+
+function rebase(
+  hit: FigureHit,
+  options: {
+    offset: number
+    scale: number
+    curve: Partial<Curve>
+    values: number[]
+    dates: string[]
+  }
+): ScanHit {
+  const { offset, scale, curve, values, dates } = options
+  const fromIndex = hit.from_index + offset
+  const toIndex = hit.to_index + offset
+  const out: ScanHit = {
+    ...hit,
+    curve_id: curve.id ?? null,
+    variable: curve.variable ?? null,
+    n: curve.n ?? null,
+    scale,
+    window_start: offset,
+    from_index: fromIndex,
+    to_index: toIndex,
+    from: dateAt(dates, fromIndex),
+    to: dateAt(dates, toIndex),
+    pivots: hit.pivots.map((pivot) => ({
+      ...pivot,
+      index: pivot.index + offset,
+      date: dateAt(dates, pivot.index + offset),
+    })),
+    guides: hit.guides.map((guide) => ({
+      ...guide,
+      points: guide.points.map((point) => ({ ...point, index: point.index + offset })),
+    })),
+    breakout: hit.breakout
+      ? {
+          ...hit.breakout,
+          index: hit.breakout.index + offset,
+          date: dateAt(dates, hit.breakout.index + offset),
+        }
+      : null,
+    outcome: { status: "no_breakout", reached: null, bars: null },
+  }
+  out.outcome = targetReached(values, out)
+  return out
+}
+
+export function scanCurve(curve: Partial<Curve>, options: ScanOptions = {}): ScanHit[] {
+  const {
+    scales = DEFAULT_SCALES,
+    strideRatio = DEFAULT_STRIDE_RATIO,
+    zigzagPct = DEFAULT_ZIGZAG_PCT,
+    eps = DEFAULT_EPS,
+    minConfidence = 0.5,
+    maxOverlap = DEFAULT_MAX_OVERLAP,
+    topPerZone = false,
+  } = options
+  const values = (curve.values ?? []).map(Number)
+  const dates = [...(curve.dates ?? [])]
+  const activity = (curve.activity ?? []).map(Number)
+  if (values.length < MIN_WINDOW) return []
+
+  const found: ScanHit[] = []
+  for (const size of scales ?? DEFAULT_SCALES) {
+    if (size < MIN_WINDOW || size > values.length) continue
+    const stride = Math.max(1, Math.trunc(size * strideRatio))
+    for (const start of windowStarts(values.length, size, stride)) {
+      const stop = start + size
+      const hits = detectFigures(
+        values.slice(start, stop),
+        dates.slice(start, stop),
+        activity.slice(start, stop),
+        { zigzagPct, eps, minConfidence, maxOverlap }
+      )
+      for (const hit of hits) {
+        found.push(rebase(hit, { offset: start, scale: size, curve, values, dates }))
+      }
+    }
+  }
+  const kept = dedupe(found, { maxOverlap }) as ScanHit[]
+  return topPerZone ? collapseZones(kept, { maxOverlap }) : kept
+}
+
+function spanOverlap(a: FigureHit, b: FigureHit) {
+  const lo = Math.max(a.from_index, b.from_index)
+  const hi = Math.min(a.to_index, b.to_index)
+  if (hi <= lo) return 0
+  const shortest = Math.min(a.to_index - a.from_index, b.to_index - b.from_index)
+  return shortest > 0 ? (hi - lo) / shortest : 0
+}
+
+function compareRank(a: FigureHit, b: FigureHit) {
+  const left = rankKey(a)
+  const right = rankKey(b)
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return left[i] - right[i]
+  }
+  return 0
+}
+
+/** Une seule figure par zone, la mieux classée ; les autres en `alternatives`. */
+export function collapseZones(
+  hits: ScanHit[],
+  options: { maxOverlap?: number } = {}
+): ScanHit[] {
+  const { maxOverlap = DEFAULT_MAX_OVERLAP } = options
+  const kept: ScanHit[] = []
+  for (const hit of [...hits].sort(compareRank)) {
+    const host = kept.find((k) => spanOverlap(k, hit) > maxOverlap)
+    if (!host) {
+      kept.push({ ...hit, alternatives: [] })
+      continue
+    }
+    host.alternatives?.push({
+      figure: hit.figure,
+      label: hit.label,
+      confidence: hit.confidence,
+    })
+  }
+  return kept
+}
+
+export function sortByRank(hits: ScanHit[]): ScanHit[] {
+  return [...hits].sort(compareRank)
+}
+
+export type ScanWindow = {
+  curve_id?: string | null
+  variable?: string | null
+  label?: string | null
+  from_index: number
+  to_index: number
+  from: string | null
+  to: string | null
+  values: number[]
+}
+
+/** Toutes les fenêtres d'une courbe, sans détection — pour la recherche. */
+export function windowsOf(
+  curves: Array<Partial<Curve>>,
+  options: { size?: number; stride?: number; curve?: string | null; limit?: number } = {}
+): ScanWindow[] {
+  const { size = 60, stride = 15, curve = null, limit = 4000 } = options
+  const out: ScanWindow[] = []
+  for (const entry of curves) {
+    if (curve !== null && entry.id !== curve) continue
+    const values = (entry.values ?? []).map(Number)
+    const dates = [...(entry.dates ?? [])]
+    if (values.length < size) continue
+    for (const start of windowStarts(values.length, size, stride)) {
+      const stop = start + size
+      out.push({
+        curve_id: entry.id ?? null,
+        variable: entry.variable ?? null,
+        label: entry.label ?? null,
+        from_index: start,
+        to_index: stop - 1,
+        from: dateAt(dates, start),
+        to: dateAt(dates, stop - 1),
+        values: values.slice(start, stop),
+      })
+      if (out.length >= limit) return out
+    }
+  }
+  return out
+}
+
+/** Part des objectifs atteints, par figure — la base du rétro-test. */
+export function outcomeStats(hits: ScanHit[]) {
+  const perFigure: Record<
+    string,
+    {
+      reached: number
+      invalidated: number
+      open: number
+      no_breakout: number
+      settled: number
+      hit_rate: number | null
+    }
+  > = {}
+  for (const hit of hits) {
+    const row =
+      perFigure[hit.figure] ??
+      (perFigure[hit.figure] = {
+        reached: 0,
+        invalidated: 0,
+        open: 0,
+        no_breakout: 0,
+        settled: 0,
+        hit_rate: null,
+      })
+    const status = hit.outcome?.status ?? "no_breakout"
+    if (status in row) row[status] += 1
+  }
+  for (const row of Object.values(perFigure)) {
+    row.settled = row.reached + row.invalidated
+    row.hit_rate = row.settled ? Math.round((row.reached / row.settled) * 1e4) / 1e4 : null
+  }
+  return perFigure
+}
+
+export function scanSummary(hits: ScanHit[]): FigureSummary {
+  return summarize(hits)
+}

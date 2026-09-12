@@ -172,7 +172,12 @@ def _breakout(
             if (values[ahead] >= edge) if direction == "down" else (values[ahead] <= edge):
                 holds = False
                 break
-        confirmed = bool(volume_ok or holds)
+        # Règle d'or : activité au-dessus de sa MM20 **et** confirmation en
+        # clôture (ou par le pull-back suivant). Le « et » n'est pas négociable
+        # — c'est lui qui distingue la cassure du fake breakout. Sans série
+        # d'activité la moitié volume du critère est indécidable, et on s'en
+        # tient à la tenue.
+        confirmed = bool(volume_ok and holds) if activity else holds
         return {
             "index": index,
             "date": dates[index] if index < len(dates) else None,
@@ -225,16 +230,19 @@ class Context:
     def __init__(
         self,
         values: Sequence[float],
-        dates: Sequence[str] | None = None,
+        dates: Sequence[str | None] | None = None,
         activity: Sequence[float] | None = None,
         *,
         zigzag_pct: float = DEFAULT_ZIGZAG_PCT,
         eps: float = DEFAULT_EPS,
     ) -> None:
         self.values = [float(v) for v in values]
-        self.dates = list(dates or [str(i) for i in range(len(self.values))])
+        # Rembourré à la longueur de la fenêtre pour que `dates[i]` soit
+        # toujours interrogeable, mais avec des trous plutôt que des indices
+        # déguisés en dates : le champ part tel quel vers Neon et l'UI.
+        self.dates: list[str | None] = list(dates or [])
         if len(self.dates) < len(self.values):
-            self.dates += [str(i) for i in range(len(self.dates), len(self.values))]
+            self.dates += [None] * (len(self.values) - len(self.dates))
         self.activity = [float(a) for a in (activity or [])]
         self.eps = eps
         self.scale = _scale(self.values)
