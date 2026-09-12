@@ -234,6 +234,16 @@ def following_draws(
     return later[:count]
 
 
+def _firing_date(firing: dict[str, Any]) -> str | None:
+    """Date de fin de fenêtre, qu'on parte d'un déclenchement ou d'une figure brute."""
+    raw = (
+        firing.get("figure_date")
+        or (firing.get("snapshot") or {}).get("to")
+        or firing.get("to")
+    )
+    return str(raw) if raw else None
+
+
 def number_signal(
     draws: Sequence[dict[str, Any]],
     firings: Sequence[dict[str, Any]],
@@ -241,25 +251,40 @@ def number_signal(
     follow: int = DEFAULT_FOLLOW,
     stars: bool = False,
 ) -> dict[str, Any]:
-    """Les boules sorties après chaque déclenchement, contre l'uniforme."""
+    """Les boules sorties après chaque déclenchement, contre l'uniforme.
+
+    Chaque tirage postérieur ne compte **qu'une fois**, même s'il suit dix
+    déclenchements. Les fenêtres de suivi se chevauchent massivement — un
+    balayage multi-échelle repère la même zone à plusieurs reprises — et
+    compter les doublons multiplierait l'effectif sans ajouter une seule
+    observation. Le binomial et le χ² supposent des tirages indépendants :
+    sans cette déduplication, la répétition seule suffirait à fabriquer des
+    « découvertes » significatives sur une archive parfaitement uniforme.
+    """
     ordered = ordered_draws(draws)
     size = STAR_COUNT if stars else BALL_COUNT
     per_draw = STARS_PER_DRAW if stars else BALLS_PER_DRAW
     counts = [0] * (size + 1)
-    observed_draws = 0
+    seen: set[str] = set()
     for firing in firings:
-        date_text = firing.get("figure_date") or (firing.get("snapshot") or {}).get("to")
-        for draw in following_draws(ordered, date_text, count=follow):
-            observed_draws += 1
+        for draw in following_draws(ordered, _firing_date(firing), count=follow):
+            key = str(draw["draw_date"])
+            if key in seen:
+                continue
+            seen.add(key)
             picks = stars_of(draw) if stars else numbers_of(draw)
             for value in picks:
                 if 1 <= value <= size:
                     counts[value] += 1
+    observed_draws = len(seen)
     if not observed_draws:
         return {
             "draws": 0,
+            "follow": follow,
+            "firings": len(firings),
             "expected_per_ball": None,
             "chi2": None,
+            "chi2_df": size - 1,
             "chi2_p": None,
             "balls": [],
             "flagged": [],
@@ -296,6 +321,9 @@ def number_signal(
     return {
         "draws": observed_draws,
         "follow": follow,
+        # L'écart entre `firings` et `draws` dit le chevauchement des fenêtres :
+        # c'est l'effectif réel qui porte le verdict, pas le nombre de figures.
+        "firings": len(firings),
         "expected_per_ball": round(expected, 3),
         "chi2": round(chi, 4),
         "chi2_df": size - 1,
