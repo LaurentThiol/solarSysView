@@ -60,3 +60,6 @@ CLAUDE.md
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# module chartisme (courbes exportées, poids, état des cycles)
+.chartisme/
