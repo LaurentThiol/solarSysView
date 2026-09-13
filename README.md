@@ -73,9 +73,11 @@ Puis bouton **Charger / interroger** dans Morpho (poids HF en cache, pas dans le
 
 ## Chartisme (`/chartisme`)
 
-Les **17 figures chartistes** de la table de référence (tête & épaules et son inverse, doubles / triples sommets et creux, biseaux, triangles, rectangle, drapeau / fanion, tasse avec anse, diamant, broadening top) cherchées sur les courbes du logiciel : somme, écart, pairs, retard et sorties de chaque boule, retard et sorties de chaque étoile — 138 courbes exportées de l’archive.
+Les **17 figures chartistes** de la table de référence (tête & épaules et son inverse, doubles / triples sommets et creux, biseaux, triangles, rectangle, drapeau / fanion, tasse avec anse, diamant, broadening top) cherchées sur les courbes du logiciel : somme, écart, pairs, retard et sorties de chaque boule, retard et sorties de chaque étoile — 142 courbes exportées de l’archive.
 
 Parmi elles, les **cinq numéros du tirage suivis séparément** — `n1` à `n5` — et les **deux étoiles**, `e1` et `e2`, les mêmes séries que l’onglet Évolution. Ce sont des *statistiques d’ordre* : `n1` est le plus petit numéro du tirage, `n5` le plus grand, jamais la première ou la dernière boule sortie — l’ordre de sortie n’est pas publié. Séparées exprès : chacune a son régime, `n1` vivant contre le plancher 1 et `n5` contre le plafond 50, si bien qu’une même cassure n’y dit pas la même chose. L’espace de règles peut donc viser `n1` sans viser `n5`.
+
+S’y ajoutent les **quatre écarts entre rangs voisins** — `g1` = `n2` − `n1`, jusqu’à `g4` = `n5` − `n4`. Ils disent comment le tirage occupe la grille, et ils le disent mieux que les rangs : ceux-ci sont ordonnés par construction, donc corrélés entre eux, si bien qu’une figure lue sur l’un se retrouve en partie sur les autres sans rien ajouter. Deux numéros collés puis un trou de vingt ne se lisent pas comme cinq numéros régulièrement espacés. Les quatre écarts somment à l’étendue, qu’ils découpent sans trou.
 
 La **règle d’or** est appliquée telle quelle : une cassure n’est retenue que si l’activité dépasse sa moyenne mobile 20 **et** que la cassure est confirmée en clôture (ou par le pull-back suivant). Le « et » n’est pas négociable — c’est lui qui distingue la cassure du *fake breakout*. L’objectif projeté suit la colonne « Objectif projeté » de la table, figure par figure.
 

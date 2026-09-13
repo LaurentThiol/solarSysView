@@ -70,6 +70,36 @@ def test_order_statistics_sort_before_reading():
     assert series(unsorted, "e2")["values"] == [9.0]
 
 
+def test_rank_gaps_describe_how_the_draw_fills_the_grid():
+    """g1 à g4 : les écarts entre rangs voisins, une variable par intervalle."""
+    unsorted = [
+        {"draw_date": date(2026, 8, 21), "numbers": [42, 8, 27, 44, 3], "stars": [9, 2], "star_pool": 12},
+    ]
+    # Trié : 3, 8, 27, 42, 44 → 5, 19, 15, 2.
+    assert series(unsorted, "g1")["values"] == [5.0]
+    assert series(unsorted, "g2")["values"] == [19.0]
+    assert series(unsorted, "g3")["values"] == [15.0]
+    assert series(unsorted, "g4")["values"] == [2.0]
+
+
+def test_rank_gaps_sum_to_the_spread():
+    """Invariant de découpage : les quatre intervalles couvrent n5 − n1, sans trou.
+
+    Si cette égalité tombe, un écart a été pris entre deux rangs qui ne se
+    suivent pas, et les quatre courbes ne décrivent plus une partition.
+    """
+    for index in range(len(SAMPLE)):
+        one = SAMPLE[index : index + 1]
+        gaps = sum(series(one, f"g{k}")["values"][0] for k in range(1, 5))
+        assert gaps == series(one, "spread")["values"][0]
+
+
+def test_rank_gaps_stay_at_least_one():
+    """Les numéros d'un tirage sont distincts : un écart nul signalerait un doublon."""
+    for k in range(1, 5):
+        assert all(v >= 1.0 for v in series(SAMPLE, f"g{k}")["values"])
+
+
 def test_order_statistics_survive_a_truncated_draw():
     """Un tirage amputé ne doit pas casser un export de cent trente-huit courbes."""
     short = [{"draw_date": date(2026, 8, 21), "numbers": [7, 4], "stars": [3], "star_pool": 12}]
@@ -85,8 +115,10 @@ def test_variable_order_numbers_then_stars():
     assert names[-3:] == ["e2", "star_delay", "star_hit"]
     assert "centroid" in names
     assert names.index("centroid") < names.index("delay")
-    # Les statistiques d'ordre restent du côté des numéros, avant les étoiles.
-    assert names.index("n5") < names.index("star_sum")
+    # Les statistiques d'ordre et leurs écarts restent du côté des numéros,
+    # avant les étoiles.
+    assert names.index("n5") < names.index("g1")
+    assert names.index("g4") < names.index("star_sum")
     assert names.index("e1") > names.index("star_sum")
 
 

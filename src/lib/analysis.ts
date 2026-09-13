@@ -18,6 +18,10 @@ export const NUMBER_VARIABLE_NAMES = [
   "n3",
   "n4",
   "n5",
+  "g1",
+  "g2",
+  "g3",
+  "g4",
   "delay",
   "hit",
 ] as const
@@ -49,6 +53,10 @@ export const VARIABLE_LABELS: Record<VariableName, string> = {
   n3: "3ᵉ numéro trié",
   n4: "4ᵉ numéro trié",
   n5: "Plus grand numéro",
+  g1: "Écart n2 − n1",
+  g2: "Écart n3 − n2",
+  g3: "Écart n4 − n3",
+  g4: "Écart n5 − n4",
   delay: "Retard d’une boule",
   hit: "Présence d’une boule",
   star_sum: "Somme des étoiles",
@@ -108,6 +116,22 @@ function orderStatistic(pool: number[], rank: number): number {
   return ranked[Math.min(Math.max(rank, 1), ranked.length) - 1]
 }
 
+/**
+ * L'écart entre deux rangs voisins : comment le tirage occupe la grille.
+ *
+ * Plus proche d'une variable libre que les rangs eux-mêmes. `n1` à `n5` sont
+ * ordonnés par construction — `n1` bas pousse les autres vers le haut — donc
+ * fortement corrélés, et une figure lue sur l'un se retrouve en partie sur les
+ * autres sans rien ajouter. Les quatre écarts, eux, décrivent l'étalement : deux
+ * numéros collés puis un trou de vingt ne se lisent pas comme cinq numéros
+ * régulièrement espacés, et les rangs ne le disent qu'indirectement.
+ *
+ * Borné comme le reste : au moins 1, puisque les numéros sont distincts.
+ */
+function rankGap(pool: number[], rank: number): number {
+  return orderStatistic(pool, rank + 1) - orderStatistic(pool, rank)
+}
+
 function scalar(draw: AnalysisDraw, name: VariableName): number {
   const nums = draw.numbers
   switch (name) {
@@ -131,6 +155,11 @@ function scalar(draw: AnalysisDraw, name: VariableName): number {
     case "n4":
     case "n5":
       return orderStatistic(nums, Number(name.slice(1)))
+    case "g1":
+    case "g2":
+    case "g3":
+    case "g4":
+      return rankGap(nums, Number(name.slice(1)))
     case "e1":
     case "e2":
       return orderStatistic(draw.stars, Number(name.slice(1)))

@@ -20,6 +20,11 @@ export const S_POOL = 12
  * l'espace de règles doit pouvoir viser `n1` sans viser `n5`. Le plus petit
  * numéro vit contre le plancher 1, le plus grand contre le plafond 50, et une
  * cassure ne veut pas dire la même chose sur les deux.
+ *
+ * `g1`…`g4` sont les écarts entre rangs voisins. Ils disent comment le tirage
+ * occupe la grille, et ils le disent mieux que les rangs : ceux-ci sont ordonnés
+ * par construction, donc corrélés entre eux, si bien qu'une figure lue sur l'un
+ * se retrouve en partie sur les autres sans rien ajouter.
  */
 export const PLAIN_VARIABLES = [
   "sum",
@@ -33,6 +38,10 @@ export const PLAIN_VARIABLES = [
   "n3",
   "n4",
   "n5",
+  "g1",
+  "g2",
+  "g3",
+  "g4",
   "star_sum",
   "e1",
   "e2",
@@ -54,6 +63,10 @@ export const VARIABLE_LABELS: Record<string, string> = {
   n3: "3ᵉ numéro trié",
   n4: "4ᵉ numéro trié",
   n5: "Plus grand numéro",
+  g1: "Écart n2 − n1",
+  g2: "Écart n3 − n2",
+  g3: "Écart n4 − n3",
+  g4: "Écart n5 − n4",
   delay: "Retard d'une boule",
   hit: "Présence d'une boule",
   star_sum: "Somme des étoiles",

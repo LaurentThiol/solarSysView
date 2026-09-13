@@ -74,6 +74,8 @@ def test_export_builds_one_curve_per_variable() -> None:
     # qu'une règle puisse viser n1 sans viser n5.
     for rank in range(1, 6):
         assert (f"n{rank}", None) in specs
+    for gap in range(1, 5):
+        assert (f"g{gap}", None) in specs
     assert ("e1", None) in specs
     assert ("e2", None) in specs
 

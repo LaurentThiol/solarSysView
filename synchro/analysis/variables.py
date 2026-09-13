@@ -17,6 +17,10 @@ VARIABLE_NAMES = (
     "n3",
     "n4",
     "n5",
+    "g1",
+    "g2",
+    "g3",
+    "g4",
     "delay",
     "hit",
     "star_sum",
@@ -50,6 +54,21 @@ def _order_statistic(pool: list[int], rank: int) -> float:
     return float(ranked[min(max(rank, 1), len(ranked)) - 1])
 
 
+def _rank_gap(pool: list[int], rank: int) -> float:
+    """L'écart entre deux rangs voisins : comment le tirage occupe la grille.
+
+    Plus proche d'une variable libre que les rangs eux-mêmes. `n1` à `n5` sont
+    ordonnés par construction — `n1` bas pousse les autres vers le haut — donc
+    fortement corrélés, et une figure lue sur l'un se retrouve en partie sur les
+    autres sans rien ajouter. Les quatre écarts, eux, décrivent l'étalement :
+    deux numéros collés puis un trou de vingt ne se lisent pas comme cinq
+    numéros régulièrement espacés, et les rangs ne le disent qu'indirectement.
+
+    Borné comme le reste : au moins 1, puisque les numéros sont distincts.
+    """
+    return _order_statistic(pool, rank + 1) - _order_statistic(pool, rank)
+
+
 _SCALAR: dict[str, Callable[[dict[str, Any]], float]] = {
     "sum": lambda d: float(sum(numbers_of(d))),
     "spread": lambda d: float(max(numbers_of(d)) - min(numbers_of(d))),
@@ -62,6 +81,10 @@ _SCALAR: dict[str, Callable[[dict[str, Any]], float]] = {
     "n3": lambda d: _order_statistic(numbers_of(d), 3),
     "n4": lambda d: _order_statistic(numbers_of(d), 4),
     "n5": lambda d: _order_statistic(numbers_of(d), 5),
+    "g1": lambda d: _rank_gap(numbers_of(d), 1),
+    "g2": lambda d: _rank_gap(numbers_of(d), 2),
+    "g3": lambda d: _rank_gap(numbers_of(d), 3),
+    "g4": lambda d: _rank_gap(numbers_of(d), 4),
     "star_sum": lambda d: float(sum(stars_of(d))),
     "e1": lambda d: _order_statistic(stars_of(d), 1),
     "e2": lambda d: _order_statistic(stars_of(d), 2),
