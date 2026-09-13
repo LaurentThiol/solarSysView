@@ -1,4 +1,4 @@
-.PHONY: help install install-vlm install-chartisme install-harmo start stop status update doctor shortcut test \
+.PHONY: help install install-vlm install-chartisme install-harmo start stop restart status logs update doctor shortcut test \
 	sync ensure serve export chartisme-export chartisme-scan chartisme-train chartisme-report
 
 help:
@@ -28,8 +28,14 @@ shortcut:
 stop:
 	./launch stop
 
+restart:
+	./launch restart
+
 status:
 	@./launch status || true
+
+logs:
+	@./launch logs
 
 update:
 	./launch update
