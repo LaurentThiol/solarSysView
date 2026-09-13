@@ -42,8 +42,9 @@ import { liveInWindow } from "@/lib/chartisme/window"
 /**
  * Le même nombre de remaniements que le chiffrage sous le tracé.
  *
- * Mesuré : les 142 courbes prennent quelques secondes, aussi rien n'obligeait à
- * échantillonner plus court ici. L'égalité vaut mieux que l'économie : à graine,
+ * Mesuré : les 142 courbes prennent deux secondes à l'échelle 25 et une dizaine à
+ * l'échelle 120, aussi rien n'obligeait à échantillonner plus court ici que sous
+ * le tracé. L'égalité vaut mieux que l'économie : à graine,
  * longueur et remaniements égaux, la ligne de la courbe affichée porte exactement
  * le seuil annoncé sous le tracé. Un écart d'un centième entre les deux se lirait
  * comme une contradiction.
@@ -182,7 +183,7 @@ export function CurveMap({
               title: "Carte des courbes",
               body: `Le taux de base répond avant le tracé : sur certaines courbes, aucun seuil atteignable ne sépare l'observation du hasard, et l'onglet ne le disait qu'après coup, une fois la courbe choisie. La carte mesure les ${specs.length} courbes une fois et les classe par le seuil qu'il leur faudrait pour tenir la rareté visée. Le bruit est fait des mêmes tirages remis dans un ordre quelconque, ${TRIALS} fois par courbe. « Hors d'atteinte » signifie qu'il faudrait dépasser ${MAX_THRESHOLD.toFixed(
                 2
-              )}, où un seuil rejette le bruit et la figure ensemble. Le verdict vaut pour une échelle et non pour la courbe entière : une même courbe peut se laisser trier à une échelle et pas à la voisine, aussi l'échelle mesurée se choisit-elle. Toutes les courbes voient les mêmes remaniements, ce qui rend le classement plus stable que chacun de ses chiffres : un hasard de tirage les déplace ensemble. À ${TRIALS} remaniements l'écart entre deux voisines ne se tranche pas — le classement sépare des familles, pas des rangs. Rien n'est écarté : une courbe illisible pour ses figures peut se regarder pour autre chose.`,
+              )}, où un seuil rejette le bruit et la figure ensemble. Le verdict vaut pour une échelle et non pour la courbe entière : une même courbe peut se laisser trier à une échelle et pas à la voisine, aussi l'échelle mesurée se choisit-elle. Toutes les courbes voient les mêmes remaniements, ce qui rend le classement plus stable que chacun de ses chiffres : un hasard de tirage les déplace ensemble. Mesuré, le seuil requis d'une courbe donnée ne bouge que de 0.05 d'une graine à l'autre : deux courbes séparées par moins que cela ne sont pas classées, un écart franc l'est. Rien n'est écarté : une courbe illisible pour ses figures peut se regarder pour autre chose.`,
             }}
           >
             Carte des courbes — où une figure veut dire quelque chose
@@ -348,7 +349,8 @@ export function CurveMap({
         ) : progress === null ? (
           <p className="text-sm text-muted-foreground">
             Non mesurée. Le calcul tient dans le navigateur — {specs.length} courbes ×{" "}
-            {TRIALS} remaniements — et dure quelques secondes.
+            {TRIALS} remaniements — et dure de deux secondes à une dizaine, selon la longueur de
+            l’échelle mesurée.
           </p>
         ) : null}
       </CardContent>
