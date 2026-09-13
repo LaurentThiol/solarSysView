@@ -13,10 +13,11 @@ from synchro.harmo.util import db10, detrend_mean, fgrid, flist, fnum, freq_pack
 
 def choose_nperseg(n: int, requested: int | None = None) -> int:
     n = max(8, int(n))
+    cap = min(128, n)
     if requested:
-        return max(8, min(int(requested), n))
-    p = int(2 ** np.floor(np.log2(max(16, n / 6))))
-    return int(np.clip(p, 16, min(128, n)))
+        return max(8, min(int(requested), cap))
+    p = int(2 ** np.floor(np.log2(max(8, n / 6.0))))
+    return max(8, min(p, cap))
 
 
 def compute_stft(
@@ -46,6 +47,15 @@ def compute_stft(
         freqs = np.asarray(freqs, dtype=float)
         times = np.asarray(times, dtype=float)
     mag = np.abs(sx)
+    if mag.ndim == 1:
+        mag = mag[:, np.newaxis]
+        sx = np.asarray(sx)
+        if sx.ndim == 1:
+            sx = sx[:, np.newaxis]
+    freqs = np.asarray(freqs, dtype=float).ravel()
+    times = np.asarray(times, dtype=float).ravel()
+    if mag.ndim == 2 and times.size != mag.shape[1] and mag.shape[1] > 0:
+        times = np.linspace(0.0, max(float(n - 1), 1.0), mag.shape[1])
     return {
         "freqs": freqs,
         "times": times,
@@ -109,6 +119,10 @@ def extract_ridges(
     draws_per_year: float = 104.0,
 ) -> list[dict[str, Any]]:
     original = np.asarray(mag, dtype=float)
+    if original.ndim == 1:
+        original = original[:, np.newaxis]
+    if original.ndim != 2:
+        return []
     work = original.copy()
     df = float(freqs[1] - freqs[0]) if freqs.size > 1 else 1.0
     ridges: list[dict[str, Any]] = []
@@ -116,6 +130,10 @@ def extract_ridges(
     stft_energy = float(np.sum(original**2))
     if n_t < 2:
         return ridges
+    times = np.asarray(times, dtype=float).ravel()
+    if times.size != n_t:
+        times = np.linspace(0.0, max(float(n_t - 1), 1.0), n_t)
+    freqs = np.asarray(freqs, dtype=float).ravel()
     for _ in range(n_ridges):
         path = _viterbi_ridge(work)
         if path.size == 0:
@@ -185,7 +203,7 @@ def downsample_tf(
 def optional_cwt(x: np.ndarray) -> dict[str, Any] | None:
     try:
         import pywt
-    except ImportError:
+    except Exception:
         return None
     x = detrend_mean(np.asarray(x, dtype=float))
     n = int(x.size)
@@ -206,7 +224,7 @@ def optional_cwt(x: np.ndarray) -> dict[str, Any] | None:
 def optional_ssq(x: np.ndarray) -> dict[str, Any] | None:
     try:
         import ssqueezepy as ssq
-    except ImportError:
+    except Exception:
         return None
     x = detrend_mean(np.asarray(x, dtype=float))
     try:
@@ -225,6 +243,7 @@ def tf_bundle(
     nperseg: int | None = None,
     draws_per_year: float = 104.0,
     want_sst: bool = True,
+    want_wavelets: bool = False,
 ) -> dict[str, Any]:
     st = compute_stft(x, nperseg=nperseg)
     mag = st["mag"]
@@ -235,8 +254,8 @@ def tf_bundle(
     if want_sst:
         sst_mag, _if_est = synchrosqueeze(st["sx"], freqs, st["hop"])
         sst = downsample_tf(freqs, times, np.sqrt(np.maximum(sst_mag, 0.0)))
-    cwt = optional_cwt(x)
-    ssq = optional_ssq(x)
+    cwt = optional_cwt(x) if want_wavelets else None
+    ssq = optional_ssq(x) if want_wavelets else None
     heatmap = downsample_tf(freqs, times, mag)
     return {
         "nperseg": st["nperseg"],

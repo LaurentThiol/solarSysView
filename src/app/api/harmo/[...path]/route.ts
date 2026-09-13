@@ -4,6 +4,42 @@ import { apiBase, HEALTH_TIMEOUT_MS } from "@/lib/api-base"
 
 export const dynamic = "force-dynamic"
 
+function harmoError(
+  body: Record<string, unknown>,
+  status: number
+): Record<string, unknown> {
+  const detail = body.detail
+  const fromDetail =
+    typeof detail === "string"
+      ? detail
+      : Array.isArray(detail) &&
+          detail[0] &&
+          typeof detail[0] === "object" &&
+          detail[0] !== null &&
+          "msg" in detail[0] &&
+          typeof (detail[0] as { msg?: unknown }).msg === "string"
+        ? String((detail[0] as { msg: string }).msg)
+        : null
+  const message =
+    (typeof body.error === "string" && body.error) || fromDetail || `HTTP ${status}`
+  return { ...body, ok: false, error: message }
+}
+
+async function readBody(response: Response): Promise<Record<string, unknown>> {
+  const text = await response.text()
+  if (!text) return { ok: false, error: `HTTP ${response.status}` }
+  try {
+    const parsed = JSON.parse(text) as unknown
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+    return { ok: false, error: "réponse invalide" }
+  } catch {
+    const snippet = text.replace(/\s+/g, " ").trim().slice(0, 200)
+    return { ok: false, error: snippet || "réponse invalide" }
+  }
+}
+
 async function proxy(request: NextRequest, path: string[]) {
   const suffix = (path || []).join("/")
   const base = apiBase()
@@ -21,7 +57,8 @@ async function proxy(request: NextRequest, path: string[]) {
       cache: "no-store",
       signal: AbortSignal.timeout(timeout),
     })
-    const body = await response.json().catch(() => ({ error: "réponse invalide" }))
+    const parsed = await readBody(response)
+    const body = response.ok ? parsed : harmoError(parsed, response.status)
     return NextResponse.json(body, { status: response.status })
   } catch (error) {
     return NextResponse.json(

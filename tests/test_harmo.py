@@ -113,3 +113,33 @@ def test_lomb_scargle_annual_on_uneven_sampling() -> None:
     assert lomb["peaks"]
     best = max(lomb["peaks"], key=lambda p: p["power"])
     assert abs(best["cycles_per_year"] - 1.0) < 0.25
+
+
+def test_json_safe_numpy_is_starlette_serializable() -> None:
+    import json
+
+    from synchro.harmo.util import json_safe
+
+    payload = json_safe(
+        {
+            "n": np.int64(3),
+            "ok": np.bool_(True),
+            "x": np.float64("nan"),
+            "inf": np.inf,
+            "z": np.array([1, 2], dtype=np.int64),
+        }
+    )
+    json.dumps(payload, allow_nan=False)
+    assert payload["n"] == 3
+    assert payload["ok"] is True
+    assert payload["x"] == 0.0
+    assert payload["z"] == [1, 2]
+
+
+def test_extract_ridges_accepts_1d_magnitude() -> None:
+    from synchro.harmo.tf import extract_ridges
+
+    mag = np.linspace(0.1, 1.0, 16)
+    freqs = np.linspace(0.0, 0.5, 16)
+    times = np.array([0.0])
+    assert extract_ridges(mag, freqs, times) == []

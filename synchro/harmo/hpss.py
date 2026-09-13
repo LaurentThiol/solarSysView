@@ -43,7 +43,7 @@ def median_hpss(
 def optional_librosa_hpss(x: np.ndarray) -> dict[str, Any] | None:
     try:
         import librosa
-    except ImportError:
+    except Exception:
         return None
     x = detrend_mean(np.asarray(x, dtype=float))
     if x.size < 16:

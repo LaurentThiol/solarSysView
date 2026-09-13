@@ -15,7 +15,7 @@ from synchro.harmo.series import build_signal
 from synchro.harmo.spectrum import spectrum_bundle
 from synchro.harmo.tf import tf_bundle
 from synchro.harmo.unmix import unmix_shares
-from synchro.harmo.util import DISCLAIMER, fnum
+from synchro.harmo.util import DISCLAIMER, fnum, json_safe
 
 WINDOWS = ("blackmanharris", "flattop", "hann")
 
@@ -34,21 +34,23 @@ def window_public(resolved: dict[str, Any]) -> dict[str, Any]:
 
 
 def _short_payload(signal: dict[str, Any], window: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "error": (
-            f"Fenêtre trop courte pour une étude spectrale "
-            f"({signal['draw_count']} tirages, minimum {signal['min_samples']})."
-        ),
-        "draw_count": signal["draw_count"],
-        "min_samples": signal["min_samples"],
-        "variable": signal["variable"],
-        "n": signal["n"],
-        "window": window,
-        "notes": signal["notes"],
-        "disclaimer": DISCLAIMER,
-        "archive_source": signal.get("archive_source"),
-    }
+    return json_safe(
+        {
+            "ok": False,
+            "error": (
+                f"Fenêtre trop courte pour une étude spectrale "
+                f"({signal['draw_count']} tirages, minimum {signal['min_samples']})."
+            ),
+            "draw_count": signal["draw_count"],
+            "min_samples": signal["min_samples"],
+            "variable": signal["variable"],
+            "n": signal["n"],
+            "window": window,
+            "notes": signal["notes"],
+            "disclaimer": DISCLAIMER,
+            "archive_source": signal.get("archive_source"),
+        }
+    )
 
 
 def build_context(
@@ -110,7 +112,7 @@ def spectrum_report(signal: dict[str, Any], *, window: str = "blackmanharris") -
             "fft_window": win,
         }
     )
-    return out
+    return json_safe(out)
 
 
 def welch_report(signal: dict[str, Any], *, nperseg: int | None = None) -> dict[str, Any]:
@@ -138,7 +140,7 @@ def welch_report(signal: dict[str, Any], *, nperseg: int | None = None) -> dict[
             "calendar": spec["calendar"],
         }
     )
-    return out
+    return json_safe(out)
 
 
 def stft_report(
@@ -147,7 +149,13 @@ def stft_report(
     if signal.get("too_short"):
         return _short_payload(signal, signal.get("window") or {})
     dpy = float(signal["sampling"]["draws_per_year"])
-    tf = tf_bundle(signal["x"], nperseg=nperseg, draws_per_year=dpy, want_sst=want_sst)
+    tf = tf_bundle(
+        signal["x"],
+        nperseg=nperseg,
+        draws_per_year=dpy,
+        want_sst=want_sst,
+        want_wavelets=True,
+    )
     ridges = []
     for ridge in tf["ridges"]:
         ridges.append(
@@ -176,7 +184,7 @@ def stft_report(
             "ssq": tf["ssq"],
         }
     )
-    return out
+    return json_safe(out)
 
 
 def envelope_report(signal: dict[str, Any]) -> dict[str, Any]:
@@ -196,7 +204,7 @@ def envelope_report(signal: dict[str, Any]) -> dict[str, Any]:
             "periodic": env.get("periodic"),
         }
     )
-    return out
+    return json_safe(out)
 
 
 def orders_report(signal: dict[str, Any], *, nperseg: int | None = None) -> dict[str, Any]:
@@ -226,18 +234,26 @@ def orders_report(signal: dict[str, Any], *, nperseg: int | None = None) -> dict
             ],
         }
     )
-    return out
+    return json_safe(out)
 
 
 def ridge_mean(ridge: dict[str, Any]) -> float:
     return fnum(ridge.get("mean_freq"))
 
 
-def unmix_report(signal: dict[str, Any], *, nperseg: int | None = None) -> dict[str, Any]:
+def unmix_report(
+    signal: dict[str, Any],
+    *,
+    nperseg: int | None = None,
+    window: str = "blackmanharris",
+) -> dict[str, Any]:
     if signal.get("too_short"):
         return _short_payload(signal, signal.get("window") or {})
+    win = window if window in WINDOWS else "blackmanharris"
     dpy = float(signal["sampling"]["draws_per_year"])
-    spec = spectrum_bundle(signal["x"], signal["t_days"], draws_per_year=dpy, nperseg=nperseg)
+    spec = spectrum_bundle(
+        signal["x"], signal["t_days"], window=win, draws_per_year=dpy, nperseg=nperseg
+    )
     tf = tf_bundle(signal["x"], nperseg=nperseg, draws_per_year=dpy, want_sst=False)
     env = envelope_bundle(signal["x"], draws_per_year=dpy, dates=signal["dates"])
     hpss = hpss_bundle(tf["mag"], signal["x"])
@@ -296,9 +312,10 @@ def unmix_report(signal: dict[str, Any], *, nperseg: int | None = None) -> dict[
                 "percussive_fraction": hpss["percussive_fraction"],
                 "librosa": hpss.get("librosa"),
             },
+            "fft_window": win,
         }
     )
-    return out
+    return json_safe(out)
 
 
 def null_report(
@@ -340,4 +357,4 @@ def null_report(
     out["thd_observed"] = spec["thd"]
     out["comb"] = spec["comb"]
     out["fft_peaks"] = spec["fft"]["peaks"][:6]
-    return out
+    return json_safe(out)

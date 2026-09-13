@@ -576,7 +576,14 @@ def create_app() -> FastAPI:
 
     def _harmo_archive(era: str) -> tuple[list[dict[str, Any]], str]:
         if db.database_configured():
-            return _analysis_draws(era, None, None), "neon"
+            try:
+                return _analysis_draws(era, None, None), "neon"
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(
+                    503, f"Archive Neon injoignable: {exc}"
+                ) from exc
         from synchro.harmo.archive import bundled_draws
 
         rows = bundled_draws(era)
@@ -586,6 +593,19 @@ def create_app() -> FastAPI:
                 "Neon non configuré et archive JSON embarquée introuvable.",
             )
         return rows, "json"
+
+    def _harmo_payload(payload: dict[str, Any]) -> dict[str, Any]:
+        from synchro.harmo.util import json_safe
+
+        return json_safe(payload)
+
+    def _harmo_compute(build: Any) -> dict[str, Any]:
+        try:
+            return _harmo_payload(build())
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(500, str(exc)) from exc
 
     def _harmo_signal(
         variable: str,
@@ -603,20 +623,23 @@ def create_app() -> FastAPI:
         if variable not in VARIABLE_NAMES:
             raise HTTPException(400, f"Variable inconnue: {variable}")
         archive, source = _harmo_archive(era)
-        resolved = resolve_window(
-            archive,
-            preset=preset,
-            from_date=from_date,
-            to_date=to_date,
-            last_n=last_n,
-            warmup=warmup,
-        )
+        try:
+            resolved = resolve_window(
+                archive,
+                preset=preset,
+                from_date=from_date,
+                to_date=to_date,
+                last_n=last_n,
+                warmup=warmup,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         work = resolved["work"]
         if not work:
             raise HTTPException(404, "Aucun tirage dans la fenêtre.")
         try:
             signal = build_context(work, variable=variable, n=n, resolved=resolved)
-        except ValueError as exc:
+        except (ValueError, TypeError, KeyError) as exc:
             raise HTTPException(400, str(exc)) from exc
         signal["archive_source"] = source
         if source == "json":
@@ -658,7 +681,7 @@ def create_app() -> FastAPI:
         _work, signal = _harmo_signal(
             variable, n, era, from_date, to_date, preset, last_n, warmup
         )
-        payload = spectrum_report(signal, window=window)
+        payload = _harmo_compute(lambda: spectrum_report(signal, window=window))
         payload["timebase"] = timebase
         return payload
 
@@ -679,7 +702,7 @@ def create_app() -> FastAPI:
         _work, signal = _harmo_signal(
             variable, n, era, from_date, to_date, preset, last_n, warmup
         )
-        return welch_report(signal, nperseg=nperseg)
+        return _harmo_compute(lambda: welch_report(signal, nperseg=nperseg))
 
     @app.get("/api/harmo/stft")
     def harmo_stft(
@@ -699,7 +722,9 @@ def create_app() -> FastAPI:
         _work, signal = _harmo_signal(
             variable, n, era, from_date, to_date, preset, last_n, warmup
         )
-        return stft_report(signal, nperseg=nperseg, want_sst=sst)
+        return _harmo_compute(
+            lambda: stft_report(signal, nperseg=nperseg, want_sst=sst)
+        )
 
     @app.get("/api/harmo/envelope")
     def harmo_envelope(
@@ -717,7 +742,7 @@ def create_app() -> FastAPI:
         _work, signal = _harmo_signal(
             variable, n, era, from_date, to_date, preset, last_n, warmup
         )
-        return envelope_report(signal)
+        return _harmo_compute(lambda: envelope_report(signal))
 
     @app.get("/api/harmo/orders")
     def harmo_orders(
@@ -736,7 +761,7 @@ def create_app() -> FastAPI:
         _work, signal = _harmo_signal(
             variable, n, era, from_date, to_date, preset, last_n, warmup
         )
-        return orders_report(signal, nperseg=nperseg)
+        return _harmo_compute(lambda: orders_report(signal, nperseg=nperseg))
 
     @app.get("/api/harmo/unmix")
     def harmo_unmix(
@@ -749,13 +774,16 @@ def create_app() -> FastAPI:
         last_n: int | None = Query(None, ge=1, le=2000),
         warmup: int = Query(52, ge=0, le=400),
         nperseg: int | None = Query(None, ge=16, le=512),
+        window: str = Query("blackmanharris", pattern="^(blackmanharris|flattop|hann)$"),
     ) -> dict[str, Any]:
         from synchro.harmo.report import unmix_report
 
         _work, signal = _harmo_signal(
             variable, n, era, from_date, to_date, preset, last_n, warmup
         )
-        return unmix_report(signal, nperseg=nperseg)
+        return _harmo_compute(
+            lambda: unmix_report(signal, nperseg=nperseg, window=window)
+        )
 
     @app.get("/api/harmo/null")
     def harmo_null(
@@ -776,7 +804,9 @@ def create_app() -> FastAPI:
         work, signal = _harmo_signal(
             variable, n, era, from_date, to_date, preset, last_n, warmup
         )
-        return null_report(work, signal, window=window, n_sim=n_sim, seed=seed)
+        return _harmo_compute(
+            lambda: null_report(work, signal, window=window, n_sim=n_sim, seed=seed)
+        )
 
     @app.post("/api/check")
     def check(payload: CheckIn) -> dict[str, Any]:

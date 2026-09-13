@@ -42,32 +42,32 @@ def extras_status() -> dict[str, Any]:
 
         status["numpy"] = True
         status["numpy_version"] = str(np.__version__)
-    except ImportError:
+    except Exception:
         pass
     try:
         import scipy
 
         status["scipy"] = True
         status["scipy_version"] = str(scipy.__version__)
-    except ImportError:
+    except Exception:
         pass
     try:
         import pywt  # noqa: F401
 
         status["pywt"] = True
-    except ImportError:
+    except Exception:
         pass
     try:
         import librosa  # noqa: F401
 
         status["librosa"] = True
-    except ImportError:
+    except Exception:
         pass
     try:
         import ssqueezepy  # noqa: F401
 
         status["ssqueezepy"] = True
-    except ImportError:
+    except Exception:
         pass
     status["ok"] = bool(status["scipy"] and status["numpy"])
     return status

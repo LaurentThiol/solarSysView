@@ -158,12 +158,30 @@ export async function fetchHarmo<T extends HarmoBase = HarmoReport>(
   params: URLSearchParams
 ): Promise<T> {
   const response = await fetch(`/api/harmo/${path}?${params}`, { cache: "no-store" })
-  const body = (await response.json().catch(() => ({
-    ok: false,
-    error: "réponse invalide",
-  }))) as T & { detail?: unknown }
+  const text = await response.text()
+  let body = { ok: false, error: "réponse invalide" } as T & {
+    detail?: unknown
+    error?: string
+  }
+  if (text) {
+    try {
+      body = JSON.parse(text) as T & { detail?: unknown; error?: string }
+    } catch {
+      body.error = text.replace(/\s+/g, " ").trim().slice(0, 200) || "réponse invalide"
+    }
+  }
   if (!response.ok) {
-    const detail = body.error || (typeof body.detail === "string" ? body.detail : null)
+    const detail =
+      body.error ||
+      (typeof body.detail === "string"
+        ? body.detail
+        : Array.isArray(body.detail) &&
+            body.detail[0] &&
+            typeof body.detail[0] === "object" &&
+            body.detail[0] !== null &&
+            "msg" in (body.detail[0] as { msg?: unknown })
+          ? String((body.detail[0] as { msg: unknown }).msg)
+          : null)
     body.error = detail || `HTTP ${response.status}`
     body.ok = false
   }

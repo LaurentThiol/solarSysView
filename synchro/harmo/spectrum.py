@@ -339,7 +339,12 @@ def lomb_scargle(
     try:
         power = lombscargle(t_years, y, omega, normalize=True)
     except TypeError:
-        power = lombscargle(t_years, y, omega, normalize="normalize")
+        try:
+            power = lombscargle(t_years, y, omega, normalize="normalize")
+        except Exception:
+            return {"points": [], "peaks": [], "calendar": []}
+    except Exception:
+        return {"points": [], "peaks": [], "calendar": []}
     peaks_idx, _ = find_peaks(power, prominence=max(float(np.median(power)) * 2, 0.02))
     peaks: list[dict[str, Any]] = []
     for i in peaks_idx[np.argsort(power[peaks_idx])[::-1][:8]]:

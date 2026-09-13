@@ -1,3 +1,4 @@
+import json
 from datetime import date, timedelta
 from unittest.mock import patch
 
@@ -62,6 +63,41 @@ def test_harmo_unmix_shape() -> None:
     assert "components" in body
     assert body["draw_count"] == 80
     assert body["variable"] == "sum"
+    json.dumps(body, allow_nan=False)
+
+
+def test_harmo_unmix_accepts_fft_window_and_last_20() -> None:
+    draws = _draws(40)
+    with (
+        patch("synchro.db.database_configured", return_value=True),
+        patch("synchro.db.all_draws", return_value=draws),
+    ):
+        with _client() as client:
+            response = client.get(
+                "/api/harmo/unmix?variable=sum&era=current&preset=last_20"
+                "&from_date=2026-07-07&to_date=2026-09-11&warmup=52"
+                "&window=blackmanharris"
+            )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["draw_count"] == 20
+    assert body["fft_window"] == "blackmanharris"
+    assert abs(sum(body["shares"].values()) - 1.0) < 1e-6
+    json.dumps(body, allow_nan=False)
+
+
+def test_harmo_neon_error_is_json() -> None:
+    with (
+        patch("synchro.db.database_configured", return_value=True),
+        patch("synchro.db.all_draws", side_effect=RuntimeError("connexion coupée")),
+    ):
+        with _client() as client:
+            response = client.get("/api/harmo/unmix?variable=sum&preset=last_100")
+    assert response.status_code == 503
+    assert "application/json" in response.headers.get("content-type", "")
+    detail = response.json().get("detail")
+    assert "connexion coupée" in str(detail)
 
 
 def test_harmo_spectrum_and_stft() -> None:

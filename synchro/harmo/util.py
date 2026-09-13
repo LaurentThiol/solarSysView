@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Iterable
 
 import numpy as np
@@ -22,6 +24,38 @@ def fnum(value: Any) -> float:
     if not math.isfinite(out):
         return 0.0
     return out
+
+
+def json_safe(value: Any) -> Any:
+    """Types JSON natifs.
+
+    Starlette sérialise avec ``allow_nan=False`` et refuse ``numpy.int64``,
+    ``ndarray`` et ``NaN`` : le proxy Next lit alors du texte brut
+    (« Internal Server Error ») et l’UI Harmo affiche « réponse invalide ».
+    """
+    if value is None or isinstance(value, (str, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return json_safe(value.tolist())
+    if isinstance(value, np.generic):
+        return json_safe(value.item())
+    if isinstance(value, Decimal):
+        return fnum(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, float):
+        return fnum(value)
+    if isinstance(value, int):
+        return int(value)
+    if isinstance(value, (bytes, bytearray)):
+        return value.decode("utf-8", errors="replace")
+    return fnum(value)
 
 
 def flist(values: Iterable[Any]) -> list[float]:
