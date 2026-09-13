@@ -2,6 +2,12 @@ import type { ReactNode } from "react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 
+import {
+  CaptureDrawer,
+  CaptureFlash,
+  CaptureProvider,
+  CaptureRoot,
+} from "@/components/capture"
 import { HelpModeProvider } from "@/components/help"
 import { SiteHeader } from "@/components/startup-status"
 
@@ -31,8 +37,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
         <HelpModeProvider>
-          <SiteHeader />
-          {children}
+          <CaptureProvider>
+            <SiteHeader />
+            <CaptureRoot>{children}</CaptureRoot>
+            <CaptureDrawer />
+            <CaptureFlash />
+          </CaptureProvider>
         </HelpModeProvider>
       </body>
     </html>

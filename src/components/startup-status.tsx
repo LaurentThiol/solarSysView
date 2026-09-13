@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
 import { LogOut } from "lucide-react"
 
+import { CaptureButton } from "@/components/capture"
 import { HelpModeToggle, HelpWrap, WithHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { isLocalHost } from "@/lib/api-base"
@@ -493,6 +494,14 @@ const NAV_ITEMS = [
     },
   },
   {
+    href: "/ia",
+    label: "IA",
+    help: {
+      title: "IA",
+      body: "Lecture d’une capture : visuel du laboratoire plus les données de la fenêtre. Gemini ou OpenAI, clés dans Admin. Décrit l’archive, ne pronostique pas.",
+    },
+  },
+  {
     href: "/admin",
     label: "Admin",
     help: {
@@ -521,7 +530,7 @@ export function SiteHeader() {
               Synchro
             </Link>
           </HelpWrap>
-          <nav className="flex items-center gap-4" aria-label="Sections">
+          <nav className="flex flex-wrap items-center gap-x-4 gap-y-1" aria-label="Sections">
             {NAV_ITEMS.map((item) => {
               const active =
                 pathname === item.href || pathname.startsWith(`${item.href}/`)
@@ -540,6 +549,7 @@ export function SiteHeader() {
           </nav>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <CaptureButton />
           <HelpModeToggle />
           <StartupStatus />
         </div>

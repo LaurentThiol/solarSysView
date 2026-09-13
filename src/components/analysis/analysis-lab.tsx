@@ -20,6 +20,7 @@ import { SystemPanel } from "@/components/analysis/system-panel"
 import { TrendPanel } from "@/components/analysis/trend-panel"
 import { ViewPanel } from "@/components/analysis/view-panel"
 import { VolatilityPanel } from "@/components/analysis/volatility-panel"
+import { useRegisterCapture } from "@/components/capture"
 import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
 import { WindowBar } from "@/components/analysis/window-bar"
 import { Input } from "@/components/ui/input"
@@ -50,6 +51,7 @@ import {
   type WindowPreset,
 } from "@/lib/analysis-window"
 import { parseQueryNumbers, drawMatchesQuery } from "@/lib/draws"
+import { packAnalyse } from "@/lib/capture/pack"
 import { techPack } from "@/lib/ta"
 import { useDraws } from "@/lib/use-draws"
 
@@ -323,6 +325,29 @@ export function AnalysisLab() {
   const comparison = useMemo(
     () => compareWindows(work, resolved.compare.work, variable, variableN),
     [work, resolved.compare.work, variable, variableN]
+  )
+
+  useRegisterCapture(() =>
+    packAnalyse({
+      tab,
+      era,
+      source,
+      variable,
+      ball,
+      star,
+      query,
+      windowSize,
+      preset,
+      resolved: { ...resolved, work, drawCount: work.length },
+      warmupCount,
+      points: workSeries.points,
+      values: workSeries.values,
+      last: tech.last,
+      adxRegime: tech.adxRegime,
+      structure: tech.structure,
+      squeeze: tech.squeeze,
+      disclaimer: tech.disclaimer,
+    })
   )
 
   async function loadMc() {

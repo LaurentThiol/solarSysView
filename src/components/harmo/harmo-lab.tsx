@@ -9,6 +9,7 @@ import { MixPanel } from "@/components/harmo/mix-panel"
 import { TestsPanel } from "@/components/harmo/tests-panel"
 import { TfPanel } from "@/components/harmo/tf-panel"
 import { WindowBar } from "@/components/analysis/window-bar"
+import { useRegisterCapture } from "@/components/capture"
 import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,6 +34,7 @@ import {
 } from "@/lib/analysis"
 import { DEFAULT_WARMUP, resolveWindow, type WindowPreset } from "@/lib/analysis-window"
 import { parseQueryNumbers, drawMatchesQuery } from "@/lib/draws"
+import { packHarmo } from "@/lib/capture/pack"
 import {
   fetchHarmo,
   harmoQuery,
@@ -206,6 +208,23 @@ export function HarmoLab() {
       }
     },
     [params, showSst]
+  )
+
+  useRegisterCapture(() =>
+    packHarmo({
+      tab,
+      era,
+      source,
+      variable,
+      ball,
+      star,
+      query,
+      preset,
+      resolved: { ...resolved, work, drawCount: work.length },
+      fftWindow,
+      payload,
+      scipy: status?.scipy_version ?? null,
+    })
   )
 
   useEffect(() => {

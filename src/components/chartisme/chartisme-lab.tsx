@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { BacktestPanel } from "@/components/chartisme/backtest-panel"
 import { CurveCanvas, type CurveSelection } from "@/components/chartisme/curve-canvas"
 import { LabelAtelier } from "@/components/chartisme/label-atelier"
+import { useRegisterCapture } from "@/components/capture"
 import { RulesPanel } from "@/components/chartisme/rules-panel"
 import { Sketchpad } from "@/components/chartisme/sketchpad"
 import { WindowCompare } from "@/components/chartisme/window-compare"
@@ -29,6 +30,7 @@ import {
   type ChartismeRule,
 } from "@/lib/chartisme/rules"
 import { loadRules, recordFirings } from "@/lib/chartisme/store"
+import { packChartisme } from "@/lib/capture/pack"
 import { evaluateRules } from "@/lib/chartisme/rules"
 import {
   DEFAULT_STUDY_PRESET,
@@ -198,6 +200,31 @@ export function ChartismeLab() {
   // Le chiffrage, lui, s'affiche toujours : c'est le seul point de comparaison
   // de la confiance lue à côté.
   const measured = curve && !fitNote ? baseRateNote(baseRates, minConfidence) : null
+
+  useRegisterCapture(() =>
+    packChartisme({
+      curveId,
+      curveLabel: curve?.label ?? curveId,
+      era,
+      source,
+      preset,
+      presetLabel: STUDY_PRESET_LABELS[preset],
+      scaleChoice,
+      scales: study.scales,
+      banner: studyBanner(study),
+      caveat,
+      measured,
+      minConfidence,
+      drawCount: study.drawCount,
+      contextCount: study.contextCount,
+      from: study.window.fromDate,
+      to: study.window.toDate,
+      dates: curve?.dates ?? [],
+      values: curve?.values ?? [],
+      hits,
+      baseRates,
+    })
+  )
 
   // Même règle que la barre de fenêtre d'Analyse : un nombre de tirages
   // n'affine que les fenêtres comptées en tirages. Sur « 3 mois » ou

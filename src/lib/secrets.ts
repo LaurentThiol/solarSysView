@@ -34,7 +34,7 @@ export const SERVICES: ServiceDef[] = [
     consoleLabel: "Google AI Studio",
     docsUrl: "https://ai.google.dev/gemini-api/docs/api-key",
     description:
-      "Clé Gemini / AI Studio (AQ.… ou AIza…). Sert aux appels generateContent.",
+      "Clé Gemini / AI Studio (AQ.… ou AIza…). Sert à l’onglet IA (lecture de capture, generateContent).",
     placeholder: "AQ.… ou AIza…",
   },
   {
@@ -44,7 +44,7 @@ export const SERVICES: ServiceDef[] = [
     consoleUrl: "https://platform.openai.com/api-keys",
     consoleLabel: "platform.openai.com",
     docsUrl: "https://platform.openai.com/docs/api-reference/authentication",
-    description: "Clé secrète sk-… pour l’API chat / modèles.",
+    description: "Clé secrète sk-… pour l’API chat. Sert à l’onglet IA (lecture de capture).",
     placeholder: "sk-…",
   },
   {
