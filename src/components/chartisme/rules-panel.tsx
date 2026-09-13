@@ -121,7 +121,7 @@ const DIRECTION_LABELS: Record<Direction, string> = {
  *
  * L'onglet balaie la courbe nommée en plus de celle affichée. Il ne peut pas
  * balayer les cinquante retards de boule pour répondre à « une figure sur une
- * boule quelconque », donc la voisine se nomme, et se nomme parmi les quatorze.
+ * boule quelconque », donc la voisine se nomme, et se nomme parmi les dix-huit.
  */
 const ALONGSIDE_CURVES = PLAIN_VARIABLES.map((variable) => ({
   value: variable,

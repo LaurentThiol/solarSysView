@@ -17,9 +17,12 @@ choix sur ce qui a du répondant plutôt que sur ce qui a l'air convaincant.
    deux ou trois « découvertes » par pur hasard.
 
 S'ajoute une mesure qui remet les figures à leur place : le **taux de base**.
-Combien de marches aléatoires de même longueur portent la même figure ? Si une
-tête & épaules apparaît sur trois fenêtres aléatoires sur quatre, en voir une
-n'apprend presque rien.
+Combien de fenêtres de bruit de même longueur portent la même figure ? Le bruit
+vient des mêmes tirages remis dans un ordre quelconque, ce qui garde les bornes
+et les paliers de chaque courbe — une marche gaussienne les ignorait et
+sous-estimait le bruit partout où la courbe est bornée, c'est-à-dire presque
+partout. Si une tête & épaules apparaît sur trois fenêtres de bruit sur quatre,
+en voir une n'apprend presque rien.
 """
 
 from __future__ import annotations

@@ -454,7 +454,7 @@ export function ChartismeLab() {
               label={`Confiance minimale · ${minConfidence.toFixed(2)}`}
               help={{
                 title: "Confiance minimale",
-                body: "La confiance mesure la qualité de l'ajustement géométrique, pénalisée quand une borne repose sur moins de trois points. Attention : 85 % des marches aléatoires de 60 tirages portent au moins une figure à 0.6, et une échelle plus courte fait monter ce taux — une figure fréquente sur du bruit n'apprend rien.",
+                body: "La confiance mesure la qualité de l'ajustement géométrique, pénalisée quand une borne repose sur moins de trois points. Elle ne dit pas si la figure est rare : c'est le taux de base mesuré sous le tracé qui le dit, et il dépend de la courbe autant que de l'échelle. Sur « paires consécutives » presque toutes les fenêtres de bruit portent déjà une figure à 0.6 ; sur la somme, un peu plus de la moitié. Une figure fréquente sur du bruit n'apprend rien.",
               }}
             >
               <Input
