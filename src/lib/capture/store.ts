@@ -1,24 +1,22 @@
 import type { DiagnosticSnapshot, LabId } from "@/lib/capture/snapshot"
 import { IMAGE_MAX_CHARS } from "@/lib/capture/snapshot"
+import { isModelId, type IaChatMessage, type IaProviderId } from "@/lib/ia/models"
+
+export type { IaChatMessage, IaProviderId } from "@/lib/ia/models"
 
 export const CAPTURE_PENDING_EVENT = "synchro-capture-pending"
 export const IA_PROVIDER_KEY = "synchro-ia-provider"
+export const IA_MODEL_KEY = "synchro-ia-model"
 const PENDING_KEY = "synchro-capture-pending"
 const THREADS_KEY = "synchro-ia-threads"
 const MAX_THREADS = 8
-
-export type IaProviderId = "google" | "openai"
-
-export type IaChatMessage = {
-  role: "user" | "assistant"
-  content: string
-}
 
 export type IaThread = {
   id: string
   updatedAt: string
   title: string
   provider: IaProviderId
+  model?: string
   snapshot: DiagnosticSnapshot
   messages: IaChatMessage[]
 }
@@ -72,6 +70,34 @@ export function readProvider(): IaProviderId | null {
 export function writeProvider(id: IaProviderId) {
   if (!canUseStorage()) return
   window.localStorage.setItem(IA_PROVIDER_KEY, id)
+}
+
+type StoredModels = Partial<Record<IaProviderId, string>>
+
+export function readModels(): StoredModels {
+  if (!canUseStorage()) return {}
+  const raw = window.localStorage.getItem(IA_MODEL_KEY)
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw) as StoredModels
+    if (!parsed || typeof parsed !== "object") return {}
+    const out: StoredModels = {}
+    if (isModelId(parsed.google)) out.google = parsed.google
+    if (isModelId(parsed.openai)) out.openai = parsed.openai
+    return out
+  } catch {
+    return {}
+  }
+}
+
+export function readModel(provider: IaProviderId): string | null {
+  return readModels()[provider] ?? null
+}
+
+export function writeModel(provider: IaProviderId, model: string) {
+  if (!canUseStorage() || !isModelId(model)) return
+  const next = { ...readModels(), [provider]: model }
+  window.localStorage.setItem(IA_MODEL_KEY, JSON.stringify(next))
 }
 
 function slimSnapshot(snapshot: DiagnosticSnapshot): DiagnosticSnapshot {

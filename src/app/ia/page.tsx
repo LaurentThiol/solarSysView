@@ -5,7 +5,7 @@ import { IaLab } from "@/components/ia/ia-lab"
 export const metadata: Metadata = {
   title: "IA — Synchro",
   description:
-    "Lire une capture de laboratoire : visuel, données de fenêtre, Gemini ou OpenAI. Descriptif, pas un pronostic.",
+    "Lire une capture de laboratoire : visuel, données de fenêtre, choix du modèle Gemini ou OpenAI. Descriptif, pas un pronostic.",
 }
 
 export default function IaPage() {
@@ -15,7 +15,8 @@ export default function IaPage() {
         <h1 className="text-3xl font-semibold tracking-tight">IA · lecture</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Envoie une capture (bouton Capture du bandeau) : l’image de l’écran plus
-          les données de la fenêtre. Gemini ou OpenAI, clés dans Admin. Les
+          les données de la fenêtre. Choisis Gemini ou OpenAI, puis le modèle —
+          catalogue recommandé, plus ceux visibles sur tes clés (Admin). Les
           tirages sont indépendants — l’assistant décrit, il ne joue pas.
         </p>
       </div>

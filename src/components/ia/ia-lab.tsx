@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 
+import { HelpTip, LabelHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+} from "@/components/ui/select"
 import { printSnapshot } from "@/lib/capture/pdf"
 import { labLabel, type DiagnosticSnapshot } from "@/lib/capture/snapshot"
 import { suggestionsFor, DEFAULT_QUESTION } from "@/lib/capture/suggestions"
@@ -10,20 +19,43 @@ import {
   CAPTURE_PENDING_EVENT,
   clearPending,
   readPending,
+  readModel,
   readProvider,
   readThreads,
   threadTitle,
   upsertThread,
+  writeModel,
   writeProvider,
   type IaChatMessage,
   type IaProviderId,
   type IaThread,
 } from "@/lib/capture/store"
+import {
+  IA_MODELS,
+  modelLabel,
+  pickAvailableModel,
+  preferredModel,
+  providerLabel,
+  providerOfModel,
+  type IaModelOption,
+} from "@/lib/ia/models"
 
 type Status = {
   google: boolean
   openai: boolean
   default: IaProviderId | null
+  models?: IaModelOption[]
+  live?: { google: boolean | null; openai: boolean | null }
+}
+
+type ChatReply = {
+  ok?: boolean
+  text?: string
+  error?: string
+  model?: string
+  provider?: IaProviderId
+  requested?: string
+  imageOmitted?: boolean
 }
 
 function pickProvider(status: Status | null, stored: IaProviderId | null): IaProviderId | null {
@@ -50,6 +82,7 @@ function snapshotPayload(snapshot: DiagnosticSnapshot) {
 export function IaLab() {
   const [status, setStatus] = useState<Status | null>(null)
   const [provider, setProvider] = useState<IaProviderId | null>(null)
+  const [model, setModel] = useState<string | null>(preferredModel("google"))
   const [threads, setThreads] = useState<IaThread[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<DiagnosticSnapshot | null>(null)
@@ -57,16 +90,19 @@ export function IaLab() {
   const [draft, setDraft] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [techOpen, setTechOpen] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const pendingAuto = useRef<DiagnosticSnapshot | null>(null)
   const providerRef = useRef<IaProviderId | null>(null)
+  const modelRef = useRef<string | null>(null)
   const askRef = useRef<
     (
       content: string,
       pack: DiagnosticSnapshot | null,
       history: IaChatMessage[],
-      chosen: IaProviderId | null
+      chosen: IaProviderId | null,
+      chosenModel: string | null
     ) => Promise<void>
   >(async () => undefined)
 
@@ -77,20 +113,34 @@ export function IaLab() {
         const response = await fetch("/api/ia/status", { cache: "no-store" })
         const payload = (await response.json()) as Status & { ok?: boolean }
         setStatus(payload)
-        setProvider(pickProvider(payload, readProvider()))
+        const nextProvider = pickProvider(payload, readProvider())
+        setProvider(nextProvider)
+        if (nextProvider) {
+          setModel(pickAvailableModel(payload.models ?? [], nextProvider, readModel(nextProvider)))
+        } else {
+          setModel(
+            readModel("google") || readModel("openai") || preferredModel("google")
+          )
+        }
       } catch {
-        setStatus({ google: false, openai: false, default: null })
+        setStatus({ google: false, openai: false, default: null, models: [] })
       }
     })()
   }, [])
 
   const persist = useCallback(
-    (nextSnapshot: DiagnosticSnapshot, nextMessages: IaChatMessage[], nextProvider: IaProviderId | null) => {
+    (
+      nextSnapshot: DiagnosticSnapshot,
+      nextMessages: IaChatMessage[],
+      nextProvider: IaProviderId | null,
+      nextModel: string | null
+    ) => {
       const thread: IaThread = {
         id: nextSnapshot.id,
         updatedAt: new Date().toISOString(),
         title: threadTitle(nextSnapshot, nextSnapshot.question || nextMessages[0]?.content || ""),
         provider: nextProvider || "google",
+        model: nextModel || undefined,
         snapshot: nextSnapshot,
         messages: nextMessages,
       }
@@ -105,7 +155,8 @@ export function IaLab() {
       content: string,
       pack: DiagnosticSnapshot | null,
       history: IaChatMessage[],
-      chosen: IaProviderId | null
+      chosen: IaProviderId | null,
+      chosenModel: string | null
     ) => {
       const text = content.trim() || DEFAULT_QUESTION
       if (!chosen) {
@@ -117,26 +168,44 @@ export function IaLab() {
       setDraft("")
       setBusy(true)
       setError(null)
+      setNotice(null)
       try {
         const response = await fetch("/api/ia/chat", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             provider: chosen,
+            model: chosenModel,
             messages: nextMessages,
             snapshot: pack ? snapshotPayload(pack) : null,
           }),
         })
-        const payload = (await response.json()) as { ok?: boolean; text?: string; error?: string }
+        const payload = (await response.json()) as ChatReply
         if (!payload.ok || !payload.text) {
           throw new Error(payload.error || `HTTP ${response.status}`)
         }
         const withReply: IaChatMessage[] = [
           ...nextMessages,
-          { role: "assistant", content: payload.text },
+          {
+            role: "assistant",
+            content: payload.text,
+            model: payload.model,
+            provider: payload.provider ?? chosen,
+            requested: payload.requested,
+          },
         ]
         setMessages(withReply)
-        if (pack) persist({ ...pack, question: pack.question || text }, withReply, chosen)
+        if (pack) {
+          persist(
+            { ...pack, question: pack.question || text },
+            withReply,
+            chosen,
+            payload.model || chosenModel
+          )
+        }
+        if (payload.imageOmitted) {
+          setNotice("Modèle sans vision : le visuel n’a pas été envoyé, seulement les données.")
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "échec IA")
       } finally {
@@ -148,8 +217,9 @@ export function IaLab() {
 
   useLayoutEffect(() => {
     providerRef.current = provider
+    modelRef.current = model
     askRef.current = ask
-  }, [provider, ask])
+  }, [provider, model, ask])
 
   useEffect(() => {
     function ingest() {
@@ -160,6 +230,7 @@ export function IaLab() {
       setActiveId(pending.snapshot.id)
       setMessages([])
       setError(null)
+      setNotice(null)
       if (!pending.autoSend) return
       const chosen = providerRef.current
       if (chosen) {
@@ -167,7 +238,8 @@ export function IaLab() {
           pending.snapshot.question || DEFAULT_QUESTION,
           pending.snapshot,
           [],
-          chosen
+          chosen,
+          modelRef.current
         )
       } else {
         pendingAuto.current = pending.snapshot
@@ -183,60 +255,192 @@ export function IaLab() {
 
   useEffect(() => {
     const pack = pendingAuto.current
-    if (!pack || !provider) return
+    if (!pack || !provider || !model) return
     pendingAuto.current = null
     const chosen = provider
+    const chosenModel = model
     void Promise.resolve().then(() =>
-      ask(pack.question || DEFAULT_QUESTION, pack, [], chosen)
+      ask(pack.question || DEFAULT_QUESTION, pack, [], chosen, chosenModel)
     )
-  }, [provider, ask])
+  }, [provider, model, ask])
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" })
   }, [messages, busy])
-
-  function openThread(thread: IaThread) {
-    setActiveId(thread.id)
-    setSnapshot(thread.snapshot)
-    setMessages(thread.messages)
-    setProvider(thread.provider)
-    setError(null)
-  }
-
-  function selectProvider(id: IaProviderId) {
-    setProvider(id)
-    writeProvider(id)
-  }
 
   const suggestions = useMemo(
     () => suggestionsFor(snapshot?.lab ?? "other", snapshot?.tab ?? null),
     [snapshot]
   )
 
+  const allModels = useMemo<IaModelOption[]>(() => {
+    if (status?.models?.length) return status.models
+    return IA_MODELS.map((item) => ({
+      ...item,
+      available: false,
+      source: "catalog" as const,
+    }))
+  }, [status])
+
+  const providerModels = useMemo(() => {
+    if (!provider) return allModels
+    return allModels.filter((item) => item.provider === provider)
+  }, [allModels, provider])
+
+  const catalogGoogle = allModels.filter(
+    (item) => item.source === "catalog" && item.provider === "google"
+  )
+  const catalogOpenAI = allModels.filter(
+    (item) => item.source === "catalog" && item.provider === "openai"
+  )
+  const catalogModels = provider
+    ? providerModels.filter((item) => item.source === "catalog")
+    : []
+  const liveModels = providerModels.filter((item) => item.source === "live")
+  const currentModel = allModels.find((item) => item.id === model) ?? null
+  const hasImage = Boolean(snapshot?.imageDataUrl)
+  const activeLabel = model ? modelLabel(model, allModels) : null
+  const canSend = Boolean(provider && model && status?.[provider])
+
+  function openThread(thread: IaThread) {
+    setActiveId(thread.id)
+    setSnapshot(thread.snapshot)
+    setMessages(thread.messages)
+    setProvider(thread.provider)
+    setModel(thread.model || pickAvailableModel(allModels, thread.provider, readModel(thread.provider)))
+    setError(null)
+    setNotice(null)
+  }
+
+  function selectProvider(id: IaProviderId) {
+    setProvider(id)
+    writeProvider(id)
+    const next = pickAvailableModel(allModels, id, readModel(id))
+    setModel(next)
+  }
+
+  function selectModel(id: string | null) {
+    if (!id) return
+    const owner = provider ?? providerOfModel(id)
+    if (!owner) return
+    setModel(id)
+    writeModel(owner, id)
+    if (status?.[owner] && owner !== provider) {
+      setProvider(owner)
+      writeProvider(owner)
+    }
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
       <div className="flex min-w-0 flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <ProviderPill
-            id="google"
-            label="Gemini"
-            enabled={Boolean(status?.google)}
-            active={provider === "google"}
-            onSelect={selectProvider}
-          />
-          <ProviderPill
-            id="openai"
-            label="OpenAI"
-            enabled={Boolean(status?.openai)}
-            active={provider === "openai"}
-            onSelect={selectProvider}
-          />
-          {!status?.google && !status?.openai ? (
-            <span className="text-xs text-muted-foreground">
-              Clés dans Admin (Google / OpenAI).
-            </span>
-          ) : null}
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="flex flex-wrap items-center gap-2">
+            <ProviderPill
+              id="google"
+              label="Gemini"
+              enabled={Boolean(status?.google)}
+              active={provider === "google"}
+              onSelect={selectProvider}
+            />
+            <ProviderPill
+              id="openai"
+              label="OpenAI"
+              enabled={Boolean(status?.openai)}
+              active={provider === "openai"}
+              onSelect={selectProvider}
+            />
+            {!status?.google && !status?.openai ? (
+              <span className="text-xs text-muted-foreground">
+                Clés dans Admin (Google / OpenAI).
+              </span>
+            ) : null}
+          </div>
+
+          <LabelHelp
+              label="Modèle"
+              className="sm:ml-auto"
+              help={{
+                title: "Modèle",
+                body: "Gemini ou OpenAI, puis le modèle envoyé avec le pack. Le catalogue est recommandé pour la lecture d’écran ; tes clés peuvent en ajouter d’autres. Le modèle réellement utilisé s’affiche sous la réponse. Un aperçu introuvable replie vers le catalogue.",
+                items: [
+                  {
+                    label: "Vision",
+                    text: "Les captures avec visuel demandent un modèle vision. Sinon seules les données partent.",
+                  },
+                  {
+                    label: "Mémoire",
+                    text: "Le dernier modèle de chaque fournisseur est mémorisé dans ce navigateur.",
+                  },
+                ],
+              }}
+            >
+              <Select value={model ?? undefined} onValueChange={(value) => selectModel(value)}>
+                <SelectTrigger className="w-full sm:w-72" aria-label="Modèle">
+                  <span className="flex flex-1 text-left">
+                    {currentModel ? currentModel.label : "Choisir un modèle"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent align="start" alignItemWithTrigger={false} className="min-w-72">
+                  {provider ? (
+                    <>
+                      <SelectGroup>
+                        <SelectLabel>Catalogue</SelectLabel>
+                        {catalogModels.map((item) => (
+                          <SelectItem key={item.id} value={item.id} disabled={!item.available}>
+                            {`${item.label} · ${item.hint}`}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                      {liveModels.length ? (
+                        <SelectGroup>
+                          <SelectLabel>Autres sur cette clé</SelectLabel>
+                          {liveModels.map((item) => (
+                            <SelectItem key={item.id} value={item.id}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <SelectGroup>
+                        <SelectLabel>Gemini</SelectLabel>
+                        {catalogGoogle.map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {`${item.label} · ${item.hint}`}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectLabel>OpenAI</SelectLabel>
+                        {catalogOpenAI.map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {`${item.label} · ${item.hint}`}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </>
+                  )}
+                  {model && !allModels.some((item) => item.id === model) ? (
+                    <SelectItem value={model}>{model}</SelectItem>
+                  ) : null}
+                </SelectContent>
+              </Select>
+            </LabelHelp>
         </div>
+
+        {currentModel ? (
+          <p className="text-[11px] leading-4 text-muted-foreground">
+            {providerLabel(currentModel.provider)} · {currentModel.id}
+            {hasImage && !currentModel.vision
+              ? " · sans vision : le visuel ne partira pas"
+              : hasImage
+                ? " · vision"
+                : ""}
+          </p>
+        ) : null}
 
         {snapshot ? (
           <div className="rounded-xl border border-border bg-card/40 p-3">
@@ -316,14 +520,25 @@ export function IaLab() {
               }`}
             >
               {message.content}
+              {message.role === "assistant" && message.model ? (
+                <span className="mt-1.5 block text-[11px] leading-4 text-muted-foreground">
+                  {providerLabel(message.provider ?? "google")} · {modelLabel(message.model, allModels)}
+                  {message.requested && message.requested !== message.model
+                    ? ` · repli depuis ${message.requested}`
+                    : ""}
+                </span>
+              ) : null}
             </div>
           ))}
           {busy ? (
-            <p className="text-xs text-muted-foreground">Lecture en cours…</p>
+            <p className="text-xs text-muted-foreground">
+              Lecture en cours{activeLabel ? ` · ${activeLabel}` : ""}…
+            </p>
           ) : null}
         </div>
 
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        {notice ? <p className="text-xs text-muted-foreground">{notice}</p> : null}
 
         {messages.length === 0 && !busy ? (
           <div className="flex flex-col gap-1.5">
@@ -345,7 +560,7 @@ export function IaLab() {
           onSubmit={(event) => {
             event.preventDefault()
             if (busy) return
-            void ask(draft, snapshot, messages, provider)
+            void ask(draft, snapshot, messages, provider, model)
           }}
         >
           <textarea
@@ -355,15 +570,19 @@ export function IaLab() {
             placeholder="Question sur la lecture…"
             className="min-h-20 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
           />
-          <Button type="submit" disabled={busy || !provider}>
+          <Button type="submit" disabled={busy || !canSend}>
             Envoyer
           </Button>
         </form>
       </div>
 
       <aside className="flex flex-col gap-2">
-        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        <p className="inline-flex items-center gap-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Captures
+          <HelpTip
+            title="Historique"
+            body="Les huit derniers packs restent dans ce navigateur. Rouvrir un fil restaure le fournisseur et le modèle de la conversation."
+          />
         </p>
         {threads.length === 0 ? (
           <p className="text-xs text-muted-foreground">Pas encore d’historique.</p>
@@ -381,7 +600,8 @@ export function IaLab() {
             >
               <span className="block font-medium text-foreground">{thread.title}</span>
               <span className="mt-0.5 block opacity-80">
-                {labLabel(thread.snapshot.lab)} · {thread.provider === "google" ? "Gemini" : "OpenAI"}
+                {labLabel(thread.snapshot.lab)} · {providerLabel(thread.provider)}
+                {thread.model ? ` · ${modelLabel(thread.model, allModels)}` : ""}
               </span>
             </button>
           ))

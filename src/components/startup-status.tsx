@@ -498,7 +498,7 @@ const NAV_ITEMS = [
     label: "IA",
     help: {
       title: "IA",
-      body: "Lecture d’une capture : visuel du laboratoire plus les données de la fenêtre. Gemini ou OpenAI, clés dans Admin. Décrit l’archive, ne pronostique pas.",
+      body: "Lecture d’une capture : visuel du laboratoire plus les données de la fenêtre. Gemini ou OpenAI, puis le modèle (catalogue + ceux visibles sur tes clés). Décrit l’archive, ne pronostique pas.",
     },
   },
   {

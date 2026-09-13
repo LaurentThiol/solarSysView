@@ -9,6 +9,7 @@ export const maxDuration = 60
 
 type Body = {
   provider?: IaProviderId
+  model?: string | null
   messages?: IaChatMessage[]
   snapshot?: IaSnapshotPayload | null
 }
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
       { status: 401 }
     )
   }
-  const status = iaStatus()
+  const status = await iaStatus()
   const body = (await request.json().catch(() => null)) as Body | null
   if (!body) {
     return NextResponse.json({ ok: false, error: "Requête invalide" }, { status: 400 })
@@ -62,6 +63,7 @@ export async function POST(request: Request) {
   try {
     const result = await completeIa({
       provider,
+      model: body.model,
       messages: cleaned,
       snapshot: body.snapshot ?? null,
     })
@@ -73,6 +75,8 @@ export async function POST(request: Request) {
       text: result.text,
       model: result.model,
       provider: result.provider,
+      requested: result.requested,
+      imageOmitted: result.imageOmitted,
     })
   } catch (error) {
     return NextResponse.json(
