@@ -45,6 +45,7 @@ def scan_curve(
     zigzag_pct: float = DEFAULT_ZIGZAG_PCT,
     eps: float = DEFAULT_EPS,
     min_confidence: float = 0.5,
+    min_confidence_by_scale: dict[int, float | None] | None = None,
     max_overlap: float = DEFAULT_MAX_OVERLAP,
     top_per_zone: bool = False,
 ) -> list[dict[str, Any]]:
@@ -54,6 +55,16 @@ def scan_curve(
     lectures d'une même zone sont légitimes — la ligne de cou d'une ETE est
     aussi un double creux — mais pour parcourir l'archive on veut une liste
     courte.
+
+    `min_confidence_by_scale` donne un seuil propre à chaque échelle. Un seuil
+    unique ne veut pas dire la même chose de l'une à l'autre : la confiance est
+    escomptée selon la part de fenêtre couverte, donc une figure courte, qui
+    couvre presque tout son tracé, la gagne sans rien gagner en substance. Lire
+    en rareté visée — « ce que le hasard ne produit que dans une fenêtre sur
+    cinq » — demande donc un seuil par échelle, et c'est ce qui rend les figures
+    de deux échelles comparables. Une échelle absente de la table est balayée au
+    seuil commun ; une échelle dont le seuil vaut `None` n'est pas balayée, la
+    rareté demandée y étant hors d'atteinte.
     """
     values = [float(v) for v in curve.get("values") or []]
     dates = list(curve.get("dates") or [])
@@ -64,6 +75,9 @@ def scan_curve(
     for size in scales or DEFAULT_SCALES:
         if size < MIN_WINDOW or size > len(values):
             continue
+        bar = (min_confidence_by_scale or {}).get(size, min_confidence)
+        if bar is None:
+            continue
         stride = max(1, int(size * stride_ratio))
         for start in window_starts(len(values), size, stride):
             stop = start + size
@@ -73,7 +87,7 @@ def scan_curve(
                 activity[start:stop],
                 zigzag_pct=zigzag_pct,
                 eps=eps,
-                min_confidence=min_confidence,
+                min_confidence=bar,
                 max_overlap=max_overlap,
             )
             for hit in hits:

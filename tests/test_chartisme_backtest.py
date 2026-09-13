@@ -10,10 +10,13 @@ import math
 from random import Random
 from typing import Any
 
+from synchro.analysis.tech import activity_from_close
+from synchro.analysis.variables import series
 from synchro.chartisme.backtest import (
     BALL_COUNT,
     STAR_COUNT,
     _binomial_two_sided,
+    best_per_window,
     figure_base_rate,
     following_draws,
     null_target_rate,
@@ -21,7 +24,9 @@ from synchro.chartisme.backtest import (
     run,
     shuffled_draws,
     target_outcomes,
+    threshold_for_base_rate,
 )
+from synchro.chartisme.figures import detect_figures
 
 
 def _draw(index: int, *, numbers: list[int] | None = None) -> dict[str, Any]:
@@ -359,6 +364,109 @@ def test_figure_base_rate_shares_a_window_budget() -> None:
     # Un appelant qui demande peu de remaniements en obtient peu, pas le plancher.
     frugal = figure_base_rate(draws=DRAWS, variables=many, length=60, trials=10, seed=0)
     assert frugal["trials"] == 10
+
+
+def _windows(bests: list[float]) -> list[dict[str, float]]:
+    """Un échantillon de bruit réduit à ce que l'inversion lit : la meilleure par fenêtre."""
+    return [{} if best <= 0 else {"double_top": best} for best in bests]
+
+
+def test_threshold_for_base_rate_finds_the_bar_that_holds_the_target() -> None:
+    """L'inversion doit tenir la cible, pas s'en approcher par le dessus.
+
+    Dix fenêtres, une cible de 20 % : deux fenêtres porteuses sont tolérées, donc
+    le seuil doit dépasser la troisième meilleure confiance (0.80) et pas la
+    deuxième — sans quoi trois fenêtres passeraient.
+    """
+    sample = _windows([0.95, 0.90, 0.80, 0.70, 0.60, 0.50, 0.40, 0.30, 0.20, 0.10])
+    found = threshold_for_base_rate(sample, target=0.2)
+    assert found["threshold"] == 0.81
+    assert found["achieved"] == 0.2
+    assert found["trials"] == 10
+
+
+def test_threshold_for_base_rate_truncates_the_tolerance() -> None:
+    """Viser 20 % sur 9 fenêtres autorise 1 fenêtre, pas 1,8.
+
+    Arrondir au plus proche laisserait passer deux fenêtres sur neuf, soit 22 % —
+    au-dessus de la cible. La mesure doit se tromper du côté sévère.
+    """
+    sample = _windows([0.95, 0.90, 0.80, 0.70, 0.60, 0.50, 0.40, 0.30, 0.20])
+    found = threshold_for_base_rate(sample, target=0.2)
+    assert found["threshold"] == 0.91
+    assert found["achieved"] <= 0.2
+
+
+def test_threshold_for_base_rate_declines_when_the_target_is_out_of_reach() -> None:
+    """Sur une courbe trop bruitée, aucun seuil lisible ne tient la cible.
+
+    Au-delà de 0.95 un seuil ne sépare plus le bruit de la figure : il rejette
+    les deux. Le dire vaut mieux que rendre un seuil qui vide le tracé en
+    laissant croire qu'on a réglé quelque chose.
+    """
+    found = threshold_for_base_rate(_windows([0.99] * 10), target=0.2)
+    assert found["threshold"] is None
+    assert found["required"] == 1.0
+
+
+def test_threshold_for_base_rate_lets_everything_through_at_full_target() -> None:
+    """Tolérer toutes les fenêtres ne demande aucun seuil."""
+    found = threshold_for_base_rate(_windows([0.5, 0.4]), target=1.0)
+    assert found["threshold"] == 0.0
+    assert threshold_for_base_rate([], target=0.2)["threshold"] is None
+
+
+def test_threshold_for_base_rate_is_monotone_in_the_target() -> None:
+    """Viser plus rare durcit le seuil : c'est ce qui rend le curseur lisible."""
+    sample = _windows([i / 100 for i in range(99, 0, -1)])
+    bars = [threshold_for_base_rate(sample, target=t)["required"] for t in (0.5, 0.3, 0.1, 0.05)]
+    assert bars == sorted(bars)
+
+
+def test_figure_base_rate_says_the_bar_each_curve_would_need() -> None:
+    """Le rapport dit l'inverse du taux, courbe par courbe.
+
+    C'est ce qui rend un seuil comparable : sur « paires consécutives » il faut
+    monter beaucoup plus haut que sur la somme pour atteindre la même rareté, et
+    parfois plus haut qu'un seuil ne peut aller.
+    """
+    report = figure_base_rate(
+        draws=DRAWS,
+        variables=(("consecutive", None), ("sum", None)),
+        length=60,
+        trials=60,
+        target=0.2,
+        seed=0,
+    )
+    rows = {row["variable"]: row for row in report["by_variable"]}
+    assert report["target"] == 0.2
+    assert rows["consecutive"]["required_for_target"] > rows["sum"]["required_for_target"]
+    assert rows["sum"]["threshold_for_target"] == rows["sum"]["required_for_target"]
+    assert "il faudrait un seuil" in report["note"]
+
+
+def test_figure_base_rate_counts_the_same_at_a_given_bar() -> None:
+    """Échantillonner sans seuil puis relire doit compter comme compter au seuil.
+
+    L'échantillon est pris à seuil zéro pour servir à n'importe quel seuil ; si la
+    relecture ne redonnait pas le même taux, le gain se paierait d'un biais.
+    """
+    for bar in (0.5, 0.6, 0.8):
+        report = figure_base_rate(
+            draws=DRAWS, variables=(("sum", None),), length=60, trials=40, min_confidence=bar, seed=3
+        )
+        rng = Random("3:sum")
+        pool = DRAWS[-(60 + 200) :]
+        carrying = 0
+        for _ in range(40):
+            values = [
+                float(v) for v in series(shuffled_draws(pool, rng), "sum", None)["values"][-60:]
+            ]
+            if detect_figures(
+                values, activity=activity_from_close(values), min_confidence=bar
+            ):
+                carrying += 1
+        assert report["windows_with_any_figure"] == round(carrying / 40, 4)
 
 
 def test_run_assembles_the_whole_report() -> None:

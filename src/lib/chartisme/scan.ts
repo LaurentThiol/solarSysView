@@ -42,6 +42,20 @@ export type ScanOptions = {
   zigzagPct?: number
   eps?: number
   minConfidence?: number
+  /**
+   * Seuil propre à chaque échelle, `minConfidence` pour les autres.
+   *
+   * Un seuil unique ne veut pas dire la même chose d'une échelle à l'autre : la
+   * confiance est escomptée selon la part de fenêtre couverte, donc une figure
+   * courte, qui couvre presque tout son tracé, la gagne sans rien gagner en
+   * substance. Régler l'onglet en rareté visée demande donc un seuil par échelle
+   * — c'est ce qui rend les figures de deux échelles comparables entre elles.
+   *
+   * Une échelle absente de la carte est balayée au seuil commun ; une échelle
+   * dont le seuil vaut `null` n'est pas balayée du tout, parce que la rareté
+   * demandée y est hors d'atteinte et qu'aucun seuil ne la trierait.
+   */
+  minConfidenceByScale?: Readonly<Record<number, number | null>> | null
   maxOverlap?: number
   topPerZone?: boolean
 }
@@ -113,6 +127,7 @@ export function scanCurve(curve: Partial<Curve>, options: ScanOptions = {}): Sca
     zigzagPct = DEFAULT_ZIGZAG_PCT,
     eps = DEFAULT_EPS,
     minConfidence = 0.5,
+    minConfidenceByScale = null,
     maxOverlap = DEFAULT_MAX_OVERLAP,
     topPerZone = false,
   } = options
@@ -124,6 +139,11 @@ export function scanCurve(curve: Partial<Curve>, options: ScanOptions = {}): Sca
   const found: ScanHit[] = []
   for (const size of scales ?? DEFAULT_SCALES) {
     if (size < MIN_WINDOW || size > values.length) continue
+    const bar =
+      minConfidenceByScale && size in minConfidenceByScale
+        ? minConfidenceByScale[size]
+        : minConfidence
+    if (bar === null) continue
     const stride = Math.max(1, Math.trunc(size * strideRatio))
     for (const start of windowStarts(values.length, size, stride)) {
       const stop = start + size
@@ -131,7 +151,7 @@ export function scanCurve(curve: Partial<Curve>, options: ScanOptions = {}): Sca
         values.slice(start, stop),
         dates.slice(start, stop),
         activity.slice(start, stop),
-        { zigzagPct, eps, minConfidence, maxOverlap }
+        { zigzagPct, eps, minConfidence: bar, maxOverlap }
       )
       for (const hit of hits) {
         found.push(rebase(hit, { offset: start, scale: size, curve, values, dates }))

@@ -398,6 +398,69 @@ def shuffled_draws(
     return [{**pick, "draw_date": dates[i]} for i, pick in enumerate(picks)]
 
 
+#: Plafond au-delà duquel un seuil ne trie plus rien.
+#:
+#: C'est celui du curseur de confiance de l'onglet, et il ne s'arrête pas là par
+#: hasard : une confiance de 0.95 exige un ajustement quasi parfait, que presque
+#: aucune figure réelle n'atteint. Au-dessus, le seuil ne sépare plus le bruit de
+#: la figure — il rejette les deux.
+MAX_THRESHOLD = 0.95
+
+#: Pas du seuil rendu : plus fin, il afficherait une précision qu'il n'a pas.
+THRESHOLD_STEP = 0.01
+
+
+def best_per_window(per_window: Sequence[dict[str, float]]) -> list[float]:
+    """Meilleure confiance par fenêtre de bruit, 0 quand la fenêtre n'a rien porté."""
+    return [max(window.values(), default=0.0) for window in per_window]
+
+
+def threshold_for_base_rate(
+    per_window: Sequence[dict[str, float]], *, target: float
+) -> dict[str, Any]:
+    """L'inverse du taux de base : quel seuil obtient la rareté visée ?
+
+    Le taux de base décroît quand le seuil monte, donc l'inversion se lit
+    directement dans la distribution des meilleures confiances obtenues sur le
+    bruit. Pour n'accepter qu'une part `target` de fenêtres porteuses, le seuil
+    doit dépasser la (target·N + 1)-ième meilleure : au-dessus d'elle il n'en
+    reste au plus que target·N.
+
+    L'intérêt du renversement est qu'un seuil de confiance ne veut pas dire la
+    même chose d'une courbe à l'autre — 0.60 laisse passer presque tout le bruit
+    sur « paires consécutives » et un peu plus de la moitié sur la somme. Une
+    rareté visée, elle, dit la même chose partout.
+
+    `threshold` vaut `None` quand la cible est hors d'atteinte ; `required` dit
+    alors de combien on manque.
+    """
+    trials = len(per_window)
+    if not trials:
+        return {"trials": 0, "target": target, "threshold": None, "achieved": 0.0, "required": 1.0}
+    bests = sorted(best_per_window(per_window), reverse=True)
+    rate = lambda bar: sum(1 for best in bests if best >= bar) / trials  # noqa: E731
+    # Nombre de fenêtres porteuses tolérées. Tronqué, jamais arrondi : viser 20 %
+    # sur 120 remaniements autorise 24 fenêtres, pas 24,4.
+    allowed = int(target * trials)
+    if allowed >= trials:
+        return {
+            "trials": trials,
+            "target": target,
+            "threshold": 0.0,
+            "achieved": round(rate(0.0), 4),
+            "required": 0.0,
+        }
+    # La valeur qu'il faut dépasser, et le premier cran de la grille qui la dépasse.
+    required = min(1.0, round((int(bests[allowed] / THRESHOLD_STEP + 1e-9) + 1) * THRESHOLD_STEP, 2))
+    return {
+        "trials": trials,
+        "target": target,
+        "threshold": None if required > MAX_THRESHOLD else required,
+        "achieved": round(rate(required), 4),
+        "required": required,
+    }
+
+
 def figure_base_rate(
     *,
     draws: Sequence[dict[str, Any]],
@@ -406,6 +469,7 @@ def figure_base_rate(
     trials: int = 200,
     max_windows: int = 600,
     min_confidence: float = 0.6,
+    target: float = 0.2,
     seed: int = 0,
 ) -> dict[str, Any]:
     """Part des fenêtres de bruit portant chaque figure, bruit tiré des tirages.
@@ -435,6 +499,12 @@ def figure_base_rate(
     plusieurs secondes. Le nombre de remaniements réellement fait est renvoyé
     avec chaque taux, ainsi que son intervalle de Wilson — un budget réparti
     élargit l'intervalle, il ne doit pas le cacher.
+
+    Les confiances sont retenues toutes, et le comptage se fait à la relecture :
+    un échantillon sert alors à n'importe quel seuil, et surtout à l'inversion.
+    Chaque variable dit donc aussi le seuil qu'il faudrait pour que le hasard n'y
+    produise plus qu'une part `target` de fenêtres porteuses — ou qu'aucun seuil
+    lisible n'y parvient, ce qui est un résultat.
     """
     pool = list(draws)[-(length + SIMULATED_CONTEXT) :]
     # Dédoublonnage par variable en gardant le premier indice rencontré : l'ordre
@@ -447,6 +517,7 @@ def figure_base_rate(
             "trials": 0,
             "length": length,
             "min_confidence": min_confidence,
+            "target": target,
             "windows_with_any_figure": None,
             "figures": [],
             "by_variable": [],
@@ -467,21 +538,48 @@ def figure_base_rate(
         # variables ne doivent pas partager la même suite de remaniements, et le
         # rapport doit rester reproductible.
         rng = random.Random(f"{seed}:{name}")
-        local = 0
+        # Toutes les confiances, seuil zéro : le seuil s'applique à la relecture,
+        # ce qui permet de compter à n'importe lequel et de l'inverser.
+        #
+        # `max_overlap=1.0` désactive le dédoublonnage, et il le faut pour que la
+        # relecture compte juste. `dedupe` classe une cassure confirmée devant une
+        # figure plus confiante de même nom : à seuil zéro, une cassure peu
+        # confiante évince donc une figure que le seuil aurait gardée, et le taux
+        # relu serait plus bas que le taux mesuré au seuil. Sans dédoublonnage,
+        # une figure est présente au seuil `b` exactement quand sa meilleure
+        # confiance atteint `b`, ce qui rend la relecture exacte.
+        per_window: list[dict[str, float]] = []
         for _ in range(per_run):
             values = [
                 float(v) for v in series(shuffled_draws(pool, rng), name, n)["values"][-length:]
             ]
-            hits = detect_figures(
-                values, activity=activity_from_close(values), min_confidence=min_confidence
-            )
+            best: dict[str, float] = {}
+            for hit in detect_figures(
+                values,
+                activity=activity_from_close(values),
+                min_confidence=0.0,
+                max_overlap=1.0,
+            ):
+                figure = str(hit["figure"])
+                confidence = float(hit["confidence"])
+                if confidence > best.get(figure, -1.0):
+                    best[figure] = confidence
+            per_window.append(best)
+        local = 0
+        for window in per_window:
             windows += 1
-            if hits:
+            above = {
+                figure
+                for figure, confidence in window.items()
+                if confidence >= min_confidence
+            }
+            if above:
                 carrying += 1
                 local += 1
-            for figure in {hit["figure"] for hit in hits}:
+            for figure in above:
                 counts[figure] = counts.get(figure, 0) + 1
         _, lo, hi = wilson_interval(local, per_run)
+        inverted = threshold_for_base_rate(per_window, target=target)
         per_variable.append(
             {
                 "variable": name,
@@ -490,6 +588,10 @@ def figure_base_rate(
                 "trials": per_run,
                 "windows_with_any_figure": round(local / per_run, 4),
                 "interval": [round(lo, 4), round(hi, 4)],
+                # Le seuil qu'il faudrait pour lire cette courbe à la rareté
+                # visée, `None` quand elle est hors d'atteinte.
+                "threshold_for_target": inverted["threshold"],
+                "required_for_target": inverted["required"],
             }
         )
     per_variable.sort(key=lambda row: -row["windows_with_any_figure"])
@@ -519,11 +621,25 @@ def figure_base_rate(
             "confiance n'y dit donc pas la même chose, et le taux moyen ci-dessus "
             "n'est qu'un résumé."
         )
+        unreachable = [row for row in per_variable if row["threshold_for_target"] is None]
+        note += (
+            f" Pour n'en garder qu'une sur {round(1 / target) if target else 1}, il "
+            f"faudrait un seuil de {loud['required_for_target']:.2f} sur "
+            f"{loud['label']} et {quiet['required_for_target']:.2f} sur "
+            f"{quiet['label']}"
+        )
+        note += (
+            f" ; {len(unreachable)} variable(s) sur {len(per_variable)} n'y arrivent "
+            f"à aucun seuil lisible, le chartisme n'y a rien à dire."
+            if unreachable
+            else ", ce qu'un seuil unique ne peut pas faire."
+        )
     _, lo, hi = wilson_interval(carrying, windows)
     return {
         "trials": per_run,
         "length": length,
         "min_confidence": min_confidence,
+        "target": target,
         "variables": len(per_variable),
         "windows": windows,
         "windows_with_any_figure": round(carrying / windows, 4),

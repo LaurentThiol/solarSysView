@@ -364,6 +364,52 @@ def test_backtest_ignores_an_unusable_scale_list() -> None:
     assert response.json()["window"]["scales"] == list(DEFAULT_SCALES)
 
 
+def test_backtest_follows_the_bar_of_each_scale() -> None:
+    """L'onglet lu en rareté visée a un seuil par échelle : la route doit le suivre.
+
+    Sans quoi le rétro-test mesurerait d'autres figures que celles qu'on a sous
+    les yeux — celles d'un seuil unique qu'aucune lecture n'a utilisé.
+    """
+    left, right = _with_draws()
+    with left, right:
+        with _client() as client:
+            common = client.get(
+                "/api/chartisme/backtest"
+                "?curve=sum&numbers=false&scales=20,40&min_confidence=0.5"
+            )
+            per_scale = client.get(
+                "/api/chartisme/backtest"
+                "?curve=sum&numbers=false&scales=20,40&min_confidence=0.5"
+                "&thresholds=0.95,0.5"
+            )
+    assert per_scale.status_code == 200
+    assert per_scale.json()["figure_count"] < common.json()["figure_count"]
+    # Le taux de base se mesure à la longueur de la plus longue échelle, donc à
+    # son seuil : ici le seuil commun, l'autre valant pour l'échelle 20.
+    assert per_scale.json()["base_rates"]["min_confidence"] == 0.5
+
+
+def test_backtest_ignores_thresholds_that_do_not_pair_with_the_scales() -> None:
+    """Décaler les seuils d'un cran rendrait un balayage plausible et faux.
+
+    Mieux vaut retomber sur le seuil commun, qui est au moins celui que la requête
+    a nommé, qu'apparier de travers.
+    """
+    left, right = _with_draws()
+    with left, right:
+        with _client() as client:
+            crooked = client.get(
+                "/api/chartisme/backtest"
+                "?curve=sum&numbers=false&scales=20,40&min_confidence=0.5&thresholds=0.95"
+            )
+            common = client.get(
+                "/api/chartisme/backtest"
+                "?curve=sum&numbers=false&scales=20,40&min_confidence=0.5"
+            )
+    assert crooked.status_code == 200
+    assert crooked.json()["figure_count"] == common.json()["figure_count"]
+
+
 def test_backtest_can_skip_the_number_question() -> None:
     left, right = _with_draws()
     with left, right:

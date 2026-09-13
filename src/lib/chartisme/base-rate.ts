@@ -113,8 +113,16 @@ export function sampleBaseRate(
     const payload = series(shuffled(pool, random), variable as VariableName, n ?? undefined)
     const values = payload.values.slice(-length)
     const best: Record<string, number> = {}
+    // Seuil zéro et dédoublonnage désactivé. Le second n'est pas un détail : la
+    // hiérarchie de `dedupe` place une cassure confirmée devant une figure plus
+    // confiante de même nom, si bien qu'à seuil zéro une cassure peu confiante
+    // évincerait une figure que le seuil aurait gardée — le taux relu tomberait
+    // sous le taux réel, et le taux de base se tromperait en sa faveur. Sans
+    // dédoublonnage, une figure est présente au seuil `b` exactement quand sa
+    // meilleure confiance atteint `b` : la relecture est alors exacte.
     for (const hit of detectFigures(values, null, activityFromClose(values), {
       minConfidence: 0,
+      maxOverlap: 1,
     })) {
       const seen = best[hit.figure]
       if (seen === undefined || hit.confidence > seen) best[hit.figure] = hit.confidence
@@ -176,8 +184,125 @@ export function baseRateAbove(sample: BaseRateSample, minConfidence: number): Ba
   }
 }
 
+/**
+ * Plafond au-delà duquel un seuil ne trie plus rien.
+ *
+ * C'est celui du curseur de confiance, et il ne s'arrête pas là par hasard : une
+ * confiance de 0.95 exige un ajustement géométrique quasi parfait, que presque
+ * aucune figure réelle n'atteint. Au-dessus, le seuil ne sépare plus le bruit de
+ * la figure — il rejette les deux. Une rareté qui demande davantage est donc
+ * hors d'atteinte sur cette courbe, et le dire vaut mieux que rendre un seuil
+ * qui vide le tracé en laissant croire qu'on a réglé quelque chose.
+ */
+export const MAX_THRESHOLD = 0.95
+
+/** Pas du seuil rendu : plus fin, il afficherait une précision qu'il n'a pas. */
+const THRESHOLD_STEP = 0.01
+
+/** Meilleure confiance par remaniement, 0 quand la fenêtre n'a rien porté. */
+function bestPerWindow(sample: BaseRateSample): number[] {
+  return sample.perWindow.map((window) => {
+    let best = 0
+    for (const confidence of Object.values(window)) if (confidence > best) best = confidence
+    return best
+  })
+}
+
+export type BaseRateThreshold = {
+  length: number
+  trials: number
+  /** Rareté visée : part des fenêtres de bruit qu'on accepte de voir porter une figure. */
+  target: number
+  /** Seuil qui tient la cible, `null` quand aucun seuil lisible n'y parvient. */
+  threshold: number | null
+  /** Ce que ce seuil obtient vraiment : le pas de 0.01 ne tombe jamais pile. */
+  achieved: number
+  /** Seuil qu'il aurait fallu, même hors d'atteinte — pour dire de combien on manque. */
+  required: number
+}
+
+/**
+ * L'inverse du taux de base : quel seuil de confiance obtient la rareté visée ?
+ *
+ * Le taux de base décroît quand le seuil monte, donc l'inversion se lit
+ * directement dans la distribution des meilleures confiances obtenues sur le
+ * bruit. Pour n'accepter qu'une part `p` de fenêtres de bruit porteuses, le
+ * seuil doit dépasser la (p·N + 1)-ième meilleure confiance : au-dessus d'elle,
+ * il n'en reste au plus que p·N.
+ *
+ * L'intérêt du renversement est qu'un seuil de confiance ne veut pas dire la
+ * même chose d'une courbe à l'autre ni d'une échelle à l'autre — 0.6 laisse
+ * passer presque tout le bruit sur « paires consécutives » et un peu plus de la
+ * moitié sur la somme. Une rareté visée, elle, dit la même chose partout : c'est
+ * le seul réglage de l'onglet qui se compare.
+ */
+export function thresholdForBaseRate(
+  sample: BaseRateSample,
+  target: number
+): BaseRateThreshold {
+  const base = { length: sample.length, trials: sample.trials, target }
+  if (!sample.trials) return { ...base, threshold: null, achieved: 0, required: 1 }
+  const bests = bestPerWindow(sample).sort((a, b) => b - a)
+  // Nombre de fenêtres de bruit porteuses qu'on tolère. Tronqué, jamais arrondi :
+  // viser 20 % sur 120 remaniements autorise 24 fenêtres, pas 24,4.
+  const allowed = Math.floor(target * sample.trials)
+  const rate = (bar: number) => bests.filter((best) => best >= bar).length / sample.trials
+  if (allowed >= sample.trials) return { ...base, threshold: 0, achieved: rate(0), required: 0 }
+  // La valeur qu'il faut dépasser, et le premier cran de la grille qui la dépasse.
+  const floorValue = bests[allowed] ?? 0
+  const steps = Math.floor(floorValue / THRESHOLD_STEP + 1e-9) + 1
+  const required = Math.min(1, Math.round(steps * THRESHOLD_STEP * 100) / 100)
+  if (required > MAX_THRESHOLD) return { ...base, threshold: null, achieved: rate(required), required }
+  return { ...base, threshold: required, achieved: rate(required), required }
+}
+
 function pct(value: number) {
   return `${Math.round(value * 100)} %`
+}
+
+/**
+ * Ce que la rareté visée exige, échelle par échelle.
+ *
+ * Le nombre affiché n'est plus un réglage mais un résultat : le seuil est
+ * cherché, pas choisi. C'est ce renversement qui rend la lecture comparable —
+ * d'une échelle à l'autre, et surtout d'une courbe à l'autre, ce qu'un seuil de
+ * confiance n'a jamais permis.
+ */
+export function rarityNote(
+  thresholds: ReadonlyArray<BaseRateThreshold>,
+  target: number
+): string | null {
+  const measured = thresholds.filter((entry) => entry.trials > 0)
+  if (!measured.length) return null
+  const parts = measured
+    .map((entry) =>
+      entry.threshold === null
+        ? `échelle ${entry.length} : hors d'atteinte (il faudrait ${entry.required.toFixed(
+            2
+          )}), écartée du balayage`
+        : `échelle ${entry.length} : seuil ${entry.threshold.toFixed(2)}, obtenu ${pct(
+            entry.achieved
+          )}`
+    )
+    .join(" · ")
+  const trials = measured[0].trials
+  const reachable = measured.filter((entry) => entry.threshold !== null)
+  const note = `Lu en rareté visée ${pct(
+    target
+  )} : le seuil de confiance n'est plus choisi mais cherché sur cette courbe, pour que le hasard ne produise plus qu'une fenêtre porteuse sur ${
+    target > 0 ? Math.round(1 / target) : 1
+  } — ${parts}. Le bruit est fait des mêmes tirages remis dans un ordre quelconque, ${trials} fois par échelle, et l'obtenu s'écarte de la cible parce qu'un seuil ne se règle qu'au centième. C'est le seul réglage de l'onglet qui dise la même chose partout : à ${pct(
+    target
+  )}, une figure sur la somme et une figure sur « paires consécutives » sont également peu banales, là où un seuil de 0.60 les laissait passer l'une à moitié et l'autre presque toutes.`
+  if (reachable.length === measured.length) return note
+  const lost = measured.length - reachable.length
+  return `${note} ${
+    reachable.length
+      ? `${lost} échelle${lost > 1 ? "s" : ""} sur ${measured.length} est écartée`
+      : "Aucune échelle ne l'atteint"
+  } : au-delà de ${MAX_THRESHOLD.toFixed(
+    2
+  )} un seuil ne sépare plus le bruit de la figure, il rejette les deux. Sur cette courbe et à cette échelle, le chartisme n'a rien à dire à cette rareté — viser plus large, ou changer de courbe.`
 }
 
 /**

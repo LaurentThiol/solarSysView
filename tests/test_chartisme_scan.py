@@ -146,6 +146,43 @@ def test_bundle_round_trip(tmp_path) -> None:
     assert read_bundle(tmp_path / "broken.json") is None
 
 
+def test_scan_curve_takes_a_bar_per_scale() -> None:
+    """Lu en rareté visée, chaque échelle a son seuil : le balayage doit le suivre.
+
+    Un seuil unique ne veut pas dire la même chose d'une échelle à l'autre — la
+    confiance est escomptée selon la part de fenêtre couverte, donc une figure
+    courte la gagne sans rien gagner en substance. Le seuil par échelle est ce
+    qui rend deux figures d'échelles différentes comparables.
+    """
+    curve = build_curve(DRAWS, "sum", None)
+    scales = (30, 60)
+    loose = scan_curve(curve, scales=scales, min_confidence=0.5)
+    mixed = scan_curve(
+        curve, scales=scales, min_confidence=0.5, min_confidence_by_scale={30: 0.9}
+    )
+    assert {hit["scale"] for hit in loose} == {30, 60}
+    # Chaque échelle respecte le seuil qui lui revient, l'échelle 60 le commun.
+    assert all(hit["confidence"] >= (0.9 if hit["scale"] == 30 else 0.5) for hit in mixed)
+    assert any(hit["scale"] == 60 and hit["confidence"] < 0.9 for hit in mixed)
+    tightened = [hit for hit in mixed if hit["scale"] == 30]
+    assert len(tightened) < len([hit for hit in loose if hit["scale"] == 30])
+
+
+def test_scan_curve_skips_a_scale_whose_bar_is_out_of_reach() -> None:
+    """`None` n'est pas zéro : c'est « aucun seuil ne trierait ici ».
+
+    Quand la rareté visée est hors d'atteinte sur une échelle, la montrer au
+    seuil commun donnerait à lire des figures qu'on ne peut pas récuser. L'échelle
+    sort du balayage.
+    """
+    curve = build_curve(DRAWS, "sum", None)
+    hits = scan_curve(
+        curve, scales=(30, 60), min_confidence=0.5, min_confidence_by_scale={30: None}
+    )
+    assert hits
+    assert {hit["scale"] for hit in hits} == {60}
+
+
 def test_scan_curve_rebases_indices_onto_the_curve() -> None:
     """Une figure trouvée dans une fenêtre doit se situer dans la courbe."""
     curve = build_curve(DRAWS, "sum", None)

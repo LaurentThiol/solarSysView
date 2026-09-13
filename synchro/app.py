@@ -207,6 +207,30 @@ def _parse_scales(text: str | None) -> tuple[int, ...] | None:
     return tuple(sizes) or None
 
 
+def _parse_thresholds(text: str | None, scales: tuple[int, ...] | None) -> dict[int, float]:
+    """Seuils appariés aux échelles, « 0.79,0.74,0.71 ».
+
+    L'appariement est positionnel : `_parse_scales` trie et dédoublonne, et
+    l'onglet envoie ses seuils dans le même ordre croissant. Une liste de
+    longueur inattendue est ignorée en entier plutôt qu'appariée de travers —
+    décaler les seuils d'un cran rendrait un balayage plausible et faux.
+    """
+    if not text or not scales:
+        return {}
+    parts = [chunk.strip() for chunk in text.split(",")]
+    if len(parts) != len(scales):
+        return {}
+    out: dict[int, float] = {}
+    for scale, raw in zip(scales, parts):
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        if 0.0 <= value <= 1.0:
+            out[scale] = value
+    return out
+
+
 def _run_dir() -> Path:
     env = os.environ.get("SYNCHRO_RUN_DIR")
     return Path(env) if env else ROOT / ".run"
@@ -1328,6 +1352,11 @@ def create_app() -> FastAPI:
         # Les échelles réellement affichées : sans elles le rétro-test mesurerait
         # d'autres figures que celles qu'on a sous les yeux.
         scales: str | None = None,
+        # Le seuil de chaque échelle, dans l'ordre de `scales`. L'onglet lu en
+        # rareté visée n'a plus un seuil mais un par échelle, cherché sur la
+        # courbe affichée ; `min_confidence` reste le seuil des échelles que
+        # cette liste ne couvre pas.
+        thresholds: str | None = None,
         numbers: bool = True,
     ) -> dict[str, Any]:
         bundle = _chartisme_bundle(era)
@@ -1335,6 +1364,11 @@ def create_app() -> FastAPI:
         if curve:
             curves = [c for c in curves if c.get("id") == curve]
         wanted = _parse_scales(scales)
+        by_scale = _parse_thresholds(thresholds, wanted)
+        # Le taux de base se mesure à la longueur de la plus longue échelle : il
+        # se mesure donc aussi à son seuil, sinon le rapport comparerait une
+        # fréquence de bruit à une sélection qu'elle n'a pas subie.
+        base_bar = by_scale.get(base_length, min_confidence)
         chosen = [
             chartisme_slice_curve(found, start=start, end=end, context=context)
             for found in curves[:max_curves]
@@ -1345,7 +1379,10 @@ def create_app() -> FastAPI:
             hits.extend(
                 hit
                 for hit in chartisme_scan_curve(
-                    found, scales=wanted, min_confidence=min_confidence
+                    found,
+                    scales=wanted,
+                    min_confidence=min_confidence,
+                    min_confidence_by_scale=by_scale,
                 )
                 if chartisme_live_in_window(hit, inside)
             )
@@ -1374,7 +1411,7 @@ def create_app() -> FastAPI:
                 follow=follow,
                 base_rate_trials=120,
                 base_length=base_length,
-                min_confidence=min_confidence,
+                min_confidence=base_bar,
                 numbers=numbers,
             ),
         }
