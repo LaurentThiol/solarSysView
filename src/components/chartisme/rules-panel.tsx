@@ -203,7 +203,13 @@ export function RulesPanel({
                   })
                 }
               >
-                <SelectTrigger className="w-full" />
+                <SelectTrigger className="w-full" aria-label="Figure">
+                  <span className="flex flex-1 text-left">
+                    {draft.condition.figures[0]
+                      ? labelOf(draft.condition.figures[0])
+                      : "toute figure"}
+                  </span>
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">toute figure</SelectItem>
                   {FIGURE_IDS.filter((id) => id !== "none").map((id) => (
@@ -231,7 +237,11 @@ export function RulesPanel({
                   })
                 }
               >
-                <SelectTrigger className="w-full" />
+                <SelectTrigger className="w-full" aria-label="Cassure">
+                  <span className="flex flex-1 text-left">
+                    {BREAKOUT_LABELS[draft.condition.breakout]}
+                  </span>
+                </SelectTrigger>
                 <SelectContent>
                   {BREAKOUT_STATES.map((state) => (
                     <SelectItem key={state} value={state}>
@@ -261,7 +271,11 @@ export function RulesPanel({
                   })
                 }
               >
-                <SelectTrigger className="w-full" />
+                <SelectTrigger className="w-full" aria-label="Tendance de fond">
+                  <span className="flex flex-1 text-left">
+                    {TREND_LABELS[draft.condition.trend] ?? draft.condition.trend}
+                  </span>
+                </SelectTrigger>
                 <SelectContent>
                   {TRENDS.map((trend) => (
                     <SelectItem key={trend} value={trend}>
@@ -313,7 +327,11 @@ export function RulesPanel({
                   })
                 }
               >
-                <SelectTrigger className="w-full" />
+                <SelectTrigger className="w-full" aria-label="Action">
+                  <span className="flex flex-1 text-left">
+                    {ACTION_LABELS[draft.actions[0]?.type ?? "note"]}
+                  </span>
+                </SelectTrigger>
                 <SelectContent>
                   {ACTION_TYPES.map((type) => (
                     <SelectItem key={type} value={type}>

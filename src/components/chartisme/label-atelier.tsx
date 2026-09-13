@@ -291,7 +291,15 @@ export function LabelAtelier({
                 }}
               >
                 <Select value={figure} onValueChange={(v) => setFigure(v ?? figure)}>
-                  <SelectTrigger className="w-full" />
+                  <SelectTrigger className="w-full" aria-label="Classe">
+                    <span className="flex flex-1 text-left">
+                      {figure === FREE_CLASS
+                        ? "+ nouvelle classe libre…"
+                        : FIGURE_IDS.includes(figure as (typeof FIGURE_IDS)[number])
+                          ? labelOf(figure)
+                          : `${figure} (classe libre)`}
+                    </span>
+                  </SelectTrigger>
                   <SelectContent>
                     {allClasses.map((id) => (
                       <SelectItem key={id} value={id}>
@@ -334,7 +342,11 @@ export function LabelAtelier({
                   value={pendingRole}
                   onValueChange={(value) => setPendingRole(value as PivotRole)}
                 >
-                  <SelectTrigger className="w-full" />
+                  <SelectTrigger className="w-full" aria-label="Rôle à placer">
+                    <span className="flex flex-1 text-left">
+                      {PIVOT_ROLE_LABELS[pendingRole]}
+                    </span>
+                  </SelectTrigger>
                   <SelectContent>
                     {PIVOT_ROLES.map((role) => (
                       <SelectItem key={role} value={role}>

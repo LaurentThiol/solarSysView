@@ -186,7 +186,11 @@ export function Sketchpad({
             }}
           >
             <Select value="" onValueChange={(v) => v && loadShape(v)}>
-              <SelectTrigger className="w-full" />
+              <SelectTrigger className="w-full" aria-label="Charger une figure de la table">
+                <span className="flex flex-1 text-left text-muted-foreground">
+                  choisir une figure…
+                </span>
+              </SelectTrigger>
               <SelectContent>
                 {FIGURE_IDS.filter((id) => id !== "none").map((id) => (
                   <SelectItem key={id} value={id}>
@@ -205,7 +209,11 @@ export function Sketchpad({
             }}
           >
             <Select value={scope} onValueChange={(value) => setScope(value as "curve" | "all")}>
-              <SelectTrigger className="w-full" />
+              <SelectTrigger className="w-full" aria-label="Périmètre de recherche">
+                <span className="flex flex-1 text-left">
+                  {scope === "curve" ? "Courbe affichée" : "Toutes les courbes"}
+                </span>
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="curve">Courbe affichée</SelectItem>
                 <SelectItem value="all">Toutes les courbes</SelectItem>
