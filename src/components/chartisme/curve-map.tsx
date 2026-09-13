@@ -167,6 +167,11 @@ export function CurveMap({
   const reachable = rows?.filter((row) => row.threshold !== null) ?? []
   const carrying = reachable.filter((row) => (row.figures ?? 0) > 0)
   const shown = onlyCarrying ? carrying : rows ?? []
+  // Les échelles balayées plus courtes que celle mesurée. Elles sont plus sévères
+  // — le seuil requis descend quand la fenêtre s'allonge — donc une courbe
+  // retenue ici peut être écartée là, et la carte promettrait plus que l'onglet
+  // ne tient si elle ne le disait pas.
+  const shorter = scales.filter((value) => value < measuredAt).sort((a, b) => a - b)
 
   return (
     <Card>
@@ -214,7 +219,7 @@ export function CurveMap({
             label="Échelle mesurée"
             help={{
               title: "Échelle mesurée",
-              body: "Le bruit d'une courbe dépend de l'échelle, et pas toujours dans le sens attendu : le retard d'une boule se laisse trier à l'échelle 30, plus du tout à 60 — ses rampes rectilignes y forment des canaux de tendance parfaits, où la confiance frôle 1 sans rien mesurer. Une seule échelle est mesurée pour que la carte reste tenable dans le navigateur ; c'est aussi elle qui sert au décompte des figures réelles.",
+              body: "Le verdict change avec l'échelle, et pas dans le sens qu'on attend : c'est la fenêtre courte qui est sévère. Mesuré, le retard d'une boule n'est triable que pour 18 boules sur 50 à l'échelle 30, pour 37 à l'échelle 60, pour les 50 à l'échelle 120 — parce qu'une figure qui couvre une moindre part de sa fenêtre gagne une moindre confiance, bruit compris, si bien que le seuil requis descend quand la fenêtre s'allonge. La plus longue échelle balayée est donc la plus permissive, non la plus exigeante : elle montre où le chartisme a une chance, et il faut descendre l'échelle pour voir les courbes tomber. Une seule échelle est mesurée pour que la carte reste tenable dans le navigateur ; c'est aussi elle qui sert au décompte des figures réelles.",
             }}
           >
             <Select
@@ -278,8 +283,23 @@ export function CurveMap({
               atteignent {Math.round(target * 100)} % à l’échelle {measuredAt}, dont{" "}
               {carrying.length} porte{carrying.length > 1 ? "nt" : ""} au moins une figure dans
               cette fenêtre. Les {rows.length - reachable.length} autres sont trop bruitées pour
-              qu’un seuil lisible y sépare une figure du hasard — à cette échelle, car une courbe
-              hors d’atteinte ici peut se laisser trier à une autre.
+              qu’un seuil lisible y sépare une figure du hasard.
+              {shorter.length ? (
+                <>
+                  {" "}
+                  Le verdict ne vaut que pour cette échelle, et dans les deux sens : une courbe hors
+                  d’atteinte ici peut se laisser trier ailleurs, et une courbe retenue ici sera
+                  souvent écartée {shorter.length > 1 ? "des échelles" : "de l’échelle"}{" "}
+                  {shorter.join(" et ")}, plus courte{shorter.length > 1 ? "s" : ""} donc plus
+                  sévère{shorter.length > 1 ? "s" : ""}.
+                </>
+              ) : (
+                <>
+                  {" "}
+                  Le verdict ne vaut que pour cette échelle : une courbe hors d’atteinte ici peut se
+                  laisser trier à une autre.
+                </>
+              )}
               {stale
                 ? " Mesure faite sur d’autres réglages — la fenêtre, l’échelle ou la rareté ont changé depuis."
                 : ""}
