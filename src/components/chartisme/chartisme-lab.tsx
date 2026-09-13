@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { BacktestPanel } from "@/components/chartisme/backtest-panel"
 import { CurveCanvas, type CurveSelection } from "@/components/chartisme/curve-canvas"
+import { CurveMap } from "@/components/chartisme/curve-map"
 import { LabelAtelier } from "@/components/chartisme/label-atelier"
 import { useRegisterCapture } from "@/components/capture"
 import { RulesPanel } from "@/components/chartisme/rules-panel"
@@ -20,7 +21,14 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select"
-import { baseRateAbove, baseRateNote, sampleBaseRate } from "@/lib/chartisme/base-rate"
+import {
+  MAX_THRESHOLD,
+  baseRateAbove,
+  baseRateNote,
+  rarityNote,
+  sampleBaseRate,
+  thresholdForBaseRate,
+} from "@/lib/chartisme/base-rate"
 import { buildCurve, curveLabel, curveSpecs, type Curve } from "@/lib/chartisme/curves"
 import { collapseZones, scanCurve, sortByRank, type ScanHit } from "@/lib/chartisme/scan"
 import {
@@ -70,6 +78,14 @@ const ERA_LABELS = {
   all: "Toute l’archive",
 }
 
+/** Un seuil de confiance posé, ou la rareté visée qui va le chercher. */
+type BarMode = "confidence" | "rarity"
+
+const BAR_MODES: Array<{ value: BarMode; label: string }> = [
+  { value: "rarity", label: "Rareté visée — le seuil est cherché" },
+  { value: "confidence", label: "Confiance — le seuil est posé" },
+]
+
 function outcomeLabel(hit: ScanHit) {
   const status = hit.outcome?.status ?? "no_breakout"
   if (status === "reached") return "objectif atteint"
@@ -93,7 +109,9 @@ export function ChartismeLab() {
   const [scaleChoice, setScaleChoice] = useState("auto")
   const [preset, setPreset] = useState<StudyPreset>(DEFAULT_STUDY_PRESET)
   const [lastN, setLastN] = useState("")
+  const [barMode, setBarMode] = useState<BarMode>("rarity")
   const [minConfidence, setMinConfidence] = useState(0.6)
+  const [targetRate, setTargetRate] = useState(0.2)
   const [selected, setSelected] = useState(0)
   const [selection, setSelection] = useState<CurveSelection | null>(null)
   const [status, setStatus] = useState<ModuleStatus | null>(null)
@@ -137,41 +155,8 @@ export function ChartismeLab() {
     return buildCurve(study.window.withWarmup, spec.variable, spec.n)
   }, [study, specs, curveId])
 
-  const hits = useMemo<ScanHit[]>(() => {
-    if (!curve) return []
-    return sortByRank(
-      collapseZones(
-        scanCurve(curve, { scales: study.scales, minConfidence }).filter((hit) =>
-          liveInWindow(hit, study.contextCount)
-        )
-      )
-    )
-  }, [curve, study, minConfidence])
-
-  // La fenêtre précédente est lue exactement comme celle qu'on étudie : mêmes
-  // échelles, même seuil, même longueur. Sans quoi la comparaison mesurerait
-  // l'écart entre deux réglages plutôt qu'entre deux périodes.
-  const previousCurve = useMemo<Curve | null>(() => {
-    const rows = study.previous?.withWarmup
-    if (!rows?.length) return null
-    const spec = specs.find((s) => (s.n === null ? s.variable : `${s.variable}:${s.n}`) === curveId)
-    if (!spec) return null
-    return buildCurve(rows, spec.variable, spec.n)
-  }, [study, specs, curveId])
-
-  const previousHits = useMemo<ScanHit[]>(() => {
-    if (!previousCurve || !study.previous) return []
-    return sortByRank(
-      collapseZones(
-        scanCurve(previousCurve, { scales: study.scales, minConfidence }).filter((hit) =>
-          liveInWindow(hit, study.previous!.warmupCount)
-        )
-      )
-    )
-  }, [previousCurve, study, minConfidence])
-
   // Le taux de base est échantillonné une fois par échelle, sans seuil : bouger
-  // le curseur de confiance relit alors l'échantillon au lieu de le refaire.
+  // le curseur relit alors l'échantillon au lieu de le refaire.
   //
   // Il dépend de la courbe et pas seulement de l'échelle, parce que le bruit est
   // tiré de cette courbe-ci : `n1` tassé contre 1 et la parité par paliers de 0
@@ -185,9 +170,110 @@ export function ChartismeLab() {
         : [],
     [curve, study]
   )
+
+  // Le seuil du balayage, dans les deux sens de lecture.
+  //
+  // En « confiance », il est posé : un nombre, le même pour toutes les échelles
+  // et toutes les courbes — sauf qu'il n'y désigne pas le même degré de rareté.
+  // En « rareté », il est cherché : on donne la part de fenêtres de bruit qu'on
+  // accepte, et chaque échelle reçoit le seuil qui l'obtient sur cette courbe.
+  // C'est le seul réglage de l'onglet qui se compare d'une courbe à l'autre.
+  const thresholds = useMemo(
+    () => (barMode === "rarity" ? samples.map((sample) => thresholdForBaseRate(sample, targetRate)) : []),
+    [barMode, samples, targetRate]
+  )
+  const bars = useMemo(() => {
+    if (barMode === "confidence") {
+      return { minConfidence, byScale: null, scales: study.scales }
+    }
+    const byScale: Record<number, number | null> = {}
+    for (const entry of thresholds) byScale[entry.length] = entry.threshold
+    // Une échelle dont la rareté est hors d'atteinte n'est pas balayée : aucun
+    // seuil n'y trierait le bruit, donc toute figure qu'on y montrerait serait
+    // montrée faute de pouvoir la récuser.
+    const scales = thresholds.filter((entry) => entry.threshold !== null).map((entry) => entry.length)
+    const kept = thresholds
+      .map((entry) => entry.threshold)
+      .filter((value): value is number => value !== null)
+    return { minConfidence: kept.length ? Math.min(...kept) : MAX_THRESHOLD, byScale, scales }
+  }, [barMode, minConfidence, study.scales, thresholds])
+
+  /**
+   * Le même seuil, pour une autre courbe que celle affichée.
+   *
+   * En rareté visée il faut le chercher courbe par courbe : c'est précisément ce
+   * qui distingue ce mode du seuil posé. Réutiliser le seuil de la courbe
+   * affichée pour interroger une voisine rendrait la simultanéité incomparable —
+   * une figure banale sur l'une passerait pour aussi rare qu'une figure notable
+   * sur l'autre.
+   */
+  const barsFor = useCallback(
+    (variable: string, n: number | null) => {
+      if (barMode === "confidence") {
+        return { scales: study.scales, minConfidence, minConfidenceByScale: null }
+      }
+      const byScale: Record<number, number | null> = {}
+      const scales: number[] = []
+      for (const scale of study.scales) {
+        const found = thresholdForBaseRate(
+          sampleBaseRate(study.window.withWarmup, variable, n, scale),
+          targetRate
+        )
+        byScale[scale] = found.threshold
+        if (found.threshold !== null) scales.push(scale)
+      }
+      return { scales, minConfidence: MAX_THRESHOLD, minConfidenceByScale: byScale }
+    },
+    [barMode, minConfidence, study, targetRate]
+  )
+
+  const hits = useMemo<ScanHit[]>(() => {
+    if (!curve) return []
+    return sortByRank(
+      collapseZones(
+        scanCurve(curve, {
+          scales: bars.scales,
+          minConfidence: bars.minConfidence,
+          minConfidenceByScale: bars.byScale,
+        }).filter((hit) => liveInWindow(hit, study.contextCount))
+      )
+    )
+  }, [curve, study, bars])
+
+  // La fenêtre précédente est lue exactement comme celle qu'on étudie : mêmes
+  // échelles, même seuil, même longueur. Sans quoi la comparaison mesurerait
+  // l'écart entre deux réglages plutôt qu'entre deux périodes.
+  //
+  // En rareté visée, ce sont les seuils de la fenêtre étudiée qui s'appliquent,
+  // pas ceux qu'on chercherait sur les tirages précédents : la comparaison isole
+  // la période en tenant la lecture fixe.
+  const previousCurve = useMemo<Curve | null>(() => {
+    const rows = study.previous?.withWarmup
+    if (!rows?.length) return null
+    const spec = specs.find((s) => (s.n === null ? s.variable : `${s.variable}:${s.n}`) === curveId)
+    if (!spec) return null
+    return buildCurve(rows, spec.variable, spec.n)
+  }, [study, specs, curveId])
+
+  const previousHits = useMemo<ScanHit[]>(() => {
+    if (!previousCurve || !study.previous) return []
+    return sortByRank(
+      collapseZones(
+        scanCurve(previousCurve, {
+          scales: bars.scales,
+          minConfidence: bars.minConfidence,
+          minConfidenceByScale: bars.byScale,
+        }).filter((hit) => liveInWindow(hit, study.previous!.warmupCount))
+      )
+    )
+  }, [previousCurve, study, bars])
+
   const baseRates = useMemo(
-    () => samples.map((sample) => baseRateAbove(sample, minConfidence)),
-    [samples, minConfidence]
+    () =>
+      samples.map((sample) =>
+        baseRateAbove(sample, bars.byScale?.[sample.length] ?? bars.minConfidence)
+      ),
+    [samples, bars]
   )
 
   // Trois mises en garde, de la plus dirimante à la plus nuancée : rien n'a été
@@ -198,8 +284,13 @@ export function ChartismeLab() {
     ? fitNote ?? shortWindowNote(study.drawCount) ?? shortScaleCaveat(study.scales)
     : null
   // Le chiffrage, lui, s'affiche toujours : c'est le seul point de comparaison
-  // de la confiance lue à côté.
-  const measured = curve && !fitNote ? baseRateNote(baseRates, minConfidence) : null
+  // de la confiance lue à côté. En rareté visée il dit l'inverse — non plus ce
+  // que le seuil obtient, mais le seuil qu'il a fallu pour obtenir la cible.
+  const measured = !curve || fitNote
+    ? null
+    : barMode === "rarity"
+      ? rarityNote(thresholds, targetRate)
+      : baseRateNote(baseRates, minConfidence)
 
   useRegisterCapture(() =>
     packChartisme({
@@ -235,7 +326,7 @@ export function ChartismeLab() {
   // sélection précédente désignerait autre chose. Ajusté au rendu plutôt que
   // dans un effet, qui provoquerait un rendu en cascade avec l'ancien index
   // affiché.
-  const scanKey = `${era}|${curveId}|${scaleChoice}|${preset}|${lastN}|${minConfidence}`
+  const scanKey = `${era}|${curveId}|${scaleChoice}|${preset}|${lastN}|${barMode}|${minConfidence}|${targetRate}`
   const [lastScanKey, setLastScanKey] = useState(scanKey)
   if (scanKey !== lastScanKey) {
     setLastScanKey(scanKey)
@@ -280,7 +371,7 @@ export function ChartismeLab() {
         const other = buildCurve(study.window.withWarmup, spec.variable, spec.n)
         found.push(
           ...alongsideIndex(
-            scanCurve(other, { scales: study.scales, minConfidence }).filter((entry) =>
+            scanCurve(other, barsFor(spec.variable, spec.n)).filter((entry) =>
               liveInWindow(entry, study.contextCount)
             )
           ).map((entry) => ({ ...entry, curve_id: id }))
@@ -288,7 +379,7 @@ export function ChartismeLab() {
       }
       return found
     },
-    [curveId, study, specs, minConfidence]
+    [curveId, study, specs, barsFor]
   )
 
   function runRules() {
@@ -478,21 +569,65 @@ export function ChartismeLab() {
             </LabelHelp>
 
             <LabelHelp
-              label={`Confiance minimale · ${minConfidence.toFixed(2)}`}
+              label="Seuil de sélection"
               help={{
-                title: "Confiance minimale",
-                body: "La confiance mesure la qualité de l'ajustement géométrique, pénalisée quand une borne repose sur moins de trois points. Elle ne dit pas si la figure est rare : c'est le taux de base mesuré sous le tracé qui le dit, et il dépend de la courbe autant que de l'échelle. Sur « paires consécutives » presque toutes les fenêtres de bruit portent déjà une figure à 0.6 ; sur la somme, un peu plus de la moitié. Une figure fréquente sur du bruit n'apprend rien.",
+                title: "Seuil de sélection",
+                body: `Deux façons de décider quelle figure mérite d'être montrée. « Confiance » pose un nombre : la qualité de l'ajustement géométrique, pénalisée quand une borne repose sur moins de trois points. Elle ne dit pas si la figure est rare, et surtout elle ne dit pas la même chose d'une courbe à l'autre — à 0.60, presque toutes les fenêtres de bruit portent déjà une figure sur « paires consécutives », un peu plus de la moitié sur la somme. « Rareté visée » renverse le réglage : on donne la part de fenêtres de bruit qu'on accepte de voir porter une figure, et l'onglet cherche sur cette courbe-ci le seuil qui l'obtient, échelle par échelle. C'est le seul réglage de l'onglet qui signifie la même chose partout. Quand aucun seuil lisible n'atteint la cible — au-delà de ${MAX_THRESHOLD.toFixed(
+                  2
+                )} un seuil rejette le bruit et la figure ensemble — l'échelle est écartée du balayage plutôt que lue faute de mieux.`,
               }}
             >
-              <Input
-                type="range"
-                min={0.3}
-                max={0.95}
-                step={0.05}
-                value={minConfidence}
-                onChange={(event) => setMinConfidence(Number(event.target.value))}
-              />
+              <Select value={barMode} onValueChange={(v) => setBarMode((v as BarMode) ?? "rarity")}>
+                <SelectTrigger className="w-full" aria-label="Seuil de sélection">
+                  <span className="flex flex-1 text-left">
+                    {BAR_MODES.find((mode) => mode.value === barMode)?.label}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {BAR_MODES.map((mode) => (
+                    <SelectItem key={mode.value} value={mode.value}>
+                      {mode.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </LabelHelp>
+
+            {barMode === "rarity" ? (
+              <LabelHelp
+                label={`Taux de base visé · ${Math.round(targetRate * 100)} %`}
+                help={{
+                  title: "Taux de base visé",
+                  body: "La part des fenêtres de bruit qu'on accepte de voir porter une figure. À 20 %, une figure affichée est de celles que le hasard ne produit que dans une fenêtre sur cinq — sur cette courbe, à cette échelle, dans cette fenêtre. Le bruit est fait des mêmes tirages remis dans un ordre quelconque : il garde donc les bornes et les paliers de la courbe, ce qu'une marche aléatoire ne ferait pas. Baisser la cible durcit le seuil et vide le tracé ; la monter le remplit de figures que le hasard produit aussi. Le chiffrage sous le tracé dit le seuil trouvé et ce qu'il obtient vraiment.",
+                }}
+              >
+                <Input
+                  type="range"
+                  min={0.02}
+                  max={0.5}
+                  step={0.02}
+                  value={targetRate}
+                  onChange={(event) => setTargetRate(Number(event.target.value))}
+                />
+              </LabelHelp>
+            ) : (
+              <LabelHelp
+                label={`Confiance minimale · ${minConfidence.toFixed(2)}`}
+                help={{
+                  title: "Confiance minimale",
+                  body: "La confiance mesure la qualité de l'ajustement géométrique, pénalisée quand une borne repose sur moins de trois points. Elle ne dit pas si la figure est rare : c'est le taux de base mesuré sous le tracé qui le dit, et il dépend de la courbe autant que de l'échelle. Sur « paires consécutives » presque toutes les fenêtres de bruit portent déjà une figure à 0.6 ; sur la somme, un peu plus de la moitié. Une figure fréquente sur du bruit n'apprend rien — c'est ce que le mode « rareté visée » évite d'avoir à vérifier après coup.",
+                }}
+              >
+                <Input
+                  type="range"
+                  min={0.3}
+                  max={0.95}
+                  step={0.05}
+                  value={minConfidence}
+                  onChange={(event) => setMinConfidence(Number(event.target.value))}
+                />
+              </LabelHelp>
+            )}
 
             <LabelHelp
               label="Archive"
@@ -624,7 +759,17 @@ export function ChartismeLab() {
                     </div>
                   ) : null}
                 </div>
-                ) : fitNote ? null : (
+                ) : fitNote ? null : barMode === "rarity" ? (
+                  <p className="text-sm text-muted-foreground">
+                    {bars.scales.length
+                      ? `Aucune figure assez rare dans cette fenêtre : à ${Math.round(
+                          targetRate * 100
+                        )} %, le seuil trouvé ne laisse rien passer. Vise plus large, change d’échelle ou de courbe.`
+                      : `Aucune échelle n’atteint ${Math.round(
+                          targetRate * 100
+                        )} % sur cette courbe : le hasard y produit des figures trop souvent pour qu’un seuil les sépare. Vise plus large, ou change de courbe.`}
+                  </p>
+                ) : (
                   <p className="text-sm text-muted-foreground">
                     Aucune figure au-dessus de {minConfidence.toFixed(2)} dans cette
                     fenêtre. Baisse le seuil, change d’échelle ou élargis la
@@ -664,6 +809,18 @@ export function ChartismeLab() {
         contextCount={study.contextCount}
       />
 
+      <CurveMap
+        draws={study.window.withWarmup}
+        specs={specs}
+        scales={study.scales}
+        contextCount={study.contextCount}
+        target={targetRate}
+        onTarget={setTargetRate}
+        curveId={curveId}
+        onPick={setCurveId}
+        stateKey={`${era}|${preset}|${lastN}|${scaleChoice}|${targetRate}`}
+      />
+
       <Sketchpad curve={curve} era={era} />
 
       <RulesPanel hit={hit} hits={hits} curve={curve} alongsideFor={alongsideFor} />
@@ -672,7 +829,8 @@ export function ChartismeLab() {
         curve={curve}
         hits={hits}
         era={era}
-        scales={study.scales}
+        scales={bars.scales}
+        bar={{ minConfidence: bars.minConfidence, byScale: bars.byScale }}
         studyWindow={study.window}
         contextCount={study.contextWanted}
       />

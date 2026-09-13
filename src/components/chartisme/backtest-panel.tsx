@@ -88,6 +88,7 @@ export function BacktestPanel({
   hits,
   era,
   scales = [],
+  bar,
   studyWindow,
   contextCount = 0,
 }: {
@@ -96,6 +97,14 @@ export function BacktestPanel({
   era: "current" | "all"
   /** Échelles balayées au-dessus : le taux de base se mesure à leur longueur. */
   scales?: number[]
+  /**
+   * Le seuil de l'onglet, tel quel.
+   *
+   * Le rétro-test mesurait à 0.60 quoi qu'affiche le tracé, ce qui en faisait le
+   * rétro-test d'une autre lecture. En rareté visée le seuil diffère d'une
+   * échelle à l'autre, d'où la table plutôt qu'un nombre.
+   */
+  bar?: { minConfidence: number; byScale: Readonly<Record<number, number | null>> | null }
   /** Fenêtre d'étude — le rétro-test s'y borne par défaut. */
   studyWindow?: { fromDate: string | null; toDate: string | null; drawCount: number }
   /** Tirages de contexte réclamés devant elle par les échelles. */
@@ -122,7 +131,7 @@ export function BacktestPanel({
       const params = new URLSearchParams({
         era,
         max_curves: String(maxCurves),
-        min_confidence: "0.6",
+        min_confidence: String(bar?.minConfidence ?? 0.6),
       })
       // La plus longue échelle balayée : le taux de base croît avec la longueur
       // (plus de pivots, donc plus d'occasions qu'une figure s'ajuste quelque
@@ -130,6 +139,12 @@ export function BacktestPanel({
       if (scales.length) {
         params.set("base_length", String(Math.max(...scales)))
         params.set("scales", scales.join(","))
+        if (bar?.byScale) {
+          params.set(
+            "thresholds",
+            scales.map((scale) => bar.byScale?.[scale] ?? bar.minConfidence).join(",")
+          )
+        }
       }
       if (bounded && studyWindow?.fromDate && studyWindow.toDate) {
         params.set("start", studyWindow.fromDate)
