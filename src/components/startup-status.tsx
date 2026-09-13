@@ -485,6 +485,14 @@ const NAV_ITEMS = [
     },
   },
   {
+    href: "/harmo",
+    label: "Harmo",
+    help: {
+      title: "Harmo",
+      body: "Étude harmonique des séries de tirages : mélange réseau / mécanique / acoustique, FFT, STFT, Hilbert. Unités en cycles/tirage, pas des hertz. Décrit le tracé, pas le prochain tirage.",
+    },
+  },
+  {
     href: "/admin",
     label: "Admin",
     help: {

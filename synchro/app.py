@@ -565,6 +565,192 @@ def create_app() -> FastAPI:
             to_date=to_date,
         )
 
+    def _harmo_ready() -> None:
+        from synchro.harmo import scipy_available
+
+        if not scipy_available():
+            raise HTTPException(
+                503,
+                "scipy absent — pip install -r requirements.txt (numpy, scipy).",
+            )
+
+    def _harmo_signal(
+        variable: str,
+        n: int | None,
+        era: str,
+        from_date: str | None,
+        to_date: str | None,
+        preset: str,
+        last_n: int | None,
+        warmup: int,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        from synchro.harmo.report import build_context
+
+        _harmo_ready()
+        if variable not in VARIABLE_NAMES:
+            raise HTTPException(400, f"Variable inconnue: {variable}")
+        archive = _analysis_draws(era, None, None)
+        resolved = resolve_window(
+            archive,
+            preset=preset,
+            from_date=from_date,
+            to_date=to_date,
+            last_n=last_n,
+            warmup=warmup,
+        )
+        work = resolved["work"]
+        if not work:
+            raise HTTPException(404, "Aucun tirage dans la fenêtre.")
+        try:
+            signal = build_context(work, variable=variable, n=n, resolved=resolved)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return work, signal
+
+    @app.get("/api/harmo/status")
+    def harmo_status() -> dict[str, Any]:
+        from synchro.harmo import extras_status
+
+        return extras_status()
+
+    @app.get("/api/harmo/spectrum")
+    def harmo_spectrum(
+        variable: str = Query("sum"),
+        n: int | None = Query(None, ge=1, le=50),
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        preset: str = Query("last_100"),
+        last_n: int | None = Query(None, ge=1, le=2000),
+        warmup: int = Query(52, ge=0, le=400),
+        window: str = Query("blackmanharris", pattern="^(blackmanharris|flattop|hann)$"),
+        timebase: str = Query("index", pattern="^(index|calendar)$"),
+    ) -> dict[str, Any]:
+        from synchro.harmo.report import spectrum_report
+
+        _work, signal = _harmo_signal(
+            variable, n, era, from_date, to_date, preset, last_n, warmup
+        )
+        payload = spectrum_report(signal, window=window)
+        payload["timebase"] = timebase
+        return payload
+
+    @app.get("/api/harmo/welch")
+    def harmo_welch(
+        variable: str = Query("sum"),
+        n: int | None = Query(None, ge=1, le=50),
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        preset: str = Query("last_100"),
+        last_n: int | None = Query(None, ge=1, le=2000),
+        warmup: int = Query(52, ge=0, le=400),
+        nperseg: int | None = Query(None, ge=16, le=512),
+    ) -> dict[str, Any]:
+        from synchro.harmo.report import welch_report
+
+        _work, signal = _harmo_signal(
+            variable, n, era, from_date, to_date, preset, last_n, warmup
+        )
+        return welch_report(signal, nperseg=nperseg)
+
+    @app.get("/api/harmo/stft")
+    def harmo_stft(
+        variable: str = Query("sum"),
+        n: int | None = Query(None, ge=1, le=50),
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        preset: str = Query("last_100"),
+        last_n: int | None = Query(None, ge=1, le=2000),
+        warmup: int = Query(52, ge=0, le=400),
+        nperseg: int | None = Query(None, ge=16, le=512),
+        sst: bool = True,
+    ) -> dict[str, Any]:
+        from synchro.harmo.report import stft_report
+
+        _work, signal = _harmo_signal(
+            variable, n, era, from_date, to_date, preset, last_n, warmup
+        )
+        return stft_report(signal, nperseg=nperseg, want_sst=sst)
+
+    @app.get("/api/harmo/envelope")
+    def harmo_envelope(
+        variable: str = Query("sum"),
+        n: int | None = Query(None, ge=1, le=50),
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        preset: str = Query("last_100"),
+        last_n: int | None = Query(None, ge=1, le=2000),
+        warmup: int = Query(52, ge=0, le=400),
+    ) -> dict[str, Any]:
+        from synchro.harmo.report import envelope_report
+
+        _work, signal = _harmo_signal(
+            variable, n, era, from_date, to_date, preset, last_n, warmup
+        )
+        return envelope_report(signal)
+
+    @app.get("/api/harmo/orders")
+    def harmo_orders(
+        variable: str = Query("sum"),
+        n: int | None = Query(None, ge=1, le=50),
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        preset: str = Query("last_100"),
+        last_n: int | None = Query(None, ge=1, le=2000),
+        warmup: int = Query(52, ge=0, le=400),
+        nperseg: int | None = Query(None, ge=16, le=512),
+    ) -> dict[str, Any]:
+        from synchro.harmo.report import orders_report
+
+        _work, signal = _harmo_signal(
+            variable, n, era, from_date, to_date, preset, last_n, warmup
+        )
+        return orders_report(signal, nperseg=nperseg)
+
+    @app.get("/api/harmo/unmix")
+    def harmo_unmix(
+        variable: str = Query("sum"),
+        n: int | None = Query(None, ge=1, le=50),
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        preset: str = Query("last_100"),
+        last_n: int | None = Query(None, ge=1, le=2000),
+        warmup: int = Query(52, ge=0, le=400),
+        nperseg: int | None = Query(None, ge=16, le=512),
+    ) -> dict[str, Any]:
+        from synchro.harmo.report import unmix_report
+
+        _work, signal = _harmo_signal(
+            variable, n, era, from_date, to_date, preset, last_n, warmup
+        )
+        return unmix_report(signal, nperseg=nperseg)
+
+    @app.get("/api/harmo/null")
+    def harmo_null(
+        variable: str = Query("sum"),
+        n: int | None = Query(None, ge=1, le=50),
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        preset: str = Query("last_100"),
+        last_n: int | None = Query(None, ge=1, le=2000),
+        warmup: int = Query(52, ge=0, le=400),
+        window: str = Query("blackmanharris", pattern="^(blackmanharris|flattop|hann)$"),
+        n_sim: int = Query(40, ge=8, le=200),
+        seed: int = Query(0),
+    ) -> dict[str, Any]:
+        from synchro.harmo.report import null_report
+
+        work, signal = _harmo_signal(
+            variable, n, era, from_date, to_date, preset, last_n, warmup
+        )
+        return null_report(work, signal, window=window, n_sim=n_sim, seed=seed)
+
     @app.post("/api/check")
     def check(payload: CheckIn) -> dict[str, Any]:
         validate_grid(payload.numbers, payload.stars)

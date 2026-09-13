@@ -28,9 +28,11 @@ Le lanceur (même modèle que PaxVideo) installe les dépendances si besoin, lib
 | `./launch stop` / `make stop` | Arrêt propre via `/api/shutdown`, puis libère 8000 et 43147 |
 | `./launch status` | Qui écoute, `/api/alive`, santé Neon |
 | `./launch update` / `make update` | Contrôle GitHub (`git fetch`) et tire `origin` en fast-forward |
-| `./launch doctor` | Python, venv, Node, `.env`, ports, VLM |
+| `./launch doctor` | Python, venv, Node, `.env`, ports, VLM, chartisme, harmo |
 | `./launch install` | Dépendances seulement |
 | `./launch install-vlm` | Moondream local (torch + transformers + accelerate) |
+| `./launch install-chartisme` | Réseaux chartisme (optionnels) |
+| `./launch install-harmo` | Extras Harmo (PyWavelets, ssqueezepy, librosa) |
 | `./launch shortcut` | Raccourci Bureau / menu applications (Linux) ou `~/Desktop/Synchro.command` (macOS) |
 | `make test` | Tests (`pytest`) |
 
@@ -38,7 +40,7 @@ Sur macOS, un double-clic sur `Synchro.command` à la racine du dépôt lance au
 
 Options : `--skip-install`, `--force-install`, `--no-open`. Ports : `SYNCHRO_BACKEND_PORT` (8000), `SYNCHRO_FRONTEND_PORT` (43147). Logs : `.run/`.
 
-Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections **Tirage**, **Évolution**, **Analyse**, **Combinaisons**, **Morpho**, **Chartisme** et **Admin** sont des onglets du bandeau.
+Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections **Tirage**, **Évolution**, **Analyse**, **Combinaisons**, **Morpho**, **Chartisme**, **Harmo** et **Admin** sont des onglets du bandeau.
 
 ## Tirage (`/tirage`)
 
@@ -135,6 +137,26 @@ Le rétro-test se **borne par défaut à la fenêtre d’étude**, aux mêmes é
 
 Les tirages sont indépendants. Une figure sur une courbe de retards ou de sorties est une propriété du tracé, pas une prédiction. Cet onglet décrit, et le rétro-test mesure l’écart entre la figure et le hasard ; il ne le comble pas.
 
+## Harmo (`/harmo`)
+
+Laboratoire spectral sur les mêmes séries qu’Analyse (somme, étendue, retard, présence, étoiles). scipy est la source de vérité ; le navigateur n’invente pas de FFT. Les unités sont des **cycles/tirage** et des **cycles/an**, pas des hertz : interpoler vers une grille kHz fabriquerait des artefacts. Le « 50 Hz réseau » est l’analogue d’un **peigne de raies verrouillé** sur le calendrier (année, semestre, trimestre, plus un scan de fondamentale).
+
+Trois dictionnaires d’énergie, affichés dans **Mélange** :
+
+| Analogue | Signature | Outils |
+|---|---|---|
+| Réseau | raies horizontales, Q élevé | Blackman-Harris / Flattop, THD / HNR, Lomb-Scargle, cepstre, F-test de Thomson |
+| Mécanique | crêtes obliques, smearing, modulation | Hilbert, STFT, order tracking tacholess (Viterbi → phase → rééchantillonnage angulaire) |
+| Acoustique | continuum, bosses larges | Welch, multitaper, HPSS par médianes (librosa optionnel) |
+
+`ShortTimeFFT` sépare visuellement droites horizontales et trajectoires liées à un « régime » variable. Le synchrosqueezing STFT est implémenté sans `ssqueezepy` ; PyWavelets / ssqueezepy / librosa restent des extras :
+
+```bash
+./launch install-harmo
+```
+
+Le modèle nul (onglet **Tests**) rejoue des tirages uniformes **aux mêmes dates** : un pic n’est lu que contre ce hasard-là. La série retard a des harmoniques **par construction** (dents de scie) ; l’onglet le dit.
+
 ## Admin (`/admin`)
 
 Page locale pour les consoles et les secrets (Neon, Google, OpenAI, Brave Search). Les valeurs sont lues/écrites dans `.env` — **jamais commitées**. Révélation / copie, test de connexion, mise à jour GitHub (`git fetch` / `git pull --ff-only`, équivalent `./launch update`), synchro FDJ.
@@ -143,7 +165,7 @@ En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, défini
 
 ## Interface web (Next.js)
 
-App Next.js (onglets **Tirage** `/tirage`, **Évolution** `/evolution`, **Analyse** `/analyse`, **Combinaisons** `/combinaisons`, **Morpho** `/morpho`, **Chartisme** `/chartisme` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
+App Next.js (onglets **Tirage** `/tirage`, **Évolution** `/evolution`, **Analyse** `/analyse`, **Combinaisons** `/combinaisons`, **Morpho** `/morpho`, **Chartisme** `/chartisme`, **Harmo** `/harmo` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install
@@ -175,7 +197,7 @@ Puis http://127.0.0.1:8000 (docs : `/docs`).
 | `python -m synchro serve` | API locale `/api/*` |
 | `python -m synchro export` | Snapshot JSON (`synchro/web/snapshot.json`) |
 | `python -m synchro chartisme export\|scan\|train\|report` | Module chartisme sans interface (usage cron) |
-| `make test` | Tests unitaires (parse FDJ, rangs, stats, `/api/alive`, ensure, chartisme) |
+| `make test` | Tests unitaires (parse FDJ, rangs, stats, `/api/alive`, ensure, chartisme, harmo) |
 
 `DATABASE_URL` ne doit **jamais** être commitée. `.env` en local, variables d’environnement / secret GitHub Actions en déployé. Au premier `./launch`, le fichier `.env` est créé depuis `.env.example` s’il manque.
 
@@ -204,5 +226,7 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 - `GET\|POST /api/chartisme/labels|rules` · `DELETE …/{id}` — atelier d’étiquetage et espace de règles (Neon)
 - `POST /api/chartisme/rules/evaluate` · `GET /api/chartisme/firings` — déclenchements et journal
 - `GET /api/chartisme/backtest` — objectif atteint, signal sur les numéros, taux de base (`base_length` = longueur des fenêtres de bruit). Bornable à une fenêtre : `start`, `end`, `context` (tirages calculés en amont), `scales` (« 25,50,100 »). La réponse porte un bloc `window` qui dit sur quoi la mesure a réellement porté.
+- `GET /api/harmo/status` — scipy / extras (sans Neon)
+- `GET /api/harmo/spectrum|welch|stft|envelope|orders|unmix|null` — même fenêtre qu’Analyse (`variable`, `n`, `era`, `preset`, `from_date`, `to_date`, `last_n`, `warmup`)
 
 Application indépendante, non affiliée à La Française des Jeux.

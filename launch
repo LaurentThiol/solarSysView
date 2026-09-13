@@ -46,10 +46,11 @@ Usage:
   ./launch stop            Arrêt propre (ports ${BACKEND_PORT} / ${FRONTEND_PORT})
   ./launch status          Affiche l'état des services (alive, Neon, UI)
   ./launch update          Contrôle GitHub et tire origin (ff-only), puis réinstalle si besoin
-  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM / chartisme
+  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM / chartisme / harmo
   ./launch install         Installe uniquement les dépendances
   ./launch install-vlm     Installe Moondream (torch + transformers + accelerate)
   ./launch install-chartisme  Installe les réseaux du chartisme (torch + torch-geometric)
+  ./launch install-harmo      Installe les extras Harmo (PyWavelets, ssqueezepy, librosa)
   ./launch chartisme-train    Entraîne les réseaux du chartisme (options passées au CLI)
   ./launch shortcut        Installe un raccourci bureau / menu applications
   ./launch help            Cette aide
@@ -789,6 +790,17 @@ cmd_install_chartisme() {
   info "L'onglet Chartisme marche sans : détecteurs géométriques et ressemblance DTW n'ont besoin de rien."
 }
 
+cmd_install_harmo() {
+  local venv="$ROOT/.venv"
+  SKIP_INSTALL=0
+  ensure_install
+  info "Installation des extras Harmo (PyWavelets, ssqueezepy, librosa)…"
+  if ! "$venv/bin/python" -m pip install -r "$ROOT/requirements-harmo.txt"; then
+    die "pip install -r requirements-harmo.txt a échoué. Voir ./launch doctor"
+  fi
+  ok "Extras Harmo prêts. L’onglet marche sans eux : FFT, STFT, Hilbert, HPSS médianes, SST maison."
+}
+
 cmd_chartisme_train() {
   local venv="$ROOT/.venv" py="$ROOT/.venv/bin/python"
   [[ -x "$py" ]] || die "Pas de venv — ./launch install puis ./launch install-chartisme"
@@ -875,6 +887,24 @@ vlm_doctor() {
   fi
 }
 
+harmo_doctor() {
+  local py="$ROOT/.venv/bin/python"
+  if [[ ! -x "$py" ]]; then
+    printf '%sHarmo : pas de venv — ./launch install%s\n' "$C_DIM" "$C_RESET"
+    return 0
+  fi
+  if "$py" -c 'import numpy, scipy, synchro.harmo' 2>/dev/null; then
+    ok "Harmo : numpy + scipy (FFT, STFT, Hilbert, HPSS, SST maison)"
+  else
+    warn "Harmo : numpy/scipy absents — pip install -r requirements.txt"
+  fi
+  if "$py" -c 'import pywt, ssqueezepy, librosa' 2>/dev/null; then
+    ok "Harmo : extras PyWavelets + ssqueezepy + librosa"
+  else
+    printf '%sHarmo : extras optionnels absents — ./launch install-harmo%s\n' "$C_DIM" "$C_RESET"
+  fi
+}
+
 cmd_doctor() {
   info "Diagnostic Synchro (${ROOT})"
   local py="" syspy venv="$ROOT/.venv"
@@ -914,6 +944,7 @@ cmd_doctor() {
   cmd_status || true
   vlm_doctor
   chartisme_doctor
+  harmo_doctor
   if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     ok "Git : $(git -C "$ROOT" rev-parse --short HEAD) ($(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?'))"
   else
@@ -1110,7 +1141,7 @@ CMD="start"
 PASSTHROUGH=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    start|stop|status|update|shortcut|help|doctor|install|install-vlm|install-chartisme|-h|--help)
+    start|stop|status|update|shortcut|help|doctor|install|install-vlm|install-chartisme|install-harmo|-h|--help)
       CMD="$1"
       shift
       ;;
@@ -1143,6 +1174,7 @@ case "$CMD" in
   install) cmd_install ;;
   install-vlm) cmd_install_vlm ;;
   install-chartisme) cmd_install_chartisme ;;
+  install-harmo) cmd_install_harmo ;;
   chartisme-train) cmd_chartisme_train "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" ;;
   shortcut) cmd_shortcut ;;
   *) die "Commande inconnue : $CMD" ;;

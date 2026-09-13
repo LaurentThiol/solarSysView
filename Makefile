@@ -1,4 +1,4 @@
-.PHONY: help install install-vlm install-chartisme start stop status update doctor shortcut test \
+.PHONY: help install install-vlm install-chartisme install-harmo start stop status update doctor shortcut test \
 	sync ensure serve export chartisme-export chartisme-scan chartisme-train chartisme-report
 
 help:
@@ -13,6 +13,10 @@ install-vlm:
 # Réseaux du chartisme — optionnels : l'onglet marche sans eux
 install-chartisme:
 	./launch install-chartisme
+
+# Extras Harmo — optionnels : l'onglet marche avec numpy/scipy seuls
+install-harmo:
+	./launch install-harmo
 
 # Un seul terminal : install si besoin, API + UI, vérifications /api/alive, Ctrl+C = tout arrêter
 start:

@@ -1,0 +1,13 @@
+# Extras optionnels du laboratoire Harmo.
+#
+# Sans eux, l’onglet reste entier : FFT, Welch, multitaper, Lomb-Scargle,
+# Hilbert, STFT, synchrosqueezing STFT maison, HPSS par médianes, order
+# tracking tacholess. Ces paquets n’ajoutent que CWT (PyWavelets),
+# synchrosqueezing CWT (ssqueezepy) et HPSS librosa.
+#
+# Installation : ./launch install-harmo
+#
+# librosa tire numba / soundfile : poste confortable seulement.
+PyWavelets>=1.6
+ssqueezepy>=0.6.5
+librosa>=0.10
