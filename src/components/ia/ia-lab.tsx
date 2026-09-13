@@ -3,43 +3,44 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 
 import { HelpTip, LabelHelp } from "@/components/help"
+import { ModelSelect } from "@/components/ia/model-select"
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-} from "@/components/ui/select"
 import { printSnapshot } from "@/lib/capture/pdf"
 import { labLabel, type DiagnosticSnapshot } from "@/lib/capture/snapshot"
 import { suggestionsFor, DEFAULT_QUESTION } from "@/lib/capture/suggestions"
 import {
   CAPTURE_PENDING_EVENT,
   clearPending,
-  readPending,
+  readCompareModel,
+  readCompareOn,
   readLastModel,
   readModel,
+  readPending,
   readProvider,
   readThreads,
   threadTitle,
   upsertThread,
+  writeCompareModel,
+  writeCompareOn,
   writeModel,
   writeProvider,
   type IaChatMessage,
   type IaProviderId,
   type IaThread,
 } from "@/lib/capture/store"
+import { streamIaChat } from "@/lib/ia/client"
 import {
   IA_MODELS,
   modelLabel,
   pickAvailableModel,
+  pickCompareModel,
   preferredModel,
   providerLabel,
   providerOfModel,
+  type IaMessageLane,
   type IaModelOption,
 } from "@/lib/ia/models"
+import { groupIaTurns, historyForLane } from "@/lib/ia/turns"
 
 type Status = {
   google: boolean
@@ -49,14 +50,9 @@ type Status = {
   live?: { google: boolean | null; openai: boolean | null }
 }
 
-type ChatReply = {
-  ok?: boolean
-  text?: string
-  error?: string
-  model?: string
-  provider?: IaProviderId
-  requested?: string
-  imageOmitted?: boolean
+type AskOptions = {
+  compare?: boolean
+  modelB?: string | null
 }
 
 function pickProvider(status: Status | null, stored: IaProviderId | null): IaProviderId | null {
@@ -80,10 +76,24 @@ function snapshotPayload(snapshot: DiagnosticSnapshot) {
   }
 }
 
+function patchLane(
+  messages: IaChatMessage[],
+  pairId: string,
+  lane: IaMessageLane,
+  patch: Partial<IaChatMessage> | ((current: IaChatMessage) => IaChatMessage)
+) {
+  return messages.map((item) => {
+    if (item.pairId !== pairId || (item.lane ?? "a") !== lane) return item
+    return typeof patch === "function" ? patch(item) : { ...item, ...patch }
+  })
+}
+
 export function IaLab() {
   const [status, setStatus] = useState<Status | null>(null)
   const [provider, setProvider] = useState<IaProviderId | null>(null)
   const [model, setModel] = useState<string | null>(preferredModel("google"))
+  const [modelB, setModelB] = useState<string | null>(null)
+  const [compare, setCompare] = useState(false)
   const [threads, setThreads] = useState<IaThread[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<DiagnosticSnapshot | null>(null)
@@ -93,22 +103,24 @@ export function IaLab() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [techOpen, setTechOpen] = useState(false)
+  const [liveLanes, setLiveLanes] = useState<Partial<Record<IaMessageLane, boolean>>>({})
   const listRef = useRef<HTMLDivElement>(null)
   const pendingAuto = useRef<DiagnosticSnapshot | null>(null)
   const providerRef = useRef<IaProviderId | null>(null)
   const modelRef = useRef<string | null>(null)
-  const askRef = useRef<
-    (
-      content: string,
-      pack: DiagnosticSnapshot | null,
-      history: IaChatMessage[],
-      chosen: IaProviderId | null,
-      chosenModel: string | null
-    ) => Promise<void>
-  >(async () => undefined)
+  const compareRef = useRef(false)
+  const modelBRef = useRef<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const messagesRef = useRef<IaChatMessage[]>([])
+  const askRef = useRef<(content: string, pack: DiagnosticSnapshot | null, history: IaChatMessage[], options: AskOptions & { provider: IaProviderId | null; model: string | null }) => Promise<void>>(
+    async () => undefined
+  )
 
   useEffect(() => {
-    void Promise.resolve().then(() => setThreads(readThreads()))
+    void Promise.resolve().then(() => {
+      setThreads(readThreads())
+      setCompare(readCompareOn())
+    })
     void (async () => {
       try {
         const response = await fetch("/api/ia/status", { cache: "no-store" })
@@ -116,13 +128,12 @@ export function IaLab() {
         setStatus(payload)
         const nextProvider = pickProvider(payload, readProvider())
         setProvider(nextProvider)
-        if (nextProvider) {
-          setModel(pickAvailableModel(payload.models ?? [], nextProvider, readModel(nextProvider)))
-        } else {
-          setModel(
-            readLastModel() || preferredModel("google")
-          )
-        }
+        const models = payload.models ?? []
+        const nextModel = nextProvider
+          ? pickAvailableModel(models, nextProvider, readModel(nextProvider))
+          : readLastModel() || preferredModel("google")
+        setModel(nextModel)
+        setModelB(pickCompareModel(models, nextModel, readCompareModel()))
       } catch {
         setStatus({ google: false, openai: false, default: null, models: [] })
       }
@@ -156,61 +167,134 @@ export function IaLab() {
       content: string,
       pack: DiagnosticSnapshot | null,
       history: IaChatMessage[],
-      chosen: IaProviderId | null,
-      chosenModel: string | null
+      options: AskOptions & { provider: IaProviderId | null; model: string | null }
     ) => {
       const text = content.trim() || DEFAULT_QUESTION
-      if (!chosen) {
+      const chosen = options.provider
+      const chosenModel = options.model
+      if (!chosen || !chosenModel) {
         setError("Aucune clé Gemini / OpenAI. Configure-les dans Admin.")
         return
       }
-      const nextMessages: IaChatMessage[] = [...history, { role: "user", content: text }]
+      const compareRun = Boolean(options.compare && options.modelB && options.modelB !== chosenModel)
+      const providerB = options.modelB ? providerOfModel(options.modelB) : null
+      if (compareRun && !providerB) {
+        setError("Second modèle inconnu.")
+        return
+      }
+      abortRef.current?.abort()
+      const abort = new AbortController()
+      abortRef.current = abort
+      const pairId = crypto.randomUUID()
+      const userMessage: IaChatMessage = { role: "user", content: text }
+      const laneA: IaChatMessage = {
+        role: "assistant",
+        content: "",
+        model: chosenModel,
+        provider: chosen,
+        lane: "a",
+        pairId,
+      }
+      const laneB: IaChatMessage | null =
+        compareRun && options.modelB && providerB
+          ? {
+              role: "assistant",
+              content: "",
+              model: options.modelB,
+              provider: providerB,
+              lane: "b",
+              pairId,
+            }
+          : null
+      const nextMessages: IaChatMessage[] = [
+        ...history,
+        userMessage,
+        laneA,
+        ...(laneB ? [laneB] : []),
+      ]
+      messagesRef.current = nextMessages
       setMessages(nextMessages)
       setDraft("")
       setBusy(true)
       setError(null)
       setNotice(null)
-      try {
-        const response = await fetch("/api/ia/chat", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            provider: chosen,
-            model: chosenModel,
-            messages: nextMessages,
-            snapshot: pack ? snapshotPayload(pack) : null,
-          }),
-        })
-        const payload = (await response.json()) as ChatReply
-        if (!payload.ok || !payload.text) {
-          throw new Error(payload.error || `HTTP ${response.status}`)
+      setLiveLanes(compareRun ? { a: true, b: true } : { a: true })
+
+      function commitLane(
+        lane: IaMessageLane,
+        patch: Partial<IaChatMessage> | ((current: IaChatMessage) => IaChatMessage)
+      ) {
+        const next = patchLane(messagesRef.current, pairId, lane, patch)
+        messagesRef.current = next
+        setMessages(next)
+      }
+
+      async function streamLane(lane: IaMessageLane, providerId: IaProviderId, modelId: string) {
+        const requestMessages = [...historyForLane(history, lane), userMessage]
+        try {
+          await streamIaChat(
+            {
+              provider: providerId,
+              model: modelId,
+              messages: requestMessages,
+              snapshot: pack ? snapshotPayload(pack) : null,
+            },
+            {
+              signal: abort.signal,
+              onEvent: (event) => {
+                if (event.type === "meta") {
+                  commitLane(lane, {
+                    model: event.model,
+                    provider: event.provider,
+                    requested: event.requested,
+                  })
+                  if (event.imageOmitted) {
+                    setNotice("Modèle sans vision : le visuel n’a pas été envoyé, seulement les données.")
+                  }
+                }
+                if (event.type === "delta") {
+                  commitLane(lane, (item) => ({
+                    ...item,
+                    content: `${item.content}${event.text}`,
+                  }))
+                }
+                if (event.type === "done") {
+                  commitLane(lane, {
+                    content: event.text,
+                    model: event.model,
+                    provider: event.provider,
+                    requested: event.requested,
+                  })
+                }
+              },
+            }
+          )
+        } catch (err) {
+          if (abort.signal.aborted) return
+          setError(err instanceof Error ? err.message : "échec IA")
+        } finally {
+          setLiveLanes((current) => ({ ...current, [lane]: false }))
         }
-        const withReply: IaChatMessage[] = [
-          ...nextMessages,
-          {
-            role: "assistant",
-            content: payload.text,
-            model: payload.model,
-            provider: payload.provider ?? chosen,
-            requested: payload.requested,
-          },
-        ]
-        setMessages(withReply)
+      }
+
+      try {
+        const tasks = [streamLane("a", chosen, chosenModel)]
+        if (compareRun && laneB && providerB && options.modelB) {
+          tasks.push(streamLane("b", providerB, options.modelB))
+        }
+        await Promise.all(tasks)
+      } finally {
         if (pack) {
           persist(
             { ...pack, question: pack.question || text },
-            withReply,
+            messagesRef.current,
             chosen,
-            payload.model || chosenModel
+            chosenModel
           )
         }
-        if (payload.imageOmitted) {
-          setNotice("Modèle sans vision : le visuel n’a pas été envoyé, seulement les données.")
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "échec IA")
-      } finally {
+        if (abortRef.current === abort) abortRef.current = null
         setBusy(false)
+        setLiveLanes({})
       }
     },
     [persist]
@@ -219,8 +303,11 @@ export function IaLab() {
   useLayoutEffect(() => {
     providerRef.current = provider
     modelRef.current = model
+    compareRef.current = compare
+    modelBRef.current = modelB
+    messagesRef.current = messages
     askRef.current = ask
-  }, [provider, model, ask])
+  }, [provider, model, compare, modelB, ask, messages])
 
   useEffect(() => {
     function ingest() {
@@ -235,13 +322,12 @@ export function IaLab() {
       if (!pending.autoSend) return
       const chosen = providerRef.current
       if (chosen) {
-        void askRef.current(
-          pending.snapshot.question || DEFAULT_QUESTION,
-          pending.snapshot,
-          [],
-          chosen,
-          modelRef.current
-        )
+        void askRef.current(pending.snapshot.question || DEFAULT_QUESTION, pending.snapshot, [], {
+          provider: chosen,
+          model: modelRef.current,
+          compare: compareRef.current,
+          modelB: modelBRef.current,
+        })
       } else {
         pendingAuto.current = pending.snapshot
       }
@@ -258,17 +344,21 @@ export function IaLab() {
     const pack = pendingAuto.current
     if (!pack || !provider || !model) return
     pendingAuto.current = null
-    const chosen = provider
-    const chosenModel = model
     void Promise.resolve().then(() =>
-      ask(pack.question || DEFAULT_QUESTION, pack, [], chosen, chosenModel)
+      ask(pack.question || DEFAULT_QUESTION, pack, [], {
+        provider,
+        model,
+        compare,
+        modelB,
+      })
     )
-  }, [provider, model, ask])
+  }, [provider, model, compare, modelB, ask])
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" })
-  }, [messages, busy])
+  }, [messages, liveLanes])
 
+  const turns = useMemo(() => groupIaTurns(messages), [messages])
   const suggestions = useMemo(
     () => suggestionsFor(snapshot?.lab ?? "other", snapshot?.tab ?? null),
     [snapshot]
@@ -298,12 +388,33 @@ export function IaLab() {
     ? providerModels.filter((item) => item.source === "catalog")
     : []
   const liveModels = providerModels.filter((item) => item.source === "live")
+  const liveAll = allModels.filter((item) => item.source === "live")
   const currentModel = allModels.find((item) => item.id === model) ?? null
+  const currentModelB = allModels.find((item) => item.id === modelB) ?? null
   const hasImage = Boolean(snapshot?.imageDataUrl)
-  const activeLabel = model ? modelLabel(model, allModels) : null
   const canSend = Boolean(provider && model && status?.[provider])
+  const providerB = modelB ? providerOfModel(modelB) : null
+  const canSendB = Boolean(providerB && status?.[providerB] && modelB && modelB !== model)
+  const canSubmit = compare ? canSend && canSendB : canSend
+  const livePairId =
+    liveLanes.a || liveLanes.b
+      ? [...messages].reverse().find((item) => item.pairId)?.pairId ?? null
+      : null
+  const groupedAll = [
+    { label: "Gemini", items: catalogGoogle },
+    { label: "OpenAI", items: catalogOpenAI },
+    { label: "Autres sur cette clé", items: liveAll },
+  ]
+  const groupedA =
+    compare || !provider
+      ? groupedAll
+      : [
+          { label: "Catalogue", items: catalogModels },
+          { label: "Autres sur cette clé", items: liveModels },
+        ]
 
   function openThread(thread: IaThread) {
+    abortRef.current?.abort()
     setActiveId(thread.id)
     setSnapshot(thread.snapshot)
     setMessages(thread.messages)
@@ -311,6 +422,8 @@ export function IaLab() {
     setModel(thread.model || pickAvailableModel(allModels, thread.provider, readModel(thread.provider)))
     setError(null)
     setNotice(null)
+    setBusy(false)
+    setLiveLanes({})
   }
 
   function selectProvider(id: IaProviderId) {
@@ -318,6 +431,11 @@ export function IaLab() {
     writeProvider(id)
     const next = pickAvailableModel(allModels, id, readModel(id))
     setModel(next)
+    if (compare) {
+      const nextB = pickCompareModel(allModels, next, readCompareModel())
+      setModelB(nextB)
+      if (nextB) writeCompareModel(nextB)
+    }
   }
 
   function selectModel(id: string | null) {
@@ -330,12 +448,41 @@ export function IaLab() {
       setProvider(owner)
       writeProvider(owner)
     }
+    if (compare && (id === modelB || !modelB)) {
+      const nextB = pickCompareModel(allModels, id, id === modelB ? null : readCompareModel())
+      setModelB(nextB)
+      if (nextB) writeCompareModel(nextB)
+    }
+  }
+
+  function selectModelB(id: string | null) {
+    if (!id || id === modelB) return
+    if (id === model) return
+    setModelB(id)
+    writeCompareModel(id)
+  }
+
+  function toggleCompare() {
+    const next = !compare
+    setCompare(next)
+    writeCompareOn(next)
+    if (next) {
+      const picked = pickCompareModel(allModels, model, readCompareModel())
+      setModelB(picked)
+      if (picked) writeCompareModel(picked)
+    }
+  }
+
+  function stop() {
+    abortRef.current?.abort()
+    setBusy(false)
+    setLiveLanes({})
   }
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
       <div className="flex min-w-0 flex-col gap-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <ProviderPill
               id="google"
@@ -351,6 +498,22 @@ export function IaLab() {
               active={provider === "openai"}
               onSelect={selectProvider}
             />
+            <button
+              type="button"
+              aria-pressed={compare}
+              onClick={toggleCompare}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                compare
+                  ? "border-primary bg-primary/15 text-foreground"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Comparer
+            </button>
+            <HelpTip
+              title="Comparer"
+              body="Même pack, deux lectures en parallèle. Utile en Chartisme / Harmo : un modèle rapide contre un plus précis, ou Gemini contre OpenAI. Les réponses arrivent en flux."
+            />
             {!status?.google && !status?.openai ? (
               <span className="text-xs text-muted-foreground">
                 Clés dans Admin (Google / OpenAI).
@@ -358,88 +521,66 @@ export function IaLab() {
             ) : null}
           </div>
 
-          <LabelHelp
-              label="Modèle"
-              className="sm:ml-auto"
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <LabelHelp
+              label={compare ? "Modèle A" : "Modèle"}
+              className="min-w-0 sm:flex-1"
               help={{
                 title: "Modèle",
-                body: "Gemini ou OpenAI, puis le modèle envoyé avec le pack. Le catalogue est recommandé pour la lecture d’écran ; tes clés peuvent en ajouter d’autres. Le modèle réellement utilisé s’affiche sous la réponse. Un aperçu introuvable replie vers le catalogue.",
+                body: "Le modèle envoyé avec le pack. En comparaison, A et B reçoivent la même question. Le modèle réellement utilisé s’affiche sous la réponse.",
                 items: [
                   {
                     label: "Vision",
                     text: "Les captures avec visuel demandent un modèle vision. Sinon seules les données partent.",
                   },
                   {
-                    label: "Mémoire",
-                    text: "Le dernier modèle de chaque fournisseur est mémorisé dans ce navigateur.",
+                    label: "Flux",
+                    text: "La réponse s’écrit au fil de l’eau. Arrêter conserve le texte déjà reçu.",
                   },
                 ],
               }}
             >
-              <Select value={model ?? undefined} onValueChange={(value) => selectModel(value)}>
-                <SelectTrigger className="w-full sm:w-72" aria-label="Modèle">
-                  <span className="flex flex-1 text-left">
-                    {currentModel ? currentModel.label : "Choisir un modèle"}
-                  </span>
-                </SelectTrigger>
-                <SelectContent align="start" alignItemWithTrigger={false} className="min-w-72">
-                  {provider ? (
-                    <>
-                      <SelectGroup>
-                        <SelectLabel>Catalogue</SelectLabel>
-                        {catalogModels.map((item) => (
-                          <SelectItem key={item.id} value={item.id} disabled={!item.available}>
-                            {`${item.label} · ${item.hint}`}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                      {liveModels.length ? (
-                        <SelectGroup>
-                          <SelectLabel>Autres sur cette clé</SelectLabel>
-                          {liveModels.map((item) => (
-                            <SelectItem key={item.id} value={item.id}>
-                              {item.label}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>
-                      <SelectGroup>
-                        <SelectLabel>Gemini</SelectLabel>
-                        {catalogGoogle.map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {`${item.label} · ${item.hint}`}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                      <SelectGroup>
-                        <SelectLabel>OpenAI</SelectLabel>
-                        {catalogOpenAI.map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {`${item.label} · ${item.hint}`}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </>
-                  )}
-                  {model && !allModels.some((item) => item.id === model) ? (
-                    <SelectItem value={model}>{model}</SelectItem>
-                  ) : null}
-                </SelectContent>
-              </Select>
+              <ModelSelect
+                label={compare ? "Modèle A" : "Modèle"}
+                value={model}
+                models={allModels}
+                groups={groupedA}
+                onChange={selectModel}
+              />
             </LabelHelp>
+            {compare ? (
+              <LabelHelp
+                label="Modèle B"
+                className="min-w-0 sm:flex-1"
+                help={{
+                  title: "Modèle B",
+                  body: "Second lecteur du même pack. Choisis un modèle différent — autre fournisseur, ou Flash contre Pro.",
+                }}
+              >
+                <ModelSelect
+                  label="Modèle B"
+                  value={modelB}
+                  models={allModels}
+                  groups={groupedAll}
+                  onChange={selectModelB}
+                />
+              </LabelHelp>
+            ) : null}
+          </div>
         </div>
 
         {currentModel ? (
           <p className="text-[11px] leading-4 text-muted-foreground">
+            {compare ? "A · " : ""}
             {providerLabel(currentModel.provider)} · {currentModel.id}
-            {hasImage && !currentModel.vision
-              ? " · sans vision : le visuel ne partira pas"
-              : hasImage
-                ? " · vision"
-                : ""}
+            {hasImage && !currentModel.vision ? " · sans vision" : hasImage ? " · vision" : ""}
+            {compare && currentModelB ? (
+              <>
+                {" · B · "}
+                {providerLabel(currentModelB.provider)} · {currentModelB.id}
+                {hasImage && !currentModelB.vision ? " · sans vision" : ""}
+              </>
+            ) : null}
           </p>
         ) : null}
 
@@ -503,7 +644,7 @@ export function IaLab() {
 
         <div
           ref={listRef}
-          className="flex max-h-[28rem] min-h-48 flex-col gap-3 overflow-auto rounded-xl border border-border bg-card/20 p-3"
+          className="flex max-h-[36rem] min-h-48 flex-col gap-3 overflow-auto rounded-xl border border-border bg-card/20 p-3"
         >
           {messages.length === 0 && !busy ? (
             <p className="text-xs text-muted-foreground">
@@ -511,35 +652,57 @@ export function IaLab() {
               générale sur la lecture des courbes.
             </p>
           ) : null}
-          {messages.map((message, index) => (
-            <div
-              key={`${message.role}-${index}`}
-              className={`max-w-[46rem] rounded-lg px-3 py-2 text-sm leading-6 whitespace-pre-wrap ${
-                message.role === "user"
-                  ? "ml-auto bg-primary/15 text-foreground"
-                  : "bg-muted/40 text-foreground"
-              }`}
-            >
-              {message.content}
-              {message.role === "assistant" && message.model ? (
-                <span className="mt-1.5 block text-[11px] leading-4 text-muted-foreground">
-                  {providerLabel(message.provider ?? "google")} · {modelLabel(message.model, allModels)}
-                  {message.requested && message.requested !== message.model
-                    ? ` · repli depuis ${message.requested}`
-                    : ""}
-                </span>
-              ) : null}
-            </div>
-          ))}
-          {busy ? (
-            <p className="text-xs text-muted-foreground">
-              Lecture en cours{activeLabel ? ` · ${activeLabel}` : ""}…
-            </p>
-          ) : null}
+          {turns.map((turn) => {
+            if (turn.kind === "user") {
+              return (
+                <div
+                  key={`user-${turn.index}`}
+                  className="ml-auto max-w-[46rem] rounded-lg bg-primary/15 px-3 py-2 text-sm leading-6 whitespace-pre-wrap"
+                >
+                  {turn.message.content}
+                </div>
+              )
+            }
+            if (turn.kind === "compare") {
+              return (
+                <div key={turn.pairId} className="grid gap-3 md:grid-cols-2">
+                  <CompareColumn
+                    message={turn.a}
+                    models={allModels}
+                    streaming={Boolean(livePairId === turn.pairId && liveLanes.a)}
+                  />
+                  <CompareColumn
+                    message={turn.b}
+                    models={allModels}
+                    streaming={Boolean(livePairId === turn.pairId && liveLanes.b)}
+                  />
+                </div>
+              )
+            }
+            return (
+              <AssistantBubble
+                key={`assistant-${turn.index}`}
+                message={turn.message}
+                models={allModels}
+                streaming={Boolean(
+                  livePairId === turn.message.pairId &&
+                    liveLanes[turn.message.lane === "b" ? "b" : "a"]
+                )}
+              />
+            )
+          })}
         </div>
 
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
         {notice ? <p className="text-xs text-muted-foreground">{notice}</p> : null}
+        {compare && model && modelB && model === modelB ? (
+          <p className="text-xs text-muted-foreground">Choisis un second modèle différent.</p>
+        ) : null}
+        {compare && providerB && !status?.[providerB] ? (
+          <p className="text-xs text-muted-foreground">
+            Le modèle B n’a pas de clé (Admin).
+          </p>
+        ) : null}
 
         {messages.length === 0 && !busy ? (
           <div className="flex flex-col gap-1.5">
@@ -561,7 +724,12 @@ export function IaLab() {
           onSubmit={(event) => {
             event.preventDefault()
             if (busy) return
-            void ask(draft, snapshot, messages, provider, model)
+            void ask(draft, snapshot, messages, {
+              provider,
+              model,
+              compare,
+              modelB,
+            })
           }}
         >
           <textarea
@@ -571,9 +739,15 @@ export function IaLab() {
             placeholder="Question sur la lecture…"
             className="min-h-20 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
           />
-          <Button type="submit" disabled={busy || !canSend}>
-            Envoyer
-          </Button>
+          {busy ? (
+            <Button type="button" variant="outline" onClick={stop}>
+              Arrêter
+            </Button>
+          ) : (
+            <Button type="submit" disabled={!canSubmit}>
+              {compare ? "Comparer" : "Envoyer"}
+            </Button>
+          )}
         </form>
       </div>
 
@@ -582,7 +756,7 @@ export function IaLab() {
           Captures
           <HelpTip
             title="Historique"
-            body="Les huit derniers packs restent dans ce navigateur. Rouvrir un fil restaure le fournisseur et le modèle de la conversation."
+            body="Les huit derniers packs restent dans ce navigateur. Rouvrir un fil restaure le fournisseur et le modèle. Une comparaison se relit en deux colonnes."
           />
         </p>
         {threads.length === 0 ? (
@@ -609,6 +783,73 @@ export function IaLab() {
         )}
       </aside>
     </div>
+  )
+}
+
+function streamingOf(message: IaChatMessage, live: boolean) {
+  return live && message.role === "assistant"
+}
+
+function AssistantBubble({
+  message,
+  models,
+  streaming,
+}: {
+  message: IaChatMessage
+  models: IaModelOption[]
+  streaming: boolean
+}) {
+  return (
+    <div className="max-w-[46rem] rounded-lg bg-muted/40 px-3 py-2 text-sm leading-6 whitespace-pre-wrap">
+      {message.content}
+      {streaming ? <Caret /> : null}
+      {message.model ? (
+        <span className="mt-1.5 block text-[11px] leading-4 text-muted-foreground">
+          {providerLabel(message.provider ?? "google")} · {modelLabel(message.model, models)}
+          {message.requested && message.requested !== message.model
+            ? ` · repli depuis ${message.requested}`
+            : ""}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+function CompareColumn({
+  message,
+  models,
+  streaming,
+}: {
+  message: IaChatMessage | null
+  models: IaModelOption[]
+  streaming: boolean
+}) {
+  if (!message) {
+    return (
+      <div className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+        En attente du second modèle…
+      </div>
+    )
+  }
+  return (
+    <div className="min-w-0">
+      <p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground">
+        {providerLabel(message.provider ?? "google")} · {modelLabel(message.model || "", models)}
+      </p>
+      <div className="rounded-lg bg-muted/40 px-3 py-2 text-sm leading-6 whitespace-pre-wrap">
+        {message.content || (streaming ? "" : "…")}
+        {streamingOf(message, streaming) ? <Caret /> : null}
+      </div>
+    </div>
+  )
+}
+
+function Caret() {
+  return (
+    <span
+      aria-hidden
+      className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse bg-primary/80"
+    />
   )
 }
 

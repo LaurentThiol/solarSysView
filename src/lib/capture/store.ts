@@ -7,6 +7,7 @@ export type { IaChatMessage, IaProviderId } from "@/lib/ia/models"
 export const CAPTURE_PENDING_EVENT = "synchro-capture-pending"
 export const IA_PROVIDER_KEY = "synchro-ia-provider"
 export const IA_MODEL_KEY = "synchro-ia-model"
+export const IA_COMPARE_KEY = "synchro-ia-compare"
 const PENDING_KEY = "synchro-capture-pending"
 const THREADS_KEY = "synchro-ia-threads"
 const MAX_THREADS = 8
@@ -72,7 +73,7 @@ export function writeProvider(id: IaProviderId) {
   window.localStorage.setItem(IA_PROVIDER_KEY, id)
 }
 
-type StoredModels = Partial<Record<IaProviderId | "last", string>>
+type StoredModels = Partial<Record<IaProviderId | "last" | "compare", string>>
 
 export function readModels(): StoredModels {
   if (!canUseStorage()) return {}
@@ -85,6 +86,7 @@ export function readModels(): StoredModels {
     if (isModelId(parsed.google)) out.google = parsed.google
     if (isModelId(parsed.openai)) out.openai = parsed.openai
     if (isModelId(parsed.last)) out.last = parsed.last
+    if (isModelId(parsed.compare)) out.compare = parsed.compare
     return out
   } catch {
     return {}
@@ -105,6 +107,27 @@ export function writeModel(provider: IaProviderId, model: string) {
   if (!canUseStorage() || !isModelId(model)) return
   const next = { ...readModels(), [provider]: model, last: model }
   window.localStorage.setItem(IA_MODEL_KEY, JSON.stringify(next))
+}
+
+export function readCompareModel(): string | null {
+  const stored = readModels().compare
+  return isModelId(stored) ? stored : null
+}
+
+export function writeCompareModel(model: string) {
+  if (!canUseStorage() || !isModelId(model)) return
+  const next = { ...readModels(), compare: model }
+  window.localStorage.setItem(IA_MODEL_KEY, JSON.stringify(next))
+}
+
+export function readCompareOn() {
+  if (!canUseStorage()) return false
+  return window.localStorage.getItem(IA_COMPARE_KEY) === "1"
+}
+
+export function writeCompareOn(on: boolean) {
+  if (!canUseStorage()) return
+  window.localStorage.setItem(IA_COMPARE_KEY, on ? "1" : "0")
 }
 
 function slimSnapshot(snapshot: DiagnosticSnapshot): DiagnosticSnapshot {

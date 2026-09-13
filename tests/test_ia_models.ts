@@ -6,6 +6,7 @@ import {
   mergeModelOptions,
   modelSequence,
   pickAvailableModel,
+  pickCompareModel,
   providerOfModel,
   resolveRequestedModel,
   stripGeminiName,
@@ -54,4 +55,28 @@ test("non-chat OpenAI ids are rejected", () => {
   assert.equal(isOpenAiChatModel("gpt-4o-mini"), true)
   assert.equal(isOpenAiChatModel("whisper-1"), false)
   assert.equal(isOpenAiChatModel("gpt-4o-audio-preview"), false)
+})
+
+test("compare prefers the other provider, then a stored distinct model", () => {
+  const both = mergeModelOptions({
+    google: true,
+    openai: true,
+    liveGoogle: null,
+    liveOpenAI: null,
+  })
+  assert.equal(pickCompareModel(both, "gemini-2.5-flash"), "gpt-4o")
+  assert.equal(pickCompareModel(both, "gpt-4o"), "gemini-2.5-flash")
+  assert.equal(pickCompareModel(both, "gemini-2.5-flash", "gpt-5"), "gpt-5")
+  assert.equal(pickCompareModel(both, "gpt-5", "gpt-5"), "gemini-2.5-flash")
+})
+
+test("compare without the other key stays on the same catalog", () => {
+  const googleOnly = mergeModelOptions({
+    google: true,
+    openai: false,
+    liveGoogle: null,
+    liveOpenAI: null,
+  })
+  assert.equal(pickCompareModel(googleOnly, "gemini-2.5-flash"), "gemini-2.5-pro")
+  assert.equal(pickCompareModel(googleOnly, "gemini-2.5-flash", "gpt-4o"), "gemini-2.5-pro")
 })

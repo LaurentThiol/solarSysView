@@ -17,8 +17,15 @@ import {
   type IaProviderId,
 } from "@/lib/ia/models"
 import { IA_SYSTEM_PROMPT } from "@/lib/ia/prompt"
+import {
+  geminiDeltaText,
+  openaiDeltaText,
+  readSseJson,
+  type IaStreamEvent,
+} from "@/lib/ia/sse"
 
 export type { IaChatMessage, IaProviderId } from "@/lib/ia/models"
+export type { IaStreamEvent } from "@/lib/ia/sse"
 
 export type IaSnapshotPayload = {
   lab?: string
@@ -211,53 +218,140 @@ function shouldRetryStatus(status: number, raw: string) {
   return false
 }
 
+function requestSignal(external?: AbortSignal) {
+  const timeout = AbortSignal.timeout(45_000)
+  if (!external) return timeout
+  if (typeof AbortSignal.any === "function") return AbortSignal.any([external, timeout])
+  return timeout
+}
+
+type OnceOk = { ok: true; text: string }
+type OnceErr = { ok: false; error: string; retry: boolean }
+type OnceResult = OnceOk | OnceErr
+
+async function generateGeminiOnce(
+  model: string,
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  key: string,
+  signal?: AbortSignal
+): Promise<OnceResult> {
+  const packed = withOptionalImage(snapshot, model, "google")
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: IA_SYSTEM_PROMPT }] },
+        contents: geminiContents(messages, packed.snapshot),
+        generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
+      }),
+      signal: requestSignal(signal),
+    }
+  )
+  const raw = await response.text()
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: `Gemini HTTP ${response.status}${raw ? ` · ${raw.slice(0, 220)}` : ""}`,
+      retry: shouldRetryStatus(response.status, raw),
+    }
+  }
+  const data = JSON.parse(raw) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>
+    error?: { message?: string }
+  }
+  const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") ?? ""
+  if (!text.trim()) {
+    return {
+      ok: false,
+      error: data.error?.message || data.candidates?.[0]?.finishReason || "réponse vide",
+      retry: true,
+    }
+  }
+  return { ok: true, text: text.trim() }
+}
+
+async function streamGeminiOnce(
+  model: string,
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  key: string,
+  onDelta: (text: string) => void,
+  signal?: AbortSignal
+): Promise<OnceResult> {
+  const packed = withOptionalImage(snapshot, model, "google")
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: IA_SYSTEM_PROMPT }] },
+    contents: geminiContents(messages, packed.snapshot),
+    generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
+  })
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+      signal: requestSignal(signal),
+    }
+  )
+  if (!response.ok) {
+    const raw = await response.text().catch(() => "")
+    if (shouldRetryStatus(response.status, raw)) {
+      return generateGeminiOnce(model, messages, snapshot, key, signal)
+    }
+    return {
+      ok: false,
+      error: `Gemini HTTP ${response.status}${raw ? ` · ${raw.slice(0, 220)}` : ""}`,
+      retry: false,
+    }
+  }
+  let text = ""
+  try {
+    await readSseJson(
+      response,
+      (payload) => {
+        const chunk = geminiDeltaText(payload)
+        if (!chunk) return
+        text += chunk
+        onDelta(chunk)
+      },
+      signal
+    )
+  } catch (error) {
+    if (signal?.aborted) throw error
+    if (text.trim()) return { ok: true, text: text.trim() }
+    return generateGeminiOnce(model, messages, snapshot, key, signal)
+  }
+  if (!text.trim()) return generateGeminiOnce(model, messages, snapshot, key, signal)
+  return { ok: true, text: text.trim() }
+}
+
 async function completeGemini(
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
-  requested: string
+  requested: string,
+  signal?: AbortSignal
 ): Promise<IaCompleteOk | IaCompleteErr> {
   const key = googleKey()
   if (!key) return { ok: false, error: "GOOGLE_API_KEY absente (Admin)." }
   let lastError = "Gemini indisponible"
   for (const model of modelSequence("google", requested)) {
     const packed = withOptionalImage(snapshot, model, "google")
-    const bodyBase = {
-      systemInstruction: { parts: [{ text: IA_SYSTEM_PROMPT }] },
-      contents: geminiContents(messages, packed.snapshot),
-      generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
-    }
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(bodyBase),
-        signal: AbortSignal.timeout(45_000),
+    const result = await generateGeminiOnce(model, messages, snapshot, key, signal)
+    if (result.ok) {
+      return {
+        ok: true,
+        text: result.text,
+        model,
+        provider: "google",
+        requested,
+        imageOmitted: packed.imageOmitted,
       }
-    )
-    const raw = await response.text()
-    if (!response.ok) {
-      lastError = `Gemini HTTP ${response.status}${raw ? ` · ${raw.slice(0, 220)}` : ""}`
-      if (shouldRetryStatus(response.status, raw)) continue
-      return { ok: false, error: lastError }
     }
-    const data = JSON.parse(raw) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>
-      error?: { message?: string }
-    }
-    const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") ?? ""
-    if (!text.trim()) {
-      lastError = data.error?.message || data.candidates?.[0]?.finishReason || "réponse vide"
-      continue
-    }
-    return {
-      ok: true,
-      text: text.trim(),
-      model,
-      provider: "google",
-      requested,
-      imageOmitted: packed.imageOmitted,
-    }
+    lastError = result.error
+    if (!result.retry) return { ok: false, error: lastError }
   }
   return { ok: false, error: lastError }
 }
@@ -289,7 +383,12 @@ function openaiMessages(messages: IaChatMessage[], snapshot: IaSnapshotPayload |
   return out
 }
 
-function openaiPayload(model: string, messages: IaChatMessage[], snapshot: IaSnapshotPayload | null) {
+function openaiPayload(
+  model: string,
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  stream = false
+) {
   const body: Record<string, unknown> = {
     model,
     messages: openaiMessages(messages, snapshot),
@@ -300,51 +399,120 @@ function openaiPayload(model: string, messages: IaChatMessage[], snapshot: IaSna
     body.temperature = 0.3
     body.max_tokens = 4096
   }
+  if (stream) body.stream = true
   return body
+}
+
+async function generateOpenAIOnce(
+  model: string,
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  key: string,
+  signal?: AbortSignal
+): Promise<OnceResult> {
+  const packed = withOptionalImage(snapshot, model, "openai")
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify(openaiPayload(model, messages, packed.snapshot)),
+    signal: requestSignal(signal),
+  })
+  const raw = await response.text()
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: `OpenAI HTTP ${response.status}${raw ? ` · ${raw.slice(0, 220)}` : ""}`,
+      retry: shouldRetryStatus(response.status, raw),
+    }
+  }
+  const data = JSON.parse(raw) as {
+    choices?: Array<{ message?: { content?: string } }>
+    error?: { message?: string }
+  }
+  const text = data.choices?.[0]?.message?.content?.trim() || ""
+  if (!text) {
+    return { ok: false, error: data.error?.message || "réponse vide", retry: true }
+  }
+  return { ok: true, text }
+}
+
+async function streamOpenAIOnce(
+  model: string,
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  key: string,
+  onDelta: (text: string) => void,
+  signal?: AbortSignal
+): Promise<OnceResult> {
+  const packed = withOptionalImage(snapshot, model, "openai")
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify(openaiPayload(model, messages, packed.snapshot, true)),
+    signal: requestSignal(signal),
+  })
+  if (!response.ok) {
+    const raw = await response.text().catch(() => "")
+    if (shouldRetryStatus(response.status, raw)) {
+      return generateOpenAIOnce(model, messages, snapshot, key, signal)
+    }
+    return {
+      ok: false,
+      error: `OpenAI HTTP ${response.status}${raw ? ` · ${raw.slice(0, 220)}` : ""}`,
+      retry: false,
+    }
+  }
+  let text = ""
+  try {
+    await readSseJson(
+      response,
+      (payload) => {
+        const chunk = openaiDeltaText(payload)
+        if (!chunk) return
+        text += chunk
+        onDelta(chunk)
+      },
+      signal
+    )
+  } catch (error) {
+    if (signal?.aborted) throw error
+    if (text.trim()) return { ok: true, text: text.trim() }
+    return generateOpenAIOnce(model, messages, snapshot, key, signal)
+  }
+  if (!text.trim()) return generateOpenAIOnce(model, messages, snapshot, key, signal)
+  return { ok: true, text: text.trim() }
 }
 
 async function completeOpenAI(
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
-  requested: string
+  requested: string,
+  signal?: AbortSignal
 ): Promise<IaCompleteOk | IaCompleteErr> {
   const key = openaiKey()
   if (!key) return { ok: false, error: "OPENAI_API_KEY absente (Admin)." }
   let lastError = "OpenAI indisponible"
   for (const model of modelSequence("openai", requested)) {
     const packed = withOptionalImage(snapshot, model, "openai")
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify(openaiPayload(model, messages, packed.snapshot)),
-      signal: AbortSignal.timeout(45_000),
-    })
-    const raw = await response.text()
-    if (!response.ok) {
-      lastError = `OpenAI HTTP ${response.status}${raw ? ` · ${raw.slice(0, 220)}` : ""}`
-      if (shouldRetryStatus(response.status, raw)) continue
-      return { ok: false, error: lastError }
+    const result = await generateOpenAIOnce(model, messages, snapshot, key, signal)
+    if (result.ok) {
+      return {
+        ok: true,
+        text: result.text,
+        model,
+        provider: "openai",
+        requested,
+        imageOmitted: packed.imageOmitted,
+      }
     }
-    const data = JSON.parse(raw) as {
-      choices?: Array<{ message?: { content?: string } }>
-      error?: { message?: string }
-    }
-    const text = data.choices?.[0]?.message?.content?.trim() || ""
-    if (!text) {
-      lastError = data.error?.message || "réponse vide"
-      continue
-    }
-    return {
-      ok: true,
-      text,
-      model,
-      provider: "openai",
-      requested,
-      imageOmitted: packed.imageOmitted,
-    }
+    lastError = result.error
+    if (!result.retry) return { ok: false, error: lastError }
   }
   return { ok: false, error: lastError }
 }
@@ -354,13 +522,106 @@ export async function completeIa(options: {
   model?: string | null
   messages: IaChatMessage[]
   snapshot?: IaSnapshotPayload | null
+  signal?: AbortSignal
 }): Promise<IaCompleteOk | IaCompleteErr> {
   const requested = resolveRequestedModel(options.provider, options.model)
   if (!requested) {
     return { ok: false, error: "Aucun modèle pour ce fournisseur." }
   }
   if (options.provider === "google") {
-    return completeGemini(options.messages, options.snapshot ?? null, requested)
+    return completeGemini(options.messages, options.snapshot ?? null, requested, options.signal)
   }
-  return completeOpenAI(options.messages, options.snapshot ?? null, requested)
+  return completeOpenAI(options.messages, options.snapshot ?? null, requested, options.signal)
+}
+
+export async function streamIa(
+  options: {
+    provider: IaProviderId
+    model?: string | null
+    messages: IaChatMessage[]
+    snapshot?: IaSnapshotPayload | null
+    signal?: AbortSignal
+  },
+  onEvent: (event: IaStreamEvent) => void
+): Promise<IaCompleteOk | IaCompleteErr> {
+  const requested = resolveRequestedModel(options.provider, options.model)
+  if (!requested) {
+    const error = "Aucun modèle pour ce fournisseur."
+    onEvent({ type: "error", error })
+    return { ok: false, error }
+  }
+  const snapshot = options.snapshot ?? null
+  const key = options.provider === "google" ? googleKey() : openaiKey()
+  if (!key) {
+    const error =
+      options.provider === "google" ? "GOOGLE_API_KEY absente (Admin)." : "OPENAI_API_KEY absente (Admin)."
+    onEvent({ type: "error", error })
+    return { ok: false, error }
+  }
+  let lastError = "IA indisponible"
+  for (const model of modelSequence(options.provider, requested)) {
+    const packed = withOptionalImage(snapshot, model, options.provider)
+    let emitted = false
+    const onDelta = (chunk: string) => {
+      if (!emitted) {
+        emitted = true
+        onEvent({
+          type: "meta",
+          model,
+          provider: options.provider,
+          requested,
+          imageOmitted: packed.imageOmitted,
+        })
+      }
+      onEvent({ type: "delta", text: chunk })
+    }
+    try {
+      const result =
+        options.provider === "google"
+          ? await streamGeminiOnce(model, options.messages, snapshot, key, onDelta, options.signal)
+          : await streamOpenAIOnce(model, options.messages, snapshot, key, onDelta, options.signal)
+      if (result.ok) {
+        if (!emitted) {
+          onEvent({
+            type: "meta",
+            model,
+            provider: options.provider,
+            requested,
+            imageOmitted: packed.imageOmitted,
+          })
+          onEvent({ type: "delta", text: result.text })
+        }
+        onEvent({
+          type: "done",
+          text: result.text,
+          model,
+          provider: options.provider,
+          requested,
+          imageOmitted: packed.imageOmitted,
+        })
+        return {
+          ok: true,
+          text: result.text,
+          model,
+          provider: options.provider,
+          requested,
+          imageOmitted: packed.imageOmitted,
+        }
+      }
+      lastError = result.error
+      if (emitted || !result.retry) {
+        onEvent({ type: "error", error: lastError })
+        return { ok: false, error: lastError }
+      }
+    } catch (error) {
+      if (options.signal?.aborted) throw error
+      lastError = error instanceof Error ? error.message : "échec IA"
+      if (emitted) {
+        onEvent({ type: "error", error: lastError })
+        return { ok: false, error: lastError }
+      }
+    }
+  }
+  onEvent({ type: "error", error: lastError })
+  return { ok: false, error: lastError }
 }

@@ -164,7 +164,7 @@ Sans Neon, Harmo lit l’archive JSON embarquée (`src/data/euromillions-2026.js
 
 ## IA (`/ia`)
 
-Lecture d’une capture (visuel + données de fenêtre). L’onglet propose **Gemini** et **OpenAI**, puis un **choix de modèle** : un catalogue recommandé pour la lecture d’écran, plus les modèles de chat visibles sur tes clés. Le modèle réellement utilisé s’affiche sous la réponse ; un aperçu introuvable replie vers le catalogue. Les clés sont dans Admin. L’assistant décrit l’archive, il ne pronostique pas.
+Lecture d’une capture (visuel + données de fenêtre). L’onglet propose **Gemini** et **OpenAI**, puis un **choix de modèle** : un catalogue recommandé pour la lecture d’écran, plus les modèles de chat visibles sur tes clés. La réponse **s’écrit en flux**. **Comparer** envoie le même pack à deux modèles (Flash contre Pro, ou Gemini contre OpenAI) — utile en Chartisme / Harmo. Le modèle réellement utilisé s’affiche sous la réponse ; un aperçu introuvable replie vers le catalogue, sauf si des jetons ont déjà commencé. Les clés sont dans Admin. L’assistant décrit l’archive, il ne pronostique pas.
 
 ## Admin (`/admin`)
 

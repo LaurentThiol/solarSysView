@@ -2,12 +2,16 @@ export type IaProviderId = "google" | "openai"
 
 export type IaModelTier = "fast" | "balanced" | "precise"
 
+export type IaMessageLane = "a" | "b"
+
 export type IaChatMessage = {
   role: "user" | "assistant"
   content: string
   model?: string
   provider?: IaProviderId
   requested?: string
+  lane?: IaMessageLane
+  pairId?: string
 }
 
 export type IaModelDef = {
@@ -283,4 +287,27 @@ export function pickAvailableModel(
   if (!available.length) return null
   if (stored && available.some((item) => item.id === stored)) return stored
   return available.find((item) => item.preferred)?.id ?? available[0].id
+}
+
+export function pickCompareModel(
+  models: IaModelOption[],
+  primary: string | null,
+  stored?: string | null
+) {
+  const others = models.filter((item) => item.id !== primary)
+  const usable = others.filter((item) => item.available)
+  const pool = usable.length ? usable : others
+  if (!pool.length) return null
+  if (stored && stored !== primary && pool.some((item) => item.id === stored)) return stored
+  const primaryProvider = primary ? providerOfModel(primary) : null
+  const otherProvider: IaProviderId | null =
+    primaryProvider === "google" ? "openai" : primaryProvider === "openai" ? "google" : null
+  const otherPreferred = otherProvider
+    ? pool.find((item) => item.provider === otherProvider && item.preferred) ??
+      pool.find((item) => item.provider === otherProvider)
+    : null
+  if (otherPreferred) return otherPreferred.id
+  const precise = pool.find((item) => item.tier === "precise")
+  if (precise) return precise.id
+  return pool[0]?.id ?? null
 }
