@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
     "Tous les tirages EuroMillions 2026, filtrables par mois et par numéros, avec export CSV.",
 }
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="fr"

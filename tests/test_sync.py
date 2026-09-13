@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
+import sys
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -206,9 +208,12 @@ def test_launch_ensure_parser_survives_set_e_pipefail() -> None:
         "expected_draw_date": "2026-09-01",
         "latest": {"draw_date": "2026-08-28"},
     }
+    # Same interpreter as pytest / ./launch (.venv), not system python3
+    # which typically lacks psycopg even when PYTHONPATH points at the repo.
+    py = shlex.quote(sys.executable)
     script = r"""
 set -euo pipefail
-python3 -c '
+%s -c '
 from synchro.sync import format_ensure_messages
 import json, sys
 raw = sys.stdin.read()
@@ -219,7 +224,7 @@ for kind, msg in format_ensure_messages(data):
 %s
 JSON
 echo SURVIVED
-""" % json.dumps(payload)
+""" % (py, json.dumps(payload))
     result = subprocess.run(
         ["bash", "-c", script],
         cwd=root,
