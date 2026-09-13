@@ -231,10 +231,10 @@ export type BaseRateThreshold = {
  * il n'en reste au plus que p·N.
  *
  * L'intérêt du renversement est qu'un seuil de confiance ne veut pas dire la
- * même chose d'une courbe à l'autre ni d'une échelle à l'autre — 0.6 laisse
- * passer presque tout le bruit sur « paires consécutives » et un peu plus de la
- * moitié sur la somme. Une rareté visée, elle, dit la même chose partout : c'est
- * le seul réglage de l'onglet qui se compare.
+ * même chose d'une courbe à l'autre ni d'une échelle à l'autre — à l'échelle 60,
+ * 0.60 laisse passer tout le bruit sur « paires consécutives » et les deux tiers
+ * sur la somme. Une rareté visée, elle, dit la même chose partout : c'est le seul
+ * réglage de l'onglet qui se compare.
  */
 export function thresholdForBaseRate(
   sample: BaseRateSample,
@@ -293,7 +293,7 @@ export function rarityNote(
     target > 0 ? Math.round(1 / target) : 1
   } — ${parts}. Le bruit est fait des mêmes tirages remis dans un ordre quelconque, ${trials} fois par échelle, et l'obtenu s'écarte de la cible parce qu'un seuil ne se règle qu'au centième. C'est le seul réglage de l'onglet qui dise la même chose partout : à ${pct(
     target
-  )}, une figure sur la somme et une figure sur « paires consécutives » sont également peu banales, là où un seuil de 0.60 les laissait passer l'une à moitié et l'autre presque toutes.`
+  )}, une figure sur la somme et une figure sur « paires consécutives » sont également peu banales, là où un seuil de 0.60 laissait passer les deux tiers du bruit de l'une et la totalité de celui de l'autre.`
   if (reachable.length === measured.length) return note
   const lost = measured.length - reachable.length
   return `${note} ${

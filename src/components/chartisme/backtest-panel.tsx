@@ -123,6 +123,11 @@ export function BacktestPanel({
   // affichée : le comptage des objectifs atteints ne demande aucun modèle.
   const local = useMemo(() => outcomeStats(hits), [hits])
 
+  // Le tracé lu en rareté visée peut n'avoir gardé aucune échelle. Mesurer
+  // quand même reviendrait à retomber sur les échelles et le seuil par défaut,
+  // c'est-à-dire à rétro-tester une lecture que personne n'a faite.
+  const nothingToRead = Boolean(bar?.byScale) && scales.length === 0
+
   async function run() {
     setRunning(true)
     setError(null)
@@ -253,10 +258,18 @@ export function BacktestPanel({
               onChange={(event) => setMaxCurves(Number(event.target.value))}
             />
           </LabelHelp>
-          <Button size="sm" onClick={() => void run()} disabled={running}>
+          <Button size="sm" onClick={() => void run()} disabled={running || nothingToRead}>
             {running ? "Mesure en cours…" : "Lancer le rétro-test"}
           </Button>
         </div>
+
+        {nothingToRead ? (
+          <p className="text-xs text-muted-foreground">
+            Aucune échelle n’atteint la rareté visée sur cette courbe : le tracé ne montre rien,
+            et le rétro-test ne mesurerait donc pas ce qu’on a sous les yeux. Vise plus large, ou
+            change de courbe.
+          </p>
+        ) : null}
 
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
 

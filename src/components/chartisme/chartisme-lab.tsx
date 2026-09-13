@@ -572,7 +572,7 @@ export function ChartismeLab() {
               label="Seuil de sélection"
               help={{
                 title: "Seuil de sélection",
-                body: `Deux façons de décider quelle figure mérite d'être montrée. « Confiance » pose un nombre : la qualité de l'ajustement géométrique, pénalisée quand une borne repose sur moins de trois points. Elle ne dit pas si la figure est rare, et surtout elle ne dit pas la même chose d'une courbe à l'autre — à 0.60, presque toutes les fenêtres de bruit portent déjà une figure sur « paires consécutives », un peu plus de la moitié sur la somme. « Rareté visée » renverse le réglage : on donne la part de fenêtres de bruit qu'on accepte de voir porter une figure, et l'onglet cherche sur cette courbe-ci le seuil qui l'obtient, échelle par échelle. C'est le seul réglage de l'onglet qui signifie la même chose partout. Quand aucun seuil lisible n'atteint la cible — au-delà de ${MAX_THRESHOLD.toFixed(
+                body: `Deux façons de décider quelle figure mérite d'être montrée. « Confiance » pose un nombre : la qualité de l'ajustement géométrique, pénalisée quand une borne repose sur moins de trois points. Elle ne dit pas si la figure est rare, et surtout elle ne dit pas la même chose d'une courbe à l'autre — à l'échelle 60 et au seuil 0.60, toutes les fenêtres de bruit de « paires consécutives » portent déjà une figure, contre les deux tiers pour la somme. « Rareté visée » renverse le réglage : on donne la part de fenêtres de bruit qu'on accepte de voir porter une figure, et l'onglet cherche sur cette courbe-ci le seuil qui l'obtient, échelle par échelle. C'est le seul réglage de l'onglet qui signifie la même chose partout. Quand aucun seuil lisible n'atteint la cible — au-delà de ${MAX_THRESHOLD.toFixed(
                   2
                 )} un seuil rejette le bruit et la figure ensemble — l'échelle est écartée du balayage plutôt que lue faute de mieux.`,
               }}
@@ -615,7 +615,7 @@ export function ChartismeLab() {
                 label={`Confiance minimale · ${minConfidence.toFixed(2)}`}
                 help={{
                   title: "Confiance minimale",
-                  body: "La confiance mesure la qualité de l'ajustement géométrique, pénalisée quand une borne repose sur moins de trois points. Elle ne dit pas si la figure est rare : c'est le taux de base mesuré sous le tracé qui le dit, et il dépend de la courbe autant que de l'échelle. Sur « paires consécutives » presque toutes les fenêtres de bruit portent déjà une figure à 0.6 ; sur la somme, un peu plus de la moitié. Une figure fréquente sur du bruit n'apprend rien — c'est ce que le mode « rareté visée » évite d'avoir à vérifier après coup.",
+                  body: "La confiance mesure la qualité de l'ajustement géométrique, pénalisée quand une borne repose sur moins de trois points. Elle ne dit pas si la figure est rare : c'est le taux de base mesuré sous le tracé qui le dit, et il dépend de la courbe autant que de l'échelle. À l'échelle 60 et à 0.60, toutes les fenêtres de bruit de « paires consécutives » portent déjà une figure ; sur la somme, les deux tiers. Une figure fréquente sur du bruit n'apprend rien — c'est ce que le mode « rareté visée » évite d'avoir à vérifier après coup.",
                 }}
               >
                 <Input

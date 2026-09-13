@@ -58,9 +58,13 @@ type Row = {
   /**
    * Part des fenêtres de bruit porteuses au seuil qui servait de réglage par
    * défaut. C'est la colonne qui montre le problème plutôt que de l'énoncer : à
-   * 0.60, presque toutes les fenêtres de bruit portent une figure sur certaines
-   * courbes et un peu plus de la moitié sur d'autres — le même nombre, deux
-   * degrés de rareté.
+   * 0.60, toutes les fenêtres de bruit portent une figure sur certaines courbes
+   * et les deux tiers sur d'autres — le même nombre, deux degrés de rareté.
+   *
+   * Elle ne suffit pourtant pas à classer : le bruit à un seuil donné dit la
+   * fréquence, pas la forme de la distribution. Une courbe peut être bruyante à
+   * 0.60 et se laisser trier plus haut, une autre discrète à 0.60 et n'être
+   * triable à aucun seuil — c'est ce que la colonne suivante mesure.
    */
   noise: number
   /** Figures réelles qui survivent à ce seuil dans la fenêtre étudiée. */
@@ -92,11 +96,16 @@ export function CurveMap({
 }) {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [measuredKey, setMeasuredKey] = useState<string | null>(null)
+  const [measuredAt, setMeasuredAt] = useState(0)
   const [progress, setProgress] = useState<number | null>(null)
   const [onlyCarrying, setOnlyCarrying] = useState(false)
+  // `null` suit la plus longue échelle balayée plutôt que d'en figer une : la
+  // fenêtre d'étude peut changer d'échelles sous la carte.
+  const [chosen, setChosen] = useState<number | null>(null)
   const cancelled = useRef(false)
 
-  const length = scales.length ? Math.max(...scales) : 0
+  const longest = scales.length ? Math.max(...scales) : 0
+  const length = chosen !== null && scales.includes(chosen) ? chosen : longest
 
   const measure = useCallback(async () => {
     if (!draws.length || !length) return
@@ -140,11 +149,12 @@ export function CurveMap({
     // le moins cher à rendre significative. Les hors d'atteinte ferment la liste.
     found.sort((a, b) => a.required - b.required || (b.figures ?? -1) - (a.figures ?? -1))
     setRows(found)
-    setMeasuredKey(stateKey)
+    setMeasuredAt(length)
+    setMeasuredKey(`${stateKey}|${length}`)
     setProgress(null)
   }, [contextCount, draws, length, specs, stateKey, target])
 
-  const stale = rows !== null && measuredKey !== stateKey
+  const stale = rows !== null && measuredKey !== `${stateKey}|${length}`
   const reachable = rows?.filter((row) => row.threshold !== null) ?? []
   const carrying = reachable.filter((row) => (row.figures ?? 0) > 0)
   const shown = onlyCarrying ? carrying : rows ?? []
@@ -156,9 +166,9 @@ export function CurveMap({
           <TitleHelp
             help={{
               title: "Carte des courbes",
-              body: `Le taux de base répond avant le tracé : sur une courbe où presque toutes les fenêtres de bruit portent une figure, aucun seuil atteignable ne sépare l'observation du hasard. La carte mesure les ${specs.length} courbes une fois et les classe par le seuil qu'il leur faudrait pour tenir la rareté visée. Le bruit est fait des mêmes tirages remis dans un ordre quelconque, ${TRIALS} fois par courbe, à l'échelle la plus longue balayée — la moins flatteuse, puisqu'une fenêtre longue offre plus de pivots donc plus d'occasions qu'une figure s'ajuste. « Hors d'atteinte » signifie qu'il faudrait dépasser ${MAX_THRESHOLD.toFixed(
+              body: `Le taux de base répond avant le tracé : sur certaines courbes, aucun seuil atteignable ne sépare l'observation du hasard, et l'onglet ne le disait qu'après coup, une fois la courbe choisie. La carte mesure les ${specs.length} courbes une fois et les classe par le seuil qu'il leur faudrait pour tenir la rareté visée. Le bruit est fait des mêmes tirages remis dans un ordre quelconque, ${TRIALS} fois par courbe. « Hors d'atteinte » signifie qu'il faudrait dépasser ${MAX_THRESHOLD.toFixed(
                 2
-              )}, où un seuil rejette le bruit et la figure ensemble. Rien n'est écarté : une courbe illisible pour ses figures peut se regarder pour autre chose.`,
+              )}, où un seuil rejette le bruit et la figure ensemble. Le verdict vaut pour une échelle et non pour la courbe entière : une même courbe peut se laisser trier à une échelle et pas à la voisine, aussi l'échelle mesurée se choisit-elle. Rien n'est écarté : une courbe illisible pour ses figures peut se regarder pour autre chose.`,
             }}
           >
             Carte des courbes — où une figure veut dire quelque chose
@@ -185,6 +195,30 @@ export function CurveMap({
                 {TARGETS.map((value) => (
                   <SelectItem key={value} value={String(value)}>
                     {Math.round(value * 100)} %
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </LabelHelp>
+
+          <LabelHelp
+            label="Échelle mesurée"
+            help={{
+              title: "Échelle mesurée",
+              body: "Le bruit d'une courbe dépend de l'échelle, et pas toujours dans le sens attendu : le retard d'une boule se laisse trier à l'échelle 30, plus du tout à 60 — ses rampes rectilignes y forment des canaux de tendance parfaits, où la confiance frôle 1 sans rien mesurer. Une seule échelle est mesurée pour que la carte reste tenable dans le navigateur ; c'est aussi elle qui sert au décompte des figures réelles.",
+            }}
+          >
+            <Select
+              value={String(length)}
+              onValueChange={(v) => setChosen(Number(v ?? length))}
+            >
+              <SelectTrigger className="w-32" aria-label="Échelle mesurée">
+                <span className="flex flex-1 text-left">{length || "—"}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {scales.map((value) => (
+                  <SelectItem key={value} value={String(value)}>
+                    {value} tirages
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -232,10 +266,11 @@ export function CurveMap({
           <>
             <p className="text-sm text-muted-foreground">
               {reachable.length} courbe{reachable.length > 1 ? "s" : ""} sur {rows.length}{" "}
-              atteignent {Math.round(target * 100)} % à l’échelle {length}, dont{" "}
+              atteignent {Math.round(target * 100)} % à l’échelle {measuredAt}, dont{" "}
               {carrying.length} porte{carrying.length > 1 ? "nt" : ""} au moins une figure dans
               cette fenêtre. Les {rows.length - reachable.length} autres sont trop bruitées pour
-              qu’un seuil lisible y sépare une figure du hasard.
+              qu’un seuil lisible y sépare une figure du hasard — à cette échelle, car une courbe
+              hors d’atteinte ici peut se laisser trier à une autre.
               {stale
                 ? " Mesure faite sur d’autres réglages — la fenêtre, l’échelle ou la rareté ont changé depuis."
                 : ""}
