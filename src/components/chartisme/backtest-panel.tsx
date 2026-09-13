@@ -162,6 +162,9 @@ export function BacktestPanel({
     const width = row.wilson[1] - row.wilson[0]
     return worst == null || width > worst ? width : worst
   }, null)
+  const found = report?.figure_count ?? 0
+  const curves = report?.curve_count ?? 0
+  const figures = `${found} figure${found > 1 ? "s" : ""} sur ${curves} courbe${curves > 1 ? "s" : ""}`
 
   return (
     <Card>
@@ -233,8 +236,8 @@ export function BacktestPanel({
         {report?.window ? (
           <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
             {report.window.bounded
-              ? `Mesuré du ${report.window.from} au ${report.window.to} · ${report.window.draw_count} tirages, ${report.window.context} en contexte · échelles ${(report.window.scales ?? []).join(" · ")} · ${report.figure_count ?? 0} figures sur ${report.curve_count ?? 0} courbes.`
-              : `Mesuré sur toute l’archive · ${report.figure_count ?? 0} figures sur ${report.curve_count ?? 0} courbes. Cette étendue suppose un régime unique sur toute la période.`}
+              ? `Mesuré du ${report.window.from} au ${report.window.to} · ${report.window.draw_count} tirages, ${report.window.context} en contexte · échelles ${(report.window.scales ?? []).join(" · ")} · ${figures}.`
+              : `Mesuré sur toute l’archive · ${figures}. Cette étendue suppose un régime unique sur toute la période.`}
             {settled != null
               ? ` ${settled} cassure${settled > 1 ? "s" : ""} réglée${settled > 1 ? "s" : ""} portent le verdict${
                   widest == null
