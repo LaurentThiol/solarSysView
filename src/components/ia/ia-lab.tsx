@@ -19,6 +19,7 @@ import {
   CAPTURE_PENDING_EVENT,
   clearPending,
   readPending,
+  readLastModel,
   readModel,
   readProvider,
   readThreads,
@@ -119,7 +120,7 @@ export function IaLab() {
           setModel(pickAvailableModel(payload.models ?? [], nextProvider, readModel(nextProvider)))
         } else {
           setModel(
-            readModel("google") || readModel("openai") || preferredModel("google")
+            readLastModel() || preferredModel("google")
           )
         }
       } catch {
@@ -320,7 +321,7 @@ export function IaLab() {
   }
 
   function selectModel(id: string | null) {
-    if (!id) return
+    if (!id || id === model) return
     const owner = provider ?? providerOfModel(id)
     if (!owner) return
     setModel(id)

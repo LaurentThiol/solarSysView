@@ -72,7 +72,7 @@ export function writeProvider(id: IaProviderId) {
   window.localStorage.setItem(IA_PROVIDER_KEY, id)
 }
 
-type StoredModels = Partial<Record<IaProviderId, string>>
+type StoredModels = Partial<Record<IaProviderId | "last", string>>
 
 export function readModels(): StoredModels {
   if (!canUseStorage()) return {}
@@ -84,6 +84,7 @@ export function readModels(): StoredModels {
     const out: StoredModels = {}
     if (isModelId(parsed.google)) out.google = parsed.google
     if (isModelId(parsed.openai)) out.openai = parsed.openai
+    if (isModelId(parsed.last)) out.last = parsed.last
     return out
   } catch {
     return {}
@@ -94,9 +95,15 @@ export function readModel(provider: IaProviderId): string | null {
   return readModels()[provider] ?? null
 }
 
+export function readLastModel(): string | null {
+  const stored = readModels()
+  if (isModelId(stored.last)) return stored.last
+  return stored.google || stored.openai || null
+}
+
 export function writeModel(provider: IaProviderId, model: string) {
   if (!canUseStorage() || !isModelId(model)) return
-  const next = { ...readModels(), [provider]: model }
+  const next = { ...readModels(), [provider]: model, last: model }
   window.localStorage.setItem(IA_MODEL_KEY, JSON.stringify(next))
 }
 
