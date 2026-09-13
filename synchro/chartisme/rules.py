@@ -31,6 +31,8 @@ BREAKOUT_STATES = ("any", "confirmed", "fake", "pending")
 DIRECTIONS = ("any", "up", "down")
 TRENDS = ("any", "up", "down", "range")
 KINDS = ("reversal_down", "reversal_up", "continuation", "range")
+#: « peu importe » · « en même temps qu'une figure sur … » · « et pas sur … ».
+ALONGSIDE_MODES = ("any", "with", "without")
 
 
 def _clean_list(raw: Any, allowed: Sequence[str] | None = None) -> list[str]:
@@ -60,6 +62,15 @@ def _one_of(raw: Any, allowed: Sequence[str], default: str) -> str:
 
 
 def normalize_condition(raw: dict[str, Any] | None) -> dict[str, Any]:
+    """Condition complète, champs manquants remplis par leur neutre.
+
+    `alongside` demande la simultanéité avec une figure d'une autre courbe. Les
+    rangs d'un tirage sont liés par construction : `n1` bas pousse les autres
+    vers le haut, si bien qu'une figure haussière sur `n5` au même moment qu'une
+    baissière sur `n1` peut n'être qu'un seul fait — l'étalement du tirage —
+    compté deux fois. `with` ne retient que les paires, `without` que les figures
+    qui ne sont pas le reflet d'une voisine.
+    """
     src = raw or {}
     return {
         # `figures` exige toutes les figures citées, `any_figures` au moins une.
@@ -74,6 +85,14 @@ def normalize_condition(raw: dict[str, Any] | None) -> dict[str, Any]:
         "trend": _one_of(src.get("trend"), TRENDS, "any"),
         "weekday": (str(src.get("weekday") or "").strip().lower() or None),
         "min_activity_ratio": _optional_float(src.get("min_activity_ratio")),
+        "alongside": _one_of(src.get("alongside"), ALONGSIDE_MODES, "any"),
+        "alongside_curve": (str(src.get("alongside_curve") or "").strip() or None),
+        "alongside_figure": (str(src.get("alongside_figure") or "").strip() or None),
+        "alongside_direction": _one_of(src.get("alongside_direction"), DIRECTIONS, "any"),
+        # Tolérance en tirages autour du chevauchement : 0 exige que les deux
+        # fenêtres se croisent. Un cycle transitoire ne frappe pas toutes les
+        # courbes le même jour.
+        "alongside_within": max(0, int(_optional_float(src.get("alongside_within")) or 0)),
     }
 
 
@@ -146,7 +165,64 @@ def match_condition(condition: dict[str, Any], state: dict[str, Any]) -> bool:
         ratio = state.get("activity_ratio")
         if ratio is None or float(ratio) < cond["min_activity_ratio"]:
             return False
+    if cond["alongside"] != "any":
+        # Aucune autre courbe balayée : la condition n'est pas fausse, elle est
+        # sans objet. La déclarer satisfaite ferait tirer la règle sur un silence.
+        if state.get("alongside") is None:
+            return False
+        found = bool(_alongside_matches(cond, state))
+        if not found if cond["alongside"] == "with" else found:
+            return False
     return True
+
+
+def _overlaps(state: dict[str, Any], other: dict[str, Any], within: int) -> bool:
+    """Deux fenêtres de figure se croisent-elles, `within` tirages de tolérance ?
+
+    Le recouvrement se mesure sur les indices de tirage, pas sur les dates : deux
+    courbes du même balayage partagent la même grille de tirages, et une date ne
+    dit pas combien de tirages séparent deux figures.
+    """
+    here_from = int(state.get("from_index") or 0)
+    here_to = int(state.get("to_index") or 0)
+    there_from = int(other.get("from_index") or 0)
+    there_to = int(other.get("to_index") or 0)
+    return there_from - within <= here_to and there_to + within >= here_from
+
+
+def _alongside_matches(cond: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Les figures voisines retenues par la condition, la courbe lue exclue."""
+    here = str(state.get("curve_id") or "")
+    out: list[dict[str, Any]] = []
+    for other in state.get("alongside") or []:
+        if str(other.get("curve_id") or "") == here:
+            continue
+        if cond["alongside_curve"] and str(other.get("curve_id") or "") != cond["alongside_curve"]:
+            continue
+        if cond["alongside_figure"] and str(other.get("figure") or "") != cond["alongside_figure"]:
+            continue
+        if (
+            cond["alongside_direction"] != "any"
+            and str(other.get("direction") or "") != cond["alongside_direction"]
+        ):
+            continue
+        if _overlaps(state, other, cond["alongside_within"]):
+            out.append(other)
+    return out
+
+
+def alongside_index(hits: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Les figures d'un balayage, réduites à ce qu'une condition de simultanéité lit."""
+    return [
+        {
+            "curve_id": str(hit.get("curve_id") or ""),
+            "figure": str(hit.get("figure") or ""),
+            "direction": (hit.get("breakout") or {}).get("direction"),
+            "from_index": int(hit.get("from_index") or 0),
+            "to_index": int(hit.get("to_index") or 0),
+        }
+        for hit in hits
+    ]
 
 
 def state_from_hit(
@@ -155,8 +231,15 @@ def state_from_hit(
     curve: dict[str, Any] | None = None,
     trend: str | None = None,
     weekday: str | None = None,
+    alongside: Sequence[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Figure détectée → état interrogeable par les règles."""
+    """Figure détectée → état interrogeable par les règles.
+
+    `alongside` absent et vide ne disent pas la même chose : `None` veut dire
+    qu'aucune autre courbe n'a été balayée, et une condition de simultanéité ne
+    peut alors rien affirmer. Une liste vide veut dire qu'on a cherché sans
+    trouver.
+    """
     breakout = hit.get("breakout") or {}
     return {
         "figure": hit.get("figure"),
@@ -178,6 +261,7 @@ def state_from_hit(
         "to_index": hit.get("to_index"),
         "target": hit.get("target"),
         "detector": hit.get("detector"),
+        "alongside": None if alongside is None else list(alongside),
     }
 
 
@@ -212,14 +296,21 @@ def evaluate_all(
     curves: dict[str, dict[str, Any]] | None = None,
     trends: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Le journal complet sur un balayage d'archive."""
+    """Le journal complet sur un balayage d'archive.
+
+    Toutes les figures du balayage servent de voisinage les unes aux autres :
+    c'est le seul endroit où plusieurs courbes sont lues d'un coup, donc le seul
+    où une condition de simultanéité a de quoi répondre.
+    """
     out: list[dict[str, Any]] = []
+    alongside = alongside_index(hits)
     for hit in hits:
         curve_id = str(hit.get("curve_id") or "")
         state = state_from_hit(
             hit,
             curve=(curves or {}).get(curve_id),
             trend=(trends or {}).get(curve_id),
+            alongside=alongside,
         )
         out.extend(evaluate_rules(rules, state))
     return out
@@ -288,6 +379,23 @@ def describe_condition(condition: dict[str, Any]) -> str:
         parts.append(f"tirage du {cond['weekday']}")
     if cond["min_activity_ratio"] is not None:
         parts.append(f"activité ≥ {cond['min_activity_ratio']:.1f}× la MM20")
+    if cond["alongside"] != "any":
+        what = " ".join(
+            bit
+            for bit in (
+                label_of(cond["alongside_figure"]) if cond["alongside_figure"] else "une figure",
+                {"up": "haussière", "down": "baissière"}.get(cond["alongside_direction"], ""),
+                f"sur {cond['alongside_curve'] or 'une autre courbe'}",
+                (
+                    f"à {cond['alongside_within']} tirages près"
+                    if cond["alongside_within"]
+                    else ""
+                ),
+            )
+            if bit
+        )
+        lead = "en même temps que" if cond["alongside"] == "with" else "sans"
+        parts.append(f"{lead} {what}")
     return "QUAND " + (" ∧ ".join(parts) if parts else "toute figure")
 
 

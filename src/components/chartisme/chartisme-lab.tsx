@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { BacktestPanel } from "@/components/chartisme/backtest-panel"
 import { CurveCanvas, type CurveSelection } from "@/components/chartisme/curve-canvas"
@@ -22,7 +22,12 @@ import {
 import { baseRateAbove, baseRateNote, sampleBaseRate } from "@/lib/chartisme/base-rate"
 import { buildCurve, curveLabel, curveSpecs, type Curve } from "@/lib/chartisme/curves"
 import { collapseZones, scanCurve, sortByRank, type ScanHit } from "@/lib/chartisme/scan"
-import { stateFromHit } from "@/lib/chartisme/rules"
+import {
+  alongsideIndex,
+  stateFromHit,
+  type AlongsideFigure,
+  type ChartismeRule,
+} from "@/lib/chartisme/rules"
 import { loadRules, recordFirings } from "@/lib/chartisme/store"
 import { evaluateRules } from "@/lib/chartisme/rules"
 import {
@@ -219,14 +224,55 @@ export function ChartismeLab() {
     return Object.entries(counts).sort((a, b) => b[1] - a[1])
   }, [hits])
 
+  /**
+   * Les courbes citées par une condition de simultanéité, balayées comme celle
+   * affichée : mêmes échelles, même fenêtre, même seuil.
+   *
+   * Sans ce balayage la condition n'aurait rien à interroger, et une règle qui
+   * exige une voisine ne tirerait jamais — ce qui ressemble à un résultat.
+   *
+   * Seules les courbes nommées sont balayées, celle affichée exclue. L'onglet ne
+   * peut pas balayer les 142 à chaque évaluation, aussi l'éditeur exige-t-il une
+   * courbe : une condition qui ne nommerait personne resterait sans réponse.
+   *
+   * `undefined` quand aucune règle ne demande de voisine, ce qui n'est pas la
+   * même chose qu'une liste vide — le moteur refuse de trancher sur un silence.
+   */
+  const alongsideFor = useCallback(
+    (rules: ChartismeRule[]): AlongsideFigure[] | undefined => {
+      const wanted = new Set<string>()
+      for (const rule of rules) {
+        const target = rule.condition.alongside_curve
+        if (rule.condition.alongside !== "any" && target && target !== curveId) wanted.add(target)
+      }
+      if (!wanted.size || !study.window.withWarmup.length) return undefined
+      const found: AlongsideFigure[] = []
+      for (const id of wanted) {
+        const spec = specs.find((s) => (s.n === null ? s.variable : `${s.variable}:${s.n}`) === id)
+        if (!spec) continue
+        const other = buildCurve(study.window.withWarmup, spec.variable, spec.n)
+        found.push(
+          ...alongsideIndex(
+            scanCurve(other, { scales: study.scales, minConfidence }).filter((entry) =>
+              liveInWindow(entry, study.contextCount)
+            )
+          ).map((entry) => ({ ...entry, curve_id: id }))
+        )
+      }
+      return found
+    },
+    [curveId, study, specs, minConfidence]
+  )
+
   function runRules() {
     const rules = loadRules()
     if (!rules.length) {
       setFiredCount(0)
       return
     }
+    const alongside = alongsideFor(rules)
     const firings = hits.flatMap((found) =>
-      evaluateRules(rules, stateFromHit(found, { curve }))
+      evaluateRules(rules, stateFromHit(found, { curve, alongside }))
     )
     recordFirings(firings)
     setFiredCount(firings.length)
@@ -593,7 +639,7 @@ export function ChartismeLab() {
 
       <Sketchpad curve={curve} era={era} />
 
-      <RulesPanel hit={hit} hits={hits} curve={curve} />
+      <RulesPanel hit={hit} hits={hits} curve={curve} alongsideFor={alongsideFor} />
 
       <BacktestPanel
         curve={curve}

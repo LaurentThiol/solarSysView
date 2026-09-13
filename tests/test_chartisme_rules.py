@@ -10,6 +10,7 @@ from typing import Any
 from synchro.chartisme.rules import (
     ACTION_TYPES,
     BREAKOUT_STATES,
+    alongside_index,
     describe,
     describe_actions,
     describe_condition,
@@ -53,6 +54,135 @@ def _hit(**over: Any) -> dict[str, Any]:
     return hit
 
 
+def _neighbour(**over: Any) -> dict[str, Any]:
+    entry = {
+        "curve_id": "n1",
+        "figure": "double_creux",
+        "direction": "up",
+        "from_index": 45,
+        "to_index": 58,
+    }
+    entry.update(over)
+    return entry
+
+
+def test_alongside_needs_a_neighbour_that_overlaps() -> None:
+    """« En même temps que » se mesure en tirages, pas en dates.
+
+    Deux courbes du même balayage partagent la même grille de tirages ; une date
+    ne dit pas combien de tirages séparent deux figures.
+    """
+    state = state_from_hit(_hit(), alongside=[_neighbour()])
+    cond = {"alongside": "with", "alongside_curve": "n1"}
+    assert match_condition(cond, state)
+
+    # La figure lue va de 10 à 60 : une voisine qui n'ouvre qu'au 68e est ailleurs.
+    far = state_from_hit(_hit(), alongside=[_neighbour(from_index=68, to_index=80)])
+    assert not match_condition(cond, far)
+    # …mais dix tirages de tolérance suffisent à la rattraper.
+    assert match_condition({**cond, "alongside_within": 10}, far)
+
+
+def test_alongside_without_keeps_only_the_lonely_figures() -> None:
+    """Le cas qui motive la condition : ne pas compter deux fois un seul fait.
+
+    Une figure haussière sur n5 en même temps qu'une baissière sur n1 peut n'être
+    que l'étalement du tirage, lu deux fois. `without` écarte ces doublons.
+    """
+    cond = {"alongside": "without", "alongside_curve": "n1"}
+    accompanied = state_from_hit(_hit(), alongside=[_neighbour()])
+    assert not match_condition(cond, accompanied)
+    alone = state_from_hit(_hit(), alongside=[])
+    assert match_condition(cond, alone)
+
+
+def test_alongside_filters_on_figure_and_direction() -> None:
+    state = state_from_hit(_hit(), alongside=[_neighbour()])
+    assert match_condition(
+        {"alongside": "with", "alongside_curve": "n1", "alongside_direction": "up"}, state
+    )
+    assert not match_condition(
+        {"alongside": "with", "alongside_curve": "n1", "alongside_direction": "down"}, state
+    )
+    assert not match_condition(
+        {"alongside": "with", "alongside_curve": "n1", "alongside_figure": "ete"}, state
+    )
+
+
+def test_alongside_ignores_the_curve_being_read() -> None:
+    """Une figure ne peut pas être sa propre voisine, ni celle de sa courbe."""
+    same = state_from_hit(_hit(), alongside=[_neighbour(curve_id="delay:7")])
+    assert not match_condition({"alongside": "with"}, same)
+
+
+def test_alongside_declines_when_nothing_was_scanned() -> None:
+    """Sans voisinage lu, la condition est sans objet — pas satisfaite.
+
+    La déclarer vraie ferait tirer la règle sur un silence, et « aucune figure
+    ailleurs » se confondrait avec « on n'a pas regardé ailleurs ».
+    """
+    blind = state_from_hit(_hit())
+    assert blind["alongside"] is None
+    assert not match_condition({"alongside": "with", "alongside_curve": "n1"}, blind)
+    assert not match_condition({"alongside": "without", "alongside_curve": "n1"}, blind)
+    # Sans condition de simultanéité, l'absence de voisinage ne change rien.
+    assert match_condition({"figures": ["ete"]}, blind)
+
+
+def test_alongside_index_reduces_a_scan_to_what_a_condition_reads() -> None:
+    index = alongside_index([_hit(curve_id="sum", from_index=3, to_index=9)])
+    assert index == [
+        {
+            "curve_id": "sum",
+            "figure": "ete",
+            "direction": "down",
+            "from_index": 3,
+            "to_index": 9,
+        }
+    ]
+
+
+def test_evaluate_all_makes_every_figure_a_neighbour_of_the_others() -> None:
+    """Le balayage multi-courbes est le seul endroit qui peut répondre.
+
+    Deux figures qui se recouvrent sur deux courbes différentes doivent se voir
+    l'une l'autre, sans que l'appelant ait à construire l'index.
+    """
+    rule = {
+        "id": "r",
+        "name": "paire",
+        "condition": {"alongside": "with"},
+        "actions": [{"type": "note", "payload": {}}],
+        "active": True,
+    }
+    pair = [
+        _hit(curve_id="n1", from_index=40, to_index=60),
+        _hit(curve_id="n5", from_index=50, to_index=70),
+    ]
+    assert len(evaluate_all([rule], pair)) == 2
+    apart = [
+        _hit(curve_id="n1", from_index=0, to_index=10),
+        _hit(curve_id="n5", from_index=50, to_index=70),
+    ]
+    assert evaluate_all([rule], apart) == []
+
+
+def test_describe_condition_says_the_simultaneity_out_loud() -> None:
+    sentence = describe_condition(
+        {
+            "alongside": "with",
+            "alongside_curve": "n1",
+            "alongside_direction": "down",
+            "alongside_within": 5,
+        }
+    )
+    assert "en même temps que" in sentence
+    assert "baissière" in sentence
+    assert "sur n1" in sentence
+    assert "5 tirages près" in sentence
+    assert "sans une figure" in describe_condition({"alongside": "without"})
+
+
 def test_normalize_condition_fills_every_field() -> None:
     """Une condition partielle doit rester interrogeable sans `KeyError`."""
     cond = normalize_condition({"figures": ["ete"]})
@@ -68,6 +198,11 @@ def test_normalize_condition_fills_every_field() -> None:
         "trend",
         "weekday",
         "min_activity_ratio",
+        "alongside",
+        "alongside_curve",
+        "alongside_figure",
+        "alongside_direction",
+        "alongside_within",
     }
     assert cond["figures"] == ["ete"]
     assert cond["breakout"] == "any"

@@ -24,7 +24,9 @@ import {
 import type { FigureHit } from "@/lib/chartisme/figures"
 import {
   ACTION_TYPES,
+  ALONGSIDE_MODES,
   BREAKOUT_STATES,
+  DIRECTIONS,
   describe,
   draftRuleFromHit,
   evaluateRules,
@@ -33,8 +35,11 @@ import {
   summarizeFirings,
   TRENDS,
   type ActionType,
+  type AlongsideFigure,
+  type AlongsideMode,
   type BreakoutState,
   type ChartismeRule,
+  type Direction,
 } from "@/lib/chartisme/rules"
 import type { ScanHit } from "@/lib/chartisme/scan"
 import {
@@ -99,6 +104,30 @@ const CURVE_TARGET_LABELS: Record<string, string> = Object.fromEntries(
   CURVE_TARGETS.map((target) => [target.value, target.label])
 )
 
+const ALONGSIDE_LABELS: Record<AlongsideMode, string> = {
+  any: "peu importe",
+  with: "en même temps qu'une figure sur…",
+  without: "sans figure sur…",
+}
+
+const DIRECTION_LABELS: Record<Direction, string> = {
+  any: "tout sens",
+  up: "haussière",
+  down: "baissière",
+}
+
+/**
+ * Courbes offertes comme voisines : celles sans indice de boule.
+ *
+ * L'onglet balaie la courbe nommée en plus de celle affichée. Il ne peut pas
+ * balayer les cinquante retards de boule pour répondre à « une figure sur une
+ * boule quelconque », donc la voisine se nomme, et se nomme parmi les quatorze.
+ */
+const ALONGSIDE_CURVES = PLAIN_VARIABLES.map((variable) => ({
+  value: variable,
+  label: VARIABLE_LABELS[variable] ?? variable,
+}))
+
 /** Cible courante, relue depuis la condition — la règle reste la source de vérité. */
 function curveTargetValue(condition: ChartismeRule["condition"]): string {
   if (condition.curves.length) return `curve:${condition.curves[0]}`
@@ -129,10 +158,17 @@ export function RulesPanel({
   hit,
   hits,
   curve,
+  alongsideFor,
 }: {
   hit: FigureHit | null
   hits: ScanHit[]
   curve: Curve | null
+  /**
+   * Balaie les courbes voisines citées par ces règles, ou rend `undefined`
+   * quand aucune n'en demande. Le balayage appartient à l'onglet, qui seul
+   * connaît la fenêtre et les échelles ; les règles appartiennent à ce panneau.
+   */
+  alongsideFor: (rules: ChartismeRule[]) => AlongsideFigure[] | undefined
 }) {
   const [rules, setRules] = useState<ChartismeRule[]>([])
   const [firings, setFirings] = useState<StoredFiring[]>([])
@@ -174,7 +210,10 @@ export function RulesPanel({
       setEvaluated(0)
       return
     }
-    const found = hits.flatMap((entry) => evaluateRules(rules, stateFromHit(entry, { curve })))
+    const alongside = alongsideFor(rules)
+    const found = hits.flatMap((entry) =>
+      evaluateRules(rules, stateFromHit(entry, { curve, alongside }))
+    )
     recordFirings(found)
     setFirings(loadFirings())
     setEvaluated(found.length)
@@ -373,10 +412,147 @@ export function RulesPanel({
             </LabelHelp>
 
             <LabelHelp
+              label="Simultanéité"
+              help={{
+                title: "En même temps qu'une autre courbe",
+                body: "Les rangs d'un tirage sont liés par construction : n1 bas pousse les autres vers le haut. Une figure haussière sur n5 au même moment qu'une baissière sur n1 peut n'être qu'un seul fait — l'étalement du tirage — compté deux fois. « En même temps que » ne retient que les paires, pour les regarder ; « sans » ne retient que les figures qui ne sont pas le reflet d'une voisine. L'onglet balaie la courbe nommée en plus de celle affichée ; sans règle qui en demande, il n'en balaie aucune.",
+              }}
+            >
+              <Select
+                value={draft.condition.alongside}
+                onValueChange={(value) =>
+                  setDraft({
+                    ...draft,
+                    condition: {
+                      ...draft.condition,
+                      alongside: (value as AlongsideMode) ?? "any",
+                      // Une voisine doit être nommée : l'onglet ne peut pas
+                      // balayer les 142 courbes pour répondre « aucune ».
+                      alongside_curve:
+                        value === "any"
+                          ? null
+                          : draft.condition.alongside_curve ?? ALONGSIDE_CURVES[0].value,
+                    },
+                  })
+                }
+              >
+                <SelectTrigger className="w-full" aria-label="Simultanéité">
+                  <span className="flex flex-1 text-left">
+                    {ALONGSIDE_LABELS[draft.condition.alongside]}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {ALONGSIDE_MODES.map((mode) => (
+                    <SelectItem key={mode} value={mode}>
+                      {ALONGSIDE_LABELS[mode]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </LabelHelp>
+
+            {draft.condition.alongside !== "any" ? (
+              <>
+                <LabelHelp
+                  label="Courbe voisine"
+                  help={{
+                    title: "Courbe voisine",
+                    body: "La courbe que l'onglet balaie en plus de celle affichée, avec les mêmes échelles et le même seuil. Elle se nomme, faute de quoi la condition resterait sans réponse : répondre « aucune figure ailleurs » supposerait d'avoir balayé les 142 courbes.",
+                  }}
+                >
+                  <Select
+                    value={draft.condition.alongside_curve ?? ALONGSIDE_CURVES[0].value}
+                    onValueChange={(value) =>
+                      setDraft({
+                        ...draft,
+                        condition: { ...draft.condition, alongside_curve: value ?? null },
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-full" aria-label="Courbe voisine">
+                      <span className="flex flex-1 text-left">
+                        {VARIABLE_LABELS[draft.condition.alongside_curve ?? ""] ??
+                          draft.condition.alongside_curve}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ALONGSIDE_CURVES.map((entry) => (
+                        <SelectItem key={entry.value} value={entry.value}>
+                          {entry.value} · {entry.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </LabelHelp>
+
+                <LabelHelp
+                  label="Sens de la voisine"
+                  help={{
+                    title: "Sens de la voisine",
+                    body: "Le sens de sa cassure. C'est ce qui permet d'écrire le cas qui motive tout ceci : une figure haussière ici en même temps qu'une baissière là — deux lectures opposées qui peuvent n'être qu'un seul étalement du tirage.",
+                  }}
+                >
+                  <Select
+                    value={draft.condition.alongside_direction}
+                    onValueChange={(value) =>
+                      setDraft({
+                        ...draft,
+                        condition: {
+                          ...draft.condition,
+                          alongside_direction: (value as Direction) ?? "any",
+                        },
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-full" aria-label="Sens de la voisine">
+                      <span className="flex flex-1 text-left">
+                        {DIRECTION_LABELS[draft.condition.alongside_direction]}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DIRECTIONS.map((direction) => (
+                        <SelectItem key={direction} value={direction}>
+                          {DIRECTION_LABELS[direction]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </LabelHelp>
+
+                <LabelHelp
+                  label={`Tolérance ${draft.condition.alongside_within} tirage${
+                    draft.condition.alongside_within > 1 ? "s" : ""
+                  }`}
+                  help={{
+                    title: "Tolérance",
+                    body: "À zéro, les deux fenêtres doivent se croiser. Au-delà, deux figures qui se suivent de près comptent aussi comme simultanées — une harmonique transitoire ne frappe pas toutes les courbes le même jour, et exiger le même tirage exact ne trouverait presque rien.",
+                  }}
+                >
+                  <Input
+                    type="range"
+                    min={0}
+                    max={20}
+                    step={1}
+                    value={draft.condition.alongside_within}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        condition: {
+                          ...draft.condition,
+                          alongside_within: Number(event.target.value) || 0,
+                        },
+                      })
+                    }
+                  />
+                </LabelHelp>
+              </>
+            ) : null}
+
+            <LabelHelp
               label={`Confiance ≥ ${(draft.condition.min_confidence ?? 0).toFixed(2)}`}
               help={{
                 title: "Confiance minimale",
-                body: "Un seuil bas rend la règle bavarde : rappelle-toi que 85 % des marches aléatoires portent déjà une figure à 0.6.",
+                body: "Un seuil bas rend la règle bavarde, et l'ampleur du bavardage dépend de la courbe : sur « paires consécutives » presque toutes les fenêtres de bruit portent déjà une figure à 0.6, sur la somme un peu moins des trois quarts. Le taux mesuré s'affiche sous le tracé.",
               }}
             >
               <Input

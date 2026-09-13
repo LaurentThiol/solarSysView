@@ -19,6 +19,11 @@ export type Trend = (typeof TRENDS)[number]
 
 export const KINDS = ["reversal_down", "reversal_up", "continuation", "range"] as const
 
+export const ALONGSIDE_MODES = ["any", "with", "without"] as const
+
+/** « peu importe » · « en même temps qu'une figure sur … » · « et pas sur … ». */
+export type AlongsideMode = (typeof ALONGSIDE_MODES)[number]
+
 export type RuleCondition = {
   figures: string[]
   any_figures: string[]
@@ -31,6 +36,28 @@ export type RuleCondition = {
   trend: Trend
   weekday: string | null
   min_activity_ratio: number | null
+  /**
+   * Simultanéité avec une figure d'une autre courbe.
+   *
+   * Les rangs d'un tirage sont liés par construction : `n1` bas pousse les
+   * autres vers le haut. Une figure haussière sur `n5` au même moment qu'une
+   * figure baissière sur `n1` peut n'être qu'un seul fait — l'étalement du
+   * tirage — compté deux fois. Sans ce champ une règle ne peut ni le voir ni
+   * l'écarter ; avec, `without` sert à ne retenir que les figures qui ne sont
+   * pas le reflet d'une voisine, et `with` à ne retenir que les paires.
+   */
+  alongside: AlongsideMode
+  alongside_curve: string | null
+  alongside_figure: string | null
+  alongside_direction: Direction
+  /**
+   * Tolérance en tirages autour du chevauchement.
+   *
+   * 0 exige que les deux fenêtres se croisent. Au-delà, deux figures qui se
+   * suivent de près comptent aussi comme simultanées — un cycle transitoire ne
+   * frappe pas toutes les courbes le même jour.
+   */
+  alongside_within: number
 }
 
 export type RuleAction = { type: ActionType; payload: Record<string, unknown> }
@@ -64,6 +91,23 @@ export type RuleState = {
   to_index?: number | null
   target?: FigureHit["target"] | null
   detector?: string | null
+  /**
+   * Les figures des autres courbes qui recouvrent celle-ci, si on les a lues.
+   *
+   * Vide et absent ne disent pas la même chose : `undefined` veut dire qu'aucune
+   * autre courbe n'a été balayée, et une condition de simultanéité ne peut alors
+   * rien affirmer. Une liste vide veut dire qu'on a cherché et rien trouvé.
+   */
+  alongside?: AlongsideFigure[]
+}
+
+/** Une figure d'une autre courbe, réduite à ce qu'une condition interroge. */
+export type AlongsideFigure = {
+  curve_id: string
+  figure: string
+  direction: "up" | "down" | null
+  from_index: number
+  to_index: number
 }
 
 export type Firing = {
@@ -125,6 +169,11 @@ export function normalizeCondition(raw?: Partial<RuleCondition> | null): RuleCon
         .trim()
         .toLowerCase() || null,
     min_activity_ratio: optionalFloat(src.min_activity_ratio),
+    alongside: oneOf(src.alongside, ALONGSIDE_MODES, "any"),
+    alongside_curve: String(src.alongside_curve ?? "").trim() || null,
+    alongside_figure: String(src.alongside_figure ?? "").trim() || null,
+    alongside_direction: oneOf(src.alongside_direction, DIRECTIONS, "any"),
+    alongside_within: Math.max(0, Math.trunc(optionalFloat(src.alongside_within) ?? 0)),
   }
 }
 
@@ -160,10 +209,38 @@ export function breakoutStateOf(hit: FigureHit): BreakoutState {
 }
 
 /**
+ * Une figure d'une autre courbe recouvre-t-elle celle-ci ?
+ *
+ * Le recouvrement se mesure sur les indices de tirage, pas sur les dates : deux
+ * courbes du même balayage partagent la même grille de tirages, et une date ne
+ * dit pas combien de tirages séparent deux figures. `within` élargit les deux
+ * fenêtres de part et d'autre avant de les croiser.
+ */
+function overlaps(state: RuleState, other: AlongsideFigure, within: number): boolean {
+  const from = Number(state.from_index ?? 0)
+  const to = Number(state.to_index ?? 0)
+  return other.from_index - within <= to && other.to_index + within >= from
+}
+
+/** Les figures voisines retenues par la condition, la courbe lue exclue. */
+function alongsideMatches(cond: RuleCondition, state: RuleState): AlongsideFigure[] {
+  const here = String(state.curve_id ?? "")
+  return (state.alongside ?? []).filter((other) => {
+    if (other.curve_id === here) return false
+    if (cond.alongside_curve && other.curve_id !== cond.alongside_curve) return false
+    if (cond.alongside_figure && other.figure !== cond.alongside_figure) return false
+    if (cond.alongside_direction !== "any" && other.direction !== cond.alongside_direction) {
+      return false
+    }
+    return overlaps(state, other, cond.alongside_within)
+  })
+}
+
+/**
  * La fenêtre satisfait-elle la condition ?
  *
  * `state` réunit la figure détectée et son contexte : courbe, tendance de
- * fond, jour de tirage.
+ * fond, jour de tirage, et les figures voisines quand elles ont été lues.
  */
 export function matchCondition(condition: RuleCondition, state: RuleState): boolean {
   const cond = normalizeCondition(condition)
@@ -188,6 +265,13 @@ export function matchCondition(condition: RuleCondition, state: RuleState): bool
       return false
     }
   }
+  if (cond.alongside !== "any") {
+    // Aucune autre courbe balayée : la condition n'est pas fausse, elle est
+    // sans objet. La déclarer satisfaite ferait tirer la règle sur un silence.
+    if (state.alongside === undefined) return false
+    const found = alongsideMatches(cond, state).length > 0
+    if (cond.alongside === "with" ? !found : found) return false
+  }
   return true
 }
 
@@ -198,9 +282,10 @@ export function stateFromHit(
     curve?: { id?: string; variable?: string; label?: string } | null
     trend?: string | null
     weekday?: string | null
+    alongside?: AlongsideFigure[]
   } = {}
 ): RuleState {
-  const { curve = null, trend = null, weekday = null } = options
+  const { curve = null, trend = null, weekday = null, alongside } = options
   const breakout = hit.breakout ?? null
   const extra = hit as FigureHit & { curve_id?: string; variable?: string }
   return {
@@ -223,7 +308,22 @@ export function stateFromHit(
     to_index: hit.to_index,
     target: hit.target,
     detector: hit.detector,
+    alongside,
   }
+}
+
+/** Les figures d'un balayage, réduites à ce qu'une condition de simultanéité lit. */
+export function alongsideIndex(hits: FigureHit[]): AlongsideFigure[] {
+  return hits.map((hit) => {
+    const extra = hit as FigureHit & { curve_id?: string }
+    return {
+      curve_id: String(extra.curve_id ?? ""),
+      figure: String(hit.figure ?? ""),
+      direction: hit.breakout?.direction ?? null,
+      from_index: Number(hit.from_index ?? 0),
+      to_index: Number(hit.to_index ?? 0),
+    }
+  })
 }
 
 /** Déclenchements d'une fenêtre — des lignes de journal, rien de plus. */
@@ -245,7 +345,13 @@ export function evaluateRules(rules: ChartismeRule[], state: RuleState): Firing[
   return firings
 }
 
-/** Le journal complet sur un balayage d'archive. */
+/**
+ * Le journal complet sur un balayage d'archive.
+ *
+ * Toutes les figures du balayage servent de voisinage les unes aux autres : c'est
+ * le seul endroit où plusieurs courbes sont lues d'un coup, donc le seul où une
+ * condition de simultanéité a de quoi répondre.
+ */
 export function evaluateAll(
   rules: ChartismeRule[],
   hits: FigureHit[],
@@ -255,11 +361,13 @@ export function evaluateAll(
   } = {}
 ): Firing[] {
   const out: Firing[] = []
+  const alongside = alongsideIndex(hits)
   for (const hit of hits) {
     const curveId = String((hit as FigureHit & { curve_id?: string }).curve_id ?? "")
     const state = stateFromHit(hit, {
       curve: options.curves?.[curveId] ?? null,
       trend: options.trends?.[curveId] ?? null,
+      alongside,
     })
     out.push(...evaluateRules(rules, state))
   }
@@ -319,6 +427,21 @@ export function describeCondition(condition: RuleCondition): string {
   if (cond.weekday) parts.push(`tirage du ${cond.weekday}`)
   if (cond.min_activity_ratio !== null) {
     parts.push(`activité ≥ ${cond.min_activity_ratio.toFixed(1)}× la MM20`)
+  }
+  if (cond.alongside !== "any") {
+    const what = [
+      cond.alongside_figure ? labelOf(cond.alongside_figure) : "une figure",
+      cond.alongside_direction === "up"
+        ? "haussière"
+        : cond.alongside_direction === "down"
+          ? "baissière"
+          : "",
+      `sur ${cond.alongside_curve || "une autre courbe"}`,
+      cond.alongside_within ? `à ${cond.alongside_within} tirages près` : "",
+    ]
+      .filter(Boolean)
+      .join(" ")
+    parts.push(`${cond.alongside === "with" ? "en même temps que" : "sans"} ${what}`)
   }
   return `QUAND ${parts.length ? parts.join(" ∧ ") : "toute figure"}`
 }
