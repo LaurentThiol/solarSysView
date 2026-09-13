@@ -113,7 +113,7 @@ Sans eux, l’onglet reste entier : détecteurs géométriques et recherche par 
 
 **Atelier d’étiquetage** : sélection au pinceau sur la courbe, catalogue des 17 figures ou classe libre, placement des rôles de pivots (tête, épaules, ligne de cou…), bloc-croquis pour dessiner une forme et retrouver les fenêtres qui lui ressemblent, et une liste des fenêtres les plus incertaines à trancher en priorité. Tes étiquettes pèsent trois fois plus que le synthétique et partent d’abord en **validation** : un score mesuré sur les étiquettes faibles ne dirait que l’accord avec le détecteur.
 
-**Espace de règles**, délibérément descriptif : QUAND figure ∧ courbe ∧ confiance ∧ cassure ∧ tendance, ALORS `tag` / `alert` / `note` / `hypothesize` / `watch`. Les cinq actions sont des écritures dans le journal — aucune ne touche aux grilles, et il n’y a pas de branchement vers `/combinaisons`. Le rétro-test dit ensuite ce qui valait quelque chose.
+**Espace de règles**, délibérément descriptif : QUAND figure ∧ courbe ∧ confiance ∧ cassure ∧ tendance, ALORS `tag` / `alert` / `note` / `hypothesize` / `watch`. La courbe se vise à deux granularités, parce que le catalogue en a deux : une courbe précise pour les quatorze séries sans indice — c’est ainsi qu’une règle porte sur `n1` et une autre sur `n5` — ou une famille entière pour les séries indexées par boule, personne n’écrivant cinquante règles pour dire « le retard d’une boule quelconque ». Les cinq actions sont des écritures dans le journal — aucune ne touche aux grilles, et il n’y a pas de branchement vers `/combinaisons`. Le rétro-test dit ensuite ce qui valait quelque chose.
 
 **Rétro-test**, deux questions et un garde-fou :
 

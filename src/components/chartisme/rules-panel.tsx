@@ -14,7 +14,13 @@ import {
   SelectTrigger,
 } from "@/components/ui/select"
 import { FIGURE_IDS, labelOf } from "@/lib/chartisme/catalog"
-import type { Curve } from "@/lib/chartisme/curves"
+import {
+  BALL_VARIABLES,
+  PLAIN_VARIABLES,
+  STAR_VARIABLES,
+  VARIABLE_LABELS,
+  type Curve,
+} from "@/lib/chartisme/curves"
 import type { FigureHit } from "@/lib/chartisme/figures"
 import {
   ACTION_TYPES,
@@ -62,6 +68,57 @@ const TREND_LABELS: Record<string, string> = {
   up: "hausse de fond",
   down: "baisse de fond",
   range: "range de fond",
+}
+
+/**
+ * Les cibles de courbe offertes à une règle.
+ *
+ * Deux granularités, parce que le catalogue en a deux. Les courbes sans indice
+ * se visent une par une — c'est là que vivent `n1`…`n5` et `e1`, `e2`, et c'est
+ * tout l'intérêt de les avoir séparées. Les courbes indexées par boule se
+ * visent par famille : personne n'écrira cinquante règles pour dire « le retard
+ * d'une boule quelconque », et `condition.variables` sait déjà le faire.
+ */
+const CURVE_TARGETS: Array<{ value: string; label: string }> = [
+  { value: "any", label: "toute courbe" },
+  ...PLAIN_VARIABLES.map((variable) => ({
+    value: `curve:${variable}`,
+    label: VARIABLE_LABELS[variable] ?? variable,
+  })),
+  ...BALL_VARIABLES.map((variable) => ({
+    value: `family:${variable}`,
+    label: `${VARIABLE_LABELS[variable] ?? variable} — les 50`,
+  })),
+  ...STAR_VARIABLES.map((variable) => ({
+    value: `family:${variable}`,
+    label: `${VARIABLE_LABELS[variable] ?? variable} — les 12`,
+  })),
+]
+
+const CURVE_TARGET_LABELS: Record<string, string> = Object.fromEntries(
+  CURVE_TARGETS.map((target) => [target.value, target.label])
+)
+
+/** Cible courante, relue depuis la condition — la règle reste la source de vérité. */
+function curveTargetValue(condition: ChartismeRule["condition"]): string {
+  if (condition.curves.length) return `curve:${condition.curves[0]}`
+  if (condition.variables.length) return `family:${condition.variables[0]}`
+  return "any"
+}
+
+function withCurveTarget(
+  condition: ChartismeRule["condition"],
+  value: string | null
+): ChartismeRule["condition"] {
+  const [kind, name] = String(value ?? "any").split(":", 2)
+  return {
+    ...condition,
+    // Les deux champs s'excluent : viser `delay` en famille tout en épinglant
+    // `delay:7` ne laisserait passer que la boule 7, ce que personne ne lit dans
+    // « toutes les boules ».
+    curves: kind === "curve" && name ? [name] : [],
+    variables: kind === "family" && name ? [name] : [],
+  }
 }
 
 function emptyRule(): ChartismeRule {
@@ -215,6 +272,35 @@ export function RulesPanel({
                   {FIGURE_IDS.filter((id) => id !== "none").map((id) => (
                     <SelectItem key={id} value={id}>
                       {labelOf(id)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </LabelHelp>
+
+            <LabelHelp
+              label="Courbe visée"
+              help={{
+                title: "Courbe visée",
+                body: "La règle ne se déclenche que sur cette courbe. C'est ce qui permet des règles différentes pour n1 et pour n5 : le plus petit numéro du tirage vit contre le plancher 1, le plus grand contre le plafond 50, et une cassure ne veut pas dire la même chose sur les deux. Les entrées « les 50 » et « les 12 » visent une famille entière plutôt qu'une boule — inutile d'écrire cinquante règles pour dire « le retard d'une boule quelconque ».",
+              }}
+            >
+              <Select
+                value={curveTargetValue(draft.condition)}
+                onValueChange={(value) =>
+                  setDraft({ ...draft, condition: withCurveTarget(draft.condition, value) })
+                }
+              >
+                <SelectTrigger className="w-full" aria-label="Courbe visée">
+                  <span className="flex flex-1 text-left">
+                    {CURVE_TARGET_LABELS[curveTargetValue(draft.condition)] ??
+                      curveTargetValue(draft.condition)}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {CURVE_TARGETS.map((target) => (
+                    <SelectItem key={target.value} value={target.value}>
+                      {target.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
