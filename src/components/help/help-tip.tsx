@@ -227,7 +227,7 @@ export function LabelHelp({
         className
       )}
     >
-      <span className="inline-flex items-center gap-1">
+      <span className="inline-flex items-center gap-1 whitespace-nowrap">
         {label}
         <HelpTip {...help} />
       </span>
