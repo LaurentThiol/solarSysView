@@ -44,10 +44,26 @@ export type StudyPreset = (typeof STUDY_PRESETS)[number]
 
 export const STUDY_PRESET_LABELS = WINDOW_PRESET_LABELS
 
-export const DEFAULT_STUDY_PRESET: StudyPreset = "all"
+/**
+ * Fenêtre ouverte par défaut.
+ *
+ * Pas l'archive entière. Le premier tirage enregistré n'a aucune raison de
+ * coïncider avec le début d'un cycle du système observé : ouvrir sur tout
+ * l'historique ferait passer une contrainte d'archivage pour une hypothèse de
+ * lecture. Cent tirages, comme l'onglet Analyse, laissent la place à trois
+ * échelles sans postuler que vingt ans se lisent d'un bloc.
+ */
+export const DEFAULT_STUDY_PRESET: StudyPreset = "last_100"
 
-/** Échelles de balayage, de la plus courte à la plus longue. */
-export const SCALE_LADDER = [20, 30, 60, 120] as const
+/**
+ * Plus long cycle qu'on accepte de chercher.
+ *
+ * Une figure de cinq cents tirages ne décrit pas un cycle, elle décrit la
+ * longueur d'archive dont on dispose. Ce plafond dit où l'on cesse de chercher,
+ * et il vaut aussi sur l'archive entière : une fenêtre longue autorise à
+ * répéter la mesure, pas à allonger la figure.
+ */
+export const MAX_CYCLE = 120
 
 /** Trois échelles suffisent : au-delà, les lectures d'une même zone se noient. */
 export const MAX_AUTO_SCALES = 3
@@ -70,16 +86,26 @@ export type ScaleChoice = "auto" | number
 /**
  * Échelles retenues pour une fenêtre de `length` tirages.
  *
- * En `auto`, on ne garde que les échelles qui tiennent dans la fenêtre : une
- * figure plus longue que la zone étudiée se lirait entièrement dans le
- * contexte. L'utilisateur peut forcer une échelle plus longue — c'est alors une
- * autre question, « quelle figure longue s'achève dans ma fenêtre ».
+ * Les barreaux se déduisent de la fenêtre au lieu de la précéder : sa longueur,
+ * sa moitié, son quart, bornés en bas par la plus courte figure détectable et en
+ * haut par le plafond de cycle. Une fenêtre de 50 tirages se lit donc à 25 · 50,
+ * une de 100 à 25 · 50 · 100, et l'archive entière à 30 · 60 · 120 — le plafond
+ * ayant pris le relais de la longueur.
+ *
+ * Une échelle fixe ferait l'inverse : elle imposerait à toute fenêtre les durées
+ * de cycle qu'on aurait décidées d'avance.
  */
 export function scalesFor(length: number, choice: ScaleChoice = "auto"): number[] {
   if (choice !== "auto") return [Math.max(MIN_WINDOW, Math.trunc(choice))]
-  const fit = SCALE_LADDER.filter((size) => size <= length)
-  if (!fit.length) return [Math.max(MIN_WINDOW, length)]
-  return fit.slice(-MAX_AUTO_SCALES)
+  const top = Math.min(Math.max(length, MIN_WINDOW), MAX_CYCLE)
+  const rungs = new Set<number>()
+  for (let step = 0; step < MAX_AUTO_SCALES; step += 1) {
+    const size = Math.round(top / 2 ** step)
+    if (size < MIN_WINDOW) break
+    rungs.add(size)
+  }
+  if (!rungs.size) rungs.add(MIN_WINDOW)
+  return [...rungs].sort((a, b) => a - b)
 }
 
 /** Tirages de contexte réclamés devant la fenêtre pour ces échelles. */
@@ -104,6 +130,14 @@ export function liveInWindow(hit: ScanHit, contextCount: number): boolean {
 export type StudyWindow<T extends { date: string }> = {
   /** Fenêtre étudiée, contexte en `warmup`. */
   window: ResolvedWindow<T>
+  /**
+   * Fenêtre de même longueur qui précède immédiatement, contexte compris.
+   *
+   * C'est le seul point de comparaison qui ne suppose rien : même nombre de
+   * tirages, mêmes échelles, juste avant. Si ce qu'on lit dans la fenêtre est
+   * une propriété du système et non du découpage, elle doit s'y retrouver.
+   */
+  previous: ResolvedWindow<T> | null
   /** Tirages étudiés (hors contexte). */
   drawCount: number
   /** Tirages de contexte réellement disponibles. */
@@ -136,8 +170,22 @@ export function resolveStudyWindow<T extends { date: string; star_pool?: number 
     lastN: spec.lastN,
     warmup: contextWanted,
   })
+  // Découper l'entrée plutôt que jouer sur `toDate` : la fenêtre précédente est
+  // alors résolue par le même chemin que la fenêtre étudiée, contexte compris.
+  const earlier = window.fromDate
+    ? draws.filter((draw) => draw.date < window.fromDate!)
+    : []
+  const previous =
+    window.drawCount && earlier.length
+      ? resolveWindow(earlier, {
+          preset: "all",
+          lastN: window.drawCount,
+          warmup: contextWanted,
+        })
+      : null
   return {
     window,
+    previous: previous?.drawCount ? previous : null,
     drawCount: window.drawCount,
     contextCount: window.warmupCount,
     contextWanted,
@@ -188,21 +236,16 @@ export function shortWindowNote(drawCount: number): string | null {
 }
 
 /**
- * Ce qu'une échelle courte fait à la lecture, dit avant de la croire.
+ * La règle d'or n'a pas ses vingt points.
  *
- * `weigh()` escompte la confiance selon la part de fenêtre couverte : la même
- * forme couvre toute une fenêtre de 20 et un tiers d'une fenêtre de 60. Elle y
- * gagne donc de la confiance sans rien gagner en substance — mesuré sur une
- * marche aléatoire, 0.62 à l'échelle 20 contre 0.49 à l'échelle 60 pour les
- * mêmes vingt points. Un seuil de confiance ne veut donc pas dire la même chose
- * d'une échelle à l'autre.
- *
- * La MM20, elle, ne voit que les points de la fenêtre de balayage qui précèdent
- * la cassure : sous vingt, la règle d'or compare l'activité à une moyenne de
- * quelques points.
+ * La MM20 ne voit que les points de la fenêtre de balayage qui précèdent la
+ * cassure. Sous vingt, la règle d'or compare donc l'activité à une moyenne de
+ * quelques points — elle continue de répondre, mais elle ne mesure plus ce
+ * qu'elle prétend mesurer. Le chiffrage de la confiance, lui, est mesuré à
+ * l'instant sur du bruit : voir `baseRateNote`.
  */
 export function shortScaleCaveat(scales: ReadonlyArray<number>): string | null {
   const shortest = Math.min(...scales)
-  if (shortest >= 30) return null
-  return `Échelle ${shortest} : la confiance n'est pas comparable à celle d'une échelle longue. Elle est escomptée selon la part de fenêtre que la figure couvre, et une figure courte couvre presque tout son tracé — les mêmes vingt points d'une marche aléatoire valent 0.62 ici contre 0.49 à l'échelle 60. La MM20 de la règle d'or n'a pas non plus ses vingt points avant la cassure. En contrepartie une figure y est moins banale (64 % des marches aléatoires de 20 tirages en portent une, contre 83 % à 60) : le rétro-test mesure le taux de base à la longueur balayée, comparez-y.`
+  if (shortest >= ACTIVITY_PERIOD) return null
+  return `Échelle ${shortest} : la MM20 de la règle d'or n'a pas ses vingt points avant la cassure. Elle compare l'activité à une moyenne de ${shortest} points au plus — la cassure reste lisible, sa confirmation par l'activité beaucoup moins.`
 }
