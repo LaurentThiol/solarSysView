@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select"
 import type { AnalysisDraw } from "@/lib/analysis"
 import {
+  DEFAULT_TRIALS,
   MAX_THRESHOLD,
   baseRateAbove,
   sampleBaseRate,
@@ -39,14 +40,15 @@ import { liveInWindow } from "@/lib/chartisme/window"
  */
 
 /**
- * Assez pour trancher « bruité » de « lisible », pas pour classer deux voisines.
+ * Le même nombre de remaniements que le chiffrage sous le tracé.
  *
- * Moitié moins que le chiffrage sous le tracé, parce qu'ici il faut le payer 142
- * fois. La carte peut donc annoncer un seuil au centième près de celui de
- * l'onglet sur la même courbe : c'est le même calcul sur un échantillon plus
- * court, pas une contradiction.
+ * Mesuré : les 142 courbes prennent quelques secondes, aussi rien n'obligeait à
+ * échantillonner plus court ici. L'égalité vaut mieux que l'économie : à graine,
+ * longueur et remaniements égaux, la ligne de la courbe affichée porte exactement
+ * le seuil annoncé sous le tracé. Un écart d'un centième entre les deux se lirait
+ * comme une contradiction.
  */
-const TRIALS = 60
+const TRIALS = DEFAULT_TRIALS
 
 const TARGETS = [0.05, 0.1, 0.2, 0.3, 0.5]
 
@@ -326,7 +328,7 @@ export function CurveMap({
         ) : progress === null ? (
           <p className="text-sm text-muted-foreground">
             Non mesurée. Le calcul tient dans le navigateur — {specs.length} courbes ×{" "}
-            {TRIALS} remaniements — et dure quelques dizaines de secondes.
+            {TRIALS} remaniements — et dure quelques secondes.
           </p>
         ) : null}
       </CardContent>
