@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 
-import { LabelHelp, TitleHelp } from "@/components/help"
+import { HelpTip, LabelHelp, TitleHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,9 +37,19 @@ type BaseRateRow = { figure: string; label: string; count: number; base_rate: nu
 
 type BallRow = { n: number; count: number; rate: number; p: number; flagged?: boolean }
 
+type ReportWindow = {
+  from?: string | null
+  to?: string | null
+  draw_count?: number
+  context?: number
+  scales?: number[]
+  bounded?: boolean
+}
+
 type Report = {
   figure_count?: number
   curve_count?: number
+  window?: ReportWindow
   targets?: {
     horizon?: number
     figures?: TargetRow[]
@@ -66,17 +76,27 @@ export function BacktestPanel({
   hits,
   era,
   scales = [],
+  studyWindow,
+  contextCount = 0,
 }: {
   curve: Curve | null
   hits: ScanHit[]
   era: "current" | "all"
   /** Échelles balayées au-dessus : le taux de base se mesure à leur longueur. */
   scales?: number[]
+  /** Fenêtre d'étude — le rétro-test s'y borne par défaut. */
+  studyWindow?: { fromDate: string | null; toDate: string | null; drawCount: number }
+  /** Tirages de contexte réclamés devant elle par les échelles. */
+  contextCount?: number
 }) {
   const [report, setReport] = useState<Report | null>(null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [maxCurves, setMaxCurves] = useState(12)
+  // Borné par défaut. Mesurer sur toute l'archive suppose que le premier tirage
+  // enregistré ouvre un cycle et que rien n'a changé depuis : c'est une
+  // hypothèse, pas une neutralité, et elle ne se choisit pas par omission.
+  const [bounded, setBounded] = useState(true)
 
   // Sans backend, on peut déjà répondre à la première question sur la courbe
   // affichée : le comptage des objectifs atteints ne demande aucun modèle.
@@ -95,7 +115,15 @@ export function BacktestPanel({
       // La plus longue échelle balayée : le taux de base croît avec la longueur
       // (plus de pivots, donc plus d'occasions qu'une figure s'ajuste quelque
       // part), et c'est la comparaison la moins flatteuse qu'on veut afficher.
-      if (scales.length) params.set("base_length", String(Math.max(...scales)))
+      if (scales.length) {
+        params.set("base_length", String(Math.max(...scales)))
+        params.set("scales", scales.join(","))
+      }
+      if (bounded && studyWindow?.fromDate && studyWindow.toDate) {
+        params.set("start", studyWindow.fromDate)
+        params.set("end", studyWindow.toDate)
+        params.set("context", String(contextCount))
+      }
       if (curve) params.set("curve", curve.id)
       const response = await fetch(`/api/chartisme/backtest?${params}`, { cache: "no-store" })
       if (!response.ok) {
@@ -122,6 +150,19 @@ export function BacktestPanel({
     [local]
   )
 
+  // L'effectif réglé et la largeur d'intervalle disent la puissance qui reste
+  // une fois la fenêtre bornée. Les afficher évite de lire une absence d'écart
+  // comme une absence d'effet.
+  const rows = report?.targets?.figures ?? []
+  const settled = rows.length
+    ? rows.reduce((total, row) => total + (row.settled || 0), 0)
+    : null
+  const widest = rows.reduce<number | null>((worst, row) => {
+    if (!row.wilson) return worst
+    const width = row.wilson[1] - row.wilson[0]
+    return worst == null || width > worst ? width : worst
+  }, null)
+
   return (
     <Card>
       <CardHeader>
@@ -144,14 +185,28 @@ export function BacktestPanel({
           le voir écrit vaut mieux que l’ignorer.
         </p>
         <p className="text-xs text-muted-foreground">
-          La fenêtre d’étude ne borne pas cette mesure : elle porte sur toute
-          l’archive choisie. Un modèle nul, un intervalle de Wilson et une
-          correction de Benjamini-Hochberg sur vingt tirages n’auraient aucune
-          puissance — la fenêtre sert à regarder de près, le rétro-test à savoir
-          si ce qu’on y voit vaut quelque chose.
+          La mesure se borne par défaut à la fenêtre d’étude, aux mêmes échelles
+          que le tracé. Elle y perd de la puissance : moins de cassures réglées,
+          donc un intervalle de Wilson plus large, et le rapport l’affiche au
+          lieu de l’acheter en élargissant la fenêtre. Toute l’archive répond à
+          une autre question — celle où l’on suppose que le premier tirage
+          enregistré ouvre un cycle et que rien n’a changé depuis.
         </p>
 
         <div className="flex flex-wrap items-end gap-3">
+          <label className="flex items-center gap-2 pb-1 text-sm">
+            <input
+              type="checkbox"
+              checked={bounded}
+              onChange={(event) => setBounded(event.target.checked)}
+              disabled={!studyWindow?.fromDate}
+            />
+            Borner à la fenêtre d’étude
+          </label>
+          <HelpTip
+            title="Borner à la fenêtre"
+            body="Coché, le rétro-test ne balaie que les tirages de la fenêtre, avec le contexte qu'exigent les échelles, et ne retient que les figures qui s'y achèvent. Décoché, il parcourt toute l'archive de l'ère choisie : plus de cassures réglées, mais la mesure suppose alors que les vingt dernières années forment un seul régime."
+          />
           <LabelHelp
             label={`Courbes balayées · ${maxCurves}`}
             help={{
@@ -174,6 +229,21 @@ export function BacktestPanel({
         </div>
 
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+        {report?.window ? (
+          <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            {report.window.bounded
+              ? `Mesuré du ${report.window.from} au ${report.window.to} · ${report.window.draw_count} tirages, ${report.window.context} en contexte · échelles ${(report.window.scales ?? []).join(" · ")} · ${report.figure_count ?? 0} figures sur ${report.curve_count ?? 0} courbes.`
+              : `Mesuré sur toute l’archive · ${report.figure_count ?? 0} figures sur ${report.curve_count ?? 0} courbes. Cette étendue suppose un régime unique sur toute la période.`}
+            {settled != null
+              ? ` ${settled} cassure${settled > 1 ? "s" : ""} réglée${settled > 1 ? "s" : ""} portent le verdict${
+                  widest == null
+                    ? ""
+                    : `, le plus large intervalle de Wilson couvrant ${(widest * 100).toFixed(0)} points`
+                }.`
+              : " Aucune cassure réglée : rien n’est mesurable ici, et l’absence de verdict n’en est pas un."}
+          </p>
+        ) : null}
 
         {localRows.length ? (
           <div className="space-y-2">

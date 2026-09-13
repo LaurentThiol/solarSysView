@@ -7,6 +7,7 @@ import { CurveCanvas, type CurveSelection } from "@/components/chartisme/curve-c
 import { LabelAtelier } from "@/components/chartisme/label-atelier"
 import { RulesPanel } from "@/components/chartisme/rules-panel"
 import { Sketchpad } from "@/components/chartisme/sketchpad"
+import { WindowCompare } from "@/components/chartisme/window-compare"
 import { LabelHelp, TitleHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -18,6 +19,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select"
+import { baseRateAbove, baseRateNote, sampleBaseRate } from "@/lib/chartisme/base-rate"
 import { buildCurve, curveSpecs, type Curve } from "@/lib/chartisme/curves"
 import { collapseZones, scanCurve, sortByRank, type ScanHit } from "@/lib/chartisme/scan"
 import { stateFromHit } from "@/lib/chartisme/rules"
@@ -138,13 +140,49 @@ export function ChartismeLab() {
     )
   }, [curve, study, minConfidence])
 
+  // La fenêtre précédente est lue exactement comme celle qu'on étudie : mêmes
+  // échelles, même seuil, même longueur. Sans quoi la comparaison mesurerait
+  // l'écart entre deux réglages plutôt qu'entre deux périodes.
+  const previousCurve = useMemo<Curve | null>(() => {
+    const rows = study.previous?.withWarmup
+    if (!rows?.length) return null
+    const spec = specs.find((s) => (s.n === null ? s.variable : `${s.variable}:${s.n}`) === curveId)
+    if (!spec) return null
+    return buildCurve(rows, spec.variable, spec.n)
+  }, [study, specs, curveId])
+
+  const previousHits = useMemo<ScanHit[]>(() => {
+    if (!previousCurve || !study.previous) return []
+    return sortByRank(
+      collapseZones(
+        scanCurve(previousCurve, { scales: study.scales, minConfidence }).filter((hit) =>
+          liveInWindow(hit, study.previous!.warmupCount)
+        )
+      )
+    )
+  }, [previousCurve, study, minConfidence])
+
+  // Le taux de base est échantillonné une fois par échelle, sans seuil : bouger
+  // le curseur de confiance relit alors l'échantillon au lieu de le refaire.
+  const samples = useMemo(
+    () => study.scales.map((scale) => sampleBaseRate(scale)),
+    [study.scales]
+  )
+  const baseRates = useMemo(
+    () => samples.map((sample) => baseRateAbove(sample, minConfidence)),
+    [samples, minConfidence]
+  )
+
   // Trois mises en garde, de la plus dirimante à la plus nuancée : rien n'a été
-  // balayé, puis rien ne peut tenir dans la fenêtre, puis la confiance ne se
-  // lit pas comme à une échelle longue. Une seule s'affiche, la première.
+  // balayé, puis rien ne peut tenir dans la fenêtre, puis la règle d'or n'a plus
+  // ses vingt points. Une seule s'affiche, la première.
   const fitNote = curve ? scaleFitNote(study.scales, curve.values.length) : null
   const caveat = curve
     ? fitNote ?? shortWindowNote(study.drawCount) ?? shortScaleCaveat(study.scales)
     : null
+  // Le chiffrage, lui, s'affiche toujours : c'est le seul point de comparaison
+  // de la confiance lue à côté.
+  const measured = curve && !fitNote ? baseRateNote(baseRates, minConfidence) : null
 
   // Même règle que la barre de fenêtre d'Analyse : un nombre de tirages
   // n'affine que les fenêtres comptées en tirages. Sur « 3 mois » ou
@@ -398,6 +436,11 @@ export function ChartismeLab() {
               {caveat}
             </p>
           ) : null}
+          {measured ? (
+            <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+              {measured}
+            </p>
+          ) : null}
 
           {loading && !curve ? (
             <p className="text-sm text-muted-foreground">Chargement des tirages…</p>
@@ -436,7 +479,12 @@ export function ChartismeLab() {
                 label={curve.label}
               />
 
-              {hits.length ? (
+              {/* Hauteur réservée : sans elle, vider la liste raccourcit la page
+                  de la hauteur du panneau, et le navigateur ramène le défilement
+                  vers le haut — le tracé qu'on lisait s'en va sous les yeux. La
+                  valeur est celle du panneau garni, mesurée. */}
+              <div className="sm:min-h-[19rem]">
+                {hits.length ? (
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-1.5">
                     {hits.slice(0, 40).map((found, index) => (
@@ -487,13 +535,14 @@ export function ChartismeLab() {
                     </div>
                   ) : null}
                 </div>
-              ) : fitNote ? null : (
-                <p className="text-sm text-muted-foreground">
-                  Aucune figure au-dessus de {minConfidence.toFixed(2)} dans cette
-                  fenêtre. Baisse le seuil, change d’échelle ou élargis la
-                  fenêtre d’étude.
-                </p>
-              )}
+                ) : fitNote ? null : (
+                  <p className="text-sm text-muted-foreground">
+                    Aucune figure au-dessus de {minConfidence.toFixed(2)} dans cette
+                    fenêtre. Baisse le seuil, change d’échelle ou élargis la
+                    fenêtre d’étude.
+                  </p>
+                )}
+              </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" variant="outline" onClick={runRules}>
@@ -512,6 +561,13 @@ export function ChartismeLab() {
         </CardContent>
       </Card>
 
+      <WindowCompare
+        hits={hits}
+        previousHits={previousHits}
+        window={study.window}
+        previous={study.previous}
+      />
+
       <LabelAtelier
         curve={curve}
         selection={selection}
@@ -523,7 +579,14 @@ export function ChartismeLab() {
 
       <RulesPanel hit={hit} hits={hits} curve={curve} />
 
-      <BacktestPanel curve={curve} hits={hits} era={era} scales={study.scales} />
+      <BacktestPanel
+        curve={curve}
+        hits={hits}
+        era={era}
+        scales={study.scales}
+        studyWindow={study.window}
+        contextCount={study.contextWanted}
+      />
     </div>
   )
 }
