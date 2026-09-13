@@ -1,4 +1,4 @@
-import { wilson } from "@/lib/analysis"
+import { series, wilson, type AnalysisDraw, type VariableName } from "@/lib/analysis"
 import { activityFromClose } from "@/lib/ta"
 
 import { labelOf } from "./catalog"
@@ -8,13 +8,26 @@ import { detectFigures } from "./figures"
  * Taux de base : combien de hasard porte la même figure ?
  *
  * Une figure n'a de valeur que par écart au bruit. Si les trois quarts des
- * marches aléatoires de la même longueur portent une tête & épaules, en voir
- * une n'apprend rien — la mesure inconfortable est celle qui compte.
+ * fenêtres de bruit de la même longueur portent une tête & épaules, en voir une
+ * n'apprend rien — la mesure inconfortable est celle qui compte.
+ *
+ * Le hasard est tiré des tirages eux-mêmes, remis dans un ordre quelconque,
+ * plutôt que d'une marche gaussienne. Une marche est non bornée et sans lien
+ * avec la courbe lue, si bien qu'elle sous-estimait le bruit partout où la
+ * courbe est bornée — et la plupart le sont. `n1` ne descend pas sous 1 et passe
+ * l'essentiel de son temps entre 1 et 10 : deux passages sur le plancher ne
+ * forment pas un double creux, ils forment un plancher. La parité tient dans
+ * 0–5 avec des ex æquo à chaque tirage, et une marche continue n'en produit
+ * jamais. Le remaniement, lui, garde exactement les bornes, les paliers et les
+ * ex æquo de la courbe qu'on regarde, puisque ce sont les mêmes valeurs.
+ *
+ * Ce que la mesure teste est alors exactement la prétention du chartisme : que
+ * l'ordre des tirages porte une forme. Ce qu'elle ne teste pas : que les
+ * tirages soient équiprobables — elle les prend comme ils sont.
  *
  * Le jumeau Python (`synchro/chartisme/backtest.py`) fait le même calcul sur
- * l'archive. Celui-ci tourne dans le navigateur, à l'échelle et au seuil
- * affichés, parce qu'un taux de base écrit en dur ne suit ni l'un ni l'autre :
- * il croît avec la longueur balayée et se lit contre le seuil courant.
+ * l'archive. Celui-ci tourne dans le navigateur, sur la courbe, l'échelle et le
+ * seuil affichés, parce qu'un taux de base écrit en dur n'en suit aucun.
  *
  * L'échantillonnage ignore le seuil et retient toutes les confiances : bouger
  * le curseur relit alors le même échantillon au lieu de le refaire.
@@ -31,44 +44,74 @@ function mulberry32(seed: number) {
   }
 }
 
-/** Box-Muller : deux uniformes donnent une normale centrée réduite. */
-function gauss(random: () => number) {
-  const u = Math.max(random(), Number.EPSILON)
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * random())
-}
-
-export function randomWalk(length: number, random: () => number, step = 1): number[] {
-  const values = [100]
-  for (let i = 1; i < length; i += 1) values.push(values[i - 1] + gauss(random) * step)
-  return values
-}
-
-/** Nombre de marches par échantillon — assez pour un ordre de grandeur, pas plus. */
+/** Nombre de remaniements par échantillon — assez pour un ordre de grandeur, pas plus. */
 export const DEFAULT_TRIALS = 120
+
+/**
+ * Tirages de contexte gardés devant la fenêtre simulée.
+ *
+ * Le retard d'une boule a besoin d'avoir vu passer cette boule au moins une
+ * fois, faute de quoi ses premiers points ne sont qu'une rampe « jamais sortie »
+ * qu'aucune vraie fenêtre ne montre ; la MM20 a besoin de ses vingt points.
+ * Deux cents tirages couvrent largement les deux. Au-delà, chaque remaniement
+ * paierait un tri de toute l'archive sans rien changer à la fenêtre lue.
+ */
+const SIMULATED_CONTEXT = 200
+
+/**
+ * Fisher-Yates sur les tirages, dates réattribuées dans l'ordre croissant.
+ *
+ * La réattribution n'est pas cosmétique : `series` retrie ses tirages par date,
+ * donc un mélange qui garderait les dates d'origine serait défait aussitôt.
+ */
+function shuffled(draws: AnalysisDraw[], random: () => number): AnalysisDraw[] {
+  const dates = draws.map((draw) => draw.date).sort((a, b) => a.localeCompare(b))
+  const picks = draws.slice()
+  for (let i = picks.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1))
+    const swap = picks[i]
+    picks[i] = picks[j]
+    picks[j] = swap
+  }
+  return picks.map((pick, index) => ({ ...pick, date: dates[index] }))
+}
 
 export type BaseRateSample = {
   length: number
   trials: number
-  /** Par marche : la meilleure confiance obtenue par chaque figure trouvée. */
-  perWalk: Array<Record<string, number>>
+  /** Par remaniement : la meilleure confiance obtenue par chaque figure trouvée. */
+  perWindow: Array<Record<string, number>>
 }
 
 /**
- * Figures trouvées sur `trials` marches aléatoires de `length` points.
+ * Figures trouvées sur `trials` remaniements, dans une fenêtre de `length` points.
  *
- * Une seule fenêtre par marche, comme le jumeau Python : le taux mesuré est
+ * Une seule fenêtre par remaniement, comme le jumeau Python : le taux mesuré est
  * celui d'une fenêtre de balayage, pas celui d'une courbe entière — sur
  * laquelle le balayage multiplie les occasions.
+ *
+ * La courbe est recalculée à chaque fois plutôt que ses valeurs mélangées : sur
+ * `delay`, mélanger les valeurs donnerait une série qu'aucun ordre de tirages ne
+ * peut produire — le retard monte de un en un entre deux sorties — et le bruit
+ * simulé serait plus sage que le vrai.
  */
 export function sampleBaseRate(
+  draws: AnalysisDraw[],
+  variable: string,
+  n: number | null,
   length: number,
   options: { trials?: number; seed?: number } = {}
 ): BaseRateSample {
   const { trials = DEFAULT_TRIALS, seed = 1 } = options
+  // Moins de tirages que l'échelle demandée : il n'y a pas de fenêtre à simuler,
+  // et `scaleFitNote` le dit déjà à côté.
+  if (length < 2 || draws.length < length) return { length, trials: 0, perWindow: [] }
+  const pool = draws.slice(-(length + SIMULATED_CONTEXT))
   const random = mulberry32(seed)
-  const perWalk: Array<Record<string, number>> = []
+  const perWindow: Array<Record<string, number>> = []
   for (let trial = 0; trial < trials; trial += 1) {
-    const values = randomWalk(length, random)
+    const payload = series(shuffled(pool, random), variable as VariableName, n ?? undefined)
+    const values = payload.values.slice(-length)
     const best: Record<string, number> = {}
     for (const hit of detectFigures(values, null, activityFromClose(values), {
       minConfidence: 0,
@@ -76,19 +119,19 @@ export function sampleBaseRate(
       const seen = best[hit.figure]
       if (seen === undefined || hit.confidence > seen) best[hit.figure] = hit.confidence
     }
-    perWalk.push(best)
+    perWindow.push(best)
   }
-  return { length, trials, perWalk }
+  return { length, trials, perWindow }
 }
 
 export type BaseRate = {
   length: number
   trials: number
-  /** Part des marches portant au moins une figure au-dessus du seuil. */
+  /** Part des remaniements portant au moins une figure au-dessus du seuil. */
   carrying: number
-  /** Intervalle de Wilson sur cette part : à 120 marches, il reste large. */
+  /** Intervalle de Wilson sur cette part : à 120 remaniements, il reste large. */
   interval: [number, number]
-  /** Médiane de la meilleure confiance obtenue, marches sans figure exclues. */
+  /** Médiane de la meilleure confiance obtenue, fenêtres sans figure exclues. */
   medianBest: number | null
   figures: Array<{ figure: string; label: string; rate: number }>
 }
@@ -98,9 +141,9 @@ export function baseRateAbove(sample: BaseRateSample, minConfidence: number): Ba
   const counts = new Map<string, number>()
   const bests: number[] = []
   let carrying = 0
-  for (const walk of sample.perWalk) {
+  for (const window of sample.perWindow) {
     let best = 0
-    for (const [figure, confidence] of Object.entries(walk)) {
+    for (const [figure, confidence] of Object.entries(window)) {
       if (confidence < minConfidence) continue
       counts.set(figure, (counts.get(figure) ?? 0) + 1)
       if (confidence > best) best = confidence
@@ -147,7 +190,7 @@ function pct(value: number) {
  * une fenêtre courte offre moins de pivots, donc moins d'occasions qu'une forme
  * s'ajuste : la figure y est plus rare, donc moins banale.
  *
- * Les deux nombres sont mesurés à l'instant sur du bruit, aux échelles
+ * Les deux nombres sont mesurés à l'instant sur la courbe affichée, aux échelles
  * réellement balayées. C'est le seul point de comparaison honnête pour la
  * confiance affichée à côté.
  */
@@ -165,5 +208,5 @@ export function baseRateNote(rates: ReadonlyArray<BaseRate>, minConfidence: numb
   const trials = measured[0].trials
   return `Part des fenêtres de bruit portant une figure au-dessus de ${minConfidence.toFixed(
     2
-  )} — ${parts}. Mesuré à l'instant sur ${trials} marches aléatoires par échelle ; l'intervalle dit ce que ce nombre de marches permet d'affirmer. Un seuil de confiance ne veut donc pas dire la même chose d'une échelle à l'autre : elle est escomptée selon la part de fenêtre couverte, et une figure courte couvre presque tout son tracé. En contrepartie une fenêtre courte offre moins de pivots, donc moins d'occasions qu'une forme s'ajuste.`
+  )} — ${parts}. Le bruit est fait des mêmes tirages remis dans un ordre quelconque, ${trials} fois par échelle : le taux garde donc les bornes, les paliers et les ex æquo de cette courbe-ci, ce qu'une marche gaussienne ignorait. Il teste exactement la prétention du chartisme — que l'ordre des tirages porte une forme — et rien d'autre : l'équiprobabilité des tirages n'est pas mise en cause, ils sont pris comme ils sont. L'intervalle dit ce que ce nombre de remaniements permet d'affirmer. Un seuil de confiance ne veut pas dire la même chose d'une échelle à l'autre : il est escompté selon la part de fenêtre couverte, et une figure courte couvre presque tout son tracé. En contrepartie une fenêtre courte offre moins de pivots, donc moins d'occasions qu'une forme s'ajuste.`
 }

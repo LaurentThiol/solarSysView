@@ -1072,8 +1072,8 @@ def create_app() -> FastAPI:
         max_curves: int = Query(12, ge=1, le=131),
         min_confidence: float = Query(0.6, ge=0.0, le=1.0),
         follow: int = Query(5, ge=1, le=20),
-        # Longueur des marches aléatoires du taux de base : celle de l'échelle
-        # que l'onglet balaie, sans quoi la comparaison porte sur autre chose.
+        # Longueur des fenêtres de bruit du taux de base : celle de l'échelle que
+        # l'onglet balaie, sans quoi la comparaison porte sur autre chose.
         base_length: int = Query(60, ge=16, le=400),
         # Fenêtre d'étude. Le premier tirage archivé n'a aucune raison d'ouvrir
         # un cycle : mesurer sur toute l'archive suppose que vingt ans se lisent
@@ -1107,6 +1107,13 @@ def create_app() -> FastAPI:
                 if chartisme_live_in_window(hit, inside)
             )
         studied = [c for c in chosen if c.get("draw_count")]
+        # Le taux de base remanie de vrais tirages : il en faut, même quand le
+        # signal sur les numéros n'est pas demandé. Bornés à droite par la
+        # fenêtre — sur une fenêtre qui s'arrête en 2020, le bruit de 2026 ne dit
+        # rien de ce qu'on a sous les yeux.
+        pool = _analysis_draws(era)
+        if end:
+            pool = [d for d in pool if str(d["draw_date"]) <= end]
         return {
             "ok": True,
             "window": {
@@ -1120,10 +1127,12 @@ def create_app() -> FastAPI:
             **chartisme_backtest_run(
                 {str(c.get("id")): c for c in chosen},
                 hits,
-                draws=_analysis_draws(era) if numbers else None,
+                draws=pool,
                 follow=follow,
                 base_rate_trials=120,
                 base_length=base_length,
+                min_confidence=min_confidence,
+                numbers=numbers,
             ),
         }
 

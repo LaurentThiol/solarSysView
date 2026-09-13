@@ -18,8 +18,8 @@ from synchro.chartisme.backtest import (
     following_draws,
     null_target_rate,
     number_signal,
-    random_walk,
     run,
+    shuffled_draws,
     target_outcomes,
 )
 
@@ -38,16 +38,29 @@ def _draw(index: int, *, numbers: list[int] | None = None) -> dict[str, Any]:
 DRAWS = [_draw(i) for i in range(120)]
 
 
+def _walk(length: int, rng: Random, *, step: float = 1.0) -> list[float]:
+    """Courbe synthétique pour éprouver les modèles nuls d'objectif.
+
+    Une marche gaussienne ne sert plus de bruit au taux de base — elle est non
+    bornée là où les vraies courbes ne le sont pas — mais elle reste une courbe
+    quelconque commode pour vérifier que `null_target_rate` réagit à la distance.
+    """
+    values = [100.0]
+    for _ in range(length - 1):
+        values.append(values[-1] + rng.gauss(0.0, step))
+    return values
+
+
 def test_null_target_rate_declines_an_impossible_measure() -> None:
     """Sans distance d'objectif il n'y a rien à mesurer : on renvoie « rien »."""
-    values = random_walk(80, Random(0))
+    values = _walk(80, Random(0))
     assert null_target_rate(values, distance=0.0, down=True)["rate"] is None
     assert null_target_rate([1.0, 2.0], distance=5.0, down=True)["trials"] == 0
 
 
 def test_null_target_rate_is_deterministic_per_seed() -> None:
     """Le rapport doit être reproductible, sinon le verdict n'est pas citable."""
-    values = random_walk(200, Random(1))
+    values = _walk(200, Random(1))
     left = null_target_rate(values, distance=3.0, down=True, trials=120, seed=7)
     right = null_target_rate(values, distance=3.0, down=True, trials=120, seed=7)
     assert left == right
@@ -61,7 +74,7 @@ def test_null_target_rate_gets_easier_as_the_objective_shrinks() -> None:
     C'est le contrôle de cohérence du modèle nul : il doit réagir à la
     distance comme une vraie cassure, pas comme un tirage au sort.
     """
-    values = random_walk(400, Random(3), step=1.0)
+    values = _walk(400, Random(3), step=1.0)
     near = null_target_rate(values, distance=0.5, down=True, trials=400, seed=0)
     far = null_target_rate(values, distance=12.0, down=True, trials=400, seed=0)
     assert near["rate"] is not None and far["rate"] is not None
@@ -69,7 +82,7 @@ def test_null_target_rate_gets_easier_as_the_objective_shrinks() -> None:
 
 
 def test_null_target_rate_counts_only_settled_trials() -> None:
-    values = random_walk(300, Random(5))
+    values = _walk(300, Random(5))
     null = null_target_rate(values, distance=4.0, down=True, trials=200, seed=2)
     assert null["trials"] == 200
     assert null["reached"] <= null["settled"] <= null["trials"]
@@ -241,12 +254,22 @@ def test_binomial_two_sided_stays_a_probability() -> None:
     assert modal > _binomial_two_sided(10, 20, 0.1)
 
 
-def test_random_walk_is_reproducible_and_starts_at_the_base() -> None:
-    left = random_walk(50, Random(4))
-    right = random_walk(50, Random(4))
-    assert left == right
-    assert len(left) == 50
-    assert left[0] == 100.0
+def test_shuffled_draws_keeps_the_draws_and_the_calendar() -> None:
+    """Un remaniement change l'ordre, pas les tirages ni les dates.
+
+    Les dates doivent être réattribuées dans l'ordre croissant : `series` retrie
+    ses tirages par date, donc un mélange qui garderait les dates d'origine
+    serait défait aussitôt.
+    """
+    shuffled = shuffled_draws(DRAWS, Random(0))
+    assert len(shuffled) == len(DRAWS)
+    assert [str(d["draw_date"]) for d in shuffled] == sorted(
+        str(d["draw_date"]) for d in DRAWS
+    )
+    assert sorted(tuple(d["numbers"]) for d in shuffled) == sorted(
+        tuple(d["numbers"]) for d in DRAWS
+    )
+    assert [d["numbers"] for d in shuffled] != [d["numbers"] for d in DRAWS]
 
 
 def test_figure_base_rate_is_the_uncomfortable_measure() -> None:
@@ -255,7 +278,9 @@ def test_figure_base_rate_is_the_uncomfortable_measure() -> None:
     Le chiffre est élevé et c'est le point : il doit apparaître dans le
     rapport plutôt que rester implicite.
     """
-    report = figure_base_rate(length=60, trials=60, min_confidence=0.6, seed=0)
+    report = figure_base_rate(
+        draws=DRAWS, variables=(("sum", None),), length=60, trials=60, min_confidence=0.6, seed=0
+    )
     assert report["trials"] == 60
     assert 0.0 <= report["windows_with_any_figure"] <= 1.0
     assert report["windows_with_any_figure"] > 0.4
@@ -268,9 +293,18 @@ def test_figure_base_rate_is_the_uncomfortable_measure() -> None:
     assert "n'apprend rien" in report["note"]
 
 
+def test_figure_base_rate_needs_draws_to_shuffle() -> None:
+    """Sans tirages il n'y a pas de bruit à fabriquer : le rapport se taise."""
+    empty = figure_base_rate(draws=[], variables=(("sum", None),), length=60)
+    assert empty["trials"] == 0
+    assert empty["windows_with_any_figure"] is None
+    assert empty["figures"] == []
+    assert "non mesuré" in empty["note"]
+
+
 def test_figure_base_rate_falls_when_the_bar_rises() -> None:
-    low = figure_base_rate(length=60, trials=60, min_confidence=0.5, seed=1)
-    high = figure_base_rate(length=60, trials=60, min_confidence=0.95, seed=1)
+    low = figure_base_rate(draws=DRAWS, length=60, trials=60, min_confidence=0.5, seed=1)
+    high = figure_base_rate(draws=DRAWS, length=60, trials=60, min_confidence=0.95, seed=1)
     assert high["windows_with_any_figure"] <= low["windows_with_any_figure"]
 
 
@@ -282,10 +316,49 @@ def test_figure_base_rate_grows_with_the_length() -> None:
     côtés — une figure courte est moins banale qu'une longue, et sa confiance
     est pourtant plus haute.
     """
-    short = figure_base_rate(length=20, trials=150, min_confidence=0.6, seed=2)
-    long = figure_base_rate(length=120, trials=150, min_confidence=0.6, seed=2)
+    short = figure_base_rate(draws=DRAWS, length=20, trials=150, min_confidence=0.6, seed=2)
+    long = figure_base_rate(draws=DRAWS, length=120, trials=150, min_confidence=0.6, seed=2)
     assert short["length"] == 20
     assert short["windows_with_any_figure"] < long["windows_with_any_figure"]
+
+
+def test_figure_base_rate_is_louder_on_a_bounded_curve() -> None:
+    """Le point de la mesure : une courbe par paliers est bien plus bruitée.
+
+    « Paires consécutives » ne prend que quelques valeurs entières et produit des
+    ex æquo à chaque tirage, donc des sommets et des creux plats à profusion. Une
+    marche gaussienne n'en produit jamais et sous-estimait ce bruit — c'est
+    précisément ce que le remaniement corrige. L'écart doit être franc, sans quoi
+    la correction ne servirait à rien.
+    """
+    report = figure_base_rate(
+        draws=DRAWS,
+        variables=(("consecutive", None), ("sum", None)),
+        length=60,
+        trials=80,
+        min_confidence=0.6,
+        seed=0,
+    )
+    rates = {row["variable"]: row["windows_with_any_figure"] for row in report["by_variable"]}
+    assert rates["consecutive"] > rates["sum"]
+    # Le classement guide la lecture : le plus bruité d'abord.
+    ordered = [row["windows_with_any_figure"] for row in report["by_variable"]]
+    assert ordered == sorted(ordered, reverse=True)
+    assert report["variables"] == 2
+    assert "n'y dit donc pas la même chose" in report["note"]
+
+
+def test_figure_base_rate_shares_a_window_budget() -> None:
+    """Une série par remaniement coûte : le budget se partage, il ne se multiplie pas."""
+    many = [(name, None) for name in ("sum", "spread", "parity", "high_low", "consecutive")]
+    report = figure_base_rate(
+        draws=DRAWS, variables=many, length=60, trials=200, max_windows=200, seed=0
+    )
+    assert report["windows"] <= 200 + len(many)
+    assert report["trials"] == 40  # plancher : en dessous le taux ne dirait rien
+    # Un appelant qui demande peu de remaniements en obtient peu, pas le plancher.
+    frugal = figure_base_rate(draws=DRAWS, variables=many, length=60, trials=10, seed=0)
+    assert frugal["trials"] == 10
 
 
 def test_run_assembles_the_whole_report() -> None:

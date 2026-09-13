@@ -165,9 +165,18 @@ export function ChartismeLab() {
 
   // Le taux de base est échantillonné une fois par échelle, sans seuil : bouger
   // le curseur de confiance relit alors l'échantillon au lieu de le refaire.
+  //
+  // Il dépend de la courbe et pas seulement de l'échelle, parce que le bruit est
+  // tiré de cette courbe-ci : `n1` tassé contre 1 et la parité par paliers de 0
+  // à 5 ne portent pas les mêmes figures par hasard que la somme.
   const samples = useMemo(
-    () => study.scales.map((scale) => sampleBaseRate(scale)),
-    [study.scales]
+    () =>
+      curve
+        ? study.scales.map((scale) =>
+            sampleBaseRate(study.window.withWarmup, curve.variable, curve.n, scale)
+          )
+        : [],
+    [curve, study]
   )
   const baseRates = useMemo(
     () => samples.map((sample) => baseRateAbove(sample, minConfidence)),

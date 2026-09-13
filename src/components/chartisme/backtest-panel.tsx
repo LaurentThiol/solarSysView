@@ -35,6 +35,14 @@ type TargetRow = {
 
 type BaseRateRow = { figure: string; label: string; count: number; base_rate: number }
 
+type BaseRateVariable = {
+  variable: string
+  label: string
+  trials: number
+  windows_with_any_figure: number
+  interval?: number[]
+}
+
 type BallRow = { n: number; count: number; rate: number; p: number; flagged?: boolean }
 
 type ReportWindow = {
@@ -58,8 +66,12 @@ type Report = {
   base_rates?: {
     trials?: number
     length?: number
+    variables?: number
+    windows?: number
     windows_with_any_figure?: number
+    interval?: number[]
     figures?: BaseRateRow[]
+    by_variable?: BaseRateVariable[]
     note?: string
   }
   numbers?: { chi2?: number; chi2_p?: number; balls?: BallRow[]; flagged?: number[]; verdict?: string }
@@ -331,10 +343,17 @@ export function BacktestPanel({
         {report?.base_rates?.figures?.length ? (
           <div className="space-y-2">
             <p className="text-xs font-medium">
-              Taux de base sur marches aléatoires de {report.base_rates.length}{" "}
-              tirages — l’échelle la plus longue balayée ·{" "}
-              {pct(report.base_rates.windows_with_any_figure)} des marches portent au
-              moins une figure
+              Taux de base sur {report.base_rates.windows} fenêtres de bruit de{" "}
+              {report.base_rates.length} tirages — l’échelle la plus longue balayée,{" "}
+              {report.base_rates.variables} variable
+              {(report.base_rates.variables ?? 0) > 1 ? "s" : ""} ·{" "}
+              {pct(report.base_rates.windows_with_any_figure)} portent au moins une
+              figure
+              {report.base_rates.interval?.length === 2
+                ? ` (${pct(report.base_rates.interval[0])} – ${pct(
+                    report.base_rates.interval[1]
+                  )})`
+                : ""}
             </p>
             <div className="flex flex-wrap gap-1.5">
               {report.base_rates.figures.slice(0, 12).map((row) => (
@@ -343,6 +362,24 @@ export function BacktestPanel({
                 </Badge>
               ))}
             </div>
+            {report.base_rates.by_variable?.length ? (
+              <div className="space-y-1">
+                {/* La moyenne masque l'essentiel : une courbe bornée par paliers
+                    porte une figure sur presque toutes les fenêtres de bruit, une
+                    courbe étalée bien moins. C'est par courbe qu'un seuil se lit. */}
+                <p className="text-xs font-medium">Par courbe, du plus bruité au moins</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {report.base_rates.by_variable.map((row) => (
+                    <Badge
+                      key={row.variable}
+                      variant={row.windows_with_any_figure > 0.5 ? "destructive" : "outline"}
+                    >
+                      {row.label} {pct(row.windows_with_any_figure)}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {report.base_rates.note ? (
               <p className="text-xs text-muted-foreground">{report.base_rates.note}</p>
             ) : null}

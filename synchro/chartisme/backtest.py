@@ -30,7 +30,10 @@ from typing import Any, Sequence
 
 from synchro.analysis.common import as_date, numbers_of, ordered_draws, stars_of
 from synchro.analysis.inference import bh_fdr, chi2_sf, wilson_interval
+from synchro.analysis.tech import activity_from_close
+from synchro.analysis.variables import series
 from synchro.chartisme.catalog import label_of
+from synchro.chartisme.export import curve_label
 from synchro.chartisme.figures import detect_figures, target_reached
 
 DEFAULT_TRIALS = 400
@@ -370,56 +373,161 @@ def _log_binomial_pmf(k: int, n: int, p: float) -> float:
 # --- Taux de base : combien de hasard porte la même figure ? ------------------
 
 
-def random_walk(length: int, rng: random.Random, *, step: float = 1.0) -> list[float]:
-    values = [100.0]
-    for _ in range(length - 1):
-        values.append(values[-1] + rng.gauss(0.0, step))
-    return values
+#: Tirages de contexte gardés devant la fenêtre simulée.
+#:
+#: Le retard d'une boule doit avoir vu passer cette boule au moins une fois,
+#: faute de quoi ses premiers points ne sont qu'une rampe « jamais sortie »
+#: qu'aucune vraie fenêtre ne montre ; la MM20 doit avoir ses vingt points.
+SIMULATED_CONTEXT = 200
+
+
+def shuffled_draws(
+    draws: Sequence[dict[str, Any]], rng: random.Random
+) -> list[dict[str, Any]]:
+    """Les mêmes tirages dans un autre ordre, dates réattribuées par ordre croissant.
+
+    La réattribution n'est pas cosmétique : `series` retrie ses tirages par date,
+    donc un mélange qui garderait les dates d'origine serait défait aussitôt.
+    """
+    dates = sorted(as_date(d["draw_date"]) for d in draws)
+    picks = list(draws)
+    rng.shuffle(picks)
+    return [{**pick, "draw_date": dates[i]} for i, pick in enumerate(picks)]
 
 
 def figure_base_rate(
     *,
+    draws: Sequence[dict[str, Any]],
+    variables: Sequence[tuple[str, int | None]] = (("sum", None),),
     length: int = DEFAULT_BASE_LENGTH,
-    trials: int = 300,
+    trials: int = 200,
+    max_windows: int = 600,
     min_confidence: float = 0.6,
     seed: int = 0,
 ) -> dict[str, Any]:
-    """Part des marches aléatoires portant chaque figure.
+    """Part des fenêtres de bruit portant chaque figure, bruit tiré des tirages.
 
     Mesure inconfortable et nécessaire. Une figure dont le taux de base est
-    élevé n'est pas une observation : c'est ce que produit n'importe quel
-    tracé bruité de cette longueur.
+    élevé n'est pas une observation : c'est ce que produit n'importe quel tracé
+    bruité de cette longueur.
+
+    Le bruit vient des tirages remis dans un ordre quelconque, non d'une marche
+    gaussienne. Une marche est non bornée et sans rapport avec la courbe lue :
+    elle sous-estimait le bruit partout où la courbe est bornée, et la plupart le
+    sont. `n1` ne descend pas sous 1 et passe l'essentiel de son temps entre 1 et
+    10, si bien que deux passages sur le plancher forment un plancher et non un
+    double creux ; la parité tient dans 0–5 avec des ex æquo à chaque tirage,
+    qu'une marche continue ne produit jamais. Le remaniement garde exactement les
+    bornes, les paliers et les ex æquo de la courbe regardée.
+
+    Le taux dépend donc de la variable, et il est mesuré pour chacune de celles
+    qui ont été balayées. Les courbes indexées par boule sont regroupées sous
+    leur variable : sous remaniement les cinquante boules ne se distinguent que
+    par leur fréquence observée, et un taux par boule coûterait cinquante fois
+    plus pour un écart que l'intervalle de Wilson ne trancherait pas.
+
+    `max_windows` répartit un budget de fenêtres entre les variables plutôt que
+    de multiplier `trials` par leur nombre : recalculer une série par remaniement
+    coûte, et douze variables à deux cents remaniements tiennent une route HTTP
+    plusieurs secondes. Le nombre de remaniements réellement fait est renvoyé
+    avec chaque taux, ainsi que son intervalle de Wilson — un budget réparti
+    élargit l'intervalle, il ne doit pas le cacher.
     """
-    rng = random.Random(seed)
+    pool = list(draws)[-(length + SIMULATED_CONTEXT) :]
+    # Dédoublonnage par variable en gardant le premier indice rencontré : l'ordre
+    # d'arrivée vient du catalogue, donc il est stable d'un rapport à l'autre.
+    wanted: dict[str, int | None] = {}
+    for name, n in variables:
+        wanted.setdefault(name, n)
+    if len(pool) < max(2, length) or not wanted:
+        return {
+            "trials": 0,
+            "length": length,
+            "min_confidence": min_confidence,
+            "windows_with_any_figure": None,
+            "figures": [],
+            "by_variable": [],
+            "note": (
+                "Pas assez de tirages pour simuler une fenêtre de "
+                f"{length} : taux de base non mesuré."
+            ),
+        }
+    # Part du budget, avec un plancher pour que le taux garde un sens, mais jamais
+    # plus que demandé : un appelant qui veut dix remaniements en veut dix.
+    per_run = min(trials, max(40, max_windows // len(wanted)))
     counts: dict[str, int] = {}
+    per_variable: list[dict[str, Any]] = []
     carrying = 0
-    for _ in range(trials):
-        values = random_walk(length, rng)
-        activity = [abs(values[i] - values[i - 1]) if i else 0.0 for i in range(len(values))]
-        hits = detect_figures(values, activity=activity, min_confidence=min_confidence)
-        if hits:
-            carrying += 1
-        for figure in {hit["figure"] for hit in hits}:
-            counts[figure] = counts.get(figure, 0) + 1
+    windows = 0
+    for name, n in wanted.items():
+        # Une graine par variable, dérivée de la graine du rapport : deux
+        # variables ne doivent pas partager la même suite de remaniements, et le
+        # rapport doit rester reproductible.
+        rng = random.Random(f"{seed}:{name}")
+        local = 0
+        for _ in range(per_run):
+            values = [
+                float(v) for v in series(shuffled_draws(pool, rng), name, n)["values"][-length:]
+            ]
+            hits = detect_figures(
+                values, activity=activity_from_close(values), min_confidence=min_confidence
+            )
+            windows += 1
+            if hits:
+                carrying += 1
+                local += 1
+            for figure in {hit["figure"] for hit in hits}:
+                counts[figure] = counts.get(figure, 0) + 1
+        _, lo, hi = wilson_interval(local, per_run)
+        per_variable.append(
+            {
+                "variable": name,
+                "n": n,
+                "label": curve_label(name, n),
+                "trials": per_run,
+                "windows_with_any_figure": round(local / per_run, 4),
+                "interval": [round(lo, 4), round(hi, 4)],
+            }
+        )
+    per_variable.sort(key=lambda row: -row["windows_with_any_figure"])
     rows = [
         {
             "figure": figure,
             "label": label_of(figure),
             "count": count,
-            "base_rate": round(count / trials, 4),
+            "base_rate": round(count / windows, 4),
         }
         for figure, count in sorted(counts.items(), key=lambda kv: -kv[1])
     ]
+    note = (
+        "Taux de base sur les mêmes tirages remis dans un ordre quelconque : "
+        "une figure fréquente ici n'apprend rien quand on la voit sur une vraie "
+        "courbe. Le bruit garde les bornes et les paliers de chaque courbe, ce "
+        "qu'une marche gaussienne ignorait. Il teste que l'ordre des tirages "
+        "porte une forme, pas que les tirages soient équiprobables."
+    )
+    if len(per_variable) > 1:
+        loud, quiet = per_variable[0], per_variable[-1]
+        note += (
+            f" Le bruit ne se répartit pas également : {loud['label']} porte une "
+            f"figure sur {round(loud['windows_with_any_figure'] * 100)} % des "
+            f"fenêtres de bruit, {quiet['label']} sur "
+            f"{round(quiet['windows_with_any_figure'] * 100)} %. Un même seuil de "
+            "confiance n'y dit donc pas la même chose, et le taux moyen ci-dessus "
+            "n'est qu'un résumé."
+        )
+    _, lo, hi = wilson_interval(carrying, windows)
     return {
-        "trials": trials,
+        "trials": per_run,
         "length": length,
         "min_confidence": min_confidence,
-        "windows_with_any_figure": round(carrying / trials, 4),
+        "variables": len(per_variable),
+        "windows": windows,
+        "windows_with_any_figure": round(carrying / windows, 4),
+        "interval": [round(lo, 4), round(hi, 4)],
         "figures": rows,
-        "note": (
-            "Taux de base sur marches aléatoires : une figure fréquente ici "
-            "n'apprend rien quand on la voit sur une vraie courbe."
-        ),
+        "by_variable": per_variable,
+        "note": note,
     }
 
 
@@ -437,6 +545,8 @@ def run(
     trials: int = DEFAULT_TRIALS,
     base_rate_trials: int = 200,
     base_length: int = DEFAULT_BASE_LENGTH,
+    min_confidence: float = 0.6,
+    numbers: bool = True,
     seed: int = 0,
 ) -> dict[str, Any]:
     """Les deux questions, plus le taux de base, en un seul rapport.
@@ -445,6 +555,12 @@ def run(
     60 tirages ne dit rien d'une lecture faite à l'échelle 20 : la confiance est
     escomptée selon la part de fenêtre couverte, donc la même figure y passe
     plus facilement le seuil. Comparer les deux serait se rassurer à bon compte.
+
+    Le taux de base est mesuré sur les variables des courbes réellement balayées,
+    et pas sur une variable de convention : le bruit est tiré des tirages, donc
+    il dépend des bornes et des paliers de chaque courbe. Sans `draws` il n'y a
+    rien à remanier, et il n'est pas mesuré du tout — mieux vaut un rapport qui
+    se taise qu'un rapport qui rassure.
     """
     report: dict[str, Any] = {
         "figure_count": len(hits),
@@ -453,7 +569,17 @@ def run(
             curves, hits, horizon=horizon, trials=trials, seed=seed
         ),
         "base_rates": figure_base_rate(
-            length=base_length, trials=base_rate_trials, seed=seed
+            draws=draws or [],
+            variables=[
+                (str(curve.get("variable") or ""), curve.get("n"))
+                for curve in curves.values()
+                if curve.get("variable")
+            ]
+            or (("sum", None),),
+            length=base_length,
+            trials=base_rate_trials,
+            min_confidence=min_confidence,
+            seed=seed,
         ),
         "disclaimer": (
             "Les tirages sont indépendants. Une figure est une propriété du "
@@ -461,7 +587,7 @@ def run(
             "deux ; il ne le comble pas."
         ),
     }
-    if draws:
+    if draws and numbers:
         source = list(firings if firings is not None else hits)
         report["numbers"] = number_signal(draws, source, follow=follow)
         report["stars"] = number_signal(draws, source, follow=follow, stars=True)
