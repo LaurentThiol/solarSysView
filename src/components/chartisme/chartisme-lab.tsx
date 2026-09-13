@@ -479,11 +479,14 @@ export function ChartismeLab() {
                 label={curve.label}
               />
 
-              {/* Hauteur réservée : sans elle, vider la liste raccourcit la page
-                  de la hauteur du panneau, et le navigateur ramène le défilement
-                  vers le haut — le tracé qu'on lisait s'en va sous les yeux. La
-                  valeur est celle du panneau garni, mesurée. */}
-              <div className="sm:min-h-[19rem]">
+              {/* Hauteur fixe, pas minimale. Vider la liste raccourcissait la
+                  page de la hauteur du panneau et le navigateur ramenait le
+                  défilement vers le haut : le tracé qu'on lisait s'en allait
+                  sous les yeux. Une hauteur minimale ne suffirait pas — le
+                  panneau garni mesure le double, et sa taille dépend de la
+                  figure affichée. Un budget fixe avec défilement interne rend la
+                  page insensible au nombre de figures trouvées. */}
+              <div className="sm:h-[19rem] sm:overflow-y-auto">
                 {hits.length ? (
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-1.5">
