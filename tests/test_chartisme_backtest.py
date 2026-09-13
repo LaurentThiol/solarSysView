@@ -274,6 +274,20 @@ def test_figure_base_rate_falls_when_the_bar_rises() -> None:
     assert high["windows_with_any_figure"] <= low["windows_with_any_figure"]
 
 
+def test_figure_base_rate_grows_with_the_length() -> None:
+    """Une fenêtre longue offre plus de pivots, donc plus d'occasions d'ajuster.
+
+    C'est pourquoi le taux de base doit suivre l'échelle balayée : le comparer
+    à celui de 60 tirages quand on lit à l'échelle 20 fausse la lecture des deux
+    côtés — une figure courte est moins banale qu'une longue, et sa confiance
+    est pourtant plus haute.
+    """
+    short = figure_base_rate(length=20, trials=150, min_confidence=0.6, seed=2)
+    long = figure_base_rate(length=120, trials=150, min_confidence=0.6, seed=2)
+    assert short["length"] == 20
+    assert short["windows_with_any_figure"] < long["windows_with_any_figure"]
+
+
 def test_run_assembles_the_whole_report() -> None:
     from synchro.chartisme.export import build_curve
     from synchro.chartisme.scan import scan_curve
@@ -294,9 +308,17 @@ def test_run_assembles_the_whole_report() -> None:
     assert report["curve_count"] == 1
     assert report["targets"]["horizon"] == 20
     assert report["base_rates"]["trials"] == 30
+    assert report["base_rates"]["length"] == 60
     assert report["numbers"]["follow"] == 3
     assert report["stars"]["chi2_df"] == STAR_COUNT - 1
     assert "indépendants" in report["disclaimer"]
+
+
+def test_run_measures_the_base_rate_at_the_scanned_length() -> None:
+    """L'onglet balaie parfois des fenêtres de 20 tirages : le nul doit suivre."""
+    curve = {"id": "x", "variable": "sum", "values": [float(v) for v in range(60)]}
+    report = run({"x": curve}, [], base_rate_trials=10, base_length=20)
+    assert report["base_rates"]["length"] == 20
 
 
 def test_run_without_draws_skips_the_number_question() -> None:

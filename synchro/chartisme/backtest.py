@@ -36,6 +36,7 @@ from synchro.chartisme.figures import detect_figures, target_reached
 DEFAULT_TRIALS = 400
 DEFAULT_HORIZON = 40
 DEFAULT_FOLLOW = 5
+DEFAULT_BASE_LENGTH = 60
 BALL_COUNT = 50
 BALLS_PER_DRAW = 5
 STAR_COUNT = 12
@@ -378,7 +379,7 @@ def random_walk(length: int, rng: random.Random, *, step: float = 1.0) -> list[f
 
 def figure_base_rate(
     *,
-    length: int = 60,
+    length: int = DEFAULT_BASE_LENGTH,
     trials: int = 300,
     min_confidence: float = 0.6,
     seed: int = 0,
@@ -435,16 +436,25 @@ def run(
     follow: int = DEFAULT_FOLLOW,
     trials: int = DEFAULT_TRIALS,
     base_rate_trials: int = 200,
+    base_length: int = DEFAULT_BASE_LENGTH,
     seed: int = 0,
 ) -> dict[str, Any]:
-    """Les deux questions, plus le taux de base, en un seul rapport."""
+    """Les deux questions, plus le taux de base, en un seul rapport.
+
+    `base_length` suit l'échelle réellement balayée. Un taux de base mesuré sur
+    60 tirages ne dit rien d'une lecture faite à l'échelle 20 : la confiance est
+    escomptée selon la part de fenêtre couverte, donc la même figure y passe
+    plus facilement le seuil. Comparer les deux serait se rassurer à bon compte.
+    """
     report: dict[str, Any] = {
         "figure_count": len(hits),
         "curve_count": len(curves),
         "targets": target_outcomes(
             curves, hits, horizon=horizon, trials=trials, seed=seed
         ),
-        "base_rates": figure_base_rate(trials=base_rate_trials, seed=seed),
+        "base_rates": figure_base_rate(
+            length=base_length, trials=base_rate_trials, seed=seed
+        ),
         "disclaimer": (
             "Les tirages sont indépendants. Une figure est une propriété du "
             "tracé, pas une prédiction. Ce rapport mesure l'écart entre les "

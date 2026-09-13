@@ -1048,6 +1048,9 @@ def create_app() -> FastAPI:
         max_curves: int = Query(12, ge=1, le=131),
         min_confidence: float = Query(0.6, ge=0.0, le=1.0),
         follow: int = Query(5, ge=1, le=20),
+        # Longueur des marches aléatoires du taux de base : celle de l'échelle
+        # que l'onglet balaie, sans quoi la comparaison porte sur autre chose.
+        base_length: int = Query(60, ge=16, le=400),
         numbers: bool = True,
     ) -> dict[str, Any]:
         bundle = _chartisme_bundle(era)
@@ -1068,6 +1071,7 @@ def create_app() -> FastAPI:
                 draws=_analysis_draws(era) if numbers else None,
                 follow=follow,
                 base_rate_trials=120,
+                base_length=base_length,
             ),
         }
 

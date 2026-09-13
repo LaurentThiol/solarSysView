@@ -65,10 +65,13 @@ export function BacktestPanel({
   curve,
   hits,
   era,
+  scales = [],
 }: {
   curve: Curve | null
   hits: ScanHit[]
   era: "current" | "all"
+  /** Échelles balayées au-dessus : le taux de base se mesure à leur longueur. */
+  scales?: number[]
 }) {
   const [report, setReport] = useState<Report | null>(null)
   const [running, setRunning] = useState(false)
@@ -89,6 +92,10 @@ export function BacktestPanel({
         max_curves: String(maxCurves),
         min_confidence: "0.6",
       })
+      // La plus longue échelle balayée : le taux de base croît avec la longueur
+      // (plus de pivots, donc plus d'occasions qu'une figure s'ajuste quelque
+      // part), et c'est la comparaison la moins flatteuse qu'on veut afficher.
+      if (scales.length) params.set("base_length", String(Math.max(...scales)))
       if (curve) params.set("curve", curve.id)
       const response = await fetch(`/api/chartisme/backtest?${params}`, { cache: "no-store" })
       if (!response.ok) {
@@ -135,6 +142,13 @@ export function BacktestPanel({
           figure et le hasard ; il ne le comble pas. Le résultat attendu sur des
           courbes de tirages est qu’aucune figure ne dépasse son modèle nul — et
           le voir écrit vaut mieux que l’ignorer.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          La fenêtre d’étude ne borne pas cette mesure : elle porte sur toute
+          l’archive choisie. Un modèle nul, un intervalle de Wilson et une
+          correction de Benjamini-Hochberg sur vingt tirages n’auraient aucune
+          puissance — la fenêtre sert à regarder de près, le rétro-test à savoir
+          si ce qu’on y voit vaut quelque chose.
         </p>
 
         <div className="flex flex-wrap items-end gap-3">
@@ -244,7 +258,8 @@ export function BacktestPanel({
         {report?.base_rates?.figures?.length ? (
           <div className="space-y-2">
             <p className="text-xs font-medium">
-              Taux de base sur marches aléatoires ·{" "}
+              Taux de base sur marches aléatoires de {report.base_rates.length}{" "}
+              tirages — l’échelle la plus longue balayée ·{" "}
               {pct(report.base_rates.windows_with_any_figure)} des marches portent au
               moins une figure
             </p>

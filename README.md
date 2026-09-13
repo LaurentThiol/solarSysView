@@ -109,7 +109,9 @@ Sans eux, l’onglet reste entier : détecteurs géométriques et recherche par 
 
 - *l’objectif a-t-il été atteint ?* comparé à un modèle nul qui applique la même mesure à des points tirés au hasard sur la même courbe (même distance, même niveau d’invalidation, même horizon), avec intervalles de Wilson ;
 - *y a-t-il un signal sur les numéros ?* les boules sorties après chaque déclenchement contre l’uniforme, chaque tirage postérieur compté une seule fois, avec correction de Benjamini-Hochberg — cinquante tests simultanés produisent deux ou trois « découvertes » par pur hasard ;
-- le **taux de base** : combien de marches aléatoires de même longueur portent la même figure. Mesure inconfortable et nécessaire — une figure fréquente sur du bruit n’apprend rien quand on la voit sur une vraie courbe.
+- le **taux de base** : combien de marches aléatoires de même longueur portent la même figure, mesuré à l’échelle la plus longue balayée (`base_length`). Mesure inconfortable et nécessaire — une figure fréquente sur du bruit n’apprend rien quand on la voit sur une vraie courbe.
+
+Le rétro-test porte sur toute l’archive choisie, pas sur la fenêtre d’étude : un modèle nul, un intervalle de Wilson et une correction de Benjamini-Hochberg sur vingt tirages n’auraient aucune puissance. La fenêtre sert à regarder de près, le rétro-test à savoir si ce qu’on y voit vaut quelque chose.
 
 **Export automatique** : `run_ensure()` accroche un cycle complet dès qu’un tirage entre en base (réexport des courbes → balayage → règles → journal → état dans `.chartisme/state.json`). Le cycle est non fatal et silencieux : un balayage qui casse n’empêche jamais une synchro FDJ d’aboutir. Désactivable par `SYNCHRO_CHARTISME_AUTO_EXPORT=0`.
 
@@ -183,6 +185,6 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 - `POST /api/chartisme/detect|similar` — lecture d’une fenêtre envoyée par le navigateur, recherche par ressemblance DTW
 - `GET\|POST /api/chartisme/labels|rules` · `DELETE …/{id}` — atelier d’étiquetage et espace de règles (Neon)
 - `POST /api/chartisme/rules/evaluate` · `GET /api/chartisme/firings` — déclenchements et journal
-- `GET /api/chartisme/backtest` — objectif atteint, signal sur les numéros, taux de base
+- `GET /api/chartisme/backtest` — objectif atteint, signal sur les numéros, taux de base (`base_length` = longueur des marches aléatoires)
 
 Application indépendante, non affiliée à La Française des Jeux.
