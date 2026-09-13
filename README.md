@@ -143,6 +143,17 @@ Ce qui décide est la **forme** de la distribution, et plus précisément son so
 
 Ce qui l’explique n’est pas la fréquence de la boule — la corrélation de rang entre nombre de sorties et seuil requis vaut 0.29, et les dix boules les plus lisibles sortent en moyenne 99 fois contre 107 pour les vingt-huit hors d’atteinte, soit rien. **C’est l’argument de la carte** : le classement ne se déduit d’aucune propriété simple de la courbe, donc il faut le mesurer, et choisir une courbe dans une liste de 142 sans l’avoir mesurée revient à tirer au sort — cinquante courbes de retard s’y présentent à l’identique, dont six sont les meilleures de la carte et vingt-huit ne peuvent rien dire.
 
+**Le classement dépend de la rareté demandée, et il s’inverse.** C’est le résultat le plus contraire à l’intuition de tout ce qui précède, et il lie deux réglages qu’on croyait indépendants. À l’échelle 25, toujours sur la même archive :
+
+| cible | 8 premières courbes | retards ≤ 0.65 | retards hors d’atteinte | atteignables sur 142 |
+|---|---|---|---|---|
+| une fenêtre sur 5 | **les 8 sont des retards** (0.52 à 0.68) | 6 / 50 | 23 / 50 | 45 |
+| une fenêtre sur 20 | 1 retard, puis somme, centre de masse, étendue, rangs | 0 / 50 | 49 / 50 | 18 |
+
+En resserrant la cible de 20 % à 5 %, la famille du retard passe de première à quasi absente et les variables libres prennent la tête. La raison est la **queue** déjà décrite : le retard a un corps sage et un sommet au plafond, donc son vingtième centile est bas et son cinquième est au plafond — le seuil requis y bondit de 0.52 à 0.71. La somme n’a pas de queue, donc ses centiles bougent à peine, de 0.73 à 0.79. Une courbe à queue lourde gagne les cibles larges et perd les cibles étroites ; une courbe tassée est indifférente à la cible.
+
+Il n’y a donc **pas de « bonne courbe » en soi**, seulement une bonne courbe pour une rareté donnée — et c’est pourquoi la carte se déclare périmée dès que la rareté visée change plutôt que de garder son classement.
+
 Les chiffres ci-dessus portent sur une archive synthétique de mille tirages, et le 0.05 d’amplitude entre graines dit exactement leur précision : deux courbes séparées par moins que cela ne sont pas classées, une scission de 0.46 est réelle. L’onglet les recalcule pour l’archive et la fenêtre effectivement chargées.
 
 **Est-ce que ça change ?** La fenêtre étudiée est comparée à celle qui la précède immédiatement, de **même longueur**, lue avec les mêmes échelles et le même seuil. L’égalité de longueur est exigée, pas seulement l’antériorité : le nombre de figures croît avec le nombre de tirages, et comparer cinquante tirages à dix-neuf montrerait toujours « moins de figures avant » sans rien dire du système. Une figure présente dans les deux tranches a une chance de décrire le système observé ; une figure absente de l’une décrivait surtout l’endroit où l’on a coupé. À ces effectifs aucun test ne tranche, et le panneau le dit.

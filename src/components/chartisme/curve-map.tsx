@@ -196,7 +196,7 @@ export function CurveMap({
             label="Rareté visée"
             help={{
               title: "Rareté visée",
-              body: "La part des fenêtres de bruit qu'on accepte de voir porter une figure. Le même réglage que le curseur de l'onglet : le changer ici le change là-bas, et la carte comme le tracé s'y rapportent.",
+              body: "La part des fenêtres de bruit qu'on accepte de voir porter une figure. Le même réglage que le curseur de l'onglet : le changer ici le change là-bas, et la carte comme le tracé s'y rapportent. Ce réglage ne déplace pas le classement, il le refait : mesuré à l'échelle 25, les huit meilleures courbes à une fenêtre sur cinq sont huit courbes de retard, et à une fenêtre sur vingt il n'en reste qu'une, les variables libres prenant la tête. Une courbe dont le bruit a une queue lourde gagne les cibles larges et perd les étroites, une courbe au bruit tassé est indifférente à la cible. Il n'y a donc pas de bonne courbe en soi, seulement une bonne courbe pour une rareté donnée — d'où le classement refait plutôt que gardé.",
             }}
           >
             <Select
