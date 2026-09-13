@@ -38,7 +38,14 @@ import { liveInWindow } from "@/lib/chartisme/window"
  * pas à décider ce qu'on cherche.
  */
 
-/** Assez pour trancher « bruité » de « lisible », pas pour classer deux voisines. */
+/**
+ * Assez pour trancher « bruité » de « lisible », pas pour classer deux voisines.
+ *
+ * Moitié moins que le chiffrage sous le tracé, parce qu'ici il faut le payer 142
+ * fois. La carte peut donc annoncer un seuil au centième près de celui de
+ * l'onglet sur la même courbe : c'est le même calcul sur un échantillon plus
+ * court, pas une contradiction.
+ */
 const TRIALS = 60
 
 const TARGETS = [0.05, 0.1, 0.2, 0.3, 0.5]
@@ -168,7 +175,7 @@ export function CurveMap({
               title: "Carte des courbes",
               body: `Le taux de base répond avant le tracé : sur certaines courbes, aucun seuil atteignable ne sépare l'observation du hasard, et l'onglet ne le disait qu'après coup, une fois la courbe choisie. La carte mesure les ${specs.length} courbes une fois et les classe par le seuil qu'il leur faudrait pour tenir la rareté visée. Le bruit est fait des mêmes tirages remis dans un ordre quelconque, ${TRIALS} fois par courbe. « Hors d'atteinte » signifie qu'il faudrait dépasser ${MAX_THRESHOLD.toFixed(
                 2
-              )}, où un seuil rejette le bruit et la figure ensemble. Le verdict vaut pour une échelle et non pour la courbe entière : une même courbe peut se laisser trier à une échelle et pas à la voisine, aussi l'échelle mesurée se choisit-elle. Rien n'est écarté : une courbe illisible pour ses figures peut se regarder pour autre chose.`,
+              )}, où un seuil rejette le bruit et la figure ensemble. Le verdict vaut pour une échelle et non pour la courbe entière : une même courbe peut se laisser trier à une échelle et pas à la voisine, aussi l'échelle mesurée se choisit-elle. Toutes les courbes voient les mêmes remaniements, ce qui rend le classement plus stable que chacun de ses chiffres : un hasard de tirage les déplace ensemble. À ${TRIALS} remaniements l'écart entre deux voisines ne se tranche pas — le classement sépare des familles, pas des rangs. Rien n'est écarté : une courbe illisible pour ses figures peut se regarder pour autre chose.`,
             }}
           >
             Carte des courbes — où une figure veut dire quelque chose
