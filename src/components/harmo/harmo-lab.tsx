@@ -151,14 +151,25 @@ export function HarmoLab() {
   }, [variable, variableN, era, preset, resolved.fromDate, resolved.toDate, lastN, warmup, fftWindow])
 
   useEffect(() => {
+    let cancelled = false
     void (async () => {
-      try {
-        const response = await fetch("/api/harmo/status", { cache: "no-store" })
-        if (response.ok) setStatus((await response.json()) as HarmoStatus)
-      } catch {
-        setStatus({ ok: false, error: "API injoignable" })
+      for (const waitMs of [0, 500]) {
+        if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs))
+        try {
+          const response = await fetch("/api/harmo/status", { cache: "no-store" })
+          if (cancelled) return
+          if (response.ok) {
+            setStatus((await response.json()) as HarmoStatus)
+            return
+          }
+        } catch {
+          if (!cancelled) setStatus({ ok: false, error: "API injoignable" })
+        }
       }
     })()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const loadTab = useCallback(
@@ -199,7 +210,11 @@ export function HarmoLab() {
 
   useEffect(() => {
     if (drawsLoading) return
-    if (tab === "tests") return
+    if (tab === "tests") {
+      setPayload(null)
+      setOrders(null)
+      return
+    }
     void loadTab(tab)
   }, [tab, loadTab, drawsLoading])
 
@@ -308,7 +323,7 @@ export function HarmoLab() {
               body: "Formule actuelle = pool de 12 étoiles. Tout l’historique mélange les anciennes formules.",
             }}
           >
-            <Select value={era} onValueChange={(v) => setEra(v as "current" | "all")}>
+            <Select value={era} onValueChange={(v) => v && setEra(v as "current" | "all")}>
               <SelectTrigger className="w-full sm:w-56" aria-label="Ère">
                 <span className="flex flex-1 text-left">
                   {era === "all" ? "Archive : tout l’historique" : "Archive : formule actuelle (12 ★)"}
@@ -327,7 +342,7 @@ export function HarmoLab() {
               body: "Série envoyée à scipy. Le retard a des harmoniques par construction ; la présence est un train d’impulsions.",
             }}
           >
-            <Select value={variable} onValueChange={(v) => setVariable(v as VariableName)}>
+            <Select value={variable} onValueChange={(v) => v && setVariable(v as VariableName)}>
               <SelectTrigger className="w-full sm:w-56" aria-label="Variable">
                 <span className="flex flex-1 text-left">{VARIABLE_LABELS[variable]}</span>
               </SelectTrigger>
