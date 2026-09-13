@@ -23,6 +23,16 @@ import { collapseZones, scanCurve, sortByRank, type ScanHit } from "@/lib/charti
 import { stateFromHit } from "@/lib/chartisme/rules"
 import { loadRules, recordFirings } from "@/lib/chartisme/store"
 import { evaluateRules } from "@/lib/chartisme/rules"
+import {
+  DEFAULT_STUDY_PRESET,
+  STUDY_PRESETS,
+  STUDY_PRESET_LABELS,
+  liveInWindow,
+  resolveStudyWindow,
+  shortScaleCaveat,
+  studyBanner,
+  type StudyPreset,
+} from "@/lib/chartisme/window"
 import { useDraws } from "@/lib/use-draws"
 
 type ModuleStatus = {
@@ -35,11 +45,17 @@ type ModuleStatus = {
 }
 
 const SCALE_CHOICES = [
-  { value: "multi", label: "Multi-échelle (30 · 60 · 120)" },
+  { value: "auto", label: "Auto — celles qui tiennent dans la fenêtre" },
+  { value: "20", label: "Très courte (20 tirages)" },
   { value: "30", label: "Courte (30 tirages)" },
   { value: "60", label: "Moyenne (60 tirages)" },
   { value: "120", label: "Longue (120 tirages)" },
 ]
+
+const ERA_LABELS = {
+  current: "Ère courante (12 ★)",
+  all: "Toute l’archive",
+}
 
 function outcomeLabel(hit: ScanHit) {
   const status = hit.outcome?.status ?? "no_breakout"
@@ -61,7 +77,9 @@ export function ChartismeLab() {
   const { draws, source, loading } = useDraws(era)
 
   const [curveId, setCurveId] = useState("sum")
-  const [scaleChoice, setScaleChoice] = useState("multi")
+  const [scaleChoice, setScaleChoice] = useState("auto")
+  const [preset, setPreset] = useState<StudyPreset>(DEFAULT_STUDY_PRESET)
+  const [lastN, setLastN] = useState("")
   const [minConfidence, setMinConfidence] = useState(0.6)
   const [selected, setSelected] = useState(0)
   const [selection, setSelection] = useState<CurveSelection | null>(null)
@@ -81,27 +99,45 @@ export function ChartismeLab() {
 
   const specs = useMemo(() => curveSpecs(), [])
 
+  // La fenêtre d'étude découpe la zone lue ; le contexte qui la précède reste
+  // calculé pour que `delay`, l'activité et la MM20 ne repartent pas de zéro au
+  // premier tirage découpé.
+  const study = useMemo(() => {
+    const parsed = Number.parseInt(lastN, 10)
+    return resolveStudyWindow(draws, {
+      preset,
+      lastN: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
+      scale: scaleChoice === "auto" ? "auto" : Number(scaleChoice),
+    })
+  }, [draws, preset, lastN, scaleChoice])
+
   // Les courbes se reconstruisent dans le navigateur : sur Netlify aucun
   // backend Python ne répond, et l'onglet doit rester entier.
   const curve = useMemo<Curve | null>(() => {
-    if (!draws.length) return null
+    if (!study.window.withWarmup.length) return null
     const spec = specs.find((s) => (s.n === null ? s.variable : `${s.variable}:${s.n}`) === curveId)
     if (!spec) return null
-    return buildCurve(draws, spec.variable, spec.n)
-  }, [draws, specs, curveId])
+    return buildCurve(study.window.withWarmup, spec.variable, spec.n)
+  }, [study, specs, curveId])
 
   const hits = useMemo<ScanHit[]>(() => {
     if (!curve) return []
-    const scales = scaleChoice === "multi" ? null : [Number(scaleChoice)]
     return sortByRank(
-      collapseZones(scanCurve(curve, { scales, minConfidence }))
+      collapseZones(
+        scanCurve(curve, { scales: study.scales, minConfidence }).filter((hit) =>
+          liveInWindow(hit, study.contextCount)
+        )
+      )
     )
-  }, [curve, scaleChoice, minConfidence])
+  }, [curve, study, minConfidence])
 
-  // Changer de courbe ou de seuil renumérote les figures : la sélection
-  // précédente désignerait autre chose. Ajusté au rendu plutôt que dans un
-  // effet, qui provoquerait un rendu en cascade avec l'ancien index affiché.
-  const scanKey = `${curveId}|${scaleChoice}|${minConfidence}`
+  const caveat = shortScaleCaveat(study.scales)
+
+  // Changer de courbe, de fenêtre ou de seuil renumérote les figures : la
+  // sélection précédente désignerait autre chose. Ajusté au rendu plutôt que
+  // dans un effet, qui provoquerait un rendu en cascade avec l'ancien index
+  // affiché.
+  const scanKey = `${era}|${curveId}|${scaleChoice}|${preset}|${lastN}|${minConfidence}`
   const [lastScanKey, setLastScanKey] = useState(scanKey)
   if (scanKey !== lastScanKey) {
     setLastScanKey(scanKey)
@@ -188,7 +224,7 @@ export function ChartismeLab() {
             <TitleHelp
               help={{
                 title: "Figures sur une courbe",
-                body: "Le balayage déplace une fenêtre sur toute la courbe, à trois échelles. Chaque figure repérée est dessinée avec ses pivots nommés, sa ligne de cou ou ses bornes, sa cassure et son objectif projeté selon la table de référence.",
+                body: "Le balayage déplace une fenêtre sur la zone étudiée, aux échelles qui y tiennent. Chaque figure repérée est dessinée avec ses pivots nommés, sa ligne de cou ou ses bornes, sa cassure et son objectif projeté selon la table de référence. Une figure entièrement contenue dans le contexte grisé n'est pas listée : elle appartient au passé calculé pour alimenter les indicateurs, pas à la fenêtre.",
               }}
             >
               Courbe et figures
@@ -196,7 +232,7 @@ export function ChartismeLab() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <LabelHelp
               label="Courbe"
               help={{
@@ -205,7 +241,9 @@ export function ChartismeLab() {
               }}
             >
               <Select value={curveId} onValueChange={(v) => setCurveId(v ?? curveId)}>
-                <SelectTrigger className="w-full" />
+                <SelectTrigger className="w-full" aria-label="Courbe">
+                  <span className="flex flex-1 text-left">{curveId}</span>
+                </SelectTrigger>
                 <SelectContent>
                   {specs.map((spec) => {
                     const id = spec.n === null ? spec.variable : `${spec.variable}:${spec.n}`
@@ -220,17 +258,65 @@ export function ChartismeLab() {
             </LabelHelp>
 
             <LabelHelp
+              label="Fenêtre d’étude"
+              help={{
+                title: "Fenêtre d’étude",
+                body: "La zone de tirages qu'on regarde — les 20, 50, 100 derniers, une durée, l'année, tout. Les tirages qui précèdent restent calculés en contexte (le retard d'une boule et la MM20 de la règle d'or ne repartent pas de zéro au premier tirage découpé), mais aucune figure entièrement contenue dans ce contexte n'est listée.",
+              }}
+            >
+              <Select
+                value={preset}
+                onValueChange={(value) => setPreset((value as StudyPreset) ?? preset)}
+              >
+                <SelectTrigger className="w-full" aria-label="Fenêtre d’étude">
+                  <span className="flex flex-1 text-left">
+                    {STUDY_PRESET_LABELS[preset]}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {STUDY_PRESETS.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {STUDY_PRESET_LABELS[item]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </LabelHelp>
+
+            <LabelHelp
+              label="Derniers N"
+              help={{
+                title: "Derniers N tirages",
+                body: "Force les N derniers tirages de la fenêtre, pour une longueur que les presets ne proposent pas (35, 75…). Vide : le preset décide.",
+              }}
+            >
+              <Input
+                type="number"
+                min={10}
+                max={2000}
+                value={lastN}
+                placeholder="auto"
+                onChange={(event) => setLastN(event.target.value)}
+                aria-label="Derniers N tirages"
+              />
+            </LabelHelp>
+
+            <LabelHelp
               label="Échelle"
               help={{
                 title: "Échelle de la fenêtre",
-                body: "Une tête-épaules sur 30 tirages et un range sur 120 ne se lisent pas à la même échelle. Le mode multi-échelle balaie les trois puis ne garde qu'une lecture par zone, les autres passant en alternatives.",
+                body: "Longueur des figures cherchées, distincte de la fenêtre d'étude. Une tête-épaules sur 30 tirages et un range sur 120 ne se lisent pas à la même échelle. « Auto » ne garde que les échelles qui tiennent dans la fenêtre, balaie les trois plus longues et ne conserve qu'une lecture par zone, les autres passant en alternatives. Forcer une échelle plus longue que la fenêtre répond à une autre question : quelle figure longue s'achève ici.",
               }}
             >
               <Select
                 value={scaleChoice}
-                onValueChange={(v) => setScaleChoice(v ?? "multi")}
+                onValueChange={(v) => setScaleChoice(v ?? "auto")}
               >
-                <SelectTrigger className="w-full" />
+                <SelectTrigger className="w-full" aria-label="Échelle">
+                  <span className="flex flex-1 text-left">
+                    {SCALE_CHOICES.find((choice) => choice.value === scaleChoice)?.label}
+                  </span>
+                </SelectTrigger>
                 <SelectContent>
                   {SCALE_CHOICES.map((choice) => (
                     <SelectItem key={choice.value} value={choice.value}>
@@ -245,7 +331,7 @@ export function ChartismeLab() {
               label={`Confiance minimale · ${minConfidence.toFixed(2)}`}
               help={{
                 title: "Confiance minimale",
-                body: "La confiance mesure la qualité de l'ajustement géométrique, pénalisée quand une borne repose sur moins de trois points. Attention : 85 % des marches aléatoires portent au moins une figure à 0.6 — une figure fréquente sur du bruit n'apprend rien.",
+                body: "La confiance mesure la qualité de l'ajustement géométrique, pénalisée quand une borne repose sur moins de trois points. Attention : 85 % des marches aléatoires de 60 tirages portent au moins une figure à 0.6, et une échelle plus courte fait monter ce taux — une figure fréquente sur du bruit n'apprend rien.",
               }}
             >
               <Input
@@ -259,34 +345,52 @@ export function ChartismeLab() {
             </LabelHelp>
 
             <LabelHelp
-              label="Période"
+              label="Archive"
               help={{
-                title: "Période",
-                body: "« Ère courante » se limite au format à 5 étoiles sur 12 ; « tout » remonte à 2004, au prix d'une rupture de règles au milieu de l'archive.",
+                title: "Archive",
+                body: "Le jeu de tirages dans lequel la fenêtre est découpée. « Ère courante » se limite au format à 5 étoiles sur 12 ; « toute l'archive » remonte à 2004, au prix d'une rupture de règles en son milieu.",
               }}
             >
               <Select
                 value={era}
                 onValueChange={(value) => setEra(value as "current" | "all")}
               >
-                <SelectTrigger className="w-full" />
+                <SelectTrigger className="w-full" aria-label="Archive">
+                  <span className="flex flex-1 text-left">{ERA_LABELS[era]}</span>
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="current">Ère courante</SelectItem>
-                  <SelectItem value="all">Toute l’archive</SelectItem>
+                  <SelectItem value="current">{ERA_LABELS.current}</SelectItem>
+                  <SelectItem value="all">{ERA_LABELS.all}</SelectItem>
                 </SelectContent>
               </Select>
             </LabelHelp>
           </div>
 
+          <p className="text-sm text-foreground">{studyBanner(study)}</p>
+          {caveat ? (
+            <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+              {caveat}
+            </p>
+          ) : null}
+
           {loading && !curve ? (
             <p className="text-sm text-muted-foreground">Chargement des tirages…</p>
+          ) : null}
+          {!loading && !curve ? (
+            <p className="text-sm text-muted-foreground">
+              Aucun tirage dans cette fenêtre — élargis la fenêtre d’étude ou
+              change d’archive.
+            </p>
           ) : null}
 
           {curve ? (
             <>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{curve.label}</span>
-                <span>· {curve.draw_count} tirages</span>
+                <span>· {study.drawCount} tirages étudiés</span>
+                {study.contextCount ? (
+                  <span>· {study.contextCount} en contexte</span>
+                ) : null}
                 <span>· {hits.length} figures</span>
                 {byFigure.slice(0, 6).map(([label, count]) => (
                   <Badge key={label} variant="outline">
@@ -302,6 +406,7 @@ export function ChartismeLab() {
                 hit={hit}
                 selection={selection}
                 onSelect={setSelection}
+                contextCount={study.contextCount}
                 label={curve.label}
               />
 
@@ -358,8 +463,9 @@ export function ChartismeLab() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Aucune figure au-dessus de {minConfidence.toFixed(2)} sur cette
-                  courbe. Baisse le seuil ou change d’échelle.
+                  Aucune figure au-dessus de {minConfidence.toFixed(2)} dans cette
+                  fenêtre. Baisse le seuil, change d’échelle ou élargis la
+                  fenêtre d’étude.
                 </p>
               )}
 
@@ -380,13 +486,18 @@ export function ChartismeLab() {
         </CardContent>
       </Card>
 
-      <LabelAtelier curve={curve} selection={selection} onSelect={setSelection} />
+      <LabelAtelier
+        curve={curve}
+        selection={selection}
+        onSelect={setSelection}
+        contextCount={study.contextCount}
+      />
 
       <Sketchpad curve={curve} era={era} />
 
       <RulesPanel hit={hit} hits={hits} curve={curve} />
 
-      <BacktestPanel curve={curve} hits={hits} era={era} />
+      <BacktestPanel curve={curve} hits={hits} era={era} scales={study.scales} />
     </div>
   )
 }

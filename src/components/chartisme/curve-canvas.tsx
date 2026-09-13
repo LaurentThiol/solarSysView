@@ -38,6 +38,7 @@ export function CurveCanvas({
   selection = null,
   onSelect,
   showActivity = true,
+  contextCount = 0,
   label,
 }: {
   values: number[]
@@ -47,6 +48,8 @@ export function CurveCanvas({
   selection?: CurveSelection | null
   onSelect?: (selection: CurveSelection) => void
   showActivity?: boolean
+  /** Tirages de tête calculés mais hors fenêtre d'étude — tracés en retrait. */
+  contextCount?: number
   label?: string
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -140,6 +143,36 @@ export function CurveCanvas({
         }}
         onPointerLeave={() => setDrag(null)}
       >
+        {contextCount > 0 && contextCount < values.length ? (
+          <g>
+            <rect
+              x={PAD}
+              y={PAD / 2}
+              width={Math.max(0, x(contextCount) - PAD)}
+              height={chartH - PAD}
+              fill="var(--muted-foreground)"
+              opacity={0.08}
+            />
+            <line
+              x1={x(contextCount)}
+              x2={x(contextCount)}
+              y1={PAD / 2}
+              y2={chartH - PAD / 2}
+              stroke="var(--muted-foreground)"
+              strokeWidth={1.2}
+              strokeDasharray="3 3"
+            />
+            <text
+              x={x(contextCount) - 4}
+              y={PAD}
+              textAnchor="end"
+              className="fill-muted-foreground text-[9px]"
+            >
+              contexte
+            </text>
+          </g>
+        ) : null}
+
         {active && active.toIndex !== active.fromIndex ? (
           <rect
             x={x(Math.min(active.fromIndex, active.toIndex))}

@@ -16,7 +16,7 @@ import { FIGURE_IDS, labelOf } from "@/lib/chartisme/catalog"
 import type { Curve } from "@/lib/chartisme/curves"
 import { bestFigure } from "@/lib/chartisme/figures"
 import { buildIndex, search, sketchToValues, type Match } from "@/lib/chartisme/retrieval"
-import { windowsOf } from "@/lib/chartisme/scan"
+import { MIN_WINDOW, windowsOf } from "@/lib/chartisme/scan"
 import { synthCurve } from "@/lib/chartisme/sketch-shapes"
 
 const WIDTH = 560
@@ -85,8 +85,15 @@ export function Sketchpad({
     } catch {
       // on retombe sur la recherche locale
     }
-    if (curve) {
-      const windows = windowsOf([curve], { size: 60, stride: 10, limit: 1200 })
+    // Fenêtres de 60 tirages, ou la courbe entière si la fenêtre d'étude est
+    // plus courte : sinon l'index sort vide et la recherche semble muette.
+    const size = curve ? Math.min(60, curve.values.length) : 0
+    if (curve && size >= MIN_WINDOW) {
+      const windows = windowsOf([curve], {
+        size,
+        stride: Math.max(2, Math.trunc(size / 6)),
+        limit: 1200,
+      })
       const index = buildIndex(windows)
       setMatches(search(values, index, { top: 12 }))
       setSource(`navigateur · ${index.length} fenêtres`)

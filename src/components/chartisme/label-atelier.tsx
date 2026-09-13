@@ -23,7 +23,7 @@ import {
 } from "@/lib/chartisme/catalog"
 import { bestFigure, type FigureHit } from "@/lib/chartisme/figures"
 import { buildIndex, classifyByNeighbours } from "@/lib/chartisme/retrieval"
-import { windowsOf } from "@/lib/chartisme/scan"
+import { MIN_WINDOW, windowsOf } from "@/lib/chartisme/scan"
 import type { Curve } from "@/lib/chartisme/curves"
 import {
   loadClasses,
@@ -46,10 +46,13 @@ export function LabelAtelier({
   curve,
   selection,
   onSelect,
+  contextCount = 0,
 }: {
   curve: Curve | null
   selection: CurveSelection | null
   onSelect: (selection: CurveSelection | null) => void
+  /** Tirages de tête hors fenêtre d'étude : on n'y propose rien à étiqueter. */
+  contextCount?: number
 }) {
   const [figure, setFigure] = useState<string>("ete")
   const [freeClass, setFreeClass] = useState("")
@@ -109,10 +112,18 @@ export function LabelAtelier({
   }, [window, labels])
 
   // Apprentissage actif : les fenêtres où le détecteur hésite le plus sont
-  // celles où une étiquette humaine rapporte le plus.
+  // celles où une étiquette humaine rapporte le plus. La taille suit la courbe :
+  // sur une fenêtre d'étude courte, 60 tirages ne rentrent pas et la liste
+  // resterait vide sans qu'on sache pourquoi.
   const uncertain = useMemo(() => {
     if (!curve) return []
-    const windows = windowsOf([curve], { size: 60, stride: 20, limit: 200 })
+    const size = Math.min(60, curve.values.length)
+    if (size < MIN_WINDOW) return []
+    const windows = windowsOf([curve], {
+      size,
+      stride: Math.max(4, Math.trunc(size / 3)),
+      limit: 200,
+    }).filter((entry) => entry.to_index >= contextCount)
     const scored = windows
       .map((entry) => {
         const hit = bestFigure(entry.values)
@@ -125,7 +136,7 @@ export function LabelAtelier({
       })
       .sort((a, b) => a.gap - b.gap)
     return scored.slice(0, 6)
-  }, [curve])
+  }, [curve, contextCount])
 
   const allClasses = useMemo(() => [...FIGURE_IDS, ...classes], [classes])
 

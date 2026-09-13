@@ -77,6 +77,12 @@ Les **17 figures chartistes** de la table de référence (tête & épaules et so
 
 La **règle d’or** est appliquée telle quelle : une cassure n’est retenue que si l’activité dépasse sa moyenne mobile 20 **et** que la cassure est confirmée en clôture (ou par le pull-back suivant). Le « et » n’est pas négociable — c’est lui qui distingue la cassure du *fake breakout*. L’objectif projeté suit la colonne « Objectif projeté » de la table, figure par figure.
 
+**Fenêtre d’étude et échelle** sont deux réglages distincts. La fenêtre dit quels tirages on regarde — 20 / 50 / 100 / 200 derniers, 3 / 6 / 12 mois, année civile, formule actuelle, tout, ou un N libre —, l’échelle dit sur combien de tirages une figure a le droit de se dérouler. En « auto », seules les échelles qui tiennent dans la fenêtre sont balayées : 20 tirages étudiés → échelle 20, 100 → 20 · 30 · 60. Forcer une échelle plus longue que la fenêtre répond à une autre question, « quelle figure longue s’achève ici », et reste possible.
+
+Les tirages qui précèdent la fenêtre sont **calculés en contexte** (grisés sur le tracé) sans être lus. Sans eux, une fenêtre courte mentirait trois fois : le retard d’une boule repartirait de zéro au premier tirage découpé, l’activité perdrait son premier pas, et la MM20 de la règle d’or n’aurait plus vingt points devant elle. Aucune figure entièrement contenue dans le contexte n’est listée ; une figure qui s’y forme et casse dans la fenêtre l’est.
+
+Une échelle courte ne se lit pas comme une longue, et l’onglet le dit : la confiance est escomptée selon la part de fenêtre couverte, donc les mêmes vingt points d’une marche aléatoire valent 0.62 à l’échelle 20 contre 0.49 à l’échelle 60. En sens inverse, une figure y est moins banale — 64 % des marches aléatoires de 20 tirages en portent une, contre 83 % à 60. Le taux de base du rétro-test est mesuré à la longueur réellement balayée.
+
 Quatre lectures de la même fenêtre, comparées sur le **même** jeu de validation :
 
 | Lecture | Ce qu’elle regarde |
