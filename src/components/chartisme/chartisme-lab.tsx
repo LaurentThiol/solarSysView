@@ -270,7 +270,13 @@ export function ChartismeLab() {
             >
               <Select
                 value={preset}
-                onValueChange={(value) => setPreset((value as StudyPreset) ?? preset)}
+                onValueChange={(value) => {
+                  // Un preset choisi doit s'appliquer : sinon un N libre resté
+                  // dans le champ continuerait de décider, et la liste
+                  // afficherait une fenêtre qui n'est pas celle du tracé.
+                  setPreset((value as StudyPreset) ?? preset)
+                  setLastN("")
+                }}
               >
                 <SelectTrigger className="w-full" aria-label="Fenêtre d’étude">
                   <span className="flex flex-1 text-left">
