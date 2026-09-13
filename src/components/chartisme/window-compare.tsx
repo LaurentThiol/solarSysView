@@ -81,17 +81,20 @@ export function WindowCompare({
       <CardContent className="space-y-3">
         {!previous ? (
           <p className="text-sm text-muted-foreground">
-            Pas de fenêtre antérieure de même longueur dans cette archive : la
-            fenêtre étudiée touche le début des tirages chargés. Raccourcis-la ou
-            élargis l’archive pour obtenir la comparaison.
+            Pas de fenêtre antérieure de {window.drawCount} tirages dans cette
+            archive : la fenêtre étudiée touche le début des tirages chargés. Une
+            tranche plus courte ne servirait à rien ici — le nombre de figures
+            croît avec le nombre de tirages, et l’écart ne dirait que cela.
+            Raccourcis la fenêtre ou élargis l’archive.
           </p>
         ) : (
           <>
             <p className="text-xs text-muted-foreground">
               Étudiée : du {window.fromDate} au {window.toDate} ({window.drawCount}{" "}
-              tirages, {hits.length} figures) · précédente : du {previous.fromDate} au{" "}
-              {previous.toDate} ({previous.drawCount} tirages, {previousHits.length}{" "}
-              figures)
+              tirages, {hits.length} figure{hits.length > 1 ? "s" : ""}) ·
+              précédente : du {previous.fromDate} au {previous.toDate} (
+              {previous.drawCount} tirages, {previousHits.length} figure
+              {previousHits.length > 1 ? "s" : ""})
             </p>
 
             {rows.length ? (
@@ -129,11 +132,15 @@ export function WindowCompare({
                   </TableBody>
                 </Table>
                 <p className="text-xs text-muted-foreground">
-                  {shared} figure{shared > 1 ? "s" : ""} sur {rows.length} se
-                  retrouve{shared > 1 ? "nt" : ""} dans les deux fenêtres. À ces
-                  effectifs aucun test ne trancherait : deux occurrences contre
-                  une ne sont pas un écart, et la comparaison sert à voir si la
-                  lecture survit au déplacement de la fenêtre, pas à la valider.
+                  {shared === 0
+                    ? `Aucune des ${rows.length} figure${rows.length > 1 ? "s" : ""} ne se retrouve`
+                    : `${shared} figure${shared > 1 ? "s" : ""} sur ${rows.length} se retrouve${shared > 1 ? "nt" : ""}`}{" "}
+                  dans les deux fenêtres. À ces effectifs aucun test ne
+                  trancherait — une occurrence de plus ou de moins n’est pas un
+                  écart. La comparaison sert à voir si la lecture survit au
+                  déplacement de la fenêtre, pas à la valider : une figure
+                  absente d’une des deux tranches décrivait surtout l’endroit où
+                  l’on a coupé.
                 </p>
               </>
             ) : (

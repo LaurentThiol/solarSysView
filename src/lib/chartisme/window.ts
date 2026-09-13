@@ -185,7 +185,11 @@ export function resolveStudyWindow<T extends { date: string; star_pool?: number 
       : null
   return {
     window,
-    previous: previous?.drawCount ? previous : null,
+    // Exigée de même longueur, pas seulement antérieure. Le nombre de figures
+    // croît avec le nombre de tirages : comparer cinquante tirages à dix-neuf
+    // montrerait toujours « moins de figures avant », et cet écart ne dirait
+    // rien du système, seulement de la longueur des deux tranches.
+    previous: previous?.drawCount === window.drawCount ? previous : null,
     drawCount: window.drawCount,
     contextCount: window.warmupCount,
     contextWanted,
