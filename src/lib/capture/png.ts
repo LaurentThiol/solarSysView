@@ -1,5 +1,5 @@
 const MAX_WIDTH = 1400
-const MAX_HEIGHT = 2200
+const MAX_HEIGHT = 1600
 
 function backgroundOf(node: HTMLElement) {
   const fromNode = getComputedStyle(node).backgroundColor
@@ -15,9 +15,11 @@ function skipCaptureUi(node: HTMLElement) {
 
 export async function captureNodePng(node: HTMLElement): Promise<string | null> {
   const { toPng, toJpeg } = await import("html-to-image")
-  const width = Math.min(Math.max(node.scrollWidth, node.clientWidth), MAX_WIDTH)
-  const height = Math.min(Math.max(node.scrollHeight, node.clientHeight), MAX_HEIGHT)
-  const pixelRatio = Math.min(1.4, MAX_WIDTH / Math.max(width, 1))
+  const rect = node.getBoundingClientRect()
+  const width = Math.min(Math.max(node.clientWidth, 320), MAX_WIDTH)
+  const visible = Math.max(240, window.innerHeight - Math.max(rect.top, 0))
+  const height = Math.min(visible, MAX_HEIGHT, Math.max(node.scrollHeight, node.clientHeight))
+  const pixelRatio = height > 900 ? 1 : 1.25
   const options = {
     cacheBust: true,
     pixelRatio,
