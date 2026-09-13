@@ -133,7 +133,9 @@ export function WindowCompare({
                 </Table>
                 <p className="text-xs text-muted-foreground">
                   {shared === 0
-                    ? `Aucune des ${rows.length} figure${rows.length > 1 ? "s" : ""} ne se retrouve`
+                    ? rows.length > 1
+                      ? `Aucune des ${rows.length} figures ne se retrouve`
+                      : "La seule figure trouvée ne se retrouve pas"
                     : `${shared} figure${shared > 1 ? "s" : ""} sur ${rows.length} se retrouve${shared > 1 ? "nt" : ""}`}{" "}
                   dans les deux fenêtres. À ces effectifs aucun test ne
                   trancherait — une occurrence de plus ou de moins n’est pas un

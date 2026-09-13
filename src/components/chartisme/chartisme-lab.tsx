@@ -27,6 +27,7 @@ import { loadRules, recordFirings } from "@/lib/chartisme/store"
 import { evaluateRules } from "@/lib/chartisme/rules"
 import {
   DEFAULT_STUDY_PRESET,
+  MAX_CYCLE,
   MIN_STUDY_DRAWS,
   STUDY_PRESETS,
   STUDY_PRESET_LABELS,
@@ -50,11 +51,11 @@ type ModuleStatus = {
 }
 
 const SCALE_CHOICES = [
-  { value: "auto", label: "Auto — celles qui tiennent dans la fenêtre" },
+  { value: "auto", label: "Auto — déduites de la fenêtre" },
   { value: "20", label: "Très courte (20 tirages)" },
   { value: "30", label: "Courte (30 tirages)" },
   { value: "60", label: "Moyenne (60 tirages)" },
-  { value: "120", label: "Longue (120 tirages)" },
+  { value: "120", label: `Longue (${MAX_CYCLE} tirages)` },
 ]
 
 const ERA_LABELS = {
@@ -369,7 +370,7 @@ export function ChartismeLab() {
               label="Échelle"
               help={{
                 title: "Échelle de la fenêtre",
-                body: "Longueur des figures cherchées, distincte de la fenêtre d'étude. Une tête-épaules sur 30 tirages et un range sur 120 ne se lisent pas à la même échelle. « Auto » ne garde que les échelles qui tiennent dans la fenêtre, balaie les trois plus longues et ne conserve qu'une lecture par zone, les autres passant en alternatives. Forcer une échelle plus longue que la fenêtre répond à une autre question : quelle figure longue s'achève ici.",
+                body: `Longueur des figures cherchées, distincte de la fenêtre d'étude. Une tête-épaules sur 30 tirages et un range sur 120 ne se lisent pas à la même échelle. « Auto » déduit trois échelles de la fenêtre — sa longueur, sa moitié, son quart — bornées en bas par ${MIN_STUDY_DRAWS} tirages, la plus courte figure détectable, et en haut par ${MAX_CYCLE}, au-delà desquels une figure ne décrit plus un cycle mais la longueur d'archive dont on dispose. Une seule lecture est gardée par zone, les autres passent en alternatives. Forcer une échelle plus longue que la fenêtre répond à une autre question : quelle figure longue s'achève ici.`,
               }}
             >
               <Select
