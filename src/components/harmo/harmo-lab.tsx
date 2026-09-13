@@ -273,6 +273,7 @@ export function HarmoLab() {
         lastN={lastN}
         warmup={warmup}
         compareOn={false}
+        showCompare={false}
         onPreset={(v) => {
           setPreset(v)
           if (v !== "custom") {
@@ -388,7 +389,7 @@ export function HarmoLab() {
               body: "Blackman-Harris : leakage faible. Flattop : amplitude des raies plus fidèle. Hann : compromis.",
             }}
           >
-            <Select value={fftWindow} onValueChange={setFftWindow}>
+            <Select value={fftWindow} onValueChange={(v) => v && setFftWindow(v)}>
               <SelectTrigger className="w-full sm:w-48" aria-label="Fenêtre FFT">
                 <span className="flex flex-1 text-left">
                   {fftWindow === "flattop" ? "Flattop" : fftWindow === "hann" ? "Hann" : "Blackman-Harris"}

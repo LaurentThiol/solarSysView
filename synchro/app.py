@@ -574,6 +574,19 @@ def create_app() -> FastAPI:
                 "scipy absent — pip install -r requirements.txt (numpy, scipy).",
             )
 
+    def _harmo_archive(era: str) -> tuple[list[dict[str, Any]], str]:
+        if db.database_configured():
+            return _analysis_draws(era, None, None), "neon"
+        from synchro.harmo.archive import bundled_draws
+
+        rows = bundled_draws(era)
+        if not rows:
+            raise HTTPException(
+                503,
+                "Neon non configuré et archive JSON embarquée introuvable.",
+            )
+        return rows, "json"
+
     def _harmo_signal(
         variable: str,
         n: int | None,
@@ -589,7 +602,7 @@ def create_app() -> FastAPI:
         _harmo_ready()
         if variable not in VARIABLE_NAMES:
             raise HTTPException(400, f"Variable inconnue: {variable}")
-        archive = _analysis_draws(era, None, None)
+        archive, source = _harmo_archive(era)
         resolved = resolve_window(
             archive,
             preset=preset,
@@ -605,6 +618,20 @@ def create_app() -> FastAPI:
             signal = build_context(work, variable=variable, n=n, resolved=resolved)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        signal["archive_source"] = source
+        if source == "json":
+            notes = list(signal.get("notes") or [])
+            notes.append(
+                {
+                    "id": "json_archive",
+                    "level": "info",
+                    "text": (
+                        "Archive JSON embarquée (2026). Neon n’est pas configuré : "
+                        "l’étude est limitée à ces tirages."
+                    ),
+                }
+            )
+            signal["notes"] = notes
         return work, signal
 
     @app.get("/api/harmo/status")

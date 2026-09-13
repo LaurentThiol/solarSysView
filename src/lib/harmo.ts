@@ -82,6 +82,7 @@ export type HarmoBase = {
     draw_count?: number
     warmup_count?: number
   }
+  archive_source?: "neon" | "json" | string | null
 }
 
 export type HarmoReport = HarmoBase & {
@@ -160,9 +161,10 @@ export async function fetchHarmo<T extends HarmoBase = HarmoReport>(
   const body = (await response.json().catch(() => ({
     ok: false,
     error: "réponse invalide",
-  }))) as T
-  if (!response.ok && !body.error) {
-    body.error = `HTTP ${response.status}`
+  }))) as T & { detail?: unknown }
+  if (!response.ok) {
+    const detail = body.error || (typeof body.detail === "string" ? body.detail : null)
+    body.error = detail || `HTTP ${response.status}`
     body.ok = false
   }
   return body

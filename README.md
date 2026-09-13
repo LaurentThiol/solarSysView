@@ -157,6 +157,8 @@ Trois dictionnaires d’énergie, affichés dans **Mélange** :
 
 Le modèle nul (onglet **Tests**) rejoue des tirages uniformes **aux mêmes dates** : un pic n’est lu que contre ce hasard-là. La série retard a des harmoniques **par construction** (dents de scie) ; l’onglet le dit.
 
+Sans Neon, Harmo lit l’archive JSON embarquée (`src/data/euromillions-2026.json`), la même que l’UI.
+
 ## Admin (`/admin`)
 
 Page locale pour les consoles et les secrets (Neon, Google, OpenAI, Brave Search). Les valeurs sont lues/écrites dans `.env` — **jamais commitées**. Révélation / copie, test de connexion, mise à jour GitHub (`git fetch` / `git pull --ff-only`, équivalent `./launch update`), synchro FDJ.
@@ -227,6 +229,6 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 - `POST /api/chartisme/rules/evaluate` · `GET /api/chartisme/firings` — déclenchements et journal
 - `GET /api/chartisme/backtest` — objectif atteint, signal sur les numéros, taux de base (`base_length` = longueur des fenêtres de bruit). Bornable à une fenêtre : `start`, `end`, `context` (tirages calculés en amont), `scales` (« 25,50,100 »). La réponse porte un bloc `window` qui dit sur quoi la mesure a réellement porté.
 - `GET /api/harmo/status` — scipy / extras (sans Neon)
-- `GET /api/harmo/spectrum|welch|stft|envelope|orders|unmix|null` — même fenêtre qu’Analyse (`variable`, `n`, `era`, `preset`, `from_date`, `to_date`, `last_n`, `warmup`)
+- `GET /api/harmo/spectrum|welch|stft|envelope|orders|unmix|null` — même fenêtre qu’Analyse (`variable`, `n`, `era`, `preset`, `from_date`, `to_date`, `last_n`, `warmup`). Sans Neon : repli sur l’archive JSON 2026.
 
 Application indépendante, non affiliée à La Française des Jeux.

@@ -47,6 +47,7 @@ def _short_payload(signal: dict[str, Any], window: dict[str, Any]) -> dict[str, 
         "window": window,
         "notes": signal["notes"],
         "disclaimer": DISCLAIMER,
+        "archive_source": signal.get("archive_source"),
     }
 
 
@@ -84,6 +85,7 @@ def _base(signal: dict[str, Any]) -> dict[str, Any]:
         "notes": signal["notes"],
         "window": signal.get("window") or {},
         "disclaimer": DISCLAIMER,
+        "archive_source": signal.get("archive_source"),
     }
 
 

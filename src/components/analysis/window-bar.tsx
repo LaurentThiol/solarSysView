@@ -25,6 +25,7 @@ export function WindowBar({
   lastN,
   warmup,
   compareOn,
+  showCompare = true,
   onPreset,
   onFrom,
   onTo,
@@ -39,6 +40,7 @@ export function WindowBar({
   lastN: string
   warmup: number
   compareOn: boolean
+  showCompare?: boolean
   onPreset: (v: WindowPreset) => void
   onFrom: (v: string) => void
   onTo: (v: string) => void
@@ -138,20 +140,22 @@ export function WindowBar({
             aria-label="Tirages de warmup"
           />
         </LabelHelp>
-        <div className="flex items-center gap-2 pb-1 text-sm">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={compareOn}
-              onChange={(e) => onCompare(e.target.checked)}
+        {showCompare ? (
+          <div className="flex items-center gap-2 pb-1 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={compareOn}
+                onChange={(e) => onCompare(e.target.checked)}
+              />
+              Comparer à la fenêtre précédente
+            </label>
+            <HelpTip
+              title="Comparer"
+              body="Calcule les écarts de moyenne / σ / couverture par rapport à la fenêtre de même longueur qui précède immédiatement celle-ci."
             />
-            Comparer à la fenêtre précédente
-          </label>
-          <HelpTip
-            title="Comparer"
-            body="Calcule les écarts de moyenne / σ / couverture par rapport à la fenêtre de même longueur qui précède immédiatement celle-ci."
-          />
-        </div>
+          </div>
+        ) : null}
       </div>
       <p className="text-sm text-foreground">{formatWindowBanner(window)}</p>
       <p className="text-xs text-muted-foreground">

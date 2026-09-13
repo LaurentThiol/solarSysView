@@ -127,3 +127,21 @@ def test_harmo_null() -> None:
     assert response.status_code == 200
     assert body["n_sim"] == 8
     assert 0.0 <= body["peak"]["p_ge_observed"] <= 1.0
+
+
+def test_harmo_json_fallback_without_neon() -> None:
+    from synchro.harmo.archive import bundled_draws
+
+    rows = bundled_draws("current")
+    assert len(rows) >= 16
+    assert rows[0]["draw_date"].year == 2026
+    with patch("synchro.db.database_configured", return_value=False):
+        with _client() as client:
+            response = client.get("/api/harmo/unmix?variable=sum&preset=last_100")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["archive_source"] == "json"
+    assert body["draw_count"] == len(rows)
+    assert {note["id"] for note in body["notes"]} >= {"json_archive"}
+    assert abs(sum(body["shares"].values()) - 1.0) < 1e-6
