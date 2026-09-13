@@ -149,6 +149,23 @@ export function studyBanner(study: StudyWindow<{ date: string }>): string {
 }
 
 /**
+ * Échelle plus longue que tout ce qu'on a sous la main.
+ *
+ * `scanCurve` ignore silencieusement une échelle plus longue que la courbe. Le
+ * cas se produit en forçant 120 sur une archive courte — le repli JSON du
+ * navigateur en compte moins de cent : l'onglet répondrait « aucune figure »
+ * alors que rien n'a été balayé.
+ */
+export function scaleFitNote(
+  scales: ReadonlyArray<number>,
+  curveLength: number
+): string | null {
+  if (scales.some((size) => size <= curveLength)) return null
+  const shortest = Math.min(...scales)
+  return `Échelle ${shortest} : rien n'a été balayé. Il faut ${shortest} tirages consécutifs et la courbe n'en compte que ${curveLength}, contexte inclus. Repasse en « auto » ou choisis une échelle plus courte.`
+}
+
+/**
  * Ce qu'une échelle courte fait à la lecture, dit avant de la croire.
  *
  * `weigh()` escompte la confiance selon la part de fenêtre couverte : la même

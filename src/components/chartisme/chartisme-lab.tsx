@@ -29,6 +29,7 @@ import {
   STUDY_PRESET_LABELS,
   liveInWindow,
   resolveStudyWindow,
+  scaleFitNote,
   shortScaleCaveat,
   studyBanner,
   type StudyPreset,
@@ -131,7 +132,10 @@ export function ChartismeLab() {
     )
   }, [curve, study, minConfidence])
 
-  const caveat = shortScaleCaveat(study.scales)
+  // Une échelle qui ne rentre pas n'est pas balayée du tout : le dire passe
+  // avant la mise en garde sur les échelles courtes.
+  const fitNote = curve ? scaleFitNote(study.scales, curve.values.length) : null
+  const caveat = curve ? fitNote ?? shortScaleCaveat(study.scales) : null
 
   // Changer de courbe, de fenêtre ou de seuil renumérote les figures : la
   // sélection précédente désignerait autre chose. Ajusté au rendu plutôt que
@@ -461,7 +465,7 @@ export function ChartismeLab() {
                     </div>
                   ) : null}
                 </div>
-              ) : (
+              ) : fitNote ? null : (
                 <p className="text-sm text-muted-foreground">
                   Aucune figure au-dessus de {minConfidence.toFixed(2)} dans cette
                   fenêtre. Baisse le seuil, change d’échelle ou élargis la
