@@ -25,12 +25,14 @@ import { loadRules, recordFirings } from "@/lib/chartisme/store"
 import { evaluateRules } from "@/lib/chartisme/rules"
 import {
   DEFAULT_STUDY_PRESET,
+  MIN_STUDY_DRAWS,
   STUDY_PRESETS,
   STUDY_PRESET_LABELS,
   liveInWindow,
   resolveStudyWindow,
   scaleFitNote,
   shortScaleCaveat,
+  shortWindowNote,
   studyBanner,
   type StudyPreset,
 } from "@/lib/chartisme/window"
@@ -107,7 +109,11 @@ export function ChartismeLab() {
     const parsed = Number.parseInt(lastN, 10)
     return resolveStudyWindow(draws, {
       preset,
-      lastN: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
+      // Une frappe intermédiaire ne décide pas de la fenêtre : saisir « 35 »
+      // passe par « 3 », et trois tirages ne portent aucune figure. Le preset
+      // tient jusqu'à ce que le nombre saisi soit étudiable.
+      lastN:
+        Number.isFinite(parsed) && parsed >= MIN_STUDY_DRAWS ? parsed : undefined,
       scale: scaleChoice === "auto" ? "auto" : Number(scaleChoice),
     })
   }, [draws, preset, lastN, scaleChoice])
@@ -132,10 +138,13 @@ export function ChartismeLab() {
     )
   }, [curve, study, minConfidence])
 
-  // Une échelle qui ne rentre pas n'est pas balayée du tout : le dire passe
-  // avant la mise en garde sur les échelles courtes.
+  // Trois mises en garde, de la plus dirimante à la plus nuancée : rien n'a été
+  // balayé, puis rien ne peut tenir dans la fenêtre, puis la confiance ne se
+  // lit pas comme à une échelle longue. Une seule s'affiche, la première.
   const fitNote = curve ? scaleFitNote(study.scales, curve.values.length) : null
-  const caveat = curve ? fitNote ?? shortScaleCaveat(study.scales) : null
+  const caveat = curve
+    ? fitNote ?? shortWindowNote(study.drawCount) ?? shortScaleCaveat(study.scales)
+    : null
 
   // Même règle que la barre de fenêtre d'Analyse : un nombre de tirages
   // n'affine que les fenêtres comptées en tirages. Sur « 3 mois » ou
@@ -303,12 +312,12 @@ export function ChartismeLab() {
                 label="Derniers N"
                 help={{
                   title: "Derniers N tirages",
-                  body: "Affine le preset pour une longueur qu'il ne propose pas (35, 75…). Vide : le preset décide. Le champ ne s'affiche que sur les fenêtres « N derniers tirages », les seules qu'un nombre de tirages sait affiner : forcer 35 sur « 3 mois » ne durerait pas trois mois.",
+                  body: `Affine le preset pour une longueur qu'il ne propose pas (35, 75…). Vide : le preset décide. Le champ ne s'affiche que sur les fenêtres « N derniers tirages », les seules qu'un nombre de tirages sait affiner : forcer 35 sur « 3 mois » ne durerait pas trois mois. En dessous de ${MIN_STUDY_DRAWS} tirages le preset continue de s'appliquer — aucune figure ne tient dans une fenêtre plus courte.`,
                 }}
               >
                 <Input
                   type="number"
-                  min={10}
+                  min={MIN_STUDY_DRAWS}
                   max={2000}
                   value={lastN}
                   placeholder="auto"

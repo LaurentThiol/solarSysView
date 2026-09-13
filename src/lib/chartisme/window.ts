@@ -55,6 +55,16 @@ export const MAX_AUTO_SCALES = 3
 /** Contexte minimal : la MM20 de la règle d'or. */
 export const CONTEXT_MIN = ACTIVITY_PERIOD
 
+/**
+ * Fenêtre d'étude la plus courte qui ait un sens.
+ *
+ * C'est la longueur du plus petit balayage : sous ce seuil, aucune figure ne
+ * tient entièrement dans la fenêtre. Les deux nombres se confondent parce
+ * qu'ils mesurent la même chose de deux côtés — la place qu'il faut à une
+ * figure pour se dérouler.
+ */
+export const MIN_STUDY_DRAWS = MIN_WINDOW
+
 export type ScaleChoice = "auto" | number
 
 /**
@@ -163,6 +173,18 @@ export function scaleFitNote(
   if (scales.some((size) => size <= curveLength)) return null
   const shortest = Math.min(...scales)
   return `Échelle ${shortest} : rien n'a été balayé. Il faut ${shortest} tirages consécutifs et la courbe n'en compte que ${curveLength}, contexte inclus. Repasse en « auto » ou choisis une échelle plus courte.`
+}
+
+/**
+ * Fenêtre plus courte que la plus courte des figures.
+ *
+ * Une figure de seize tirages ne tient pas dans une fenêtre de dix. Le
+ * balayage continue pourtant d'en trouver, à cheval sur le contexte : ce qu'on
+ * lit alors n'est pas une figure de la fenêtre, c'en est la fin.
+ */
+export function shortWindowNote(drawCount: number): string | null {
+  if (!drawCount || drawCount >= MIN_STUDY_DRAWS) return null
+  return `Fenêtre de ${drawCount} tirages, plus courte que la plus courte des figures (${MIN_STUDY_DRAWS} tirages) : aucune ne tient entièrement dedans. Celles qui sont listées commencent dans le contexte et seule leur fin est étudiée.`
 }
 
 /**
