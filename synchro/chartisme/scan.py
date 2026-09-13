@@ -192,6 +192,74 @@ def _date(dates: Sequence[str], index: int) -> str | None:
     return dates[index] if 0 <= index < len(dates) else None
 
 
+def slice_curve(
+    curve: dict[str, Any],
+    *,
+    start: str | None = None,
+    end: str | None = None,
+    context: int = 0,
+) -> dict[str, Any]:
+    """Courbe restreinte à une fenêtre de dates, contexte compris.
+
+    Les valeurs sont déjà calculées sur toute l'archive : les découper conserve
+    le retard d'une boule et l'activité, là où les recalculer sur les seuls
+    tirages de la fenêtre les ferait repartir de zéro au premier tirage retenu.
+
+    `context` réserve devant la fenêtre les points dont le balayage a besoin —
+    une figure de 60 points qui s'achève au premier tirage étudié commence 59
+    points plus tôt — et ceux de la MM20 de la règle d'or. `context_count` dit
+    combien ont réellement été trouvés : moins que demandé en début d'archive.
+
+    `from_date` et `to_date` restent ceux de la fenêtre étudiée, pas ceux du
+    découpage : le contexte est calculé, il n'est pas lu.
+    """
+    dates = [str(d) for d in curve.get("dates") or []]
+    values = list(curve.get("values") or [])
+    activity = list(curve.get("activity") or [])
+    first = next((i for i, d in enumerate(dates) if d >= start), len(dates)) if start else 0
+    last = next((i for i, d in enumerate(dates) if d > end), len(dates)) if end else len(dates)
+    if first >= last:
+        return {
+            **curve,
+            "dates": [],
+            "values": [],
+            "activity": [],
+            "draw_count": 0,
+            "context_count": 0,
+            "from_date": None,
+            "to_date": None,
+        }
+    lead = max(0, first - max(0, context))
+    return {
+        **curve,
+        "dates": dates[lead:last],
+        "values": values[lead:last],
+        "activity": activity[lead:last],
+        "draw_count": last - first,
+        "context_count": first - lead,
+        "from_date": dates[first],
+        "to_date": dates[last - 1],
+    }
+
+
+def live_in_window(hit: dict[str, Any], context: int) -> bool:
+    """La figure s'achève-t-elle dans la fenêtre, ou seulement dans le contexte ?
+
+    Une figure entièrement contenue dans le contexte appartient au passé qu'on a
+    calculé sans le lire. Une figure qui s'achève — ou qui casse — dans la
+    fenêtre est au contraire ce qu'on cherche, même si son épaule gauche est en
+    amont. Jumeau de `liveInWindow` côté navigateur.
+    """
+    if context <= 0:
+        return True
+    breakout = hit.get("breakout") or {}
+    end = int(hit.get("to_index") or 0)
+    index = breakout.get("index")
+    if index is not None:
+        end = max(end, int(index))
+    return end >= context
+
+
 def scan_bundle(
     bundle: dict[str, Any],
     *,

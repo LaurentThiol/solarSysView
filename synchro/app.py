@@ -54,8 +54,12 @@ from synchro.chartisme.rules import ACTION_TYPES as CHARTISME_ACTION_TYPES
 from synchro.chartisme.rules import evaluate_all as chartisme_evaluate_all
 from synchro.chartisme.rules import normalize_rule as chartisme_normalize_rule
 from synchro.chartisme.rules import summarize_firings as chartisme_summarize_firings
+from synchro.chartisme.scan import DEFAULT_SCALES as CHARTISME_DEFAULT_SCALES
+from synchro.chartisme.scan import MIN_WINDOW as CHARTISME_MIN_WINDOW
 from synchro.chartisme.scan import collapse_zones as chartisme_collapse_zones
+from synchro.chartisme.scan import live_in_window as chartisme_live_in_window
 from synchro.chartisme.scan import scan_curve as chartisme_scan_curve
+from synchro.chartisme.scan import slice_curve as chartisme_slice_curve
 from synchro.chartisme.scan import windows_of as chartisme_windows_of
 from synchro.config import ROOT, WEB_DIR, get_settings
 from synchro.morpho.anticipation import anticipate
@@ -181,6 +185,26 @@ def _json(value: Any) -> Any:
     if isinstance(value, Decimal):
         return float(value)
     return value
+
+
+def _parse_scales(text: str | None) -> tuple[int, ...] | None:
+    """Échelles passées en clair, « 25,50,100 ». `None` laisse les valeurs par défaut.
+
+    Une échelle hors bornes est écartée sans faire échouer la requête : la borne
+    basse est la plus courte figure détectable, la haute la longueur qu'aucun
+    cycle observé ne dépasse.
+    """
+    if not text:
+        return None
+    sizes = sorted(
+        {
+            size
+            for chunk in text.split(",")
+            if (raw := chunk.strip()).isdigit()
+            and CHARTISME_MIN_WINDOW <= (size := int(raw)) <= 400
+        }
+    )
+    return tuple(sizes) or None
 
 
 def _run_dir() -> Path:
@@ -1051,20 +1075,48 @@ def create_app() -> FastAPI:
         # Longueur des marches aléatoires du taux de base : celle de l'échelle
         # que l'onglet balaie, sans quoi la comparaison porte sur autre chose.
         base_length: int = Query(60, ge=16, le=400),
+        # Fenêtre d'étude. Le premier tirage archivé n'a aucune raison d'ouvrir
+        # un cycle : mesurer sur toute l'archive suppose que vingt ans se lisent
+        # d'un bloc. Bornée, la mesure perd de la puissance — le rapport dit
+        # laquelle plutôt que de l'acheter en élargissant la fenêtre.
+        start: str | None = None,
+        end: str | None = None,
+        context: int = Query(0, ge=0, le=400),
+        # Les échelles réellement affichées : sans elles le rétro-test mesurerait
+        # d'autres figures que celles qu'on a sous les yeux.
+        scales: str | None = None,
         numbers: bool = True,
     ) -> dict[str, Any]:
         bundle = _chartisme_bundle(era)
         curves = bundle.get("curves") or []
         if curve:
             curves = [c for c in curves if c.get("id") == curve]
-        chosen = curves[:max_curves]
+        wanted = _parse_scales(scales)
+        chosen = [
+            chartisme_slice_curve(found, start=start, end=end, context=context)
+            for found in curves[:max_curves]
+        ]
         hits: list[dict[str, Any]] = []
         for found in chosen:
+            inside = int(found.get("context_count") or 0)
             hits.extend(
-                chartisme_scan_curve(found, min_confidence=min_confidence)
+                hit
+                for hit in chartisme_scan_curve(
+                    found, scales=wanted, min_confidence=min_confidence
+                )
+                if chartisme_live_in_window(hit, inside)
             )
+        studied = [c for c in chosen if c.get("draw_count")]
         return {
             "ok": True,
+            "window": {
+                "from": min((str(c["from_date"]) for c in studied), default=None),
+                "to": max((str(c["to_date"]) for c in studied), default=None),
+                "draw_count": max((int(c["draw_count"]) for c in studied), default=0),
+                "context": max((int(c["context_count"]) for c in studied), default=0),
+                "scales": list(wanted) if wanted else list(CHARTISME_DEFAULT_SCALES),
+                "bounded": bool(start or end),
+            },
             **chartisme_backtest_run(
                 {str(c.get("id")): c for c in chosen},
                 hits,

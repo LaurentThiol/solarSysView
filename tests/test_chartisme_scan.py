@@ -25,10 +25,12 @@ from synchro.chartisme.scan import (
     DEFAULT_SCALES,
     MIN_WINDOW,
     collapse_zones,
+    live_in_window,
     outcome_stats,
     sample_by_figure,
     scan_bundle,
     scan_curve,
+    slice_curve,
     window_starts,
     windows_for_training,
     windows_of,
@@ -158,6 +160,62 @@ def test_scan_honours_a_single_scale() -> None:
 def test_scan_skips_windows_shorter_than_the_minimum() -> None:
     short = {"id": "x", "values": [1.0] * (MIN_WINDOW - 1), "dates": [], "activity": []}
     assert scan_curve(short) == []
+
+
+def test_slice_curve_keeps_the_window_and_counts_its_context() -> None:
+    """Le contexte précède la fenêtre : il est calculé, il n'est pas étudié."""
+    curve = build_curve(DRAWS, "sum", None)
+    start = curve["dates"][100]
+    end = curve["dates"][119]
+    cut = slice_curve(curve, start=start, end=end, context=30)
+    assert cut["draw_count"] == 20
+    assert cut["context_count"] == 30
+    assert cut["from_date"] == start
+    assert cut["to_date"] == end
+    # La série transporte le contexte, les bornes ne parlent que de la fenêtre.
+    assert len(cut["values"]) == len(cut["dates"]) == len(cut["activity"]) == 50
+    assert cut["dates"][30] == start
+    assert cut["dates"][-1] == end
+    # Les valeurs sont découpées, pas recalculées : un retard reste un retard.
+    assert cut["values"] == curve["values"][70:120]
+
+
+def test_slice_curve_takes_what_context_exists_at_the_start_of_the_archive() -> None:
+    curve = build_curve(DRAWS, "sum", None)
+    cut = slice_curve(curve, start=curve["dates"][5], context=40)
+    assert cut["context_count"] == 5
+    assert cut["draw_count"] == len(DRAWS) - 5
+
+
+def test_slice_curve_on_an_empty_window() -> None:
+    curve = build_curve(DRAWS, "sum", None)
+    cut = slice_curve(curve, start="2099-01-01")
+    assert cut["draw_count"] == 0
+    assert cut["values"] == []
+    assert cut["from_date"] is None
+
+
+def test_live_in_window_keeps_figures_that_end_inside_it() -> None:
+    """Une figure entièrement en amont appartient au passé calculé, pas à la fenêtre."""
+    assert live_in_window({"to_index": 5}, 0) is True
+    assert live_in_window({"to_index": 29}, 30) is False
+    assert live_in_window({"to_index": 30}, 30) is True
+    # Une cassure dans la fenêtre suffit, même si la forme se noue en amont.
+    assert live_in_window({"to_index": 25, "breakout": {"index": 32}}, 30) is True
+    assert live_in_window({"to_index": 25, "breakout": None}, 30) is False
+
+
+def test_slicing_then_scanning_only_reports_figures_of_the_window() -> None:
+    """Le rétro-test borné ne doit pas compter les figures du contexte."""
+    curve = build_curve(DRAWS, "sum", None)
+    cut = slice_curve(curve, start=curve["dates"][60], context=59)
+    hits = scan_curve(cut, scales=(30,), min_confidence=0.0)
+    inside = [h for h in hits if live_in_window(h, cut["context_count"])]
+    assert hits
+    assert len(inside) < len(hits)
+    for hit in inside:
+        end = max(hit["to_index"], (hit["breakout"] or {}).get("index") or 0)
+        assert end >= cut["context_count"]
 
 
 def test_collapse_zones_keeps_one_reading_and_files_the_rest() -> None:

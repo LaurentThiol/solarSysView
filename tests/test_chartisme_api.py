@@ -317,6 +317,53 @@ def test_backtest_answers_the_two_questions() -> None:
     assert "indépendants" in body["disclaimer"]
 
 
+def test_backtest_bounds_itself_to_the_window() -> None:
+    """Le rétro-test doit pouvoir ne porter que sur la fenêtre étudiée.
+
+    Mesurer sur toute l'archive suppose que le premier tirage enregistré ouvre un
+    cycle et que rien n'a changé depuis. La route doit donc savoir se borner, et
+    dire sur quoi elle a porté.
+    """
+    left, right = _with_draws()
+    dates = sorted(str(d["draw_date"]) for d in DRAWS)
+    with left, right:
+        with _client() as client:
+            bounded = client.get(
+                "/api/chartisme/backtest"
+                f"?curve=sum&min_confidence=0.0&numbers=false"
+                f"&start={dates[80]}&end={dates[119]}&context=29&scales=20,40"
+            )
+            whole = client.get(
+                "/api/chartisme/backtest?curve=sum&min_confidence=0.0&numbers=false"
+            )
+    assert bounded.status_code == 200
+    window = bounded.json()["window"]
+    assert window["bounded"] is True
+    assert window["from"] == dates[80]
+    assert window["to"] == dates[119]
+    assert window["draw_count"] == 40
+    assert window["context"] == 29
+    assert window["scales"] == [20, 40]
+    # Bornée, la mesure voit moins de figures : c'est le prix, pas un défaut.
+    assert bounded.json()["figure_count"] < whole.json()["figure_count"]
+    assert whole.json()["window"]["bounded"] is False
+
+
+def test_backtest_ignores_an_unusable_scale_list() -> None:
+    """Une échelle hors bornes ne doit pas faire échouer la requête."""
+    left, right = _with_draws()
+    with left, right:
+        with _client() as client:
+            response = client.get(
+                "/api/chartisme/backtest"
+                "?curve=sum&min_confidence=0.0&numbers=false&scales=3,abc,"
+            )
+    assert response.status_code == 200
+    from synchro.chartisme.scan import DEFAULT_SCALES
+
+    assert response.json()["window"]["scales"] == list(DEFAULT_SCALES)
+
+
 def test_backtest_can_skip_the_number_question() -> None:
     left, right = _with_draws()
     with left, right:
