@@ -12,6 +12,15 @@ import { activityFromClose } from "@/lib/ta"
 export const N_POOL = 50
 export const S_POOL = 12
 
+/**
+ * Courbes sans indice de boule.
+ *
+ * `n1`…`n5` et `e1`, `e2` sont les statistiques d'ordre du tirage — le plus petit
+ * numéro, le deuxième, etc. Séparées exprès : chacune a son propre régime, et
+ * l'espace de règles doit pouvoir viser `n1` sans viser `n5`. Le plus petit
+ * numéro vit contre le plancher 1, le plus grand contre le plafond 50, et une
+ * cassure ne veut pas dire la même chose sur les deux.
+ */
 export const PLAIN_VARIABLES = [
   "sum",
   "spread",
@@ -19,7 +28,14 @@ export const PLAIN_VARIABLES = [
   "high_low",
   "consecutive",
   "centroid",
+  "n1",
+  "n2",
+  "n3",
+  "n4",
+  "n5",
   "star_sum",
+  "e1",
+  "e2",
 ] as const
 
 export const BALL_VARIABLES = ["delay", "hit"] as const
@@ -33,9 +49,16 @@ export const VARIABLE_LABELS: Record<string, string> = {
   high_low: "Numéros ≥ 26",
   consecutive: "Paires consécutives",
   centroid: "Centre de masse",
+  n1: "Plus petit numéro",
+  n2: "2ᵉ numéro trié",
+  n3: "3ᵉ numéro trié",
+  n4: "4ᵉ numéro trié",
+  n5: "Plus grand numéro",
   delay: "Retard d'une boule",
   hit: "Présence d'une boule",
   star_sum: "Somme des étoiles",
+  e1: "Plus petite étoile",
+  e2: "Plus grande étoile",
   star_delay: "Retard d'une étoile",
   star_hit: "Présence d'une étoile",
 }

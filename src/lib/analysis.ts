@@ -13,12 +13,19 @@ export const NUMBER_VARIABLE_NAMES = [
   "high_low",
   "consecutive",
   "centroid",
+  "n1",
+  "n2",
+  "n3",
+  "n4",
+  "n5",
   "delay",
   "hit",
 ] as const
 
 export const STAR_VARIABLE_NAMES = [
   "star_sum",
+  "e1",
+  "e2",
   "star_delay",
   "star_hit",
 ] as const
@@ -37,9 +44,16 @@ export const VARIABLE_LABELS: Record<VariableName, string> = {
   high_low: "Numéros ≥ 26",
   consecutive: "Paires consécutives",
   centroid: "Centre de masse",
+  n1: "Plus petit numéro",
+  n2: "2ᵉ numéro trié",
+  n3: "3ᵉ numéro trié",
+  n4: "4ᵉ numéro trié",
+  n5: "Plus grand numéro",
   delay: "Retard d’une boule",
   hit: "Présence d’une boule",
   star_sum: "Somme des étoiles",
+  e1: "Plus petite étoile",
+  e2: "Plus grande étoile",
   star_delay: "Retard d’une étoile",
   star_hit: "Présence d’une étoile",
 }
@@ -78,6 +92,22 @@ function consecutivePairs(numbers: number[]) {
   return count
 }
 
+/**
+ * Le k-ième plus petit d'un tirage — une statistique d'ordre, pas l'ordre de sortie.
+ *
+ * La FDJ publie un ensemble : l'ordre dans lequel les boules sont tombées n'est
+ * pas conservé. `n3` est donc le troisième plus petit numéro du tirage, jamais
+ * la troisième boule sortie. Même définition que l'onglet Évolution, qui trie
+ * avant de tracer — les deux onglets doivent parler de la même chose.
+ */
+function orderStatistic(pool: number[], rank: number): number {
+  if (!pool.length) return 0
+  const ranked = [...pool].sort((a, b) => a - b)
+  // Un tirage amputé rendrait `undefined`, donc NaN, et un seul trou suffit à
+  // fausser toutes les fenêtres de balayage qui le contiennent.
+  return ranked[Math.min(Math.max(rank, 1), ranked.length) - 1]
+}
+
 function scalar(draw: AnalysisDraw, name: VariableName): number {
   const nums = draw.numbers
   switch (name) {
@@ -95,6 +125,15 @@ function scalar(draw: AnalysisDraw, name: VariableName): number {
       return nums.reduce((a, b) => a + b, 0) / 5
     case "star_sum":
       return draw.stars.reduce((a, b) => a + b, 0)
+    case "n1":
+    case "n2":
+    case "n3":
+    case "n4":
+    case "n5":
+      return orderStatistic(nums, Number(name.slice(1)))
+    case "e1":
+    case "e2":
+      return orderStatistic(draw.stars, Number(name.slice(1)))
     default:
       return 0
   }

@@ -12,9 +12,16 @@ VARIABLE_NAMES = (
     "high_low",
     "consecutive",
     "centroid",
+    "n1",
+    "n2",
+    "n3",
+    "n4",
+    "n5",
     "delay",
     "hit",
     "star_sum",
+    "e1",
+    "e2",
     "star_delay",
     "star_hit",
 )
@@ -26,6 +33,23 @@ _NEEDS_N = {
     "star_hit": "étoile 1–12",
 }
 
+def _order_statistic(pool: list[int], rank: int) -> float:
+    """Le k-ième plus petit d'un tirage — statistique d'ordre, pas ordre de sortie.
+
+    La FDJ publie un ensemble : l'ordre dans lequel les boules sont tombées n'est
+    pas conservé, et `numbers_of` ne trie pas. `n3` est donc le troisième plus
+    petit numéro du tirage, jamais la troisième boule sortie. Même définition que
+    l'onglet Évolution côté navigateur — les deux doivent parler de la même chose.
+
+    Le rang est borné à ce que le tirage contient : un tirage amputé produirait
+    sinon une exception au milieu d'un export de cent trente-huit courbes.
+    """
+    if not pool:
+        return 0.0
+    ranked = sorted(pool)
+    return float(ranked[min(max(rank, 1), len(ranked)) - 1])
+
+
 _SCALAR: dict[str, Callable[[dict[str, Any]], float]] = {
     "sum": lambda d: float(sum(numbers_of(d))),
     "spread": lambda d: float(max(numbers_of(d)) - min(numbers_of(d))),
@@ -33,7 +57,14 @@ _SCALAR: dict[str, Callable[[dict[str, Any]], float]] = {
     "high_low": lambda d: float(sum(1 for n in numbers_of(d) if n >= 26)),
     "consecutive": lambda d: float(_consecutive_pairs(numbers_of(d))),
     "centroid": lambda d: round(sum(numbers_of(d)) / 5, 4),
+    "n1": lambda d: _order_statistic(numbers_of(d), 1),
+    "n2": lambda d: _order_statistic(numbers_of(d), 2),
+    "n3": lambda d: _order_statistic(numbers_of(d), 3),
+    "n4": lambda d: _order_statistic(numbers_of(d), 4),
+    "n5": lambda d: _order_statistic(numbers_of(d), 5),
     "star_sum": lambda d: float(sum(stars_of(d))),
+    "e1": lambda d: _order_statistic(stars_of(d), 1),
+    "e2": lambda d: _order_statistic(stars_of(d), 2),
 }
 
 

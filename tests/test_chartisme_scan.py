@@ -70,6 +70,25 @@ def test_export_builds_one_curve_per_variable() -> None:
     assert ("sum", None) in specs
     assert ("delay", 50) in specs
     assert ("star_hit", 12) in specs
+    # Les cinq numéros et les deux étoiles sont des courbes à part entière, pour
+    # qu'une règle puisse viser n1 sans viser n5.
+    for rank in range(1, 6):
+        assert (f"n{rank}", None) in specs
+    assert ("e1", None) in specs
+    assert ("e2", None) in specs
+
+
+def test_order_statistic_curves_differ_from_one_another() -> None:
+    """Cinq courbes séparées, pas cinq vues de la même : chacune son régime."""
+    smallest = build_curve(DRAWS, "n1", None)
+    largest = build_curve(DRAWS, "n5", None)
+    assert smallest["values"] != largest["values"]
+    # Invariant du rang : tirage par tirage, le plus petit ne dépasse jamais le
+    # plus grand. Si cette assertion tombe, le tri a été perdu quelque part.
+    assert all(a <= b for a, b in zip(smallest["values"], largest["values"]))
+    assert all(1 <= v <= 50 for v in smallest["values"] + largest["values"])
+    stars = build_curve(DRAWS, "e1", None)
+    assert all(1 <= v <= 12 for v in stars["values"])
 
 
 def test_curve_id_round_trip() -> None:

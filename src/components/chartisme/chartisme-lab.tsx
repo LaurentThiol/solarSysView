@@ -20,7 +20,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select"
 import { baseRateAbove, baseRateNote, sampleBaseRate } from "@/lib/chartisme/base-rate"
-import { buildCurve, curveSpecs, type Curve } from "@/lib/chartisme/curves"
+import { buildCurve, curveLabel, curveSpecs, type Curve } from "@/lib/chartisme/curves"
 import { collapseZones, scanCurve, sortByRank, type ScanHit } from "@/lib/chartisme/scan"
 import { stateFromHit } from "@/lib/chartisme/rules"
 import { loadRules, recordFirings } from "@/lib/chartisme/store"
@@ -294,7 +294,7 @@ export function ChartismeLab() {
               label="Courbe"
               help={{
                 title: "Courbe",
-                body: "Une courbe = une variable d'analyse déroulée sur les tirages. Somme, étendue, parité, mais aussi le retard ou la présence de chaque boule et de chaque étoile : 124 courbes en tout.",
+                body: `Une courbe = une variable d'analyse déroulée sur les tirages : ${specs.length} en tout. Somme, étendue, parité, centre de masse, le retard et la présence de chaque boule et de chaque étoile — et les cinq numéros du tirage suivis séparément, n1 à n5, plus les deux étoiles e1 et e2. Ce sont des statistiques d'ordre : n1 est le plus petit numéro du tirage, jamais la première boule sortie, l'ordre de sortie n'étant pas publié.`,
               }}
             >
               <Select value={curveId} onValueChange={(v) => setCurveId(v ?? curveId)}>
@@ -306,7 +306,10 @@ export function ChartismeLab() {
                     const id = spec.n === null ? spec.variable : `${spec.variable}:${spec.n}`
                     return (
                       <SelectItem key={id} value={id}>
-                        {id}
+                        {/* L'identifiant d'abord : c'est lui qu'une règle vise et
+                            que le journal consigne. Le libellé suit pour qu'on
+                            sache ce qu'on choisit dans une liste de {specs.length}. */}
+                        {id} · {curveLabel(spec.variable, spec.n)}
                       </SelectItem>
                     )
                   })}
