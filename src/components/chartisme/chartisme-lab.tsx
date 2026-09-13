@@ -137,6 +137,11 @@ export function ChartismeLab() {
   const fitNote = curve ? scaleFitNote(study.scales, curve.values.length) : null
   const caveat = curve ? fitNote ?? shortScaleCaveat(study.scales) : null
 
+  // Même règle que la barre de fenêtre d'Analyse : un nombre de tirages
+  // n'affine que les fenêtres comptées en tirages. Sur « 3 mois » ou
+  // « Année civile », il ne les affinerait pas, il les remplacerait.
+  const showLastN = preset.startsWith("last_") || lastN !== ""
+
   // Changer de courbe, de fenêtre ou de seuil renumérote les figures : la
   // sélection précédente désignerait autre chose. Ajusté au rendu plutôt que
   // dans un effet, qui provoquerait un rendu en cascade avec l'ancien index
@@ -293,23 +298,25 @@ export function ChartismeLab() {
               </Select>
             </LabelHelp>
 
-            <LabelHelp
-              label="Derniers N"
-              help={{
-                title: "Derniers N tirages",
-                body: "Force les N derniers tirages de la fenêtre, pour une longueur que les presets ne proposent pas (35, 75…). Vide : le preset décide.",
-              }}
-            >
-              <Input
-                type="number"
-                min={10}
-                max={2000}
-                value={lastN}
-                placeholder="auto"
-                onChange={(event) => setLastN(event.target.value)}
-                aria-label="Derniers N tirages"
-              />
-            </LabelHelp>
+            {showLastN ? (
+              <LabelHelp
+                label="Derniers N"
+                help={{
+                  title: "Derniers N tirages",
+                  body: "Affine le preset pour une longueur qu'il ne propose pas (35, 75…). Vide : le preset décide. Le champ ne s'affiche que sur les fenêtres « N derniers tirages », les seules qu'un nombre de tirages sait affiner : forcer 35 sur « 3 mois » ne durerait pas trois mois.",
+                }}
+              >
+                <Input
+                  type="number"
+                  min={10}
+                  max={2000}
+                  value={lastN}
+                  placeholder="auto"
+                  onChange={(event) => setLastN(event.target.value)}
+                  aria-label="Derniers N tirages"
+                />
+              </LabelHelp>
+            ) : null}
 
             <LabelHelp
               label="Échelle"
