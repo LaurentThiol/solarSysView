@@ -1,5 +1,6 @@
 import { contourInterval } from "./color"
 import type { DrawAnchor, HeightMode, Peak } from "./layout"
+import { autoExaggeration } from "./project"
 
 export type HeightField = {
   cols: number
@@ -177,7 +178,7 @@ export function fieldQuads(field: HeightField, yScale: number): TerrainQuad[] {
       const h11 = sample(field, c + 1, r + 1)
       const h01 = sample(field, c, r + 1)
       const h = (h00 + h10 + h11 + h01) / 4
-      if (h <= maxH * 0.012) continue
+      if (h <= maxH * 0.008) continue
       quads.push({
         a: vertex(field, c, r, yScale),
         b: vertex(field, c + 1, r, yScale),
@@ -208,6 +209,7 @@ export function crestStrips(
   yScale: number,
   connected: boolean
 ): TerrainQuad[] {
+  if (anchors.length === 0) return []
   const count = anchors.length
   const recency = (index: number) => (count <= 1 ? 1 : index / (count - 1))
   const hOf = (index: number, value: number) => {
@@ -225,7 +227,7 @@ export function crestStrips(
       const h = hOf(anchor.drawIndex, n)
       return {
         x: connected ? rank - 2 : anchor.x + (rank - 2) * 0.42,
-        y: (connected ? n / 50 : h) * yScale * (connected ? 1.6 : 1),
+        y: connected ? n / 50 : h,
         z: connected ? anchor.drawIndex * 0.72 : anchor.z,
         h: connected ? n : h * 50,
         n,
@@ -236,6 +238,14 @@ export function crestStrips(
   })
 
   const maxH = connected ? 50 : Math.max(1, ...rows.flat().map((p) => p.h))
+  const xs = rows.flat().map((p) => p.x)
+  const zs = rows.flat().map((p) => p.z)
+  const spanX = Math.max(...xs) - Math.min(...xs)
+  const spanZ = Math.max(...zs) - Math.min(...zs)
+  const yMul = autoExaggeration(connected ? 1 : Math.max(...rows.flat().map((p) => p.y), 0.01), spanX, spanZ, yScale)
+  for (const row of rows) {
+    for (const p of row) p.y *= yMul
+  }
   const half = connected ? 0 : 0.18
 
   if (connected) {

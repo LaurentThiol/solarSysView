@@ -70,3 +70,11 @@ export function fitScale(
   const span = Math.max(maxX - minX, maxZ - minZ, 2)
   return (0.42 * Math.min(width, height)) / span
 }
+
+/** Hauteur cible ≈ 36 % de l’emprise, pour que le relief se lise quelle que soit la maille. */
+export function autoExaggeration(maxH: number, spanX: number, spanZ: number, user = 1) {
+  const span = Math.max(spanX, spanZ, 1)
+  const target = 0.36 * span
+  const base = maxH > 0 ? target / maxH : 1
+  return base * user
+}

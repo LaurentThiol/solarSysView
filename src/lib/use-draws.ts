@@ -33,6 +33,7 @@ export function useDraws(window: DrawWindow = "year") {
       try {
         const response = await fetch(`/api/draws${queryFor(window)}`, {
           cache: "no-store",
+          signal: AbortSignal.timeout(15_000),
         })
         if (!response.ok) {
           if (!cancelled) {

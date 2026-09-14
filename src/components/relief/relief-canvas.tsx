@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { heightColor, rgbCss, shadeRgb } from "@/lib/relief/color"
@@ -16,6 +16,7 @@ import {
   DEFAULT_CAMERA,
   ZOOM_MAX,
   ZOOM_MIN,
+  autoExaggeration,
   clampCamera,
   fitScale,
   projectPoint,
@@ -53,37 +54,27 @@ export function ReliefCanvas({
   hoverOwner: number | null
   onHover: (owner: number | null) => void
 }) {
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const cameraRef = useRef(camera)
   const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
   const projectedRef = useRef<Array<{ owner: number; x: number; y: number }>>([])
-  const [size, setSize] = useState({ w: 900, h: 540 })
   const [hint, setHint] = useState<Hover>(null)
   const contour = useMemo(() => {
     if (!field || !contours) return []
-    return contourEdges(field, yScale)
+    const spanX = (field.cols - 1) * field.cell
+    const spanZ = (field.rows - 1) * field.cell
+    return contourEdges(field, autoExaggeration(field.maxH, spanX, spanZ, yScale))
   }, [contours, field, yScale])
+  const sceneRef = useRef({ field, quads, anchors, contour, hoverOwner, wire, yScale })
 
   useEffect(() => {
     cameraRef.current = camera
   }, [camera])
 
   useEffect(() => {
-    const node = wrapRef.current
-    if (!node) return
-    const measure = () => {
-      const box = node.getBoundingClientRect()
-      setSize({
-        w: Math.max(320, Math.round(box.width)),
-        h: Math.max(360, Math.round(box.height)),
-      })
-    }
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [])
+    sceneRef.current = { field, quads, anchors, contour, hoverOwner, wire, yScale }
+  }, [anchors, contour, field, hoverOwner, quads, wire, yScale])
 
   useEffect(() => {
     if (!autoRotate) return
@@ -98,74 +89,24 @@ export function ReliefCanvas({
     return () => window.cancelAnimationFrame(frame)
   }, [autoRotate, onCamera])
 
-  const paint = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
-    const dpr = Math.min(2, window.devicePixelRatio || 1)
-    canvas.width = Math.round(size.w * dpr)
-    canvas.height = Math.round(size.h * dpr)
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.clearRect(0, 0, size.w, size.h)
-
-    const cam = camera
-    const cx = size.w * 0.5
-    const cy = size.h * 0.58
-    const box = field
-      ? {
-          minX: field.originX,
-          maxX: field.originX + (field.cols - 1) * field.cell,
-          minZ: field.originZ,
-          maxZ: field.originZ + (field.rows - 1) * field.cell,
-        }
-      : boundsFromQuads(quads)
-    const scale = fitScale(box.minX, box.maxX, box.minZ, box.maxZ, size.w, size.h)
-    const proj = (x: number, y: number, z: number) => projectPoint(x, y, z, cam, cx, cy, scale)
-
-    drawBackdrop(ctx, size.w, size.h)
-    drawGround(ctx, proj, box)
-
-    if (field && quads.length === 0) {
-      paintHeightField(ctx, field, proj, cam.yaw, yScale, hoverOwner, wire)
-      if (contour.length) {
-        ctx.strokeStyle = "rgba(8, 12, 24, 0.28)"
-        ctx.lineWidth = 1
-        for (const [a, b] of contour) {
-          const p = proj(a.x, a.y, a.z)
-          const q = proj(b.x, b.y, b.z)
-          ctx.beginPath()
-          ctx.moveTo(p.x, p.y)
-          ctx.lineTo(q.x, q.y)
-          ctx.stroke()
-        }
-      }
-    } else {
-      paintQuads(ctx, quads, proj, hoverOwner, wire)
+  useEffect(() => {
+    let frame = 0
+    let alive = true
+    const loop = () => {
+      if (!alive) return
+      paintScene(canvasRef.current, wrapRef.current, cameraRef.current, sceneRef.current, projectedRef)
+      frame = window.requestAnimationFrame(loop)
     }
-
-    const latest = anchors.length ? anchors[anchors.length - 1].drawIndex : -1
-    const projected: Array<{ owner: number; x: number; y: number }> = []
-    for (const anchor of anchors) {
-      const p = proj(anchor.x, 0.08, anchor.z)
-      projected.push({ owner: anchor.drawIndex, x: p.x, y: p.y })
-      const isLatest = anchor.drawIndex === latest
-      const active = hoverOwner === anchor.drawIndex
-      ctx.beginPath()
-      ctx.arc(p.x, p.y, isLatest || active ? 4.5 : 2.4, 0, Math.PI * 2)
-      ctx.fillStyle = isLatest
-        ? "rgb(232, 210, 96)"
-        : active
-          ? "rgb(220, 230, 255)"
-          : "rgba(220, 230, 250, 0.35)"
-      ctx.fill()
+    frame = window.requestAnimationFrame(loop)
+    return () => {
+      alive = false
+      window.cancelAnimationFrame(frame)
     }
-    projectedRef.current = projected
-  }, [anchors, camera, contour, field, hoverOwner, quads, size.h, size.w, wire, yScale])
+  }, [])
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const node = wrapRef.current
+    if (!node) return
     const onWheel = (event: WheelEvent) => {
       event.preventDefault()
       const factor = event.deltaY > 0 ? 0.94 : 1.06
@@ -176,13 +117,9 @@ export function ReliefCanvas({
         })
       )
     }
-    canvas.addEventListener("wheel", onWheel, { passive: false })
-    return () => canvas.removeEventListener("wheel", onWheel)
+    node.addEventListener("wheel", onWheel, { passive: false })
+    return () => node.removeEventListener("wheel", onWheel)
   }, [onCamera])
-
-  useEffect(() => {
-    paint()
-  }, [paint])
 
   function pick(clientX: number, clientY: number) {
     const canvas = canvasRef.current
@@ -203,13 +140,14 @@ export function ReliefCanvas({
   }
 
   return (
-    <div ref={wrapRef} className="relative min-h-[420px] w-full overflow-hidden rounded-lg bg-[#12182a]">
+    <div
+      ref={wrapRef}
+      className="relative h-full min-h-[420px] w-full overflow-hidden rounded-lg bg-[#12182a]"
+    >
       <canvas
         ref={canvasRef}
         tabIndex={0}
-        width={size.w}
-        height={size.h}
-        className="block h-full w-full cursor-grab touch-none outline-none active:cursor-grabbing"
+        className="absolute inset-0 block h-full w-full cursor-grab touch-none outline-none active:cursor-grabbing"
         aria-label="Carte 3D des tirages, glisser pour tourner, molette pour zoomer"
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId)
@@ -303,6 +241,104 @@ export function ReliefCanvas({
   )
 }
 
+type Scene = {
+  field: HeightField | null
+  quads: TerrainQuad[]
+  anchors: DrawAnchor[]
+  contour: ReturnType<typeof contourEdges>
+  hoverOwner: number | null
+  wire: boolean
+  yScale: number
+}
+
+function paintScene(
+  canvas: HTMLCanvasElement | null,
+  wrap: HTMLDivElement | null,
+  cam: Camera,
+  scene: Scene,
+  projectedRef: { current: Array<{ owner: number; x: number; y: number }> }
+) {
+  if (!canvas) return
+  const host = wrap ?? canvas.parentElement
+  if (!host) return
+  const rect = host.getBoundingClientRect()
+  const cssW = Math.max(1, Math.round(rect.width))
+  const cssH = Math.max(1, Math.round(rect.height))
+  if (cssW < 2 || cssH < 2) return
+  const dpr = Math.min(2, typeof window === "undefined" ? 1 : window.devicePixelRatio || 1)
+  const bw = Math.max(1, Math.round(cssW * dpr))
+  const bh = Math.max(1, Math.round(cssH * dpr))
+  if (canvas.width !== bw) canvas.width = bw
+  if (canvas.height !== bh) canvas.height = bh
+  const ctx = canvas.getContext("2d")
+  if (!ctx) return
+  const { field, quads, anchors, contour, hoverOwner, wire, yScale } = scene
+  try {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, cssW, cssH)
+
+    const cx = cssW * 0.5
+    const cy = cssH * 0.58
+    const box = field
+      ? {
+          minX: field.originX,
+          maxX: field.originX + (field.cols - 1) * field.cell,
+          minZ: field.originZ,
+          maxZ: field.originZ + (field.rows - 1) * field.cell,
+        }
+      : boundsFromQuads(quads)
+    const scale = fitScale(box.minX, box.maxX, box.minZ, box.maxZ, cssW, cssH)
+    const proj = (x: number, y: number, z: number) => projectPoint(x, y, z, cam, cx, cy, scale)
+
+    drawBackdrop(ctx, cssW, cssH)
+    drawGround(ctx, proj, box)
+
+    if (field && quads.length === 0) {
+      const spanX = (field.cols - 1) * field.cell
+      const spanZ = (field.rows - 1) * field.cell
+      const yMul = autoExaggeration(field.maxH, spanX, spanZ, yScale)
+      paintHeightField(ctx, field, proj, cam.yaw, yMul, hoverOwner, wire)
+      if (contour.length) {
+        ctx.strokeStyle = "rgba(8, 12, 24, 0.28)"
+        ctx.lineWidth = 1
+        for (const [a, b] of contour) {
+          const p = proj(a.x, a.y, a.z)
+          const q = proj(b.x, b.y, b.z)
+          ctx.beginPath()
+          ctx.moveTo(p.x, p.y)
+          ctx.lineTo(q.x, q.y)
+          ctx.stroke()
+        }
+      }
+    } else if (quads.length) {
+      paintQuads(ctx, quads, proj, hoverOwner, wire)
+    }
+
+    const latest = anchors.length ? anchors[anchors.length - 1].drawIndex : -1
+    const projected: Array<{ owner: number; x: number; y: number }> = []
+    for (const anchor of anchors) {
+      const p = proj(anchor.x, 0.08, anchor.z)
+      projected.push({ owner: anchor.drawIndex, x: p.x, y: p.y })
+      const isLatest = anchor.drawIndex === latest
+      const active = hoverOwner === anchor.drawIndex
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, isLatest || active ? 4.5 : 2.4, 0, Math.PI * 2)
+      ctx.fillStyle = isLatest
+        ? "rgb(232, 210, 96)"
+        : active
+          ? "rgb(220, 230, 255)"
+          : "rgba(220, 230, 250, 0.35)"
+      ctx.fill()
+    }
+    projectedRef.current = projected
+    canvas.dataset.relief = `${cssW}x${cssH}`
+  } catch {
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.fillStyle = "rgb(42, 86, 128)"
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  }
+}
+
 function boundsFromQuads(quads: TerrainQuad[]) {
   if (!quads.length) return { minX: -2, maxX: 2, minZ: -2, maxZ: 2 }
   let minX = Infinity
@@ -390,7 +426,7 @@ function paintHeightField(
   const r1 = rBack ? -1 : field.rows - 1
   const rStep = rBack ? -1 : 1
   const maxH = field.maxH || 1
-  const thresh = maxH * 0.012
+  const thresh = maxH * 0.006
 
   for (let r = r0; r !== r1; r += rStep) {
     for (let c = c0; c !== c1; c += cStep) {

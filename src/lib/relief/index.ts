@@ -52,6 +52,7 @@ export {
   PITCH_MIN,
   ZOOM_MAX,
   ZOOM_MIN,
+  autoExaggeration,
   clampCamera,
   depthOfQuad,
   fitScale,

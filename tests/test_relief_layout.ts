@@ -13,7 +13,7 @@ import {
 } from "../src/lib/relief/layout"
 import { heightColor } from "../src/lib/relief/color"
 import { rasterizePeaks } from "../src/lib/relief/heightmap"
-import { clampCamera, DEFAULT_CAMERA, projectPoint } from "../src/lib/relief/project"
+import { clampCamera, DEFAULT_CAMERA, projectPoint, autoExaggeration } from "../src/lib/relief/project"
 
 function draw(i: number): Draw {
   const date = new Date(Date.UTC(2024, 0, 1 + i)).toISOString().slice(0, 10)
@@ -127,6 +127,12 @@ test("heightmap splat peaks at the ball and colors climb with height", () => {
   const low = heightColor(0)
   const high = heightColor(1)
   assert.ok(low[0] + low[1] + low[2] < high[0] + high[1] + high[2])
+})
+
+test("auto exaggeration lifts a flat field to a readable fraction of the span", () => {
+  const y = autoExaggeration(1, 20, 20, 1)
+  assert.ok(y > 5)
+  assert.ok(Math.abs(y - 0.36 * 20) < 1e-9)
 })
 
 test("camera projects and clamp keeps pitch / zoom in range", () => {

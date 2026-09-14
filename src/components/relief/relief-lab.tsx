@@ -275,13 +275,14 @@ export function ReliefLab() {
           </div>
         </div>
         <p className="text-xs leading-5 text-muted-foreground">
-          {loading ? "Chargement des tirages…" : null}
+          {chronological.length
+            ? `${chronological.length} tirages · ${from ? formatShortDate(from) : "?"} → ${to ? formatShortDate(to) : "?"} · source ${source}${loading ? " · Neon…" : ""}`
+            : loading
+              ? "Chargement des tirages…"
+              : "Aucun tirage."}
           {!loading && short
-            ? `Archive disponible : ${chronological.length} tirages (échantillon ${sample} incomplet sans Neon).`
-            : null}
-          {!loading && !short
-            ? `${chronological.length} tirages · ${from ? formatShortDate(from) : "?"} → ${to ? formatShortDate(to) : "?"} · source ${source}`
-            : null}
+            ? ` Échantillon ${sample} incomplet (archive ${chronological.length}).`
+            : ""}
         </p>
       </div>
 
