@@ -402,14 +402,14 @@ function paintStamp(
     ctx.stroke()
   }
 
-  const half = cell * 0.38
+  const half = cell * 0.44
   const maxH = map.maxH || 1
   const lift = plan ? 0 : cell * 1.35 * yScale
   const sample = proj(stamp.x, 0, stamp.z)
   const neighbor = proj(stamp.x + cell, 0, stamp.z)
   const cellPx = Math.hypot(neighbor.x - sample.x, neighbor.y - sample.y)
-  const showNum = labels && cellPx >= 11
-  const showDate = labels && map.stamps.length <= 24 && cellPx >= 9 && !map.aggregated
+  const showNum = labels && cellPx >= 8
+  const showDate = labels && map.stamps.length <= 24 && cellPx >= 7 && !map.aggregated
 
   const rankedCells = [...stamp.cells].sort(
     (u, v) => proj(v.x, 0, v.z).depth - proj(u.x, 0, u.z).depth
@@ -425,10 +425,10 @@ function paintStamp(
     }
     if (showNum) {
       const top = proj(cellData.x, y, cellData.z)
-      ctx.font = `${Math.max(8, Math.min(13, cellPx * 0.42))}px ui-sans-serif, system-ui, sans-serif`
+      ctx.font = `600 ${Math.max(9, Math.min(14, cellPx * 0.55))}px ui-sans-serif, system-ui, sans-serif`
       ctx.textAlign = "center"
       ctx.textBaseline = "middle"
-      ctx.fillStyle = "rgba(10, 14, 24, 0.92)"
+      ctx.fillStyle = cellData.t > 0.62 ? "rgba(20, 16, 8, 0.95)" : "rgba(248, 250, 252, 0.95)"
       ctx.fillText(cellData.star ? `★${cellData.n}` : String(cellData.n), top.x, top.y)
     }
   }

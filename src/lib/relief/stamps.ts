@@ -131,8 +131,8 @@ function aggregateStamp(layout: ReliefLayout, cell: number): StampMap {
 }
 
 export function stampBounds(map: StampMap) {
-  const hx = 5.2 * map.cell
-  const hz = 3.2 * map.cell
+  const hx = 5 * map.cell
+  const hz = 2.55 * map.cell
   if (map.stamps.length === 0) return { minX: -2, maxX: 2, minZ: -2, maxZ: 2 }
   let minX = Infinity
   let maxX = -Infinity

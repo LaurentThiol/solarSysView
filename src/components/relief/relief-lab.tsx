@@ -51,7 +51,7 @@ export function ReliefLab() {
   const [offset, setOffset] = useState<OffsetMode>("hex")
   const [height, setHeight] = useState<HeightMode>("mixte")
   const [style, setStyle] = useState<ViewStyle>("plan")
-  const [fusion, setFusion] = useState(0.4)
+  const [fusion, setFusion] = useState(0.48)
   const [yScale, setYScale] = useState(1.15)
   const [stars, setStars] = useState(false)
   const [labels, setLabels] = useState(true)

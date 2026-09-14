@@ -147,7 +147,7 @@ export function glyphScaleFor(spacing: number, fusion: number, mode: OffsetMode)
   const f = clamp01(fusion)
   if (mode === "superpose") return 1
   if (mode === "temps") return Math.max(0.22, 0.48 + 0.28 * f)
-  const cover = 0.32 + 0.48 * f
+  const cover = 0.58 + 0.34 * f
   return (spacing * cover) / 10
 }
 
