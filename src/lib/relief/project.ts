@@ -5,9 +5,15 @@ export type Camera = {
 }
 
 export const DEFAULT_CAMERA: Camera = {
-  yaw: 0.78,
-  pitch: 0.66,
+  yaw: 0.62,
+  pitch: 0.72,
   zoom: 1,
+}
+
+export const PLAN_CAMERA: Camera = {
+  yaw: 0,
+  pitch: 1.18,
+  zoom: 1.05,
 }
 
 export const PITCH_MIN = 0.22

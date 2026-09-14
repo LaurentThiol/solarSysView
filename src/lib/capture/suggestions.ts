@@ -61,9 +61,9 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   }
   if (lab === "relief") {
     return [
-      "Décris le relief : où sont les sommets, que code la couleur, et quel décalage a produit cette carte.",
-      "Le mode de décalage (angle d’or, Hilbert, hexagone…) change-t-il la lecture, ou seulement l’esthétique ?",
-      "Rappelle que la hauteur n’est pas une prédiction : ce sont des sorties déjà tirées, empilées.",
+      "Chaque plaque 5×10 est un tirage. Lis les cinq boules du plus récent (cadre or) et dis comment le décalage range les glyphes.",
+      "Le mode de décalage (hexagone, angle d’or, Hilbert…) change-t-il le voisinage, ou seulement l’esthétique ?",
+      "Rappelle que la couleur n’est pas une prédiction : ce sont des sorties déjà tirées, posées côte à côte.",
     ]
   }
   return [

@@ -14,6 +14,7 @@ import {
 import { heightColor } from "../src/lib/relief/color"
 import { rasterizePeaks } from "../src/lib/relief/heightmap"
 import { clampCamera, DEFAULT_CAMERA, projectPoint, autoExaggeration } from "../src/lib/relief/project"
+import { buildStampMap } from "../src/lib/relief/stamps"
 
 function draw(i: number): Draw {
   const date = new Date(Date.UTC(2024, 0, 1 + i)).toISOString().slice(0, 10)
@@ -149,6 +150,34 @@ test("relief is a first-class lab for capture / IA", () => {
   assert.equal(labLabel("relief"), "Relief")
   const tips = suggestionsFor("relief")
   assert.ok(tips.some((t) => t.toLowerCase().includes("hauteur") || t.toLowerCase().includes("décalage")))
+})
+
+test("stamp map keeps one 5×10 plate per draw with five numbered cells", () => {
+  const layout = layoutDraws(draws(20), { mode: "hex", height: "mixte", fusion: 0.4, stars: false })
+  const map = buildStampMap(layout)
+  assert.equal(map.stamps.length, 20)
+  assert.equal(map.aggregated, false)
+  for (const stamp of map.stamps) {
+    assert.equal(stamp.cells.length, 5)
+    const nums = new Set(stamp.cells.map((c) => c.n))
+    assert.equal(nums.size, 5)
+    for (const n of stamp.numbers) assert.ok(nums.has(n))
+  }
+  assert.equal(map.stamps.filter((s) => s.latest).length, 1)
+})
+
+test("superpose stamp is a single histogram board", () => {
+  const layout = layoutDraws(draws(8), {
+    mode: "superpose",
+    height: "presence",
+    fusion: 0.3,
+    stars: false,
+  })
+  const map = buildStampMap(layout)
+  assert.equal(map.stamps.length, 1)
+  assert.equal(map.aggregated, true)
+  assert.ok(map.stamps[0].cells.length >= 5)
+  assert.ok(map.maxH >= 1)
 })
 
 test("every offset mode lays out 100 draws", () => {

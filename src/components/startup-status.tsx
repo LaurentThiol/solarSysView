@@ -490,7 +490,7 @@ const NAV_ITEMS = [
     label: "Relief",
     help: {
       title: "Relief",
-      body: "Carte 3D des tirages : hauteur colorée, échantillons 20/50/100/200, décalage (angle d’or, Hilbert, hexagone), rotation.",
+      body: "Une plaque Morpho 5×10 par tirage. Les cinq cases colorées sont les boules. Plan lisible ou timbres 3D, décalage hexagone / angle d’or, rotation.",
     },
   },
   {

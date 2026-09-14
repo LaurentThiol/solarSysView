@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react"
 import { OverlayToggle } from "@/components/analysis/shared"
 import { useRegisterCapture } from "@/components/capture"
 import { HelpTip, LabelHelp, TitleHelp } from "@/components/help"
+import { GlyphBoard } from "@/components/morpho/glyph-board"
 import { ReliefCanvas } from "@/components/relief/relief-canvas"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,18 +20,18 @@ import { packRelief } from "@/lib/capture/pack"
 import { INDEPENDENCE_DISCLAIMER } from "@/lib/capture/snapshot"
 import { formatDrawDate, formatShortDate, takeLastDraws } from "@/lib/draws"
 import {
-  crestStrips,
   DEFAULT_CAMERA,
   HEIGHT_LABELS,
   HEIGHT_MODES,
   OFFSET_LABELS,
   OFFSET_MODES,
+  PLAN_CAMERA,
   RELIEF_SAMPLES,
   STYLE_LABELS,
   VIEW_STYLES,
+  buildStampMap,
   layoutDraws,
   layoutNote,
-  rasterizePeaks,
   recommendedOffset,
   type Camera,
   type HeightMode,
@@ -40,19 +41,22 @@ import {
 } from "@/lib/relief"
 import { useDraws } from "@/lib/use-draws"
 
+function homeCamera(style: ViewStyle): Camera {
+  return style === "plan" ? PLAN_CAMERA : DEFAULT_CAMERA
+}
+
 export function ReliefLab() {
   const { draws: archive, source, loading } = useDraws("current")
-  const [sample, setSample] = useState<ReliefSample>(50)
-  const [offset, setOffset] = useState<OffsetMode>("or")
+  const [sample, setSample] = useState<ReliefSample>(20)
+  const [offset, setOffset] = useState<OffsetMode>("hex")
   const [height, setHeight] = useState<HeightMode>("mixte")
-  const [style, setStyle] = useState<ViewStyle>("relief")
-  const [fusion, setFusion] = useState(0.58)
+  const [style, setStyle] = useState<ViewStyle>("plan")
+  const [fusion, setFusion] = useState(0.4)
   const [yScale, setYScale] = useState(1.15)
   const [stars, setStars] = useState(false)
-  const [contours, setContours] = useState(true)
-  const [wire, setWire] = useState(false)
+  const [labels, setLabels] = useState(true)
   const [autoRotate, setAutoRotate] = useState(false)
-  const [camera, setCamera] = useState<Camera>(DEFAULT_CAMERA)
+  const [camera, setCamera] = useState<Camera>(PLAN_CAMERA)
   const [hoverOwner, setHoverOwner] = useState<number | null>(null)
 
   const onCamera = useCallback((next: Camera | ((prev: Camera) => Camera)) => {
@@ -75,17 +79,7 @@ export function ReliefLab() {
       }),
     [chronological, fusion, height, offset, stars]
   )
-  const field = useMemo(() => {
-    if (style !== "relief") return null
-    return rasterizePeaks(layout.peaks, layout.anchors, fusion, offset === "superpose")
-  }, [fusion, layout, offset, style])
-  const quads = useMemo(() => {
-    if (style !== "cretes") return []
-    const connected =
-      layout.anchors.length >= 2 &&
-      (offset === "temps" || offset === "hilbert" || offset === "superpose")
-    return crestStrips(layout.anchors, height, yScale, connected)
-  }, [height, layout.anchors, offset, style, yScale])
+  const map = useMemo(() => buildStampMap(layout), [layout])
 
   const hover = hoverOwner == null ? null : layout.anchors[hoverOwner] ?? null
   const from = chronological[0]?.date ?? null
@@ -105,7 +99,7 @@ export function ReliefLab() {
       fusion,
       yScale,
       stars,
-      maxH: field?.maxH ?? 0,
+      maxH: map.maxH,
       recommended: OFFSET_LABELS[recommended],
     })
   )
@@ -119,22 +113,27 @@ export function ReliefLab() {
               <p className="p-6 text-sm text-muted-foreground">Aucun tirage à cartographier.</p>
             ) : (
               <ReliefCanvas
-                field={style === "relief" ? field : null}
-                quads={quads}
-                anchors={layout.anchors}
+                map={map}
+                style={style}
                 camera={camera}
                 onCamera={onCamera}
                 autoRotate={autoRotate}
-                contours={style === "relief" && contours}
-                wire={wire}
                 yScale={yScale}
                 hoverOwner={hoverOwner}
                 onHover={setHoverOwner}
+                labels={labels}
               />
             )}
           </div>
         </CardContent>
       </Card>
+
+      <p className="px-1 text-sm leading-6 text-muted-foreground">
+        <span className="text-foreground">Une plaque 5×10 = un tirage.</span> Les cinq
+        cases colorées sont les cinq boules, à leur place Morpho (1 en haut à
+        gauche, 50 en bas à droite). La couleur va de l’ancien au récent. Le
+        cadre or est le dernier tirage.
+      </p>
 
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
@@ -142,7 +141,7 @@ export function ReliefLab() {
             label="Échantillon"
             help={{
               title: "Échantillon",
-              body: "Les 20, 50, 100 ou 200 derniers tirages de la formule actuelle. 50 tient sur un coup d’œil ; 200 commence à faire continent. Sans Neon, l’archive JSON de l’année peut être plus courte.",
+              body: "20 plaques se lisent une par une (numéros visibles). 50 donne la carte. 100 et 200 gardent la silhouette de chaque glyphe, plus compacte. Sans Neon, l’archive JSON de l’année peut être plus courte.",
             }}
           >
             <div className="flex flex-wrap gap-1">
@@ -157,7 +156,8 @@ export function ReliefLab() {
                     setSample(n)
                     const next = takeLastDraws(archive, n)
                     setOffset(recommendedOffset(next.length))
-                    setCamera(DEFAULT_CAMERA)
+                    setCamera(homeCamera(style))
+                    setLabels(n <= 50)
                   }}
                 >
                   {n}
@@ -169,7 +169,7 @@ export function ReliefLab() {
             label="Décalage"
             help={{
               title: "Décalage entre tirages",
-              body: "Sans décalage, tous les glyphes 5×10 s’empilent au même endroit (histogramme). Un décalage pose chaque tirage à côté des autres pour former une carte. L’angle d’or est le plus homogène ; Hilbert garde le voisinage temporel ; l’hexagone est le plus lisible à 20 tirages.",
+              body: "Sans décalage, toutes les plaques s’empilent (histogramme 1–50). Un décalage pose chaque glyphe à côté des autres. L’hexagone est le plus lisible à 20 ; l’angle d’or range 50+ sans trou.",
               wide: true,
             }}
           >
@@ -193,11 +193,18 @@ export function ReliefLab() {
           <LabelHelp
             label="Lecture"
             help={{
-              title: "Relief ou crêtes",
-              body: "Relief : chaque boule est une colline lissée, les îlots fusionnent. Crêtes : le profil n1→n5 de chaque tirage, en ruban (ou en nappe temps × rang si le décalage est temporel / Hilbert).",
+              title: "Plan ou timbres 3D",
+              body: "Plan : vue de dessus, chaque case est un carré numéroté — c’est la lecture. Timbres 3D : les cases sorties se soulèvent ; la couleur reste la même. Glisser fait tourner les deux.",
             }}
           >
-            <Select value={style} onValueChange={(v) => setStyle(v as ViewStyle)}>
+            <Select
+              value={style}
+              onValueChange={(v) => {
+                const next = v as ViewStyle
+                setStyle(next)
+                setCamera(homeCamera(next))
+              }}
+            >
               <SelectTrigger className="w-44" aria-label="Lecture">
                 <span className="flex flex-1 text-left">{STYLE_LABELS[style]}</span>
               </SelectTrigger>
@@ -211,14 +218,14 @@ export function ReliefLab() {
             </Select>
           </LabelHelp>
           <LabelHelp
-            label="Hauteur"
+            label="Couleur"
             help={{
-              title: "Hauteur",
-              body: "Présence : chaque boule vaut 1. Récence : les tirages récents sont plus hauts. Valeur : une 50 est un pic, une 1 une butte. Mixte (défaut) : présence pondérée par la récence et la valeur — le présent forme les sommets sans effacer le passé.",
+              title: "Couleur",
+              body: "Récence : les plaques récentes tirent vers l’or, les anciennes vers le bleu. Mixte (défaut) : surtout la récence. Valeur : une 50 est plus claire qu’une 1. Présence : toutes les cases sorties se valent.",
             }}
           >
             <Select value={height} onValueChange={(v) => setHeight(v as HeightMode)}>
-              <SelectTrigger className="w-56" aria-label="Hauteur">
+              <SelectTrigger className="w-56" aria-label="Couleur">
                 <span className="flex flex-1 text-left">{HEIGHT_LABELS[height]}</span>
               </SelectTrigger>
               <SelectContent>
@@ -234,10 +241,10 @@ export function ReliefLab() {
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <label className="flex min-w-56 flex-1 flex-col gap-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">
-              Fusion des îlots
+              Serrer les plaques
               <HelpTip
-                title="Fusion"
-                body="Écart entre origines vs taille du glyphe 5×10, plus le lissage gaussien. Bas : archipel. Haut : une seule carte continue. Vers 0,55–0,65 les voisins se touchent sans se noyer."
+                title="Serrer"
+                body="Écart entre les glyphes. Bas : chaque tirage est isolé. Haut : la carte se compacte, les plaques restent séparées (elles ne fusionnent plus en collines)."
               />
             </span>
             <input
@@ -247,40 +254,33 @@ export function ReliefLab() {
               step={0.01}
               value={fusion}
               onChange={(event) => setFusion(Number(event.target.value))}
-              aria-label="Fusion des îlots"
+              aria-label="Serrer les plaques"
               className="accent-primary"
             />
           </label>
-          <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-muted-foreground">
-            <span>Exagération du relief</span>
-            <input
-              type="range"
-              min={0.4}
-              max={2.4}
-              step={0.05}
-              value={yScale}
-              onChange={(event) => setYScale(Number(event.target.value))}
-              aria-label="Exagération du relief"
-              className="accent-primary"
-            />
-          </label>
+          {style === "timbres" ? (
+            <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-muted-foreground">
+              <span>Hauteur des cases</span>
+              <input
+                type="range"
+                min={0.4}
+                max={2.4}
+                step={0.05}
+                value={yScale}
+                onChange={(event) => setYScale(Number(event.target.value))}
+                aria-label="Hauteur des cases"
+                className="accent-primary"
+              />
+            </label>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <OverlayToggle
-              label="Isohypses"
-              on={contours}
-              onClick={() => setContours((v) => !v)}
+              label="Numéros"
+              on={labels}
+              onClick={() => setLabels((v) => !v)}
               help={{
-                title: "Isohypses",
-                body: "Courbes de niveau, comme sur une carte d’état-major. Elles se lisent surtout en relief, pas sur les crêtes.",
-              }}
-            />
-            <OverlayToggle
-              label="Fil de fer"
-              on={wire}
-              onClick={() => setWire((v) => !v)}
-              help={{
-                title: "Fil de fer",
-                body: "Trace les facettes. Utile pour juger le lissage, moins joli en carte.",
+                title: "Numéros",
+                body: "Écrit 1–50 dans les cases assez grandes. À 20 tirages c’est le mode de lecture. À 200, mieux vaut les masquer et survoler une plaque.",
               }}
             />
             <OverlayToggle
@@ -289,7 +289,7 @@ export function ReliefLab() {
               onClick={() => setStars((v) => !v)}
               help={{
                 title: "Étoiles",
-                body: "Ajoute les 2 étoiles en petites collines sous le glyphe 5×10. Elles pèsent moins que les numéros.",
+                body: "Ajoute les 2 étoiles sous la plaque 5×10. Elles restent secondaires : la lecture, c’est les cinq numéros.",
               }}
             />
             <OverlayToggle
@@ -315,14 +315,14 @@ export function ReliefLab() {
         </p>
       </div>
 
-      <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-medium">
               <TitleHelp
                 help={{
                   title: "Pourquoi ce décalage",
-                  body: "Une carte cohérente, ce n’est pas empiler plus haut : c’est placer les tirages pour que le voisinage visuel ait un sens (densité uniforme, temps, ou morphologie).",
+                  body: "Une carte lisible, ce n’est pas fondre les glyphes : c’est les poser pour que chaque 5×10 reste un tirage, et que le voisinage ait un sens.",
                 }}
               >
                 Pourquoi ce décalage
@@ -359,9 +359,9 @@ export function ReliefLab() {
           </CardHeader>
           <CardContent>
             {hover ? (
-              <div className="flex flex-col gap-2 text-sm">
+              <div className="flex flex-col gap-3 text-sm">
                 <p className="text-xs text-muted-foreground">
-                  {hover.weekday} · n° {hover.drawIndex + 1} / {layout.anchors.length}
+                  {hover.weekday} · plaque {hover.drawIndex + 1} / {layout.anchors.length}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {hover.numbers.map((n) => (
@@ -375,18 +375,23 @@ export function ReliefLab() {
                     </Badge>
                   ))}
                 </div>
+                <GlyphBoard
+                  numbers={hover.numbers}
+                  stars={hover.stars}
+                  labels
+                  className="max-w-xs"
+                />
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Survolez un point or ou blanc sur la carte. Le plus récent est toujours en or.
+                Survolez une plaque. Le dernier tirage a le cadre or.
               </p>
             )}
-            {field ? (
-              <p className="mt-3 text-xs text-muted-foreground tabular-nums">
-                Sommet {field.maxH.toFixed(2)} · fusion {fusion.toFixed(2)} · maille {field.cols}×
-                {field.rows}
-              </p>
-            ) : null}
+            <p className="mt-3 text-xs text-muted-foreground tabular-nums">
+              {map.stamps.length} plaque{map.stamps.length > 1 ? "s" : ""} · maille{" "}
+              {map.cell.toFixed(2)}
+              {map.aggregated ? " · histogramme 5×10" : ""}
+            </p>
           </CardContent>
         </Card>
       </section>

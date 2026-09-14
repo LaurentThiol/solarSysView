@@ -1,27 +1,26 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { heightColor, rgbCss, shadeRgb } from "@/lib/relief/color"
-import {
-  contourEdges,
-  lambert,
-  quadNormal,
-  type HeightField,
-  type TerrainQuad,
-} from "@/lib/relief/heightmap"
-import type { DrawAnchor } from "@/lib/relief/layout"
+import type { ViewStyle } from "@/lib/relief/layout"
 import {
   DEFAULT_CAMERA,
+  PLAN_CAMERA,
   ZOOM_MAX,
   ZOOM_MIN,
-  autoExaggeration,
   clampCamera,
   fitScale,
   projectPoint,
   type Camera,
 } from "@/lib/relief/project"
+import {
+  plateCorners,
+  stampBounds,
+  type Stamp,
+  type StampMap,
+} from "@/lib/relief/stamps"
 
 type Hover = {
   owner: number
@@ -29,54 +28,52 @@ type Hover = {
   y: number
 } | null
 
+type Scene = {
+  map: StampMap | null
+  style: ViewStyle
+  yScale: number
+  hoverOwner: number | null
+  labels: boolean
+}
+
 export function ReliefCanvas({
-  field,
-  quads,
-  anchors,
+  map,
+  style,
   camera,
   onCamera,
   autoRotate,
-  contours,
-  wire,
   yScale,
   hoverOwner,
   onHover,
+  labels,
 }: {
-  field: HeightField | null
-  quads: TerrainQuad[]
-  anchors: DrawAnchor[]
+  map: StampMap | null
+  style: ViewStyle
   camera: Camera
   onCamera: (next: Camera | ((prev: Camera) => Camera)) => void
   autoRotate: boolean
-  contours: boolean
-  wire: boolean
   yScale: number
   hoverOwner: number | null
   onHover: (owner: number | null) => void
+  labels: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const cameraRef = useRef(camera)
   const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
-  const projectedRef = useRef<Array<{ owner: number; x: number; y: number }>>([])
+  const projectedRef = useRef<Array<{ owner: number; x: number; y: number; r: number }>>([])
   const [hint, setHint] = useState<Hover>(null)
-  const contour = useMemo(() => {
-    if (!field || !contours) return []
-    const spanX = (field.cols - 1) * field.cell
-    const spanZ = (field.rows - 1) * field.cell
-    return contourEdges(field, autoExaggeration(field.maxH, spanX, spanZ, yScale))
-  }, [contours, field, yScale])
-  const sceneRef = useRef({ field, quads, anchors, contour, hoverOwner, wire, yScale })
+  const sceneRef = useRef<Scene>({ map, style, yScale, hoverOwner, labels })
+  const lastKeyRef = useRef("")
+  const home = style === "plan" ? PLAN_CAMERA : DEFAULT_CAMERA
 
   useEffect(() => {
     cameraRef.current = camera
   }, [camera])
 
   useEffect(() => {
-    sceneRef.current = { field, quads, anchors, contour, hoverOwner, wire, yScale }
-  }, [anchors, contour, field, hoverOwner, quads, wire, yScale])
-
-  const lastKeyRef = useRef("")
+    sceneRef.current = { map, style, yScale, hoverOwner, labels }
+  }, [hoverOwner, labels, map, style, yScale])
 
   useEffect(() => {
     if (!autoRotate) return
@@ -137,10 +134,11 @@ export function ReliefCanvas({
     const x = clientX - box.left
     const y = clientY - box.top
     let best: Hover = null
-    let dist = 22
+    let dist = 28
     for (const item of projectedRef.current) {
       const d = Math.hypot(item.x - x, item.y - y)
-      if (d < dist) {
+      const limit = Math.max(18, item.r)
+      if (d < limit && d < dist) {
         dist = d
         best = { owner: item.owner, x: item.x, y: item.y }
       }
@@ -157,7 +155,7 @@ export function ReliefCanvas({
         ref={canvasRef}
         tabIndex={0}
         className="absolute inset-0 block h-full w-full cursor-grab touch-none outline-none active:cursor-grabbing"
-        aria-label="Carte 3D des tirages, glisser pour tourner, molette pour zoomer"
+        aria-label="Carte des glyphes 5×10, glisser pour tourner, molette pour zoomer"
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId)
           dragRef.current = {
@@ -197,7 +195,7 @@ export function ReliefCanvas({
             onHover(null)
           }
         }}
-        onDoubleClick={() => onCamera(DEFAULT_CAMERA)}
+        onDoubleClick={() => onCamera(home)}
         onKeyDown={(event) => {
           const step = event.shiftKey ? 0.14 : 0.07
           if (event.key === "ArrowLeft") {
@@ -217,24 +215,19 @@ export function ReliefCanvas({
           } else if (event.key === "-" || event.key === "_") {
             onCamera((prev) => clampCamera({ ...prev, zoom: prev.zoom * 0.92 }))
           } else if (event.key === "0") {
-            onCamera(DEFAULT_CAMERA)
+            onCamera(home)
           }
         }}
       />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-3 text-[11px] text-white/70">
-        <p>Glisser pour tourner · molette pour zoomer · double-clic pour réinitialiser</p>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-3 text-[11px] text-white/75">
+        <p>Une plaque = un tirage · cinq cases = les cinq boules · glisser pour tourner</p>
         {hint ? <p className="tabular-nums">tirage #{hint.owner + 1}</p> : null}
       </div>
       <div className="absolute top-3 right-3 flex flex-col items-center gap-1">
         <Legend />
       </div>
       <div className="absolute top-3 left-3 flex gap-1">
-        <Button
-          size="xs"
-          variant="secondary"
-          type="button"
-          onClick={() => onCamera(DEFAULT_CAMERA)}
-        >
+        <Button size="xs" variant="secondary" type="button" onClick={() => onCamera(home)}>
           Vue
         </Button>
         <Button
@@ -250,14 +243,21 @@ export function ReliefCanvas({
   )
 }
 
-type Scene = {
-  field: HeightField | null
-  quads: TerrainQuad[]
-  anchors: DrawAnchor[]
-  contour: ReturnType<typeof contourEdges>
-  hoverOwner: number | null
-  wire: boolean
-  yScale: number
+function projectPlan(
+  x: number,
+  y: number,
+  z: number,
+  cam: Camera,
+  cx: number,
+  cy: number,
+  scale: number
+) {
+  const cosY = Math.cos(cam.yaw)
+  const sinY = Math.sin(cam.yaw)
+  const x1 = x * cosY - z * sinY
+  const z1 = x * sinY + z * cosY
+  const s = scale * cam.zoom
+  return { x: cx + x1 * s, y: cy + z1 * s, depth: z1 - y * 0.02 }
 }
 
 function paintScene(
@@ -265,7 +265,7 @@ function paintScene(
   wrap: HTMLDivElement | null,
   cam: Camera,
   scene: Scene,
-  projectedRef: { current: Array<{ owner: number; x: number; y: number }> },
+  projectedRef: { current: Array<{ owner: number; x: number; y: number; r: number }> },
   lastKeyRef: { current: string }
 ) {
   if (!canvas) return
@@ -278,22 +278,19 @@ function paintScene(
   const dpr = Math.min(2, typeof window === "undefined" ? 1 : window.devicePixelRatio || 1)
   const bw = Math.max(1, Math.round(cssW * dpr))
   const bh = Math.max(1, Math.round(cssH * dpr))
-  const { field, quads, anchors, contour, hoverOwner, wire, yScale } = scene
+  const { map, style, yScale, hoverOwner, labels } = scene
   const key = [
     cssW,
     cssH,
     cam.yaw.toFixed(4),
     cam.pitch.toFixed(4),
     cam.zoom.toFixed(3),
-    field?.cols ?? 0,
-    field?.rows ?? 0,
-    field?.maxH?.toFixed(4) ?? "0",
-    quads.length,
-    anchors.length,
+    map?.stamps.length ?? 0,
+    map?.maxH.toFixed(4) ?? "0",
+    style,
     hoverOwner ?? -1,
-    wire ? 1 : 0,
-    contour.length,
     yScale.toFixed(3),
+    labels ? 1 : 0,
   ].join("|")
   if (
     key === lastKeyRef.current &&
@@ -311,61 +308,38 @@ function paintScene(
   try {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, cssW, cssH)
-
+    drawBackdrop(ctx, cssW, cssH)
+    if (!map || map.stamps.length === 0) {
+      canvas.dataset.relief = `${cssW}x${cssH}`
+      return
+    }
+    const box = stampBounds(map)
+    const scale = fitScale(box.minX, box.maxX, box.minZ, box.maxZ, cssW, cssH)
     const cx = cssW * 0.5
     const cy = cssH * 0.5
-    const box = field
-      ? {
-          minX: field.originX,
-          maxX: field.originX + (field.cols - 1) * field.cell,
-          minZ: field.originZ,
-          maxZ: field.originZ + (field.rows - 1) * field.cell,
-        }
-      : boundsFromQuads(quads)
-    const scale = fitScale(box.minX, box.maxX, box.minZ, box.maxZ, cssW, cssH)
-    const proj = (x: number, y: number, z: number) => projectPoint(x, y, z, cam, cx, cy, scale)
-
-    drawBackdrop(ctx, cssW, cssH)
-    drawGround(ctx, proj, box)
-
-    if (field && quads.length === 0) {
-      const spanX = (field.cols - 1) * field.cell
-      const spanZ = (field.rows - 1) * field.cell
-      const yMul = autoExaggeration(field.maxH, spanX, spanZ, yScale)
-      paintHeightField(ctx, field, proj, cam.yaw, yMul, hoverOwner, wire)
-      if (contour.length) {
-        ctx.strokeStyle = "rgba(8, 12, 24, 0.28)"
-        ctx.lineWidth = 1
-        for (const [a, b] of contour) {
-          const p = proj(a.x, a.y, a.z)
-          const q = proj(b.x, b.y, b.z)
-          ctx.beginPath()
-          ctx.moveTo(p.x, p.y)
-          ctx.lineTo(q.x, q.y)
-          ctx.stroke()
-        }
-      }
-    } else if (quads.length) {
-      paintQuads(ctx, quads, proj, hoverOwner, wire)
+    const plan = style === "plan"
+    const proj = (x: number, y: number, z: number) =>
+      plan
+        ? projectPlan(x, y, z, cam, cx, cy, scale)
+        : projectPoint(x, y, z, cam, cx, cy, scale)
+    const ranked = [...map.stamps].sort((a, b) => {
+      const da = proj(a.x, 0, a.z).depth
+      const db = proj(b.x, 0, b.z).depth
+      return db - da
+    })
+    const hits: Array<{ owner: number; x: number; y: number; r: number }> = []
+    for (const stamp of ranked) {
+      paintStamp(ctx, stamp, map, proj, plan, yScale, hoverOwner, labels)
+      const p = proj(stamp.x, 0, stamp.z)
+      const edge = proj(stamp.x + 5 * map.cell, 0, stamp.z)
+      hits.push({
+        owner: stamp.drawIndex,
+        x: p.x,
+        y: p.y,
+        r: Math.hypot(edge.x - p.x, edge.y - p.y) * 0.85,
+      })
     }
-
-    const latest = anchors.length ? anchors[anchors.length - 1].drawIndex : -1
-    const projected: Array<{ owner: number; x: number; y: number }> = []
-    for (const anchor of anchors) {
-      const p = proj(anchor.x, 0.08, anchor.z)
-      projected.push({ owner: anchor.drawIndex, x: p.x, y: p.y })
-      const isLatest = anchor.drawIndex === latest
-      const active = hoverOwner === anchor.drawIndex
-      ctx.beginPath()
-      ctx.arc(p.x, p.y, isLatest || active ? 4.5 : 2.4, 0, Math.PI * 2)
-      ctx.fillStyle = isLatest
-        ? "rgb(232, 210, 96)"
-        : active
-          ? "rgb(220, 230, 255)"
-          : "rgba(220, 230, 250, 0.35)"
-      ctx.fill()
-    }
-    projectedRef.current = projected
+    projectedRef.current = hits
     canvas.dataset.relief = `${cssW}x${cssH}`
   } catch {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -374,21 +348,175 @@ function paintScene(
   }
 }
 
-function boundsFromQuads(quads: TerrainQuad[]) {
-  if (!quads.length) return { minX: -2, maxX: 2, minZ: -2, maxZ: 2 }
-  let minX = Infinity
-  let maxX = -Infinity
-  let minZ = Infinity
-  let maxZ = -Infinity
-  for (const q of quads) {
-    for (const p of [q.a, q.b, q.c, q.d]) {
-      if (p.x < minX) minX = p.x
-      if (p.x > maxX) maxX = p.x
-      if (p.z < minZ) minZ = p.z
-      if (p.z > maxZ) maxZ = p.z
+function paintStamp(
+  ctx: CanvasRenderingContext2D,
+  stamp: Stamp,
+  map: StampMap,
+  proj: (x: number, y: number, z: number) => { x: number; y: number; depth: number },
+  plan: boolean,
+  yScale: number,
+  hoverOwner: number | null,
+  labels: boolean
+) {
+  const plate = plateCorners(stamp, map.cell)
+  const active = hoverOwner === stamp.drawIndex
+  const a = proj(plate.minX, 0, plate.minZ)
+  const b = proj(plate.maxX, 0, plate.minZ)
+  const c = proj(plate.maxX, 0, plate.maxZ)
+  const d = proj(plate.minX, 0, plate.maxZ)
+  ctx.beginPath()
+  ctx.moveTo(a.x, a.y)
+  ctx.lineTo(b.x, b.y)
+  ctx.lineTo(c.x, c.y)
+  ctx.lineTo(d.x, d.y)
+  ctx.closePath()
+  ctx.fillStyle = stamp.latest ? "rgba(40, 48, 28, 0.95)" : "rgba(18, 24, 40, 0.92)"
+  ctx.fill()
+  ctx.strokeStyle = stamp.latest
+    ? "rgba(232, 210, 96, 0.95)"
+    : active
+      ? "rgba(220, 230, 255, 0.85)"
+      : "rgba(120, 140, 180, 0.35)"
+  ctx.lineWidth = stamp.latest || active ? 1.8 : 0.8
+  ctx.stroke()
+
+  const cell = map.cell
+  ctx.strokeStyle = "rgba(140, 160, 200, 0.22)"
+  ctx.lineWidth = 0.6
+  for (let col = 0; col <= 10; col += 1) {
+    const x = stamp.x + (col - 5) * cell
+    const p = proj(x, 0, plate.minZ)
+    const q = proj(x, 0, plate.maxZ)
+    ctx.beginPath()
+    ctx.moveTo(p.x, p.y)
+    ctx.lineTo(q.x, q.y)
+    ctx.stroke()
+  }
+  for (let row = 0; row <= 5; row += 1) {
+    const z = stamp.z + (row - 2.5) * cell
+    const p = proj(plate.minX, 0, z)
+    const q = proj(plate.maxX, 0, z)
+    ctx.beginPath()
+    ctx.moveTo(p.x, p.y)
+    ctx.lineTo(q.x, q.y)
+    ctx.stroke()
+  }
+
+  const half = cell * 0.38
+  const maxH = map.maxH || 1
+  const lift = plan ? 0 : cell * 1.35 * yScale
+  const sample = proj(stamp.x, 0, stamp.z)
+  const neighbor = proj(stamp.x + cell, 0, stamp.z)
+  const cellPx = Math.hypot(neighbor.x - sample.x, neighbor.y - sample.y)
+  const showNum = labels && cellPx >= 11
+  const showDate = labels && map.stamps.length <= 24 && cellPx >= 9 && !map.aggregated
+
+  const rankedCells = [...stamp.cells].sort(
+    (u, v) => proj(v.x, 0, v.z).depth - proj(u.x, 0, u.z).depth
+  )
+  for (const cellData of rankedCells) {
+    const y = (cellData.h / maxH) * lift
+    const fill = rgbCss(shadeRgb(heightColor(cellData.t), active ? 1.05 : 0.92))
+    const pad = cellData.star ? half * 0.72 : half
+    if (plan || y < cell * 0.04) {
+      paintFlatCell(ctx, proj, cellData.x, cellData.z, pad, fill)
+    } else {
+      paintBox(ctx, proj, cellData.x, cellData.z, pad, y, fill)
+    }
+    if (showNum) {
+      const top = proj(cellData.x, y, cellData.z)
+      ctx.font = `${Math.max(8, Math.min(13, cellPx * 0.42))}px ui-sans-serif, system-ui, sans-serif`
+      ctx.textAlign = "center"
+      ctx.textBaseline = "middle"
+      ctx.fillStyle = "rgba(10, 14, 24, 0.92)"
+      ctx.fillText(cellData.star ? `★${cellData.n}` : String(cellData.n), top.x, top.y)
     }
   }
-  return { minX, maxX, minZ, maxZ }
+
+  if (showDate) {
+    const foot = proj(stamp.x, 0, plate.maxZ + cell * 0.55)
+    ctx.font = "10px ui-sans-serif, system-ui, sans-serif"
+    ctx.textAlign = "center"
+    ctx.textBaseline = "top"
+    ctx.fillStyle = stamp.latest ? "rgb(232, 210, 96)" : "rgba(200, 210, 230, 0.7)"
+    const label = stamp.date.slice(5).replace("-", "/")
+    ctx.fillText(label, foot.x, foot.y)
+  }
+}
+
+function paintFlatCell(
+  ctx: CanvasRenderingContext2D,
+  proj: (x: number, y: number, z: number) => { x: number; y: number },
+  x: number,
+  z: number,
+  half: number,
+  fill: string
+) {
+  const a = proj(x - half, 0, z - half)
+  const b = proj(x + half, 0, z - half)
+  const c = proj(x + half, 0, z + half)
+  const d = proj(x - half, 0, z + half)
+  ctx.beginPath()
+  ctx.moveTo(a.x, a.y)
+  ctx.lineTo(b.x, b.y)
+  ctx.lineTo(c.x, c.y)
+  ctx.lineTo(d.x, d.y)
+  ctx.closePath()
+  ctx.fillStyle = fill
+  ctx.fill()
+  ctx.strokeStyle = "rgba(8, 12, 24, 0.35)"
+  ctx.lineWidth = 0.7
+  ctx.stroke()
+}
+
+function paintBox(
+  ctx: CanvasRenderingContext2D,
+  proj: (x: number, y: number, z: number) => { x: number; y: number },
+  x: number,
+  z: number,
+  half: number,
+  y: number,
+  fill: string
+) {
+  const x0 = x - half
+  const x1 = x + half
+  const z0 = z - half
+  const z1 = z + half
+  const t00 = proj(x0, y, z0)
+  const t10 = proj(x1, y, z0)
+  const t11 = proj(x1, y, z1)
+  const t01 = proj(x0, y, z1)
+  const b00 = proj(x0, 0, z0)
+  const b10 = proj(x1, 0, z0)
+  const b11 = proj(x1, 0, z1)
+  const b01 = proj(x0, 0, z1)
+  const faces = [
+    [b10, b11, t11, t10],
+    [b01, b00, t00, t01],
+    [b00, b10, t10, t00],
+    [b11, b01, t01, t11],
+  ]
+  ctx.fillStyle = "rgba(16, 22, 36, 0.88)"
+  for (const face of faces) {
+    ctx.beginPath()
+    ctx.moveTo(face[0].x, face[0].y)
+    ctx.lineTo(face[1].x, face[1].y)
+    ctx.lineTo(face[2].x, face[2].y)
+    ctx.lineTo(face[3].x, face[3].y)
+    ctx.closePath()
+    ctx.fill()
+  }
+  ctx.beginPath()
+  ctx.moveTo(t00.x, t00.y)
+  ctx.lineTo(t10.x, t10.y)
+  ctx.lineTo(t11.x, t11.y)
+  ctx.lineTo(t01.x, t01.y)
+  ctx.closePath()
+  ctx.fillStyle = fill
+  ctx.fill()
+  ctx.strokeStyle = "rgba(8, 12, 24, 0.4)"
+  ctx.lineWidth = 0.7
+  ctx.stroke()
 }
 
 function drawBackdrop(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -400,138 +528,11 @@ function drawBackdrop(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillRect(0, 0, w, h)
 }
 
-function drawGround(
-  ctx: CanvasRenderingContext2D,
-  proj: (x: number, y: number, z: number) => { x: number; y: number; depth: number },
-  box: { minX: number; maxX: number; minZ: number; maxZ: number }
-) {
-  const pad = 0.8
-  const corners = [
-    proj(box.minX - pad, 0, box.minZ - pad),
-    proj(box.maxX + pad, 0, box.minZ - pad),
-    proj(box.maxX + pad, 0, box.maxZ + pad),
-    proj(box.minX - pad, 0, box.maxZ + pad),
-  ]
-  ctx.beginPath()
-  ctx.moveTo(corners[0].x, corners[0].y)
-  for (let i = 1; i < 4; i += 1) ctx.lineTo(corners[i].x, corners[i].y)
-  ctx.closePath()
-  ctx.fillStyle = "rgba(12, 18, 36, 0.85)"
-  ctx.fill()
-  ctx.strokeStyle = "rgba(120, 140, 180, 0.18)"
-  ctx.stroke()
-}
-
-function fillQuad(
-  ctx: CanvasRenderingContext2D,
-  pts: Array<{ x: number; y: number }>,
-  fill: string,
-  stroke: string | null
-) {
-  ctx.beginPath()
-  ctx.moveTo(pts[0].x, pts[0].y)
-  ctx.lineTo(pts[1].x, pts[1].y)
-  ctx.lineTo(pts[2].x, pts[2].y)
-  ctx.lineTo(pts[3].x, pts[3].y)
-  ctx.closePath()
-  ctx.fillStyle = fill
-  ctx.fill()
-  if (stroke) {
-    ctx.strokeStyle = stroke
-    ctx.lineWidth = 0.6
-    ctx.stroke()
-  }
-}
-
-function paintHeightField(
-  ctx: CanvasRenderingContext2D,
-  field: HeightField,
-  proj: (x: number, y: number, z: number) => { x: number; y: number; depth: number },
-  yaw: number,
-  yScale: number,
-  hoverOwner: number | null,
-  wire: boolean
-) {
-  const cBack = Math.sin(yaw) >= 0
-  const rBack = Math.cos(yaw) >= 0
-  const c0 = cBack ? field.cols - 2 : 0
-  const c1 = cBack ? -1 : field.cols - 1
-  const cStep = cBack ? -1 : 1
-  const r0 = rBack ? field.rows - 2 : 0
-  const r1 = rBack ? -1 : field.rows - 1
-  const rStep = rBack ? -1 : 1
-  const maxH = field.maxH || 1
-  const thresh = maxH * 0.006
-
-  for (let r = r0; r !== r1; r += rStep) {
-    for (let c = c0; c !== c1; c += cStep) {
-      const i00 = r * field.cols + c
-      const i10 = r * field.cols + (c + 1)
-      const i01 = (r + 1) * field.cols + c
-      const i11 = (r + 1) * field.cols + (c + 1)
-      const h = (field.heights[i00] + field.heights[i10] + field.heights[i11] + field.heights[i01]) / 4
-      if (h <= thresh) continue
-      const x0 = field.originX + c * field.cell
-      const x1 = x0 + field.cell
-      const z0 = field.originZ + r * field.cell
-      const z1 = z0 + field.cell
-      const a = proj(x0, field.heights[i00] * yScale, z0)
-      const b = proj(x1, field.heights[i10] * yScale, z0)
-      const d = proj(x0, field.heights[i01] * yScale, z1)
-      const cc = proj(x1, field.heights[i11] * yScale, z1)
-      const shade = lambert(
-        quadNormal({
-          a: { x: x0, y: field.heights[i00] * yScale, z: z0 },
-          b: { x: x1, y: field.heights[i10] * yScale, z: z0 },
-          c: { x: x1, y: field.heights[i11] * yScale, z: z1 },
-          d: { x: x0, y: field.heights[i01] * yScale, z: z1 },
-          h,
-          t: h / maxH,
-          owner: field.owner[i00],
-        })
-      )
-      const lit = hoverOwner === field.owner[i00] ? Math.min(1.15, shade + 0.18) : shade
-      const fill = rgbCss(shadeRgb(heightColor(h / maxH), lit))
-      fillQuad(ctx, [a, b, cc, d], fill, wire ? "rgba(8,10,20,0.35)" : "rgba(8,10,20,0.12)")
-    }
-  }
-}
-
-function paintQuads(
-  ctx: CanvasRenderingContext2D,
-  quads: TerrainQuad[],
-  proj: (x: number, y: number, z: number) => { x: number; y: number; depth: number },
-  hoverOwner: number | null,
-  wire: boolean
-) {
-  const ranked = quads
-    .map((quad) => {
-      const pa = proj(quad.a.x, quad.a.y, quad.a.z)
-      return { quad, pa, depth: pa.depth }
-    })
-    .sort((a, b) => b.depth - a.depth)
-  for (const item of ranked) {
-    const { quad } = item
-    const a = item.pa
-    const b = proj(quad.b.x, quad.b.y, quad.b.z)
-    const c = proj(quad.c.x, quad.c.y, quad.c.z)
-    const d = proj(quad.d.x, quad.d.y, quad.d.z)
-    const shade = lambert(quadNormal(quad))
-    const lit = hoverOwner === quad.owner ? Math.min(1.15, shade + 0.18) : shade
-    fillQuad(
-      ctx,
-      [a, b, c, d],
-      rgbCss(shadeRgb(heightColor(quad.t), lit)),
-      wire ? "rgba(8,10,20,0.4)" : "rgba(8,10,20,0.14)"
-    )
-  }
-}
-
 function Legend() {
   const stops = [0, 0.2, 0.4, 0.6, 0.8, 1]
   return (
     <div className="rounded-md border border-white/15 bg-black/30 px-2 py-2 text-[10px] text-white/80 backdrop-blur-sm">
-      <p className="mb-1 text-center tracking-wide uppercase">hauteur</p>
+      <p className="mb-1 text-center tracking-wide uppercase">couleur</p>
       <div className="flex gap-2">
         <div className="flex h-28 w-2.5 flex-col-reverse overflow-hidden rounded-sm">
           {stops.map((t) => (
@@ -539,8 +540,8 @@ function Legend() {
           ))}
         </div>
         <div className="flex h-28 flex-col justify-between">
-          <span>haut</span>
-          <span>bas</span>
+          <span>récent</span>
+          <span>ancien</span>
         </div>
       </div>
     </div>

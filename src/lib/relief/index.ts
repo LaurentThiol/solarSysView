@@ -48,6 +48,7 @@ export {
 } from "./layout"
 export {
   DEFAULT_CAMERA,
+  PLAN_CAMERA,
   PITCH_MAX,
   PITCH_MIN,
   ZOOM_MAX,
@@ -60,3 +61,12 @@ export {
   type Camera,
   type Projected,
 } from "./project"
+export {
+  buildStampMap,
+  plateCorners,
+  stampBounds,
+  stampTint,
+  type Stamp,
+  type StampCell,
+  type StampMap,
+} from "./stamps"

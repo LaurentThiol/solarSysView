@@ -12,7 +12,7 @@ export type OffsetMode = (typeof OFFSET_MODES)[number]
 export const HEIGHT_MODES = ["mixte", "presence", "recence", "valeur"] as const
 export type HeightMode = (typeof HEIGHT_MODES)[number]
 
-export const VIEW_STYLES = ["relief", "cretes"] as const
+export const VIEW_STYLES = ["plan", "timbres"] as const
 export type ViewStyle = (typeof VIEW_STYLES)[number]
 
 export const OFFSET_LABELS: Record<OffsetMode, string> = {
@@ -32,8 +32,8 @@ export const HEIGHT_LABELS: Record<HeightMode, string> = {
 }
 
 export const STYLE_LABELS: Record<ViewStyle, string> = {
-  relief: "Relief",
-  cretes: "Crêtes",
+  plan: "Plan (lisible)",
+  timbres: "Timbres 3D",
 }
 
 /** Angle d'or de Vogel : 2π / φ². */
@@ -146,9 +146,9 @@ function nearestOriginDist(points: Array<[number, number]>) {
 export function glyphScaleFor(spacing: number, fusion: number, mode: OffsetMode) {
   const f = clamp01(fusion)
   if (mode === "superpose") return 1
-  if (mode === "temps") return Math.max(0.18, 0.42 + 0.35 * f)
-  const cover = 0.38 + 0.72 * f
-  return (spacing * cover) / 9
+  if (mode === "temps") return Math.max(0.22, 0.48 + 0.28 * f)
+  const cover = 0.32 + 0.48 * f
+  return (spacing * cover) / 10
 }
 
 export function layoutDraws(draws: Draw[], options: LayoutOptions): ReliefLayout {
@@ -230,5 +230,5 @@ export function layoutNote(mode: OffsetMode): string {
   if (mode === "stat") {
     return "Origine = (centroïde des 5 boules, étendue n5−n1). Les tirages de même équilibre se superposent : la hauteur dit alors la densité morphologique, pas la date."
   }
-  return "Tous les tirages sur la même grille Morpho 5×10. La hauteur est le cumul des sorties : c’est l’histogramme 1–50 en relief."
+    return "Tous les tirages sur la même plaque Morpho 5×10. La hauteur (ou la saturation) d’une case est le nombre de fois où cette boule est sortie : l’histogramme 1–50, lisible."
 }

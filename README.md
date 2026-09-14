@@ -82,16 +82,16 @@ Puis bouton **Charger / interroger** dans Morpho (poids HF en cache, pas dans le
 
 ## Relief (`/relief`)
 
-Carte 3D des tirages : chaque grille est le glyphe Morpho 5×10, la **couleur suit la hauteur** (teinte hypsométrique). Échantillons **20 / 50 / 100 / 200**. Sans décalage, tout s’empile sur la même grille (histogramme). Avec décalage, chaque tirage devient un îlot :
+Carte des tirages : **une plaque Morpho 5×10 = un tirage**, les cinq cases allumées = les cinq boules (1 en haut à gauche, 50 en bas à droite). La **couleur** va de l’ancien au récent. Échantillons **20 / 50 / 100 / 200**. Sans décalage, tout s’empile sur la même grille (histogramme). Avec décalage, chaque glyphe reste lisible :
 
-- **Angle d’or** (phyllotaxie de Vogel, défaut dès 50 tirages) — densité uniforme, carte circulaire ;
-- **Hexagone** — pavage régulier, le plus lisible à 20 tirages ;
-- **Hilbert** — les tirages consécutifs restent voisins (continents temporels) ;
-- **Temps** — profondeur = chronologie ;
-- **Centroïde × étendue** — les grilles de même équilibre se superposent ;
-- **Superposé 5×10** — l’histogramme 1–50 en montagne.
+- **Hexagone** — pavage régulier, le plus lisible à 20 tirages (défaut) ;
+- **Angle d’or** (phyllotaxie de Vogel, défaut dès 50) — densité uniforme ;
+- **Hilbert** — les tirages consécutifs restent voisins ;
+- **Temps** — une plaque derrière l’autre ;
+- **Centroïde × étendue** — les grilles de même équilibre se rapprochent ;
+- **Superposé 5×10** — l’histogramme 1–50 sur une seule plaque.
 
-Le curseur **Fusion** règle l’écart entre îlots et le lissage, pour passer de l’archipel à une carte continue. Changer d’échantillon applique le décalage recommandé (hexagone à 20, angle d’or ensuite). Glisser fait tourner la carte ; molette pour zoomer ; option Rotation. Lecture **Crêtes** : profil `n1→n5` en ruban, ou nappe temps × rang. Ce n’est pas un pronostic : le voisinage sur la carte est un choix de mise en page.
+Lecture **Plan** (vue de dessus, numéros dans les cases) ou **Timbres 3D** (cases soulevées). Le curseur **Serrer** compacte la carte sans fondre les glyphes. Glisser fait tourner ; molette pour zoomer. Ce n’est pas un pronostic : le voisinage sur la carte est un choix de mise en page.
 
 ## Chartisme (`/chartisme`)
 
