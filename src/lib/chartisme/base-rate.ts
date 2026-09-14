@@ -256,6 +256,69 @@ export function thresholdForBaseRate(
   return { ...base, threshold: required, achieved: rate(required), required }
 }
 
+/**
+ * Même inversion, pour une figure nommée plutôt que pour « n'importe laquelle ».
+ *
+ * Le seuil d'ensemble est dicté par le motif le plus bruyant : sur une somme,
+ * les triangles passent à 0.65 dans la moitié du hasard, donc un double creux
+ * à 0.40 — que ce même hasard produit à peine — disparaissait avec eux. Juger
+ * chaque figure à son propre taux rend le badge « rare » comparable d'un motif
+ * à l'autre, et surtout ne fait plus payer aux lectures discrètes le bavardage
+ * des bornes.
+ *
+ * Une figure absente de l'échantillon a un seuil de 0.01 : le hasard ne l'a
+ * pas produite, n'importe quelle occurrence réelle est donc distinctive.
+ */
+export function thresholdForFigure(
+  sample: BaseRateSample,
+  figure: string,
+  target: number
+): BaseRateThreshold {
+  return thresholdForBaseRate(
+    {
+      ...sample,
+      perWindow: sample.perWindow.map((window) => {
+        const confidence = window[figure]
+        return confidence == null ? {} : { [figure]: confidence }
+      }),
+    },
+    target
+  )
+}
+
+/** Seuil de rareté de chaque figure vue (ou non) dans l'échantillon. */
+export function figureThresholds(
+  sample: BaseRateSample,
+  target: number
+): Record<string, BaseRateThreshold> {
+  const names = new Set<string>()
+  for (const window of sample.perWindow) {
+    for (const figure of Object.keys(window)) names.add(figure)
+  }
+  const out: Record<string, BaseRateThreshold> = {}
+  for (const figure of names) out[figure] = thresholdForFigure(sample, figure, target)
+  return out
+}
+
+/**
+ * Cette lecture est-elle rare, à la rareté visée, pour *sa* figure ?
+ *
+ * `undefined` dans la carte : le hasard n'a jamais produit ce motif à cette
+ * échelle, donc n'importe quelle occurrence réelle est distinctive. `null` :
+ * aucun seuil lisible ne sépare ce motif du bruit — il n'est jamais rare.
+ */
+export function hitIsRare(
+  hit: { figure: string; scale: number; confidence: number },
+  bars: Readonly<Record<number, Readonly<Record<string, BaseRateThreshold>>>> | null,
+  fallback: number
+): boolean {
+  if (!bars) return hit.confidence >= fallback
+  const row = bars[hit.scale]?.[hit.figure]
+  if (row == null) return true
+  if (row.threshold == null) return false
+  return hit.confidence >= row.threshold
+}
+
 function pct(value: number) {
   return `${Math.round(value * 100)} %`
 }

@@ -25,6 +25,7 @@ from synchro.chartisme.backtest import (
     shuffled_draws,
     target_outcomes,
     threshold_for_base_rate,
+    threshold_for_figure,
 )
 from synchro.chartisme.figures import detect_figures
 
@@ -414,6 +415,39 @@ def test_threshold_for_base_rate_lets_everything_through_at_full_target() -> Non
     found = threshold_for_base_rate(_windows([0.5, 0.4]), target=1.0)
     assert found["threshold"] == 0.0
     assert threshold_for_base_rate([], target=0.2)["threshold"] is None
+
+
+def test_threshold_for_figure_does_not_inherit_the_loudest_pattern() -> None:
+    """Un double creux rare ne doit pas être jugé au seuil des rectangles banals.
+
+    C'est le bug de l'onglet vide : le seuil d'ensemble, dicté par le motif le
+    plus bruyant, enterrait les lectures distinctives en même temps que le bruit.
+    """
+    per = []
+    for index in range(10):
+        row = {"rectangle": 0.9}
+        if index < 2:
+            row["double_bottom"] = 0.4
+        per.append(row)
+    any_bar = threshold_for_base_rate(per, target=0.2)
+    double = threshold_for_figure(per, "double_bottom", target=0.2)
+    rect = threshold_for_figure(per, "rectangle", target=0.2)
+    assert any_bar["threshold"] is not None
+    assert double["threshold"] is not None
+    assert rect["threshold"] is not None
+    assert double["threshold"] < any_bar["threshold"]
+    assert double["threshold"] < rect["threshold"]
+    # Un 0.40 est rare pour le double creux, banal pour le rectangle.
+    assert 0.4 >= double["threshold"]
+    assert 0.4 < rect["threshold"]
+
+
+def test_threshold_for_figure_on_an_absent_pattern_is_permissive() -> None:
+    """Le hasard n'a pas produit ce motif : n'importe quelle occurrence est distinctive."""
+    per = [{"rectangle": 0.8} for _ in range(10)]
+    found = threshold_for_figure(per, "ete", target=0.2)
+    assert found["threshold"] == 0.01
+    assert found["figure"] == "ete"
 
 
 def test_threshold_for_base_rate_is_monotone_in_the_target() -> None:

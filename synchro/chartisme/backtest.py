@@ -461,6 +461,40 @@ def threshold_for_base_rate(
     }
 
 
+def threshold_for_figure(
+    per_window: Sequence[dict[str, float]], figure: str, *, target: float
+) -> dict[str, Any]:
+    """Même inversion, pour une figure nommée plutôt que pour « n'importe laquelle ».
+
+    Le seuil d'ensemble est dicté par le motif le plus bruyant : les triangles
+    d'une somme passent à 0.65 dans la moitié du hasard, donc un double creux
+    à 0.40 — que ce même hasard produit à peine — disparaissait avec eux. Juger
+    chaque figure à son propre taux ne fait plus payer aux lectures discrètes
+    le bavardage des bornes.
+
+    Une figure absente de l'échantillon a un seuil de 0.01 : le hasard ne l'a
+    pas produite, n'importe quelle occurrence réelle est donc distinctive.
+    """
+    sliced = [
+        {figure: window[figure]} if figure in window else {} for window in per_window
+    ]
+    found = threshold_for_base_rate(sliced, target=target)
+    found["figure"] = figure
+    return found
+
+
+def figure_thresholds(
+    per_window: Sequence[dict[str, float]], *, target: float
+) -> dict[str, dict[str, Any]]:
+    """Seuil de rareté de chaque figure vue dans l'échantillon."""
+    names: set[str] = set()
+    for window in per_window:
+        names.update(window)
+    return {
+        figure: threshold_for_figure(per_window, figure, target=target) for figure in names
+    }
+
+
 def figure_base_rate(
     *,
     draws: Sequence[dict[str, Any]],

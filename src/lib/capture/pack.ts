@@ -189,10 +189,10 @@ export function packChartisme(input: {
   const summary = [
     `Chartisme · ${input.curveId} · ${input.curveLabel}`,
     input.banner,
-    `${input.hits.length} figure(s) dans la fenêtre · confiance ≥ ${input.minConfidence.toFixed(2)}`,
+    `${input.hits.length} lecture(s) géométrique(s) dans la fenêtre`,
     hits[0]
       ? `Lecture principale : ${hits[0].label} (${hits[0].confidence ?? "—"})`
-      : "Aucune figure au seuil actuel",
+      : "Aucune lecture géométrique dans cette fenêtre",
   ]
   if (input.caveat) summary.push(input.caveat)
   return {

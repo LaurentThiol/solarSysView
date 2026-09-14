@@ -24,6 +24,15 @@ import type { Curve } from "./curves"
 export const DEFAULT_SCALES = [30, 60, 120] as const
 export const DEFAULT_STRIDE_RATIO = 0.25
 export const MIN_WINDOW = 16
+/**
+ * Plancher du balayage géométrique.
+ *
+ * La rareté n'est plus un seuil de scan : on lit d'abord toutes les formes
+ * que les détecteurs voient, puis on badge celles que le hasard produit trop
+ * souvent. Scanner à 0.6 — ou au seuil inversé, souvent 0.65 — vidait le
+ * tracé alors que les détecteurs avaient déjà trouvé la figure.
+ */
+export const GEOMETRIC_FLOOR = 0
 
 /** Figure d'un balayage : indices dans le repère de la courbe entière. */
 export type ScanHit = FigureHit & {
@@ -180,13 +189,17 @@ function compareRank(a: FigureHit, b: FigureHit) {
 }
 
 /** Une seule figure par zone, la mieux classée ; les autres en `alternatives`. */
-export function collapseZones(
-  hits: ScanHit[],
-  options: { maxOverlap?: number } = {}
-): ScanHit[] {
-  const { maxOverlap = DEFAULT_MAX_OVERLAP } = options
-  const kept: ScanHit[] = []
-  for (const hit of [...hits].sort(compareRank)) {
+export function collapseZones<T extends ScanHit>(
+  hits: T[],
+  options: {
+    maxOverlap?: number
+    compare?: (a: T, b: T) => number
+  } = {}
+): T[] {
+  const { maxOverlap = DEFAULT_MAX_OVERLAP, compare = compareRank as (a: T, b: T) => number } =
+    options
+  const kept: T[] = []
+  for (const hit of [...hits].sort(compare)) {
     const host = kept.find((k) => spanOverlap(k, hit) > maxOverlap)
     if (!host) {
       kept.push({ ...hit, alternatives: [] })

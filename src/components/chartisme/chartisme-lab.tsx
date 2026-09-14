@@ -25,12 +25,21 @@ import {
   MAX_THRESHOLD,
   baseRateAbove,
   baseRateNote,
+  figureThresholds,
+  hitIsRare,
   rarityNote,
   sampleBaseRate,
   thresholdForBaseRate,
+  type BaseRateThreshold,
 } from "@/lib/chartisme/base-rate"
 import { buildCurve, curveLabel, curveSpecs, type Curve } from "@/lib/chartisme/curves"
-import { collapseZones, scanCurve, sortByRank, type ScanHit } from "@/lib/chartisme/scan"
+import { rankKey } from "@/lib/chartisme/figures"
+import {
+  GEOMETRIC_FLOOR,
+  collapseZones,
+  scanCurve,
+  type ScanHit,
+} from "@/lib/chartisme/scan"
 import {
   alongsideIndex,
   stateFromHit,
@@ -80,11 +89,32 @@ const ERA_LABELS = {
 
 /** Un seuil de confiance posé, ou la rareté visée qui va le chercher. */
 type BarMode = "confidence" | "rarity"
+/** Toutes les lectures géométriques, ou seulement celles que le hasard produit peu. */
+type ViewMode = "all" | "rare"
 
 const BAR_MODES: Array<{ value: BarMode; label: string }> = [
   { value: "rarity", label: "Rareté visée — le seuil est cherché" },
   { value: "confidence", label: "Confiance — le seuil est posé" },
 ]
+
+const VIEW_MODES: Array<{ value: ViewMode; label: string }> = [
+  { value: "all", label: "Toutes les lectures — le badge dit la rareté" },
+  { value: "rare", label: "Seulement les rares — l’ancien filtre" },
+]
+
+type LabHit = ScanHit & { rare: boolean }
+
+function compareLab(a: LabHit, b: LabHit) {
+  // Une lecture rare passe devant une commune, même moins spécifique : sinon
+  // un rectangle confirmé avalait un double creux distinctif en alternative.
+  if (a.rare !== b.rare) return a.rare ? -1 : 1
+  const left = rankKey(a)
+  const right = rankKey(b)
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return left[i] - right[i]
+  }
+  return 0
+}
 
 function outcomeLabel(hit: ScanHit) {
   const status = hit.outcome?.status ?? "no_breakout"
@@ -110,6 +140,7 @@ export function ChartismeLab() {
   const [preset, setPreset] = useState<StudyPreset>(DEFAULT_STUDY_PRESET)
   const [lastN, setLastN] = useState("")
   const [barMode, setBarMode] = useState<BarMode>("rarity")
+  const [viewMode, setViewMode] = useState<ViewMode>("all")
   const [minConfidence, setMinConfidence] = useState(0.6)
   const [targetRate, setTargetRate] = useState(0.2)
   const [selected, setSelected] = useState(0)
@@ -188,9 +219,9 @@ export function ChartismeLab() {
     }
     const byScale: Record<number, number | null> = {}
     for (const entry of thresholds) byScale[entry.length] = entry.threshold
-    // Une échelle dont la rareté est hors d'atteinte n'est pas balayée : aucun
-    // seuil n'y trierait le bruit, donc toute figure qu'on y montrerait serait
-    // montrée faute de pouvoir la récuser.
+    // Seuil d'ensemble, pour le rétro-test et le chiffrage sous le tracé. Le
+    // balayage géométrique, lui, n'en dépend plus : il lit toutes les échelles,
+    // et la rareté badge ensuite, figure par figure.
     const scales = thresholds.filter((entry) => entry.threshold !== null).map((entry) => entry.length)
     const kept = thresholds
       .map((entry) => entry.threshold)
@@ -198,47 +229,45 @@ export function ChartismeLab() {
     return { minConfidence: kept.length ? Math.min(...kept) : MAX_THRESHOLD, byScale, scales }
   }, [barMode, minConfidence, study.scales, thresholds])
 
-  /**
-   * Le même seuil, pour une autre courbe que celle affichée.
-   *
-   * En rareté visée il faut le chercher courbe par courbe : c'est précisément ce
-   * qui distingue ce mode du seuil posé. Réutiliser le seuil de la courbe
-   * affichée pour interroger une voisine rendrait la simultanéité incomparable —
-   * une figure banale sur l'une passerait pour aussi rare qu'une figure notable
-   * sur l'autre.
-   */
-  const barsFor = useCallback(
-    (variable: string, n: number | null) => {
-      if (barMode === "confidence") {
-        return { scales: study.scales, minConfidence, minConfidenceByScale: null }
-      }
-      const byScale: Record<number, number | null> = {}
-      const scales: number[] = []
-      for (const scale of study.scales) {
-        const found = thresholdForBaseRate(
-          sampleBaseRate(study.window.withWarmup, variable, n, scale),
-          targetRate
-        )
-        byScale[scale] = found.threshold
-        if (found.threshold !== null) scales.push(scale)
-      }
-      return { scales, minConfidence: MAX_THRESHOLD, minConfidenceByScale: byScale }
-    },
-    [barMode, minConfidence, study, targetRate]
+  // Seuil de rareté *par figure* : un double creux que le hasard produit à
+  // peine ne doit pas disparaître derrière le seuil des triangles, plus
+  // bavards. `null` = le mode confiance pose un nombre unique.
+  const figureBars = useMemo<Record<
+    number,
+    Record<string, BaseRateThreshold>
+  > | null>(() => {
+    if (barMode !== "rarity") return null
+    const out: Record<number, Record<string, BaseRateThreshold>> = {}
+    for (const sample of samples) out[sample.length] = figureThresholds(sample, targetRate)
+    return out
+  }, [barMode, samples, targetRate])
+
+  // Balayage géométrique d'abord, rareté ensuite. Scanner au seuil inversé
+  // (souvent 0.65, même à 50 % d'acceptation) vidait le tracé : les détecteurs
+  // avaient déjà vu la forme, le filtre la rejetait.
+  const geometricHits = useMemo<ScanHit[]>(() => {
+    if (!curve) return []
+    return scanCurve(curve, {
+      scales: study.scales,
+      minConfidence: GEOMETRIC_FLOOR,
+    }).filter((hit) => liveInWindow(hit, study.contextCount))
+  }, [curve, study])
+
+  const annotatedHits = useMemo<LabHit[]>(
+    () =>
+      geometricHits.map((hit) => ({
+        ...hit,
+        rare: hitIsRare(hit, figureBars, minConfidence),
+      })),
+    [geometricHits, figureBars, minConfidence]
   )
 
-  const hits = useMemo<ScanHit[]>(() => {
-    if (!curve) return []
-    return sortByRank(
-      collapseZones(
-        scanCurve(curve, {
-          scales: bars.scales,
-          minConfidence: bars.minConfidence,
-          minConfidenceByScale: bars.byScale,
-        }).filter((hit) => liveInWindow(hit, study.contextCount))
-      )
-    )
-  }, [curve, study, bars])
+  const hits = useMemo<LabHit[]>(() => {
+    const pool = viewMode === "rare" ? annotatedHits.filter((hit) => hit.rare) : annotatedHits
+    return collapseZones(pool, { compare: compareLab }) as LabHit[]
+  }, [annotatedHits, viewMode])
+
+  const rareCount = annotatedHits.filter((hit) => hit.rare).length
 
   // La fenêtre précédente est lue exactement comme celle qu'on étudie : mêmes
   // échelles, même seuil, même longueur. Sans quoi la comparaison mesurerait
@@ -255,18 +284,17 @@ export function ChartismeLab() {
     return buildCurve(rows, spec.variable, spec.n)
   }, [study, specs, curveId])
 
-  const previousHits = useMemo<ScanHit[]>(() => {
+  const previousHits = useMemo<LabHit[]>(() => {
     if (!previousCurve || !study.previous) return []
-    return sortByRank(
-      collapseZones(
-        scanCurve(previousCurve, {
-          scales: bars.scales,
-          minConfidence: bars.minConfidence,
-          minConfidenceByScale: bars.byScale,
-        }).filter((hit) => liveInWindow(hit, study.previous!.warmupCount))
-      )
-    )
-  }, [previousCurve, study, bars])
+    const found = scanCurve(previousCurve, {
+      scales: study.scales,
+      minConfidence: GEOMETRIC_FLOOR,
+    })
+      .filter((hit) => liveInWindow(hit, study.previous!.warmupCount))
+      .map((hit) => ({ ...hit, rare: hitIsRare(hit, figureBars, minConfidence) }))
+    const pool = viewMode === "rare" ? found.filter((hit) => hit.rare) : found
+    return collapseZones(pool, { compare: compareLab }) as LabHit[]
+  }, [previousCurve, study, figureBars, minConfidence, viewMode])
 
   const baseRates = useMemo(
     () =>
@@ -286,11 +314,26 @@ export function ChartismeLab() {
   // Le chiffrage, lui, s'affiche toujours : c'est le seul point de comparaison
   // de la confiance lue à côté. En rareté visée il dit l'inverse — non plus ce
   // que le seuil obtient, mais le seuil qu'il a fallu pour obtenir la cible.
-  const measured = !curve || fitNote
+  const measuredCore = !curve || fitNote
     ? null
     : barMode === "rarity"
       ? rarityNote(thresholds, targetRate)
       : baseRateNote(baseRates, minConfidence)
+  const measured =
+    !curve || fitNote
+      ? null
+      : [
+          measuredCore,
+          annotatedHits.length
+            ? `Lecture géométrique d’abord : ${annotatedHits.length} forme${
+                annotatedHits.length > 1 ? "s" : ""
+              } vue${annotatedHits.length > 1 ? "s" : ""}, dont ${rareCount} distinctive${
+                rareCount > 1 ? "s" : ""
+              } à cette rareté, figure par figure — un double creux que le hasard produit à peine reste rare même si les triangles, plus banals, fixeraient un seuil plus haut.`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" ") || null
 
   useRegisterCapture(() =>
     packChartisme({
@@ -326,7 +369,7 @@ export function ChartismeLab() {
   // sélection précédente désignerait autre chose. Ajusté au rendu plutôt que
   // dans un effet, qui provoquerait un rendu en cascade avec l'ancien index
   // affiché.
-  const scanKey = `${era}|${curveId}|${scaleChoice}|${preset}|${lastN}|${barMode}|${minConfidence}|${targetRate}`
+  const scanKey = `${era}|${curveId}|${scaleChoice}|${preset}|${lastN}|${barMode}|${viewMode}|${minConfidence}|${targetRate}`
   const [lastScanKey, setLastScanKey] = useState(scanKey)
   if (scanKey !== lastScanKey) {
     setLastScanKey(scanKey)
@@ -371,15 +414,16 @@ export function ChartismeLab() {
         const other = buildCurve(study.window.withWarmup, spec.variable, spec.n)
         found.push(
           ...alongsideIndex(
-            scanCurve(other, barsFor(spec.variable, spec.n)).filter((entry) =>
-              liveInWindow(entry, study.contextCount)
-            )
+            scanCurve(other, {
+              scales: study.scales,
+              minConfidence: GEOMETRIC_FLOOR,
+            }).filter((entry) => liveInWindow(entry, study.contextCount))
           ).map((entry) => ({ ...entry, curve_id: id }))
         )
       }
       return found
     },
-    [curveId, study, specs, barsFor]
+    [curveId, study, specs]
   )
 
   function runRules() {
@@ -572,9 +616,9 @@ export function ChartismeLab() {
               label="Seuil de sélection"
               help={{
                 title: "Seuil de sélection",
-                body: `Deux façons de décider quelle figure mérite d'être montrée. « Confiance » pose un nombre : la qualité de l'ajustement géométrique, pénalisée quand une borne repose sur moins de trois points. Elle ne dit pas si la figure est rare, et surtout elle ne dit pas la même chose d'une courbe à l'autre — à l'échelle 60 et au seuil 0.60, toutes les fenêtres de bruit de « paires consécutives » portent déjà une figure, contre les deux tiers pour la somme. « Rareté visée » renverse le réglage : on donne la part de fenêtres de bruit qu'on accepte de voir porter une figure, et l'onglet cherche sur cette courbe-ci le seuil qui l'obtient, échelle par échelle. C'est le seul réglage de l'onglet qui signifie la même chose partout. Quand aucun seuil lisible n'atteint la cible — au-delà de ${MAX_THRESHOLD.toFixed(
+                body: `Deux façons de dire quelle lecture est distinctive. « Confiance » pose un nombre : la qualité de l'ajustement géométrique. « Rareté visée » le cherche : on donne la part de fenêtres de bruit qu'on accepte, et chaque figure reçoit le seuil qui l'obtient sur cette courbe — un double creux rare n'est plus jugé au même nombre que les triangles, plus bavards. Ce seuil badge les lectures, il ne les efface plus : l'affichage « Toutes les lectures » montre ce que les détecteurs voient, « Seulement les rares » retrouve l'ancien filtre. Quand aucun seuil lisible n'atteint la cible — au-delà de ${MAX_THRESHOLD.toFixed(
                   2
-                )} un seuil rejette le bruit et la figure ensemble — l'échelle est écartée du balayage plutôt que lue faute de mieux.`,
+                )} — la figure n'est jamais rare, mais elle reste visible en lecture complète.`,
               }}
             >
               <Select value={barMode} onValueChange={(v) => setBarMode((v as BarMode) ?? "rarity")}>
@@ -598,13 +642,13 @@ export function ChartismeLab() {
                 label={`Taux de base visé · ${Math.round(targetRate * 100)} %`}
                 help={{
                   title: "Taux de base visé",
-                  body: "La part des fenêtres de bruit qu'on accepte de voir porter une figure. À 20 %, une figure affichée est de celles que le hasard ne produit que dans une fenêtre sur cinq — sur cette courbe, à cette échelle, dans cette fenêtre. Le bruit est fait des mêmes tirages remis dans un ordre quelconque : il garde donc les bornes et les paliers de la courbe, ce qu'une marche aléatoire ne ferait pas. Baisser la cible durcit le seuil et vide le tracé ; la monter le remplit de figures que le hasard produit aussi. Le chiffrage sous le tracé dit le seuil trouvé et ce qu'il obtient vraiment.",
+                  body: "La part des fenêtres de bruit qu'on accepte, figure par figure. À 20 %, une lecture « rare » est de celles que le hasard ne produit que dans une fenêtre sur cinq — pour ce motif, sur cette courbe, à cette échelle. Le bruit est fait des mêmes tirages remis dans un ordre quelconque. Ce curseur ne vide plus le tracé : il change le badge. Pour ne garder que les rares, passe l'affichage sur « Seulement les rares ».",
                 }}
               >
                 <Input
                   type="range"
                   min={0.02}
-                  max={0.5}
+                  max={0.8}
                   step={0.02}
                   value={targetRate}
                   onChange={(event) => setTargetRate(Number(event.target.value))}
@@ -628,6 +672,32 @@ export function ChartismeLab() {
                 />
               </LabelHelp>
             )}
+
+            <LabelHelp
+              label="Affichage"
+              help={{
+                title: "Affichage des lectures",
+                body: "Les détecteurs voient souvent des formes que le hasard produit aussi. « Toutes les lectures » les montre, le badge dit lesquelles sont distinctives à la rareté visée — c'est ce qui empêche le tracé de rester vide quand on monte le taux d'acceptation. « Seulement les rares » est l'ancien filtre, qui ne gardait que les lectures au-dessus du seuil et laissait croire que rien n'avait été vu.",
+              }}
+            >
+              <Select
+                value={viewMode}
+                onValueChange={(value) => setViewMode((value as ViewMode) ?? "all")}
+              >
+                <SelectTrigger className="w-full" aria-label="Affichage des lectures">
+                  <span className="flex flex-1 text-left">
+                    {VIEW_MODES.find((mode) => mode.value === viewMode)?.label}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {VIEW_MODES.map((mode) => (
+                    <SelectItem key={mode.value} value={mode.value}>
+                      {mode.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </LabelHelp>
 
             <LabelHelp
               label="Archive"
@@ -681,7 +751,13 @@ export function ChartismeLab() {
                 {study.contextCount ? (
                   <span>· {study.contextCount} en contexte</span>
                 ) : null}
-                <span>· {hits.length} figures</span>
+                <span>· {hits.length} lecture{hits.length > 1 ? "s" : ""}</span>
+                {annotatedHits.length ? (
+                  <span>
+                    · {rareCount} rare{rareCount > 1 ? "s" : ""} /{" "}
+                    {annotatedHits.length} vue{annotatedHits.length > 1 ? "s" : ""}
+                  </span>
+                ) : null}
                 {byFigure.slice(0, 6).map(([label, count]) => (
                   <Badge key={label} variant="outline">
                     {label} × {count}
@@ -694,6 +770,7 @@ export function ChartismeLab() {
                 dates={curve.dates}
                 activity={curve.activity}
                 hit={hit}
+                hits={hits}
                 selection={selection}
                 onSelect={setSelection}
                 contextCount={study.contextCount}
@@ -719,6 +796,7 @@ export function ChartismeLab() {
                         onClick={() => setSelected(index)}
                       >
                         {found.label} · {found.confidence.toFixed(2)}
+                        {found.rare ? "" : " · bruit"}
                       </Button>
                     ))}
                   </div>
@@ -727,6 +805,9 @@ export function ChartismeLab() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-medium">{hit.label}</span>
                         <Badge variant="secondary">{hit.kind}</Badge>
+                        <Badge variant={hit.rare ? "default" : "outline"}>
+                          {hit.rare ? "rare à ce taux" : "commune au bruit"}
+                        </Badge>
                         <Badge variant={outcomeVariant(hit)}>{outcomeLabel(hit)}</Badge>
                         {hit.breakout ? (
                           <Badge variant={hit.breakout.confirmed ? "default" : "destructive"}>
@@ -759,21 +840,26 @@ export function ChartismeLab() {
                     </div>
                   ) : null}
                 </div>
-                ) : fitNote ? null : barMode === "rarity" ? (
-                  <p className="text-sm text-muted-foreground">
-                    {bars.scales.length
-                      ? `Aucune figure assez rare dans cette fenêtre : à ${Math.round(
-                          targetRate * 100
-                        )} %, le seuil trouvé ne laisse rien passer. Vise plus large, change d’échelle ou de courbe.`
-                      : `Aucune échelle n’atteint ${Math.round(
-                          targetRate * 100
-                        )} % sur cette courbe : le hasard y produit des figures trop souvent pour qu’un seuil les sépare. Vise plus large, ou change de courbe.`}
-                  </p>
+                ) : fitNote ? null : annotatedHits.length && viewMode === "rare" ? (
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      {annotatedHits.length} lecture
+                      {annotatedHits.length > 1 ? "s" : ""} géométrique
+                      {annotatedHits.length > 1 ? "s" : ""}, aucune assez rare à{" "}
+                      {barMode === "rarity"
+                        ? `${Math.round(targetRate * 100)} %`
+                        : minConfidence.toFixed(2)}
+                      . Ce n’est pas que les détecteurs n’aient rien vu : le
+                      filtre ne garde que ce que le hasard produit peu.
+                    </p>
+                    <Button size="sm" variant="outline" onClick={() => setViewMode("all")}>
+                      Voir les {annotatedHits.length} lectures
+                    </Button>
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Aucune figure au-dessus de {minConfidence.toFixed(2)} dans cette
-                    fenêtre. Baisse le seuil, change d’échelle ou élargis la
-                    fenêtre d’étude.
+                    Aucune forme géométrique dans cette fenêtre. Change d’échelle
+                    ou élargis la fenêtre d’étude.
                   </p>
                 )}
               </div>

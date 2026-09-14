@@ -51,7 +51,7 @@ import { liveInWindow } from "@/lib/chartisme/window"
  */
 const TRIALS = DEFAULT_TRIALS
 
-const TARGETS = [0.05, 0.1, 0.2, 0.3, 0.5]
+const TARGETS = [0.05, 0.1, 0.2, 0.3, 0.5, 0.8]
 
 /** Seuil de référence de la colonne « bruit » : celui que l'onglet posait avant. */
 const REFERENCE_BAR = 0.6

@@ -168,6 +168,23 @@ def test_scan_curve_takes_a_bar_per_scale() -> None:
     assert len(tightened) < len([hit for hit in loose if hit["scale"] == 30])
 
 
+def test_geometric_scan_finds_more_than_a_rarity_bar() -> None:
+    """L'onglet vide n'était pas un détecteur aveugle : c'était le filtre.
+
+    Sur une somme de tirages, les détecteurs voient des dizaines de formes dont
+    la confiance médiane reste sous le seuil qu'une rareté visée de 20 % — voire
+    50 % — irait chercher. Scanner à ce seuil laissait croire que rien n'était
+    là. Le plancher géométrique les garde ; la rareté badge ensuite.
+    """
+    curve = build_curve(DRAWS, "sum", None)
+    geometric = scan_curve(curve, scales=(30, 60), min_confidence=0.0)
+    rare = scan_curve(curve, scales=(30, 60), min_confidence=0.65)
+    assert geometric
+    assert len(geometric) > len(rare)
+    collapsed = collapse_zones(geometric)
+    assert 0 < len(collapsed) < len(geometric)
+
+
 def test_scan_curve_skips_a_scale_whose_bar_is_out_of_reach() -> None:
     """`None` n'est pas zéro : c'est « aucun seuil ne trierait ici ».
 

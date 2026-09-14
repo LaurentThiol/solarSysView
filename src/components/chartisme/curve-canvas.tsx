@@ -35,6 +35,7 @@ export function CurveCanvas({
   dates,
   activity = [],
   hit = null,
+  hits = [],
   selection = null,
   onSelect,
   showActivity = true,
@@ -45,6 +46,8 @@ export function CurveCanvas({
   dates?: string[]
   activity?: number[]
   hit?: FigureHit | null
+  /** Toutes les lectures listées : une marque en tête du tracé, la sélection en plein. */
+  hits?: Array<FigureHit & { rare?: boolean }>
   selection?: CurveSelection | null
   onSelect?: (selection: CurveSelection) => void
   showActivity?: boolean
@@ -173,6 +176,26 @@ export function CurveCanvas({
             </text>
           </g>
         ) : null}
+
+        {hits.map((found, index) => {
+          const selected =
+            hit != null &&
+            found.figure === hit.figure &&
+            found.from_index === hit.from_index &&
+            found.to_index === hit.to_index
+          const widthPx = Math.max(2, x(found.to_index) - x(found.from_index))
+          return (
+            <rect
+              key={`span-${found.figure}-${found.from_index}-${index}`}
+              x={x(found.from_index)}
+              y={4}
+              width={widthPx}
+              height={selected ? 8 : 5}
+              fill={found.rare === false ? "var(--muted-foreground)" : "var(--chart-4)"}
+              opacity={selected ? 0.9 : 0.35}
+            />
+          )
+        })}
 
         {active && active.toIndex !== active.fromIndex ? (
           <rect
