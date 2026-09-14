@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from itertools import combinations
 from typing import Any
 
 NUMBER_DRAW = 5
@@ -19,6 +20,14 @@ TOTAL_GRIDS = TOTAL_NUMBER_WAYS * TOTAL_STAR_WAYS
 DEFAULT_THRESHOLD = 1
 DEFAULT_CHANCE = 100
 LIST_LIMIT = 50
+DECADE_COUNT = 5
+DECADE_MAX_PER = 5
+NUMBER_SPREAD_MIN = 4
+NUMBER_SPREAD_MAX = 49
+NUMBER_CONSEC_MAX = 4
+STAR_SPREAD_MIN = 1
+STAR_SPREAD_MAX = 11
+STAR_CONSEC_MAX = 1
 
 
 def _meta(kind: str) -> dict[str, Any]:
@@ -120,6 +129,151 @@ def _weight(chance: float) -> float:
     return clamp_chance(chance) / 100.0
 
 
+def _decade_index(value: int) -> int:
+    return min(4, max(0, (value - 1) // 10))
+
+
+def _consecutive(values: list[int]) -> int:
+    s = set(values)
+    return sum(1 for n in s if (n + 1) in s)
+
+
+def _shape_bands(spec: dict[str, Any], kind: str) -> dict[str, Any]:
+    if kind == "numbers":
+        spread = order_band(spec.get("min_spread", NUMBER_SPREAD_MIN), spec.get("max_spread", NUMBER_SPREAD_MAX), NUMBER_SPREAD_MIN, NUMBER_SPREAD_MAX)
+        consec = order_band(spec.get("min_consecutive", 0), spec.get("max_consecutive", NUMBER_CONSEC_MAX), 0, NUMBER_CONSEC_MAX)
+        decade_min = list(spec.get("decade_min") or [0] * DECADE_COUNT)
+        decade_max = list(spec.get("decade_max") or [DECADE_MAX_PER] * DECADE_COUNT)
+    else:
+        spread = order_band(spec.get("min_spread", STAR_SPREAD_MIN), spec.get("max_spread", STAR_SPREAD_MAX), STAR_SPREAD_MIN, STAR_SPREAD_MAX)
+        consec = order_band(spec.get("min_consecutive", 0), spec.get("max_consecutive", STAR_CONSEC_MAX), 0, STAR_CONSEC_MAX)
+        decade_min = [0] * DECADE_COUNT
+        decade_max = [DECADE_MAX_PER] * DECADE_COUNT
+    decade_min = [clamp_int(decade_min[i] if i < len(decade_min) else 0, 0, DECADE_MAX_PER) for i in range(DECADE_COUNT)]
+    decade_max = [clamp_int(decade_max[i] if i < len(decade_max) else DECADE_MAX_PER, 0, DECADE_MAX_PER) for i in range(DECADE_COUNT)]
+    for i in range(DECADE_COUNT):
+        if decade_min[i] > decade_max[i]:
+            decade_min[i], decade_max[i] = decade_max[i], decade_min[i]
+    return {
+        "min_spread": spread[0],
+        "max_spread": spread[1],
+        "min_consecutive": consec[0],
+        "max_consecutive": consec[1],
+        "decade_min": decade_min,
+        "decade_max": decade_max,
+    }
+
+
+def _shape_restricted(spec: dict[str, Any], kind: str) -> bool:
+    bands = _shape_bands(spec, kind)
+    if kind == "numbers":
+        if bands["min_spread"] > NUMBER_SPREAD_MIN or bands["max_spread"] < NUMBER_SPREAD_MAX:
+            return True
+        if bands["min_consecutive"] > 0 or bands["max_consecutive"] < NUMBER_CONSEC_MAX:
+            return True
+        return any(bands["decade_min"][i] > 0 or bands["decade_max"][i] < DECADE_MAX_PER for i in range(DECADE_COUNT))
+    if bands["min_spread"] > STAR_SPREAD_MIN or bands["max_spread"] < STAR_SPREAD_MAX:
+        return True
+    return bands["min_consecutive"] > 0 or bands["max_consecutive"] < STAR_CONSEC_MAX
+
+
+def _combo_passes_shape(combo: list[int], spec: dict[str, Any], kind: str) -> bool:
+    if not combo:
+        return True
+    bands = _shape_bands(spec, kind)
+    spread = max(combo) - min(combo)
+    if spread < bands["min_spread"] or spread > bands["max_spread"]:
+        return False
+    consec = _consecutive(combo)
+    if consec < bands["min_consecutive"] or consec > bands["max_consecutive"]:
+        return False
+    if kind == "numbers":
+        decades = [0] * DECADE_COUNT
+        for value in combo:
+            decades[_decade_index(value)] += 1
+        for i in range(DECADE_COUNT):
+            if decades[i] < bands["decade_min"][i] or decades[i] > bands["decade_max"][i]:
+                return False
+    return True
+
+
+def combo_survives(values: list[int], spec: dict[str, Any]) -> bool:
+    kind = spec["kind"]
+    meta = _meta(kind)
+    if len(values) != meta["draw"]:
+        return False
+    classified = classify(spec)
+    allowed = set(classified["optional"]) | set(classified["forced"])
+    if any(value not in allowed for value in values):
+        return False
+    if any(value not in values for value in classified["forced"]):
+        return False
+    band = order_band(spec.get("min_sum", meta["sum_min"]), spec.get("max_sum", meta["sum_max"]), meta["sum_min"], meta["sum_max"])
+    even_band = order_band(spec.get("min_even", 0), spec.get("max_even", meta["draw"]), 0, meta["draw"])
+    total = sum(values)
+    even = sum(_is_even(value) for value in values)
+    if not (band[0] <= total <= band[1] and even_band[0] <= even <= even_band[1]):
+        return False
+    return _combo_passes_shape(sorted(values), spec, kind)
+
+
+def grid_survives(grid: dict[str, Any], numbers: dict[str, Any], stars: dict[str, Any]) -> bool:
+    return combo_survives(list(grid["numbers"]), {**numbers, "kind": "numbers"}) and combo_survives(
+        list(grid["stars"]), {**stars, "kind": "stars"}
+    )
+
+
+def _gather_from_visit(spec: dict[str, Any], classified: dict[str, Any], band: tuple[int, int], even_band: tuple[int, int], chance) -> dict[str, Any]:
+    meta = classified["meta"]
+    forced = classified["forced"]
+    optional = classified["optional"]
+    need = classified["draw"] - len(forced)
+    must_sum = sum(forced)
+    must_even = sum(_is_even(value) for value in forced)
+    count = 0
+    mass = 0.0
+    sum_acc = 0
+    by_sum: dict[int, int] = {}
+    by_even: dict[int, int] = {}
+    forced_mass = 1.0
+    for value in forced:
+        forced_mass *= _weight(_read_chance(chance, value))
+
+    def accept(rest: tuple[int, ...]) -> None:
+        nonlocal count, mass, sum_acc
+        combo = sorted(forced + list(rest))
+        total = must_sum + sum(rest)
+        even = must_even + sum(_is_even(value) for value in rest)
+        if not (band[0] <= total <= band[1] and even_band[0] <= even <= even_band[1]):
+            return
+        if not _combo_passes_shape(combo, spec, spec["kind"]):
+            return
+        w = forced_mass
+        for value in rest:
+            w *= _weight(_read_chance(chance, value))
+        count += 1
+        mass += w
+        sum_acc += total
+        by_sum[total] = by_sum.get(total, 0) + 1
+        by_even[even] = by_even.get(even, 0) + 1
+
+    if need == 0:
+        accept(())
+    else:
+        for rest in combinations(optional, need):
+            accept(rest)
+
+    return {
+        "count": count,
+        "mass": mass,
+        "by_sum": [{"sum": s, "count": n} for s, n in sorted(by_sum.items())],
+        "by_even": [
+            {"even": e, "odd": meta["draw"] - e, "count": n} for e, n in sorted(by_even.items())
+        ],
+        "mean_sum": (sum_acc / count) if count else None,
+    }
+
+
 def evaluate_pool(spec: dict[str, Any]) -> dict[str, Any]:
     meta = _meta(spec["kind"])
     classified = classify(spec)
@@ -150,6 +304,10 @@ def evaluate_pool(spec: dict[str, Any]) -> dict[str, Any]:
     remain_max_sum = band[1] - must_sum
     remain_min_even = even_band[0] - must_even
     remain_max_even = even_band[1] - must_even
+
+    if _shape_restricted(spec, spec["kind"]):
+        gathered = _gather_from_visit(spec, classified, band, even_band, chance)
+        return {**base, **gathered}
 
     if need == 0:
         ok = band[0] <= must_sum <= band[1] and even_band[0] <= must_even <= even_band[1]

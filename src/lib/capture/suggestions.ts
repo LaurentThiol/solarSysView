@@ -31,7 +31,7 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   }
   if (lab === "evolution") {
     return [
-      "Résume la courbe affichée : niveau, pente récente, pair/impair.",
+      "Résume la courbe affichée : niveau, pente récente, pair/impair, forme (étendue, consécutifs, décennies).",
       "Ces extrêmes de retard ou de fréquence sont-ils remarquables sous l’hypothèse d’indépendance ?",
     ]
   }
@@ -49,8 +49,8 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   }
   if (lab === "jeux") {
     return [
-      "Combien de grilles restent, et quelles restrictions ont le plus réduit l’univers ?",
-      "Sépare décompte combinatoire (solutions) et masse pondérée (chances). Ce n’est pas un pronostic.",
+      "Combien de grilles restent, et quelles restrictions (somme, forme, décennies) ont le plus réduit l’univers ?",
+      "Parmi les propositions de Combinaisons, combien survivent ici ? Sépare décompte et masse pondérée.",
     ]
   }
   if (lab === "morpho") {

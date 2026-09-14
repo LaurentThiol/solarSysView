@@ -1,5 +1,23 @@
 import { comb } from "@/lib/analysis"
 import { mulberry32, type CombinationGrid } from "@/lib/combinations"
+import {
+  DECADE_COUNT,
+  DECADE_MAX_PER,
+  NUMBER_CONSEC_MAX,
+  NUMBER_CONSEC_MIN,
+  NUMBER_SPREAD_MAX,
+  NUMBER_SPREAD_MIN,
+  STAR_CONSEC_MAX,
+  STAR_CONSEC_MIN,
+  STAR_SPREAD_MAX,
+  STAR_SPREAD_MIN,
+  comboPassesShape,
+  defaultNumberShape,
+  defaultStarShape,
+  mergedPassesShape,
+  shapeIsRestricted,
+  type ShapeBands,
+} from "@/lib/grid-shape"
 
 export const NUMBER_DRAW = 5
 export const STAR_DRAW = 2
@@ -38,6 +56,12 @@ export type PoolSpec = {
   maxSum: number
   minEven: number
   maxEven: number
+  minSpread: number
+  maxSpread: number
+  minConsecutive: number
+  maxConsecutive: number
+  decadeMin: number[]
+  decadeMax: number[]
 }
 
 export type SumBin = { sum: number; count: number }
@@ -152,6 +176,60 @@ export function classifyBalls(spec: PoolSpec) {
     else excluded.push(value)
   }
   return { optional, forced, excluded, draw, threshold }
+}
+
+export function shapeBandsFromSpec(spec: PoolSpec): ShapeBands {
+  const withDecades = spec.kind === "numbers"
+  const fallback = withDecades ? defaultNumberShape() : defaultStarShape()
+  const spreadLo = spec.kind === "numbers" ? NUMBER_SPREAD_MIN : STAR_SPREAD_MIN
+  const spreadHi = spec.kind === "numbers" ? NUMBER_SPREAD_MAX : STAR_SPREAD_MAX
+  const consecLo = spec.kind === "numbers" ? NUMBER_CONSEC_MIN : STAR_CONSEC_MIN
+  const consecHi = spec.kind === "numbers" ? NUMBER_CONSEC_MAX : STAR_CONSEC_MAX
+  const spread = orderBand(spec.minSpread ?? fallback.minSpread, spec.maxSpread ?? fallback.maxSpread, spreadLo, spreadHi)
+  const consec = orderBand(
+    spec.minConsecutive ?? fallback.minConsecutive,
+    spec.maxConsecutive ?? fallback.maxConsecutive,
+    consecLo,
+    consecHi
+  )
+  const decadeMin = Array.from({ length: DECADE_COUNT }, (_, i) =>
+    clampInt(spec.decadeMin?.[i] ?? fallback.decadeMin[i], 0, DECADE_MAX_PER)
+  )
+  const decadeMax = Array.from({ length: DECADE_COUNT }, (_, i) =>
+    clampInt(spec.decadeMax?.[i] ?? fallback.decadeMax[i], 0, DECADE_MAX_PER)
+  )
+  for (let i = 0; i < DECADE_COUNT; i += 1) {
+    if (decadeMin[i] > decadeMax[i]) {
+      const swap = decadeMin[i]
+      decadeMin[i] = decadeMax[i]
+      decadeMax[i] = swap
+    }
+  }
+  return {
+    minSpread: spread.min,
+    maxSpread: spread.max,
+    minConsecutive: consec.min,
+    maxConsecutive: consec.max,
+    decadeMin,
+    decadeMax,
+  }
+}
+
+export function poolShapeRestricted(spec: PoolSpec) {
+  return shapeIsRestricted(shapeBandsFromSpec(spec), spec.kind === "numbers")
+}
+
+function impossibleShapeMessage(spec: PoolSpec, bands: ShapeBands): string | null {
+  if (spec.kind !== "numbers") return null
+  const minNeed = bands.decadeMin.reduce((total, item) => total + item, 0)
+  const maxCap = bands.decadeMax.reduce((total, item) => total + item, 0)
+  if (minNeed > NUMBER_DRAW) {
+    return "Les minima par décennie dépassent 5 boules."
+  }
+  if (maxCap < NUMBER_DRAW) {
+    return "Les maxima par décennie ne permettent pas 5 boules."
+  }
+  return null
 }
 
 function isEven(value: number) {
@@ -281,6 +359,108 @@ function impossibleMessage(
   return null
 }
 
+function forEachMatch(
+  spec: PoolSpec,
+  onMatch: (combo: number[], sum: number, even: number, mass: number) => boolean | void
+) {
+  const { classified, need, remainMinSum, remainMaxSum, remainMinEven, remainMaxEven, forced } =
+    shiftTargets(spec)
+  const bands = shapeBandsFromSpec(spec)
+  const withDecades = spec.kind === "numbers"
+  const mustSum = forced.reduce((total, value) => total + value, 0)
+  const mustEven = forced.reduce((total, value) => total + isEven(value), 0)
+  const forcedMass = forced.reduce(
+    (total, value) => total * weightOf(spec.chance[value] ?? 0),
+    1
+  )
+  const optional = classified.optional
+  const n = optional.length
+  const weights = optional.map((value) => weightOf(spec.chance[value] ?? 0))
+  const evens = optional.map(isEven)
+  const picked = new Array<number>(need)
+  const comboBuf = new Array<number>(classified.draw)
+
+  function emit(sum: number, even: number, mass: number) {
+    if (
+      sum < remainMinSum ||
+      sum > remainMaxSum ||
+      even < remainMinEven ||
+      even > remainMaxEven ||
+      !mergedPassesShape(forced, picked, bands, withDecades)
+    ) {
+      return false
+    }
+    let i = 0
+    let j = 0
+    let k = 0
+    while (i < forced.length || j < need) {
+      if (j >= need || (i < forced.length && forced[i] <= picked[j])) {
+        comboBuf[k] = forced[i]
+        i += 1
+      } else {
+        comboBuf[k] = picked[j]
+        j += 1
+      }
+      k += 1
+    }
+    return (
+      onMatch(comboBuf, sum + mustSum, even + mustEven, mass * forcedMass) === false
+    )
+  }
+
+  function rec(depth: number, start: number, sum: number, even: number, mass: number): boolean {
+    if (depth === need) return emit(sum, even, mass)
+    const left = need - depth
+    if (n - start < left) return false
+    const bounds = remainingBounds(optional, start, left)
+    if (sum + bounds.max < remainMinSum || sum + bounds.min > remainMaxSum) return false
+    for (let i = start; i <= n - left; i += 1) {
+      picked[depth] = optional[i]
+      if (rec(depth + 1, i + 1, sum + optional[i], even + evens[i], mass * weights[i])) {
+        return true
+      }
+    }
+    return false
+  }
+
+  rec(0, 0, 0, 0, 1)
+}
+
+function gatherFromVisit(spec: PoolSpec, impossible: string | null): Omit<PoolResult, "kind" | "draw" | "poolMax" | "universe" | "poolSize" | "optional" | "forced" | "excluded"> {
+  let count = 0
+  let mass = 0
+  let sumAcc = 0
+  const bySumMap = new Map<number, number>()
+  const byEvenMap = new Map<number, number>()
+  const meta = poolMeta(spec.kind)
+  forEachMatch(spec, (_combo, sum, even, comboMass) => {
+    count += 1
+    mass += comboMass
+    sumAcc += sum
+    bySumMap.set(sum, (bySumMap.get(sum) ?? 0) + 1)
+    byEvenMap.set(even, (byEvenMap.get(even) ?? 0) + 1)
+  })
+  const bySum = [...bySumMap.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([sum, n]) => ({ sum, count: n }))
+  const byEven = [...byEvenMap.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([even, n]) => ({
+      even,
+      odd: meta.draw - even,
+      count: n,
+      label: `${even}p / ${meta.draw - even}i`,
+    }))
+  return {
+    count,
+    mass,
+    bySum,
+    byEven,
+    meanSum: count > 0 ? sumAcc / count : null,
+    impossible: count === 0 ? (impossible ?? "Aucune combinaison dans ces bornes.") : null,
+  }
+}
+
 export function evaluatePool(spec: PoolSpec): PoolResult {
   const meta = poolMeta(spec.kind)
   const classified = classifyBalls(spec)
@@ -300,14 +480,10 @@ export function evaluatePool(spec: PoolSpec): PoolResult {
     excluded: classified.excluded,
   }
 
-  const impossible = impossibleMessage(
-    classified,
-    need,
-    mustSum,
-    mustEven,
-    band,
-    evenBand
-  )
+  const shapeBands = shapeBandsFromSpec(spec)
+  const impossible =
+    impossibleMessage(classified, need, mustSum, mustEven, band, evenBand) ??
+    impossibleShapeMessage(spec, shapeBands)
   if (
     need < 0 ||
     classified.optional.length + classified.forced.length < meta.draw ||
@@ -348,7 +524,8 @@ export function evaluatePool(spec: PoolSpec): PoolResult {
       mustSum >= band.min &&
       mustSum <= band.max &&
       mustEven >= evenBand.min &&
-      mustEven <= evenBand.max
+      mustEven <= evenBand.max &&
+      comboPassesShape(classified.forced, shapeBands, spec.kind === "numbers")
     const mass = ok
       ? classified.forced.reduce((total, value) => total * weightOf(spec.chance[value] ?? 0), 1)
       : 0
@@ -370,6 +547,10 @@ export function evaluatePool(spec: PoolSpec): PoolResult {
       meanSum: ok ? mustSum : null,
       impossible: ok ? null : impossible,
     }
+  }
+
+  if (poolShapeRestricted(spec)) {
+    return { ...base, ...gatherFromVisit(spec, impossible) }
   }
 
   const maxK = need
@@ -517,18 +698,26 @@ function finishCombo(forced: number[], rest: number[]) {
 export function listPool(spec: PoolSpec, limit = LIST_LIMIT): number[][] {
   const result = evaluatePool(spec)
   if (result.count === 0 || result.count > limit) return []
-  const { classified, need, remainMinSum, remainMaxSum, remainMinEven, remainMaxEven, forced } =
-    shiftTargets(spec)
-  const rest = enumerateCombos(
-    classified.optional,
-    need,
-    remainMinSum,
-    remainMaxSum,
-    remainMinEven,
-    remainMaxEven,
-    result.count
-  )
-  return rest.map((combo) => finishCombo(forced, combo))
+  const out: number[][] = []
+  forEachMatch(spec, (combo) => {
+    out.push(combo.slice())
+    return out.length < result.count && out.length < limit
+  })
+  return out
+}
+
+function sampleByReservoir(spec: PoolSpec, take: number, seed: number) {
+  const rand = mulberry32(seed)
+  const sample: number[][] = []
+  let seen = 0
+  forEachMatch(spec, (combo) => {
+    seen += 1
+    if (sample.length < take) sample.push(combo.slice())
+    else if (rand() < take / seen) {
+      sample[Math.floor(rand() * take)] = combo.slice()
+    }
+  })
+  return sample
 }
 
 function suffixCounts(
@@ -598,6 +787,7 @@ export function samplePool(
   const result = evaluatePool(spec)
   if (result.count === 0 || n <= 0) return []
   const take = Math.min(n, result.count)
+  if (poolShapeRestricted(spec)) return sampleByReservoir(spec, take, seed)
   const { classified, need, remainMinSum, remainMaxSum, remainMinEven, remainMaxEven, forced } =
     shiftTargets(spec)
   if (need === 0) {
@@ -722,13 +912,25 @@ export type StoredSpec = {
   numberMaxSum: number
   numberMinEven: number
   numberMaxEven: number
+  numberMinSpread: number
+  numberMaxSpread: number
+  numberMinConsecutive: number
+  numberMaxConsecutive: number
+  numberDecadeMin: number[]
+  numberDecadeMax: number[]
   starMinSum: number
   starMaxSum: number
   starMinEven: number
   starMaxEven: number
+  starMinSpread: number
+  starMaxSpread: number
+  starMinConsecutive: number
+  starMaxConsecutive: number
 }
 
 export function defaultStoredSpec(): StoredSpec {
+  const numberShape = defaultNumberShape()
+  const starShape = defaultStarShape()
   return {
     numberChance: NUMBER_VALUES.map(() => DEFAULT_CHANCE),
     starChance: STAR_VALUES.map(() => DEFAULT_CHANCE),
@@ -740,10 +942,20 @@ export function defaultStoredSpec(): StoredSpec {
     numberMaxSum: NUMBER_SUM_MAX,
     numberMinEven: 0,
     numberMaxEven: NUMBER_DRAW,
+    numberMinSpread: numberShape.minSpread,
+    numberMaxSpread: numberShape.maxSpread,
+    numberMinConsecutive: numberShape.minConsecutive,
+    numberMaxConsecutive: numberShape.maxConsecutive,
+    numberDecadeMin: [...numberShape.decadeMin],
+    numberDecadeMax: [...numberShape.decadeMax],
     starMinSum: STAR_SUM_MIN,
     starMaxSum: STAR_SUM_MAX,
     starMinEven: 0,
     starMaxEven: STAR_DRAW,
+    starMinSpread: starShape.minSpread,
+    starMaxSpread: starShape.maxSpread,
+    starMinConsecutive: starShape.minConsecutive,
+    starMaxConsecutive: starShape.maxConsecutive,
   }
 }
 
@@ -780,6 +992,12 @@ export function storedToPoolSpecs(stored: StoredSpec): {
       maxSum: stored.numberMaxSum,
       minEven: stored.numberMinEven,
       maxEven: stored.numberMaxEven,
+      minSpread: stored.numberMinSpread,
+      maxSpread: stored.numberMaxSpread,
+      minConsecutive: stored.numberMinConsecutive,
+      maxConsecutive: stored.numberMaxConsecutive,
+      decadeMin: stored.numberDecadeMin,
+      decadeMax: stored.numberDecadeMax,
     },
     stars: {
       kind: "stars",
@@ -790,6 +1008,56 @@ export function storedToPoolSpecs(stored: StoredSpec): {
       maxSum: stored.starMaxSum,
       minEven: stored.starMinEven,
       maxEven: stored.starMaxEven,
+      minSpread: stored.starMinSpread,
+      maxSpread: stored.starMaxSpread,
+      minConsecutive: stored.starMinConsecutive,
+      maxConsecutive: stored.starMaxConsecutive,
+      decadeMin: defaultStarShape().decadeMin,
+      decadeMax: defaultStarShape().decadeMax,
     },
   }
+}
+
+export function comboSurvives(values: number[], spec: PoolSpec): boolean {
+  const meta = poolMeta(spec.kind)
+  if (values.length !== meta.draw) return false
+  const classified = classifyBalls(spec)
+  const allowed = new Set([...classified.optional, ...classified.forced])
+  for (const value of values) {
+    if (!allowed.has(value)) return false
+  }
+  for (const value of classified.forced) {
+    if (!values.includes(value)) return false
+  }
+  const band = orderBand(spec.minSum, spec.maxSum, meta.sumMin, meta.sumMax)
+  const evenBand = orderBand(spec.minEven, spec.maxEven, 0, meta.draw)
+  const sum = values.reduce((total, value) => total + value, 0)
+  const even = values.reduce((total, value) => total + isEven(value), 0)
+  if (sum < band.min || sum > band.max || even < evenBand.min || even > evenBand.max) {
+    return false
+  }
+  return comboPassesShape(values, shapeBandsFromSpec(spec), spec.kind === "numbers")
+}
+
+export function gridSurvives(
+  grid: CombinationGrid,
+  numbers: PoolSpec,
+  stars: PoolSpec
+) {
+  return comboSurvives(grid.numbers, { ...numbers, kind: "numbers" }) &&
+    comboSurvives(grid.stars, { ...stars, kind: "stars" })
+}
+
+export function intersectGrids(
+  grids: CombinationGrid[],
+  numbers: PoolSpec,
+  stars: PoolSpec
+) {
+  const survivors: CombinationGrid[] = []
+  const rejected: CombinationGrid[] = []
+  for (const grid of grids) {
+    if (gridSurvives(grid, numbers, stars)) survivors.push(grid)
+    else rejected.push(grid)
+  }
+  return { total: grids.length, survivors, rejected }
 }

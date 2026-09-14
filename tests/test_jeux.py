@@ -23,6 +23,12 @@ def _spec(kind: str, **kwargs):
         "max_sum": 240 if kind == "numbers" else 23,
         "min_even": 0,
         "max_even": 5 if kind == "numbers" else 2,
+        "min_spread": 4 if kind == "numbers" else 1,
+        "max_spread": 49 if kind == "numbers" else 11,
+        "min_consecutive": 0,
+        "max_consecutive": 4 if kind == "numbers" else 1,
+        "decade_min": [0, 0, 0, 0, 0],
+        "decade_max": [5, 5, 5, 5, 5],
     }
     spec.update(kwargs)
     if "chance" in kwargs and isinstance(kwargs["chance"], dict):
@@ -152,3 +158,38 @@ def test_weighted_mass_scales_when_all_optional_are_half():
     result = evaluate_pool(_spec("stars", chance=chance))
     assert result["count"] == 66
     assert abs(result["mass"] - 66 * 0.5 * 0.5) < 1e-9
+
+
+def test_spread_four_is_the_five_runs():
+    result = evaluate_pool(_spec("numbers", min_spread=4, max_spread=4))
+    assert result["count"] == 46
+
+
+def test_four_consecutive_pairs_are_the_five_runs():
+    result = evaluate_pool(_spec("numbers", min_consecutive=4, max_consecutive=4))
+    assert result["count"] == 46
+
+
+def test_one_ball_per_decade():
+    result = evaluate_pool(_spec("numbers", decade_min=[1, 1, 1, 1, 1], decade_max=[1, 1, 1, 1, 1]))
+    assert result["count"] == 10**5
+
+
+def test_star_consecutive_pairs():
+    result = evaluate_pool(_spec("stars", min_consecutive=1, max_consecutive=1))
+    assert result["count"] == 11
+
+
+def test_shape_still_respects_sum_band():
+    result = evaluate_pool(_spec("numbers", min_spread=4, max_spread=4, min_sum=15, max_sum=15))
+    assert result["count"] == 1
+
+
+def test_grid_survives_even_only_and_rejects_odd():
+    from synchro.analysis.jeux import grid_survives
+
+    chance = {i: 100 if i % 2 == 0 else 0 for i in range(1, 51)}
+    numbers = _spec("numbers", chance=chance, min_even=5, max_even=5)
+    stars = _spec("stars")
+    assert grid_survives({"numbers": [2, 4, 6, 8, 10], "stars": [1, 2]}, numbers, stars)
+    assert not grid_survives({"numbers": [1, 2, 3, 4, 5], "stars": [1, 2]}, numbers, stars)

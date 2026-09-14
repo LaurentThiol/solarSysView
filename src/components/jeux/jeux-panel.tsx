@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 
@@ -20,6 +21,19 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import type { CombinationGrid } from "@/lib/combinations"
+import {
+  PROPOSALS_EVENT,
+  readStoredProposals,
+} from "@/lib/combinations"
+import {
+  DECADE_LABELS,
+  NUMBER_CONSEC_MAX,
+  NUMBER_SPREAD_MAX,
+  NUMBER_SPREAD_MIN,
+  STAR_CONSEC_MAX,
+  STAR_SPREAD_MAX,
+  STAR_SPREAD_MIN,
+} from "@/lib/grid-shape"
 import {
   numberFrequencyTable,
   starFrequencyTable,
@@ -49,6 +63,7 @@ import {
   formatCount,
   formatMass,
   formatOneIn,
+  intersectGrids,
   listGrids,
   listPool,
   samplePool,
@@ -67,7 +82,7 @@ const HELP = {
   },
   count: {
     title: "Nombre de solutions",
-    body: "Produit du nombre de 5-combinaisons de numéros restantes par le nombre de 2-combinaisons d’étoiles. Recalculé à chaque curseur, par programmation dynamique.",
+    body: "Produit du nombre de 5-combinaisons de numéros restantes par le nombre de 2-combinaisons d’étoiles. Recalculé à chaque curseur (DP pour somme/parité, énumération si étendue / consécutifs / décennies).",
   },
   oneIn: {
     title: "1 sur N",
@@ -105,6 +120,22 @@ const HELP = {
     title: "Fréquences archive",
     body: "Recopie les chances sur les totaux des 100 derniers tirages (max = 100 %). Une boule absente de cette fenêtre passe à 0 % et sort du bassin. Ce n’est pas une proba de sortie.",
   },
+  spread: {
+    title: "Étendue",
+    body: "max − min des boules tirées. Numéros : 4 (1-2-3-4-5) à 49 (1 et 50). Étoiles : 1 (consécutives) à 11 (1 et 12). Même définition que Combinaisons et Évolution.",
+  },
+  consecutive: {
+    title: "Consécutifs",
+    body: "Nombre de paires (n, n+1). Cinq numéros : 0 à 4. Deux étoiles : 0 ou 1. 1-2-3-4-5 a 4 paires ; 3 18 27 39 46 n’en a aucune.",
+  },
+  decades: {
+    title: "Décennies",
+    body: "Combien de numéros dans chaque bande de 10 de la grille 5×10 (1–10 … 41–50). Mini 0 et maxi 5 = pas de filtre. « Max 2 / décennie » est le preset le plus courant.",
+  },
+  intersection: {
+    title: "Intersection Combinaisons",
+    body: "Parmi les grilles proposées dans Combinaisons (session), combien respectent les restrictions d’ici. Ce n’est pas un score de gain : une grille survit ou elle sort.",
+  },
 } satisfies Record<string, HelpCopy>
 
 function formatPct(value: number | null | undefined, digits = 2) {
@@ -140,6 +171,18 @@ function readStored(): StoredSpec {
           Math.min(100, Math.max(0, Math.round(Number(parsed.starChance?.[i]) || 0)))
         )
       : base.starChance
+    const numberDecadeMin = Array.isArray(parsed.numberDecadeMin)
+      ? base.numberDecadeMin.map((_, i) => {
+          const n = Number(parsed.numberDecadeMin?.[i])
+          return Number.isFinite(n) ? Math.min(5, Math.max(0, Math.round(n))) : 0
+        })
+      : base.numberDecadeMin
+    const numberDecadeMax = Array.isArray(parsed.numberDecadeMax)
+      ? base.numberDecadeMax.map((_, i) => {
+          const n = Number(parsed.numberDecadeMax?.[i])
+          return Number.isFinite(n) ? Math.min(5, Math.max(0, Math.round(n))) : 5
+        })
+      : base.numberDecadeMax
     return {
       ...base,
       ...parsed,
@@ -147,6 +190,8 @@ function readStored(): StoredSpec {
       starChance,
       numberForced: Array.isArray(parsed.numberForced) ? parsed.numberForced : [],
       starForced: Array.isArray(parsed.starForced) ? parsed.starForced : [],
+      numberDecadeMin,
+      numberDecadeMax,
     }
   } catch {
     return fallback
@@ -346,6 +391,7 @@ export function JeuxPanel() {
   const [ready, setReady] = useState(false)
   const [sampleSeed, setSampleSeed] = useState(1)
   const [sampleOn, setSampleOn] = useState(false)
+  const [proposals, setProposals] = useState<CombinationGrid[]>([])
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -353,6 +399,19 @@ export function JeuxPanel() {
       setReady(true)
     }, 0)
     return () => window.clearTimeout(id)
+  }, [])
+
+  useEffect(() => {
+    const load = () => setProposals(readStoredProposals())
+    load()
+    window.addEventListener(PROPOSALS_EVENT, load)
+    window.addEventListener("focus", load)
+    document.addEventListener("visibilitychange", load)
+    return () => {
+      window.removeEventListener(PROPOSALS_EVENT, load)
+      window.removeEventListener("focus", load)
+      document.removeEventListener("visibilitychange", load)
+    }
   }, [])
 
   useEffect(() => {
@@ -386,6 +445,11 @@ export function JeuxPanel() {
     return listGrids(listedNumbers, listedStars, LIST_LIMIT)
   }, [game.grids, listedNumbers, listedStars])
 
+  const intersection = useMemo(
+    () => intersectGrids(proposals, pools.numbers, pools.stars),
+    [proposals, pools]
+  )
+
   const samples = useMemo(() => {
     if (!sampleOn || game.grids === 0 || game.grids <= LIST_LIMIT) return []
     const numberSample =
@@ -416,7 +480,10 @@ export function JeuxPanel() {
       `${formatCount(game.grids)} grilles 5+2 restantes`,
       `${formatCount(game.numbers.count)} combinaisons de numéros × ${formatCount(game.stars.count)} d’étoiles`,
       game.oneIn == null ? "Aucune solution" : `1 sur ${formatOneIn(game.oneIn)} de l’univers`,
-    ],
+      proposals.length > 0
+        ? `${intersection.survivors.length}/${intersection.total} propositions Combinaisons survivent`
+        : null,
+    ].filter((item): item is string => Boolean(item)),
     tech: {
       grids: game.grids,
       fraction: game.fraction,
@@ -427,6 +494,9 @@ export function JeuxPanel() {
         excluded: game.numbers.excluded.length,
         sum: [spec.numberMinSum, spec.numberMaxSum],
         even: [spec.numberMinEven, spec.numberMaxEven],
+        spread: [spec.numberMinSpread, spec.numberMaxSpread],
+        consecutive: [spec.numberMinConsecutive, spec.numberMaxConsecutive],
+        decades: spec.numberDecadeMax,
       },
       stars: {
         count: game.stars.count,
@@ -441,6 +511,15 @@ export function JeuxPanel() {
 
   function patch(partial: Partial<StoredSpec>) {
     setSpec((current) => ({ ...current, ...partial }))
+  }
+
+  function setDecade(which: "min" | "max", index: number, value: number) {
+    setSpec((current) => {
+      const key = which === "min" ? "numberDecadeMin" : "numberDecadeMax"
+      const next = [...current[key]]
+      next[index] = value
+      return { ...current, [key]: next }
+    })
   }
 
   function setChance(kind: PoolKind, value: number, chance: number) {
@@ -642,6 +721,78 @@ export function JeuxPanel() {
               display={`${spec.numberThreshold}%`}
               ariaLabel="Seuil de chance des numéros"
             />
+            <RangeField
+              label="Étendue mini"
+              help={HELP.spread}
+              min={NUMBER_SPREAD_MIN}
+              max={NUMBER_SPREAD_MAX}
+              value={spec.numberMinSpread}
+              onChange={(value) => patch({ numberMinSpread: value })}
+              display={String(spec.numberMinSpread)}
+              ariaLabel="Étendue minimale des 5 numéros"
+            />
+            <RangeField
+              label="Étendue maxi"
+              help={HELP.spread}
+              min={NUMBER_SPREAD_MIN}
+              max={NUMBER_SPREAD_MAX}
+              value={spec.numberMaxSpread}
+              onChange={(value) => patch({ numberMaxSpread: value })}
+              display={String(spec.numberMaxSpread)}
+              ariaLabel="Étendue maximale des 5 numéros"
+            />
+            <RangeField
+              label="Consécutifs mini"
+              help={HELP.consecutive}
+              min={0}
+              max={NUMBER_CONSEC_MAX}
+              value={spec.numberMinConsecutive}
+              onChange={(value) => patch({ numberMinConsecutive: value })}
+              display={String(spec.numberMinConsecutive)}
+              ariaLabel="Nombre minimal de paires consécutives"
+            />
+            <RangeField
+              label="Consécutifs maxi"
+              help={HELP.consecutive}
+              min={0}
+              max={NUMBER_CONSEC_MAX}
+              value={spec.numberMaxConsecutive}
+              onChange={(value) => patch({ numberMaxConsecutive: value })}
+              display={String(spec.numberMaxConsecutive)}
+              ariaLabel="Nombre maximal de paires consécutives"
+            />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              <TitleHelp help={HELP.decades}>Décennies</TitleHelp>
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {DECADE_LABELS.map((label, index) => (
+                <div key={label} className="flex flex-col gap-2 rounded-md border border-border/60 px-2 py-2">
+                  <p className="text-xs font-medium tabular-nums">{label}</p>
+                  <RangeField
+                    label="Mini"
+                    help={HELP.decades}
+                    min={0}
+                    max={5}
+                    value={spec.numberDecadeMin[index] ?? 0}
+                    onChange={(value) => setDecade("min", index, value)}
+                    display={String(spec.numberDecadeMin[index] ?? 0)}
+                    ariaLabel={`Minimum de numéros dans ${label}`}
+                  />
+                  <RangeField
+                    label="Maxi"
+                    help={HELP.decades}
+                    min={0}
+                    max={5}
+                    value={spec.numberDecadeMax[index] ?? 5}
+                    onChange={(value) => setDecade("max", index, value)}
+                    display={String(spec.numberDecadeMax[index] ?? 5)}
+                    ariaLabel={`Maximum de numéros dans ${label}`}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => setAllChance("numbers", 100)}>
@@ -655,6 +806,35 @@ export function JeuxPanel() {
             </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => keepParity("numbers", false)}>
               Impairs seulement
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                patch({
+                  numberDecadeMin: [0, 0, 0, 0, 0],
+                  numberDecadeMax: [2, 2, 2, 2, 2],
+                })
+              }
+            >
+              Max 2 / décennie
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => patch({ numberMinConsecutive: 0, numberMaxConsecutive: 0 })}
+            >
+              Sans consécutifs
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => patch({ numberMinSpread: 20, numberMaxSpread: 40 })}
+            >
+              Étendue 20–40
             </Button>
           </div>
           <HelpWrap help={HELP.force}>
@@ -729,6 +909,46 @@ export function JeuxPanel() {
               onChange={(value) => patch({ starThreshold: value })}
               display={`${spec.starThreshold}%`}
               ariaLabel="Seuil de chance des étoiles"
+            />
+            <RangeField
+              label="Étendue mini"
+              help={HELP.spread}
+              min={STAR_SPREAD_MIN}
+              max={STAR_SPREAD_MAX}
+              value={spec.starMinSpread}
+              onChange={(value) => patch({ starMinSpread: value })}
+              display={String(spec.starMinSpread)}
+              ariaLabel="Étendue minimale des 2 étoiles"
+            />
+            <RangeField
+              label="Étendue maxi"
+              help={HELP.spread}
+              min={STAR_SPREAD_MIN}
+              max={STAR_SPREAD_MAX}
+              value={spec.starMaxSpread}
+              onChange={(value) => patch({ starMaxSpread: value })}
+              display={String(spec.starMaxSpread)}
+              ariaLabel="Étendue maximale des 2 étoiles"
+            />
+            <RangeField
+              label="Consécutifs mini"
+              help={HELP.consecutive}
+              min={0}
+              max={STAR_CONSEC_MAX}
+              value={spec.starMinConsecutive}
+              onChange={(value) => patch({ starMinConsecutive: value })}
+              display={String(spec.starMinConsecutive)}
+              ariaLabel="Nombre minimal de paires d’étoiles consécutives"
+            />
+            <RangeField
+              label="Consécutifs maxi"
+              help={HELP.consecutive}
+              min={0}
+              max={STAR_CONSEC_MAX}
+              value={spec.starMaxConsecutive}
+              onChange={(value) => patch({ starMaxConsecutive: value })}
+              display={String(spec.starMaxConsecutive)}
+              ariaLabel="Nombre maximal de paires d’étoiles consécutives"
             />
           </div>
           <div className="flex flex-wrap gap-2">
@@ -862,6 +1082,59 @@ export function JeuxPanel() {
             {formatPct(game.fraction, 4)}. Masse {formatMass(game.mass)} (poids des
             chances). Cliquez une grille pour l’envoyer au composeur.
           </Disclaimer>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <TitleHelp help={HELP.intersection}>Intersection Combinaisons</TitleHelp>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {intersection.total === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Aucune proposition en session.{" "}
+              <Link className="underline underline-offset-2 hover:text-foreground" href="/combinaisons">
+                Générer des grilles dans Combinaisons
+              </Link>
+              , puis revenir ici : le bandeau dira combien survivent.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm tabular-nums">
+                <span className="font-medium text-foreground">
+                  {intersection.survivors.length} / {intersection.total}
+                </span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  proposition{intersection.total > 1 ? "s" : ""} survivent aux
+                  restrictions actuelles
+                </span>
+              </p>
+              {intersection.survivors.length > 0 ? (
+                <ul className="flex flex-col gap-2">
+                  {intersection.survivors.map((grid) => (
+                    <li key={gridLabel(grid)}>
+                      <button
+                        type="button"
+                        onClick={() => sendGrid(grid)}
+                        className="flex w-full flex-col gap-2 rounded-lg border border-border px-3 py-2 text-left hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <DrawBalls numbers={grid.numbers} stars={grid.stars} />
+                        <span className="text-xs text-muted-foreground">Ouvrir dans Combinaisons</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Aucune de ces {intersection.total} grilles n’entre dans l’espace
+                  restant.
+                </p>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 

@@ -66,6 +66,37 @@ export function gridKey(grid: CombinationGrid): string {
   return `${sorted.numbers.join(",")}|${sorted.stars.join(",")}`
 }
 
+export const PROPOSALS_KEY = "synchro.combinaisons.proposals"
+export const PROPOSALS_EVENT = "synchro-proposals"
+export const MAX_PROPOSALS = 20
+
+export function readStoredProposals(): CombinationGrid[] {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = sessionStorage.getItem(PROPOSALS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as { grids?: CombinationGrid[] } | CombinationGrid[]
+    const grids = Array.isArray(parsed) ? parsed : parsed.grids
+    if (!Array.isArray(grids)) return []
+    return grids.filter(isCompleteGrid).map(sortedGrid).slice(0, MAX_PROPOSALS)
+  } catch {
+    return []
+  }
+}
+
+export function writeStoredProposals(grids: CombinationGrid[]) {
+  if (typeof window === "undefined") return
+  try {
+    sessionStorage.setItem(
+      PROPOSALS_KEY,
+      JSON.stringify({ grids: grids.map(sortedGrid).slice(0, MAX_PROPOSALS) })
+    )
+    window.dispatchEvent(new Event(PROPOSALS_EVENT))
+  } catch {
+    /* quota / private mode */
+  }
+}
+
 export function matchCounts(
   grid: CombinationGrid,
   draw: Pick<Draw, "numbers" | "stars">
@@ -649,7 +680,7 @@ export function proposeGrids({
   const expectedStars = expectedStarHits(draws.length)
   const seen = new Set<string>()
   const grids: CombinationGrid[] = []
-  const target = Math.max(0, Math.min(10, Math.floor(count)))
+  const target = Math.max(0, Math.min(MAX_PROPOSALS, Math.floor(count)))
   const constrained = minSum != null || maxSum != null
   const band = orderSumBand(
     minSum == null ? NUMBER_SUM_MIN : minSum,

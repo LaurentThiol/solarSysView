@@ -5,7 +5,7 @@ import { JeuxPanel } from "@/components/jeux/jeux-panel"
 export const metadata: Metadata = {
   title: "Jeux — Synchro",
   description:
-    "Compter les grilles EuroMillions 5+2 qui restent après restrictions de somme, de parité et de chances de tirage.",
+    "Compter les grilles EuroMillions 5+2 qui restent après restrictions de somme, de parité, de forme et de chances de tirage.",
 }
 
 export default function JeuxPage() {
@@ -15,9 +15,10 @@ export default function JeuxPage() {
         <h1 className="text-3xl font-semibold tracking-tight">Jeux · solutions</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Combien de grilles 5+2 restent une fois la somme, la parité et les
-          chances de chaque boule fixées ? Le bandeau du bas suit le décompte
-          en direct. Sous 50 solutions, la liste s’affiche ; au-delà, un
-          échantillon uniforme.
+          chances de chaque boule, l’étendue, les consécutifs et les décennies
+          fixés ? Le bandeau du bas suit le décompte en direct. Sous 50
+          solutions, la liste s’affiche ; au-delà, un échantillon uniforme. Les
+          propositions de Combinaisons sont filtrées ici.
         </p>
       </div>
       <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 pb-12 sm:px-6">

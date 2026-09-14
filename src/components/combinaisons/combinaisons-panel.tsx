@@ -47,6 +47,7 @@ import {
   STRATEGY_LABELS,
   STRATEGIES,
   SUM_BOUND_MODE_LABELS,
+  MAX_PROPOSALS,
   SUM_BOUND_MODES,
   autoMaxSum,
   autoMinSum,
@@ -56,8 +57,10 @@ import {
   officialWinProbability,
   profileGrid,
   proposeGrids,
+  readStoredProposals,
   resolveSumBand,
   windowSumExtent,
+  writeStoredProposals,
   type CombinationGrid,
   type CombinationStrategy,
   type SumBoundMode,
@@ -199,7 +202,7 @@ const HELP = {
   },
   proposeCount: {
     title: "Nombre",
-    body: "Combien de grilles distinctes générer (1 à 10). La salve est dédoublonnée puis triée par P̂(gain).",
+    body: "Combien de grilles distinctes générer (1 à 20). La salve est dédoublonnée puis triée par P̂(gain). Jeux lit cette salve pour compter combien survivent aux restrictions.",
   },
   sumMin: {
     title: "Somme mini",
@@ -562,7 +565,7 @@ export function CombinaisonsPanel() {
   const requestedCount = useMemo(() => {
     const parsed = Number.parseInt(proposeCount, 10)
     if (!Number.isFinite(parsed)) return 5
-    return Math.max(1, Math.min(10, Math.floor(parsed)))
+    return Math.max(1, Math.min(MAX_PROPOSALS, Math.floor(parsed)))
   }, [proposeCount])
 
   const proposalRows = useMemo(
@@ -582,6 +585,8 @@ export function CombinaisonsPanel() {
   useEffect(() => {
     const id = window.setTimeout(() => {
       try {
+        const stored = readStoredProposals()
+        if (stored.length > 0) setProposals(stored)
         const raw = sessionStorage.getItem(HANDOFF_KEY)
         if (!raw) return
         const parsed = JSON.parse(raw) as CombinationGrid
@@ -673,6 +678,7 @@ export function CombinaisonsPanel() {
       maxSum: sumBand.max,
     })
     setProposals(next)
+    writeStoredProposals(next)
     const bandLabel = `${sumBand.min}–${sumBand.max}`
     if (next.length === 0) {
       setProposeNote(
@@ -1073,7 +1079,7 @@ export function CombinaisonsPanel() {
               <Input
                 type="number"
                 min={1}
-                max={10}
+                max={MAX_PROPOSALS}
                 value={proposeCount}
                 onChange={(event) => setProposeCount(event.target.value)}
                 className="w-24"

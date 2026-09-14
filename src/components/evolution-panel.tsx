@@ -8,6 +8,7 @@ import { DrawChart } from "@/components/draw-chart"
 import { EvolutionDraws } from "@/components/evolution-draws"
 import { EvolutionHeat } from "@/components/evolution-heat"
 import { EvolutionParity } from "@/components/evolution-parity"
+import { EvolutionShape } from "@/components/evolution-shape"
 import { FrequencyCard } from "@/components/frequency-card"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -95,6 +96,9 @@ function EvolutionContent() {
     return {
       numbers: summarizeValues(series.map((point) => point.sumNumbers)),
       stars: summarizeValues(series.map((point) => point.sumStars)),
+      spread: summarizeValues(series.map((point) => point.spread)),
+      consecutive: summarizeValues(series.map((point) => point.consecutive)),
+      decades: summarizeValues(series.map((point) => point.decadeOccupied)),
     }
   }, [filtered])
 
@@ -203,9 +207,41 @@ function EvolutionContent() {
         />
       </section>
 
+      <section className="grid gap-3 sm:grid-cols-3">
+        <StatCard
+          label="Étendue moyenne"
+          value={sumStats.spread ? formatStat(sumStats.spread.avg) : "—"}
+          hint={
+            sumStats.spread
+              ? `n5 − n1 · ${sumStats.spread.min}–${sumStats.spread.max}`
+              : "aucun tirage"
+          }
+        />
+        <StatCard
+          label="Consécutifs moyens"
+          value={sumStats.consecutive ? formatStat(sumStats.consecutive.avg) : "—"}
+          hint={
+            sumStats.consecutive
+              ? `paires n, n+1 · ${sumStats.consecutive.min}–${sumStats.consecutive.max}`
+              : "aucun tirage"
+          }
+        />
+        <StatCard
+          label="Décennies occupées"
+          value={sumStats.decades ? formatStat(sumStats.decades.avg) : "—"}
+          hint={
+            sumStats.decades
+              ? `bandes de 10 touchées · ${sumStats.decades.min}–${sumStats.decades.max}`
+              : "aucun tirage"
+          }
+        />
+      </section>
+
       <DrawChart draws={filtered} />
 
       <EvolutionParity draws={filtered} />
+
+      <EvolutionShape draws={filtered} />
 
       <section className="grid gap-4 lg:grid-cols-2">
         <FrequencyCard

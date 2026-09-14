@@ -450,7 +450,7 @@ const NAV_ITEMS = [
     label: "Évolution",
     help: {
       title: "Évolution",
-      body: "Courbes dans le temps, suivi pair/impair, classements des numéros / étoiles. Accès protégé par mot de passe admin.",
+      body: "Courbes dans le temps, suivi pair/impair, forme de la grille (décennies, étendue, consécutifs), classements. Accès protégé par mot de passe admin.",
     },
   },
   {
@@ -474,7 +474,7 @@ const NAV_ITEMS = [
     label: "Jeux",
     help: {
       title: "Jeux",
-      body: "Compteur combinatoire : somme, parité et chances de chaque boule. Le bandeau donne le nombre exact de grilles 5+2 restantes. Ce n’est pas un pronostic.",
+      body: "Compteur combinatoire : somme, parité, étendue, consécutifs, décennies et chances. Intersection avec les propositions de Combinaisons. Ce n’est pas un pronostic.",
     },
   },
   {

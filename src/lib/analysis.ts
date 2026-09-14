@@ -1,3 +1,5 @@
+import { consecutiveCount } from "@/lib/grid-shape"
+
 export type AnalysisDraw = {
   date: string
   weekday?: string
@@ -94,10 +96,7 @@ function ordered(draws: AnalysisDraw[]) {
 }
 
 function consecutivePairs(numbers: number[]) {
-  const set = new Set(numbers)
-  let count = 0
-  for (const n of set) if (set.has(n + 1)) count += 1
-  return count
+  return consecutiveCount(numbers)
 }
 
 /**

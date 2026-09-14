@@ -1,4 +1,11 @@
 import rawDraws from "@/data/euromillions-2026.json"
+import {
+  consecutiveCount,
+  decadeCounts,
+  decadeOccupied,
+  decadePeak,
+  spreadOf,
+} from "@/lib/grid-shape"
 
 export type Draw = {
   id: number
@@ -294,12 +301,23 @@ export type DrawSeriesPoint = {
   evenNumbers: number
   oddNumbers: number
   parityNumbers: number
+  spread: number
+  consecutive: number
+  d0: number
+  d1: number
+  d2: number
+  d3: number
+  d4: number
+  decadePeak: number
+  decadeOccupied: number
   e1: number
   e2: number
   sumStars: number
   evenStars: number
   oddStars: number
   parityStars: number
+  starSpread: number
+  starConsecutive: number
 }
 
 export function toDrawSeries(draws: Draw[]): DrawSeriesPoint[] {
@@ -312,6 +330,7 @@ export function toDrawSeries(draws: Draw[]): DrawSeriesPoint[] {
       const [e1, e2] = stars
       const numbersParity = parityCounts(numbers)
       const starsParity = parityCounts(stars)
+      const decades = decadeCounts(numbers)
       return {
         date: draw.date,
         id: draw.id,
@@ -324,12 +343,23 @@ export function toDrawSeries(draws: Draw[]): DrawSeriesPoint[] {
         evenNumbers: numbersParity.even,
         oddNumbers: numbersParity.odd,
         parityNumbers: numbersParity.score,
+        spread: spreadOf(numbers),
+        consecutive: consecutiveCount(numbers),
+        d0: decades[0],
+        d1: decades[1],
+        d2: decades[2],
+        d3: decades[3],
+        d4: decades[4],
+        decadePeak: decadePeak(decades),
+        decadeOccupied: decadeOccupied(decades),
         e1,
         e2,
         sumStars: e1 + e2,
         evenStars: starsParity.even,
         oddStars: starsParity.odd,
         parityStars: starsParity.score,
+        starSpread: spreadOf(stars),
+        starConsecutive: consecutiveCount(stars),
       }
     })
 }

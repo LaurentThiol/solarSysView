@@ -51,7 +51,7 @@ Archives EuroMillions : tableau filtrable et export CSV. En local, les données 
 
 ## Évolution (`/evolution`)
 
-Onglet admin : **évolution dans le temps**, **suivi pair/impair** (pair = +1, impair = −1, cumul numéros et étoiles), **20 / 50 derniers tirages**, **numéros et étoiles les plus sortis / en retard**, grille 1–50. Même accès que **Admin** (`ADMIN_PASSWORD`, ou ouvert en local sur `127.0.0.1`). Fenêtres : 20 tirages, 50 tirages, année en cours, formule actuelle, tout l’historique ; filtre mois sur les plages calendaires.
+Onglet admin : **évolution dans le temps**, **suivi pair/impair** (pair = +1, impair = −1, cumul numéros et étoiles), **forme de la grille** (étendue max−min, paires consécutives, occupation des cinq décennies 1–10 … 41–50), **20 / 50 derniers tirages**, **numéros et étoiles les plus sortis / en retard**, grille 1–50. Même accès que **Admin** (`ADMIN_PASSWORD`, ou ouvert en local sur `127.0.0.1`). Fenêtres : 20 tirages, 50 tirages, année en cours, formule actuelle, tout l’historique ; filtre mois sur les plages calendaires.
 
 ## Analyse (`/analyse`)
 
@@ -63,11 +63,11 @@ Les tirages sont indépendants : ces outils décrivent l’archive, ils ne préd
 
 ## Combinaisons (`/combinaisons`)
 
-Composeur EuroMillions 5+2 : chaque boule affiche **total de sorties** et **retard** dans la même fenêtre de travail qu’Analyse. Cinq stratégies proposent des grilles (équilibré, retards, totaux élevés / faibles, aléatoire). Le score affiché est une **proba de gain** : loi officielle des 13 rangs (identique pour toute grille 5+2) et **P̂ empirique** (part des tirages de la fenêtre où la grille aurait été payée, avec IC Wilson). Les grilles se sauvegardent via `/api/grids` (Neon) ou, à défaut, en session.
+Composeur EuroMillions 5+2 : chaque boule affiche **total de sorties** et **retard** dans la même fenêtre de travail qu’Analyse. Cinq stratégies proposent jusqu’à 20 grilles (équilibré, retards, totaux élevés / faibles, aléatoire). Le score affiché est une **proba de gain** : loi officielle des 13 rangs (identique pour toute grille 5+2) et **P̂ empirique** (part des tirages de la fenêtre où la grille aurait été payée, avec IC Wilson). Les grilles se sauvegardent via `/api/grids` (Neon) ou, à défaut, en session. La dernière salve de propositions est lue par **Jeux** pour l’intersection.
 
 ## Jeux (`/jeux`)
 
-Compteur combinatoire de l’univers EuroMillions (5 parmi 50 × 2 parmi 12 = 139 838 160). Les curseurs de somme, de parité pair/impair et de chance 0–100 % par boule réduisent l’espace ; le bandeau affiche en permanence le nombre exact de grilles restantes. 0 % exclut une boule ; un seuil de présence fait entrer les pourcentages intermédiaires dans le décompte entier ; un clic impose une boule. Sous 50 solutions la liste s’affiche, sinon un échantillon uniforme. Ce n’est pas un pronostic : le tirage officiel reste uniforme.
+Compteur combinatoire de l’univers EuroMillions (5 parmi 50 × 2 parmi 12 = 139 838 160). Les curseurs de somme, de parité pair/impair, d’étendue, de consécutifs, de décennies (1–10 … 41–50) et de chance 0–100 % par boule réduisent l’espace ; le bandeau affiche en permanence le nombre exact de grilles restantes. 0 % exclut une boule ; un seuil de présence fait entrer les pourcentages intermédiaires dans le décompte entier ; un clic impose une boule. Sous 50 solutions la liste s’affiche, sinon un échantillon uniforme. Les propositions de Combinaisons (session, jusqu’à 20) sont filtrées : combien survivent ici. Ce n’est pas un pronostic : le tirage officiel reste uniforme.
 
 ## Morpho (`/morpho`)
 
