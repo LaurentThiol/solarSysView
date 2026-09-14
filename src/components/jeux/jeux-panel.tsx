@@ -872,15 +872,14 @@ export function JeuxPanel() {
       >
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-baseline justify-between gap-2 px-4 py-3 sm:px-6">
           <p className="text-sm font-medium tabular-nums">
-            {formatCount(game.grids)} solution{game.grids > 1 ? "s" : ""}
+            {formatCount(game.grids)} solution{game.grids === 1 ? "" : "s"}
           </p>
           <p className="text-xs text-muted-foreground tabular-nums">
-            {formatCount(game.numbers.count)} comb. n° ×{" "}
-            {formatCount(game.stars.count)} comb. ★
-            {" · "}
-            1 sur {formatOneIn(game.oneIn)}
-            {" · "}
-            {formatPct(game.fraction, 3)} de l’univers
+            {game.grids === 0
+              ? game.numbers.impossible ||
+                game.stars.impossible ||
+                "Aucune grille 5+2 dans ces bornes."
+              : `${formatCount(game.numbers.count)} comb. n° × ${formatCount(game.stars.count)} comb. ★ · 1 sur ${formatOneIn(game.oneIn)} · ${formatPct(game.fraction, 3)} de l’univers`}
           </p>
         </div>
       </div>
