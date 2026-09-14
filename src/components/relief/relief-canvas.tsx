@@ -317,11 +317,13 @@ function paintScene(
     const scale = fitScale(box.minX, box.maxX, box.minZ, box.maxZ, cssW, cssH)
     const cx = cssW * 0.5
     const cy = cssH * 0.5
+    const midX = (box.minX + box.maxX) / 2
+    const midZ = (box.minZ + box.maxZ) / 2
     const plan = style === "plan"
     const proj = (x: number, y: number, z: number) =>
       plan
-        ? projectPlan(x, y, z, cam, cx, cy, scale)
-        : projectPoint(x, y, z, cam, cx, cy, scale)
+        ? projectPlan(x - midX, y, z - midZ, cam, cx, cy, scale)
+        : projectPoint(x - midX, y, z - midZ, cam, cx, cy, scale)
     const ranked = [...map.stamps].sort((a, b) => {
       const da = proj(a.x, 0, a.z).depth
       const db = proj(b.x, 0, b.z).depth
