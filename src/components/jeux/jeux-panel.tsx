@@ -109,6 +109,12 @@ const HELP = {
 
 function formatPct(value: number | null | undefined, digits = 2) {
   if (value == null || Number.isNaN(value)) return "—"
+  if (value > 0 && value < 0.000001) {
+    return value.toLocaleString("fr-FR", {
+      style: "percent",
+      maximumSignificantDigits: 2,
+    })
+  }
   return value.toLocaleString("fr-FR", {
     style: "percent",
     maximumFractionDigits: digits,
@@ -265,8 +271,8 @@ function ChanceGrid({
               aria-pressed={role === "forced"}
               aria-label={
                 role === "forced"
-                  ? `Relâcher le ${kind === "stars" ? "étoile" : "numéro"} ${value}`
-                  : `Imposer le ${kind === "stars" ? "étoile" : "numéro"} ${value}`
+                  ? `Relâcher ${kind === "stars" ? "l’étoile" : "le numéro"} ${value}`
+                  : `Imposer ${kind === "stars" ? "l’étoile" : "le numéro"} ${value}`
               }
               onClick={() => onForce(value)}
               className={cn(
@@ -286,7 +292,7 @@ function ChanceGrid({
               value={p}
               onChange={(event) => onChance(value, Number(event.target.value))}
               className="jeux-range w-full"
-              aria-label={`Chance du ${kind === "stars" ? "étoile" : "numéro"} ${value}`}
+              aria-label={`Chance ${kind === "stars" ? "de l’étoile" : "du numéro"} ${value}`}
             />
             <span className="text-[9px] tabular-nums text-muted-foreground sm:text-[10px]">
               {p}%
@@ -549,7 +555,7 @@ export function JeuxPanel() {
         <Card>
           <CardHeader className="pb-2">
             <p className="text-xs tracking-wide text-muted-foreground uppercase">
-              Numéros × étoiles
+              Comb. n° × étoiles
             </p>
             <CardTitle className="text-lg tabular-nums">
               {formatCount(game.numbers.count)} × {formatCount(game.stars.count)}
@@ -833,7 +839,8 @@ export function JeuxPanel() {
               ) : null}
               {listedNumbers.length > 0 ? (
                 <p className="text-xs text-muted-foreground tabular-nums">
-                  {listedNumbers.length} combinaisons de numéros ≤ {LIST_LIMIT} :{" "}
+                  {listedNumbers.length} combinaison
+                  {listedNumbers.length > 1 ? "s" : ""} de numéros ≤ {LIST_LIMIT} :{" "}
                   {listedNumbers
                     .slice(0, 8)
                     .map((combo) => combo.join("-"))
@@ -843,7 +850,8 @@ export function JeuxPanel() {
               ) : null}
               {listedStars.length > 0 ? (
                 <p className="text-xs text-muted-foreground tabular-nums">
-                  {listedStars.length} combinaisons d’étoiles ≤ {LIST_LIMIT} :{" "}
+                  {listedStars.length} combinaison
+                  {listedStars.length > 1 ? "s" : ""} d’étoiles ≤ {LIST_LIMIT} :{" "}
                   {listedStars.map((combo) => combo.join("-")).join(" · ")}
                 </p>
               ) : null}
@@ -867,7 +875,8 @@ export function JeuxPanel() {
             {formatCount(game.grids)} solution{game.grids > 1 ? "s" : ""}
           </p>
           <p className="text-xs text-muted-foreground tabular-nums">
-            {formatCount(game.numbers.count)} n° × {formatCount(game.stars.count)} ★
+            {formatCount(game.numbers.count)} comb. n° ×{" "}
+            {formatCount(game.stars.count)} comb. ★
             {" · "}
             1 sur {formatOneIn(game.oneIn)}
             {" · "}
