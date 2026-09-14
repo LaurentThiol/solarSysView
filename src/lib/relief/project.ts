@@ -75,8 +75,8 @@ export function fitScale(
 ) {
   const spanX = Math.max(maxX - minX, 0.6)
   const spanZ = Math.max(maxZ - minZ, 0.6)
-  const sx = (0.92 * width) / spanX
-  const sz = (0.86 * height) / spanZ
+  const sx = (0.86 * width) / spanX
+  const sz = (0.78 * height) / spanZ
   return Math.min(sx, sz)
 }
 
