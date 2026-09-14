@@ -112,10 +112,10 @@ function CaptureForm({
 
   return (
     <>
-      {draft.imageDataUrl ? (
+      {draft.imageDataUrl || draft.thumbDataUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={draft.imageDataUrl}
+          src={draft.imageDataUrl || draft.thumbDataUrl || ""}
           alt="Aperçu de la capture"
           className="max-h-48 w-full rounded-lg border border-border bg-muted/30 object-contain"
         />

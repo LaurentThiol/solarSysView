@@ -1,5 +1,9 @@
+import {
+  pruneCaptureImages,
+  rememberVisual,
+  withStoredImage,
+} from "@/lib/capture/images"
 import type { DiagnosticSnapshot, LabId } from "@/lib/capture/snapshot"
-import { IMAGE_MAX_CHARS } from "@/lib/capture/snapshot"
 import { isModelId, type IaChatMessage, type IaProviderId } from "@/lib/ia/models"
 
 export type { IaChatMessage, IaProviderId } from "@/lib/ia/models"
@@ -31,15 +35,16 @@ function canUseStorage() {
   return typeof window !== "undefined"
 }
 
-export function writePending(snapshot: DiagnosticSnapshot, autoSend: boolean) {
+export async function writePending(snapshot: DiagnosticSnapshot, autoSend: boolean) {
   if (!canUseStorage()) return
-  const pending: PendingCapture = { snapshot, autoSend }
+  const packed = await rememberVisual(snapshot)
+  const pending: PendingCapture = { snapshot: packed, autoSend }
   try {
     sessionStorage.setItem(PENDING_KEY, JSON.stringify(pending))
   } catch {
     const slim: PendingCapture = {
       autoSend,
-      snapshot: { ...snapshot, imageDataUrl: null },
+      snapshot: { ...packed, imageDataUrl: null },
     }
     sessionStorage.setItem(PENDING_KEY, JSON.stringify(slim))
   }
@@ -55,6 +60,10 @@ export function readPending(): PendingCapture | null {
   } catch {
     return null
   }
+}
+
+export async function hydratePending(pending: PendingCapture): Promise<PendingCapture> {
+  return { ...pending, snapshot: await withStoredImage(pending.snapshot) }
 }
 
 export function clearPending() {
@@ -131,11 +140,11 @@ export function writeCompareOn(on: boolean) {
 }
 
 function slimSnapshot(snapshot: DiagnosticSnapshot): DiagnosticSnapshot {
-  const image = snapshot.imageDataUrl
-  if (image && image.length > IMAGE_MAX_CHARS / 3) {
-    return { ...snapshot, imageDataUrl: null }
+  return {
+    ...snapshot,
+    imageDataUrl: null,
+    thumbDataUrl: snapshot.thumbDataUrl ?? null,
   }
-  return snapshot
 }
 
 export function readThreads(): IaThread[] {
@@ -156,24 +165,30 @@ export function writeThreads(threads: IaThread[]) {
     ...thread,
     snapshot: slimSnapshot(thread.snapshot),
   }))
+  const persist = (payload: IaThread[]) => {
+    window.localStorage.setItem(THREADS_KEY, JSON.stringify(payload))
+  }
   try {
-    window.localStorage.setItem(THREADS_KEY, JSON.stringify(next))
+    persist(next)
   } catch {
-    const withoutImages = next.map((thread) => ({
+    const withoutThumbs = next.map((thread) => ({
       ...thread,
-      snapshot: { ...thread.snapshot, imageDataUrl: null },
+      snapshot: { ...thread.snapshot, imageDataUrl: null, thumbDataUrl: null },
     }))
     try {
-      window.localStorage.setItem(THREADS_KEY, JSON.stringify(withoutImages))
+      persist(withoutThumbs)
     } catch {
-      window.localStorage.setItem(THREADS_KEY, JSON.stringify(withoutImages.slice(0, 3)))
+      persist(withoutThumbs.slice(0, 3))
     }
   }
+  void pruneCaptureImages(next.map((thread) => thread.id))
 }
 
-export function upsertThread(thread: IaThread) {
+export async function upsertThread(thread: IaThread) {
+  const snapshot = await rememberVisual(thread.snapshot)
   const others = readThreads().filter((item) => item.id !== thread.id)
-  writeThreads([thread, ...others])
+  writeThreads([{ ...thread, snapshot }, ...others])
+  return snapshot
 }
 
 export function threadTitle(snapshot: DiagnosticSnapshot, question: string) {
@@ -183,4 +198,12 @@ export function threadTitle(snapshot: DiagnosticSnapshot, question: string) {
 
 export function labOf(snapshot: DiagnosticSnapshot): LabId {
   return snapshot.lab
+}
+
+export function keepVisual(from: DiagnosticSnapshot, onto: DiagnosticSnapshot): DiagnosticSnapshot {
+  return {
+    ...onto,
+    imageDataUrl: onto.imageDataUrl || from.imageDataUrl,
+    thumbDataUrl: onto.thumbDataUrl || from.thumbDataUrl,
+  }
 }

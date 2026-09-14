@@ -5,6 +5,18 @@ export const JSON_BUDGET = 80_000
 export const SERIES_MAX_POINTS = 400
 export const IMAGE_MAX_CHARS = 1_800_000
 
+export function formatCapturedAt(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return date.toLocaleString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 export type LabId =
   | "tirage"
   | "evolution"
@@ -48,6 +60,8 @@ export type DiagnosticSnapshot = {
   archive: SnapshotArchive
   question: string
   imageDataUrl: string | null
+  /** Miniature JPEG conservée dans localStorage (le visuel plein est en IndexedDB). */
+  thumbDataUrl?: string | null
   summary: string[]
   tech: Record<string, unknown>
   blocked: { reason: string } | null

@@ -5,12 +5,15 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { HelpTip, LabelHelp } from "@/components/help"
 import { ModelSelect } from "@/components/ia/model-select"
 import { Button } from "@/components/ui/button"
+import { snapshotThumb, snapshotVisual, withStoredImage } from "@/lib/capture/images"
 import { printSnapshot } from "@/lib/capture/pdf"
-import { labLabel, type DiagnosticSnapshot } from "@/lib/capture/snapshot"
+import { formatCapturedAt, labLabel, type DiagnosticSnapshot } from "@/lib/capture/snapshot"
 import { suggestionsFor, DEFAULT_QUESTION } from "@/lib/capture/suggestions"
 import {
   CAPTURE_PENDING_EVENT,
   clearPending,
+  hydratePending,
+  keepVisual,
   readCompareModel,
   readCompareOn,
   readLastModel,
@@ -103,6 +106,7 @@ export function IaLab() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [techOpen, setTechOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [liveLanes, setLiveLanes] = useState<Partial<Record<IaMessageLane, boolean>>>({})
   const listRef = useRef<HTMLDivElement>(null)
   const pendingAuto = useRef<DiagnosticSnapshot | null>(null)
@@ -112,6 +116,15 @@ export function IaLab() {
   const modelBRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const messagesRef = useRef<IaChatMessage[]>([])
+  const persistRef = useRef<
+    (
+      nextSnapshot: DiagnosticSnapshot,
+      nextMessages: IaChatMessage[],
+      nextProvider: IaProviderId | null,
+      nextModel: string | null
+    ) => Promise<DiagnosticSnapshot>
+  >(async (nextSnapshot) => nextSnapshot)
+  const openGen = useRef(0)
   const askRef = useRef<(content: string, pack: DiagnosticSnapshot | null, history: IaChatMessage[], options: AskOptions & { provider: IaProviderId | null; model: string | null }) => Promise<void>>(
     async () => undefined
   )
@@ -141,13 +154,13 @@ export function IaLab() {
   }, [])
 
   const persist = useCallback(
-    (
+    async (
       nextSnapshot: DiagnosticSnapshot,
       nextMessages: IaChatMessage[],
       nextProvider: IaProviderId | null,
       nextModel: string | null
     ) => {
-      const thread: IaThread = {
+      const stored = await upsertThread({
         id: nextSnapshot.id,
         updatedAt: new Date().toISOString(),
         title: threadTitle(nextSnapshot, nextSnapshot.question || nextMessages[0]?.content || ""),
@@ -155,9 +168,18 @@ export function IaLab() {
         model: nextModel || undefined,
         snapshot: nextSnapshot,
         messages: nextMessages,
-      }
-      upsertThread(thread)
-      setThreads(readThreads())
+      })
+      const hydrated = keepVisual(nextSnapshot, stored)
+      setThreads((prev) =>
+        readThreads().map((item) => {
+          const memory = prev.find((entry) => entry.id === item.id)?.snapshot
+          let packed = item.snapshot
+          if (item.id === hydrated.id) packed = keepVisual(hydrated, packed)
+          if (memory) packed = keepVisual(memory, packed)
+          return { ...item, snapshot: packed }
+        })
+      )
+      return hydrated
     },
     []
   )
@@ -219,6 +241,9 @@ export function IaLab() {
       setError(null)
       setNotice(null)
       setLiveLanes(compareRun ? { a: true, b: true } : { a: true })
+      if (pack) {
+        void persist({ ...pack, question: pack.question || text }, nextMessages, chosen, chosenModel)
+      }
 
       function commitLane(
         lane: IaMessageLane,
@@ -285,11 +310,14 @@ export function IaLab() {
         await Promise.all(tasks)
       } finally {
         if (pack) {
-          persist(
+          const stored = await persist(
             { ...pack, question: pack.question || text },
             messagesRef.current,
             chosen,
             chosenModel
+          )
+          setSnapshot((current) =>
+            current && current.id === stored.id ? keepVisual(current, stored) : current
           )
         }
         if (abortRef.current === abort) abortRef.current = null
@@ -307,32 +335,62 @@ export function IaLab() {
     modelBRef.current = modelB
     messagesRef.current = messages
     askRef.current = ask
-  }, [provider, model, compare, modelB, ask, messages])
+    persistRef.current = persist
+  }, [provider, model, compare, modelB, ask, persist, messages])
 
   useEffect(() => {
-    function ingest() {
+    function ingest(): boolean {
       const pending = readPending()
-      if (!pending) return
+      if (!pending) return false
       clearPending()
-      setSnapshot(pending.snapshot)
-      setActiveId(pending.snapshot.id)
-      setMessages([])
-      setError(null)
-      setNotice(null)
-      if (!pending.autoSend) return
-      const chosen = providerRef.current
-      if (chosen) {
-        void askRef.current(pending.snapshot.question || DEFAULT_QUESTION, pending.snapshot, [], {
-          provider: chosen,
-          model: modelRef.current,
-          compare: compareRef.current,
-          modelB: modelBRef.current,
-        })
-      } else {
-        pendingAuto.current = pending.snapshot
-      }
+      abortRef.current?.abort()
+      const gen = (openGen.current += 1)
+      void (async () => {
+        const hydrated = await hydratePending(pending)
+        if (openGen.current !== gen) return
+        setSnapshot(hydrated.snapshot)
+        setActiveId(hydrated.snapshot.id)
+        setMessages([])
+        setError(null)
+        setNotice(null)
+        setPreviewOpen(false)
+        setBusy(false)
+        setLiveLanes({})
+        const chosen = providerRef.current
+        await persistRef.current(hydrated.snapshot, [], chosen, modelRef.current)
+        if (!hydrated.autoSend) return
+        if (chosen) {
+          void askRef.current(hydrated.snapshot.question || DEFAULT_QUESTION, hydrated.snapshot, [], {
+            provider: chosen,
+            model: modelRef.current,
+            compare: compareRef.current,
+            modelB: modelBRef.current,
+          })
+        } else {
+          pendingAuto.current = hydrated.snapshot
+        }
+      })()
+      return true
     }
-    const timeout = window.setTimeout(ingest, 0)
+    async function openLatest() {
+      const list = readThreads()
+      if (!list[0]) return
+      const thread = list[0]
+      const gen = (openGen.current += 1)
+      setActiveId(thread.id)
+      setSnapshot(thread.snapshot)
+      setMessages(thread.messages)
+      setProvider(thread.provider)
+      if (thread.model) setModel(thread.model)
+      setPreviewOpen(false)
+      setNotice(null)
+      const packed = await withStoredImage(thread.snapshot)
+      if (openGen.current !== gen) return
+      setSnapshot(packed)
+    }
+    const timeout = window.setTimeout(() => {
+      if (!ingest()) void openLatest()
+    }, 0)
     window.addEventListener(CAPTURE_PENDING_EVENT, ingest)
     return () => {
       window.clearTimeout(timeout)
@@ -363,6 +421,7 @@ export function IaLab() {
     () => suggestionsFor(snapshot?.lab ?? "other", snapshot?.tab ?? null),
     [snapshot]
   )
+  const visual = snapshot ? snapshotVisual(snapshot) : null
 
   const allModels = useMemo<IaModelOption[]>(() => {
     if (status?.models?.length) return status.models
@@ -391,7 +450,7 @@ export function IaLab() {
   const liveAll = allModels.filter((item) => item.source === "live")
   const currentModel = allModels.find((item) => item.id === model) ?? null
   const currentModelB = allModels.find((item) => item.id === modelB) ?? null
-  const hasImage = Boolean(snapshot?.imageDataUrl)
+  const hasImage = Boolean(visual)
   const canSend = Boolean(provider && model && status?.[provider])
   const providerB = modelB ? providerOfModel(modelB) : null
   const canSendB = Boolean(providerB && status?.[providerB] && modelB && modelB !== model)
@@ -413,8 +472,9 @@ export function IaLab() {
           { label: "Autres sur cette clé", items: liveModels },
         ]
 
-  function openThread(thread: IaThread) {
+  async function openThread(thread: IaThread) {
     abortRef.current?.abort()
+    const gen = (openGen.current += 1)
     setActiveId(thread.id)
     setSnapshot(thread.snapshot)
     setMessages(thread.messages)
@@ -424,6 +484,10 @@ export function IaLab() {
     setNotice(null)
     setBusy(false)
     setLiveLanes({})
+    setPreviewOpen(false)
+    const packed = await withStoredImage(thread.snapshot)
+    if (openGen.current !== gen) return
+    setSnapshot(packed)
   }
 
   function selectProvider(id: IaProviderId) {
@@ -586,46 +650,60 @@ export function IaLab() {
 
         {snapshot ? (
           <div className="rounded-xl border border-border bg-card/40 p-3">
-            <div className="flex flex-wrap items-start gap-3">
-              {snapshot.imageDataUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
+            <div className="min-w-0">
+              <p className="text-sm font-medium leading-5">
+                {snapshot.question || "Lecture sans question"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {labLabel(snapshot.lab)}
+                {snapshot.tab ? ` · ${snapshot.tab}` : ""}
+                {" · "}
+                {formatCapturedAt(snapshot.capturedAt)}
+              </p>
+            </div>
+            {visual ? (
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(true)}
+                className="mt-3 block w-full overflow-hidden rounded-md border border-border bg-muted/20"
+                title="Agrandir le graphique"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={snapshot.imageDataUrl}
-                  alt="Capture jointe"
-                  className="h-24 w-36 rounded-md border border-border object-cover"
+                  key={snapshot.id}
+                  src={visual}
+                  alt="Graphique capturé"
+                  className="max-h-56 w-full object-contain"
                 />
-              ) : (
-                <div className="flex h-24 w-36 items-center justify-center rounded-md border border-dashed border-border text-[11px] text-muted-foreground">
-                  Sans visuel
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">
-                  {labLabel(snapshot.lab)}
-                  {snapshot.tab ? ` · ${snapshot.tab}` : ""}
-                </p>
-                <ul className="mt-1 space-y-0.5 text-xs leading-5 text-muted-foreground">
-                  {snapshot.summary.slice(0, 4).map((line, index) => (
-                    <li key={`${index}-${line}`}>{line}</li>
-                  ))}
-                </ul>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="text-[11px] text-primary underline-offset-2 hover:underline"
-                    onClick={() => setTechOpen((value) => !value)}
-                  >
-                    {techOpen ? "Masquer le JSON" : "Données techniques"}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-[11px] text-primary underline-offset-2 hover:underline"
-                    onClick={() => printSnapshot(snapshot)}
-                  >
-                    PDF
-                  </button>
-                </div>
+              </button>
+            ) : (
+              <div className="mt-3 flex h-28 items-center justify-center rounded-md border border-dashed border-border px-3 text-center text-[11px] leading-4 text-muted-foreground">
+                Visuel non conservé — le graphique n’a pas pu être enregistré
+                (thème CSS ou quota du navigateur).
               </div>
+            )}
+            <ul className="mt-3 space-y-0.5 text-xs leading-5 text-muted-foreground">
+              {snapshot.summary.slice(0, 4).map((line, index) => (
+                <li key={`${index}-${line}`}>{line}</li>
+              ))}
+            </ul>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="text-[11px] text-primary underline-offset-2 hover:underline"
+                onClick={() => setTechOpen((value) => !value)}
+              >
+                {techOpen ? "Masquer le JSON" : "Données techniques"}
+              </button>
+              <button
+                type="button"
+                className="text-[11px] text-primary underline-offset-2 hover:underline"
+                onClick={() => {
+                  void withStoredImage(snapshot).then((packed) => printSnapshot(packed))
+                }}
+              >
+                PDF
+              </button>
             </div>
             {techOpen ? (
               <pre className="mt-3 max-h-56 overflow-auto rounded-lg bg-muted/40 p-2 text-[11px] leading-4">
@@ -762,26 +840,62 @@ export function IaLab() {
         {threads.length === 0 ? (
           <p className="text-xs text-muted-foreground">Pas encore d’historique.</p>
         ) : (
-          threads.map((thread) => (
-            <button
-              key={thread.id}
-              type="button"
-              onClick={() => openThread(thread)}
-              className={`rounded-lg border px-2.5 py-2 text-left text-xs leading-4 ${
-                activeId === thread.id
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <span className="block font-medium text-foreground">{thread.title}</span>
-              <span className="mt-0.5 block opacity-80">
-                {labLabel(thread.snapshot.lab)} · {providerLabel(thread.provider)}
-                {thread.model ? ` · ${modelLabel(thread.model, allModels)}` : ""}
-              </span>
-            </button>
-          ))
+          threads.map((thread) => {
+            const thumb = snapshotThumb(thread.snapshot)
+            return (
+              <button
+                key={thread.id}
+                type="button"
+                onClick={() => void openThread(thread)}
+                className={`flex items-start gap-2 rounded-lg border px-2 py-2 text-left text-xs leading-4 ${
+                  activeId === thread.id
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {thumb ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={thumb}
+                    alt=""
+                    className="h-12 w-16 shrink-0 rounded border border-border object-cover"
+                  />
+                ) : (
+                  <span className="flex h-12 w-16 shrink-0 items-center justify-center rounded border border-dashed border-border text-[10px]">
+                    —
+                  </span>
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium text-foreground">{thread.title}</span>
+                  <span className="mt-0.5 block opacity-80">
+                    {labLabel(thread.snapshot.lab)}
+                    {thread.snapshot.tab ? ` · ${thread.snapshot.tab}` : ""}
+                    {" · "}
+                    {providerLabel(thread.provider)}
+                    {thread.model ? ` · ${modelLabel(thread.model, allModels)}` : ""}
+                  </span>
+                </span>
+              </button>
+            )
+          })
         )}
       </aside>
+
+      {previewOpen && visual ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setPreviewOpen(false)}
+          aria-label="Fermer le graphique"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={visual}
+            alt="Graphique capturé"
+            className="max-h-[90vh] max-w-[92vw] rounded-lg border border-border object-contain"
+          />
+        </button>
+      ) : null}
     </div>
   )
 }

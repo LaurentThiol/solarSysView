@@ -12,14 +12,13 @@ import {
 } from "react"
 import { usePathname, useRouter } from "next/navigation"
 
-import { captureNodePng } from "@/lib/capture/png"
+import { captureNodePng, makeThumbDataUrl } from "@/lib/capture/png"
 import { printSnapshot } from "@/lib/capture/pdf"
 import { getCaptureCollector } from "@/lib/capture/registry"
 import {
   defaultCollector,
   emptyArchive,
   INDEPENDENCE_DISCLAIMER,
-  IMAGE_MAX_CHARS,
   newSnapshotId,
   type DiagnosticSnapshot,
   type SnapshotArchive,
@@ -124,12 +123,13 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
         source: context.archive?.source ?? runtime.archive.source,
       }
       let imageDataUrl: string | null = null
+      let thumbDataUrl: string | null = null
       if (!blocked) {
         const root =
           context.captureRoot ||
           (document.querySelector("[data-capture-root]") as HTMLElement | null)
         if (root) imageDataUrl = await captureNodePng(root)
-        if (imageDataUrl && imageDataUrl.length > IMAGE_MAX_CHARS) imageDataUrl = null
+        if (imageDataUrl) thumbDataUrl = await makeThumbDataUrl(imageDataUrl)
       }
       const snapshot: DiagnosticSnapshot = {
         id: newSnapshotId(),
@@ -141,6 +141,7 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
         archive,
         question: "",
         imageDataUrl,
+        thumbDataUrl,
         summary: blocked ? [] : context.summary,
         tech: blocked ? {} : context.tech,
         blocked: blocked || null,
@@ -160,9 +161,11 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
   const sendToIa = useCallback(
     (question: string) => {
       if (!draft || draft.blocked) return
-      writePending(withQuestion(draft, question), true)
-      setOpen(false)
-      router.push("/ia")
+      const pack = withQuestion(draft, question)
+      void writePending(pack, true).then(() => {
+        setOpen(false)
+        router.push("/ia")
+      })
     },
     [draft, router]
   )

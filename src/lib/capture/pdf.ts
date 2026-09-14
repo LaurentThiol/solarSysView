@@ -41,8 +41,8 @@ function metaRows(snapshot: DiagnosticSnapshot) {
 export function snapshotReportHtml(snapshot: DiagnosticSnapshot) {
   const summary = snapshot.summary.map((line) => `<li>${escapeHtml(line)}</li>`).join("")
   const tech = escapeHtml(JSON.stringify(snapshot.tech, null, 2))
-  const image = snapshot.imageDataUrl
-    ? `<img alt="Capture de l’écran" src="${snapshot.imageDataUrl}" />`
+  const image = snapshot.imageDataUrl || snapshot.thumbDataUrl
+    ? `<img alt="Capture de l’écran" src="${snapshot.imageDataUrl || snapshot.thumbDataUrl}" />`
     : "<p class='muted'>Pas d’image (capture visuelle indisponible).</p>"
   const question = snapshot.question.trim() || "—"
   return `<!DOCTYPE html>
