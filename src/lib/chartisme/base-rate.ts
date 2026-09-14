@@ -342,7 +342,7 @@ export function rarityNote(
       entry.threshold === null
         ? `échelle ${entry.length} : hors d'atteinte (il faudrait ${entry.required.toFixed(
             2
-          )}), écartée du balayage`
+          )}), aucune lecture n'y est rare au seuil d'ensemble`
         : `échelle ${entry.length} : seuil ${entry.threshold.toFixed(2)}, obtenu ${pct(
             entry.achieved
           )}`
@@ -361,11 +361,11 @@ export function rarityNote(
   const lost = measured.length - reachable.length
   return `${note} ${
     reachable.length
-      ? `${lost} échelle${lost > 1 ? "s" : ""} sur ${measured.length} est écartée`
-      : "Aucune échelle ne l'atteint"
+      ? `${lost} échelle${lost > 1 ? "s" : ""} sur ${measured.length} n'${lost > 1 ? "ont" : "a"} pas de seuil d'ensemble`
+      : "Aucune échelle n'a de seuil d'ensemble"
   } : au-delà de ${MAX_THRESHOLD.toFixed(
     2
-  )} un seuil ne sépare plus le bruit de la figure, il rejette les deux. Sur cette courbe et à cette échelle, le chartisme n'a rien à dire à cette rareté — viser plus large, ou changer de courbe.`
+  )} un seuil ne sépare plus le bruit de la figure. Les formes y restent lues ; le badge « rare » n'y apparaît pas. Viser plus large, ou changer de courbe.`
 }
 
 /**

@@ -751,11 +751,15 @@ export function ChartismeLab() {
                 {study.contextCount ? (
                   <span>· {study.contextCount} en contexte</span>
                 ) : null}
-                <span>· {hits.length} lecture{hits.length > 1 ? "s" : ""}</span>
+                <span>
+                  · {hits.length} lecture{hits.length > 1 ? "s" : ""}
+                  {viewMode === "rare" ? " rare" : ""}
+                  {hits.length > 1 && viewMode === "rare" ? "s" : ""}
+                </span>
                 {annotatedHits.length ? (
                   <span>
-                    · {rareCount} rare{rareCount > 1 ? "s" : ""} /{" "}
-                    {annotatedHits.length} vue{annotatedHits.length > 1 ? "s" : ""}
+                    · {rareCount} rare{rareCount > 1 ? "s" : ""} parmi{" "}
+                    {annotatedHits.length} forme{annotatedHits.length > 1 ? "s" : ""}
                   </span>
                 ) : null}
                 {byFigure.slice(0, 6).map(([label, count]) => (
