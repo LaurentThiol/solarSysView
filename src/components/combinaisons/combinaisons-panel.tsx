@@ -62,6 +62,7 @@ import {
   type CombinationStrategy,
   type SumBoundMode,
 } from "@/lib/combinations"
+import { HANDOFF_KEY } from "@/lib/jeux"
 import {
   expectedNumberHits,
   expectedStarHits,
@@ -576,6 +577,24 @@ export function CombinaisonsPanel() {
 
   useEffect(() => {
     setOfficialTableOpen(readOfficialTableOpen())
+  }, [])
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      try {
+        const raw = sessionStorage.getItem(HANDOFF_KEY)
+        if (!raw) return
+        const parsed = JSON.parse(raw) as CombinationGrid
+        sessionStorage.removeItem(HANDOFF_KEY)
+        if (isCompleteGrid(parsed)) {
+          setNumbers([...parsed.numbers])
+          setStars([...parsed.stars])
+        }
+      } catch {
+        /* ignore */
+      }
+    }, 0)
+    return () => window.clearTimeout(id)
   }, [])
 
   useEffect(() => {

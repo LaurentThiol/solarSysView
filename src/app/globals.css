@@ -145,3 +145,9 @@
     grid-template-columns: repeat(10, minmax(0, 1fr));
   }
 }
+
+.jeux-range {
+  accent-color: var(--color-primary);
+  height: 0.35rem;
+  cursor: pointer;
+}

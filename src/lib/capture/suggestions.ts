@@ -47,6 +47,12 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
       "Les retards et totaux aident à choisir, ils ne changent pas P(rang). Confirme-le sur cette grille.",
     ]
   }
+  if (lab === "jeux") {
+    return [
+      "Combien de grilles restent, et quelles restrictions ont le plus réduit l’univers ?",
+      "Sépare décompte combinatoire (solutions) et masse pondérée (chances). Ce n’est pas un pronostic.",
+    ]
+  }
   if (lab === "morpho") {
     return [
       "Quelles formes géométriques sont visibles sur le glyphe, et que valent-elles statistiquement ?",

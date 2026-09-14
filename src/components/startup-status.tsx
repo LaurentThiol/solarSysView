@@ -470,6 +470,14 @@ const NAV_ITEMS = [
     },
   },
   {
+    href: "/jeux",
+    label: "Jeux",
+    help: {
+      title: "Jeux",
+      body: "Compteur combinatoire : somme, parité et chances de chaque boule. Le bandeau donne le nombre exact de grilles 5+2 restantes. Ce n’est pas un pronostic.",
+    },
+  },
+  {
     href: "/morpho",
     label: "Morpho",
     help: {
