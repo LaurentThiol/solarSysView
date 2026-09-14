@@ -59,6 +59,13 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
       "Sépare description du glyphe et anticipation P(forme suivante | contexte).",
     ]
   }
+  if (lab === "relief") {
+    return [
+      "Décris le relief : où sont les sommets, que code la couleur, et quel décalage a produit cette carte.",
+      "Le mode de décalage (angle d’or, Hilbert, hexagone…) change-t-il la lecture, ou seulement l’esthétique ?",
+      "Rappelle que la hauteur n’est pas une prédiction : ce sont des sorties déjà tirées, empilées.",
+    ]
+  }
   return [
     "Explique ce que montre cet écran, à partir du visuel et des données jointes.",
     "Quels éléments techniques regarder en premier, et lesquels ignorer ?",

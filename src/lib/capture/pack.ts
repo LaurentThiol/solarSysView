@@ -15,6 +15,7 @@ import {
   roundish,
   seriesStats,
   withinBudget,
+  INDEPENDENCE_DISCLAIMER,
   type CaptureContext,
   type SeriesPoint,
 } from "@/lib/capture/snapshot"
@@ -353,6 +354,55 @@ export function packHarmo(input: {
       observed_peak: payload?.observed_peak ?? null,
       peak_null: payload?.peak ?? null,
       disclaimer: payload?.disclaimer ?? null,
+    }),
+  }
+}
+
+export function packRelief(input: {
+  source: string
+  sample: number
+  drawn: number
+  from: string | null
+  to: string | null
+  style: string
+  offset: string
+  height: string
+  fusion: number
+  yScale: number
+  stars: boolean
+  maxH: number
+  recommended: string
+}): CaptureContext {
+  const summary = [
+    `Relief · ${input.style} · ${input.offset}`,
+    `${input.drawn} tirages (échantillon ${input.sample}) · ${input.from ?? "?"} → ${input.to ?? "?"}`,
+    `Hauteur = ${input.height} · fusion ${input.fusion.toFixed(2)} · max ${roundish(input.maxH, 2)}`,
+    `Décalage recommandé pour cette taille : ${input.recommended}`,
+  ]
+  return {
+    lab: "relief",
+    tab: input.style,
+    archive: {
+      n: input.drawn,
+      from: input.from,
+      to: input.to,
+      source: input.source,
+    },
+    summary,
+    tech: withinBudget({
+      lab: "relief",
+      source: input.source,
+      sample: input.sample,
+      drawn: input.drawn,
+      style: input.style,
+      offset: input.offset,
+      height: input.height,
+      fusion: roundish(input.fusion, 3),
+      yScale: roundish(input.yScale, 3),
+      stars: input.stars,
+      maxH: roundish(input.maxH, 3),
+      recommended: input.recommended,
+      disclaimer: INDEPENDENCE_DISCLAIMER,
     }),
   }
 }

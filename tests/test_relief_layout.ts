@@ -1,0 +1,155 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+
+import { labFromPath, labLabel } from "../src/lib/capture/snapshot"
+import { suggestionsFor } from "../src/lib/capture/suggestions"
+import type { Draw } from "../src/lib/draws"
+import { hilbertOrderFor, hilbertXY } from "../src/lib/relief/hilbert"
+import {
+  GOLDEN_ANGLE,
+  layoutDraws,
+  recommendedOffset,
+  type OffsetMode,
+} from "../src/lib/relief/layout"
+import { heightColor } from "../src/lib/relief/color"
+import { rasterizePeaks } from "../src/lib/relief/heightmap"
+import { clampCamera, DEFAULT_CAMERA, projectPoint } from "../src/lib/relief/project"
+
+function draw(i: number): Draw {
+  const date = new Date(Date.UTC(2024, 0, 1 + i)).toISOString().slice(0, 10)
+  const base = (i * 7) % 46
+  return {
+    id: i + 1,
+    date,
+    weekday: i % 2 ? "mardi" : "vendredi",
+    numbers: [base + 1, base + 2, base + 3, base + 4, base + 5],
+    stars: [1 + (i % 12), 1 + ((i + 3) % 12)],
+  }
+}
+
+function draws(n: number) {
+  return Array.from({ length: n }, (_, i) => draw(i))
+}
+
+function minDist(points: Array<{ x: number; z: number }>) {
+  let best = Infinity
+  for (let i = 0; i < points.length; i += 1) {
+    for (let j = i + 1; j < points.length; j += 1) {
+      const d = Math.hypot(points[i].x - points[j].x, points[i].z - points[j].z)
+      if (d > 1e-9 && d < best) best = d
+    }
+  }
+  return best
+}
+
+test("Hilbert covers the square without duplicates", () => {
+  const order = 3
+  const n = 1 << order
+  const seen = new Set<string>()
+  for (let d = 0; d < n * n; d += 1) {
+    const [x, y] = hilbertXY(order, d)
+    assert.ok(x >= 0 && x < n && y >= 0 && y < n)
+    seen.add(`${x},${y}`)
+  }
+  assert.equal(seen.size, n * n)
+  assert.equal(hilbertOrderFor(200), 4)
+})
+
+test("angle d'or packs 50 origins with a stable minimum distance", () => {
+  const layout = layoutDraws(draws(50), {
+    mode: "or",
+    height: "presence",
+    fusion: 0.55,
+    stars: false,
+  })
+  assert.equal(layout.anchors.length, 50)
+  assert.equal(layout.peaks.length, 250)
+  const d = minDist(layout.anchors)
+  assert.ok(d > 0.4, `min dist ${d}`)
+  assert.ok(Math.abs(GOLDEN_ANGLE - Math.PI * (3 - Math.sqrt(5))) < 1e-12)
+})
+
+test("hex and Hilbert keep consecutive draws as neighbours", () => {
+  const hex = layoutDraws(draws(20), { mode: "hex", height: "presence", fusion: 0.5, stars: false })
+  const hilbert = layoutDraws(draws(16), {
+    mode: "hilbert",
+    height: "presence",
+    fusion: 0.5,
+    stars: false,
+  })
+  const hexStep = Math.hypot(
+    hex.anchors[1].x - hex.anchors[0].x,
+    hex.anchors[1].z - hex.anchors[0].z
+  )
+  const hilbertStep = Math.hypot(
+    hilbert.anchors[1].x - hilbert.anchors[0].x,
+    hilbert.anchors[1].z - hilbert.anchors[0].z
+  )
+  assert.ok(hexStep > 0.5)
+  assert.ok(hilbertStep > 0.5)
+  assert.ok(Math.abs(hexStep - minDist(hex.anchors)) < 1e-6)
+})
+
+test("temps advances along z, superpose stacks at the origin", () => {
+  const temps = layoutDraws(draws(8), { mode: "temps", height: "presence", fusion: 0.4, stars: false })
+  const stack = layoutDraws(draws(8), {
+    mode: "superpose",
+    height: "presence",
+    fusion: 0.4,
+    stars: false,
+  })
+  assert.ok(temps.anchors[7].z > temps.anchors[0].z)
+  assert.equal(stack.anchors.every((a) => a.x === 0 && a.z === 0), true)
+})
+
+test("fusion enlarges glyphs relative to spacing", () => {
+  const low = layoutDraws(draws(30), { mode: "or", height: "mixte", fusion: 0.15, stars: false })
+  const high = layoutDraws(draws(30), { mode: "or", height: "mixte", fusion: 0.9, stars: false })
+  assert.ok(high.glyphScale > low.glyphScale)
+})
+
+test("recommended offset is hex on small samples and golden otherwise", () => {
+  assert.equal(recommendedOffset(20), "hex")
+  assert.equal(recommendedOffset(50), "or")
+  assert.equal(recommendedOffset(200), "or")
+})
+
+test("heightmap splat peaks at the ball and colors climb with height", () => {
+  const layout = layoutDraws(draws(20), {
+    mode: "superpose",
+    height: "presence",
+    fusion: 0.3,
+    stars: false,
+  })
+  const field = rasterizePeaks(layout.peaks, layout.anchors, 0.3, true)
+  assert.ok(field.maxH > 0)
+  assert.ok(field.cols >= 36 && field.rows >= 36)
+  const low = heightColor(0)
+  const high = heightColor(1)
+  assert.ok(low[0] + low[1] + low[2] < high[0] + high[1] + high[2])
+})
+
+test("camera projects and clamp keeps pitch / zoom in range", () => {
+  const a = projectPoint(0, 0, 0, DEFAULT_CAMERA, 200, 200, 40)
+  const b = projectPoint(1, 0, 0, DEFAULT_CAMERA, 200, 200, 40)
+  assert.ok(Math.hypot(a.x - b.x, a.y - b.y) > 1)
+  const cam = clampCamera({ yaw: 12, pitch: 8, zoom: 99 })
+  assert.ok(cam.pitch <= 1.22)
+  assert.ok(cam.zoom <= 2.8)
+})
+
+test("relief is a first-class lab for capture / IA", () => {
+  assert.equal(labFromPath("/relief"), "relief")
+  assert.equal(labLabel("relief"), "Relief")
+  const tips = suggestionsFor("relief")
+  assert.ok(tips.some((t) => t.toLowerCase().includes("hauteur") || t.toLowerCase().includes("décalage")))
+})
+
+test("every offset mode lays out 100 draws", () => {
+  const modes: OffsetMode[] = ["or", "hex", "hilbert", "temps", "stat", "superpose"]
+  for (const mode of modes) {
+    const layout = layoutDraws(draws(100), { mode, height: "mixte", fusion: 0.58, stars: true })
+    assert.equal(layout.anchors.length, 100, mode)
+    assert.equal(layout.peaks.length, 700, mode)
+  }
+})

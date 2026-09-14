@@ -486,6 +486,14 @@ const NAV_ITEMS = [
     },
   },
   {
+    href: "/relief",
+    label: "Relief",
+    help: {
+      title: "Relief",
+      body: "Carte 3D des tirages : hauteur colorée, échantillons 20/50/100/200, décalage (angle d’or, Hilbert, hexagone), rotation.",
+    },
+  },
+  {
     href: "/chartisme",
     label: "Chartisme",
     help: {
