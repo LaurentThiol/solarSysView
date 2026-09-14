@@ -119,6 +119,7 @@ export function CurveCanvas({
     <div className="overflow-x-auto">
       <svg
         ref={svgRef}
+        data-capture-visual=""
         viewBox={`0 0 ${width} ${HEIGHT}`}
         width={width}
         height={HEIGHT}

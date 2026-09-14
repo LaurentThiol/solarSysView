@@ -14,7 +14,7 @@ export function CaptureButton() {
     <HelpWrap
       help={{
         title: "Capture de lecture",
-        body: "Enregistre le visuel du laboratoire plus les données de la fenêtre (série, indicateurs, figures, pics). Envoie le pack à l’onglet IA ou exporte un PDF. Raccourci « c » hors champ de saisie. Désactivé sur Admin (secrets).",
+        body: "Enregistre le graphique visible et les données de la fenêtre (série, indicateurs, figures, pics). Envoie le pack à l’onglet IA ou exporte un PDF. Raccourci « c » hors champ de saisie. Désactivé sur Admin (secrets).",
       }}
     >
       <button
@@ -64,8 +64,8 @@ export function CaptureDrawer() {
               Capture de lecture
             </h2>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Visuel + données de la fenêtre, pas un screenshot brut. L’IA décrit
-              l’archive, elle ne pronostique pas.
+              Zone visible et graphique à l’écran, plus les données de la
+              fenêtre. L’IA décrit l’archive, elle ne pronostique pas.
             </p>
           </div>
           <button

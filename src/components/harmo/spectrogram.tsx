@@ -77,7 +77,7 @@ export function Spectrogram({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" data-capture-visual>
       <div className="flex items-center justify-between text-[10px] text-muted-foreground">
         <span>0</span>
         <span>index de tirage →</span>

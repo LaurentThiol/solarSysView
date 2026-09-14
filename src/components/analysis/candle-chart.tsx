@@ -47,6 +47,7 @@ export function CandleChart({
   return (
     <div className="overflow-x-auto">
       <svg
+        data-capture-visual=""
         viewBox={`0 0 ${width} ${height}`}
         width={width}
         height={height}
