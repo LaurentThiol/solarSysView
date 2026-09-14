@@ -111,7 +111,31 @@ export function ReliefLab() {
   )
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          <div className="h-[min(68vh,600px)] min-h-[380px]">
+            {chronological.length === 0 ? (
+              <p className="p-6 text-sm text-muted-foreground">Aucun tirage à cartographier.</p>
+            ) : (
+              <ReliefCanvas
+                field={style === "relief" ? field : null}
+                quads={quads}
+                anchors={layout.anchors}
+                camera={camera}
+                onCamera={onCamera}
+                autoRotate={autoRotate}
+                contours={style === "relief" && contours}
+                wire={wire}
+                yScale={yScale}
+                hoverOwner={hoverOwner}
+                onHover={setHoverOwner}
+              />
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
           <LabelHelp
@@ -290,42 +314,6 @@ export function ReliefLab() {
             : ""}
         </p>
       </div>
-
-      <Card className="overflow-hidden">
-        <CardHeader className="border-b border-border/60">
-          <CardTitle className="text-base font-medium">
-            <TitleHelp
-              help={{
-                title: "Carte 3D",
-                body: "Chaque tirage est le glyphe Morpho 5×10. La couleur suit la hauteur (teinte hypsométrique). Le point or marque le tirage le plus récent. Survoler un point affiche la grille.",
-              }}
-            >
-              Carte 3D
-            </TitleHelp>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="h-[min(62vh,560px)] min-h-[400px]">
-            {chronological.length === 0 ? (
-              <p className="p-6 text-sm text-muted-foreground">Aucun tirage à cartographier.</p>
-            ) : (
-              <ReliefCanvas
-                field={style === "relief" ? field : null}
-                quads={quads}
-                anchors={layout.anchors}
-                camera={camera}
-                onCamera={onCamera}
-                autoRotate={autoRotate}
-                contours={style === "relief" && contours}
-                wire={wire}
-                yScale={yScale}
-                hoverOwner={hoverOwner}
-                onHover={setHoverOwner}
-              />
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <Card>

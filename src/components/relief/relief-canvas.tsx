@@ -313,7 +313,7 @@ function paintScene(
     ctx.clearRect(0, 0, cssW, cssH)
 
     const cx = cssW * 0.5
-    const cy = cssH * 0.58
+    const cy = cssH * 0.5
     const box = field
       ? {
           minX: field.originX,
