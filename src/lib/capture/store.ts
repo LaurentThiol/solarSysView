@@ -4,9 +4,28 @@ import {
   withStoredImage,
 } from "@/lib/capture/images"
 import type { DiagnosticSnapshot, LabId } from "@/lib/capture/snapshot"
-import { isModelId, type IaChatMessage, type IaProviderId } from "@/lib/ia/models"
+import { isModelId, type IaProviderId } from "@/lib/ia/models"
+import {
+  capThreads,
+  deleteThreadIn,
+  mergeThreadLists,
+  pinThreadIn,
+  renameThreadIn,
+  upsertThreadList,
+  type IaThread,
+} from "@/lib/ia/threads"
 
 export type { IaChatMessage, IaProviderId } from "@/lib/ia/models"
+export type { IaThread } from "@/lib/ia/threads"
+export {
+  capThreads,
+  filterThreads,
+  MAX_UNPINNED_THREADS,
+  mergeThreadLists,
+  normalizeThreadTitle,
+  renameThreadIn,
+  threadTitle,
+} from "@/lib/ia/threads"
 
 export const CAPTURE_PENDING_EVENT = "synchro-capture-pending"
 export const IA_PROVIDER_KEY = "synchro-ia-provider"
@@ -14,17 +33,6 @@ export const IA_MODEL_KEY = "synchro-ia-model"
 export const IA_COMPARE_KEY = "synchro-ia-compare"
 const PENDING_KEY = "synchro-capture-pending"
 const THREADS_KEY = "synchro-ia-threads"
-const MAX_THREADS = 8
-
-export type IaThread = {
-  id: string
-  updatedAt: string
-  title: string
-  provider: IaProviderId
-  model?: string
-  snapshot: DiagnosticSnapshot
-  messages: IaChatMessage[]
-}
 
 export type PendingCapture = {
   snapshot: DiagnosticSnapshot
@@ -161,7 +169,7 @@ export function readThreads(): IaThread[] {
 
 export function writeThreads(threads: IaThread[]) {
   if (!canUseStorage()) return
-  const next = threads.slice(0, MAX_THREADS).map((thread) => ({
+  const next = capThreads(threads).map((thread) => ({
     ...thread,
     snapshot: slimSnapshot(thread.snapshot),
   }))
@@ -186,14 +194,43 @@ export function writeThreads(threads: IaThread[]) {
 
 export async function upsertThread(thread: IaThread) {
   const snapshot = await rememberVisual(thread.snapshot)
-  const others = readThreads().filter((item) => item.id !== thread.id)
-  writeThreads([{ ...thread, snapshot }, ...others])
+  writeThreads(upsertThreadList(readThreads(), { ...thread, snapshot }))
   return snapshot
 }
 
-export function threadTitle(snapshot: DiagnosticSnapshot, question: string) {
-  const text = question.trim() || snapshot.summary[0] || snapshot.lab
-  return text.length > 72 ? `${text.slice(0, 70)}…` : text
+export function renameThread(id: string, title: string) {
+  const next = renameThreadIn(readThreads(), id, title)
+  if (!next) return null
+  writeThreads(next)
+  return readThreads()
+}
+
+export function deleteThread(id: string) {
+  writeThreads(deleteThreadIn(readThreads(), id))
+  return readThreads()
+}
+
+export function pinThread(id: string, pinned?: boolean) {
+  writeThreads(pinThreadIn(readThreads(), id, pinned))
+  return readThreads()
+}
+
+export function clearThreads() {
+  writeThreads([])
+}
+
+export async function importThreads(incoming: IaThread[]) {
+  for (const thread of incoming) {
+    if (thread.snapshot.imageDataUrl) {
+      try {
+        await rememberVisual(thread.snapshot)
+      } catch {
+        // quota : le JSON reste importé sans visuel plein
+      }
+    }
+  }
+  writeThreads(mergeThreadLists(readThreads(), incoming))
+  return readThreads()
 }
 
 export function labOf(snapshot: DiagnosticSnapshot): LabId {

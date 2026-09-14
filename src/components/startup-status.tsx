@@ -506,7 +506,7 @@ const NAV_ITEMS = [
     label: "IA",
     help: {
       title: "IA",
-      body: "Lecture d’une capture : visuel du laboratoire plus les données de la fenêtre. Gemini ou OpenAI, puis le modèle (catalogue + ceux visibles sur tes clés). Flux, ou deux modèles en parallèle sur le même pack. Décrit l’archive, ne pronostique pas.",
+      body: "Lecture d’une capture : visuel du laboratoire plus les données de la fenêtre. Gemini ou OpenAI, puis le modèle. Historique local : renommer, épingler, exporter (Markdown / JSON / PDF) ou supprimer. Décrit l’archive, ne pronostique pas.",
     },
   },
   {

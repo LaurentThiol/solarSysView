@@ -4,16 +4,21 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 import { HelpTip, LabelHelp } from "@/components/help"
 import { ModelSelect } from "@/components/ia/model-select"
+import { IaThreadList } from "@/components/ia/thread-list"
 import { Button } from "@/components/ui/button"
-import { snapshotThumb, snapshotVisual, withStoredImage } from "@/lib/capture/images"
-import { printSnapshot } from "@/lib/capture/pdf"
+import { snapshotVisual, withStoredImage } from "@/lib/capture/images"
+import { printSnapshot, printThread } from "@/lib/capture/pdf"
 import { formatCapturedAt, labLabel, type DiagnosticSnapshot } from "@/lib/capture/snapshot"
 import { suggestionsFor, DEFAULT_QUESTION } from "@/lib/capture/suggestions"
 import {
   CAPTURE_PENDING_EVENT,
   clearPending,
+  clearThreads,
+  deleteThread,
   hydratePending,
+  importThreads,
   keepVisual,
+  pinThread,
   readCompareModel,
   readCompareOn,
   readLastModel,
@@ -21,6 +26,7 @@ import {
   readPending,
   readProvider,
   readThreads,
+  renameThread,
   threadTitle,
   upsertThread,
   writeCompareModel,
@@ -31,6 +37,7 @@ import {
   type IaProviderId,
   type IaThread,
 } from "@/lib/capture/store"
+import { downloadThreadJson, downloadThreadMarkdown, downloadThreadsJson, parseThreadsExport, threadToMarkdown } from "@/lib/ia/export"
 import { streamIaChat } from "@/lib/ia/client"
 import {
   IA_MODELS,
@@ -160,10 +167,15 @@ export function IaLab() {
       nextProvider: IaProviderId | null,
       nextModel: string | null
     ) => {
+      const existing = readThreads().find((item) => item.id === nextSnapshot.id)
       const stored = await upsertThread({
         id: nextSnapshot.id,
         updatedAt: new Date().toISOString(),
-        title: threadTitle(nextSnapshot, nextSnapshot.question || nextMessages[0]?.content || ""),
+        title: existing?.titleLocked
+          ? existing.title
+          : threadTitle(nextSnapshot, nextSnapshot.question || nextMessages[0]?.content || ""),
+        titleLocked: existing?.titleLocked,
+        pinned: existing?.pinned,
         provider: nextProvider || "google",
         model: nextModel || undefined,
         snapshot: nextSnapshot,
@@ -543,8 +555,103 @@ export function IaLab() {
     setLiveLanes({})
   }
 
+  const activeThread = threads.find((item) => item.id === activeId) ?? null
+
+  function liveThread(thread: IaThread): IaThread {
+    if (thread.id !== activeId) return thread
+    return {
+      ...thread,
+      messages,
+      snapshot: snapshot ?? thread.snapshot,
+    }
+  }
+
+  function threadToMarkdownLive(thread: IaThread) {
+    return threadToMarkdown(liveThread(thread))
+  }
+
+  function applyStored(next: IaThread[]) {
+    setThreads((prev) =>
+      next.map((item) => {
+        const memory = prev.find((entry) => entry.id === item.id)?.snapshot
+        return memory ? { ...item, snapshot: keepVisual(memory, item.snapshot) } : item
+      })
+    )
+  }
+
+  function exportMarkdown(thread: IaThread) {
+    downloadThreadMarkdown(liveThread(thread))
+    setNotice("Fil exporté en Markdown.")
+  }
+
+  function exportJson(thread: IaThread) {
+    const packed = liveThread(thread)
+    downloadThreadJson(packed, Boolean(packed.snapshot.imageDataUrl))
+    setNotice("Fil exporté en JSON.")
+  }
+
+  function handleRename(id: string, title: string) {
+    const next = renameThread(id, title)
+    if (!next) return false
+    applyStored(next)
+    setNotice("Fil renommé.")
+    return true
+  }
+
+  function handleDelete(id: string) {
+    abortRef.current?.abort()
+    const next = deleteThread(id)
+    applyStored(next)
+    setNotice("Fil supprimé.")
+    if (activeId !== id) return
+    const fallback = next[0]
+    if (fallback) {
+      void openThread(fallback)
+    } else {
+      setActiveId(null)
+      setSnapshot(null)
+      setMessages([])
+    }
+  }
+
+  function handlePin(id: string) {
+    applyStored(pinThread(id))
+  }
+
+  function handleClearAll() {
+    if (!window.confirm("Supprimer toutes les lectures IA de ce navigateur ?")) return
+    abortRef.current?.abort()
+    clearThreads()
+    setThreads([])
+    setActiveId(null)
+    setSnapshot(null)
+    setMessages([])
+    setNotice("Historique IA effacé.")
+  }
+
+  async function handleImportFile(file: File) {
+    try {
+      const raw = JSON.parse(await file.text()) as unknown
+      const incoming = parseThreadsExport(raw)
+      if (!incoming.length) {
+        setError("Fichier d’export IA illisible.")
+        return
+      }
+      const next = await importThreads(incoming)
+      applyStored(next)
+      setError(null)
+      setNotice(
+        `${incoming.length} lecture${incoming.length > 1 ? "s" : ""} importée${
+          incoming.length > 1 ? "s" : ""
+        }.`
+      )
+    } catch {
+      setError("Fichier d’export IA illisible.")
+    }
+  }
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <div className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -699,11 +806,54 @@ export function IaLab() {
                 type="button"
                 className="text-[11px] text-primary underline-offset-2 hover:underline"
                 onClick={() => {
-                  void withStoredImage(snapshot).then((packed) => printSnapshot(packed))
+                  const thread = threads.find((item) => item.id === snapshot.id)
+                  void withStoredImage(snapshot).then((packed) => {
+                    if (thread && (thread.messages.length || messages.length)) {
+                      printThread({
+                        ...thread,
+                        snapshot: packed,
+                        messages: thread.id === activeId ? messages : thread.messages,
+                      })
+                    } else {
+                      printSnapshot(packed)
+                    }
+                  })
                 }}
               >
                 PDF
               </button>
+              {activeThread ? (
+                <>
+                  <button
+                    type="button"
+                    className="text-[11px] text-primary underline-offset-2 hover:underline"
+                    onClick={() => exportMarkdown(activeThread)}
+                  >
+                    Markdown
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[11px] text-primary underline-offset-2 hover:underline"
+                    onClick={() => exportJson(activeThread)}
+                  >
+                    JSON
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[11px] text-primary underline-offset-2 hover:underline"
+                    onClick={() => {
+                      void navigator.clipboard
+                        .writeText(threadToMarkdownLive(activeThread))
+                        .then(
+                          () => setNotice("Conversation copiée."),
+                          () => setNotice("Impossible de copier.")
+                        )
+                    }}
+                  >
+                    Copier
+                  </button>
+                </>
+              ) : null}
             </div>
             {techOpen ? (
               <pre className="mt-3 max-h-56 overflow-auto rounded-lg bg-muted/40 p-2 text-[11px] leading-4">
@@ -829,57 +979,23 @@ export function IaLab() {
         </form>
       </div>
 
-      <aside className="flex flex-col gap-2">
-        <p className="inline-flex items-center gap-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Captures
-          <HelpTip
-            title="Historique"
-            body="Les huit derniers packs restent dans ce navigateur. Rouvrir un fil restaure le fournisseur et le modèle. Une comparaison se relit en deux colonnes."
-          />
-        </p>
-        {threads.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Pas encore d’historique.</p>
-        ) : (
-          threads.map((thread) => {
-            const thumb = snapshotThumb(thread.snapshot)
-            return (
-              <button
-                key={thread.id}
-                type="button"
-                onClick={() => void openThread(thread)}
-                className={`flex items-start gap-2 rounded-lg border px-2 py-2 text-left text-xs leading-4 ${
-                  activeId === thread.id
-                    ? "border-primary bg-primary/10 text-foreground"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {thumb ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={thumb}
-                    alt=""
-                    className="h-12 w-16 shrink-0 rounded border border-border object-cover"
-                  />
-                ) : (
-                  <span className="flex h-12 w-16 shrink-0 items-center justify-center rounded border border-dashed border-border text-[10px]">
-                    —
-                  </span>
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="block font-medium text-foreground">{thread.title}</span>
-                  <span className="mt-0.5 block opacity-80">
-                    {labLabel(thread.snapshot.lab)}
-                    {thread.snapshot.tab ? ` · ${thread.snapshot.tab}` : ""}
-                    {" · "}
-                    {providerLabel(thread.provider)}
-                    {thread.model ? ` · ${modelLabel(thread.model, allModels)}` : ""}
-                  </span>
-                </span>
-              </button>
-            )
-          })
-        )}
-      </aside>
+      <IaThreadList
+        threads={threads}
+        activeId={activeId}
+        models={allModels}
+        onOpen={(thread) => void openThread(thread)}
+        onRename={handleRename}
+        onDelete={handleDelete}
+        onPin={handlePin}
+        onExportMarkdown={exportMarkdown}
+        onExportJson={exportJson}
+        onExportAll={() => {
+          downloadThreadsJson(threads.map(liveThread))
+          setNotice("Historique exporté en JSON.")
+        }}
+        onImportFile={(file) => void handleImportFile(file)}
+        onClearAll={handleClearAll}
+      />
 
       {previewOpen && visual ? (
         <button
