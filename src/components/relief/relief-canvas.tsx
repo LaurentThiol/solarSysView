@@ -223,7 +223,7 @@ export function ReliefCanvas({
         <p>Une plaque = un tirage · cinq cases = les cinq boules · glisser pour tourner</p>
         {hint ? <p className="tabular-nums">tirage #{hint.owner + 1}</p> : null}
       </div>
-      <div className="absolute top-3 right-3 flex flex-col items-center gap-1">
+      <div className="pointer-events-none absolute top-3 right-3 flex flex-col items-center gap-1">
         <Legend />
       </div>
       <div className="absolute top-3 left-3 flex gap-1">
