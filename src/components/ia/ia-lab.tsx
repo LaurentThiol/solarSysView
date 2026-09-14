@@ -673,7 +673,7 @@ export function IaLab() {
                   key={snapshot.id}
                   src={visual}
                   alt="Graphique capturé"
-                  className="max-h-56 w-full object-contain"
+                  className="max-h-72 w-full object-contain"
                 />
               </button>
             ) : (

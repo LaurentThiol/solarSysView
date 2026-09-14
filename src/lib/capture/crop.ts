@@ -55,11 +55,12 @@ function clampPos(value: number, size: number, max: number) {
 }
 
 /**
- * Capture window: the visible slice, expanded to include nearby charts
- * (the curve the reader is looking at), without exceeding maxWidth × maxHeight.
+ * Capture window: prefer the charts the reader is looking at.
+ * The previous path took the top of the page (title + form) clipped to the
+ * viewport, so Harmo / Analyse sent a screenshot without the curve.
  *
  * If no chart intersects the viewport, jump to the first chart rather than
- * sending the page chrome (title + form) without the graph.
+ * sending only the chrome.
  */
 export function preferredCrop(input: {
   visible: Rect
@@ -71,29 +72,41 @@ export function preferredCrop(input: {
   const maxW = input.maxWidth ?? CAPTURE_MAX_WIDTH
   const maxH = input.maxHeight ?? CAPTURE_MAX_HEIGHT
   const { nodeSize, visuals } = input
-  let crop = input.visible
-  if (crop.width < 1 || crop.height < 1) {
-    crop = {
-      x: 0,
-      y: 0,
-      width: Math.min(nodeSize.width, maxW),
-      height: Math.min(nodeSize.height, maxH),
-    }
-  }
+  const visible = input.visible.width >= 1 && input.visible.height >= 1
+    ? input.visible
+    : {
+        x: 0,
+        y: 0,
+        width: Math.min(nodeSize.width, maxW),
+        height: Math.min(nodeSize.height, maxH),
+      }
 
-  const visTop = crop.y
+  const visTop = visible.y
   const nearby = visuals.filter((v) => v.y + v.height >= visTop - 80 && v.y <= visTop + maxH)
 
+  let crop: Rect
   if (nearby.length) {
-    for (const visual of nearby) crop = unionRect(crop, padRect(visual, CHART_PAD))
+    crop = padRect(
+      nearby.reduce((acc, visual) => unionRect(acc, visual)),
+      CHART_PAD
+    )
+    const header = 88
+    crop = unionRect(crop, {
+      x: crop.x,
+      y: Math.max(0, Math.min(...nearby.map((v) => v.y)) - header),
+      width: crop.width,
+      height: header,
+    })
   } else if (visuals.length) {
     const first = visuals.reduce((best, item) => (item.y < best.y ? item : best))
     crop = unionRect(padRect(first, CHART_PAD), {
       x: first.x,
-      y: Math.max(0, first.y - 72),
+      y: Math.max(0, first.y - 88),
       width: first.width,
-      height: first.height + 72,
+      height: first.height + 88,
     })
+  } else {
+    crop = visible
   }
 
   const width = Math.min(Math.max(Math.round(crop.width), CAPTURE_MIN_WIDTH), maxW, Math.max(1, nodeSize.width))

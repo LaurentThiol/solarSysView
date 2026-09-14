@@ -31,6 +31,8 @@ test("a chart just below the fold is pulled into the capture window", () => {
   assert.ok(crop.y <= 900)
   assert.ok(crop.y + crop.height >= 900 + 280)
   assert.ok(crop.height <= CAPTURE_MAX_HEIGHT)
+  // Do not keep the whole page title: the curve must dominate the image.
+  assert.ok(crop.y >= 700)
 })
 
 test("when scrolled onto a curve, the crop stays on that slice, not the page top", () => {
@@ -53,8 +55,21 @@ test("if the viewport is only chrome, jump to the first chart", () => {
     visuals: [{ x: 40, y: 2100, width: 1000, height: 300 }],
     nodeSize: { width: 1100, height: 2600 },
   })
-  assert.ok(crop.y >= 2100 - 72 - CHART_PAD)
+  assert.ok(crop.y >= 2100 - 88 - CHART_PAD)
   assert.ok(rectsIntersect(crop, { x: 40, y: 2100, width: 1000, height: 300 }))
+})
+
+test("adjacent charts stay together in one crop", () => {
+  const crop = preferredCrop({
+    visible: { x: 0, y: 800, width: 1100, height: 700 },
+    visuals: [
+      { x: 24, y: 900, width: 1040, height: 280 },
+      { x: 24, y: 1220, width: 1040, height: 280 },
+    ],
+    nodeSize: { width: 1100, height: 2200 },
+  })
+  assert.ok(rectsIntersect(crop, { x: 24, y: 900, width: 1040, height: 280 }))
+  assert.ok(rectsIntersect(crop, { x: 24, y: 1220, width: 1040, height: 280 }))
 })
 
 test("unionRect and relativeRect keep chart offsets", () => {
