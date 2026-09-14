@@ -91,7 +91,7 @@ Carte 3D des tirages : chaque grille est le glyphe Morpho 5×10, la **couleur su
 - **Centroïde × étendue** — les grilles de même équilibre se superposent ;
 - **Superposé 5×10** — l’histogramme 1–50 en montagne.
 
-Le curseur **Fusion** règle l’écart entre îlots et le lissage, pour passer de l’archipel à une carte continue. Glisser fait tourner la carte ; molette pour zoomer ; option Rotation. Lecture **Crêtes** : profil `n1→n5` en ruban, ou nappe temps × rang. Ce n’est pas un pronostic : le voisinage sur la carte est un choix de mise en page.
+Le curseur **Fusion** règle l’écart entre îlots et le lissage, pour passer de l’archipel à une carte continue. Changer d’échantillon applique le décalage recommandé (hexagone à 20, angle d’or ensuite). Glisser fait tourner la carte ; molette pour zoomer ; option Rotation. Lecture **Crêtes** : profil `n1→n5` en ruban, ou nappe temps × rang. Ce n’est pas un pronostic : le voisinage sur la carte est un choix de mise en page.
 
 ## Chartisme (`/chartisme`)
 

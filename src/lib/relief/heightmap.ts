@@ -37,7 +37,7 @@ function normalize3(x: number, y: number, z: number): [number, number, number] {
   return [x / n, y / n, z / n]
 }
 
-export function boundsOf(peaks: Peak[], pad = 1.4) {
+export function boundsOf(peaks: Peak[], pad = 0.85) {
   if (peaks.length === 0) {
     return { minX: -1, maxX: 1, minZ: -1, maxZ: 1 }
   }

@@ -129,7 +129,12 @@ export function ReliefLab() {
                   size="sm"
                   variant={sample === n ? "default" : "outline"}
                   aria-pressed={sample === n}
-                  onClick={() => setSample(n)}
+                  onClick={() => {
+                    setSample(n)
+                    const next = takeLastDraws(archive, n)
+                    setOffset(recommendedOffset(next.length))
+                    setCamera(DEFAULT_CAMERA)
+                  }}
                 >
                   {n}
                 </Button>
@@ -300,7 +305,7 @@ export function ReliefLab() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="h-[min(72vh,640px)] min-h-[420px]">
+          <div className="h-[min(62vh,560px)] min-h-[400px]">
             {chronological.length === 0 ? (
               <p className="p-6 text-sm text-muted-foreground">Aucun tirage à cartographier.</p>
             ) : (

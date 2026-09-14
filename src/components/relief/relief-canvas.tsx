@@ -76,6 +76,8 @@ export function ReliefCanvas({
     sceneRef.current = { field, quads, anchors, contour, hoverOwner, wire, yScale }
   }, [anchors, contour, field, hoverOwner, quads, wire, yScale])
 
+  const lastKeyRef = useRef("")
+
   useEffect(() => {
     if (!autoRotate) return
     let frame = 0
@@ -94,7 +96,14 @@ export function ReliefCanvas({
     let alive = true
     const loop = () => {
       if (!alive) return
-      paintScene(canvasRef.current, wrapRef.current, cameraRef.current, sceneRef.current, projectedRef)
+      paintScene(
+        canvasRef.current,
+        wrapRef.current,
+        cameraRef.current,
+        sceneRef.current,
+        projectedRef,
+        lastKeyRef
+      )
       frame = window.requestAnimationFrame(loop)
     }
     frame = window.requestAnimationFrame(loop)
@@ -142,7 +151,7 @@ export function ReliefCanvas({
   return (
     <div
       ref={wrapRef}
-      className="relative h-full min-h-[420px] w-full overflow-hidden rounded-lg bg-[#12182a]"
+      className="relative h-full min-h-[400px] w-full overflow-hidden rounded-lg bg-[#12182a]"
     >
       <canvas
         ref={canvasRef}
@@ -256,7 +265,8 @@ function paintScene(
   wrap: HTMLDivElement | null,
   cam: Camera,
   scene: Scene,
-  projectedRef: { current: Array<{ owner: number; x: number; y: number }> }
+  projectedRef: { current: Array<{ owner: number; x: number; y: number }> },
+  lastKeyRef: { current: string }
 ) {
   if (!canvas) return
   const host = wrap ?? canvas.parentElement
@@ -268,11 +278,36 @@ function paintScene(
   const dpr = Math.min(2, typeof window === "undefined" ? 1 : window.devicePixelRatio || 1)
   const bw = Math.max(1, Math.round(cssW * dpr))
   const bh = Math.max(1, Math.round(cssH * dpr))
+  const { field, quads, anchors, contour, hoverOwner, wire, yScale } = scene
+  const key = [
+    cssW,
+    cssH,
+    cam.yaw.toFixed(4),
+    cam.pitch.toFixed(4),
+    cam.zoom.toFixed(3),
+    field?.cols ?? 0,
+    field?.rows ?? 0,
+    field?.maxH?.toFixed(4) ?? "0",
+    quads.length,
+    anchors.length,
+    hoverOwner ?? -1,
+    wire ? 1 : 0,
+    contour.length,
+    yScale.toFixed(3),
+  ].join("|")
+  if (
+    key === lastKeyRef.current &&
+    canvas.dataset.relief &&
+    canvas.width === bw &&
+    canvas.height === bh
+  ) {
+    return
+  }
+  lastKeyRef.current = key
   if (canvas.width !== bw) canvas.width = bw
   if (canvas.height !== bh) canvas.height = bh
   const ctx = canvas.getContext("2d")
   if (!ctx) return
-  const { field, quads, anchors, contour, hoverOwner, wire, yScale } = scene
   try {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, cssW, cssH)

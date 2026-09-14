@@ -68,7 +68,7 @@ export function fitScale(
   height: number
 ) {
   const span = Math.max(maxX - minX, maxZ - minZ, 2)
-  return (0.42 * Math.min(width, height)) / span
+  return (0.56 * Math.min(width, height)) / span
 }
 
 /** Hauteur cible ≈ 36 % de l’emprise, pour que le relief se lise quelle que soit la maille. */
