@@ -45,7 +45,7 @@ usage() {
 ${C_BOLD}Synchro${C_RESET} — lanceur local (EuroMillions)
 
 Usage:
-  ./launch                 Démarre API + UI, vérifie Neon et rattrape les tirages si besoin
+  ./launch                 Démarre API + UI, vérifie Neon / Ollama et rattrape les tirages si besoin
   ./launch start           Idem
   ./launch stop            Arrêt propre (ports ${BACKEND_PORT:-8000} / ${FRONTEND_PORT:-43147})
   ./launch stop --force    Libère les ports même si le processus n'est pas Synchro
@@ -80,7 +80,8 @@ Variables (processus > .env > défaut):
   SYNCHRO_FRONTEND_PORT      Port UI   (défaut: 43147)
   SYNCHRO_RUN_DIR            Journaux et PID (défaut: .run/)
   SYNCHRO_PYTHON             Interpréteur Python 3.10+ (sinon auto)
-  SYNCHRO_SKIP_OLLAMA        1 = ne pas démarrer Ollama au start
+  SYNCHRO_OLLAMA             Binaire ollama (sinon PATH + emplacements connus)
+  SYNCHRO_SKIP_OLLAMA        1 = ne pas vérifier / démarrer Ollama au start
 
 Arrêt propre : bouton Quitter dans l'UI, Ctrl+C, ou ./launch stop.
 EOF
@@ -1208,52 +1209,210 @@ wait_llm_up() {
   return 1
 }
 
-ensure_local_llm() {
-  if [[ "${SYNCHRO_SKIP_OLLAMA:-}" == "1" ]]; then
-    return 0
-  fi
-  local host found
-  host="$(llm_configured_host)"
-  found="$(llm_find_up "$host" || true)"
-  if [[ -n "$found" ]]; then
-    ok "LLM local : ${found}"
-    return 0
-  fi
-  if [[ "$(uname -s)" == Darwin && -d /Applications/Ollama.app ]]; then
-    info "Ollama.app installé mais ${host} refuse la connexion — ouverture…"
-    open -a Ollama >/dev/null 2>&1 || true
-    found="$(wait_llm_up "$host" || true)"
-    if [[ -n "$found" ]]; then
-      ok "LLM local : ${found}"
+find_ollama_bin() {
+  local c resolved
+  if [[ -n "${SYNCHRO_OLLAMA:-}" ]]; then
+    if [[ -x "${SYNCHRO_OLLAMA}" ]]; then
+      printf '%s\n' "$SYNCHRO_OLLAMA"
       return 0
     fi
+    resolved="$(command -v "$SYNCHRO_OLLAMA" 2>/dev/null || true)"
+    if [[ -n "$resolved" && -x "$resolved" ]]; then
+      printf '%s\n' "$resolved"
+      return 0
+    fi
+    return 1
   fi
-  if command -v ollama >/dev/null 2>&1; then
+  resolved="$(command -v ollama 2>/dev/null || true)"
+  if [[ -n "$resolved" && -x "$resolved" ]]; then
+    printf '%s\n' "$resolved"
+    return 0
+  fi
+  for c in \
+    /usr/local/bin/ollama \
+    /opt/homebrew/bin/ollama \
+    /usr/bin/ollama \
+    "${HOME}/.local/bin/ollama" \
+    /Applications/Ollama.app/Contents/Resources/ollama \
+    /Applications/Ollama.app/Contents/MacOS/ollama
+  do
+    if [[ -x "$c" ]]; then
+      printf '%s\n' "$c"
+      return 0
+    fi
+  done
+  return 1
+}
+
+ollama_version_label() {
+  local bin="$1" out
+  [[ -n "$bin" && -x "$bin" ]] || return 1
+  out="$("$bin" --version 2>&1 | tr -d '\r' | head -n 1 || true)"
+  if [[ -z "$out" || "$out" == *"not found"* || "$out" == *"No such file"* || "$out" == *"command not found"* ]]; then
+    return 1
+  fi
+  printf '%s' "$out"
+}
+
+ollama_howto() {
+  cat <<EOF
+Ollama n'est pas installé correctement (CLI introuvable ou cassé).
+  macOS  : https://ollama.com/download  ou  brew install ollama
+           ouvrez Ollama.app une fois pour poser le binaire
+  Linux  : curl -fsSL https://ollama.com/install.sh | sh
+  Puis   : ollama pull llama3.2
+  Autre  : LOCAL_LLM_BASE_URL=http://127.0.0.1:1234/v1  (LM Studio)
+           SYNCHRO_OLLAMA=/chemin/vers/ollama ./launch
+  Forcer : SYNCHRO_SKIP_OLLAMA=1 ./launch  (pastille LLM local off)
+EOF
+}
+
+llm_json_names() {
+  local py="$ROOT/.venv/bin/python"
+  if [[ ! -x "$py" ]]; then
+    py="$(command -v python3 || command -v python || true)"
+  fi
+  [[ -n "$py" ]] || return 1
+  "$py" -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+items = data.get("models") or data.get("data") or []
+names = []
+for item in items:
+    if not isinstance(item, dict):
+        continue
+    name = item.get("name") or item.get("id") or ""
+    if name:
+        names.append(str(name))
+print(" ".join(names))
+'
+}
+
+llm_model_names() {
+  local host="$1" json names
+  [[ -n "$host" ]] || return 1
+  json="$(curl -fsS --noproxy '*' --max-time 2 "${host}/api/tags" 2>/dev/null || true)"
+  if [[ -z "$json" ]]; then
+    json="$(curl -fsS --noproxy '*' --max-time 2 "$(llm_models_url "$host")" 2>/dev/null || true)"
+  fi
+  [[ -n "$json" ]] || return 1
+  names="$(printf '%s' "$json" | llm_json_names 2>/dev/null || true)"
+  [[ -n "$names" ]] || return 1
+  printf '%s' "$names"
+}
+
+ensure_local_llm() {
+  LLM_LAUNCH_SUMMARY="non vérifié"
+  if [[ "${SYNCHRO_SKIP_OLLAMA:-}" == "1" ]]; then
+    info "Ollama : ignoré (SYNCHRO_SKIP_OLLAMA=1)"
+    LLM_LAUNCH_SUMMARY="ignoré"
+    return 0
+  fi
+  local host found bin ver names extra cli_ok=0
+  host="$(llm_configured_host)"
+  found="$(llm_find_up "$host" || true)"
+  bin="$(find_ollama_bin || true)"
+  if [[ -z "$bin" && "$(uname -s)" == Darwin && -d /Applications/Ollama.app && -z "$found" ]]; then
+    info "Ollama.app est installé, CLI encore introuvable — ouverture de l'app…"
+    open -a Ollama >/dev/null 2>&1 || true
+    found="$(wait_llm_up "$host" || true)"
+    bin="$(find_ollama_bin || true)"
+  fi
+  if [[ -n "$bin" ]]; then
+    if ver="$(ollama_version_label "$bin")"; then
+      ok "Ollama CLI : ${ver}  (${bin})"
+      cli_ok=1
+    else
+      warn "Ollama trouvé (${bin}) mais « ollama --version » échoue — installation cassée. Réinstallez : https://ollama.com"
+      ollama_howto >&2
+    fi
+  else
+    if [[ "$(uname -s)" == Darwin && -d /Applications/Ollama.app ]]; then
+      warn "Ollama.app est dans /Applications mais le CLI est introuvable. Ouvrez l'app une fois, ou : brew install ollama"
+    elif [[ -n "$found" ]]; then
+      printf '%sOllama CLI : absent (le serveur répond déjà — Docker / autre install ?)%s\n' "$C_DIM" "$C_RESET"
+    else
+      warn "Ollama : CLI introuvable dans PATH ni aux emplacements connus."
+      ollama_howto >&2
+    fi
+  fi
+
+  if [[ -z "$found" && "$cli_ok" -eq 1 ]]; then
+    if [[ "$(uname -s)" == Darwin && -d /Applications/Ollama.app ]]; then
+      info "Ollama CLI OK mais ${host} refuse la connexion — ouverture d'Ollama.app…"
+      open -a Ollama >/dev/null 2>&1 || true
+      found="$(wait_llm_up "$host" || true)"
+    fi
+  fi
+  if [[ -z "$found" && "$cli_ok" -eq 1 ]]; then
     info "Démarrage de ollama serve (${host})…"
     mkdir -p "$RUN_DIR"
     (
       trap '' INT
-      exec ollama serve
+      exec "$bin" serve
     ) >>"$RUN_DIR/ollama.log" 2>&1 &
     found="$(wait_llm_up "$host" || true)"
-    if [[ -n "$found" ]]; then
-      ok "LLM local : ${found}"
-      return 0
+  fi
+  if [[ -z "$found" ]]; then
+    if [[ "$cli_ok" -eq 1 ]]; then
+      warn "Ollama CLI OK mais le serveur n'écoute pas sur ${host}. Journal : ${RUN_DIR}/ollama.log"
+      LLM_LAUNCH_SUMMARY="CLI OK, serveur injoignable (${host})"
+    else
+      LLM_LAUNCH_SUMMARY="non installé — https://ollama.com"
     fi
-    warn "Ollama n'a pas ouvert ${host}. Journal : ${RUN_DIR}/ollama.log"
     return 0
   fi
-  warn "LLM local off : rien n'écoute sur ${host}. Installez https://ollama.com puis relancez, ou LOCAL_LLM_BASE_URL pour LM Studio (1234) / llama-server (8080)."
+  names="$(llm_model_names "$found" || true)"
+  if [[ -z "$names" && "$cli_ok" -eq 1 ]]; then
+    extra="$("$bin" list 2>/dev/null | awk 'NR>1 && $1 != "" {print $1}' | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+    names="$extra"
+  fi
+  if [[ -z "$names" ]]; then
+    warn "Ollama écoute (${found}) mais aucun modèle. Ex. : ${bin:-ollama} pull llama3.2"
+    LLM_LAUNCH_SUMMARY="${found} · aucun modèle"
+    return 0
+  fi
+  ok "Ollama serveur : ${found} · ${names}"
+  if [[ "$cli_ok" -eq 1 ]]; then
+    LLM_LAUNCH_SUMMARY="${ver} · ${found} · ${names}"
+  else
+    LLM_LAUNCH_SUMMARY="${found} · ${names}"
+  fi
 }
 
 ollama_doctor() {
-  local host found
+  if [[ "${SYNCHRO_SKIP_OLLAMA:-}" == "1" ]]; then
+    printf '%sOllama : ignoré (SYNCHRO_SKIP_OLLAMA=1)%s\n' "$C_DIM" "$C_RESET"
+    return 0
+  fi
+  local host found bin ver names
   host="$(llm_configured_host)"
-  found="$(llm_find_up "$host" || true)"
-  if [[ -n "$found" ]]; then
-    ok "LLM local : ${found}"
+  bin="$(find_ollama_bin || true)"
+  if [[ -z "$bin" ]]; then
+    if [[ "$(uname -s)" == Darwin && -d /Applications/Ollama.app ]]; then
+      warn "Ollama.app est dans /Applications mais le CLI est introuvable — ouvrez l'app une fois."
+    else
+      warn "Ollama : pas installé (CLI introuvable)."
+    fi
+    ollama_howto >&2
+  elif ! ver="$(ollama_version_label "$bin")"; then
+    warn "Ollama : ${bin} présent mais « ollama --version » échoue — réinstallez."
   else
-    printf '%sLLM local : injoignable (%s) — lancez ollama serve, ou LOCAL_LLM_BASE_URL. Brain ne bascule pas sur le cloud.%s\n' "$C_DIM" "$host" "$C_RESET"
+    ok "Ollama CLI : ${ver}  (${bin})"
+  fi
+  found="$(llm_find_up "$host" || true)"
+  if [[ -z "$found" ]]; then
+    printf '%sOllama serveur : injoignable (%s) — ./launch le démarrera si le CLI est OK.%s\n' "$C_DIM" "$host" "$C_RESET"
+    return 0
+  fi
+  names="$(llm_model_names "$found" || true)"
+  if [[ -n "$names" ]]; then
+    ok "Ollama serveur : ${found} · ${names}"
+  else
+    warn "Ollama écoute (${found}) mais aucun modèle. Ex. : ollama pull llama3.2"
   fi
 }
 
@@ -1468,6 +1627,7 @@ cmd_start() {
   printf '\n%sSynchro est lancé%s\n' "$C_BOLD" "$C_RESET"
   printf '  UI   %s\n' "$FRONTEND_URL"
   printf '  API  %s  (alive : %s · docs : %s/docs)\n' "$BACKEND_URL" "$ALIVE_URL" "$BACKEND_URL"
+  printf '  LLM  %s\n' "${LLM_LAUNCH_SUMMARY:-non vérifié}"
   printf '  Logs %s  (autre terminal : ./launch logs -f)\n' "$RUN_DIR"
   printf '%s  Arrêt : bouton Quitter dans l’UI, Ctrl+C, ou ./launch stop.%s\n\n' "$C_DIM" "$C_RESET"
 

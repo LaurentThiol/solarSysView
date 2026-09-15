@@ -51,6 +51,7 @@ def test_launch_help_lists_new_commands() -> None:
     assert "./launch restart" in out
     assert "./launch stop --force" in out
     assert "HOST du .env" in out
+    assert "vérifie Neon / Ollama" in out
 
 
 def test_launch_reloads_only_python_package() -> None:
@@ -64,6 +65,9 @@ def test_launch_reloads_only_python_package() -> None:
     assert "--noproxy '*'" in text
     assert "ollama serve" in text
     assert "ensure_local_llm" in text
+    assert "find_ollama_bin" in text
+    assert "ollama_version_label" in text
+    assert "SYNCHRO_OLLAMA" in text
 
 
 def test_stop_force_is_accepted() -> None:
@@ -168,3 +172,34 @@ if env_database_ok; then echo DB_OK; else echo DB_BAD; fi
     )
     assert result.returncode == 0, result.stderr
     assert "DB_BAD" in result.stdout
+
+
+def test_find_ollama_bin_honors_synchro_ollama(tmp_path: Path) -> None:
+    exe = tmp_path / "ollama"
+    exe.write_text("#!/bin/sh\necho ollama version is 0.11.0\n", encoding="utf-8")
+    exe.chmod(0o755)
+    result = _source(
+        'printf "bin=%s\\n" "$(find_ollama_bin)"',
+        env={"SYNCHRO_OLLAMA": str(exe)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert f"bin={exe}" in result.stdout
+
+
+def test_ollama_version_label_reads_cli(tmp_path: Path) -> None:
+    exe = tmp_path / "ollama"
+    exe.write_text("#!/bin/sh\necho 'ollama version is 0.11.0'\n", encoding="utf-8")
+    exe.chmod(0o755)
+    result = _source(
+        f'ver="$(ollama_version_label {shlex.quote(str(exe))})" && printf "ver=%s\\n" "$ver"'
+    )
+    assert result.returncode == 0, result.stderr
+    assert "0.11.0" in result.stdout
+
+
+def test_ollama_version_label_rejects_stub(tmp_path: Path) -> None:
+    exe = tmp_path / "ollama"
+    exe.write_text("#!/bin/sh\necho 'ollama: command not found'\n", encoding="utf-8")
+    exe.chmod(0o755)
+    result = _source(f"ollama_version_label {shlex.quote(str(exe))}")
+    assert result.returncode != 0
