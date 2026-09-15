@@ -58,6 +58,8 @@ def test_launch_reloads_only_python_package() -> None:
     assert "--reload-dir synchro" in text
     assert r'data.get(\"' not in text
     assert "trap '' INT" in text
+    assert "${host}/v1/models" in text
+    assert "LOCAL_LLM_BASE_URL" in text
 
 
 def test_stop_force_is_accepted() -> None:

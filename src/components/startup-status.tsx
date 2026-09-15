@@ -447,17 +447,22 @@ function LocalLlmPill() {
     let cancelled = false
     const ping = async () => {
       try {
-        const response = await fetch("/api/brain/status", { cache: "no-store" })
-        const payload = (await response.json()) as {
-          ollama?: { ok?: boolean; host?: string }
-          local?: boolean
-          localHost?: string
+        const brainRes = await fetch("/api/brain/status", { cache: "no-store" })
+        const brain = (await brainRes.json()) as {
+          ollama?: { ok?: boolean; host?: string; models?: string[] }
         }
         if (cancelled) return
-        const ok = Boolean(payload.ollama?.ok || payload.local)
+        if (brain.ollama?.ok) {
+          setLocal("ok")
+          if (brain.ollama.host) setHost(brain.ollama.host.replace(/^https?:\/\//, ""))
+          return
+        }
+        const iaRes = await fetch("/api/ia/status", { cache: "no-store" })
+        const ia = (await iaRes.json()) as { local?: boolean; localHost?: string }
+        if (cancelled) return
+        const ok = Boolean(ia.local)
         setLocal(ok ? "ok" : "off")
-        const host = payload.ollama?.host || payload.localHost
-        if (host) setHost(host.replace(/^https?:\/\//, ""))
+        if (ia.localHost) setHost(ia.localHost.replace(/^https?:\/\//, ""))
       } catch {
         if (!cancelled) setLocal("off")
       }

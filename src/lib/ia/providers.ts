@@ -1,3 +1,4 @@
+import { apiBase } from "@/lib/api-base"
 import { liveEnv } from "@/lib/env-file"
 import { isPlaceholder } from "@/lib/secrets"
 import { IMAGE_MAX_CHARS, JSON_BUDGET } from "@/lib/capture/snapshot"
@@ -18,6 +19,7 @@ import {
   type IaModelOption,
   type IaProviderId,
 } from "@/lib/ia/models"
+import { localChatCompletionsUrl, localModelsUrl, normalizeLocalLlmBase } from "@/lib/ia/local-url"
 import { IA_SYSTEM_PROMPT } from "@/lib/ia/prompt"
 import {
   geminiDeltaText,
@@ -64,14 +66,11 @@ function openaiKey() {
   return value && !isPlaceholder(value) ? value : ""
 }
 
+export { localChatCompletionsUrl, localModelsUrl, normalizeLocalLlmBase } from "@/lib/ia/local-url"
+
 export function localLlmBase() {
   const fromEnv = (liveEnv("LOCAL_LLM_BASE_URL") || liveEnv("OLLAMA_HOST")).trim()
-  return (fromEnv || "http://127.0.0.1:11434").replace(/\/$/, "")
-}
-
-function localChatCompletionsUrl(base: string) {
-  if (/\/v1$/.test(base)) return `${base}/chat/completions`
-  return `${base}/v1/chat/completions`
+  return normalizeLocalLlmBase(fromEnv || "http://127.0.0.1:11434")
 }
 
 function systemText(override?: string | null) {
@@ -124,80 +123,107 @@ async function listOpenAiIds(key: string): Promise<string[] | null> {
   }
 }
 
-async function listLocalIds(base: string): Promise<string[] | null> {
+function chatIdsFromNames(names: string[]) {
+  return names.filter((id) => isModelId(id) && isLocalChatModel(id))
+}
+
+async function listLocalIds(base: string, timeoutMs = LIVE_TIMEOUT_MS): Promise<string[] | null> {
   try {
     const tags = await fetch(`${base}/api/tags`, {
-      signal: AbortSignal.timeout(LIVE_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
       cache: "no-store",
     })
     if (tags.ok) {
       const data = (await tags.json()) as { models?: Array<{ name?: string }> }
-      const ids = (data.models ?? [])
-        .map((item) => item.name || "")
-        .filter((id) => isModelId(id) && isLocalChatModel(id))
-      return ids
+      return chatIdsFromNames((data.models ?? []).map((item) => item.name || ""))
     }
   } catch {
-    /* try OpenAI-compat */
+    /* llama-server / LM Studio have no /api/tags */
   }
   try {
-    const modelsUrl = /\/v1$/.test(base) ? `${base}/models` : `${base}/v1/models`
-    const response = await fetch(modelsUrl, {
-      signal: AbortSignal.timeout(LIVE_TIMEOUT_MS),
+    const response = await fetch(localModelsUrl(base), {
+      signal: AbortSignal.timeout(timeoutMs),
       cache: "no-store",
     })
     if (!response.ok) return null
     const data = (await response.json()) as { data?: Array<{ id?: string }> }
-    return (data.data ?? [])
-      .map((item) => item.id || "")
-      .filter((id) => isModelId(id) && isLocalChatModel(id))
+    return chatIdsFromNames((data.data ?? []).map((item) => item.id || ""))
   } catch {
     return null
   }
+}
+
+async function listLocalIdsViaPython(): Promise<string[] | null> {
+  const python = apiBase()
+  if (!python) return null
+  try {
+    const response = await fetch(`${python}/api/brain/status`, {
+      signal: AbortSignal.timeout(LIVE_TIMEOUT_MS),
+      cache: "no-store",
+    })
+    if (!response.ok) return null
+    const data = (await response.json()) as {
+      ollama?: { ok?: boolean; models?: string[] }
+    }
+    if (!data.ollama?.ok) return null
+    return chatIdsFromNames(data.ollama.models ?? [])
+  } catch {
+    return null
+  }
+}
+
+type LocalProbe = { ok: boolean; ids: string[] | null; at: number; host: string }
+
+let localProbeCache: LocalProbe | null = null
+const LOCAL_PROBE_TTL_MS = 10_000
+const LOCAL_PROBE_TIMEOUT_MS = 1_500
+
+export function clearLocalLlmProbeCache() {
+  localProbeCache = null
+}
+
+export async function probeLocalLlm(host = localLlmBase(), timeoutMs = LOCAL_PROBE_TIMEOUT_MS): Promise<LocalProbe> {
+  if (
+    localProbeCache &&
+    localProbeCache.host === host &&
+    Date.now() - localProbeCache.at < LOCAL_PROBE_TTL_MS
+  ) {
+    return localProbeCache
+  }
+  let ids = await listLocalIds(host, timeoutMs)
+  if (ids === null) ids = await listLocalIdsViaPython()
+  const probe: LocalProbe = { ok: ids !== null, ids, at: Date.now(), host }
+  localProbeCache = probe
+  return probe
 }
 
 export async function iaStatus(options: { live?: boolean } = {}) {
   const google = Boolean(googleKey())
   const openai = Boolean(openaiKey())
   const host = localLlmBase()
-  let liveLocal: string[] | null = null
   let liveGoogle: string[] | null = null
   let liveOpenAI: string[] | null = null
-  let local = false
+  const extra: Array<Promise<void>> = []
   if (options.live) {
-    const tasks: Array<Promise<void>> = []
-    tasks.push(
-      listLocalIds(host).then((ids) => {
-        liveLocal = ids
-      })
-    )
     if (google) {
-      tasks.push(
+      extra.push(
         listGeminiIds(googleKey()).then((ids) => {
           liveGoogle = ids
         })
       )
     }
     if (openai) {
-      tasks.push(
+      extra.push(
         listOpenAiIds(openaiKey()).then((ids) => {
           liveOpenAI = ids
         })
       )
     }
-    await Promise.all(tasks)
-    local = liveLocal !== null
-  } else {
-    try {
-      const response = await fetch(`${host}/api/tags`, {
-        signal: AbortSignal.timeout(1_500),
-        cache: "no-store",
-      })
-      local = response.ok
-    } catch {
-      local = false
-    }
   }
+  const localPromise = probeLocalLlm(host)
+  const [localProbe] = await Promise.all([localPromise, ...extra])
+  const liveLocal = localProbe.ids
+  const local = localProbe.ok
   const fallback: IaProviderId | null = google ? "google" : openai ? "openai" : local ? "local" : null
   const models: IaModelOption[] = mergeModelOptions({
     google,
@@ -217,7 +243,7 @@ export async function iaStatus(options: { live?: boolean } = {}) {
     live: {
       google: google ? liveGoogle !== null : null,
       openai: openai ? liveOpenAI !== null : null,
-      local: options.live ? liveLocal !== null : local,
+      local,
     },
     models,
   }

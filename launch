@@ -1136,14 +1136,26 @@ harmo_doctor() {
 }
 
 ollama_doctor() {
-  local host="${OLLAMA_HOST:-}"
+  local host="${LOCAL_LLM_BASE_URL:-${OLLAMA_HOST:-}}"
   if [[ -z "$host" && -f "$ROOT/.env" ]]; then
-    host="$(grep -E '^OLLAMA_HOST=' "$ROOT/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' || true)"
+    host="$(dotenv_value LOCAL_LLM_BASE_URL)"
+    [[ -n "$host" ]] || host="$(dotenv_value OLLAMA_HOST)"
   fi
   host="${host:-http://127.0.0.1:11434}"
   host="${host%/}"
-  if command -v curl >/dev/null 2>&1 && curl -fsS --max-time 2 "${host}/api/tags" >/dev/null 2>&1; then
-    ok "Ollama : ${host}"
+  case "$host" in
+    http://localhost*) host="http://127.0.0.1${host#http://localhost}" ;;
+    https://localhost*) host="https://127.0.0.1${host#https://localhost}" ;;
+  esac
+  local models_url="${host}/v1/models"
+  if [[ "$host" == */v1 ]]; then
+    models_url="${host}/models"
+  fi
+  if command -v curl >/dev/null 2>&1 && {
+    curl -fsS --max-time 2 "${host}/api/tags" >/dev/null 2>&1 \
+      || curl -fsS --max-time 2 "$models_url" >/dev/null 2>&1
+  }; then
+    ok "LLM local : ${host}"
   else
     printf '%sLLM local : injoignable (%s) — Brain reste local-off, pas de bascule cloud.%s\n' "$C_DIM" "$host" "$C_RESET"
   fi

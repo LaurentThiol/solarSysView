@@ -205,6 +205,18 @@ def test_should_not_retry_set_placeholder_syntax_error() -> None:
     assert _should_retry_ping(err) is False
 
 
+def test_brain_readings_window_column_is_quoted() -> None:
+    import re
+    from pathlib import Path
+
+    from synchro import db as db_mod
+
+    assert re.search(r'"window"\s+JSONB', db_mod.SCHEMA_SQL)
+    assert not re.search(r"(?m)^\s+window\s+JSONB", db_mod.SCHEMA_SQL)
+    source = Path(db_mod.__file__).read_text(encoding="utf-8")
+    assert 'params, "window", draw_to' in source
+
+
 def test_reload_env_rereads_settings() -> None:
     with _client() as client:
         response = client.post("/api/reload-env")

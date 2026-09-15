@@ -189,7 +189,8 @@ CREATE TABLE IF NOT EXISTS brain_readings (
     handle          TEXT NOT NULL,
     lab             TEXT NOT NULL,
     params          JSONB NOT NULL DEFAULT '{}'::jsonb,
-    window           JSONB NOT NULL DEFAULT '{}'::jsonb,
+    -- WINDOW is a reserved word in PostgreSQL (window functions).
+    "window"        JSONB NOT NULL DEFAULT '{}'::jsonb,
     observed_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     draw_to         DATE,
     payload         JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -1044,7 +1045,7 @@ def insert_brain_reading(payload: dict[str, Any]) -> dict[str, Any]:
             cur.execute(
                 """
                 INSERT INTO brain_readings (
-                    catalog_id, handle, lab, params, window, draw_to, payload,
+                    catalog_id, handle, lab, params, "window", draw_to, payload,
                     source, thread_id, embedding, embedding_model
                 ) VALUES (
                     %(catalog_id)s, %(handle)s, %(lab)s, %(params)s, %(window)s,

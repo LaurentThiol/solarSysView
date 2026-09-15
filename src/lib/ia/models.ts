@@ -324,6 +324,11 @@ export function pickAvailableModel(
 ) {
   const available = models.filter((item) => item.provider === provider && item.available)
   if (!available.length) return null
+  const live = available.filter((item) => item.source === "live")
+  if (provider === "local" && live.length) {
+    if (stored && live.some((item) => item.id === stored)) return stored
+    return live[0].id
+  }
   if (stored && available.some((item) => item.id === stored)) return stored
   return available.find((item) => item.preferred)?.id ?? available[0].id
 }

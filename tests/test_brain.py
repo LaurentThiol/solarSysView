@@ -5,7 +5,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from synchro.app import create_app
-from synchro.brain import cosine, pack_embed_text
+from synchro.brain import cosine, normalize_llm_base, openai_models_url, pack_embed_text
 
 
 def _client() -> TestClient:
@@ -32,6 +32,34 @@ def test_pack_embed_text_skips_empty_and_joins_notes() -> None:
     assert "72" in packed
     assert "note humaine" in packed
     assert "skip" not in packed
+
+
+def test_normalize_llm_base_rewrites_localhost() -> None:
+    assert normalize_llm_base("http://localhost:11434/") == "http://127.0.0.1:11434"
+    assert normalize_llm_base("127.0.0.1:1234") == "http://127.0.0.1:1234"
+    assert openai_models_url("http://127.0.0.1:8080/v1") == "http://127.0.0.1:8080/v1/models"
+    assert openai_models_url("http://127.0.0.1:11434") == "http://127.0.0.1:11434/v1/models"
+
+
+def test_ping_ollama_falls_back_to_openai_compat() -> None:
+    import urllib.error
+
+    from synchro import brain as brain_mod
+
+    def fake_read(url: str, timeout: float):
+        if url.endswith("/api/tags"):
+            raise urllib.error.URLError("no tags")
+        if url.endswith("/v1/models"):
+            return {"data": [{"id": "qwen2.5"}, {"id": "nomic-embed-text"}]}
+        raise AssertionError(url)
+
+    with (
+        patch.object(brain_mod, "_read_json", side_effect=fake_read),
+        patch.object(brain_mod, "llm_base", return_value="http://127.0.0.1:8080"),
+    ):
+        result = brain_mod.ping_ollama()
+    assert result["ok"] is True
+    assert result["models"] == ["qwen2.5", "nomic-embed-text"]
 
 
 def test_brain_status_does_not_need_neon() -> None:

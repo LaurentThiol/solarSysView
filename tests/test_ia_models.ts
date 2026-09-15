@@ -80,3 +80,16 @@ test("compare without the other key stays on the same catalog", () => {
   assert.equal(pickCompareModel(googleOnly, "gemini-2.5-flash"), "gemini-2.5-pro")
   assert.equal(pickCompareModel(googleOnly, "gemini-2.5-flash", "gpt-4o"), "gemini-2.5-pro")
 })
+
+test("local prefers a model actually served over the catalog default", () => {
+  const models = mergeModelOptions({
+    google: false,
+    openai: false,
+    local: true,
+    liveGoogle: null,
+    liveOpenAI: null,
+    liveLocal: ["qwen2.5", "mistral"],
+  })
+  assert.equal(pickAvailableModel(models, "local", "llama3.2"), "mistral")
+  assert.equal(pickAvailableModel(models, "local", "qwen2.5"), "qwen2.5")
+})
