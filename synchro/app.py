@@ -14,7 +14,9 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from psycopg_pool import PoolTimeout
 from pydantic import BaseModel, Field
 
 from synchro import db
@@ -317,13 +319,24 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.exception_handler(PoolTimeout)
+    async def neon_pool_timeout(_request: Request, exc: PoolTimeout) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Neon: aucune connexion disponible. Réessayez.",
+                "error": str(exc),
+            },
+        )
+
     @app.get("/api/alive")
     def alive() -> dict[str, Any]:
         return {"ok": True, "service": "synchro"}
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
-        neon = db.ping()
+        details = db.health_details()
+        neon = details["neon"]
         payload: dict[str, Any] = {
             "ok": bool(neon.get("ok")),
             "alive": True,
@@ -338,11 +351,10 @@ def create_app() -> FastAPI:
         if not neon.get("ok"):
             return payload
         try:
-            db.init_db()
-            latest = db.latest_draw()
-            last_ok = db.last_sync(ok_only=True)
-            fresh = freshness(latest=latest)
-            payload["draws"] = db.count_draws()
+            latest = details["latest"]
+            last_ok = details["last_sync"]
+            fresh = freshness(latest=latest or {})
+            payload["draws"] = details["draws"]
             payload["latest"] = _json(db.serialize_draw(latest)) if latest else None
             payload["last_sync"] = _json(db.serialize_row(last_ok) if last_ok else None)
             payload["expected_draw_date"] = fresh["expected_draw_date"]

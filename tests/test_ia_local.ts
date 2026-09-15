@@ -59,3 +59,10 @@ test("the LLM pill does not probe loopback hosts from the browser", () => {
   assert.doesNotMatch(pill, /jsonPing\("\/api\/brain\/status"\)/)
   assert.match(pill, /\/api\/ia\/local/)
 })
+
+test("startup status ignores overlapping /api/startup polls", () => {
+  const src = readFileSync(new URL("../src/components/startup-status.tsx", import.meta.url), "utf8")
+  const block = src.slice(src.indexOf("export function StartupStatus"), src.indexOf("function MorphoFiringPill"))
+  assert.match(block, /inFlight/)
+  assert.match(block, /if \(inFlight\.current\) return/)
+})

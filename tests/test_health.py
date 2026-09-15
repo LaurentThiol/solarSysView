@@ -28,19 +28,8 @@ def test_alive_does_not_need_database() -> None:
 
 
 def test_health_reports_neon_when_unconfigured() -> None:
-    with patch(
-        "synchro.db.ping",
-        return_value={
-            "ok": False,
-            "connected": False,
-            "configured": False,
-            "host": None,
-            "waking": False,
-            "error": "DATABASE_URL absent",
-        },
-    ):
-        with _client() as client:
-            response = client.get("/api/health")
+    with _client() as client:
+        response = client.get("/api/health")
     assert response.status_code == 200
     body = response.json()
     assert body["alive"] is True
@@ -50,13 +39,22 @@ def test_health_reports_neon_when_unconfigured() -> None:
 
 
 def test_health_ok_includes_draws() -> None:
-    neon = {"ok": True, "connected": True, "configured": True, "latency_ms": 12, "host": "ep.neon.tech", "waking": False}
-    with (
-        patch("synchro.db.ping", return_value=neon),
-        patch("synchro.db.init_db"),
-        patch("synchro.db.latest_draw", return_value=None),
-        patch("synchro.db.count_draws", return_value=1976),
-        patch("synchro.db.last_sync", return_value=None),
+    neon = {
+        "ok": True,
+        "connected": True,
+        "configured": True,
+        "latency_ms": 12,
+        "host": "ep.neon.tech",
+        "waking": False,
+    }
+    with patch(
+        "synchro.db.health_details",
+        return_value={
+            "neon": neon,
+            "draws": 1976,
+            "latest": None,
+            "last_sync": None,
+        },
     ):
         with _client() as client:
             response = client.get("/api/health")
@@ -157,6 +155,8 @@ def test_ping_does_not_bind_statement_timeout() -> None:
     executed: list[tuple[str, object]] = []
 
     class FakeCursor:
+        _sql = ""
+
         def __enter__(self) -> FakeCursor:
             return self
 
@@ -165,8 +165,14 @@ def test_ping_does_not_bind_statement_timeout() -> None:
 
         def execute(self, sql: str, params: object = None) -> None:
             executed.append((sql, params))
+            self._sql = sql
 
-        def fetchone(self) -> dict[str, int]:
+        def fetchone(self) -> dict[str, object] | None:
+            sql = self._sql.lower()
+            if "count(*)" in sql:
+                return {"n": 0}
+            if "from draws" in sql or "from sync_log" in sql:
+                return None
             return {"ok": 1}
 
     class FakeConn:
@@ -174,7 +180,7 @@ def test_ping_does_not_bind_statement_timeout() -> None:
             return FakeCursor()
 
     @contextmanager
-    def fake_connection():
+    def fake_connection(*, timeout: float | None = None):
         yield FakeConn()
 
     with (
@@ -194,6 +200,7 @@ def test_ping_does_not_bind_statement_timeout() -> None:
     assert result["ok"] is True
     assert executed[0] == ("SET LOCAL statement_timeout = 5000", None)
     assert executed[1][0] == "SELECT 1 AS ok"
+    assert any("COUNT(*)" in sql for sql, _ in executed)
 
 
 def test_should_not_retry_set_placeholder_syntax_error() -> None:
@@ -246,3 +253,136 @@ def test_sync_ensure_endpoint_skips_when_fresh() -> None:
     assert body["ok"] is True
     assert body["skipped"] is True
     assert body["stale"] is False
+
+
+def test_ping_does_not_reset_pool_on_connect_error() -> None:
+    from synchro import db
+
+    with (
+        patch("synchro.db.database_configured", return_value=True),
+        patch(
+            "synchro.db.connection",
+            side_effect=Exception("timeout expired"),
+        ),
+        patch("synchro.db.reset_pool") as reset,
+        patch(
+            "synchro.db.get_settings",
+            return_value=type(
+                "S",
+                (),
+                {"database_url": "postgresql://u:p@ep-x.neon.tech/neondb"},
+            )(),
+        ),
+    ):
+        result = db.ping(timeout_sec=1)
+    assert result["ok"] is False
+    assert "timeout expired" in (result.get("error") or "")
+    reset.assert_not_called()
+
+
+def test_pool_uses_short_timeouts_and_checks_connections() -> None:
+    from synchro import db
+
+    created: dict[str, object] = {}
+
+    class FakePool:
+        closed = False
+
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            created.update(kwargs)
+            if args:
+                created["conninfo"] = args[0]
+
+        def close(self, timeout: float = 5.0) -> None:
+            return None
+
+    db.reset_pool()
+    try:
+        with (
+            patch("synchro.db.database_configured", return_value=True),
+            patch(
+                "synchro.db.get_settings",
+                return_value=type(
+                    "S",
+                    (),
+                    {"database_url": "postgresql://u:p@ep-x-pooler.neon.tech/neondb"},
+                )(),
+            ),
+            patch("synchro.db.ConnectionPool", FakePool),
+        ):
+            db.get_pool()
+        assert created["timeout"] == db.POOL_GETCONN_TIMEOUT_SEC
+        assert created["reconnect_timeout"] == db.POOL_RECONNECT_TIMEOUT_SEC
+        assert created["max_idle"] == db.POOL_MAX_IDLE_SEC
+        assert created["check"] is db._check_pooled_connection
+        kwargs = created["kwargs"]
+        assert isinstance(kwargs, dict)
+        assert kwargs["connect_timeout"] == db.CONNECT_TIMEOUT_SEC
+        assert kwargs["keepalives"] == 1
+        assert kwargs["prepare_threshold"] is None
+        assert db.CONNECT_TIMEOUT_SEC <= 8
+        assert db.POOL_GETCONN_TIMEOUT_SEC <= 10
+    finally:
+        db.reset_pool()
+
+
+def test_draws_return_503_when_pool_times_out() -> None:
+    from psycopg_pool import PoolTimeout
+
+    with patch(
+        "synchro.db.list_draws",
+        side_effect=PoolTimeout("couldn't get a connection after 8.00 sec"),
+    ):
+        with _client() as client:
+            response = client.get("/api/draws?limit=50")
+    assert response.status_code == 503
+    body = response.json()
+    assert "Neon" in body["detail"]
+
+
+def test_health_does_not_run_init_db() -> None:
+    from pathlib import Path
+
+    from synchro import app as app_mod
+    from synchro import db as db_mod
+
+    source = Path(app_mod.__file__).read_text(encoding="utf-8")
+    health = source.split("def health()", 1)[1].split("def shutdown", 1)[0]
+    assert "init_db" not in health
+    assert "health_details" in health
+    details = Path(db_mod.__file__).read_text(encoding="utf-8").split(
+        "def health_details", 1
+    )[1].split("@contextmanager", 1)[0]
+    assert "reset_pool()" not in details
+
+
+def test_draw_select_omits_raw_json() -> None:
+    from pathlib import Path
+
+    from synchro import db as db_mod
+
+    cols = {part.strip() for part in db_mod.DRAW_COLUMNS.split(",")}
+    assert "raw" not in cols
+    assert "draw_date" in cols
+    source = Path(db_mod.__file__).read_text(encoding="utf-8")
+    assert "SELECT * FROM draws" not in source
+
+
+def test_ui_does_not_stampede_neon_on_every_page() -> None:
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    watchlist = (root / "src/components/brain/watchlist-sync.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "useDraws(" not in watchlist
+    assert "SYNC_ENSURE_EVENT" in watchlist
+    startup = (root / "src/components/startup-status.tsx").read_text(encoding="utf-8")
+    block = startup.split("export function StartupStatus", 1)[1].split(
+        "function MorphoFiringPill", 1
+    )[0]
+    assert "inFlight" in block
+    assert "if (inFlight.current) return" in block
+    draws = (root / "src/lib/use-draws.ts").read_text(encoding="utf-8")
+    assert "const inflight" in draws
+    assert "function loadDraws" in draws

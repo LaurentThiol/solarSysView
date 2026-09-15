@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { LogOut } from "lucide-react"
 
 import { CaptureButton } from "@/components/capture"
@@ -99,12 +99,15 @@ export function StartupStatus() {
   const [quitDone, setQuitDone] = useState(false)
   const [localApp, setLocalApp] = useState(false)
   const [ensuring, setEnsuring] = useState(false)
+  const inFlight = useRef(false)
 
   useEffect(() => {
     setLocalApp(isLocalHost(window.location.hostname))
   }, [])
 
   const refresh = useCallback(async (opts?: { git?: boolean; silent?: boolean }) => {
+    if (inFlight.current) return
+    inFlight.current = true
     try {
       const query = opts?.git ? "?refresh=1" : ""
       const response = await fetch(`/api/startup${query}`, { cache: "no-store" })
@@ -117,6 +120,7 @@ export function StartupStatus() {
       setError(err instanceof Error ? err.message : "échec")
       if (!opts?.silent) setData(null)
     } finally {
+      inFlight.current = false
       setLoading(false)
     }
   }, [])

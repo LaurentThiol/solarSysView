@@ -16,8 +16,21 @@ from synchro.config import get_settings
 
 _PLACEHOLDER_MARKERS = ("USER:PASSWORD", "PASSWORD@", "changeme")
 # Neon scale-to-zero : le compute peut mettre plusieurs secondes à se réveiller.
-CONNECT_TIMEOUT_SEC = 15
-PING_TIMEOUT_SEC = 15
+# libpq applique connect_timeout à CHAQUE IP du pooler (souvent 3) : 15 s × 3 = 45 s,
+# ce qui saturait le pool et faisait échouer close() (« couldn't stop thread »).
+CONNECT_TIMEOUT_SEC = 5
+PING_TIMEOUT_SEC = 12
+POOL_GETCONN_TIMEOUT_SEC = 8
+POOL_RECONNECT_TIMEOUT_SEC = 20
+POOL_MAX_IDLE_SEC = 180
+POOL_MAX_LIFETIME_SEC = 30 * 60
+
+# serialize_draw jette `raw` : ne pas le tirer (JSONB FDJ, gros sur 2000 tirages).
+DRAW_COLUMNS = (
+    "id, draw_date, draw_code, weekday, numbers, stars, star_pool, "
+    "winners_rank1_fr, winners_rank1_eu, prize_rank1, my_million, "
+    "source, imported_at"
+)
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS draws (
@@ -213,6 +226,7 @@ CREATE INDEX IF NOT EXISTS brain_reading_notes_reading ON brain_reading_notes (r
 """
 
 _pool: ConnectionPool | None = None
+_check_pooled_connection = ConnectionPool.check_connection
 
 
 def _neon_host(url: str | None) -> str | None:
@@ -263,12 +277,21 @@ def get_pool() -> ConnectionPool:
             conninfo=url,
             min_size=1,
             max_size=8,
+            timeout=POOL_GETCONN_TIMEOUT_SEC,
+            max_idle=POOL_MAX_IDLE_SEC,
+            max_lifetime=POOL_MAX_LIFETIME_SEC,
+            reconnect_timeout=POOL_RECONNECT_TIMEOUT_SEC,
+            check=_check_pooled_connection,
             kwargs={
                 "row_factory": dict_row,
                 "autocommit": False,
                 "connect_timeout": CONNECT_TIMEOUT_SEC,
                 # PgBouncer (URI -pooler) : pas de prepared statements nommés.
                 "prepare_threshold": None,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 3,
             },
             open=True,
         )
@@ -276,68 +299,123 @@ def get_pool() -> ConnectionPool:
 
 
 def reset_pool() -> None:
+    """Ferme le pool. Ne pas appeler depuis ping() : close() attend les workers."""
     global _pool
-    if _pool is None:
+    old, _pool = _pool, None
+    if old is None:
         return
     try:
-        _pool.close()
+        old.close(timeout=1.0)
     except Exception:
         pass
-    _pool = None
+
+
+def _unconfigured_neon() -> dict[str, Any]:
+    return {
+        "ok": False,
+        "connected": False,
+        "configured": False,
+        "host": None,
+        "waking": False,
+        "error": "DATABASE_URL absent (copiez .env.example → .env et collez l'URI Neon).",
+    }
 
 
 def ping(timeout_sec: float = PING_TIMEOUT_SEC) -> dict[str, Any]:
     """Ping Neon without raising. Used by /api/health and the launcher."""
-    url = (get_settings().database_url or "").strip()
-    host = _neon_host(url)
+    return health_details(timeout_sec=timeout_sec)["neon"]
+
+
+def health_details(timeout_sec: float = PING_TIMEOUT_SEC) -> dict[str, Any]:
+    """SELECT 1 + compteurs sur une seule connexion (bandeau /api/health).
+
+    Ne recrée pas le pool en cas d'échec : un close() pendant un reconnect
+    Neon (plusieurs IP × connect_timeout) laisse des workers zombies et un
+    second pool (« pool-2 ») qui n'obtient plus de connexion.
+    """
     if not database_configured():
         return {
+            "neon": _unconfigured_neon(),
+            "draws": None,
+            "latest": None,
+            "last_sync": None,
+        }
+    url = (get_settings().database_url or "").strip()
+    host = _neon_host(url)
+    empty = {
+        "neon": {
             "ok": False,
             "connected": False,
-            "configured": False,
-            "host": None,
+            "configured": True,
+            "host": host,
             "waking": False,
-            "error": "DATABASE_URL absent (copiez .env.example → .env et collez l'URI Neon).",
-        }
+        },
+        "draws": None,
+        "latest": None,
+        "last_sync": None,
+    }
     started = time.perf_counter()
     last_error: BaseException | None = None
     for attempt in range(2):
         try:
-            with connection() as conn:
+            with connection(timeout=timeout_sec) as conn:
                 with conn.cursor() as cur:
                     cur.execute(_statement_timeout_sql(timeout_sec))
                     cur.execute("SELECT 1 AS ok")
                     cur.fetchone()
-            latency_ms = round((time.perf_counter() - started) * 1000)
+                    latency_ms = round((time.perf_counter() - started) * 1000)
+                    cur.execute(
+                        f"SELECT {DRAW_COLUMNS} FROM draws ORDER BY draw_date DESC LIMIT 1"
+                    )
+                    latest = cur.fetchone()
+                    cur.execute("SELECT COUNT(*) AS n FROM draws")
+                    draws = int(cur.fetchone()["n"])
+                    cur.execute(
+                        """
+                        SELECT * FROM sync_log
+                         WHERE status = %s
+                         ORDER BY COALESCE(finished_at, started_at) DESC
+                         LIMIT 1
+                        """,
+                        ("ok",),
+                    )
+                    last_sync = cur.fetchone()
             return {
-                "ok": True,
-                "connected": True,
-                "configured": True,
-                "latency_ms": latency_ms,
-                "host": host,
-                "waking": latency_ms >= 2500,
+                "neon": {
+                    "ok": True,
+                    "connected": True,
+                    "configured": True,
+                    "latency_ms": latency_ms,
+                    "host": host,
+                    "waking": latency_ms >= 2500,
+                },
+                "draws": draws,
+                "latest": dict(latest) if latest else None,
+                "last_sync": dict(last_sync) if last_sync else None,
             }
         except Exception as exc:
             last_error = exc
-            if attempt == 0 and _should_retry_ping(exc):
-                reset_pool()
+            elapsed = time.perf_counter() - started
+            # Retry seulement si l'échec est immédiat (connexion déjà morte).
+            # Un timeout réseau de 8–12 s ne doit pas être doublé : /api/startup
+            # abandonne à 20 s et laisserait le thread Python occuper le pool.
+            if attempt == 0 and elapsed < 2.0 and _should_retry_ping(exc):
                 continue
             break
-    latency_ms = round((time.perf_counter() - started) * 1000)
-    return {
-        "ok": False,
-        "connected": False,
-        "configured": True,
-        "latency_ms": latency_ms,
-        "host": host,
-        "waking": False,
+    empty["neon"] = {
+        **empty["neon"],
+        "latency_ms": round((time.perf_counter() - started) * 1000),
         "error": str(last_error) if last_error else "échec",
     }
+    return empty
 
 
 @contextmanager
-def connection() -> Iterator[Any]:
-    with get_pool().connection() as conn:
+def connection(*, timeout: float | None = None) -> Iterator[Any]:
+    kwargs: dict[str, Any] = {}
+    if timeout is not None:
+        kwargs["timeout"] = timeout
+    with get_pool().connection(**kwargs) as conn:
         yield conn
 
 
@@ -414,7 +492,9 @@ def count_draws(year: int | None = None) -> int:
 def latest_draw() -> dict[str, Any] | None:
     with connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM draws ORDER BY draw_date DESC LIMIT 1")
+            cur.execute(
+                f"SELECT {DRAW_COLUMNS} FROM draws ORDER BY draw_date DESC LIMIT 1"
+            )
             row = cur.fetchone()
             return dict(row) if row else None
 
@@ -425,7 +505,7 @@ def list_draws(
     query: str | None = None,
     year: int | None = None,
 ) -> list[dict[str, Any]]:
-    sql = "SELECT * FROM draws"
+    sql = f"SELECT {DRAW_COLUMNS} FROM draws"
     params: dict[str, Any] = {"limit": limit, "offset": offset}
     clauses: list[str] = []
     if year is not None:
@@ -452,7 +532,7 @@ def list_draws(
 
 
 def all_draws(era: str = "current") -> list[dict[str, Any]]:
-    sql = "SELECT * FROM draws"
+    sql = f"SELECT {DRAW_COLUMNS} FROM draws"
     if era == "current":
         sql += " WHERE draw_date >= DATE '2016-09-27'"
     sql += " ORDER BY draw_date ASC"
