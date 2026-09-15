@@ -607,7 +607,7 @@ const NAV_ITEMS = [
     label: "Relief",
     help: {
       title: "Relief",
-      body: "Une ligne n1→n5 par tirage. Calque optionnel : mêmes rangs dans le temps. Tiges verticales masquables. Le glyphe 5×10 reste Morpho.",
+      body: "Une ligne n1→n5 par tirage. Boule ou point. Zoom plus serré à 100/200. Calque rangs dans le temps. Tiges masquables. Le glyphe 5×10 reste Morpho.",
     },
   },
   {

@@ -36,6 +36,37 @@ export const STYLE_LABELS: Record<ViewStyle, string> = {
   plan: "Plan",
 }
 
+export const MARKER_STYLES = ["boule", "point"] as const
+export type MarkerStyle = (typeof MARKER_STYLES)[number]
+
+export const MARKER_LABELS: Record<MarkerStyle, string> = {
+  boule: "Boule",
+  point: "Point",
+}
+
+/** 100 et 200 tirages : le point reste lisible, la boule bouche le tracé. */
+export function recommendedMarker(sample: number): MarkerStyle {
+  return sample >= 100 ? "point" : "boule"
+}
+
+export function markerRadius(
+  style: MarkerStyle,
+  count: number,
+  recency: number,
+  emphasis: boolean
+): number {
+  if (style === "point") {
+    if (emphasis) return count >= 100 ? 2.35 : 2.8
+    if (count >= 200) return 1.05
+    if (count >= 100) return 1.3
+    return 1.7
+  }
+  if (emphasis) return 5.6
+  if (count >= 200) return 2.05 + recency * 0.7
+  if (count >= 100) return 2.45 + recency * 1.05
+  return 3.2 + recency * 1.6
+}
+
 /** Angle d'or de Vogel : 2π / φ². */
 export const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 

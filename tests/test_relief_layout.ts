@@ -8,14 +8,16 @@ import { hilbertOrderFor, hilbertXY } from "../src/lib/relief/hilbert"
 import {
   GOLDEN_ANGLE,
   layoutDraws,
+  markerRadius,
+  recommendedMarker,
   recommendedOffset,
   type OffsetMode,
 } from "../src/lib/relief/layout"
 import { heightColor } from "../src/lib/relief/color"
 import { rasterizePeaks } from "../src/lib/relief/heightmap"
-import { clampCamera, DEFAULT_CAMERA, projectPoint, autoExaggeration } from "../src/lib/relief/project"
+import { clampCamera, DEFAULT_CAMERA, ZOOM_MAX, fitScale, focusPoint, homeZoom, projectPoint, zoomToward, autoExaggeration } from "../src/lib/relief/project"
 import { buildStampMap } from "../src/lib/relief/stamps"
-import { axisConnected, buildProfiles, ranksOf, rankTimeLinks } from "../src/lib/relief/profiles"
+import { axisConnected, buildProfiles, profileBounds, ranksOf, rankTimeLinks } from "../src/lib/relief/profiles"
 
 function draw(i: number): Draw {
   const date = new Date(Date.UTC(2024, 0, 1 + i)).toISOString().slice(0, 10)
@@ -143,7 +145,9 @@ test("camera projects and clamp keeps pitch / zoom in range", () => {
   assert.ok(Math.hypot(a.x - b.x, a.y - b.y) > 1)
   const cam = clampCamera({ yaw: 12, pitch: 8, zoom: 99 })
   assert.ok(cam.pitch <= 1.22)
-  assert.ok(cam.zoom <= 2.8)
+  assert.ok(cam.zoom <= ZOOM_MAX)
+  assert.equal(cam.panX, 0)
+  assert.equal(cam.panY, 0)
 })
 
 test("relief is a first-class lab for capture / IA", () => {
@@ -255,4 +259,66 @@ test("rank-time links join the same order statistic across consecutive draws", (
     assert.ok(link.bz > link.az)
     assert.equal(link.toIndex, link.fromIndex + 1)
   }
+})
+
+test("dense samples prefer point markers, balls stay larger", () => {
+  assert.equal(recommendedMarker(20), "boule")
+  assert.equal(recommendedMarker(50), "boule")
+  assert.equal(recommendedMarker(100), "point")
+  assert.equal(recommendedMarker(200), "point")
+  const ball = markerRadius("boule", 200, 0.5, false)
+  const dot = markerRadius("point", 200, 0.5, false)
+  assert.ok(dot < 1.5)
+  assert.ok(ball > dot * 1.6)
+})
+
+test("home zoom and max zoom get closer on 200 draws than on 20", () => {
+  assert.equal(homeZoom(20), 1)
+  assert.ok(homeZoom(200) > homeZoom(100))
+  assert.ok(homeZoom(100) > homeZoom(20))
+  assert.ok(ZOOM_MAX >= 12)
+  const zoomed = clampCamera({ yaw: 0, pitch: 0.7, zoom: 12 })
+  assert.equal(zoomed.zoom, 12)
+})
+
+test("fitScale keeps n1→n5 readable on a 200-draw time series", () => {
+  const layout = layoutDraws(draws(200), { mode: "temps", height: "valeur", fusion: 0.42, stars: false })
+  const map = buildProfiles(layout)
+  const box = profileBounds(map, false)
+  const spanX = box.maxX - box.minX
+  const spanZ = box.maxZ - box.minZ
+  const packed = Math.min((0.86 * 1000) / spanX, (0.78 * 500) / spanZ)
+  const scale = fitScale(box.minX, box.maxX, box.minZ, box.maxZ, 1000, 500)
+  assert.ok(scale > packed * 3, `scale ${scale} vs packed ${packed}`)
+  assert.ok(4 * scale > 36, `n1→n5 is only ${4 * scale}px`)
+  const compact = layoutDraws(draws(20), { mode: "temps", height: "valeur", fusion: 0.42, stars: false })
+  const compactBox = profileBounds(buildProfiles(compact), false)
+  const compactPacked = Math.min(
+    (0.86 * 1000) / (compactBox.maxX - compactBox.minX),
+    (0.78 * 500) / (compactBox.maxZ - compactBox.minZ)
+  )
+  const compactScale = fitScale(
+    compactBox.minX,
+    compactBox.maxX,
+    compactBox.minZ,
+    compactBox.maxZ,
+    1000,
+    500
+  )
+  assert.ok(Math.abs(compactScale - compactPacked) < 1e-9)
+})
+
+test("focusPoint frames the newest slice when time overflows", () => {
+  const look = focusPoint(0, 5.7, 0, 190, 10, 500)
+  assert.ok(look.midZ > 95, `midZ ${look.midZ}`)
+  assert.ok(look.midZ < 190)
+  const whole = focusPoint(0, 5.7, 0, 20, 20, 500)
+  assert.ok(Math.abs(whole.midZ - 10) < 1e-6)
+})
+
+test("zoomToward keeps the cursor anchored and raises zoom past the old 2.8 cap", () => {
+  const cam = zoomToward({ yaw: 0.6, pitch: 0.7, zoom: 1, panX: 0, panY: 0 }, 4, 400, 200, 500, 300)
+  assert.ok(cam.zoom > 2.8)
+  assert.ok(cam.zoom <= 4 + 1e-9)
+  assert.ok(cam.panX !== 0 || cam.panY !== 0)
 })

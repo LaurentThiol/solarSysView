@@ -20,37 +20,37 @@ import { packRelief } from "@/lib/capture/pack"
 import { INDEPENDENCE_DISCLAIMER } from "@/lib/capture/snapshot"
 import { formatDrawDate, formatShortDate, takeLastDraws } from "@/lib/draws"
 import {
-  DEFAULT_CAMERA,
+  MARKER_LABELS,
+  MARKER_STYLES,
   OFFSET_LABELS,
   OFFSET_MODES,
-  PLAN_CAMERA,
   RANK_LABELS,
   RANK_RGB,
   RELIEF_SAMPLES,
   STYLE_LABELS,
   VIEW_STYLES,
   buildProfiles,
+  homeCamera,
   layoutDraws,
   layoutNote,
   profileBounds,
+  recommendedMarker,
   recommendedOffset,
   rgbCssOf,
   type Camera,
+  type MarkerStyle,
   type OffsetMode,
   type ReliefSample,
   type ViewStyle,
 } from "@/lib/relief"
 import { useDraws } from "@/lib/use-draws"
 
-function homeCamera(style: ViewStyle): Camera {
-  return style === "plan" ? PLAN_CAMERA : DEFAULT_CAMERA
-}
-
 export function ReliefLab() {
   const { draws: archive, source, loading } = useDraws("current")
   const [sample, setSample] = useState<ReliefSample>(20)
   const [offset, setOffset] = useState<OffsetMode>("temps")
   const [style, setStyle] = useState<ViewStyle>("scene")
+  const [marker, setMarker] = useState<MarkerStyle>("boule")
   const [fusion, setFusion] = useState(0.42)
   const [yScale, setYScale] = useState(1.15)
   const [stars, setStars] = useState(false)
@@ -58,7 +58,7 @@ export function ReliefLab() {
   const [rankTime, setRankTime] = useState(false)
   const [stems, setStems] = useState(true)
   const [autoRotate, setAutoRotate] = useState(false)
-  const [camera, setCamera] = useState<Camera>(DEFAULT_CAMERA)
+  const [camera, setCamera] = useState<Camera>(() => homeCamera("scene", 20))
   const [hoverOwner, setHoverOwner] = useState<number | null>(null)
 
   const onCamera = useCallback((next: Camera | ((prev: Camera) => Camera)) => {
@@ -104,6 +104,7 @@ export function ReliefLab() {
       stars,
       rankTime,
       stems,
+      marker,
       maxH: bounds.maxY * yScale,
       recommended: OFFSET_LABELS[recommended],
     })
@@ -130,6 +131,8 @@ export function ReliefLab() {
                 stars={stars}
                 rankTime={rankTime}
                 stems={stems}
+                marker={marker}
+                home={homeCamera(style, chronological.length || sample)}
               />
             )}
           </div>
@@ -150,7 +153,7 @@ export function ReliefLab() {
             label="Échantillon"
             help={{
               title: "Échantillon",
-              body: "20 lignes se lisent une par une (numéros sur les points). 50 donne le faisceau. 100 et 200 gardent la silhouette. Sans Neon, l’archive JSON de l’année peut être plus courte.",
+              body: "20 lignes se lisent une par une. 50 donne le faisceau. 100 et 200 cadrent les tirages récents de plus près (molette pour zoomer, Maj+glisser pour déplacer). Sans Neon, l’archive JSON de l’année peut être plus courte.",
             }}
           >
             <div className="flex flex-wrap gap-1">
@@ -165,8 +168,9 @@ export function ReliefLab() {
                     setSample(n)
                     const next = takeLastDraws(archive, n)
                     setOffset(recommendedOffset(next.length))
-                    setCamera(homeCamera(style))
+                    setCamera(homeCamera(style, next.length || n))
                     setLabels(n <= 20)
+                    setMarker(recommendedMarker(n))
                   }}
                 >
                   {n}
@@ -203,7 +207,7 @@ export function ReliefLab() {
             label="Lecture"
             help={{
               title: "Profils 3D ou plan",
-              body: "Profils 3D : vue oblique, la hauteur des points est la valeur. Plan : regard plus vertical, mêmes lignes. Glisser fait tourner les deux.",
+              body: "Profils 3D : vue oblique, la hauteur des points est la valeur. Plan : regard plus vertical, mêmes lignes. Glisser fait tourner ; Maj+glisser déplace ; molette zoom vers le curseur.",
             }}
           >
             <Select
@@ -211,7 +215,7 @@ export function ReliefLab() {
               onValueChange={(v) => {
                 const next = v as ViewStyle
                 setStyle(next)
-                setCamera(homeCamera(next))
+                setCamera(homeCamera(next, chronological.length || sample))
               }}
             >
               <SelectTrigger className="w-44" aria-label="Lecture">
@@ -225,6 +229,28 @@ export function ReliefLab() {
                 ))}
               </SelectContent>
             </Select>
+          </LabelHelp>
+          <LabelHelp
+            label="Marqueur"
+            help={{
+              title: "Boule ou point",
+              body: "Boule : disque lisible à 20–50 tirages. Point : un pixel coloré, pour que 100 et 200 ne se bouchent pas. Le choix 100/200 bascule tout seul sur point, on peut revenir à la boule.",
+            }}
+          >
+            <div className="flex flex-wrap gap-1">
+              {MARKER_STYLES.map((item) => (
+                <Button
+                  key={item}
+                  type="button"
+                  size="sm"
+                  variant={marker === item ? "default" : "outline"}
+                  aria-pressed={marker === item}
+                  onClick={() => setMarker(item)}
+                >
+                  {MARKER_LABELS[item]}
+                </Button>
+              ))}
+            </div>
           </LabelHelp>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -309,7 +335,7 @@ export function ReliefLab() {
               onClick={() => setAutoRotate((v) => !v)}
               help={{
                 title: "Rotation",
-                body: "Fait tourner la carte. On peut aussi glisser, utiliser les flèches, ou le bouton 90°.",
+                body: "Fait tourner la carte. On peut aussi glisser, Maj+glisser pour déplacer, utiliser les flèches, ou le bouton 90°.",
               }}
             />
           </div>

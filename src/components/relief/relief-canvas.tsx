@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
-import type { ViewStyle } from "@/lib/relief/layout"
+import { markerRadius, type MarkerStyle, type ViewStyle } from "@/lib/relief/layout"
 import {
   RANK_LABELS,
   RANK_RGB,
@@ -16,13 +16,11 @@ import {
   type ProfileMap,
 } from "@/lib/relief/profiles"
 import {
-  DEFAULT_CAMERA,
-  PLAN_CAMERA,
-  ZOOM_MAX,
-  ZOOM_MIN,
   clampCamera,
   fitScale,
+  focusPoint,
   projectPoint,
+  zoomToward,
   type Camera,
 } from "@/lib/relief/project"
 
@@ -49,6 +47,10 @@ type Seg = {
   by: number
 }
 
+type Drag =
+  | { kind: "orbit"; x: number; y: number; yaw: number; pitch: number }
+  | { kind: "pan"; x: number; y: number; panX: number; panY: number }
+
 type Scene = {
   map: ProfileMap | null
   style: ViewStyle
@@ -58,6 +60,7 @@ type Scene = {
   stars: boolean
   rankTime: boolean
   stems: boolean
+  marker: MarkerStyle
 }
 
 export function ReliefCanvas({
@@ -73,6 +76,8 @@ export function ReliefCanvas({
   stars,
   rankTime,
   stems,
+  marker,
+  home,
 }: {
   map: ProfileMap | null
   style: ViewStyle
@@ -86,11 +91,13 @@ export function ReliefCanvas({
   stars: boolean
   rankTime: boolean
   stems: boolean
+  marker: MarkerStyle
+  home: Camera
 }) {
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const cameraRef = useRef(camera)
-  const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
+  const dragRef = useRef<Drag | null>(null)
   const hitsRef = useRef<Hit[]>([])
   const segsRef = useRef<Seg[]>([])
   const [hint, setHint] = useState<Hover>(null)
@@ -103,17 +110,17 @@ export function ReliefCanvas({
     stars,
     rankTime,
     stems,
+    marker,
   })
   const lastKeyRef = useRef("")
-  const home = style === "plan" ? PLAN_CAMERA : DEFAULT_CAMERA
 
   useEffect(() => {
     cameraRef.current = camera
   }, [camera])
 
   useEffect(() => {
-    sceneRef.current = { map, style, yScale, hoverOwner, labels, stars, rankTime, stems }
-  }, [hoverOwner, labels, map, rankTime, stars, stems, style, yScale])
+    sceneRef.current = { map, style, yScale, hoverOwner, labels, stars, rankTime, stems, marker }
+  }, [hoverOwner, labels, map, marker, rankTime, stars, stems, style, yScale])
 
   useEffect(() => {
     if (!autoRotate) return
@@ -156,12 +163,17 @@ export function ReliefCanvas({
     if (!node) return
     const onWheel = (event: WheelEvent) => {
       event.preventDefault()
-      const factor = event.deltaY > 0 ? 0.94 : 1.06
+      const box = node.getBoundingClientRect()
+      const factor = Math.exp(-event.deltaY * 0.0017)
       onCamera((prev) =>
-        clampCamera({
-          ...prev,
-          zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, prev.zoom * factor)),
-        })
+        zoomToward(
+          prev,
+          factor,
+          event.clientX - box.left,
+          event.clientY - box.top,
+          box.width * 0.5,
+          box.height * 0.58
+        )
       )
     }
     node.addEventListener("wheel", onWheel, { passive: false })
@@ -203,10 +215,24 @@ export function ReliefCanvas({
         ref={canvasRef}
         tabIndex={0}
         className="absolute inset-0 block h-full w-full cursor-grab touch-none outline-none active:cursor-grabbing"
-        aria-label="Profils n1 à n5 des tirages, glisser pour tourner, molette pour zoomer"
+        aria-label="Profils n1 à n5 des tirages, glisser pour tourner, Maj+glisser pour déplacer, molette pour zoomer"
+        onContextMenu={(event) => event.preventDefault()}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId)
+          const pan =
+            event.shiftKey || event.altKey || event.button === 1 || event.button === 2
+          if (pan) {
+            dragRef.current = {
+              kind: "pan",
+              x: event.clientX,
+              y: event.clientY,
+              panX: cameraRef.current.panX,
+              panY: cameraRef.current.panY,
+            }
+            return
+          }
           dragRef.current = {
+            kind: "orbit",
             x: event.clientX,
             y: event.clientY,
             yaw: cameraRef.current.yaw,
@@ -215,14 +241,24 @@ export function ReliefCanvas({
         }}
         onPointerMove={(event) => {
           const drag = dragRef.current
-          if (drag) {
+          if (drag?.kind === "orbit") {
             const dx = event.clientX - drag.x
             const dy = event.clientY - drag.y
             onCamera(
               clampCamera({
+                ...cameraRef.current,
                 yaw: drag.yaw + dx * 0.0075,
                 pitch: drag.pitch - dy * 0.0055,
-                zoom: cameraRef.current.zoom,
+              })
+            )
+            return
+          }
+          if (drag?.kind === "pan") {
+            onCamera(
+              clampCamera({
+                ...cameraRef.current,
+                panX: drag.panX + (event.clientX - drag.x),
+                panY: drag.panY + (event.clientY - drag.y),
               })
             )
             return
@@ -259,9 +295,9 @@ export function ReliefCanvas({
             event.preventDefault()
             onCamera((prev) => clampCamera({ ...prev, pitch: prev.pitch - step }))
           } else if (event.key === "+" || event.key === "=") {
-            onCamera((prev) => clampCamera({ ...prev, zoom: prev.zoom * 1.08 }))
+            onCamera((prev) => clampCamera({ ...prev, zoom: prev.zoom * 1.12 }))
           } else if (event.key === "-" || event.key === "_") {
-            onCamera((prev) => clampCamera({ ...prev, zoom: prev.zoom * 0.92 }))
+            onCamera((prev) => clampCamera({ ...prev, zoom: prev.zoom * 0.89 }))
           } else if (event.key === "0") {
             onCamera(home)
           }
@@ -269,8 +305,10 @@ export function ReliefCanvas({
       />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-3 text-[11px] text-white/75">
         <p>
-          Un trait = un tirage · cinq points = n1→n5 · hauteur = valeur 1–50
+          Un trait = un tirage · {marker === "point" ? "points" : "boules"} n1→n5 ·
+          hauteur = 1–50
           {rankTime ? " · calque rangs dans le temps" : ""}
+          <span className="text-white/45"> · Maj+glisser pour déplacer</span>
         </p>
         {hint ? <p className="tabular-nums">tirage #{hint.owner + 1}</p> : null}
       </div>
@@ -313,13 +351,15 @@ function paintScene(
   const dpr = Math.min(2, typeof window === "undefined" ? 1 : window.devicePixelRatio || 1)
   const bw = Math.max(1, Math.round(cssW * dpr))
   const bh = Math.max(1, Math.round(cssH * dpr))
-  const { map, style, yScale, hoverOwner, labels, stars, rankTime, stems } = scene
+  const { map, style, yScale, hoverOwner, labels, stars, rankTime, stems, marker } = scene
   const key = [
     cssW,
     cssH,
     cam.yaw.toFixed(4),
     cam.pitch.toFixed(4),
     cam.zoom.toFixed(3),
+    (cam.panX ?? 0).toFixed(1),
+    (cam.panY ?? 0).toFixed(1),
     map?.profiles.length ?? 0,
     map?.connected ? 1 : 0,
     style,
@@ -329,6 +369,7 @@ function paintScene(
     stars ? 1 : 0,
     rankTime ? 1 : 0,
     stems ? 1 : 0,
+    marker,
   ].join("|")
   if (
     key === lastKeyRef.current &&
@@ -355,10 +396,13 @@ function paintScene(
     const scale = fitScale(box.minX, box.maxX, box.minZ, box.maxZ, cssW, cssH)
     const cx = cssW * 0.5
     const cy = cssH * 0.58
-    const midX = (box.minX + box.maxX) / 2
-    const midZ = (box.minZ + box.maxZ) / 2
-    const proj = (x: number, y: number, z: number) =>
-      projectPoint(x - midX, y * yScale, z - midZ, cam, cx, cy, scale)
+    const focus = focusPoint(box.minX, box.maxX, box.minZ, box.maxZ, scale, cssH)
+    const panX = cam.panX ?? 0
+    const panY = cam.panY ?? 0
+    const proj = (x: number, y: number, z: number) => {
+      const p = projectPoint(x - focus.midX, y * yScale, z - focus.midZ, cam, cx, cy, scale)
+      return { x: p.x + panX, y: p.y + panY, depth: p.depth }
+    }
 
     const g0 = proj(box.minX, 0, box.minZ)
     const g1 = proj(box.maxX, 0, box.minZ)
@@ -392,8 +436,9 @@ function paintScene(
     if (rankTime) {
       paintRankTime(ctx, map, proj, hoverOwner, segs)
     }
+    const count = map.profiles.length
     for (const profile of ranked) {
-      paintProfile(ctx, profile, proj, hoverOwner, labelAll, stars, stems, hits, segs)
+      paintProfile(ctx, profile, proj, hoverOwner, labelAll, stars, stems, marker, count, hits, segs)
     }
     hitsRef.current = hits
     segsRef.current = segs
@@ -499,13 +544,17 @@ function paintProfile(
   labelAll: boolean,
   stars: boolean,
   stems: boolean,
+  marker: MarkerStyle,
+  count: number,
   hits: Hit[],
   segs: Seg[]
 ) {
   const hovered = hoverOwner === profile.drawIndex
   const latest = profile.latest
   const rec = profile.recency
+  const emphasis = hovered || latest
   const alpha = hovered ? 0.98 : latest ? 0.92 : 0.18 + rec * 0.62
+  const dense = count >= 100
   const pts = profile.points.map((p) => proj(p.x, p.y, p.z))
 
   if (latest) {
@@ -513,7 +562,7 @@ function paintProfile(
     ctx.moveTo(pts[0].x, pts[0].y)
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
     ctx.strokeStyle = "rgba(232, 210, 96, 0.45)"
-    ctx.lineWidth = 5
+    ctx.lineWidth = marker === "point" ? 2.8 : 5
     ctx.lineJoin = "round"
     ctx.lineCap = "round"
     ctx.stroke()
@@ -531,12 +580,13 @@ function paintProfile(
     }
   }
 
+  const strokeW = emphasis ? (marker === "point" ? 1.8 : 2.6) : dense ? 0.7 + rec * 0.45 : 1.1 + rec * 1.1
   for (let i = 0; i < 4; i++) {
     ctx.beginPath()
     ctx.moveTo(pts[i].x, pts[i].y)
     ctx.lineTo(pts[i + 1].x, pts[i + 1].y)
     ctx.strokeStyle = rgbCssOf(RANK_RGB[i], alpha)
-    ctx.lineWidth = hovered || latest ? 2.6 : 1.1 + rec * 1.1
+    ctx.lineWidth = strokeW
     ctx.lineJoin = "round"
     ctx.lineCap = "round"
     ctx.stroke()
@@ -552,15 +602,17 @@ function paintProfile(
   const showNum = labelAll || hovered || latest
   for (let i = 0; i < 5; i++) {
     const p = pts[i]
-    const r = hovered || latest ? 5.6 : 3.2 + rec * 1.6
+    const r = markerRadius(marker, count, rec, emphasis)
     ctx.beginPath()
     ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
-    ctx.fillStyle = rgbCssOf(RANK_RGB[i], hovered || latest ? 1 : 0.4 + rec * 0.55)
+    ctx.fillStyle = rgbCssOf(RANK_RGB[i], emphasis ? 1 : 0.4 + rec * 0.55)
     ctx.fill()
-    ctx.strokeStyle = latest ? "rgba(232, 210, 96, 0.95)" : "rgba(8, 12, 24, 0.55)"
-    ctx.lineWidth = latest || hovered ? 1.5 : 0.7
-    ctx.stroke()
-    hits.push({ owner: profile.drawIndex, x: p.x, y: p.y, r: r + 8 })
+    if (marker === "boule" || emphasis) {
+      ctx.strokeStyle = latest ? "rgba(232, 210, 96, 0.95)" : "rgba(8, 12, 24, 0.55)"
+      ctx.lineWidth = emphasis ? (marker === "point" ? 1.05 : 1.5) : 0.7
+      ctx.stroke()
+    }
+    hits.push({ owner: profile.drawIndex, x: p.x, y: p.y, r: r + (marker === "point" ? 6 : 8) })
     if (showNum) {
       ctx.fillStyle = "rgba(248, 250, 252, 0.95)"
       ctx.font = `${hovered || latest ? 10 : 9}px ui-sans-serif, system-ui, sans-serif`
@@ -577,7 +629,7 @@ function paintProfile(
       ctx.moveTo(starPts[0].x, starPts[0].y)
       ctx.lineTo(starPts[1].x, starPts[1].y)
       ctx.strokeStyle = rgbCssOf(STAR_RGB, alpha * 0.85)
-      ctx.lineWidth = hovered || latest ? 2 : 1
+      ctx.lineWidth = emphasis ? 2 : marker === "point" ? 0.8 : 1
       ctx.stroke()
       segs.push({
         owner: profile.drawIndex,
@@ -589,20 +641,23 @@ function paintProfile(
     }
     for (let i = 0; i < starPts.length; i++) {
       const p = starPts[i]
+      const r = marker === "point" ? (emphasis ? 2.1 : 1.15) : emphasis ? 4.4 : 3
       ctx.beginPath()
-      ctx.arc(p.x, p.y, hovered || latest ? 4.4 : 3, 0, Math.PI * 2)
-      ctx.fillStyle = rgbCssOf(STAR_RGB, hovered || latest ? 1 : 0.45 + rec * 0.4)
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
+      ctx.fillStyle = rgbCssOf(STAR_RGB, emphasis ? 1 : 0.45 + rec * 0.4)
       ctx.fill()
-      ctx.strokeStyle = "rgba(8, 12, 24, 0.55)"
-      ctx.lineWidth = 0.8
-      ctx.stroke()
-      hits.push({ owner: profile.drawIndex, x: p.x, y: p.y, r: 12 })
+      if (marker === "boule" || emphasis) {
+        ctx.strokeStyle = "rgba(8, 12, 24, 0.55)"
+        ctx.lineWidth = 0.8
+        ctx.stroke()
+      }
+      hits.push({ owner: profile.drawIndex, x: p.x, y: p.y, r: r + 8 })
       if (showNum) {
         ctx.fillStyle = "rgba(248, 250, 252, 0.9)"
         ctx.font = "9px ui-sans-serif, system-ui, sans-serif"
         ctx.textAlign = "center"
         ctx.textBaseline = "bottom"
-        ctx.fillText(`★${profile.starPoints[i].n}`, p.x, p.y - 6)
+        ctx.fillText(`★${profile.starPoints[i].n}`, p.x, p.y - r - 2)
       }
     }
   }
