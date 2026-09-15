@@ -159,7 +159,7 @@ export function ReliefLab() {
                     const next = takeLastDraws(archive, n)
                     setOffset(recommendedOffset(next.length))
                     setCamera(homeCamera(style))
-                    setLabels(n <= 50)
+                    setLabels(n <= 20)
                   }}
                 >
                   {n}
