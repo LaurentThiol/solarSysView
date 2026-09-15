@@ -340,6 +340,7 @@ export function BrainLab() {
         setError("Pas de clé Gemini / OpenAI pour ce tour-ci. Dépose-les dans Admin, ou décoche le cloud.")
         return
       }
+      setDraft("")
       setBusy(true)
       setError(null)
       const history: IaChatMessage[] = [...messages, { role: "user", content: question }]
@@ -392,7 +393,6 @@ export function BrainLab() {
   const sendDraft = useCallback(() => {
     const text = draft.trim()
     if (!text || busy) return
-    setDraft("")
     void ask(text)
   }, [ask, busy, draft])
 
@@ -749,7 +749,7 @@ export function BrainLab() {
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <StatusDot ok={localOn} label={localOn ? "local" : "local off"} />
               <span className="text-muted-foreground">
-                {provider} · {model ?? "modèle…"}
+                {localOn ? `${provider} · ${model ?? "modèle…"}` : "en attente d’Ollama"}
               </span>
               {escalate ? <Badge variant="secondary">ce tour dans le cloud</Badge> : null}
               <label className="ml-auto flex items-center gap-1.5 text-muted-foreground">
@@ -817,7 +817,11 @@ export function BrainLab() {
                 </p>
               ) : null}
             </div>
-            {error ? <p className="text-xs text-destructive">{error}</p> : null}
+            {error ? (
+              <p className="rounded-xl border border-primary/35 bg-primary/10 px-3 py-2 text-xs leading-5 text-foreground">
+                {error}
+              </p>
+            ) : null}
             <div className="relative">
               <textarea
                 className="min-h-20 w-full rounded-2xl border border-border bg-background p-3 pr-12 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -1054,19 +1058,19 @@ export function BrainLab() {
 
       <Card>
         <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <CardTitle className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <CardTitle className="flex flex-wrap items-center gap-2">
                 <ScanSearch className="size-4 text-primary" />
                 Balayage
                 <HelpTip
                   title="Balayage"
-                  body="Sur bouton seulement : Brain parcourt le catalog ou les 142 courbes, note les fiches à relire, puis peut commenter ces lots. Rien ne part tout seul."
+                  body="Sur bouton seulement : Brain parcourt la bibliothèque ou les 142 courbes, note les fiches à relire, puis peut commenter ces lots. Rien ne part tout seul."
                 />
               </CardTitle>
               <CardDescription>Lecture automatique, uniquement quand tu lances. Pause et arrêt à tout moment.</CardDescription>
             </div>
-            <Button size="sm" variant="ghost" onClick={() => setScanOpen((value) => !value)}>
+            <Button size="sm" variant="ghost" className="shrink-0" onClick={() => setScanOpen((value) => !value)}>
               {scanOpen || walker ? "Replier" : "Ouvrir"}
             </Button>
           </div>
@@ -1076,7 +1080,7 @@ export function BrainLab() {
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => void runWalker("catalog")} disabled={walker?.status === "running"}>
                 <ScanSearch />
-                Lire le catalog
+                Lire la bibliothèque
               </Button>
               <Button size="sm" variant="secondary" onClick={() => void runWalker("curves")} disabled={walker?.status === "running"}>
                 Lire les 142 courbes
@@ -1125,7 +1129,7 @@ export function BrainLab() {
             {walker ? (
               <div className="flex flex-col gap-2 text-xs">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">{walker.mode === "curves" ? "142 courbes" : "catalog"}</Badge>
+                  <Badge variant="secondary">{walker.mode === "curves" ? "142 courbes" : "bibliothèque"}</Badge>
                   <span>{WALKER_STATUS_LABELS[walker.status] ?? walker.status}</span>
                   <span className="text-muted-foreground">
                     {walker.index} / {walker.jobs.length} · {walker.flagged.length} à relire · local {walker.localCalls} / cloud{" "}
@@ -1158,7 +1162,7 @@ export function BrainLab() {
               </div>
             ) : (
               <p className="text-xs leading-5 text-muted-foreground">
-                Rien ne se lance tout seul. Brain commente seulement les fiches à relire, pas tout le catalog.
+                Rien ne se lance tout seul. Brain commente seulement les fiches à relire, pas toute la bibliothèque.
               </p>
             )}
           </CardContent>

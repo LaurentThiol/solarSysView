@@ -9,6 +9,8 @@ export const BRAIN_FAMILY_LABELS: Record<string, string> = {
   tendance: "Tendance",
   volatilite: "Volatilité",
   moyennes: "Moyennes",
+  niveaux: "Niveaux",
+  flux: "Flux",
   variable: "Séries",
   figure: "Figures",
   tf: "Spectres",
