@@ -230,6 +230,10 @@ function yDomain(mode: DrawChartMode): [number, number] | [number, "auto"] {
   return [15, "auto"]
 }
 
+function yDomainLocked(mode: DrawChartMode) {
+  return typeof yDomain(mode)[1] === "number"
+}
+
 function formatStat(value: number) {
   return value.toLocaleString("fr-FR", {
     maximumFractionDigits: 1,
@@ -732,6 +736,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                   tickLine={false}
                   axisLine={false}
                   allowDecimals={false}
+                  allowDataOverflow={yDomainLocked(mode)}
                   tickFormatter={combined ? (value) => `${value}%` : undefined}
                 />
                 {combined && scale === "theory" ? (
