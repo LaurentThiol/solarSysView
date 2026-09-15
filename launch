@@ -56,7 +56,7 @@ Usage:
   ./launch update          Contrôle GitHub et tire origin (ff-only), puis réinstalle si besoin
   ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM / chartisme / harmo / Ollama
   ./launch install         Installe uniquement les dépendances
-  ./launch install-vlm     Installe Moondream (torch + transformers + accelerate)
+  ./launch install-vlm     Installe Moondream via torch (optionnel si ollama pull moondream)
   ./launch install-chartisme  Installe les réseaux du chartisme (torch + torch-geometric)
   ./launch install-harmo      Installe les extras Harmo (PyWavelets, ssqueezepy, librosa)
   ./launch chartisme-train    Entraîne les réseaux du chartisme (options passées au CLI)
@@ -1112,7 +1112,7 @@ vlm_doctor() {
   elif "$py" -c 'import transformers, torch' 2>/dev/null; then
     warn "VLM : accelerate manquant — relancez ./launch install-vlm (device_map CUDA/MPS)"
   else
-    warn "VLM : transformers/torch absents — Morpho → Installer et charger, ou ./launch install-vlm"
+    warn "VLM : transformers/torch absents — Morpho utilise Ollama si un tag vision est là (ollama pull moondream), sinon ./launch install-vlm"
   fi
   if "$py" -c 'import moondream' 2>/dev/null; then
     ok "VLM : photon (paquet moondream)"
@@ -1411,6 +1411,11 @@ ollama_doctor() {
   names="$(llm_model_names "$found" || true)"
   if [[ -n "$names" ]]; then
     ok "Ollama serveur : ${found} · ${names}"
+    if printf '%s' "$names" | grep -Eqi 'moondream|llava|qwen[^ ]*vl|minicpm-?v'; then
+      ok "Morpho VLM : tag vision présent — pas besoin de torch"
+    else
+      printf '%sMorpho VLM : pas de modèle vision — ollama pull moondream%s\n' "$C_DIM" "$C_RESET"
+    fi
   else
     warn "Ollama écoute (${found}) mais aucun modèle. Ex. : ollama pull llama3.2"
   fi

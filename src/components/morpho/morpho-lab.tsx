@@ -44,6 +44,8 @@ type VlmLoadStatus = {
   hint?: string | null
   message?: string | null
   available?: string[]
+  backend?: string | null
+  model_id?: string | null
   install_cmd?: string
 }
 
@@ -56,6 +58,9 @@ function vlmProgress(status: VlmLoadStatus | null): string {
     return status.message || "Installation de torch + transformers + accelerate (une fois, ~2 Go)…"
   }
   if (status?.phase === "loading" || status?.busy) {
+    if (status?.available?.includes("ollama") || status?.backend === "ollama") {
+      return status?.message || "Connexion au VLM Ollama…"
+    }
     return status?.message || "Chargement de Moondream2…"
   }
   return status?.error || status?.hint || ""
@@ -109,6 +114,8 @@ export function MorphoLab() {
     residual?: string | null
     loaded?: boolean
     error?: string
+    backend?: string | null
+    model_id?: string | null
     sequence?: { drift?: string | null; cluster_move?: string | null }
     contrast?: { difference?: string | null }
   } | null>(null)
@@ -253,6 +260,8 @@ export function MorphoLab() {
         residual?: string | null
         grounding_score?: number | null
         vlm?: boolean
+        backend?: string | null
+        model_id?: string | null
       }
       sequence?: { drift?: string | null; cluster_move?: string | null }
       contrast?: { difference?: string | null }
@@ -285,6 +294,8 @@ export function MorphoLab() {
       residual: body.state?.residual,
       loaded: body.state?.vlm,
       error: body.error,
+      backend: body.state?.backend,
+      model_id: body.state?.model_id,
       sequence: body.sequence,
       contrast: body.contrast,
     })
@@ -518,19 +529,19 @@ export function MorphoLab() {
             <CardTitle>
               <TitleHelp
                 help={{
-                  title: "Moondream",
-                  body: "Vision locale (Moondream2) : caption, questions de forme, ancrage. Premier clic installe torch/transformers si besoin (~2 Go), puis charge le modèle.",
+                  title: "VLM local",
+                  body: "Vision locale pour légender le glyphe (questions de forme). Si Ollama a un modèle vision (moondream, llava…), il est utilisé en premier — ollama pull moondream, pas besoin de torch. Sinon Moondream2 via transformers : le premier clic peut installer ~2 Go. La géométrie reste la source de vérité ; CLIP (kNN) reste dans le navigateur.",
                 }}
               >
-                Moondream
+                VLM
               </TitleHelp>
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <WithHelp
               help={{
-                title: "Interroger Moondream",
-                body: "Lance le chargement du VLM si besoin, puis décrit le glyphe courant (caption, requêtes, score d’ancrage). Sans API, la caption géométrique du lexique reste affichée.",
+                title: "Interroger le VLM",
+                body: "Charge Ollama (modèle vision) ou Moondream2, puis décrit le glyphe courant. Sans ancrage par coordonnées côté Ollama. Sans API, la caption géométrique du lexique reste affichée.",
               }}
             >
               <Button type="button" onClick={() => void runVlm()} disabled={vlmBusy}>
@@ -540,11 +551,19 @@ export function MorphoLab() {
                     : "Analyse VLM…"
                   : vlmStatus?.loaded
                     ? "Interroger"
-                    : vlmStatus?.available?.length
+                    : vlmStatus?.available?.includes("ollama") || (vlmStatus?.available?.length ?? 0) > 0
                       ? "Charger / interroger"
                       : "Installer et charger"}
               </Button>
             </WithHelp>
+            {(vlmStatus?.loaded && (vlmStatus.backend || vlmStatus.model_id)) || vlm?.backend ? (
+              <p className="text-xs text-muted-foreground">
+                VLM : {vlm?.backend || vlmStatus?.backend}
+                {vlm?.model_id || vlmStatus?.model_id
+                  ? ` / ${vlm?.model_id || vlmStatus?.model_id}`
+                  : ""}
+              </p>
+            ) : null}
             {!vlmBusy && !vlmStatus?.loaded && vlmStatus?.hint && !vlm?.error ? (
               <p className="text-xs text-muted-foreground">{vlmStatus.hint}</p>
             ) : null}

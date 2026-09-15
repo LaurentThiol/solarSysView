@@ -6,11 +6,24 @@ from fastapi.testclient import TestClient
 
 from synchro.app import create_app
 
+from synchro.morpho import vlm as vlm_mod
+
 
 @pytest.fixture(autouse=True)
 def _no_neon_on_startup() -> None:
     with patch("synchro.db.database_configured", return_value=False):
         yield
+
+
+@pytest.fixture(autouse=True)
+def _ollama_tags_off(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "synchro.brain.ping_ollama_tags",
+        lambda timeout=0.8: {"ok": False, "host": "http://127.0.0.1:11434", "error": "down", "kind": None},
+    )
+    vlm_mod.clear_ollama_vision_cache()
+    yield
+    vlm_mod.unload()
 
 
 def _client() -> TestClient:
@@ -101,6 +114,7 @@ def test_vlm_status_exposes_install_hint() -> None:
     if not body.get("loaded") and not body.get("available"):
         assert body.get("hint")
         assert "install-vlm" in body["hint"]
+        assert "moondream" in body["hint"].lower()
 
 
 def test_vlm_load_without_extras_skips_gguf() -> None:
@@ -121,5 +135,5 @@ def test_vlm_load_without_extras_skips_gguf() -> None:
     blob = f"{body.get('error') or ''} {body.get('hint') or ''}"
     if body.get("loaded"):
         return
-    assert "install-vlm" in blob or "Moondream" in blob
+    assert "install-vlm" in blob or "Moondream" in blob or "ollama pull" in blob
     assert "MORPHO_GGUF_PATH" not in blob

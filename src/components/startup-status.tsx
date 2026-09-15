@@ -571,7 +571,7 @@ const NAV_ITEMS = [
     label: "Morpho",
     help: {
       title: "Morpho",
-      body: "Glyphes 5×10, lexique de formes, voisins visuels, Moondream, règles QUAND/ALORS et anticipation.",
+      body: "Glyphes 5×10, lexique de formes, voisins visuels CLIP, VLM local (Ollama moondream ou Moondream2), règles QUAND/ALORS et anticipation.",
     },
   },
   {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  guessVision,
   isOpenAiChatModel,
   mergeModelOptions,
   modelSequence,
@@ -92,4 +93,11 @@ test("local prefers a model actually served over the catalog default", () => {
   })
   assert.equal(pickAvailableModel(models, "local", "llama3.2"), "mistral")
   assert.equal(pickAvailableModel(models, "local", "qwen2.5"), "qwen2.5")
+})
+
+test("local vision ids include moondream, llava and minicpm-v", () => {
+  assert.equal(guessVision("moondream", "local"), true)
+  assert.equal(guessVision("llava", "local"), true)
+  assert.equal(guessVision("minicpm-v", "local"), true)
+  assert.equal(guessVision("llama3.2", "local"), false)
 })

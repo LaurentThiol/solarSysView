@@ -14,8 +14,8 @@ export default function MorphoPage() {
       <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         <h1 className="text-3xl font-semibold tracking-tight">Morpho · formes</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          Grille 5×10, lexique géométrique, kNN visuel, Moondream local, règles
-          QUAND/ALORS, P(forme suivante | contexte) vs uniforme.
+          Grille 5×10, lexique géométrique, kNN visuel, VLM local (Ollama /
+          Moondream), règles QUAND/ALORS, P(forme suivante | contexte) vs uniforme.
         </p>
       </div>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-12 sm:px-6">

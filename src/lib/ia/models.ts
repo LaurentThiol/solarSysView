@@ -195,7 +195,7 @@ export function guessVision(id: string, provider: IaProviderId) {
   const known = IA_MODELS.find((item) => item.id === id)
   if (known) return known.vision
   if (provider === "google") return /gemini/i.test(id) && !/(embed|tts|imagen|veo)/i.test(id)
-  if (provider === "local") return /(llava|vision|qwen.*vl|moondream)/i.test(id)
+  if (provider === "local") return /(llava|vision|qwen.*vl|moondream|minicpm-?v)/i.test(id)
   return /^(gpt-4o|gpt-4\.1|gpt-5)/.test(id)
 }
 

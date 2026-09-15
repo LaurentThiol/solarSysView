@@ -33,7 +33,7 @@ Le lanceur (même modèle que PaxVideo) installe les dépendances si besoin, lib
 | `./launch update` / `make update` | Contrôle GitHub (`git fetch`) et tire `origin` en fast-forward |
 | `./launch doctor` | Python, venv, Node, `.env`, ports, VLM, chartisme, harmo, Ollama |
 | `./launch install` | Dépendances seulement |
-| `./launch install-vlm` | Moondream local (torch + transformers + accelerate) |
+| `./launch install-vlm` | Moondream via torch (optionnel si `ollama pull moondream`) |
 | `./launch install-chartisme` | Réseaux chartisme (optionnels) |
 | `./launch install-harmo` | Extras Harmo (PyWavelets, ssqueezepy, librosa) |
 | `./launch shortcut` | Raccourci Bureau / menu applications (Linux) ou `~/Desktop/Synchro.command` (macOS) |
@@ -71,14 +71,22 @@ Compteur combinatoire de l’univers EuroMillions (5 parmi 50 × 2 parmi 12 = 13
 
 ## Morpho (`/morpho`)
 
-Laboratoire visuel : chaque tirage est un glyphe sur la grille 5×10 + étoiles. Détecteurs géométriques (alignements, grappe, miroir, …), kNN visuel, règles QUAND/ALORS, anticipation `P(forme suivante | contexte)` vs tirages uniformes. Moondream local (optionnel) :
+Laboratoire visuel : chaque tirage est un glyphe sur la grille 5×10 + étoiles. Détecteurs géométriques (alignements, grappe, miroir, …), kNN visuel CLIP (navigateur), règles QUAND/ALORS, anticipation `P(forme suivante | contexte)` vs tirages uniformes. VLM optionnel pour la légende :
+
+```bash
+ollama pull moondream
+```
+
+Puis bouton **Charger / interroger** dans Morpho. Ollama est le backend VLM prioritaire dès qu’un modèle vision est listé (`moondream`, `llava`, `qwen2-vl`, `minicpm-v`). Pas d’install torch dans ce cas. La géométrie reste la source de vérité : Ollama n’a pas l’API `point()` de Moondream, donc pas de score d’ancrage par coordonnées.
+
+Sinon, Moondream2 via Hugging Face :
 
 ```bash
 ./launch install-vlm
 # équivalent : .venv/bin/pip install -r requirements-morpho.txt
 ```
 
-Puis bouton **Charger / interroger** dans Morpho (poids HF en cache, pas dans le git). Si les extras ne sont pas là, le bouton les installe tout seul (torch + transformers 4.x + accelerate, ~2 Go, une fois). `transformers` est épinglé `<5` : la 5.x casse le chargement de `HfMoondream` (`all_tied_weights_keys`). CLIP navigateur : `@huggingface/transformers`, chargé au clic **Œil local CLIP**.
+Le bouton peut aussi installer torch + transformers 4.x + accelerate (~2 Go, une fois). `transformers` est épinglé `<5` : la 5.x casse le chargement de `HfMoondream` (`all_tied_weights_keys`). CLIP navigateur : `@huggingface/transformers`, chargé au clic **Œil local CLIP** — ce n’est pas un LLM, il ne passe pas par Ollama.
 
 ## Relief (`/relief`)
 

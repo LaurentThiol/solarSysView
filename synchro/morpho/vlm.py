@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
+import json
 import os
 import re
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -22,11 +25,17 @@ GROUNDING_THRESHOLD = 0.4
 DEFAULT_MODEL_ID = "vikhyatk/moondream2"
 DEFAULT_REVISION = "2025-06-21"
 INSTALL_CMD = "./launch install-vlm"
-INSTALL_HINT = (
-    "Moondream n'est pas installé. Lancez ./launch install-vlm "
-    "(torch + transformers + accelerate, ~2 Go, une fois) puis recliquez "
-    "Charger / interroger — ou laissez le bouton installer tout seul."
+OLLAMA_HINT = (
+    "Pour Morpho via Ollama : ollama pull moondream puis Charger / interroger "
+    "(pas besoin de torch)."
 )
+INSTALL_HINT = (
+    "Aucun VLM local. "
+    "Recommandé : ollama pull moondream puis Charger / interroger. "
+    "Sinon ./launch install-vlm (torch + transformers + accelerate, ~2 Go) "
+    "— ou laissez le bouton installer tout seul."
+)
+OLLAMA_LOAD_PROGRESS = "Connexion au VLM Ollama…"
 COMPAT_HINT = (
     "Incompatibilité transformers 5 / Moondream2 : HfMoondream n'expose pas "
     "all_tied_weights_keys. Relancez ./launch install-vlm (transformers 4.x, <5) "
@@ -54,6 +63,15 @@ _worker: threading.Thread | None = None
 _phase: str | None = None
 _last_error: str | None = None
 _last_message: str | None = None
+_ollama_vision_cache: tuple[float, dict[str, Any]] | None = None
+OLLAMA_VISION_TTL_S = 10.0
+VISION_EXCLUDE = re.compile(r"(embed|nomic-embed|tts|whisper|clip)", re.I)
+VISION_RANK = (
+    (re.compile(r"moondream", re.I), 0),
+    (re.compile(r"minicpm-?v", re.I), 1),
+    (re.compile(r"llava", re.I), 2),
+    (re.compile(r"qwen.*vl", re.I), 3),
+)
 
 
 def extras_requirements_path() -> Path:
@@ -123,10 +141,70 @@ def gguf_configured() -> bool:
     return bool(path)
 
 
+def vision_model_rank(name: str) -> int | None:
+    lower = (name or "").strip()
+    if not lower or VISION_EXCLUDE.search(lower):
+        return None
+    for pattern, rank in VISION_RANK:
+        if pattern.search(lower):
+            return rank
+    return None
+
+
+def pick_vision_model(names: list[str]) -> str | None:
+    scored: list[tuple[int, int, str]] = []
+    for name in names:
+        rank = vision_model_rank(name)
+        if rank is None:
+            continue
+        scored.append((rank, len(name), name))
+    if not scored:
+        return None
+    scored.sort()
+    return scored[0][2]
+
+
+def clear_ollama_vision_cache() -> None:
+    global _ollama_vision_cache
+    _ollama_vision_cache = None
+
+
+def ollama_vision_status(*, force: bool = False) -> dict[str, Any]:
+    """True only if native `/api/tags` lists a vision model (not OpenAI-compat)."""
+    global _ollama_vision_cache
+    now = time.monotonic()
+    if not force and _ollama_vision_cache and now - _ollama_vision_cache[0] < OLLAMA_VISION_TTL_S:
+        return _ollama_vision_cache[1]
+    from synchro.brain import ping_ollama_tags
+
+    ping = ping_ollama_tags()
+    if not ping.get("ok") or ping.get("kind") != "tags":
+        result: dict[str, Any] = {
+            "ok": False,
+            "host": ping.get("host"),
+            "model": None,
+            "models": [],
+        }
+    else:
+        models = [str(item) for item in (ping.get("models") or []) if item]
+        model = pick_vision_model(models)
+        result = {
+            "ok": bool(model),
+            "host": ping.get("host"),
+            "model": model,
+            "models": models,
+        }
+    _ollama_vision_cache = (now, result)
+    return result
+
+
 def backend_order(preferred: str | None = None) -> list[str]:
     if preferred:
         return [preferred]
-    names = ["transformers", "photon"]
+    names: list[str] = []
+    if ollama_vision_status().get("ok"):
+        names.append("ollama")
+    names.extend(["transformers", "photon"])
     if gguf_configured():
         names.append("gguf")
     return names
@@ -181,7 +259,11 @@ def _installed_transformers_needs_pin() -> bool:
     return transformers_needs_pin(_transformers_version())
 
 
-def _stack_needs_install() -> bool:
+def _stack_needs_install(preferred: str | None = None) -> bool:
+    if preferred == "ollama":
+        return False
+    if preferred is None and ollama_vision_status().get("ok"):
+        return False
     return extras_missing() or _installed_transformers_needs_pin()
 
 
@@ -226,7 +308,7 @@ def format_vlm_load_error(errors: list[str]) -> str:
     if looks_like_compat_error(detail) or any(looks_like_compat_error(item) for item in errors):
         prefix = COMPAT_HINT
     elif not _probe_available() or _looks_like_missing_extra(detail):
-        prefix = f"aucun backend VLM local. {INSTALL_HINT}"
+        prefix = f"aucun backend VLM local. {OLLAMA_HINT} {INSTALL_HINT}"
     else:
         prefix = LOAD_HINT
     if detail:
@@ -310,6 +392,8 @@ def _install_tied_weights_getattr_patch():
 
 
 def _optional_backend_noise(name: str, exc: BaseException) -> bool:
+    if name == "ollama":
+        return True
     if name == "photon" and _is_missing_module(exc, "moondream"):
         return True
     if name == "gguf":
@@ -328,14 +412,17 @@ def status() -> dict[str, Any]:
     loaded = _backend is not None
     busy = _worker is not None and _worker.is_alive()
     available = _probe_available()
+    ollama = ollama_vision_status()
     if loaded:
         hint = None
+    elif ollama.get("ok"):
+        hint = f"VLM Ollama prêt ({ollama.get('model')}). Pas besoin de torch."
     elif _installed_transformers_needs_pin():
         hint = COMPAT_HINT
     elif available:
         hint = None
     else:
-        hint = INSTALL_HINT
+        hint = f"{OLLAMA_HINT} {INSTALL_HINT}"
     return {
         "loaded": loaded,
         "busy": busy,
@@ -354,6 +441,8 @@ def status() -> dict[str, Any]:
 
 def _probe_available() -> list[str]:
     found: list[str] = []
+    if ollama_vision_status().get("ok"):
+        found.append("ollama")
     if _transformers_ready():
         found.append("transformers")
     if _module_available("moondream"):
@@ -368,7 +457,9 @@ def _load_first_backend(preferred: str | None = None) -> dict[str, Any]:
     errors: list[str] = []
     for name in backend_order(preferred):
         try:
-            if name == "photon":
+            if name == "ollama":
+                _backend = _load_ollama()
+            elif name == "photon":
                 _backend = _load_photon()
             elif name == "transformers":
                 _backend = _load_transformers()
@@ -389,7 +480,7 @@ def load(backend: str | None = None, *, install: bool = False) -> dict[str, Any]
     if _backend is not None:
         return status()
     tried_install = False
-    if install and _stack_needs_install() and install_allowed():
+    if install and _stack_needs_install(backend) and install_allowed():
         _pip_install_extras()
         tried_install = True
     try:
@@ -409,9 +500,14 @@ def ensure_loaded(backend: str | None = None, *, install: bool = True) -> dict[s
     with _lock:
         if _worker is not None and _worker.is_alive():
             return {"ok": False, **status()}
-        will_install = install and _stack_needs_install() and install_allowed()
+        will_install = install and _stack_needs_install(backend) and install_allowed()
         _phase = "installing" if will_install else "loading"
-        _last_message = _install_progress_message() if will_install else LOAD_PROGRESS
+        if will_install:
+            _last_message = _install_progress_message()
+        elif (backend or "ollama") == "ollama" and ollama_vision_status().get("ok"):
+            _last_message = OLLAMA_LOAD_PROGRESS
+        else:
+            _last_message = LOAD_PROGRESS
         _last_error = None
         _worker = threading.Thread(
             target=_load_worker,
@@ -426,13 +522,17 @@ def ensure_loaded(backend: str | None = None, *, install: bool = True) -> dict[s
 def _load_worker(backend: str | None, install: bool) -> None:
     global _phase, _last_error, _last_message
     try:
-        if install and _stack_needs_install() and install_allowed():
+        if install and _stack_needs_install(backend) and install_allowed():
             _phase = "installing"
             _last_message = _install_progress_message()
             _last_error = None
             _pip_install_extras()
         _phase = "loading"
-        _last_message = LOAD_PROGRESS
+        _last_message = (
+            OLLAMA_LOAD_PROGRESS
+            if (backend or "ollama") == "ollama" and ollama_vision_status().get("ok")
+            else LOAD_PROGRESS
+        )
         load(backend, install=False)
         _last_error = None
         _last_message = None
@@ -485,6 +585,50 @@ def unload() -> None:
     _phase = None
     _last_error = None
     _last_message = None
+    clear_ollama_vision_cache()
+
+
+def _load_ollama() -> dict[str, Any]:
+    probe = ollama_vision_status(force=True)
+    if not probe.get("ok") or not probe.get("model") or not probe.get("host"):
+        raise RuntimeError("Ollama n'expose pas de modèle vision (ollama pull moondream)")
+    return {
+        "name": "ollama",
+        "model": None,
+        "host": probe["host"],
+        "model_id": probe["model"],
+        "revision": None,
+    }
+
+
+def _chat_ollama(host: str, model: str, png: bytes, question: str, timeout: float = 60) -> str:
+    from synchro.brain import _open
+
+    encoded = base64.standard_b64encode(png).decode("ascii")
+    body = json.dumps(
+        {
+            "model": model,
+            "stream": False,
+            "keep_alive": "10m",
+            "messages": [{"role": "user", "content": question, "images": [encoded]}],
+        }
+    ).encode("utf-8")
+    with _open(
+        f"{host.rstrip('/')}/api/chat",
+        timeout,
+        data=body,
+        headers={"content-type": "application/json", "connection": "close"},
+    ) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    message = payload.get("message") if isinstance(payload, dict) else None
+    if isinstance(message, dict) and message.get("content"):
+        return str(message["content"]).strip()
+    if isinstance(payload, dict) and payload.get("response"):
+        return str(payload["response"]).strip()
+    error = ""
+    if isinstance(payload, dict):
+        error = str(payload.get("error") or "")
+    raise RuntimeError(error or "réponse VLM Ollama vide")
 
 
 def _load_photon() -> dict[str, Any]:
@@ -590,6 +734,12 @@ def _pil_image(png: bytes):
 def _ask(png: bytes, question: str) -> str:
     if _backend is None:
         raise RuntimeError("VLM non chargé")
+    if _backend.get("name") == "ollama":
+        host = str(_backend.get("host") or "")
+        model = str(_backend.get("model_id") or "")
+        if not host or not model:
+            raise RuntimeError("backend Ollama incomplet")
+        return _chat_ollama(host, model, png, question)
     model = _backend["model"]
     image = _pil_image(png)
     if hasattr(model, "query"):
@@ -608,6 +758,8 @@ def _ask(png: bytes, question: str) -> str:
 
 def _point(png: bytes, target: str) -> list[dict[str, Any]]:
     if _backend is None:
+        return []
+    if _backend.get("name") == "ollama":
         return []
     model = _backend["model"]
     if not hasattr(model, "point"):

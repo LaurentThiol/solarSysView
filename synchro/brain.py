@@ -125,6 +125,22 @@ def ping_ollama(timeout: float = 0.8) -> dict[str, Any]:
     return {"ok": False, "host": last_host, "error": last_error}
 
 
+def ping_ollama_tags(timeout: float = 0.8) -> dict[str, Any]:
+    """Native Ollama `/api/tags` only — not LM Studio / llama-server `/v1/models`."""
+    last_error = "injoignable"
+    last_host = llm_base()
+    for base in llm_bases():
+        last_host = base
+        try:
+            payload = _read_json(f"{base}/api/tags", timeout)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError) as exc:
+            last_error = str(exc)
+            continue
+        names = [item.get("name") for item in payload.get("models") or [] if item.get("name")]
+        return {"ok": True, "host": base, "models": names, "kind": "tags"}
+    return {"ok": False, "host": last_host, "error": last_error, "kind": None}
+
+
 def embed_text(text: str, model: str = DEFAULT_EMBED_MODEL, timeout: float = 20) -> dict[str, Any]:
     body = json.dumps({"model": model, "prompt": text}).encode("utf-8")
     last_error = "injoignable"

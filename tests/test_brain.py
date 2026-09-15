@@ -111,6 +111,45 @@ def test_ping_ollama_retries_localhost_when_ipv4_loopback_fails() -> None:
     assert result["models"] == ["mistral"]
 
 
+def test_ping_ollama_tags_ignores_openai_compat() -> None:
+    import urllib.error
+
+    from synchro import brain as brain_mod
+
+    def fake_read(url: str, timeout: float):
+        if url.endswith("/api/tags"):
+            raise urllib.error.URLError("no tags")
+        if "/v1/models" in url:
+            return {"data": [{"id": "moondream"}]}
+        raise AssertionError(url)
+
+    with (
+        patch.object(brain_mod, "_read_json", side_effect=fake_read),
+        patch.object(brain_mod, "llm_base", return_value="http://127.0.0.1:1234"),
+    ):
+        result = brain_mod.ping_ollama_tags()
+    assert result["ok"] is False
+    assert result["kind"] is None
+
+
+def test_ping_ollama_tags_returns_native_catalog() -> None:
+    from synchro import brain as brain_mod
+
+    def fake_read(url: str, timeout: float):
+        if url.endswith("/api/tags"):
+            return {"models": [{"name": "moondream"}, {"name": "llama3.2"}]}
+        raise AssertionError(url)
+
+    with (
+        patch.object(brain_mod, "_read_json", side_effect=fake_read),
+        patch.object(brain_mod, "llm_base", return_value="http://127.0.0.1:11434"),
+    ):
+        result = brain_mod.ping_ollama_tags()
+    assert result["ok"] is True
+    assert result["kind"] == "tags"
+    assert result["models"] == ["moondream", "llama3.2"]
+
+
 def test_loopback_json_bypasses_http_proxy() -> None:
     import urllib.request
 

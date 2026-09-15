@@ -1,3 +1,4 @@
+import pytest
 from synchro.morpho.board import cell_center, number_cell, numbers_origin, pixel_to_norm
 from synchro.morpho import vlm as vlm_mod
 from synchro.morpho.vlm import (
@@ -8,10 +9,22 @@ from synchro.morpho.vlm import (
     grounding_score,
     load,
     parse_label,
+    pick_vision_model,
     project_points,
     status,
     unload,
 )
+
+
+@pytest.fixture(autouse=True)
+def _ollama_tags_off(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "synchro.brain.ping_ollama_tags",
+        lambda timeout=0.8: {"ok": False, "host": "http://127.0.0.1:11434", "error": "down", "kind": None},
+    )
+    vlm_mod.clear_ollama_vision_cache()
+    yield
+    unload()
 
 
 def test_parse_label() -> None:
@@ -330,6 +343,199 @@ def test_load_pins_transformers_5_before_load(monkeypatch) -> None:
 
 
 def test_load_retries_install_on_tied_weights_error(monkeypatch) -> None:
+    unload()
+    calls = {"pip": 0}
+    monkeypatch.delenv("MORPHO_GGUF_PATH", raising=False)
+    monkeypatch.setattr(vlm_mod, "install_allowed", lambda: True)
+    monkeypatch.setattr(vlm_mod, "_probe_available", lambda: ["transformers"])
+    monkeypatch.setattr(vlm_mod, "_transformers_version", lambda: "4.56.1")
+
+    def fake_pip() -> None:
+        calls["pip"] += 1
+
+    def fake_transformers() -> dict:
+        if calls["pip"] == 0:
+            raise AttributeError("'HfMoondream' object has no attribute 'all_tied_weights_keys'")
+        return {"name": "transformers", "model": object(), "model_id": "x", "revision": None}
+
+    monkeypatch.setattr(vlm_mod, "_pip_install_extras", fake_pip)
+    monkeypatch.setattr(vlm_mod, "_load_transformers", fake_transformers)
+    monkeypatch.setattr(
+        vlm_mod,
+        "_load_photon",
+        lambda: (_ for _ in ()).throw(ModuleNotFoundError("No module named 'moondream'")),
+    )
+    try:
+        body = load(install=True)
+        assert calls["pip"] == 1
+        assert body["loaded"] is True
+    finally:
+        unload()
+
+
+def test_pick_vision_model_prefers_moondream() -> None:
+    assert pick_vision_model(["llama3.2", "nomic-embed-text"]) is None
+    assert pick_vision_model(["llava", "moondream:latest"]) == "moondream:latest"
+    assert pick_vision_model(["qwen2.5vl", "minicpm-v"]) == "minicpm-v"
+
+
+def test_ollama_vision_status_requires_native_tags(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "synchro.brain.ping_ollama_tags",
+        lambda timeout=0.8: {
+            "ok": True,
+            "host": "http://127.0.0.1:11434",
+            "models": ["moondream"],
+            "kind": "tags",
+        },
+    )
+    vlm_mod.clear_ollama_vision_cache()
+    probe = vlm_mod.ollama_vision_status(force=True)
+    assert probe["ok"] is True
+    assert probe["model"] == "moondream"
+
+    monkeypatch.setattr(
+        "synchro.brain.ping_ollama_tags",
+        lambda timeout=0.8: {
+            "ok": True,
+            "host": "http://127.0.0.1:1234",
+            "models": ["moondream"],
+            "kind": None,
+        },
+    )
+    vlm_mod.clear_ollama_vision_cache()
+    probe = vlm_mod.ollama_vision_status(force=True)
+    assert probe["ok"] is False
+
+
+def test_backend_order_puts_ollama_first_when_vision_tag_exists(monkeypatch) -> None:
+    monkeypatch.setattr(
+        vlm_mod,
+        "ollama_vision_status",
+        lambda **_k: {
+            "ok": True,
+            "host": "http://127.0.0.1:11434",
+            "model": "moondream",
+            "models": ["moondream", "llama3.2"],
+        },
+    )
+    monkeypatch.delenv("MORPHO_GGUF_PATH", raising=False)
+    assert backend_order()[0] == "ollama"
+    assert "transformers" in backend_order()
+
+
+def test_analyze_ollama_parses_closed_labels_without_point(monkeypatch) -> None:
+    unload()
+    monkeypatch.setenv("MORPHO_VLM_NO_INSTALL", "1")
+    monkeypatch.delenv("MORPHO_GGUF_PATH", raising=False)
+    monkeypatch.setattr(
+        vlm_mod,
+        "ollama_vision_status",
+        lambda **_k: {
+            "ok": True,
+            "host": "http://127.0.0.1:11434",
+            "model": "moondream",
+            "models": ["moondream"],
+        },
+    )
+    calls: list[str] = []
+
+    def fake_chat(host: str, model: str, png: bytes, question: str, timeout: float = 60) -> str:
+        assert host == "http://127.0.0.1:11434"
+        assert model == "moondream"
+        assert png
+        calls.append(question)
+        if "collinear" in question:
+            return "yes"
+        if "compact" in question:
+            return "The cluster is compact."
+        if "adjacent" in question or "lower smaller grid" in question:
+            return "adjacent"
+        if "concentrated" in question:
+            return "top"
+        return "A compact row of filled dots on the top of the board."
+
+    monkeypatch.setattr(vlm_mod, "_chat_ollama", fake_chat)
+    monkeypatch.setattr(
+        vlm_mod,
+        "_load_transformers",
+        lambda: (_ for _ in ()).throw(RuntimeError("transformers should not load")),
+    )
+    try:
+        body = load(install=False)
+        assert body["backend"] == "ollama"
+        assert body["model_id"] == "moondream"
+        state = analyze([1, 2, 3, 4, 5], [1, 2])
+    finally:
+        unload()
+    assert state["vlm"] is True
+    assert state["backend"] == "ollama"
+    assert state["grounding_score"] is None
+    assert state["points"] == []
+    assert state["queries"]["region"] == "top"
+    assert state["queries"]["collinear"] == "yes"
+    assert state["queries"]["compact"] == "compact"
+    assert state["queries"]["stars"] == "adjacent"
+    assert len(calls) >= 5
+
+
+def test_chat_ollama_posts_native_api_chat(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"message":{"role":"assistant","content":"top"}}'
+
+    def fake_open(url: str, timeout: float, data: bytes | None = None, headers=None):
+        seen["url"] = url
+        seen["body"] = data
+        seen["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr("synchro.brain._open", fake_open)
+    answer = vlm_mod._chat_ollama("http://127.0.0.1:11434", "moondream", b"\x89PNG", "Where?")
+    assert answer == "top"
+    assert seen["url"] == "http://127.0.0.1:11434/api/chat"
+    payload = __import__("json").loads(seen["body"])
+    assert payload["model"] == "moondream"
+    assert payload["stream"] is False
+    assert payload["messages"][0]["images"]
+
+
+def test_ollama_down_does_not_pip_install_when_forbidden(monkeypatch) -> None:
+    unload()
+    monkeypatch.setenv("MORPHO_VLM_NO_INSTALL", "1")
+    monkeypatch.delenv("MORPHO_GGUF_PATH", raising=False)
+    pip_calls = {"n": 0}
+
+    def fake_pip() -> None:
+        pip_calls["n"] += 1
+
+    monkeypatch.setattr(vlm_mod, "_pip_install_extras", fake_pip)
+    monkeypatch.setattr(
+        vlm_mod,
+        "_load_transformers",
+        lambda: (_ for _ in ()).throw(ModuleNotFoundError("No module named 'transformers'")),
+    )
+    monkeypatch.setattr(
+        vlm_mod,
+        "_load_photon",
+        lambda: (_ for _ in ()).throw(ModuleNotFoundError("No module named 'moondream'")),
+    )
+    try:
+        load(install=True)
+    except RuntimeError as exc:
+        msg = str(exc)
+        assert pip_calls["n"] == 0
+        assert "ollama pull moondream" in msg or "install-vlm" in msg
+        return
+    raise AssertionError("load() aurait dû échouer sans backend")
     unload()
     calls = {"pip": 0}
     monkeypatch.delenv("MORPHO_GGUF_PATH", raising=False)
