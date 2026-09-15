@@ -51,10 +51,11 @@ test("search includes LM Studio and llama-server ports", () => {
 
 test("the LLM pill does not probe loopback hosts from the browser", () => {
   const src = readFileSync(new URL("../src/components/startup-status.tsx", import.meta.url), "utf8")
-  assert.doesNotMatch(src, /pingBases/)
-  assert.doesNotMatch(src, /\[::1\]:11434/)
-  assert.doesNotMatch(src, /127\.0\.0\.1:1234/)
-  assert.doesNotMatch(src, /127\.0\.0\.1:8080/)
-  assert.match(src, /\/api\/ia\/local/)
-  assert.match(src, /\/api\/brain\/status/)
+  const pill = src.slice(src.indexOf("function LocalLlmPill"), src.indexOf("const NAV_ITEMS"))
+  assert.doesNotMatch(pill, /pingBases/)
+  assert.doesNotMatch(pill, /\[::1\]:11434/)
+  assert.doesNotMatch(pill, /127\.0\.0\.1:1234/)
+  assert.doesNotMatch(pill, /127\.0\.0\.1:8080/)
+  assert.doesNotMatch(pill, /jsonPing\("\/api\/brain\/status"\)/)
+  assert.match(pill, /\/api\/ia\/local/)
 })

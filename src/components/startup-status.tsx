@@ -477,23 +477,21 @@ function LocalLlmPill() {
     }
 
     const ping = async () => {
-      // Same-origin only: browser fetches to 127.0.0.1:11434 / 1234 / 8080 log
-      // ERR_CONNECTION_REFUSED in DevTools whenever Ollama is not running.
-      const [iaLocal, brain] = await Promise.all([
-        jsonPing("/api/ia/local"),
-        jsonPing("/api/brain/status"),
-      ])
+      // Same-origin only. `/api/ia/local` already probes Ollama / LM Studio
+      // in Node (and Python if present). Browser fetches to 11434/1234/8080
+      // would log ERR_CONNECTION_REFUSED; `/api/brain/status` 503 when
+      // FastAPI is down would also show in DevTools.
+      const iaLocal = await jsonPing("/api/ia/local")
       if (cancelled) return
-      const hit = (iaLocal?.ok ? iaLocal : null) ?? (brain?.ok ? brain : null)
-      if (hit?.ok) {
+      if (iaLocal?.ok) {
         setLocal("ok")
-        if (hit.host) setHost(hit.host.replace(/^https?:\/\//, ""))
-        setDetail(hit.host ? hit.host.replace(/^https?:\/\//, "") : "ok")
+        if (iaLocal.host) setHost(iaLocal.host.replace(/^https?:\/\//, ""))
+        setDetail(iaLocal.host ? iaLocal.host.replace(/^https?:\/\//, "") : "ok")
         return
       }
       setLocal("off")
       setDetail("off")
-      setHost(localLlmOffMessage(iaLocal?.error || brain?.error))
+      setHost(localLlmOffMessage(iaLocal?.error))
     }
     void ping()
     const id = window.setInterval(() => void ping(), 15_000)
