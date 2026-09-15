@@ -609,10 +609,14 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
 
   function changeMode(next: DrawChartMode) {
     const leavingSums = !isRankMode(mode)
+    const enteringSums = isRankMode(mode) && !isRankMode(next)
     setMode(next)
     setHidden({})
     if (leavingSums && isRankMode(next)) {
       setShowSma(false)
+      setShowBb(false)
+    } else if (enteringSums) {
+      setShowSma(true)
       setShowBb(false)
     }
   }
