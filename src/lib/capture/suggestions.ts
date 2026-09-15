@@ -61,9 +61,9 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   }
   if (lab === "relief") {
     return [
-      "Chaque plaque 5×10 est un tirage. Lis les cinq boules du plus récent (cadre or) et dis comment le décalage range les glyphes.",
-      "Le mode de décalage (hexagone, angle d’or, Hilbert…) change-t-il le voisinage, ou seulement l’esthétique ?",
-      "Rappelle que la couleur n’est pas une prédiction : ce sont des sorties déjà tirées, posées côte à côte.",
+      "Chaque ligne est un tirage : cinq points n1→n5, la hauteur est la valeur 1–50. Lis le profil du plus récent (halo or).",
+      "Le décalage (temps, superposé, hexagone…) change-t-il le voisinage des profils, ou seulement l’esthétique ?",
+      "Rappelle que ce n’est pas une prédiction : ce sont des sorties déjà tirées, posées en lignes de points.",
     ]
   }
   if (lab === "brain") {

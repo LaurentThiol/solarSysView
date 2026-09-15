@@ -82,16 +82,15 @@ Puis bouton **Charger / interroger** dans Morpho (poids HF en cache, pas dans le
 
 ## Relief (`/relief`)
 
-Carte des tirages : **une plaque Morpho 5×10 = un tirage**, les cinq cases allumées = les cinq boules (1 en haut à gauche, 50 en bas à droite). La **couleur** va de l’ancien au récent. Échantillons **20 / 50 / 100 / 200**. Sans décalage, tout s’empile sur la même grille (histogramme). Avec décalage, chaque glyphe reste lisible :
+Carte 3D des tirages : **une ligne de cinq points = un tirage**. Les points sont les statistiques d’ordre **n1→n5** (plus petite boule → plus grande, pas l’ordre de sortie). La **hauteur** est la valeur 1–50. La couleur est le rang (comme l’onglet Évolution). Le glyphe Morpho 5×10 reste sur `/morpho`.
 
-- **Hexagone** — pavage régulier, le plus lisible à 20 tirages (défaut) ;
-- **Angle d’or** (phyllotaxie de Vogel, défaut dès 50) — densité uniforme ;
-- **Hilbert** — les tirages consécutifs restent voisins ;
-- **Temps** — une plaque derrière l’autre ;
-- **Centroïde × étendue** — les grilles de même équilibre se rapprochent ;
-- **Superposé 5×10** — l’histogramme 1–50 sur une seule plaque.
+Échantillons **20 / 50 / 100 / 200**. Décalage :
 
-Lecture **Plan** (vue de dessus, numéros dans les cases) ou **Timbres 3D** (cases soulevées). Le curseur **Serrer** compacte la carte sans fondre les glyphes. Glisser fait tourner ; molette pour zoomer. Ce n’est pas un pronostic : le voisinage sur la carte est un choix de mise en page.
+- **Temps** (défaut) — chaque profil est une tranche, le temps va vers l’arrière ;
+- **Superposé n1→n5** — tous les profils sur le même axe (faisceau) ;
+- **Hexagone / angle d’or / Hilbert / centroïde** — un peigne n1→n5 par tirage, sans grille 5×10.
+
+Lecture **Profils 3D** ou **Plan**. Glisser fait tourner ; molette pour zoomer. Ce n’est pas un pronostic : le voisinage sur la carte est un choix de mise en page.
 
 ## Chartisme (`/chartisme`)
 

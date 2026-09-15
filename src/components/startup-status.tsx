@@ -542,7 +542,7 @@ const NAV_ITEMS = [
     label: "Relief",
     help: {
       title: "Relief",
-      body: "Une plaque Morpho 5×10 par tirage. Les cinq cases colorées sont les boules. Plan lisible ou timbres 3D, décalage hexagone / angle d’or, rotation.",
+      body: "Une ligne n1→n5 par tirage. Cinq points, hauteur = valeur 1–50. Profils 3D, décalage temps / hexagone, rotation. Le glyphe 5×10 reste Morpho.",
     },
   },
   {

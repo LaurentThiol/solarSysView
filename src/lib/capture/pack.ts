@@ -374,9 +374,9 @@ export function packRelief(input: {
   recommended: string
 }): CaptureContext {
   const summary = [
-    `Relief · ${input.style} · ${input.offset}`,
+    `Relief · profils n1→n5 · ${input.style} · ${input.offset}`,
     `${input.drawn} tirages (échantillon ${input.sample}) · ${input.from ?? "?"} → ${input.to ?? "?"}`,
-    `Hauteur = ${input.height} · fusion ${input.fusion.toFixed(2)} · max ${roundish(input.maxH, 2)}`,
+    `Hauteur = ${input.height} · écart ${input.fusion.toFixed(2)} · max ${roundish(input.maxH, 2)}`,
     `Décalage recommandé pour cette taille : ${input.recommended}`,
   ]
   return {

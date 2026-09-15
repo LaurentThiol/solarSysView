@@ -12,7 +12,7 @@ export type OffsetMode = (typeof OFFSET_MODES)[number]
 export const HEIGHT_MODES = ["mixte", "presence", "recence", "valeur"] as const
 export type HeightMode = (typeof HEIGHT_MODES)[number]
 
-export const VIEW_STYLES = ["plan", "timbres"] as const
+export const VIEW_STYLES = ["scene", "plan"] as const
 export type ViewStyle = (typeof VIEW_STYLES)[number]
 
 export const OFFSET_LABELS: Record<OffsetMode, string> = {
@@ -21,7 +21,7 @@ export const OFFSET_LABELS: Record<OffsetMode, string> = {
   hilbert: "Hilbert",
   temps: "Temps",
   stat: "Centroïde × étendue",
-  superpose: "Superposé 5×10",
+  superpose: "Superposé n1→n5",
 }
 
 export const HEIGHT_LABELS: Record<HeightMode, string> = {
@@ -32,8 +32,8 @@ export const HEIGHT_LABELS: Record<HeightMode, string> = {
 }
 
 export const STYLE_LABELS: Record<ViewStyle, string> = {
-  plan: "Plan (lisible)",
-  timbres: "Timbres 3D",
+  scene: "Profils 3D",
+  plan: "Plan",
 }
 
 /** Angle d'or de Vogel : 2π / φ². */
@@ -210,25 +210,25 @@ export function layoutDraws(draws: Draw[], options: LayoutOptions): ReliefLayout
   }
 }
 
-export function recommendedOffset(sample: number): OffsetMode {
-  return sample <= 24 ? "hex" : "or"
+export function recommendedOffset(_sample: number): OffsetMode {
+  return "temps"
 }
 
 export function layoutNote(mode: OffsetMode): string {
   if (mode === "or") {
-    return "Phyllotaxie de Vogel : chaque tirage est posé à l’angle d’or (~137,5°). La densité est uniforme, sans trou ni direction privilégiée — c’est le décalage le plus harmonieux pour une carte circulaire."
+    return "Angle d’or : chaque tirage reste un peigne n1→n5, posé en spirale. On ne dessine que les cinq boules du jour, pas la grille Morpho 5×10."
   }
   if (mode === "hex") {
-    return "Pavage hexagonal : six voisins à égale distance. Sur un petit échantillon (20 tirages) la grille reste lisible, chaque glyphe 5×10 formant une tuile."
+    return "Maille hexagonale : un peigne n1→n5 par tirage. Utile pour comparer des profils voisins, toujours sans glyphe 5×10."
   }
   if (mode === "hilbert") {
-    return "Courbe de Hilbert : deux tirages consécutifs restent voisins. Les « continents » de la carte suivent le temps, pas seulement la géométrie des boules."
+    return "Courbe de Hilbert : les peignes n1→n5 proches dans le temps restent voisins."
   }
   if (mode === "temps") {
-    return "Le temps court sur la profondeur. Chaque tirage est une tranche ; la carte se lit comme une chaîne de montagnes du plus ancien au plus récent."
+    return "Le temps court en profondeur. Chaque tirage est la ligne de cinq points n1→n5 (plus petite boule → plus grande), la hauteur est la valeur 1–50. Les plus récents sont au premier plan."
   }
   if (mode === "stat") {
-    return "Origine = (centroïde des 5 boules, étendue n5−n1). Les tirages de même équilibre se superposent : la hauteur dit alors la densité morphologique, pas la date."
+    return "Le peigne n1→n5 entier se décale selon le barycentre et l’étendue des cinq boules. Deux tirages de même équilibre se rapprochent."
   }
-    return "Tous les tirages sur la même plaque Morpho 5×10. La hauteur (ou la saturation) d’une case est le nombre de fois où cette boule est sortie : l’histogramme 1–50, lisible."
+  return "Tous les profils n1→n5 sur le même axe : le faisceau montre la répétition des formes, pas un histogramme 5×10."
 }

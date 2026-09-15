@@ -62,6 +62,24 @@ export {
   type Projected,
 } from "./project"
 export {
+  RANK_LABELS,
+  RANK_RGB,
+  STAR_RGB,
+  Y_WORLD,
+  axisConnected,
+  buildProfiles,
+  distToSegment,
+  profileBounds,
+  ranksOf,
+  rgbCssOf,
+  starsOf,
+  valueHeight,
+  type DrawProfile,
+  type ProfileMap,
+  type ProfilePoint,
+  type StarPoint,
+} from "./profiles"
+export {
   buildStampMap,
   plateCorners,
   stampBounds,

@@ -21,20 +21,21 @@ import { INDEPENDENCE_DISCLAIMER } from "@/lib/capture/snapshot"
 import { formatDrawDate, formatShortDate, takeLastDraws } from "@/lib/draws"
 import {
   DEFAULT_CAMERA,
-  HEIGHT_LABELS,
-  HEIGHT_MODES,
   OFFSET_LABELS,
   OFFSET_MODES,
   PLAN_CAMERA,
+  RANK_LABELS,
+  RANK_RGB,
   RELIEF_SAMPLES,
   STYLE_LABELS,
   VIEW_STYLES,
-  buildStampMap,
+  buildProfiles,
   layoutDraws,
   layoutNote,
+  profileBounds,
   recommendedOffset,
+  rgbCssOf,
   type Camera,
-  type HeightMode,
   type OffsetMode,
   type ReliefSample,
   type ViewStyle,
@@ -48,15 +49,14 @@ function homeCamera(style: ViewStyle): Camera {
 export function ReliefLab() {
   const { draws: archive, source, loading } = useDraws("current")
   const [sample, setSample] = useState<ReliefSample>(20)
-  const [offset, setOffset] = useState<OffsetMode>("hex")
-  const [height, setHeight] = useState<HeightMode>("mixte")
-  const [style, setStyle] = useState<ViewStyle>("plan")
-  const [fusion, setFusion] = useState(0.48)
+  const [offset, setOffset] = useState<OffsetMode>("temps")
+  const [style, setStyle] = useState<ViewStyle>("scene")
+  const [fusion, setFusion] = useState(0.42)
   const [yScale, setYScale] = useState(1.15)
   const [stars, setStars] = useState(false)
   const [labels, setLabels] = useState(true)
   const [autoRotate, setAutoRotate] = useState(false)
-  const [camera, setCamera] = useState<Camera>(PLAN_CAMERA)
+  const [camera, setCamera] = useState<Camera>(DEFAULT_CAMERA)
   const [hoverOwner, setHoverOwner] = useState<number | null>(null)
 
   const onCamera = useCallback((next: Camera | ((prev: Camera) => Camera)) => {
@@ -73,15 +73,16 @@ export function ReliefLab() {
     () =>
       layoutDraws(chronological, {
         mode: offset,
-        height,
+        height: "valeur",
         fusion,
         stars,
       }),
-    [chronological, fusion, height, offset, stars]
+    [chronological, fusion, offset, stars]
   )
-  const map = useMemo(() => buildStampMap(layout), [layout])
+  const map = useMemo(() => buildProfiles(layout), [layout])
+  const bounds = useMemo(() => profileBounds(map, stars), [map, stars])
 
-  const hover = hoverOwner == null ? null : layout.anchors[hoverOwner] ?? null
+  const hover = hoverOwner == null ? null : (map.profiles[hoverOwner] ?? null)
   const from = chronological[0]?.date ?? null
   const to = chronological[chronological.length - 1]?.date ?? null
   const short = chronological.length < sample
@@ -95,11 +96,11 @@ export function ReliefLab() {
       to,
       style,
       offset,
-      height,
+      height: "valeur 1–50 (n1→n5)",
       fusion,
       yScale,
       stars,
-      maxH: map.maxH,
+      maxH: bounds.maxY * yScale,
       recommended: OFFSET_LABELS[recommended],
     })
   )
@@ -110,7 +111,7 @@ export function ReliefLab() {
         <CardContent className="p-0">
           <div className="h-[min(68vh,600px)] min-h-[380px]">
             {chronological.length === 0 ? (
-              <p className="p-6 text-sm text-muted-foreground">Aucun tirage à cartographier.</p>
+              <p className="p-6 text-sm text-muted-foreground">Aucun tirage à tracer.</p>
             ) : (
               <ReliefCanvas
                 map={map}
@@ -122,6 +123,7 @@ export function ReliefLab() {
                 hoverOwner={hoverOwner}
                 onHover={setHoverOwner}
                 labels={labels}
+                stars={stars}
               />
             )}
           </div>
@@ -129,10 +131,10 @@ export function ReliefLab() {
       </Card>
 
       <p className="px-1 text-sm leading-6 text-muted-foreground">
-        <span className="text-foreground">Une plaque 5×10 = un tirage.</span> Les cinq
-        cases colorées sont les cinq boules, à leur place Morpho (1 en haut à
-        gauche, 50 en bas à droite). La couleur va de l’ancien au récent. Le
-        cadre or est le dernier tirage.
+        <span className="text-foreground">Un trait = un tirage.</span> Les cinq
+        points sont les statistiques d’ordre <span className="text-foreground">n1→n5</span>{" "}
+        (plus petite boule → plus grande), pas l’ordre de sortie. La hauteur est
+        la valeur 1–50. Le glyphe 5×10 reste l’onglet Morpho.
       </p>
 
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
@@ -141,7 +143,7 @@ export function ReliefLab() {
             label="Échantillon"
             help={{
               title: "Échantillon",
-              body: "20 plaques se lisent une par une (numéros visibles). 50 donne la carte. 100 et 200 gardent la silhouette de chaque glyphe, plus compacte. Sans Neon, l’archive JSON de l’année peut être plus courte.",
+              body: "20 lignes se lisent une par une (numéros sur les points). 50 donne le faisceau. 100 et 200 gardent la silhouette. Sans Neon, l’archive JSON de l’année peut être plus courte.",
             }}
           >
             <div className="flex flex-wrap gap-1">
@@ -169,7 +171,7 @@ export function ReliefLab() {
             label="Décalage"
             help={{
               title: "Décalage entre tirages",
-              body: "Sans décalage, toutes les plaques s’empilent (histogramme 1–50). Un décalage pose chaque glyphe à côté des autres. L’hexagone est le plus lisible à 20 ; l’angle d’or range 50+ sans trou.",
+              body: "Temps (recommandé) : chaque profil n1→n5 est une tranche, le temps va vers l’arrière. Superposé : tous les profils sur le même axe. Hexagone / angle d’or / Hilbert : un peigne de cinq points par tirage, sans grille Morpho.",
               wide: true,
             }}
           >
@@ -193,8 +195,8 @@ export function ReliefLab() {
           <LabelHelp
             label="Lecture"
             help={{
-              title: "Plan ou timbres 3D",
-              body: "Plan : vue de dessus, chaque case est un carré numéroté — c’est la lecture. Timbres 3D : les cases sorties se soulèvent ; la couleur reste la même. Glisser fait tourner les deux.",
+              title: "Profils 3D ou plan",
+              body: "Profils 3D : vue oblique, la hauteur des points est la valeur. Plan : regard plus vertical, mêmes lignes. Glisser fait tourner les deux.",
             }}
           >
             <Select
@@ -217,34 +219,14 @@ export function ReliefLab() {
               </SelectContent>
             </Select>
           </LabelHelp>
-          <LabelHelp
-            label="Couleur"
-            help={{
-              title: "Couleur",
-              body: "Récence : les plaques récentes tirent vers l’or, les anciennes vers le bleu. Mixte (défaut) : surtout la récence. Valeur : une 50 est plus claire qu’une 1. Présence : toutes les cases sorties se valent.",
-            }}
-          >
-            <Select value={height} onValueChange={(v) => setHeight(v as HeightMode)}>
-              <SelectTrigger className="w-56" aria-label="Couleur">
-                <span className="flex flex-1 text-left">{HEIGHT_LABELS[height]}</span>
-              </SelectTrigger>
-              <SelectContent>
-                {HEIGHT_MODES.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {HEIGHT_LABELS[item]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </LabelHelp>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <label className="flex min-w-56 flex-1 flex-col gap-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">
-              Serrer les plaques
+              Écarter les tirages
               <HelpTip
-                title="Serrer"
-                body="Écart entre les glyphes. Bas : chaque tirage est isolé. Haut : la carte se compacte, les plaques restent séparées (elles ne fusionnent plus en collines)."
+                title="Écarter"
+                body="Espace entre les lignes. Bas : les profils se serrent. Haut : chaque tirage se détache. Ils ne fusionnent plus en collines."
               />
             </span>
             <input
@@ -254,25 +236,29 @@ export function ReliefLab() {
               step={0.01}
               value={fusion}
               onChange={(event) => setFusion(Number(event.target.value))}
-              aria-label="Serrer les plaques"
+              aria-label="Écarter les tirages"
               className="accent-primary"
             />
           </label>
-          {style === "timbres" ? (
-            <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-muted-foreground">
-              <span>Hauteur des cases</span>
-              <input
-                type="range"
-                min={0.4}
-                max={2.4}
-                step={0.05}
-                value={yScale}
-                onChange={(event) => setYScale(Number(event.target.value))}
-                aria-label="Hauteur des cases"
-                className="accent-primary"
+          <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              Hauteur (1–50)
+              <HelpTip
+                title="Hauteur"
+                body="Exagère l’axe des valeurs. Une 50 reste au sommet, une 1 au sol. Ça n’est pas une prédiction, c’est l’échelle de lecture."
               />
-            </label>
-          ) : null}
+            </span>
+            <input
+              type="range"
+              min={0.4}
+              max={2.4}
+              step={0.05}
+              value={yScale}
+              onChange={(event) => setYScale(Number(event.target.value))}
+              aria-label="Hauteur des valeurs"
+              className="accent-primary"
+            />
+          </label>
           <div className="flex flex-wrap gap-2">
             <OverlayToggle
               label="Numéros"
@@ -280,7 +266,7 @@ export function ReliefLab() {
               onClick={() => setLabels((v) => !v)}
               help={{
                 title: "Numéros",
-                body: "Écrit 1–50 dans les cases assez grandes. À 20 tirages c’est le mode de lecture. À 200, mieux vaut les masquer et survoler une plaque.",
+                body: "Écrit la valeur sur chaque point. À 20 tirages c’est le mode de lecture. À 200, mieux vaut les masquer et survoler une ligne.",
               }}
             />
             <OverlayToggle
@@ -289,7 +275,7 @@ export function ReliefLab() {
               onClick={() => setStars((v) => !v)}
               help={{
                 title: "Étoiles",
-                body: "Ajoute les 2 étoiles sous la plaque 5×10. Elles restent secondaires : la lecture, c’est les cinq numéros.",
+                body: "Ajoute e1 et e2 à droite du peigne, sur la même échelle 1–50 (donc près du sol). Secondaire : la lecture, c’est n1→n5.",
               }}
             />
             <OverlayToggle
@@ -322,7 +308,7 @@ export function ReliefLab() {
               <TitleHelp
                 help={{
                   title: "Pourquoi ce décalage",
-                  body: "Une carte lisible, ce n’est pas fondre les glyphes : c’est les poser pour que chaque 5×10 reste un tirage, et que le voisinage ait un sens.",
+                  body: "Une carte lisible, ce n’est pas fondre les glyphes : c’est poser chaque tirage comme une ligne n1→n5, et que le voisinage (temps, hexagone…) ait un sens.",
                 }}
               >
                 Pourquoi ce décalage
@@ -361,12 +347,17 @@ export function ReliefLab() {
             {hover ? (
               <div className="flex flex-col gap-3 text-sm">
                 <p className="text-xs text-muted-foreground">
-                  {hover.weekday} · plaque {hover.drawIndex + 1} / {layout.anchors.length}
+                  {hover.weekday} · ligne {hover.drawIndex + 1} / {map.profiles.length}
+                  {hover.latest ? " · dernier tirage" : ""}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {hover.numbers.map((n) => (
-                    <Badge key={`n-${n}`} variant="default">
-                      {n}
+                  {hover.ranks.map((n, i) => (
+                    <Badge
+                      key={`n-${RANK_LABELS[i]}`}
+                      variant="default"
+                      style={{ background: rgbCssOf(RANK_RGB[i]) }}
+                    >
+                      {RANK_LABELS[i]} {n}
                     </Badge>
                   ))}
                   {hover.stars.map((s) => (
@@ -375,6 +366,10 @@ export function ReliefLab() {
                     </Badge>
                   ))}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Glyphe Morpho (secondaire) — la lecture ici, c’est la ligne de
+                  points.
+                </p>
                 <GlyphBoard
                   numbers={hover.numbers}
                   stars={hover.stars}
@@ -384,13 +379,12 @@ export function ReliefLab() {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Survolez une plaque. Le dernier tirage a le cadre or.
+                Survolez une ligne. Le dernier tirage a le halo or.
               </p>
             )}
             <p className="mt-3 text-xs text-muted-foreground tabular-nums">
-              {map.stamps.length} plaque{map.stamps.length > 1 ? "s" : ""} · maille{" "}
-              {map.cell.toFixed(2)}
-              {map.aggregated ? " · histogramme 5×10" : ""}
+              {map.profiles.length} ligne{map.profiles.length > 1 ? "s" : ""} n1→n5
+              {map.connected ? " · axe rang × temps" : " · peignes décalés"}
             </p>
           </CardContent>
         </Card>

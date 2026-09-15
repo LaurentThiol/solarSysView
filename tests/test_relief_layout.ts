@@ -15,6 +15,7 @@ import { heightColor } from "../src/lib/relief/color"
 import { rasterizePeaks } from "../src/lib/relief/heightmap"
 import { clampCamera, DEFAULT_CAMERA, projectPoint, autoExaggeration } from "../src/lib/relief/project"
 import { buildStampMap } from "../src/lib/relief/stamps"
+import { axisConnected, buildProfiles, ranksOf } from "../src/lib/relief/profiles"
 
 function draw(i: number): Draw {
   const date = new Date(Date.UTC(2024, 0, 1 + i)).toISOString().slice(0, 10)
@@ -109,10 +110,10 @@ test("fusion enlarges glyphs relative to spacing", () => {
   assert.ok(high.glyphScale > low.glyphScale)
 })
 
-test("recommended offset is hex on small samples and golden otherwise", () => {
-  assert.equal(recommendedOffset(20), "hex")
-  assert.equal(recommendedOffset(50), "or")
-  assert.equal(recommendedOffset(200), "or")
+test("recommended offset is time for every sample", () => {
+  assert.equal(recommendedOffset(20), "temps")
+  assert.equal(recommendedOffset(50), "temps")
+  assert.equal(recommendedOffset(200), "temps")
 })
 
 test("heightmap splat peaks at the ball and colors climb with height", () => {
@@ -186,5 +187,57 @@ test("every offset mode lays out 100 draws", () => {
     const layout = layoutDraws(draws(100), { mode, height: "mixte", fusion: 0.58, stars: true })
     assert.equal(layout.anchors.length, 100, mode)
     assert.equal(layout.peaks.length, 700, mode)
+  }
+})
+
+test("ranksOf sorts the five balls n1 to n5", () => {
+  assert.deepEqual(ranksOf([41, 7, 28, 12, 19]), [7, 12, 19, 28, 41])
+})
+
+test("each draw profile is a 5-point n1→n5 line, time advances along z", () => {
+  const layout = layoutDraws(draws(8), { mode: "temps", height: "valeur", fusion: 0.4, stars: false })
+  const map = buildProfiles(layout)
+  assert.equal(map.profiles.length, 8)
+  assert.equal(axisConnected("temps"), true)
+  assert.equal(map.connected, true)
+  for (const profile of map.profiles) {
+    assert.equal(profile.points.length, 5)
+    assert.deepEqual(
+      profile.points.map((p) => p.x),
+      [0, 1, 2, 3, 4]
+    )
+    for (let i = 1; i < 5; i++) {
+      assert.ok(profile.ranks[i] >= profile.ranks[i - 1])
+      assert.ok(profile.points[i].y >= profile.points[i - 1].y)
+    }
+  }
+  assert.ok(map.profiles[7].points[0].z > map.profiles[0].points[0].z)
+  assert.equal(map.profiles.filter((p) => p.latest).length, 1)
+})
+
+test("superpose stacks every n1→n5 profile on z = 0", () => {
+  const layout = layoutDraws(draws(6), {
+    mode: "superpose",
+    height: "valeur",
+    fusion: 0.3,
+    stars: false,
+  })
+  const map = buildProfiles(layout)
+  assert.equal(map.connected, true)
+  assert.equal(
+    map.profiles.every((p) => p.points.every((pt) => pt.z === 0 && pt.x >= 0 && pt.x <= 4)),
+    true
+  )
+})
+
+test("hex offset keeps a 5-point comb at each draw, not a 5×10 grid", () => {
+  const layout = layoutDraws(draws(12), { mode: "hex", height: "valeur", fusion: 0.4, stars: false })
+  const map = buildProfiles(layout)
+  assert.equal(map.connected, false)
+  assert.equal(map.profiles.length, 12)
+  for (const profile of map.profiles) {
+    assert.equal(profile.points.length, 5)
+    const zs = new Set(profile.points.map((p) => p.z))
+    assert.equal(zs.size, 1)
   }
 })
