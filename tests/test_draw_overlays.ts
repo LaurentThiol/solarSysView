@@ -24,8 +24,12 @@ test("overlay period follows the Évolution SMA rule", () => {
 test("overlay field names are stable for Recharts dataKeys", () => {
   assert.equal(overlayField("n1", "sma"), "sma_n1")
   assert.equal(overlayField("relNumbers", "bbUpper"), "bbUpper_relNumbers")
+  assert.equal(overlayField("spread", "sma"), "sma_spread")
+  assert.equal(overlayField("starConsecutive", "bbLower"), "bbLower_starConsecutive")
+  assert.equal(overlayField("d0", "pctB"), "pctB_d0")
   assert.equal(isOverlayDataKey("n1"), false)
   assert.equal(isOverlayDataKey("sma_n1"), true)
+  assert.equal(isOverlayDataKey("sma_spread"), true)
   assert.equal(isOverlayDataKey("pctB_n3"), true)
   assert.equal(isOverlayDataKey("smaNumbers"), false)
 })

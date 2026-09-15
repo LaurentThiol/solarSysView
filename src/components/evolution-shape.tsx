@@ -1,7 +1,14 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
+import { Fragment, useMemo, useState } from "react"
+import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  XAxis,
+  YAxis,
+} from "recharts"
 
 import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,6 +17,15 @@ import {
   ChartTooltip,
   type ChartConfig,
 } from "@/components/ui/chart"
+import {
+  bandExcursions,
+  overlayBands,
+  overlayField,
+  overlayPeriodFor,
+  overlayRecord,
+  readOverlay,
+  type BandPoint,
+} from "@/lib/draw-overlays"
 import {
   type Draw,
   formatDrawDate,
@@ -38,9 +54,30 @@ const chartConfig = {
   d2: { label: DECADE_LABELS[2], color: "var(--chart-3)" },
   d3: { label: DECADE_LABELS[3], color: "var(--chart-4)" },
   d4: { label: DECADE_LABELS[4], color: "var(--chart-5)" },
+  sma: { label: "SMA", color: "var(--chart-2)" },
+  bbUpper: { label: "Bollinger +", color: "var(--chart-5)" },
+  bbLower: { label: "Bollinger −", color: "var(--chart-5)" },
 } satisfies ChartConfig
 
-type SeriesKey = keyof typeof chartConfig
+type SeriesKey =
+  | "spread"
+  | "starSpread"
+  | "consecutive"
+  | "starConsecutive"
+  | "d0"
+  | "d1"
+  | "d2"
+  | "d3"
+  | "d4"
+
+type ChartPoint = ReturnType<typeof toDrawSeries>[number] &
+  Record<string, number | string | null>
+
+const VIEW_KEYS: Record<ShapeView, SeriesKey[]> = {
+  spread: ["spread", "starSpread"],
+  consecutive: ["consecutive", "starConsecutive"],
+  decades: ["d0", "d1", "d2", "d3", "d4"],
+}
 
 const TITLE_HELP: HelpCopy = {
   title: "Forme de la grille",
@@ -51,12 +88,22 @@ const TITLE_HELP: HelpCopy = {
 • Consécutifs = paires (n, n+1). 0 à 4 pour les numéros, 0 ou 1 pour les étoiles.
 • Décennies = combien de boules dans 1–10, 11–20, …, 41–50.
 
-Descriptif : chaque tirage reste indépendant.`,
+SMA et Bollinger (optionnels) lissent ou encadrent chaque courbe visible. Maj+clic isole une série. Descriptif : chaque tirage reste indépendant.`,
 }
 
 const VIEW_HELP: HelpCopy = {
   title: "Lecture",
-  body: "Étendue et consécutifs superposent numéros et étoiles. Décennies : une courbe par bande de 10.",
+  body: "Étendue et consécutifs superposent numéros et étoiles. Décennies : une courbe par bande de 10. SMA et Bollinger s’appliquent à chaque courbe visible.",
+}
+
+const SMA_HELP: HelpCopy = {
+  title: "SMA",
+  body: "Moyenne simple sur la période auto (5 tirages si la fenêtre a au moins 10 points, 10 si au moins 40). Une courbe par série visible. Lissage descriptif, pas une prédiction.",
+}
+
+const BB_HELP: HelpCopy = {
+  title: "Bollinger",
+  body: "Bandes SMA ± 2σ de chaque série visible. Le milieu est la SMA. %B dans l’infobulle : 0 = bande basse, 1 = bande haute. Maj+clic sur une pastille pour isoler sa bande. Dispersion observée, pas un signal de jeu.",
 }
 
 function formatStat(value: number, digits = 1) {
@@ -66,49 +113,105 @@ function formatStat(value: number, digits = 1) {
   })
 }
 
+function formatPctB(value: number) {
+  return value.toLocaleString("fr-FR", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  })
+}
+
 function yDomain(view: ShapeView): [number, number] {
   if (view === "spread") return [0, 49]
   if (view === "consecutive") return [0, 4]
   return [0, 5]
 }
 
+function mergeOverlays(
+  points: ChartPoint[],
+  key: SeriesKey,
+  bands: BandPoint[]
+): ChartPoint[] {
+  return points.map((point, i) => ({
+    ...point,
+    ...overlayRecord(key, bands[i]),
+  }))
+}
+
 function ShapeTooltip({
   active,
   payload,
   label,
+  keys,
+  hidden,
+  smaPeriod,
+  showSma,
+  showBb,
 }: {
   active?: boolean
   payload?: Array<{
     dataKey?: string | number
-    color?: string
-    name?: string
-    value?: number
+    payload?: ChartPoint
   }>
   label?: string
+  keys: SeriesKey[]
+  hidden: Partial<Record<SeriesKey, boolean>>
+  smaPeriod: number
+  showSma: boolean
+  showBb: boolean
 }) {
   if (!active || !payload?.length) return null
+  const point = payload[0]?.payload
+  if (!point) return null
+
   return (
     <div className="grid min-w-40 items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
-      <div className="font-medium">{formatDrawDate(String(label))}</div>
+      <div className="font-medium">{formatDrawDate(String(label ?? point.date))}</div>
       <div className="grid gap-1.5">
-        {payload.map((item) => {
-          const key = String(item.dataKey ?? "")
-          if (key.startsWith("sma")) return null
-          return (
-            <div key={key} className="flex items-center gap-2">
-              <span
-                className="size-2.5 shrink-0 rounded-[2px]"
-                style={{ background: item.color }}
-              />
-              <span className="flex-1 text-muted-foreground">
-                {chartConfig[key as SeriesKey]?.label ?? item.name}
-              </span>
-              <span className="font-mono font-medium tabular-nums">
-                {item.value == null ? "—" : formatStat(Number(item.value), 0)}
-              </span>
-            </div>
-          )
-        })}
+        {keys
+          .filter((key) => !hidden[key])
+          .map((key) => {
+            const value = point[key]
+            const sma = showSma ? readOverlay(point, key, "sma") : null
+            const lo = showBb ? readOverlay(point, key, "bbLower") : null
+            const hi = showBb ? readOverlay(point, key, "bbUpper") : null
+            const pctB = showBb ? readOverlay(point, key, "pctB") : null
+            return (
+              <div key={key} className="grid gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="size-2.5 shrink-0 rounded-[2px]"
+                    style={{ background: chartConfig[key].color }}
+                  />
+                  <span className="flex-1 text-muted-foreground">
+                    {chartConfig[key].label}
+                  </span>
+                  <span className="font-mono font-medium tabular-nums">
+                    {typeof value === "number" ? formatStat(value, 0) : "—"}
+                  </span>
+                </div>
+                {showSma ? (
+                  <div className="flex items-center gap-2 pl-4 text-muted-foreground">
+                    <span className="flex-1">SMA {smaPeriod}</span>
+                    <span className="font-mono tabular-nums">
+                      {sma == null ? "—" : formatStat(sma)}
+                    </span>
+                  </div>
+                ) : null}
+                {showBb ? (
+                  <div className="flex items-center gap-2 pl-4 text-muted-foreground">
+                    <span className="flex-1">Bollinger</span>
+                    <span className="font-mono tabular-nums">
+                      {lo == null || hi == null
+                        ? "—"
+                        : `${formatStat(lo)} – ${formatStat(hi)}${
+                            pctB == null ? "" : ` · %B ${formatPctB(pctB)}`
+                          }`}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
       </div>
     </div>
   )
@@ -117,15 +220,37 @@ function ShapeTooltip({
 export function EvolutionShape({ draws }: { draws: Draw[] }) {
   const [view, setView] = useState<ShapeView>("spread")
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({})
+  const [showSma, setShowSma] = useState(true)
+  const [showBb, setShowBb] = useState(false)
 
   const series = useMemo(() => toDrawSeries(draws), [draws])
-  const keys: SeriesKey[] =
-    view === "spread"
-      ? ["spread", "starSpread"]
-      : view === "consecutive"
-        ? ["consecutive", "starConsecutive"]
-        : ["d0", "d1", "d2", "d3", "d4"]
+  const keys = VIEW_KEYS[view]
   const visible = keys.filter((key) => !hidden[key])
+  const smaPeriod = overlayPeriodFor(series.length)
+  const multiSeries = view === "decades"
+
+  const overlayPacks = useMemo(() => {
+    const packs: Partial<
+      Record<SeriesKey, { abs: BandPoint[]; values: number[] }>
+    > = {}
+    if (!smaPeriod) return packs
+    for (const key of keys) {
+      const values = series.map((point) => point[key])
+      packs[key] = { abs: overlayBands(values, smaPeriod), values }
+    }
+    return packs
+  }, [series, keys, smaPeriod])
+
+  const chartData = useMemo(() => {
+    if (!smaPeriod) return series
+    let points: ChartPoint[] = series
+    for (const key of keys) {
+      const abs = overlayPacks[key]?.abs
+      if (!abs) continue
+      points = mergeOverlays(points, key, abs)
+    }
+    return points
+  }, [series, smaPeriod, keys, overlayPacks])
 
   const summaries = useMemo(() => {
     return keys.map((key) => ({
@@ -134,6 +259,61 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
       stats: summarizeValues(series.map((point) => point[key])),
     }))
   }, [series, keys])
+
+  const excursions = useMemo(() => {
+    if (!showBb || !smaPeriod) return []
+    return visible
+      .map((key) => {
+        const pack = overlayPacks[key]
+        if (!pack) return null
+        const stats = bandExcursions(pack.values, pack.abs)
+        if (!stats.ready) return null
+        return { key, label: chartConfig[key].label, ...stats }
+      })
+      .filter(
+        (item): item is { key: SeriesKey; label: string; outside: number; ready: number } =>
+          Boolean(item)
+      )
+  }, [showBb, smaPeriod, visible, overlayPacks])
+
+  function changeView(next: ShapeView) {
+    if (next === view) return
+    const leavingPair = view !== "decades"
+    const enteringDecades = next === "decades"
+    setView(next)
+    setHidden({})
+    if (leavingPair && enteringDecades) {
+      setShowSma(false)
+      setShowBb(false)
+    } else if (!leavingPair && !enteringDecades) {
+      setShowSma(true)
+      setShowBb(false)
+    }
+  }
+
+  function toggleSeries(key: SeriesKey, solo: boolean) {
+    if (solo) {
+      const alreadySolo =
+        !hidden[key] && keys.every((item) => item === key || hidden[item])
+      if (alreadySolo) {
+        setHidden({})
+        return
+      }
+      setHidden(Object.fromEntries(keys.map((item) => [item, item !== key])))
+      return
+    }
+    setHidden((current) => ({
+      ...current,
+      [key]: !current[key],
+    }))
+  }
+
+  function overlayStroke(key: SeriesKey, kind: "sma" | "bb"): string {
+    if (visible.length === 1) {
+      return kind === "sma" ? "var(--color-sma)" : "var(--color-bbUpper)"
+    }
+    return `var(--color-${key})`
+  }
 
   return (
     <Card>
@@ -153,7 +333,7 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
                   key={item.value}
                   type="button"
                   aria-pressed={view === item.value}
-                  onClick={() => setView(item.value)}
+                  onClick={() => changeView(item.value)}
                   className={cn(
                     "rounded-full border px-2.5 py-1 text-xs",
                     view === item.value
@@ -179,10 +359,10 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
               config={chartConfig}
               className="aspect-auto h-[280px] w-full sm:h-[340px]"
             >
-              <LineChart
+              <ComposedChart
                 key={view}
                 accessibilityLayer
-                data={series}
+                data={chartData}
                 margin={{ left: 4, right: 8, top: 8, bottom: 4 }}
               >
                 <CartesianGrid vertical={false} />
@@ -200,8 +380,48 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
                   tickLine={false}
                   axisLine={false}
                   allowDecimals={false}
+                  allowDataOverflow
                 />
-                <ChartTooltip content={<ShapeTooltip />} />
+                <ChartTooltip
+                  content={
+                    <ShapeTooltip
+                      keys={keys}
+                      hidden={hidden}
+                      smaPeriod={smaPeriod}
+                      showSma={showSma && smaPeriod > 0}
+                      showBb={showBb && smaPeriod > 0}
+                    />
+                  }
+                />
+                {showBb && smaPeriod > 0 && visible.length === 1
+                  ? visible.map((key) => (
+                      <Fragment key={`bb-fill-${key}`}>
+                        <Area
+                          type="linear"
+                          dataKey={overlayField(key, "bbBase")}
+                          stackId={`bb-${key}`}
+                          fill="transparent"
+                          stroke="none"
+                          legendType="none"
+                          tooltipType="none"
+                          connectNulls
+                          isAnimationActive={false}
+                        />
+                        <Area
+                          type="linear"
+                          dataKey={overlayField(key, "bbSpan")}
+                          stackId={`bb-${key}`}
+                          fill={overlayStroke(key, "bb")}
+                          fillOpacity={0.14}
+                          stroke="none"
+                          legendType="none"
+                          tooltipType="none"
+                          connectNulls
+                          isAnimationActive={false}
+                        />
+                      </Fragment>
+                    ))
+                  : null}
                 {visible.map((key) => (
                   <Line
                     key={key}
@@ -213,29 +433,145 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
                     name={chartConfig[key].label}
                   />
                 ))}
-              </LineChart>
+                {smaPeriod > 0 && showSma
+                  ? visible.map((key) => (
+                      <Line
+                        key={`sma-${key}`}
+                        dataKey={overlayField(key, "sma")}
+                        type="linear"
+                        stroke={overlayStroke(key, "sma")}
+                        strokeWidth={2}
+                        strokeDasharray="5 4"
+                        dot={false}
+                        connectNulls
+                        legendType="none"
+                        name={`SMA ${smaPeriod} ${chartConfig[key].label}`}
+                      />
+                    ))
+                  : null}
+                {smaPeriod > 0 && showBb
+                  ? visible.map((key) => (
+                      <Fragment key={`bb-${key}`}>
+                        <Line
+                          dataKey={overlayField(key, "bbUpper")}
+                          type="linear"
+                          stroke={overlayStroke(key, "bb")}
+                          strokeWidth={1.25}
+                          strokeDasharray="2 3"
+                          strokeOpacity={visible.length === 1 ? 1 : 0.7}
+                          dot={false}
+                          connectNulls
+                          legendType="none"
+                          name={`Bollinger + ${chartConfig[key].label}`}
+                        />
+                        <Line
+                          dataKey={overlayField(key, "bbLower")}
+                          type="linear"
+                          stroke={overlayStroke(key, "bb")}
+                          strokeWidth={1.25}
+                          strokeDasharray="2 3"
+                          strokeOpacity={visible.length === 1 ? 1 : 0.7}
+                          dot={false}
+                          connectNulls
+                          legendType="none"
+                          name={`Bollinger − ${chartConfig[key].label}`}
+                        />
+                        {!showSma ? (
+                          <Line
+                            dataKey={overlayField(key, "sma")}
+                            type="linear"
+                            stroke={overlayStroke(key, "sma")}
+                            strokeWidth={1.5}
+                            strokeDasharray="4 3"
+                            dot={false}
+                            connectNulls
+                            legendType="none"
+                            name={`Bollinger ${chartConfig[key].label}`}
+                          />
+                        ) : null}
+                      </Fragment>
+                    ))
+                  : null}
+              </ComposedChart>
             </ChartContainer>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              {smaPeriod > 0 ? (
+                <>
+                  <span className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-pressed={showSma}
+                      title={`Afficher ou masquer la SMA ${smaPeriod}`}
+                      onClick={() => setShowSma((current) => !current)}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs transition-opacity hover:bg-muted",
+                        !showSma && "opacity-40"
+                      )}
+                    >
+                      <span
+                        className="size-2 shrink-0 rounded-[2px]"
+                        style={{
+                          background:
+                            visible.length === 1
+                              ? chartConfig.sma.color
+                              : chartConfig[visible[0] ?? keys[0]].color,
+                          boxShadow: "inset 0 0 0 1px transparent",
+                        }}
+                      />
+                      SMA {smaPeriod}
+                    </button>
+                    <HelpTip {...SMA_HELP} />
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-pressed={showBb}
+                      title="Afficher ou masquer les bandes de Bollinger"
+                      onClick={() => setShowBb((current) => !current)}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs transition-opacity hover:bg-muted",
+                        !showBb && "opacity-40"
+                      )}
+                    >
+                      <span
+                        className="size-2 shrink-0 rounded-[2px] border border-dashed"
+                        style={{
+                          borderColor: chartConfig.bbUpper.color,
+                          background: "transparent",
+                        }}
+                      />
+                      Bollinger
+                    </button>
+                    <HelpTip {...BB_HELP} />
+                  </span>
+                </>
+              ) : null}
               {keys.map((key) => (
                 <button
                   key={key}
                   type="button"
                   aria-pressed={!hidden[key]}
-                  onClick={() =>
-                    setHidden((current) => ({ ...current, [key]: !current[key] }))
-                  }
+                  title={`Afficher ou masquer ${chartConfig[key].label}. Maj+clic : cette courbe seule.`}
+                  onClick={(event) => toggleSeries(key, event.shiftKey)}
                   className={cn(
-                    "rounded-full border px-2.5 py-1 text-xs",
-                    hidden[key]
-                      ? "border-border text-muted-foreground"
-                      : "border-primary/40 bg-primary/10 text-foreground"
+                    "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs transition-opacity hover:bg-muted",
+                    hidden[key] && "opacity-40"
                   )}
                 >
+                  <span
+                    className="size-2 shrink-0 rounded-[2px]"
+                    style={{ background: chartConfig[key].color }}
+                  />
                   {chartConfig[key].label}
                 </button>
               ))}
             </div>
-            <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums text-muted-foreground">
+            {multiSeries && (showSma || showBb) && visible.length > 2 ? (
+              <p className="mt-2 text-center text-xs text-muted-foreground">
+                Maj+clic sur une décennie pour n’afficher que sa SMA / bande.
+              </p>
+            ) : null}
+            <ul className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-center text-xs tabular-nums text-muted-foreground">
               {summaries.map((row) => (
                 <li key={row.key}>
                   {row.label}
@@ -244,6 +580,20 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
                     : " · —"}
                 </li>
               ))}
+              {excursions.length > 0 ? (
+                <li className="inline-flex items-center gap-1">
+                  <span>
+                    hors bande{" "}
+                    {excursions
+                      .map((item) => `${item.label} ${item.outside}/${item.ready}`)
+                      .join(" · ")}
+                  </span>
+                  <HelpTip
+                    title="Hors bande"
+                    body="Nombre de tirages où la série sort de SMA ± 2σ, une fois la fenêtre Bollinger pleine. Sous un bruit gaussien on attend ~5 %. Descriptif, pas un signal de jeu."
+                  />
+                </li>
+              ) : null}
             </ul>
           </>
         )}

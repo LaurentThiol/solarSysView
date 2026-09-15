@@ -1,6 +1,6 @@
 import { bollinger } from "./analysis"
 
-/** SMA / Bollinger window used on the Évolution chart. */
+/** SMA / Bollinger window used on the Évolution charts (courbe et forme). */
 export function overlayPeriodFor(length: number): number {
   if (length >= 40) return 10
   if (length >= 10) return 5
