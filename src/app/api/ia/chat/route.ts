@@ -13,6 +13,7 @@ import {
 import { encodeSse, type IaStreamEvent } from "@/lib/ia/sse"
 
 export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
 export const maxDuration = 60
 
 type Body = {

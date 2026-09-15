@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { completeIa } from "../src/lib/ia/providers"
+import { completeIa, setLlmTransport } from "../src/lib/ia/providers"
 
 test("a local 404 does not escalate to Gemini or OpenAI", async () => {
   const urls: string[] = []
@@ -11,6 +11,10 @@ test("a local 404 does not escalate to Gemini or OpenAI", async () => {
     urls.push(url)
     return new Response("missing", { status: 404, headers: { "content-type": "application/json" } })
   }) as typeof fetch
+  setLlmTransport(async (url) => {
+    urls.push(String(url))
+    return new Response("missing", { status: 404, headers: { "content-type": "application/json" } })
+  })
   try {
     const result = await completeIa({
       provider: "local",
@@ -24,6 +28,7 @@ test("a local 404 does not escalate to Gemini or OpenAI", async () => {
     )
     assert.match(result.error, /local|Ollama|injoignable|HTTP 404/i)
   } finally {
+    setLlmTransport(null)
     globalThis.fetch = original
   }
 })

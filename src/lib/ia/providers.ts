@@ -19,7 +19,8 @@ import {
   type IaModelOption,
   type IaProviderId,
 } from "@/lib/ia/models"
-import { localChatCompletionsUrl, localModelsUrl, normalizeLocalLlmBase } from "@/lib/ia/local-url"
+import { localChatCompletionsUrl, localLlmCandidates, localProbeUrls, normalizeLocalLlmBase } from "@/lib/ia/local-url"
+import { llmFetch } from "@/lib/ia/loopback-fetch"
 import { IA_SYSTEM_PROMPT } from "@/lib/ia/prompt"
 import {
   geminiDeltaText,
@@ -67,6 +68,7 @@ function openaiKey() {
 }
 
 export { localChatCompletionsUrl, localModelsUrl, normalizeLocalLlmBase } from "@/lib/ia/local-url"
+export { setLlmTransport } from "@/lib/ia/loopback-fetch"
 
 export function localLlmBase() {
   const fromEnv = (liveEnv("LOCAL_LLM_BASE_URL") || liveEnv("OLLAMA_HOST")).trim()
@@ -127,29 +129,38 @@ function chatIdsFromNames(names: string[]) {
   return names.filter((id) => isModelId(id) && isLocalChatModel(id))
 }
 
-async function listLocalIds(base: string, timeoutMs = LIVE_TIMEOUT_MS): Promise<string[] | null> {
-  try {
-    const tags = await fetch(`${base}/api/tags`, {
-      signal: AbortSignal.timeout(timeoutMs),
-      cache: "no-store",
-    })
-    if (tags.ok) {
-      const data = (await tags.json()) as { models?: Array<{ name?: string }> }
-      return chatIdsFromNames((data.models ?? []).map((item) => item.name || ""))
-    }
-  } catch {
-    /* llama-server / LM Studio have no /api/tags */
+function idsFromLocalPayload(data: {
+  models?: Array<{ name?: string }>
+  data?: Array<{ id?: string }>
+  version?: string
+}): string[] | null {
+  if (Array.isArray(data.models)) {
+    return chatIdsFromNames(data.models.map((item) => item.name || ""))
   }
+  if (Array.isArray(data.data)) {
+    return chatIdsFromNames(data.data.map((item) => item.id || ""))
+  }
+  if (data.version) return []
+  return null
+}
+
+async function probeLocalUrl(
+  url: string,
+  timeoutMs: number
+): Promise<{ ids: string[] | null; error?: string }> {
   try {
-    const response = await fetch(localModelsUrl(base), {
-      signal: AbortSignal.timeout(timeoutMs),
-      cache: "no-store",
-    })
-    if (!response.ok) return null
-    const data = (await response.json()) as { data?: Array<{ id?: string }> }
-    return chatIdsFromNames((data.data ?? []).map((item) => item.id || ""))
-  } catch {
-    return null
+    const response = await llmFetch(url, { method: "GET", cache: "no-store" }, timeoutMs)
+    if (!response.ok) return { ids: null, error: `HTTP ${response.status} ${url}` }
+    const data = (await response.json()) as {
+      models?: Array<{ name?: string }>
+      data?: Array<{ id?: string }>
+      version?: string
+    }
+    const ids = idsFromLocalPayload(data)
+    if (ids === null) return { ids: null, error: `réponse inattendue ${url}` }
+    return { ids }
+  } catch (error) {
+    return { ids: null, error: error instanceof Error ? error.message : String(error) }
   }
 }
 
@@ -157,10 +168,11 @@ async function listLocalIdsViaPython(): Promise<string[] | null> {
   const python = apiBase()
   if (!python) return null
   try {
-    const response = await fetch(`${python}/api/brain/status`, {
-      signal: AbortSignal.timeout(LIVE_TIMEOUT_MS),
-      cache: "no-store",
-    })
+    const response = await llmFetch(
+      `${python}/api/brain/status`,
+      { method: "GET", cache: "no-store" },
+      LIVE_TIMEOUT_MS
+    )
     if (!response.ok) return null
     const data = (await response.json()) as {
       ollama?: { ok?: boolean; models?: string[] }
@@ -172,11 +184,11 @@ async function listLocalIdsViaPython(): Promise<string[] | null> {
   }
 }
 
-type LocalProbe = { ok: boolean; ids: string[] | null; at: number; host: string }
+type LocalProbe = { ok: boolean; ids: string[] | null; at: number; host: string; error?: string }
 
-let localProbeCache: LocalProbe | null = null
+let localProbeCache: (LocalProbe & { requested: string }) | null = null
 const LOCAL_PROBE_TTL_MS = 10_000
-const LOCAL_PROBE_TIMEOUT_MS = 1_500
+const LOCAL_PROBE_TIMEOUT_MS = 800
 
 export function clearLocalLlmProbeCache() {
   localProbeCache = null
@@ -185,15 +197,36 @@ export function clearLocalLlmProbeCache() {
 export async function probeLocalLlm(host = localLlmBase(), timeoutMs = LOCAL_PROBE_TIMEOUT_MS): Promise<LocalProbe> {
   if (
     localProbeCache &&
-    localProbeCache.host === host &&
+    localProbeCache.ok &&
+    localProbeCache.requested === host &&
     Date.now() - localProbeCache.at < LOCAL_PROBE_TTL_MS
   ) {
     return localProbeCache
   }
-  let ids = await listLocalIds(host, timeoutMs)
-  if (ids === null) ids = await listLocalIdsViaPython()
-  const probe: LocalProbe = { ok: ids !== null, ids, at: Date.now(), host }
-  localProbeCache = probe
+  const attempts = await Promise.all(
+    localLlmCandidates(host).map(async (candidate) => {
+      const probes = await Promise.all(localProbeUrls(candidate).map((url) => probeLocalUrl(url, timeoutMs)))
+      const hit = probes.find((item) => item.ids !== null)
+      const error = probes.map((item) => item.error).filter(Boolean)[0]
+      return { ids: hit?.ids ?? null, host: candidate, error }
+    })
+  )
+  let hit = attempts.find((item) => item.ids !== null)
+  if (!hit) {
+    const ids = await listLocalIdsViaPython()
+    if (ids !== null) hit = { ids, host, error: undefined }
+    else attempts.push({ ids: null, host, error: "API Python : Ollama injoignable" })
+  }
+  const probe: LocalProbe = {
+    ok: Boolean(hit),
+    ids: hit?.ids ?? null,
+    at: Date.now(),
+    host: hit?.host ?? host,
+    error: hit
+      ? undefined
+      : attempts.map((item) => item.error).filter(Boolean)[0] || "injoignable (Ollama / llama-server)",
+  }
+  localProbeCache = probe.ok ? { ...probe, requested: host } : null
   return probe
 }
 
@@ -224,6 +257,7 @@ export async function iaStatus(options: { live?: boolean } = {}) {
   const [localProbe] = await Promise.all([localPromise, ...extra])
   const liveLocal = localProbe.ids
   const local = localProbe.ok
+  const localHost = localProbe.host
   const fallback: IaProviderId | null = google ? "google" : openai ? "openai" : local ? "local" : null
   const models: IaModelOption[] = mergeModelOptions({
     google,
@@ -237,7 +271,7 @@ export async function iaStatus(options: { live?: boolean } = {}) {
     google,
     openai,
     local,
-    localHost: host,
+    localHost,
     default: fallback,
     defaultModel: fallback ? pickAvailableModel(models, fallback) ?? preferredModel(fallback) : null,
     live: {
@@ -521,15 +555,19 @@ async function generateOpenAIOnce(
   const packed = withOptionalImage(snapshot, model, endpoint ? "local" : "openai")
   const url = endpoint?.url ?? "https://api.openai.com/v1/chat/completions"
   const label = endpoint?.label ?? "OpenAI"
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Authorization: `Bearer ${key || "local"}`,
+  const response = await llmFetch(
+    url,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${key || "local"}`,
+      },
+      body: JSON.stringify(openaiPayload(model, messages, packed.snapshot)),
+      signal: requestSignal(signal),
     },
-    body: JSON.stringify(openaiPayload(model, messages, packed.snapshot)),
-    signal: requestSignal(signal),
-  })
+    45_000
+  )
   const raw = await response.text()
   if (!response.ok) {
     return {
@@ -561,15 +599,19 @@ async function streamOpenAIOnce(
   const packed = withOptionalImage(snapshot, model, endpoint ? "local" : "openai")
   const url = endpoint?.url ?? "https://api.openai.com/v1/chat/completions"
   const label = endpoint?.label ?? "OpenAI"
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Authorization: `Bearer ${key || "local"}`,
+  const response = await llmFetch(
+    url,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${key || "local"}`,
+      },
+      body: JSON.stringify(openaiPayload(model, messages, packed.snapshot, true)),
+      signal: requestSignal(signal),
     },
-    body: JSON.stringify(openaiPayload(model, messages, packed.snapshot, true)),
-    signal: requestSignal(signal),
-  })
+    45_000
+  )
   if (!response.ok) {
     const raw = await response.text().catch(() => "")
     if (shouldRetryStatus(response.status, raw)) {
@@ -662,28 +704,30 @@ async function completeLocal(
   requested: string,
   signal?: AbortSignal
 ): Promise<IaCompleteOk | IaCompleteErr> {
-  const endpoint = { url: localChatCompletionsUrl(localLlmBase()), label: "LLM local" }
+  const probe = await probeLocalLlm()
+  const bases = probe.ok ? [probe.host] : localLlmCandidates(localLlmBase())
   let lastError = "LLM local injoignable (Ollama ?). Pas de bascule cloud."
-  for (const model of modelSequence("local", requested)) {
-    const packed = withOptionalImage(snapshot, model, "local")
-    try {
-      const result = await generateOpenAIOnce(model, messages, snapshot, "local", signal, endpoint)
-      if (result.ok) {
-        return {
-          ok: true,
-          text: result.text,
-          model,
-          provider: "local",
-          requested,
-          imageOmitted: packed.imageOmitted,
+  for (const base of bases) {
+    const endpoint = { url: localChatCompletionsUrl(base), label: "LLM local" }
+    for (const model of modelSequence("local", requested)) {
+      const packed = withOptionalImage(snapshot, model, "local")
+      try {
+        const result = await generateOpenAIOnce(model, messages, snapshot, "local", signal, endpoint)
+        if (result.ok) {
+          return {
+            ok: true,
+            text: result.text,
+            model,
+            provider: "local",
+            requested,
+            imageOmitted: packed.imageOmitted,
+          }
         }
-      }
-      lastError = result.error
-      if (!result.retry) return { ok: false, error: lastError }
-    } catch (error) {
-      return {
-        ok: false,
-        error: error instanceof Error ? error.message : "LLM local injoignable. Pas de bascule cloud.",
+        lastError = result.error
+        if (!result.retry) return { ok: false, error: lastError }
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : "LLM local injoignable. Pas de bascule cloud."
+        break
       }
     }
   }
@@ -710,10 +754,6 @@ export async function streamIa(
       return { ok: false, error }
     }
     const snapshot = options.snapshot ?? null
-    const localEndpoint =
-      options.provider === "local"
-        ? { url: localChatCompletionsUrl(localLlmBase()), label: "LLM local" }
-        : undefined
     const key =
       options.provider === "google" ? googleKey() : options.provider === "local" ? "local" : openaiKey()
     if (options.provider !== "local" && !key) {
@@ -722,38 +762,26 @@ export async function streamIa(
       onEvent({ type: "error", error })
       return { ok: false, error }
     }
+    const localProbe = options.provider === "local" ? await probeLocalLlm() : null
+    const localBases =
+      options.provider === "local"
+        ? localProbe?.ok
+          ? [localProbe.host]
+          : localLlmCandidates(localLlmBase())
+        : [""]
     let lastError = "IA indisponible"
-    for (const model of modelSequence(options.provider, requested)) {
-      const packed = withOptionalImage(snapshot, model, options.provider)
-      let emitted = false
-      const onDelta = (chunk: string) => {
-        if (!emitted) {
-          emitted = true
-          onEvent({
-            type: "meta",
-            model,
-            provider: options.provider,
-            requested,
-            imageOmitted: packed.imageOmitted,
-          })
-        }
-        onEvent({ type: "delta", text: chunk })
-      }
-      try {
-        const result =
-          options.provider === "google"
-            ? await streamGeminiOnce(model, options.messages, snapshot, key, onDelta, options.signal)
-            : await streamOpenAIOnce(
-                model,
-                options.messages,
-                snapshot,
-                key,
-                onDelta,
-                options.signal,
-                localEndpoint
-              )
-        if (result.ok) {
+    for (const localBase of localBases) {
+      const localEndpoint =
+        options.provider === "local"
+          ? { url: localChatCompletionsUrl(localBase), label: "LLM local" }
+          : undefined
+      let hostFailed = false
+      for (const model of modelSequence(options.provider, requested)) {
+        const packed = withOptionalImage(snapshot, model, options.provider)
+        let emitted = false
+        const onDelta = (chunk: string) => {
           if (!emitted) {
+            emitted = true
             onEvent({
               type: "meta",
               model,
@@ -761,43 +789,76 @@ export async function streamIa(
               requested,
               imageOmitted: packed.imageOmitted,
             })
-            onEvent({ type: "delta", text: result.text })
           }
-          onEvent({
-            type: "done",
-            text: result.text,
-            model,
-            provider: options.provider,
-            requested,
-            imageOmitted: packed.imageOmitted,
-          })
-          return {
-            ok: true,
-            text: result.text,
-            model,
-            provider: options.provider,
-            requested,
-            imageOmitted: packed.imageOmitted,
+          onEvent({ type: "delta", text: chunk })
+        }
+        try {
+          const result =
+            options.provider === "google"
+              ? await streamGeminiOnce(model, options.messages, snapshot, key, onDelta, options.signal)
+              : await streamOpenAIOnce(
+                  model,
+                  options.messages,
+                  snapshot,
+                  key,
+                  onDelta,
+                  options.signal,
+                  localEndpoint
+                )
+          if (result.ok) {
+            if (!emitted) {
+              onEvent({
+                type: "meta",
+                model,
+                provider: options.provider,
+                requested,
+                imageOmitted: packed.imageOmitted,
+              })
+              onEvent({ type: "delta", text: result.text })
+            }
+            onEvent({
+              type: "done",
+              text: result.text,
+              model,
+              provider: options.provider,
+              requested,
+              imageOmitted: packed.imageOmitted,
+            })
+            return {
+              ok: true,
+              text: result.text,
+              model,
+              provider: options.provider,
+              requested,
+              imageOmitted: packed.imageOmitted,
+            }
           }
-        }
-        lastError = result.error
-        if (emitted || !result.retry) {
-          onEvent({ type: "error", error: lastError })
-          return { ok: false, error: lastError }
-        }
-      } catch (error) {
-        if (options.signal?.aborted) throw error
-        lastError =
-          options.provider === "local"
-            ? "LLM local injoignable. Pas de bascule cloud."
-            : error instanceof Error
-              ? error.message
-              : "échec IA"
-        if (emitted || options.provider === "local") {
-          onEvent({ type: "error", error: lastError })
-          return { ok: false, error: lastError }
+          lastError = result.error
+          if (emitted || !result.retry) {
+            onEvent({ type: "error", error: lastError })
+            return { ok: false, error: lastError }
+          }
+        } catch (error) {
+          if (options.signal?.aborted) throw error
+          lastError =
+            options.provider === "local"
+              ? error instanceof Error
+                ? error.message
+                : "LLM local injoignable. Pas de bascule cloud."
+              : error instanceof Error
+                ? error.message
+                : "échec IA"
+          if (emitted) {
+            onEvent({ type: "error", error: lastError })
+            return { ok: false, error: lastError }
+          }
+          if (options.provider === "local") {
+            hostFailed = true
+            break
+          }
         }
       }
+      if (!hostFailed && options.provider !== "local") break
     }
     onEvent({ type: "error", error: lastError })
     return { ok: false, error: lastError }

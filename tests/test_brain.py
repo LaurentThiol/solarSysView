@@ -62,6 +62,75 @@ def test_ping_ollama_falls_back_to_openai_compat() -> None:
     assert result["models"] == ["qwen2.5", "nomic-embed-text"]
 
 
+def test_ping_ollama_accepts_version_when_catalogs_fail() -> None:
+    import urllib.error
+
+    from synchro import brain as brain_mod
+
+    def fake_read(url: str, timeout: float):
+        if url.endswith("/api/version"):
+            return {"version": "0.11.0"}
+        raise urllib.error.URLError("no catalog")
+
+    with (
+        patch.object(brain_mod, "_read_json", side_effect=fake_read),
+        patch.object(brain_mod, "llm_base", return_value="http://127.0.0.1:11434"),
+    ):
+        result = brain_mod.ping_ollama()
+    assert result["ok"] is True
+    assert result["models"] == []
+
+
+def test_ping_ollama_retries_localhost_when_ipv4_loopback_fails() -> None:
+    from synchro import brain as brain_mod
+
+    def fake_read(url: str, timeout: float):
+        if "127.0.0.1" in url:
+            raise OSError("refused")
+        if url == "http://localhost:11434/api/tags":
+            return {"models": [{"name": "mistral"}]}
+        raise AssertionError(url)
+
+    with (
+        patch.object(brain_mod, "_read_json", side_effect=fake_read),
+        patch.object(brain_mod, "llm_base", return_value="http://127.0.0.1:11434"),
+    ):
+        result = brain_mod.ping_ollama()
+    assert result["ok"] is True
+    assert result["host"] == "http://localhost:11434"
+    assert result["models"] == ["mistral"]
+
+
+def test_loopback_json_bypasses_http_proxy() -> None:
+    import urllib.request
+
+    from synchro import brain as brain_mod
+
+    seen: list[object] = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"models":[]}'
+
+    class FakeOpener:
+        def open(self, request: object, timeout: object = None) -> FakeResponse:
+            return FakeResponse()
+
+    def fake_build(*handlers: object) -> FakeOpener:
+        seen.extend(handlers)
+        return FakeOpener()
+
+    with patch.object(urllib.request, "build_opener", side_effect=fake_build):
+        brain_mod._read_json("http://127.0.0.1:11434/api/tags", 1)
+    assert any(isinstance(handler, urllib.request.ProxyHandler) for handler in seen)
+
+
 def test_brain_status_does_not_need_neon() -> None:
     with patch(
         "synchro.brain.ping_ollama",

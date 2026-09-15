@@ -442,33 +442,87 @@ function LocalLlmPill() {
   const router = useRouter()
   const [local, setLocal] = useState<"ok" | "off" | "load">("load")
   const [host, setHost] = useState("Ollama")
+  const [detail, setDetail] = useState("off")
 
   useEffect(() => {
     let cancelled = false
-    const ping = async () => {
+
+    const pingBases = async (bases: string[]): Promise<{ ok: true; host: string } | null> => {
+      const unique = [...new Set(bases.filter(Boolean))]
+      for (const base of unique) {
+        const normalized = base.replace(/\/$/, "")
+        const origin = /^https?:\/\//i.test(normalized) ? normalized : `http://${normalized}`
+        for (const path of ["/api/tags", "/v1/models", "/api/version"]) {
+          try {
+            const response = await fetch(`${origin}${path}`, {
+              cache: "no-store",
+              signal: AbortSignal.timeout(1_200),
+            })
+            if (response.ok) return { ok: true, host: origin.replace(/^https?:\/\//, "") }
+          } catch {
+            /* CORS or down */
+          }
+        }
+      }
+      return null
+    }
+
+    const jsonPing = async (
+      url: string
+    ): Promise<{ ok: boolean; host?: string; error?: string } | null> => {
       try {
-        const brainRes = await fetch("/api/brain/status", { cache: "no-store" })
-        const brain = (await brainRes.json()) as {
-          ollama?: { ok?: boolean; host?: string; models?: string[] }
+        const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8_000) })
+        const payload = (await response.json()) as {
+          local?: boolean
+          ollama?: { ok?: boolean; host?: string; error?: string }
+          localHost?: string
+          error?: string
+          ok?: boolean
         }
-        if (cancelled) return
-        if (brain.ollama?.ok) {
-          setLocal("ok")
-          if (brain.ollama.host) setHost(brain.ollama.host.replace(/^https?:\/\//, ""))
-          return
+        if (payload.ollama?.ok) {
+          return { ok: true, host: payload.ollama.host }
         }
-        const iaRes = await fetch("/api/ia/status", { cache: "no-store" })
-        const ia = (await iaRes.json()) as { local?: boolean; localHost?: string }
-        if (cancelled) return
-        const ok = Boolean(ia.local)
-        setLocal(ok ? "ok" : "off")
-        if (ia.localHost) setHost(ia.localHost.replace(/^https?:\/\//, ""))
-      } catch {
-        if (!cancelled) setLocal("off")
+        if (payload.local) {
+          return { ok: true, host: payload.localHost }
+        }
+        return {
+          ok: false,
+          host: payload.ollama?.host || payload.localHost,
+          error: payload.ollama?.error || payload.error,
+        }
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : "injoignable" }
       }
     }
+
+    const ping = async () => {
+      const [browser, iaLocal, brain] = await Promise.all([
+        pingBases(["http://127.0.0.1:11434", "http://localhost:11434"]),
+        jsonPing("/api/ia/local"),
+        jsonPing("/api/brain/status"),
+      ])
+      if (cancelled) return
+      let hit = browser ?? (iaLocal?.ok ? iaLocal : null) ?? (brain?.ok ? brain : null)
+      if (!hit?.ok) {
+        const advertised = iaLocal?.host || brain?.host
+        if (advertised && !/11434/.test(advertised)) {
+          const extra = await pingBases([advertised])
+          if (extra) hit = extra
+        }
+      }
+      if (hit?.ok) {
+        setLocal("ok")
+        if (hit.host) setHost(hit.host.replace(/^https?:\/\//, ""))
+        setDetail(hit.host ? hit.host.replace(/^https?:\/\//, "") : "ok")
+        return
+      }
+      setLocal("off")
+      const err = iaLocal?.error || brain?.error
+      setDetail("off")
+      setHost(err ? err.slice(0, 80) : "Ollama")
+    }
     void ping()
-    const id = window.setInterval(() => void ping(), 30_000)
+    const id = window.setInterval(() => void ping(), 15_000)
     return () => {
       cancelled = true
       window.clearInterval(id)
@@ -484,9 +538,15 @@ function LocalLlmPill() {
     >
       <Pill
         label="LLM local"
-        detail={local === "ok" ? host : "off"}
+        detail={local === "ok" ? detail : "off"}
         tone={local === "load" ? "load" : local === "ok" ? "ok" : "off"}
-        title={local === "ok" ? `Joignable · ${host}` : "Injoignable — pas de bascule cloud"}
+        title={
+          local === "ok"
+            ? `Joignable · ${host}`
+            : host && host !== "Ollama"
+              ? `Injoignable — ${host}`
+              : "Injoignable — pas de bascule cloud"
+        }
         onClick={() => router.push("/brain")}
       />
     </HelpWrap>

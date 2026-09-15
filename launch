@@ -1147,15 +1147,31 @@ ollama_doctor() {
     http://localhost*) host="http://127.0.0.1${host#http://localhost}" ;;
     https://localhost*) host="https://127.0.0.1${host#https://localhost}" ;;
   esac
-  local models_url="${host}/v1/models"
-  if [[ "$host" == */v1 ]]; then
-    models_url="${host}/models"
+  if ! command -v curl >/dev/null 2>&1; then
+    printf '%sLLM local : injoignable (%s) — curl absent.%s\n' "$C_DIM" "$host" "$C_RESET"
+    return
   fi
-  if command -v curl >/dev/null 2>&1 && {
-    curl -fsS --max-time 2 "${host}/api/tags" >/dev/null 2>&1 \
-      || curl -fsS --max-time 2 "$models_url" >/dev/null 2>&1
-  }; then
-    ok "LLM local : ${host}"
+  llm_curl() {
+    curl -fsS --noproxy '*' --max-time 2 "$1" >/dev/null 2>&1
+  }
+  llm_models_url() {
+    if [[ "$1" == */v1 ]]; then
+      printf '%s/models' "$1"
+    else
+      printf '%s/v1/models' "$1"
+    fi
+  }
+  local try alt found=""
+  for try in "$host" "${host/127.0.0.1/localhost}" "${host/localhost/127.0.0.1}"; do
+    [[ -n "$try" ]] || continue
+    alt="$(llm_models_url "$try")"
+    if llm_curl "${try}/api/tags" || llm_curl "$alt" || llm_curl "${try}/api/version"; then
+      found="$try"
+      break
+    fi
+  done
+  if [[ -n "$found" ]]; then
+    ok "LLM local : ${found}"
   else
     printf '%sLLM local : injoignable (%s) — Brain reste local-off, pas de bascule cloud.%s\n' "$C_DIM" "$host" "$C_RESET"
   fi
@@ -1308,11 +1324,20 @@ cmd_start() {
   : >"$RUN_DIR/frontend.log"
 
   info "Démarrage API ${BACKEND_URL} …"
+  local extra_no_proxy="127.0.0.1,localhost,::1"
+  local merged_no_proxy="${NO_PROXY:-${no_proxy:-}}"
+  if [[ -z "$merged_no_proxy" ]]; then
+    merged_no_proxy="$extra_no_proxy"
+  elif [[ "$merged_no_proxy" != *"127.0.0.1"* ]]; then
+    merged_no_proxy="${merged_no_proxy},${extra_no_proxy}"
+  fi
   (
     trap '' INT
     cd "$ROOT"
     export PYTHONUNBUFFERED=1
     export SYNCHRO_RUN_DIR="$RUN_DIR"
+    export NO_PROXY="$merged_no_proxy"
+    export no_proxy="$merged_no_proxy"
     exec .venv/bin/python -m uvicorn synchro.app:create_app --factory --reload \
       --reload-dir synchro \
       --host "$BACKEND_HOST" --port "$BACKEND_PORT"
@@ -1327,6 +1352,8 @@ cmd_start() {
     export NEXT_PUBLIC_API_URL="$BACKEND_URL"
     export SYNCHRO_API_URL="$BACKEND_URL"
     export SYNCHRO_RUN_DIR="$RUN_DIR"
+    export NO_PROXY="$merged_no_proxy"
+    export no_proxy="$merged_no_proxy"
     exec ./node_modules/.bin/next dev --port "$FRONTEND_PORT" --hostname "$FRONTEND_HOST"
   ) >>"$RUN_DIR/frontend.log" 2>&1 &
   frontend_pid=$!

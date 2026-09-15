@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { localChatCompletionsUrl, localModelsUrl, normalizeLocalLlmBase } from "../src/lib/ia/local-url"
+import { localChatCompletionsUrl, localLlmCandidates, localModelsUrl, localProbeUrls, normalizeLocalLlmBase } from "../src/lib/ia/local-url"
 
 test("localhost LLM base is rewritten to IPv4", () => {
   assert.equal(normalizeLocalLlmBase("http://localhost:11434/"), "http://127.0.0.1:11434")
@@ -21,4 +21,12 @@ test("OpenAI-compat model and chat URLs respect a /v1 suffix", () => {
     localChatCompletionsUrl("http://127.0.0.1:11434"),
     "http://127.0.0.1:11434/v1/chat/completions"
   )
+})
+
+test("loopback candidates retry localhost when 127.0.0.1 is used", () => {
+  assert.deepEqual(localLlmCandidates("http://127.0.0.1:11434"), [
+    "http://127.0.0.1:11434",
+    "http://localhost:11434",
+  ])
+  assert.ok(localProbeUrls("http://127.0.0.1:11434").includes("http://127.0.0.1:11434/api/version"))
 })

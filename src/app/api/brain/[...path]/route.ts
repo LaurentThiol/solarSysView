@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { apiBase, HEALTH_TIMEOUT_MS } from "@/lib/api-base"
+import { llmFetch } from "@/lib/ia/loopback-fetch"
 
 export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
 
 async function proxy(request: NextRequest, path: string[]) {
   const base = apiBase()
@@ -10,7 +12,7 @@ async function proxy(request: NextRequest, path: string[]) {
     return NextResponse.json({ ok: false, error: "API locale non configurée" }, { status: 503 })
   }
   const suffix = path.length ? `/${path.join("/")}` : ""
-  const timeout = path.includes("retrieve") ? 30_000 : HEALTH_TIMEOUT_MS
+  const timeout = path[0] === "status" ? 6_000 : path.includes("retrieve") ? 30_000 : HEALTH_TIMEOUT_MS
   const init: RequestInit = {
     method: request.method,
     cache: "no-store",
@@ -21,7 +23,7 @@ async function proxy(request: NextRequest, path: string[]) {
     init.body = await request.text()
   }
   try {
-    const response = await fetch(`${base}/api/brain${suffix}${request.nextUrl.search}`, init)
+    const response = await llmFetch(`${base}/api/brain${suffix}${request.nextUrl.search}`, init, timeout)
     const body = await response.json().catch(() => ({ error: "réponse invalide" }))
     return NextResponse.json(body, { status: response.status })
   } catch (error) {
