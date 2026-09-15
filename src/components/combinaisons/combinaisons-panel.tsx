@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { Pencil } from "lucide-react"
 
 import { WindowBar } from "@/components/analysis/window-bar"
 import {
@@ -44,6 +45,8 @@ import {
   type WindowPreset,
 } from "@/lib/analysis-window"
 import {
+  DEFAULT_GRID_LABEL,
+  MAX_GRID_LABEL,
   STRATEGY_LABELS,
   STRATEGIES,
   SUM_BOUND_MODE_LABELS,
@@ -53,11 +56,13 @@ import {
   autoMinSum,
   empiricalWinRate,
   isCompleteGrid,
+  normalizeGridLabel,
   numberSum,
   officialWinProbability,
   profileGrid,
   proposeGrids,
   readStoredProposals,
+  renameSavedGridIn,
   resolveSumBand,
   windowSumExtent,
   writeStoredProposals,
@@ -242,11 +247,15 @@ const HELP = {
   },
   label: {
     title: "Libellé",
-    body: "Nom enregistré avec la grille (Neon si l’API répond, sinon session de cet onglet).",
+    body: "Nom enregistré avec la grille (Neon si l’API répond, sinon session de cet onglet). Les lignes déjà sauvées se renomment ensuite.",
   },
   save: {
     title: "Enregistrer",
     body: "Envoie la grille 5+2 courante. Inactif tant que la sélection est incomplète.",
+  },
+  rename: {
+    title: "Renommer",
+    body: "Change le nom de cette grille enregistrée, sans toucher aux numéros ni aux étoiles.",
   },
   load: {
     title: "Recharger",
@@ -475,6 +484,141 @@ function BallPicker({
   )
 }
 
+function SavedGridItem({
+  item,
+  rate,
+  onLoad,
+  onRemove,
+  onRename,
+}: {
+  item: SavedGrid
+  rate: { p: number; wins: number; n: number } | null
+  onLoad: () => void
+  onRemove: () => void
+  onRename: (label: string) => Promise<boolean>
+}) {
+  const displayLabel = item.label || DEFAULT_GRID_LABEL
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(displayLabel)
+  const [busy, setBusy] = useState(false)
+
+  function startRename() {
+    setDraft(displayLabel)
+    setEditing(true)
+  }
+
+  function cancelRename() {
+    setDraft(displayLabel)
+    setEditing(false)
+  }
+
+  async function commitRename() {
+    if (busy) return
+    setBusy(true)
+    const ok = await onRename(draft)
+    setBusy(false)
+    if (ok) setEditing(false)
+  }
+
+  return (
+    <li className="flex flex-col gap-2 rounded-lg border border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        {editing ? (
+          <Input
+            value={draft}
+            autoFocus
+            disabled={busy}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault()
+                void commitRename()
+              }
+              if (event.key === "Escape") {
+                event.preventDefault()
+                cancelRename()
+              }
+            }}
+            aria-label="Nouveau libellé de la grille"
+            maxLength={MAX_GRID_LABEL}
+            className="h-7 max-w-xs text-sm font-medium"
+          />
+        ) : (
+          <button
+            type="button"
+            className="max-w-full truncate text-left text-sm font-medium hover:underline"
+            title="Cliquer pour renommer"
+            aria-label={`Renommer ${displayLabel}`}
+            onClick={startRename}
+          >
+            {displayLabel}
+          </button>
+        )}
+        <DrawBalls numbers={item.numbers} stars={item.stars} />
+        {rate ? (
+          <p className="text-xs text-muted-foreground tabular-nums">
+            P̂ {formatPct(rate.p, 1)} · {rate.wins}/{rate.n}
+          </p>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {editing ? (
+          <>
+            <HelpWrap help={HELP.rename}>
+              <Button
+                type="button"
+                size="sm"
+                disabled={busy}
+                onClick={() => void commitRename()}
+              >
+                Valider
+              </Button>
+            </HelpWrap>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={cancelRename}
+            >
+              Annuler
+            </Button>
+          </>
+        ) : (
+          <>
+            <HelpWrap help={HELP.rename}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={startRename}
+              >
+                <Pencil data-icon="inline-start" />
+                Renommer
+              </Button>
+            </HelpWrap>
+            <HelpWrap help={HELP.load}>
+              <Button type="button" variant="outline" size="sm" onClick={onLoad}>
+                Recharger
+              </Button>
+            </HelpWrap>
+            <HelpWrap help={HELP.remove}>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={onRemove}
+              >
+                Supprimer
+              </Button>
+            </HelpWrap>
+          </>
+        )}
+      </div>
+    </li>
+  )
+}
+
 export function CombinaisonsPanel() {
   const { draws, source, loading } = useDraws("all")
   const [preset, setPreset] = useState<WindowPreset>("last_100")
@@ -494,7 +638,8 @@ export function CombinaisonsPanel() {
   const [sumMaxInput, setSumMaxInput] = useState("")
   const [proposals, setProposals] = useState<CombinationGrid[]>([])
   const [proposeNote, setProposeNote] = useState<string | null>(null)
-  const [label, setLabel] = useState("Grille")
+  const [label, setLabel] = useState(DEFAULT_GRID_LABEL)
+  const [loadedId, setLoadedId] = useState<SavedGrid["id"] | null>(null)
   const [saved, setSaved] = useState<SavedGrid[]>([])
   const [gridsSource, setGridsSource] = useState<"api" | "session" | "loading">(
     "loading"
@@ -652,6 +797,14 @@ export function CombinaisonsPanel() {
   function loadGrid(item: CombinationGrid) {
     setNumbers([...item.numbers])
     setStars([...item.stars])
+    setLoadedId(null)
+  }
+
+  function loadSavedGrid(item: SavedGrid) {
+    setNumbers([...item.numbers])
+    setStars([...item.stars])
+    setLabel(normalizeGridLabel(item.label))
+    setLoadedId(item.id)
   }
 
   function handleFrom(value: string) {
@@ -718,7 +871,11 @@ export function CombinaisonsPanel() {
 
   async function saveGrid() {
     if (!complete) return
-    const body = { label: label.trim() || "Grille", numbers: grid.numbers, stars: grid.stars }
+    const body = {
+      label: normalizeGridLabel(label),
+      numbers: grid.numbers,
+      stars: grid.stars,
+    }
     if (gridsSource === "api") {
       try {
         const response = await fetch("/api/grids", {
@@ -732,6 +889,8 @@ export function CombinaisonsPanel() {
           return
         }
         setSaved((current) => [row, ...current.filter((item) => item.id !== row.id)])
+        setLoadedId(row.id)
+        setLabel(normalizeGridLabel(row.label))
         setGridsError(null)
         return
       } catch {
@@ -745,8 +904,47 @@ export function CombinaisonsPanel() {
     }
     const next = [local, ...saved]
     setSaved(next)
+    setLoadedId(local.id)
     writeSessionGrids(next)
     setGridsSource("session")
+  }
+
+  async function renameGrid(item: SavedGrid, nextLabel: string): Promise<boolean> {
+    const renamed = renameSavedGridIn(saved, item.id, nextLabel)
+    if (!renamed) return false
+    const nextName =
+      renamed.find((row) => row.id === item.id)?.label ?? normalizeGridLabel(nextLabel)
+    if (normalizeGridLabel(item.label) === nextName) return true
+    if (gridsSource === "api" && typeof item.id === "number") {
+      try {
+        const response = await fetch(`/api/grids/${item.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ label: nextName }),
+        })
+        const row = (await response.json()) as SavedGrid & { error?: string }
+        if (!response.ok) {
+          setGridsError(row.error ?? "Renommage impossible")
+          return false
+        }
+        const savedLabel = normalizeGridLabel(row.label ?? nextName)
+        setSaved((current) =>
+          current.map((grid) =>
+            grid.id === item.id ? { ...grid, ...row, label: savedLabel } : grid
+          )
+        )
+        if (loadedId === item.id) setLabel(savedLabel)
+        setGridsError(null)
+        return true
+      } catch {
+        setGridsError("Renommage API impossible")
+        return false
+      }
+    }
+    setSaved(renamed)
+    writeSessionGrids(renamed)
+    if (loadedId === item.id) setLabel(nextName)
+    return true
   }
 
   async function removeGrid(item: SavedGrid) {
@@ -1169,6 +1367,7 @@ export function CombinaisonsPanel() {
                 value={label}
                 onChange={(event) => setLabel(event.target.value)}
                 aria-label="Libellé de la grille"
+                maxLength={MAX_GRID_LABEL}
               />
             </LabelHelp>
             <HelpWrap help={HELP.save}>
@@ -1192,42 +1391,14 @@ export function CombinaisonsPanel() {
                   ? empiricalWinRate(item, work)
                   : null
                 return (
-                  <li
+                  <SavedGridItem
                     key={String(item.id)}
-                    className="flex flex-col gap-2 rounded-lg border border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="flex min-w-0 flex-col gap-1">
-                      <p className="text-sm font-medium">{item.label || "Grille"}</p>
-                      <DrawBalls numbers={item.numbers} stars={item.stars} />
-                      {rate ? (
-                        <p className="text-xs text-muted-foreground tabular-nums">
-                          P̂ {formatPct(rate.p, 1)} · {rate.wins}/{rate.n}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <HelpWrap help={HELP.load}>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => loadGrid(item)}
-                        >
-                          Recharger
-                        </Button>
-                      </HelpWrap>
-                      <HelpWrap help={HELP.remove}>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => void removeGrid(item)}
-                        >
-                          Supprimer
-                        </Button>
-                      </HelpWrap>
-                    </div>
-                  </li>
+                    item={item}
+                    rate={rate}
+                    onLoad={() => loadSavedGrid(item)}
+                    onRemove={() => void removeGrid(item)}
+                    onRename={(nextLabel) => renameGrid(item, nextLabel)}
+                  />
                 )
               })}
             </ul>

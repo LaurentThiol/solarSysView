@@ -87,6 +87,10 @@ class GridIn(BaseModel):
     stars: list[int] = Field(min_length=2, max_length=2)
 
 
+class GridLabelIn(BaseModel):
+    label: str = Field(max_length=200)
+
+
 class CheckIn(BaseModel):
     numbers: list[int] = Field(min_length=5, max_length=5)
     stars: list[int] = Field(min_length=2, max_length=2)
@@ -900,10 +904,17 @@ def create_app() -> FastAPI:
     def create_grid(payload: GridIn) -> dict[str, Any]:
         validate_grid(payload.numbers, payload.stars)
         row = db.insert_grid(
-            payload.label.strip() or "Grille",
+            payload.label,
             sorted(payload.numbers),
             sorted(payload.stars),
         )
+        return _json(db.serialize_row(row))
+
+    @app.patch("/api/grids/{grid_id}")
+    def rename_grid(grid_id: int, payload: GridLabelIn) -> dict[str, Any]:
+        row = db.update_grid_label(grid_id, payload.label)
+        if not row:
+            raise HTTPException(404, "Grille introuvable")
         return _json(db.serialize_row(row))
 
     @app.delete("/api/grids/{grid_id}")

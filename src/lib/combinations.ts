@@ -61,6 +61,25 @@ export function isCompleteGrid(grid: CombinationGrid): boolean {
   return true
 }
 
+export const DEFAULT_GRID_LABEL = "Grille"
+export const MAX_GRID_LABEL = 80
+
+export function normalizeGridLabel(label: string | null | undefined): string {
+  const text = (label ?? "").trim().replace(/\s+/g, " ")
+  if (!text) return DEFAULT_GRID_LABEL
+  return text.length > MAX_GRID_LABEL ? text.slice(0, MAX_GRID_LABEL) : text
+}
+
+export function renameSavedGridIn<T extends { id: number | string; label: string }>(
+  grids: T[],
+  id: T["id"],
+  label: string
+): T[] | null {
+  if (!grids.some((item) => item.id === id)) return null
+  const nextLabel = normalizeGridLabel(label)
+  return grids.map((item) => (item.id === id ? { ...item, label: nextLabel } : item))
+}
+
 export function gridKey(grid: CombinationGrid): string {
   const sorted = sortedGrid(grid)
   return `${sorted.numbers.join(",")}|${sorted.stars.join(",")}`

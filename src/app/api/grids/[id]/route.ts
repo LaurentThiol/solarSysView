@@ -4,11 +4,7 @@ import { apiBase, HEALTH_TIMEOUT_MS } from "@/lib/api-base"
 
 export const dynamic = "force-dynamic"
 
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  const { id } = await context.params
+async function proxy(request: NextRequest, id: string) {
   const base = apiBase()
   if (!base) {
     return NextResponse.json(
@@ -16,12 +12,20 @@ export async function DELETE(
       { status: 503 }
     )
   }
+  const init: RequestInit = {
+    method: request.method,
+    cache: "no-store",
+    signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+    headers: { "content-type": "application/json" },
+  }
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    init.body = await request.text()
+  }
   try {
-    const response = await fetch(`${base}/api/grids/${id}`, {
-      method: "DELETE",
-      cache: "no-store",
-      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
-    })
+    const response = await fetch(
+      `${base}/api/grids/${id}${request.nextUrl.search}`,
+      init
+    )
     const body = await response.json().catch(() => ({ error: "réponse invalide" }))
     return NextResponse.json(body, { status: response.status })
   } catch (error) {
@@ -33,4 +37,20 @@ export async function DELETE(
       { status: 503 }
     )
   }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const { id } = await context.params
+  return proxy(request, id)
+}
+
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const { id } = await context.params
+  return proxy(request, id)
 }

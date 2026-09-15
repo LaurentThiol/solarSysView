@@ -542,6 +542,17 @@ def all_draws(era: str = "current") -> list[dict[str, Any]]:
             return [dict(r) for r in cur.fetchall()]
 
 
+DEFAULT_GRID_LABEL = "Grille"
+MAX_GRID_LABEL = 80
+
+
+def normalize_grid_label(label: str | None) -> str:
+    text = " ".join((label or "").split())
+    if not text:
+        return DEFAULT_GRID_LABEL
+    return text[:MAX_GRID_LABEL]
+
+
 def list_grids() -> list[dict[str, Any]]:
     with connection() as conn:
         with conn.cursor() as cur:
@@ -560,11 +571,28 @@ def insert_grid(label: str, numbers: list[int], stars: list[int]) -> dict[str, A
                 VALUES (%s, %s, %s)
                 RETURNING *
                 """,
-                (label, numbers, stars),
+                (normalize_grid_label(label), numbers, stars),
             )
             row = dict(cur.fetchone())
         conn.commit()
         return row
+
+
+def update_grid_label(grid_id: int, label: str) -> dict[str, Any] | None:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE grids
+                SET label = %s
+                WHERE id = %s AND active = TRUE
+                RETURNING *
+                """,
+                (normalize_grid_label(label), grid_id),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
 
 
 def delete_grid(grid_id: int) -> bool:
