@@ -448,27 +448,6 @@ function LocalLlmPill() {
   useEffect(() => {
     let cancelled = false
 
-    const pingBases = async (bases: string[]): Promise<{ ok: true; host: string } | null> => {
-      const unique = [...new Set(bases.filter(Boolean))]
-      const attempts = unique.flatMap((base) => {
-        const origin = (/^https?:\/\//i.test(base) ? base : `http://${base}`).replace(/\/$/, "").replace(/\/v1$/, "")
-        return ["/api/tags", "/v1/models", "/api/version"].map(async (path) => {
-          try {
-            const response = await fetch(`${origin}${path}`, {
-              cache: "no-store",
-              signal: AbortSignal.timeout(1_200),
-            })
-            if (response.ok) return origin.replace(/^https?:\/\//, "")
-          } catch {
-            return null
-          }
-          return null
-        })
-      })
-      const hit = (await Promise.all(attempts)).find((item) => Boolean(item))
-      return hit ? { ok: true, host: hit } : null
-    }
-
     const jsonPing = async (
       url: string
     ): Promise<{ ok: boolean; host?: string; error?: string } | null> => {
@@ -498,26 +477,14 @@ function LocalLlmPill() {
     }
 
     const ping = async () => {
-      const [browser, iaLocal, brain] = await Promise.all([
-        pingBases([
-          "http://127.0.0.1:11434",
-          "http://localhost:11434",
-          "http://[::1]:11434",
-          "http://127.0.0.1:1234",
-          "http://127.0.0.1:8080",
-        ]),
+      // Same-origin only: browser fetches to 127.0.0.1:11434 / 1234 / 8080 log
+      // ERR_CONNECTION_REFUSED in DevTools whenever Ollama is not running.
+      const [iaLocal, brain] = await Promise.all([
         jsonPing("/api/ia/local"),
         jsonPing("/api/brain/status"),
       ])
       if (cancelled) return
-      let hit = browser ?? (iaLocal?.ok ? iaLocal : null) ?? (brain?.ok ? brain : null)
-      if (!hit?.ok) {
-        const advertised = iaLocal?.host || brain?.host
-        if (advertised && !/11434/.test(advertised)) {
-          const extra = await pingBases([advertised])
-          if (extra) hit = extra
-        }
-      }
+      const hit = (iaLocal?.ok ? iaLocal : null) ?? (brain?.ok ? brain : null)
       if (hit?.ok) {
         setLocal("ok")
         if (hit.host) setHost(hit.host.replace(/^https?:\/\//, ""))

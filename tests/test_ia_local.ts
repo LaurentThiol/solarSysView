@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -46,4 +47,14 @@ test("search includes LM Studio and llama-server ports", () => {
   assert.ok(bases.includes("http://127.0.0.1:8080/v1"))
   assert.ok(bases.includes("http://[::1]:11434"))
   assert.match(localLlmOffMessage("connect ECONNREFUSED 127.0.0.1:11434"), /Ollama n'écoute pas/)
+})
+
+test("the LLM pill does not probe loopback hosts from the browser", () => {
+  const src = readFileSync(new URL("../src/components/startup-status.tsx", import.meta.url), "utf8")
+  assert.doesNotMatch(src, /pingBases/)
+  assert.doesNotMatch(src, /\[::1\]:11434/)
+  assert.doesNotMatch(src, /127\.0\.0\.1:1234/)
+  assert.doesNotMatch(src, /127\.0\.0\.1:8080/)
+  assert.match(src, /\/api\/ia\/local/)
+  assert.match(src, /\/api\/brain\/status/)
 })

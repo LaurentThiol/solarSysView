@@ -28,6 +28,12 @@ export const metadata: Metadata = {
   title: "Synchro — Archives EuroMillions",
   description:
     "Tous les tirages EuroMillions 2026, filtrables par mois et par numéros, avec export CSV.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+  },
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -675,7 +675,7 @@ export function BrainLab() {
             ) : (
               board.map((item) => (
                 <div
-                  key={item.id}
+                  key={`${item.kind}:${item.id}`}
                   className={`rounded-md border px-2 py-1 ${item.inPrompt ? "border-primary/40 bg-primary/10" : "border-border"}`}
                 >
                   <div className="flex items-center gap-2">

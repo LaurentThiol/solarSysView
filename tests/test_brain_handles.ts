@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { catalogCollisions, catalogEntry } from "../src/lib/brain/catalog"
+import { BRAIN_CATALOG, catalogCollisions, catalogEntry } from "../src/lib/brain/catalog"
 import { parseHandle, parseHandlesInText } from "../src/lib/brain/handles"
 import { cosine } from "../src/lib/brain/retrieve"
 import { objectsEqualPrompt, packWorkingSet } from "../src/lib/brain/working-set"
@@ -58,6 +58,12 @@ test("no two catalog entries share a handle or alias in the same lab", () => {
   assert.deepEqual(catalogCollisions(), [])
   assert.ok(catalogEntry("analyse/rsi"))
   assert.ok(catalogEntry("chartisme/ete"))
+})
+
+test("catalog ids are unique (React list keys)", () => {
+  const ids = BRAIN_CATALOG.map((entry) => entry.id)
+  assert.equal(ids.length, new Set(ids).size)
+  assert.equal(ids.filter((id) => id === "morpho/top").length, 1)
 })
 
 test("working set ids match the JSON sent in the prompt pack", () => {
