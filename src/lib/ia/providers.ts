@@ -19,7 +19,14 @@ import {
   type IaModelOption,
   type IaProviderId,
 } from "@/lib/ia/models"
-import { localChatCompletionsUrl, localLlmCandidates, localProbeUrls, normalizeLocalLlmBase } from "@/lib/ia/local-url"
+import {
+  localChatCompletionsUrl,
+  localLlmCandidates,
+  localLlmOffMessage,
+  localLlmSearchBases,
+  localProbeUrls,
+  normalizeLocalLlmBase,
+} from "@/lib/ia/local-url"
 import { llmFetch } from "@/lib/ia/loopback-fetch"
 import { IA_SYSTEM_PROMPT } from "@/lib/ia/prompt"
 import {
@@ -204,7 +211,7 @@ export async function probeLocalLlm(host = localLlmBase(), timeoutMs = LOCAL_PRO
     return localProbeCache
   }
   const attempts = await Promise.all(
-    localLlmCandidates(host).map(async (candidate) => {
+    localLlmSearchBases(host).map(async (candidate) => {
       const probes = await Promise.all(localProbeUrls(candidate).map((url) => probeLocalUrl(url, timeoutMs)))
       const hit = probes.find((item) => item.ids !== null)
       const error = probes.map((item) => item.error).filter(Boolean)[0]
@@ -224,7 +231,7 @@ export async function probeLocalLlm(host = localLlmBase(), timeoutMs = LOCAL_PRO
     host: hit?.host ?? host,
     error: hit
       ? undefined
-      : attempts.map((item) => item.error).filter(Boolean)[0] || "injoignable (Ollama / llama-server)",
+      : localLlmOffMessage(attempts.map((item) => item.error).filter(Boolean)[0]),
   }
   localProbeCache = probe.ok ? { ...probe, requested: host } : null
   return probe

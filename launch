@@ -80,6 +80,7 @@ Variables (processus > .env > défaut):
   SYNCHRO_FRONTEND_PORT      Port UI   (défaut: 43147)
   SYNCHRO_RUN_DIR            Journaux et PID (défaut: .run/)
   SYNCHRO_PYTHON             Interpréteur Python 3.10+ (sinon auto)
+  SYNCHRO_SKIP_OLLAMA        1 = ne pas démarrer Ollama au start
 
 Arrêt propre : bouton Quitter dans l'UI, Ctrl+C, ou ./launch stop.
 EOF
@@ -1135,7 +1136,7 @@ harmo_doctor() {
   fi
 }
 
-ollama_doctor() {
+llm_configured_host() {
   local host="${LOCAL_LLM_BASE_URL:-${OLLAMA_HOST:-}}"
   if [[ -z "$host" && -f "$ROOT/.env" ]]; then
     host="$(dotenv_value LOCAL_LLM_BASE_URL)"
@@ -1147,33 +1148,112 @@ ollama_doctor() {
     http://localhost*) host="http://127.0.0.1${host#http://localhost}" ;;
     https://localhost*) host="https://127.0.0.1${host#https://localhost}" ;;
   esac
-  if ! command -v curl >/dev/null 2>&1; then
-    printf '%sLLM local : injoignable (%s) — curl absent.%s\n' "$C_DIM" "$host" "$C_RESET"
-    return
+  printf '%s' "$host"
+}
+
+llm_models_url() {
+  if [[ "$1" == */v1 ]]; then
+    printf '%s/models' "$1"
+  else
+    printf '%s/v1/models' "$1"
   fi
-  llm_curl() {
-    curl -fsS --noproxy '*' --max-time 2 "$1" >/dev/null 2>&1
-  }
-  llm_models_url() {
-    if [[ "$1" == */v1 ]]; then
-      printf '%s/models' "$1"
-    else
-      printf '%s/v1/models' "$1"
-    fi
-  }
-  local try alt found=""
-  for try in "$host" "${host/127.0.0.1/localhost}" "${host/localhost/127.0.0.1}"; do
+}
+
+llm_curl() {
+  command -v curl >/dev/null 2>&1 || return 1
+  curl -fsS --noproxy '*' --max-time 1 "$1" >/dev/null 2>&1
+}
+
+llm_host_up() {
+  local try="$1" alt
+  [[ -n "$try" ]] || return 1
+  alt="$(llm_models_url "$try")"
+  llm_curl "${try}/api/tags" || llm_curl "$alt" || llm_curl "${try}/api/version"
+}
+
+llm_find_up() {
+  local host="$1" try
+  for try in "$host" \
+    "${host/127.0.0.1/localhost}" \
+    "${host/localhost/127.0.0.1}" \
+    "${host/127.0.0.1/[::1]}" \
+    "http://127.0.0.1:1234" \
+    "http://127.0.0.1:1234/v1" \
+    "http://127.0.0.1:8080/v1" \
+    "http://127.0.0.1:8080"
+  do
     [[ -n "$try" ]] || continue
-    alt="$(llm_models_url "$try")"
-    if llm_curl "${try}/api/tags" || llm_curl "$alt" || llm_curl "${try}/api/version"; then
-      found="$try"
-      break
+    if llm_host_up "$try"; then
+      printf '%s' "$try"
+      return 0
     fi
   done
+  return 1
+}
+
+wait_llm_up() {
+  local host="$1" n=0
+  while [[ $n -lt 24 ]]; do
+    if llm_host_up "$host"; then
+      printf '%s' "$host"
+      return 0
+    fi
+    if llm_host_up "${host/127.0.0.1/localhost}"; then
+      printf '%s' "${host/127.0.0.1/localhost}"
+      return 0
+    fi
+    n=$((n + 1))
+    sleep 0.25
+  done
+  return 1
+}
+
+ensure_local_llm() {
+  if [[ "${SYNCHRO_SKIP_OLLAMA:-}" == "1" ]]; then
+    return 0
+  fi
+  local host found
+  host="$(llm_configured_host)"
+  found="$(llm_find_up "$host" || true)"
+  if [[ -n "$found" ]]; then
+    ok "LLM local : ${found}"
+    return 0
+  fi
+  if [[ "$(uname -s)" == Darwin && -d /Applications/Ollama.app ]]; then
+    info "Ollama.app installé mais ${host} refuse la connexion — ouverture…"
+    open -a Ollama >/dev/null 2>&1 || true
+    found="$(wait_llm_up "$host" || true)"
+    if [[ -n "$found" ]]; then
+      ok "LLM local : ${found}"
+      return 0
+    fi
+  fi
+  if command -v ollama >/dev/null 2>&1; then
+    info "Démarrage de ollama serve (${host})…"
+    mkdir -p "$RUN_DIR"
+    (
+      trap '' INT
+      exec ollama serve
+    ) >>"$RUN_DIR/ollama.log" 2>&1 &
+    found="$(wait_llm_up "$host" || true)"
+    if [[ -n "$found" ]]; then
+      ok "LLM local : ${found}"
+      return 0
+    fi
+    warn "Ollama n'a pas ouvert ${host}. Journal : ${RUN_DIR}/ollama.log"
+    return 0
+  fi
+  warn "LLM local off : rien n'écoute sur ${host}. Installez https://ollama.com puis relancez, ou LOCAL_LLM_BASE_URL pour LM Studio (1234) / llama-server (8080)."
+}
+
+ollama_doctor() {
+  local host found
+  host="$(llm_configured_host)"
+  found="$(llm_find_up "$host" || true)"
   if [[ -n "$found" ]]; then
     ok "LLM local : ${found}"
   else
-    printf '%sLLM local : injoignable (%s) — Brain reste local-off, pas de bascule cloud.%s\n' "$C_DIM" "$host" "$C_RESET"
+    printf '%sLLM local : injoignable (%s) — lancez ollama serve, ou LOCAL_LLM_BASE_URL. Brain ne bascule pas sur le cloud.%s\n' "$C_DIM" "$host" "$C_RESET"
   fi
 }
 
@@ -1289,6 +1369,7 @@ cmd_start() {
   rm -f "$RUN_DIR/stopped"
   require_ports_free
   ensure_env_file
+  ensure_local_llm
 
   cleanup() {
     local code=$?

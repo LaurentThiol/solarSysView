@@ -10,6 +10,7 @@ import { HelpModeToggle, HelpWrap, WithHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { isLocalHost } from "@/lib/api-base"
 import { formatSyncStamp } from "@/lib/draws"
+import { localLlmOffMessage } from "@/lib/ia/local-url"
 import { FIRING_EVENT, readLastFiring, type StoredFiring } from "@/lib/morpho/store"
 
 type GitPayload = {
@@ -449,22 +450,23 @@ function LocalLlmPill() {
 
     const pingBases = async (bases: string[]): Promise<{ ok: true; host: string } | null> => {
       const unique = [...new Set(bases.filter(Boolean))]
-      for (const base of unique) {
-        const normalized = base.replace(/\/$/, "")
-        const origin = /^https?:\/\//i.test(normalized) ? normalized : `http://${normalized}`
-        for (const path of ["/api/tags", "/v1/models", "/api/version"]) {
+      const attempts = unique.flatMap((base) => {
+        const origin = (/^https?:\/\//i.test(base) ? base : `http://${base}`).replace(/\/$/, "").replace(/\/v1$/, "")
+        return ["/api/tags", "/v1/models", "/api/version"].map(async (path) => {
           try {
             const response = await fetch(`${origin}${path}`, {
               cache: "no-store",
               signal: AbortSignal.timeout(1_200),
             })
-            if (response.ok) return { ok: true, host: origin.replace(/^https?:\/\//, "") }
+            if (response.ok) return origin.replace(/^https?:\/\//, "")
           } catch {
-            /* CORS or down */
+            return null
           }
-        }
-      }
-      return null
+          return null
+        })
+      })
+      const hit = (await Promise.all(attempts)).find((item) => Boolean(item))
+      return hit ? { ok: true, host: hit } : null
     }
 
     const jsonPing = async (
@@ -497,7 +499,13 @@ function LocalLlmPill() {
 
     const ping = async () => {
       const [browser, iaLocal, brain] = await Promise.all([
-        pingBases(["http://127.0.0.1:11434", "http://localhost:11434"]),
+        pingBases([
+          "http://127.0.0.1:11434",
+          "http://localhost:11434",
+          "http://[::1]:11434",
+          "http://127.0.0.1:1234",
+          "http://127.0.0.1:8080",
+        ]),
         jsonPing("/api/ia/local"),
         jsonPing("/api/brain/status"),
       ])
@@ -517,9 +525,8 @@ function LocalLlmPill() {
         return
       }
       setLocal("off")
-      const err = iaLocal?.error || brain?.error
       setDetail("off")
-      setHost(err ? err.slice(0, 80) : "Ollama")
+      setHost(localLlmOffMessage(iaLocal?.error || brain?.error))
     }
     void ping()
     const id = window.setInterval(() => void ping(), 15_000)
@@ -533,7 +540,7 @@ function LocalLlmPill() {
     <HelpWrap
       help={{
         title: "LLM local",
-        body: "Ollama (ou llama-server) sur cette machine. Brain l’utilise par défaut. Un 404 Ollama ne bascule jamais sur Gemini / OpenAI. Sur Netlify la pastille reste éteinte.",
+        body: "Ollama doit tourner sur cette machine (app Ollama ou « ollama serve »). Brain l’utilise par défaut. Un 404 Ollama ne bascule jamais sur Gemini / OpenAI. Sur Netlify la pastille reste éteinte.",
       }}
     >
       <Pill

@@ -62,6 +62,8 @@ def test_launch_reloads_only_python_package() -> None:
     assert "LOCAL_LLM_BASE_URL" in text
     assert 'NO_PROXY="$merged_no_proxy"' in text
     assert "--noproxy '*'" in text
+    assert "ollama serve" in text
+    assert "ensure_local_llm" in text
 
 
 def test_stop_force_is_accepted() -> None:

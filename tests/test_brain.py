@@ -41,6 +41,16 @@ def test_normalize_llm_base_rewrites_localhost() -> None:
     assert openai_models_url("http://127.0.0.1:11434") == "http://127.0.0.1:11434/v1/models"
 
 
+def test_llm_bases_also_tries_ipv6_loopback() -> None:
+    from synchro import brain as brain_mod
+
+    with patch.object(brain_mod, "llm_base", return_value="http://127.0.0.1:11434"):
+        bases = brain_mod.llm_bases()
+    assert "http://127.0.0.1:11434" in bases
+    assert "http://localhost:11434" in bases
+    assert "http://[::1]:11434" in bases
+
+
 def test_ping_ollama_falls_back_to_openai_compat() -> None:
     import urllib.error
 

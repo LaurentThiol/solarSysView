@@ -41,6 +41,7 @@ def llm_bases() -> list[str]:
     for base in (
         primary,
         primary.replace("://127.0.0.1", "://localhost"),
+        primary.replace("://127.0.0.1", "://[::1]"),
         primary.replace("://localhost", "://127.0.0.1"),
     ):
         if base and base not in out:
