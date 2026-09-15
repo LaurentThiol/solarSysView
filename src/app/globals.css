@@ -151,3 +151,48 @@
   height: 0.35rem;
   cursor: pointer;
 }
+
+@keyframes brain-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes brain-think {
+  0%,
+  100% {
+    transform: rotate(-5deg) translateY(0);
+  }
+  50% {
+    transform: rotate(5deg) translateY(-2px);
+  }
+}
+
+@keyframes brain-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.brain-mascot-idle {
+  animation: brain-bob 3.4s ease-in-out infinite;
+}
+
+.brain-mascot-busy {
+  animation: brain-think 1.15s ease-in-out infinite;
+}
+
+.brain-dot {
+  animation: brain-dot 1s ease-in-out infinite;
+}

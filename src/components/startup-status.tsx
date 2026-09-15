@@ -607,7 +607,7 @@ const NAV_ITEMS = [
     label: "Brain",
     help: {
       title: "Brain",
-      body: "Catalog nommé (@rsi, @ete…), journal daté, mémoire locale et agent manuel. LLM local (Ollama) par défaut ; Gemini / OpenAI seulement si tu escalades. L’onglet IA reste la lecture de captures.",
+      body: "Épingle des noms (@rsi, @ete…) : Brain ne lit que ce qui est sur la table. Discussion en local (Ollama). Gemini / OpenAI seulement si tu le demandes. L’onglet IA reste la lecture de captures.",
     },
   },
   {

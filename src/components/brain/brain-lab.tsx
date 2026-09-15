@@ -1,13 +1,37 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  BookOpen,
+  Cloud,
+  NotebookPen,
+  Pause,
+  Pin,
+  Play,
+  ScanSearch,
+  Send,
+  Sparkles,
+  Star,
+  StopCircle,
+} from "lucide-react"
 
 import { WindowBar } from "@/components/analysis/window-bar"
+import {
+  familyLabel,
+  JOB_STATUS_LABELS,
+  KIND_LABELS,
+  KIND_TONE,
+  LAB_TONE,
+  STARTER_QUESTIONS,
+  StatusDot,
+  WALKER_STATUS_LABELS,
+} from "@/components/brain/brain-chrome"
+import { BrainMascot } from "@/components/brain/brain-mascot"
 import { useRegisterCapture } from "@/components/capture"
 import { HelpTip } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
   DEFAULT_WARMUP,
@@ -68,6 +92,7 @@ import {
 import { readStoredProposals } from "@/lib/combinations"
 import { INDEPENDENCE_DISCLAIMER } from "@/lib/capture/snapshot"
 import { useDraws } from "@/lib/use-draws"
+import { cn } from "@/lib/utils"
 
 type Status = {
   google: boolean
@@ -87,6 +112,12 @@ function download(name: string, text: string, type: string) {
   link.download = name
   link.click()
   URL.revokeObjectURL(url)
+}
+
+function formatObserved(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })
 }
 
 export function BrainLab() {
@@ -125,7 +156,10 @@ export function BrainLab() {
   const [model, setModel] = useState<string | null>(preferredModel("local"))
   const [escalate, setEscalate] = useState(false)
   const [inspector, setInspector] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [scanOpen, setScanOpen] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+  const chatRef = useRef<HTMLDivElement | null>(null)
 
   const archive = useMemo(
     () => [...draws].sort((a, b) => a.date.localeCompare(b.date)),
@@ -172,6 +206,19 @@ export function BrainLab() {
     })
   }, [activeLab, query])
 
+  const catalogGroups = useMemo(() => {
+    const order: string[] = []
+    const map = new Map<string, CatalogEntry[]>()
+    for (const entry of catalog) {
+      if (!map.has(entry.family)) {
+        order.push(entry.family)
+        map.set(entry.family, [])
+      }
+      map.get(entry.family)?.push(entry)
+    }
+    return order.map((family) => ({ family, entries: map.get(family) ?? [] }))
+  }, [catalog])
+
   const handleCtx = useMemo(
     () => ({
       activeLab: activeLab === "all" ? null : activeLab,
@@ -211,6 +258,16 @@ export function BrainLab() {
   const pinEntry = useCallback((entry: CatalogEntry) => {
     setPins((prev) => (prev.some((item) => item.id === entry.id) ? prev : [...prev, entry]))
   }, [])
+
+  const pinPack = useCallback(
+    (handles: string[]) => {
+      for (const handle of handles) {
+        const parsed = parseHandle(`@${handle}`, handleCtx)
+        if (parsed.entry) pinEntry(parsed.entry)
+      }
+    },
+    [handleCtx, pinEntry]
+  )
 
   const resolvePins = useCallback(async () => {
     const objects: WorkingObject[] = []
@@ -276,11 +333,11 @@ export function BrainLab() {
             : "local"
         : "local"
       if (nextProvider === "local" && status && status.local === false) {
-        setError("LLM local injoignable. Pas de bascule cloud.")
+        setError("Ollama ne répond pas. Brain reste en local : pas de bascule automatique vers le cloud.")
         return
       }
       if (useCloud && nextProvider === "local") {
-        setError("Escalade : aucune clé Gemini / OpenAI.")
+        setError("Pas de clé Gemini / OpenAI pour ce tour-ci. Dépose-les dans Admin, ou décoche le cloud.")
         return
       }
       setBusy(true)
@@ -324,7 +381,7 @@ export function BrainLab() {
         )
         setEscalate(false)
       } catch (err) {
-        setError(err instanceof Error ? err.message : "échec chat")
+        setError(err instanceof Error ? err.message : "La discussion a buté. Réessaie dans un instant.")
       } finally {
         setBusy(false)
       }
@@ -332,10 +389,18 @@ export function BrainLab() {
     [escalate, fiches, handleCtx, messages, model, pinEntry, status]
   )
 
+  const sendDraft = useCallback(() => {
+    const text = draft.trim()
+    if (!text || busy) return
+    setDraft("")
+    void ask(text)
+  }, [ask, busy, draft])
+
   const runWalker = useCallback(
     async (mode: "catalog" | "curves") => {
       const state = createWalker(mode, cloudLots)
       stopRef.current = false
+      setScanOpen(true)
       setWalker({ ...state, status: "running", startedAt: new Date().toISOString() })
       setPaused(false)
       pausedRef.current = false
@@ -377,7 +442,7 @@ export function BrainLab() {
       const lots = flaggedLots(jobs, LLM_LOT_SIZE)
       if (cloudLots && lots.length > CLOUD_LOT_CONFIRM) {
         const ok = window.confirm(
-          `Lots cloud : ${lots.length} appels prévus (seuil ${CLOUD_LOT_CONFIRM}). Continuer ?`
+          `Brain va commenter ${lots.length} lots dans le cloud (seuil ${CLOUD_LOT_CONFIRM}). On continue ?`
         )
         if (!ok) {
           setWalker((prev) => (prev ? { ...prev, status: "done" } : prev))
@@ -421,11 +486,11 @@ export function BrainLab() {
                 : "local"
             : "local"
           if (nextProvider === "local" && status && status.local === false) {
-            setError("LLM local injoignable. Lots non commentés. Pas de bascule cloud.")
+            setError("Ollama ne répond pas. Les lots n’ont pas été commentés. Pas de bascule cloud.")
             break
           }
           if (cloudLots && nextProvider === "local") {
-            setError("Lots cloud : aucune clé Gemini / OpenAI.")
+            setError("Commentaires cloud : aucune clé Gemini / OpenAI.")
             break
           }
           let text = ""
@@ -466,7 +531,7 @@ export function BrainLab() {
               )
             }
           } catch (err) {
-            setError(err instanceof Error ? err.message : "échec lot LLM")
+            setError(err instanceof Error ? err.message : "Le commentaire de lot a buté.")
             if (nextProvider === "local") break
           }
         }
@@ -492,7 +557,9 @@ export function BrainLab() {
   const suggestions = useMemo(() => {
     const last = draft.split(/\s/).pop() ?? ""
     if (!last.startsWith("@") || last.length < 2) return []
-    return BRAIN_CATALOG.filter((entry) => `@${entry.handle}`.startsWith(last.toLowerCase()) || entry.handle.startsWith(last.slice(1).toLowerCase())).slice(0, 8)
+    return BRAIN_CATALOG.filter(
+      (entry) => `@${entry.handle}`.startsWith(last.toLowerCase()) || entry.handle.startsWith(last.slice(1).toLowerCase())
+    ).slice(0, 8)
   }, [draft])
 
   const memories: WorkingObject[] = journal.slice(0, 8).map((item) => ({
@@ -521,9 +588,70 @@ export function BrainLab() {
     ...memories.filter((item) => !fiches.some((fiche) => item.handle.startsWith(fiche.handle))),
   ]
 
+  const visibleJournal = journal.filter((item) => {
+    const q = journalFilter.trim().toLowerCase().replace(/^@/, "")
+    if (!q) return true
+    const summary = String((item.payload as { summary?: string })?.summary ?? "")
+    const notes = (item.notes ?? []).map((note) => note.body).join(" ")
+    return `${item.handle} ${summary} ${notes}`.toLowerCase().includes(q)
+  })
+
+  const mascotMood = busy || walker?.status === "running" ? "think" : status?.local === false ? "sleep" : messages.length ? "talk" : "idle"
+  const scanProgress = walker && walker.jobs.length ? Math.min(100, (walker.index / walker.jobs.length) * 100) : 0
+  const localOn = Boolean(status?.local)
+  const cloudReady = Boolean(status?.google || status?.openai)
+
+  useEffect(() => {
+    const node = chatRef.current
+    if (!node) return
+    node.scrollTop = node.scrollHeight
+  }, [messages, busy])
+
   return (
-    <div className="flex flex-col gap-6">
-      <p className="text-xs leading-5 text-muted-foreground">{INDEPENDENCE_DISCLAIMER}</p>
+    <div className="flex flex-col gap-5">
+      <section className="relative overflow-hidden rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/22 via-chart-5/12 to-card p-5 sm:p-6">
+        <div className="pointer-events-none absolute -top-12 -right-6 size-44 rounded-full bg-primary/25 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-16 left-1/4 size-40 rounded-full bg-chart-5/20 blur-3xl" />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
+          <BrainMascot mood={mascotMood} size="lg" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-medium tracking-[0.18em] text-primary uppercase">Laboratoire de lecture</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight">Brain</h1>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+              Épingle un nom — <span className="text-foreground">@rsi</span>,{" "}
+              <span className="text-foreground">@ete</span>, <span className="text-foreground">@fft</span> —
+              puis pose une question. Brain décrit la fenêtre. Il ne joue pas.
+            </p>
+            <ol className="mt-3 flex flex-wrap gap-2 text-xs">
+              <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">1. Épingle</li>
+              <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">2. Pose une question</li>
+              <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">3. Il ne voit que la table</li>
+            </ol>
+          </div>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <StatusDot
+              ok={localOn}
+              label={localOn ? `Ollama ${status?.localHost ?? "allumé"}` : status ? "Ollama éteint" : "Ollama…"}
+              hint="Brain discute d’abord en local. Le cloud n’intervient que si tu le demandes."
+            />
+            {cloudReady ? (
+              <StatusDot
+                ok
+                label={status?.google && status?.openai ? "Gemini et OpenAI prêts" : status?.google ? "Gemini prêt" : "OpenAI prêt"}
+              />
+            ) : null}
+            <p className="text-[11px] text-muted-foreground">
+              {pins.length ? `${pins.length} fiche${pins.length > 1 ? "s" : ""} sur la table` : "Table vide"}
+              {watch.length ? ` · ${watch.length} suivi${watch.length > 1 ? "s" : ""}` : ""}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <p className="rounded-xl border border-primary/20 bg-primary/8 px-3 py-2 text-xs leading-5 text-muted-foreground">
+        {INDEPENDENCE_DISCLAIMER}
+      </p>
+
       <WindowBar
         window={resolved}
         preset={preset}
@@ -540,354 +668,572 @@ export function BrainLab() {
         onWarmup={setWarmup}
         onCompare={() => undefined}
       />
-      <div className="flex flex-wrap gap-2 text-xs">
-        <label className="flex items-center gap-1">
-          Archive
-          <select
-            className="rounded-md border border-border bg-background px-2 py-1"
-            value={era}
-            onChange={(event) => setEra(event.target.value as "current" | "all")}
-          >
-            <option value="current">formule actuelle</option>
-            <option value="all">tout</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-1">
-          Variable
-          <select
-            className="rounded-md border border-border bg-background px-2 py-1"
-            value={variable}
-            onChange={(event) => setVariable(event.target.value as VariableName)}
-          >
-            {VARIABLE_NAMES.map((name) => (
-              <option key={name} value={name}>
-                {VARIABLE_LABELS[name]}
-              </option>
-            ))}
-          </select>
-        </label>
-        {variableNeedsBall(variable) ? (
+
+      <div className="flex flex-col gap-2 rounded-xl border border-border bg-card/40 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           <label className="flex items-center gap-1">
-            Boule
-            <Input className="w-16" type="number" min={1} max={50} value={ball} onChange={(e) => setBall(Number(e.target.value) || 7)} />
+            Archive
+            <select
+              className="rounded-md border border-border bg-background px-2 py-1"
+              value={era}
+              onChange={(event) => setEra(event.target.value as "current" | "all")}
+            >
+              <option value="current">formule actuelle</option>
+              <option value="all">tout</option>
+            </select>
           </label>
-        ) : null}
-        {variableNeedsStar(variable) ? (
           <label className="flex items-center gap-1">
-            Étoile
-            <Input className="w-16" type="number" min={1} max={12} value={star} onChange={(e) => setStar(Number(e.target.value) || 1)} />
+            Série
+            <select
+              className="rounded-md border border-border bg-background px-2 py-1"
+              value={variable}
+              onChange={(event) => setVariable(event.target.value as VariableName)}
+            >
+              {VARIABLE_NAMES.map((name) => (
+                <option key={name} value={name}>
+                  {VARIABLE_LABELS[name]}
+                </option>
+              ))}
+            </select>
           </label>
-        ) : null}
-        <label className="flex items-center gap-1">
-          X
-          <Input className="w-16" type="number" min={2} max={200} value={periodX} onChange={(e) => setPeriodX(Number(e.target.value) || 14)} />
-        </label>
-        <label className="flex items-center gap-1">
-          Courbe
-          <Input className="w-28" value={curveId} onChange={(e) => setCurveId(e.target.value || "sum")} />
-        </label>
-        <span className="text-muted-foreground">{loading ? "tirages…" : `${resolved.work.length} tirages · ${source}`}</span>
-        <span className="text-muted-foreground">n={seriesIndex(variable, ball, star)}</span>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Catalog
-              <HelpTip title="Catalog" body="Handles stables. Un clic pin pour le working set. Les packs pinent un lot." />
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <div className="flex flex-wrap gap-1">
-              <Button size="xs" variant={activeLab === "all" ? "default" : "outline"} onClick={() => setActiveLab("all")}>
-                Tous
-              </Button>
-              {BRAIN_LABS.map((lab) => (
-                <Button key={lab} size="xs" variant={activeLab === lab ? "default" : "outline"} onClick={() => setActiveLab(lab)}>
-                  {BRAIN_LAB_LABELS[lab]}
-                </Button>
-              ))}
-            </div>
-            <Input placeholder="rechercher @rsi…" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <div className="flex flex-wrap gap-1">
-              {BRAIN_PACKS.map((pack) => (
-                <Button
-                  key={pack.id}
-                  size="xs"
-                  variant="secondary"
-                  onClick={() => {
-                    for (const handle of pack.handles) {
-                      const parsed = parseHandle(`@${handle}`, handleCtx)
-                      if (parsed.entry) pinEntry(parsed.entry)
-                    }
-                  }}
-                >
-                  {pack.label}
-                </Button>
-              ))}
-            </div>
-            <div className="max-h-64 overflow-auto text-sm">
-              {catalog.map((entry) => {
-                const watched = watch.includes(entry.id)
-                return (
-                  <div key={entry.id} className="flex items-center gap-2 border-b border-border/60 py-1">
-                    <button type="button" className="text-left hover:text-foreground" onClick={() => pinEntry(entry)}>
-                      @{entry.handle} · {entry.label}
-                    </button>
-                    <button
-                      type="button"
-                      className="ml-auto text-[10px] text-muted-foreground"
-                      onClick={() => {
-                        const next = watched ? watch.filter((id) => id !== entry.id) : [...watch, entry.id]
-                        setWatch(next)
-                        writeWatchlist(next)
-                      }}
-                    >
-                      {watched ? "watch ✓" : "watch"}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {pins.map((entry) => (
-                <Badge
-                  key={entry.id}
-                  variant="secondary"
-                  className="cursor-pointer"
-                  onClick={() => setPins((prev) => prev.filter((item) => item.id !== entry.id))}
-                >
-                  @{entry.handle} ×
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Objets (= prompt)</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2 text-sm">
-            {board.length === 0 ? (
-              <p className="text-muted-foreground">Pin un handle ou lance l’agent.</p>
-            ) : (
-              board.map((item) => (
-                <div
-                  key={`${item.kind}:${item.id}`}
-                  className={`rounded-md border px-2 py-1 ${item.inPrompt ? "border-primary/40 bg-primary/10" : "border-border"}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{item.handle}</span>
-                    <Badge variant="outline">{item.kind}</Badge>
-                    {item.fiche ? (
-                      <a className="ml-auto text-xs underline" href={deepLinkFor({ entry: pins.find((p) => p.id === item.fiche?.id) ?? BRAIN_CATALOG.find((e) => e.id === item.fiche?.id) ?? BRAIN_CATALOG[0], variable: item.fiche.params.variable, n: item.fiche.params.n, periodX: item.fiche.params.periodX, preset, curveId: item.fiche.params.curveId }).href}>
-                        ouvrir
-                      </a>
-                    ) : null}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{item.summary}</p>
-                </div>
-              ))
-            )}
-            <Button size="sm" variant="outline" onClick={() => setInspector((v) => !v)}>
-              {inspector ? "Masquer JSON" : "Inspecteur JSON"}
-            </Button>
-            {inspector ? (
-              <pre className="max-h-48 overflow-auto text-[10px] leading-4">{JSON.stringify(packed.tech, null, 2)}</pre>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Console agent</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={() => void runWalker("catalog")} disabled={walker?.status === "running"}>
-              Parcourir le catalog
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => void runWalker("curves")} disabled={walker?.status === "running"}>
-              Parcourir les 142 courbes
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                pausedRef.current = !pausedRef.current
-                setPaused(pausedRef.current)
-                setWalker((prev) => (prev && prev.status === "running" ? { ...prev, status: pausedRef.current ? "paused" : "running" } : prev))
-              }}
-            >
-              {paused ? "Reprendre" : "Pause"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                stopRef.current = true
-                pausedRef.current = false
-                setPaused(false)
-              }}
-            >
-              Arrêt
-            </Button>
-            <label className="flex items-center gap-1 text-xs">
-              <input type="checkbox" checked={cloudLots} onChange={(e) => setCloudLots(e.target.checked)} />
-              Lots cloud
+          {variableNeedsBall(variable) ? (
+            <label className="flex items-center gap-1">
+              Boule
+              <Input className="w-16" type="number" min={1} max={50} value={ball} onChange={(e) => setBall(Number(e.target.value) || 7)} />
             </label>
-            <Button size="sm" variant="outline" onClick={() => void refreshWatchlist()}>
-              Watchlist (chiffres)
-            </Button>
-            {lastWatchlistRun() ? <span className="text-xs text-muted-foreground">watch {lastWatchlistRun()}</span> : null}
+          ) : null}
+          {variableNeedsStar(variable) ? (
+            <label className="flex items-center gap-1">
+              Étoile
+              <Input className="w-16" type="number" min={1} max={12} value={star} onChange={(e) => setStar(Number(e.target.value) || 1)} />
+            </label>
+          ) : null}
+          <span className="text-muted-foreground">{loading ? "tirages…" : `${resolved.work.length} tirages · ${source}`}</span>
+          <button
+            type="button"
+            className="ml-auto text-[11px] text-primary underline-offset-2 hover:underline"
+            onClick={() => setDetailsOpen((value) => !value)}
+          >
+            {detailsOpen ? "Masquer les réglages" : "Période, courbe…"}
+          </button>
+        </div>
+        {detailsOpen ? (
+          <div className="flex flex-wrap gap-2 border-t border-border/70 pt-2 text-xs">
+            <label className="flex items-center gap-1">
+              Période X
+              <Input className="w-16" type="number" min={2} max={200} value={periodX} onChange={(e) => setPeriodX(Number(e.target.value) || 14)} />
+            </label>
+            <label className="flex items-center gap-1">
+              Courbe
+              <Input className="w-28" value={curveId} onChange={(e) => setCurveId(e.target.value || "sum")} />
+            </label>
+            <span className="text-muted-foreground">n={seriesIndex(variable, ball, star)}</span>
           </div>
-          {walker ? (
-            <div className="text-xs">
-              <p>
-                {walker.mode} · {walker.status} · {walker.index} / {walker.jobs.length} · flaggés {walker.flagged.length} ·
-                local {walker.localCalls} / cloud {walker.cloudCalls} · notes {walker.notes} · ~{walker.tokensApprox} tok
-              </p>
-              <div className="mt-2 max-h-40 overflow-auto">
-                {walker.jobs.map((job) => (
-                  <div key={job.id} className="flex gap-2">
-                    <span className="w-20 text-muted-foreground">{job.status}</span>
-                    <span>{job.handle}</span>
-                    <span className="text-muted-foreground">{job.fiche?.summary ?? job.error}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Déclenchement manuel seulement. Le LLM commente les lots flaggés, pas tout le catalog.</p>
-          )}
-        </CardContent>
-      </Card>
+        ) : null}
+      </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Journal</CardTitle>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+        <Card className="border-primary/20">
+          <CardHeader className="border-b border-border/60">
+            <CardTitle className="flex items-center gap-2">
+              <BrainMascot mood={mascotMood} size="sm" />
+              Discussion
+              <HelpTip
+                title="Discussion"
+                body="Brain ne lit que les fiches sur la table, plus quelques souvenirs. Tape @ pour coller un nom. Ollama par défaut ; le cloud seulement si tu coches « ce tour »."
+              />
+            </CardTitle>
+            <CardDescription>Pose une question comme à un collègue. Les @ collent les fiches toutes seules.</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            <p className="text-xs text-muted-foreground">Source {journalSource}{journalSource === "local" ? " (Neon indisponible)" : ""}</p>
-            <Input placeholder="filtre @rsi ou texte…" value={journalFilter} onChange={(e) => setJournalFilter(e.target.value)} />
-            <div className="max-h-72 overflow-auto text-sm">
-              {journal
-                .filter((item) => {
-                  const q = journalFilter.trim().toLowerCase().replace(/^@/, "")
-                  if (!q) return true
-                  const summary = String((item.payload as { summary?: string })?.summary ?? "")
-                  const notes = (item.notes ?? []).map((note) => note.body).join(" ")
-                  return `${item.handle} ${summary} ${notes}`.toLowerCase().includes(q)
-                })
-                .map((item) => (
-                <div key={String(item.id)} className="border-b border-border py-2">
-                  <div className="flex gap-2">
-                    <span className="font-medium">
-                      @{item.handle}#{item.id}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{item.observed_at}</span>
-                    <Badge variant="outline">{item.source}</Badge>
-                  </div>
-                  <p className="text-xs">{String((item.payload as { summary?: string })?.summary ?? "")}</p>
-                  {(item.notes ?? []).map((note) => (
-                    <p key={String(note.id)} className="text-xs text-muted-foreground">
-                      ({note.author}) {note.body}
-                    </p>
-                  ))}
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input placeholder="commentaire sur la 1re lecture…" value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} />
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  const first = journal[0]
-                  if (!first || !noteDraft.trim()) return
-                  void addNote(first.id, noteDraft).then(() => {
-                    setNoteDraft("")
-                    void refreshJournal()
-                  })
-                }}
-              >
-                Noter
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => download("brain-journal.md", readingsToMarkdown(journal), "text/markdown")}>
-                MD
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => download("brain-journal.csv", readingsToCsv(journal), "text/csv")}>
-                CSV
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Chat</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            <div className="flex flex-wrap gap-2 text-xs">
-              <span>Fournisseur {provider}</span>
-              <span>{model}</span>
-              <span>{status?.local ? `local ${status.localHost ?? "ok"}` : "local off"}</span>
-              <label className="flex items-center gap-1">
+          <CardContent className="flex flex-col gap-3 pt-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <StatusDot ok={localOn} label={localOn ? "local" : "local off"} />
+              <span className="text-muted-foreground">
+                {provider} · {model ?? "modèle…"}
+              </span>
+              {escalate ? <Badge variant="secondary">ce tour dans le cloud</Badge> : null}
+              <label className="ml-auto flex items-center gap-1.5 text-muted-foreground">
                 <input type="checkbox" checked={escalate} onChange={(e) => setEscalate(e.target.checked)} />
-                Escalader ce tour
+                Ce tour dans le cloud
               </label>
             </div>
-            <div className="max-h-56 overflow-auto rounded-md border border-border p-2 text-sm">
-              {messages.map((message, index) => (
-                <p key={`${message.role}-${index}`} className={message.role === "assistant" ? "mt-2" : "mt-2 text-muted-foreground"}>
-                  <strong>{message.role === "user" ? "Toi" : "Brain"}.</strong> {message.content}
+            <div
+              ref={chatRef}
+              className="flex max-h-[28rem] min-h-64 flex-col gap-3 overflow-auto rounded-2xl border border-border bg-gradient-to-b from-card/80 to-background/40 p-3"
+            >
+              {messages.length === 0 && !busy ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-3 py-6 text-center">
+                  <BrainMascot mood={localOn ? "idle" : "sleep"} size="md" />
+                  <p className="text-sm font-medium">Salut, je suis Brain.</p>
+                  <p className="max-w-sm text-xs leading-5 text-muted-foreground">
+                    {localOn
+                      ? "Épingle un indicateur à droite, ou clique une question pour démarrer."
+                      : "Ollama est éteint : allume-le, ou coche « ce tour dans le cloud » si tu as une clé."}
+                  </p>
+                  <div className="flex w-full max-w-md flex-col gap-1.5">
+                    {STARTER_QUESTIONS.map((question) => (
+                      <button
+                        key={question}
+                        type="button"
+                        className="rounded-xl border border-primary/25 bg-primary/8 px-3 py-2 text-left text-[12px] leading-5 text-foreground hover:border-primary/50 hover:bg-primary/15"
+                        onClick={() => {
+                          setDraft(question)
+                          for (const item of parseHandlesInText(question, handleCtx)) {
+                            if (item.entry) pinEntry(item.entry)
+                          }
+                        }}
+                      >
+                        {question}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                messages.map((message, index) =>
+                  message.role === "user" ? (
+                    <div
+                      key={`${message.role}-${index}`}
+                      className="ml-auto max-w-[90%] rounded-2xl rounded-br-md bg-primary/20 px-3 py-2 text-sm leading-6 whitespace-pre-wrap"
+                    >
+                      {message.content}
+                    </div>
+                  ) : (
+                    <div key={`${message.role}-${index}`} className="flex max-w-[94%] items-start gap-2">
+                      <BrainMascot mood="talk" size="sm" className="mt-0.5" />
+                      <div className="rounded-2xl rounded-bl-md border border-border bg-card px-3 py-2 text-sm leading-6 whitespace-pre-wrap">
+                        {message.content}
+                        {message.model ? (
+                          <p className="mt-1 text-[10px] text-muted-foreground">{message.provider} · {message.model}</p>
+                        ) : null}
+                      </div>
+                    </div>
+                  )
+                )
+              )}
+              {busy ? (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <BrainMascot mood="think" size="sm" />
+                  Brain lit la table…
                 </p>
-              ))}
+              ) : null}
             </div>
             {error ? <p className="text-xs text-destructive">{error}</p> : null}
             <div className="relative">
               <textarea
-                className="min-h-20 w-full rounded-md border border-border bg-background p-2 text-sm"
-                placeholder="@rsi et @adx sur cette fenêtre…"
+                className="min-h-20 w-full rounded-2xl border border-border bg-background p-3 pr-12 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                placeholder="Écris ici… tape @rsi pour coller un nom"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault()
+                    sendDraft()
+                  }
+                }}
               />
               {suggestions.length ? (
-                <div className="absolute bottom-full left-0 z-10 mb-1 rounded-md border border-border bg-background p-1 text-xs">
+                <div className="absolute bottom-full left-0 z-10 mb-1 w-full max-w-sm rounded-xl border border-border bg-popover p-1 text-xs shadow-xl">
                   {suggestions.map((entry) => (
                     <button
                       key={entry.id}
                       type="button"
-                      className="block w-full px-2 py-1 text-left hover:bg-muted"
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-muted"
                       onClick={() => {
                         setDraft((prev) => prev.replace(/@[^\s]*$/, `@${entry.handle} `))
                         pinEntry(entry)
                       }}
                     >
-                      @{entry.handle} · {entry.label}
+                      <span className="font-mono text-primary">@{entry.handle}</span>
+                      <span className="truncate text-muted-foreground">{entry.label}</span>
                     </button>
                   ))}
                 </div>
               ) : null}
             </div>
-            <Button
-              size="sm"
-              disabled={busy || !draft.trim()}
-              onClick={() => {
-                const text = draft.trim()
-                setDraft("")
-                void ask(text)
-              }}
-            >
-              {busy ? "…" : "Envoyer"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <p className="text-[11px] text-muted-foreground">Entrée envoie · Maj+Entrée pour une ligne</p>
+              <Button size="sm" className="ml-auto" disabled={busy || !draft.trim()} onClick={sendDraft}>
+                <Send />
+                {busy ? "…" : "Envoyer"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
+
+        <div className="flex flex-col gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Pin className="size-4 text-primary" />
+                Sur la table
+                <HelpTip
+                  title="Sur la table"
+                  body="C’est exactement ce que Brain reçoit. Une fiche épinglée, un souvenir, un lot : s’il n’est pas ici, Brain ne le voit pas."
+                />
+              </CardTitle>
+              <CardDescription>Brain ne lit que ces fiches. Clique une pastille pour la retirer.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2 text-sm">
+              {pins.length ? (
+                <div className="flex flex-wrap gap-1">
+                  {pins.map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
+                        LAB_TONE[entry.lab]
+                      )}
+                      onClick={() => setPins((prev) => prev.filter((item) => item.id !== entry.id))}
+                      title="Retirer de la table"
+                    >
+                      @{entry.handle} ×
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {board.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-border px-3 py-4 text-xs leading-5 text-muted-foreground">
+                  Table vide. Clique un nom dans la bibliothèque, ou un kit ci-dessous : Brain aura enfin quelque chose à lire.
+                </p>
+              ) : (
+                board.map((item) => {
+                  const entry = pins.find((pin) => pin.id === item.fiche?.id) ?? BRAIN_CATALOG.find((row) => row.id === item.fiche?.id)
+                  const href = item.fiche && entry
+                    ? deepLinkFor({
+                        entry,
+                        variable: item.fiche.params.variable,
+                        n: item.fiche.params.n,
+                        periodX: item.fiche.params.periodX,
+                        preset,
+                        curveId: item.fiche.params.curveId,
+                      }).href
+                    : null
+                  return (
+                    <div
+                      key={`${item.kind}:${item.id}`}
+                      className={cn("rounded-xl border px-2.5 py-2", item.inPrompt ? KIND_TONE[item.kind] : "border-border bg-muted/20")}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[13px]">{item.handle}</span>
+                        <Badge variant="outline">{KIND_LABELS[item.kind]}</Badge>
+                        {item.inPrompt ? (
+                          <span className="text-[10px] text-muted-foreground">vu par Brain</span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">hors prompt</span>
+                        )}
+                        {href ? (
+                          <a className="ml-auto text-[11px] text-primary underline-offset-2 hover:underline" href={href}>
+                            ouvrir
+                          </a>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.summary}</p>
+                    </div>
+                  )
+                })
+              )}
+              <Button size="sm" variant="outline" onClick={() => setInspector((value) => !value)}>
+                {inspector ? "Masquer le JSON" : "Inspecteur JSON"}
+              </Button>
+              {inspector ? (
+                <pre className="max-h-48 overflow-auto rounded-lg bg-muted/40 p-2 text-[10px] leading-4">
+                  {JSON.stringify(packed.tech, null, 2)}
+                </pre>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BookOpen className="size-4 text-primary" />
+                Bibliothèque
+                <HelpTip
+                  title="Bibliothèque"
+                  body="Noms stables. Un clic épingle. Un kit pose tout un petit plateau. L’étoile suit les chiffres, sans LLM."
+                />
+              </CardTitle>
+              <CardDescription>Clique un nom pour l’épingler. L’étoile le suit à chaque synchro.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <div className="flex flex-wrap gap-1">
+                <Button size="xs" variant={activeLab === "all" ? "default" : "outline"} onClick={() => setActiveLab("all")}>
+                  Tous
+                </Button>
+                {BRAIN_LABS.map((lab) => (
+                  <Button
+                    key={lab}
+                    size="xs"
+                    variant={activeLab === lab ? "default" : "outline"}
+                    className={activeLab === lab ? undefined : LAB_TONE[lab]}
+                    onClick={() => setActiveLab(lab)}
+                  >
+                    {BRAIN_LAB_LABELS[lab]}
+                  </Button>
+                ))}
+              </div>
+              <Input placeholder="chercher @rsi, tête-épaules…" value={query} onChange={(e) => setQuery(e.target.value)} />
+              <div className="grid gap-2 sm:grid-cols-2">
+                {BRAIN_PACKS.map((pack) => (
+                  <button
+                    key={pack.id}
+                    type="button"
+                    className="rounded-2xl border border-primary/25 bg-primary/8 px-3 py-2 text-left hover:border-primary/50 hover:bg-primary/14"
+                    onClick={() => pinPack(pack.handles)}
+                  >
+                    <span className="flex items-center gap-1.5 text-sm font-medium">
+                      <Sparkles className="size-3.5 text-primary" />
+                      Kit {pack.label}
+                    </span>
+                    <span className="mt-1 block font-mono text-[11px] text-muted-foreground">
+                      {pack.handles.map((handle) => `@${handle}`).join(" · ")}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="max-h-80 overflow-auto pr-1">
+                {catalogGroups.map((group) => (
+                  <div key={group.family} className="mb-3">
+                    <p className="mb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                      {familyLabel(group.family)}
+                    </p>
+                    <div className="flex flex-col gap-1">
+                      {group.entries.map((entry) => {
+                        const watched = watch.includes(entry.id)
+                        const pinned = pins.some((item) => item.id === entry.id)
+                        return (
+                          <div
+                            key={entry.id}
+                            className={cn(
+                              "flex items-start gap-2 rounded-xl border px-2 py-1.5",
+                              pinned ? "border-primary/40 bg-primary/10" : "border-border/70 bg-card/30"
+                            )}
+                          >
+                            <button
+                              type="button"
+                              className="min-w-0 flex-1 text-left"
+                              title={entry.reading}
+                              onClick={() => pinEntry(entry)}
+                            >
+                              <span className="font-mono text-[13px] text-primary">@{entry.handle}</span>
+                              <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">
+                                {entry.label}
+                                {entry.units ? ` · ${entry.units}` : ""}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className={cn(
+                                "mt-0.5 rounded-full p-1",
+                                watched ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                              )}
+                              title={watched ? "Ne plus suivre" : "Suivre les chiffres"}
+                              onClick={() => {
+                                const next = watched ? watch.filter((id) => id !== entry.id) : [...watch, entry.id]
+                                setWatch(next)
+                                writeWatchlist(next)
+                              }}
+                            >
+                              <Star className={cn("size-3.5", watched && "fill-current")} />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {catalog.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Aucun nom ne correspond. Essaie rsi, ete, fft…</p>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <ScanSearch className="size-4 text-primary" />
+                Balayage
+                <HelpTip
+                  title="Balayage"
+                  body="Sur bouton seulement : Brain parcourt le catalog ou les 142 courbes, note les fiches à relire, puis peut commenter ces lots. Rien ne part tout seul."
+                />
+              </CardTitle>
+              <CardDescription>Lecture automatique, uniquement quand tu lances. Pause et arrêt à tout moment.</CardDescription>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => setScanOpen((value) => !value)}>
+              {scanOpen || walker ? "Replier" : "Ouvrir"}
+            </Button>
+          </div>
+        </CardHeader>
+        {scanOpen || walker ? (
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" onClick={() => void runWalker("catalog")} disabled={walker?.status === "running"}>
+                <ScanSearch />
+                Lire le catalog
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => void runWalker("curves")} disabled={walker?.status === "running"}>
+                Lire les 142 courbes
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  pausedRef.current = !pausedRef.current
+                  setPaused(pausedRef.current)
+                  setWalker((prev) =>
+                    prev && prev.status === "running"
+                      ? { ...prev, status: pausedRef.current ? "paused" : "running" }
+                      : prev
+                  )
+                }}
+              >
+                {paused ? <Play /> : <Pause />}
+                {paused ? "Reprendre" : "Pause"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  stopRef.current = true
+                  pausedRef.current = false
+                  setPaused(false)
+                }}
+              >
+                <StopCircle />
+                Arrêt
+              </Button>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <input type="checkbox" checked={cloudLots} onChange={(e) => setCloudLots(e.target.checked)} />
+                <Cloud className="size-3.5" />
+                Commenter les fiches à relire dans le cloud
+              </label>
+              <Button size="sm" variant="outline" onClick={() => void refreshWatchlist()}>
+                <Star />
+                Rafraîchir les suivis
+              </Button>
+              {lastWatchlistRun() ? (
+                <span className="text-xs text-muted-foreground">suivis {formatObserved(lastWatchlistRun() ?? "")}</span>
+              ) : null}
+            </div>
+            {walker ? (
+              <div className="flex flex-col gap-2 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary">{walker.mode === "curves" ? "142 courbes" : "catalog"}</Badge>
+                  <span>{WALKER_STATUS_LABELS[walker.status] ?? walker.status}</span>
+                  <span className="text-muted-foreground">
+                    {walker.index} / {walker.jobs.length} · {walker.flagged.length} à relire · local {walker.localCalls} / cloud{" "}
+                    {walker.cloudCalls}
+                  </span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${scanProgress}%` }} />
+                </div>
+                <div className="max-h-44 overflow-auto rounded-xl border border-border/70">
+                  {walker.jobs.map((job) => (
+                    <div key={job.id} className="flex gap-2 border-b border-border/50 px-2 py-1 last:border-0">
+                      <span
+                        className={cn(
+                          "w-20 shrink-0",
+                          job.status === "flagged"
+                            ? "text-primary"
+                            : job.status === "error"
+                              ? "text-destructive"
+                              : "text-muted-foreground"
+                        )}
+                      >
+                        {JOB_STATUS_LABELS[job.status] ?? job.status}
+                      </span>
+                      <span className="font-mono">{job.handle}</span>
+                      <span className="truncate text-muted-foreground">{job.fiche?.summary ?? job.error}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs leading-5 text-muted-foreground">
+                Rien ne se lance tout seul. Brain commente seulement les fiches à relire, pas tout le catalog.
+              </p>
+            )}
+          </CardContent>
+        ) : null}
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <NotebookPen className="size-4 text-primary" />
+            Carnet
+            <HelpTip
+              title="Carnet"
+              body="Lectures datées, souvenirs locaux, notes humaines. Neon si disponible, sinon cet ordinateur. Exporte en Markdown ou CSV."
+            />
+          </CardTitle>
+          <CardDescription>
+            {journalSource === "neon" ? "Enregistré sur Neon." : "Sur cet ordinateur (Neon indisponible)."} {journal.length} lecture
+            {journal.length > 1 ? "s" : ""}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          <Input placeholder="filtre @rsi ou un mot…" value={journalFilter} onChange={(e) => setJournalFilter(e.target.value)} />
+          <div className="max-h-72 overflow-auto text-sm">
+            {visibleJournal.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-border px-3 py-4 text-xs text-muted-foreground">
+                Encore vide. Une lecture apparaît après un balayage, un suivi, ou une discussion qui épingle un nom.
+              </p>
+            ) : (
+              visibleJournal.map((item) => (
+                <div key={String(item.id)} className="border-b border-border/70 py-2 last:border-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-[13px]">
+                      @{item.handle}#{item.id}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">{formatObserved(item.observed_at)}</span>
+                    <Badge variant="outline">
+                      {item.source === "agent" ? "balayage" : item.source === "watchlist" ? "suivi" : "toi"}
+                    </Badge>
+                  </div>
+                  <p className="mt-0.5 text-xs leading-5">{String((item.payload as { summary?: string })?.summary ?? "")}</p>
+                  {(item.notes ?? []).map((note) => (
+                    <p key={String(note.id)} className="text-xs leading-5 text-muted-foreground">
+                      {note.author === "brain" ? "Brain" : "Toi"} · {note.body}
+                    </p>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Input placeholder="commentaire sur la lecture la plus récente…" value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const first = journal[0]
+                if (!first || !noteDraft.trim()) return
+                void addNote(first.id, noteDraft).then(() => {
+                  setNoteDraft("")
+                  void refreshJournal()
+                })
+              }}
+            >
+              Noter
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => download("brain-journal.md", readingsToMarkdown(journal), "text/markdown")}>
+              MD
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => download("brain-journal.csv", readingsToCsv(journal), "text/csv")}>
+              CSV
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
