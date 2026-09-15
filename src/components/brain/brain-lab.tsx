@@ -105,7 +105,7 @@ export function BrainLab() {
   const [activeLab, setActiveLab] = useState<BrainLab | "all">("analyse")
   const [query, setQuery] = useState("")
   const [pins, setPins] = useState<CatalogEntry[]>([])
-  const [watch, setWatch] = useState<string[]>(() => (typeof window === "undefined" ? [] : readWatchlist()))
+  const [watch, setWatch] = useState<string[]>([])
   const [fiches, setFiches] = useState<WorkingObject[]>([])
   const [walker, setWalker] = useState<WalkerState | null>(null)
   const [cloudLots, setCloudLots] = useState(false)
@@ -143,7 +143,7 @@ export function BrainLab() {
   }, [archive, preset, customFrom, customTo, lastN, warmup])
 
   const ctxBase = useMemo((): Omit<ResolveContext, "entry"> => {
-      const window = windowMetaFrom(resolved)
+    const window = windowMetaFrom(resolved)
     const proposals = readStoredProposals()
     return {
       archive,
@@ -191,6 +191,7 @@ export function BrainLab() {
 
   useEffect(() => {
     void Promise.resolve().then(() => {
+      setWatch(readWatchlist())
       void refreshJournal()
     })
     void (async () => {
