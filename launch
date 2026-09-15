@@ -54,7 +54,7 @@ Usage:
   ./launch logs            Dernières lignes des journaux (.run/)
   ./launch logs -f         Suit les journaux (autre terminal)
   ./launch update          Contrôle GitHub et tire origin (ff-only), puis réinstalle si besoin
-  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM / chartisme / harmo
+  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM / chartisme / harmo / Ollama
   ./launch install         Installe uniquement les dépendances
   ./launch install-vlm     Installe Moondream (torch + transformers + accelerate)
   ./launch install-chartisme  Installe les réseaux du chartisme (torch + torch-geometric)
@@ -1135,6 +1135,20 @@ harmo_doctor() {
   fi
 }
 
+ollama_doctor() {
+  local host="${OLLAMA_HOST:-}"
+  if [[ -z "$host" && -f "$ROOT/.env" ]]; then
+    host="$(grep -E '^OLLAMA_HOST=' "$ROOT/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' || true)"
+  fi
+  host="${host:-http://127.0.0.1:11434}"
+  host="${host%/}"
+  if command -v curl >/dev/null 2>&1 && curl -fsS --max-time 2 "${host}/api/tags" >/dev/null 2>&1; then
+    ok "Ollama : ${host}"
+  else
+    printf '%sLLM local : injoignable (%s) — Brain reste local-off, pas de bascule cloud.%s\n' "$C_DIM" "$host" "$C_RESET"
+  fi
+}
+
 cmd_doctor() {
   info "Diagnostic Synchro (${ROOT})"
   local py="" syspy venv="$ROOT/.venv"
@@ -1176,6 +1190,7 @@ cmd_doctor() {
   vlm_doctor
   chartisme_doctor
   harmo_doctor
+  ollama_doctor
   if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     ok "Git : $(git -C "$ROOT" rev-parse --short HEAD) ($(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?'))"
   else

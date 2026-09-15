@@ -140,7 +140,7 @@ export function printSnapshot(snapshot: DiagnosticSnapshot) {
   printHtml(snapshotReportHtml(snapshot), `synchro-capture-${snapshot.id}.html`)
 }
 
-function speakerHtml(message: { role: string; model?: string; provider?: "google" | "openai" }) {
+function speakerHtml(message: { role: string; model?: string; provider?: import("@/lib/ia/models").IaProviderId }) {
   if (message.role === "user") return "Toi"
   return `${providerLabel(message.provider ?? "google")}${message.model ? ` · ${escapeHtml(message.model)}` : ""}`
 }

@@ -175,6 +175,33 @@ class ChartismeEvaluateIn(BaseModel):
     persist: bool = False
 
 
+class BrainReadingIn(BaseModel):
+    catalog_id: str
+    handle: str
+    lab: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    window: dict[str, Any] = Field(default_factory=dict)
+    draw_to: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    source: str = "user"
+    thread_id: str | None = None
+    comment: str | None = None
+    embed: bool = True
+    cloud_embed: bool = False
+
+
+class BrainNoteIn(BaseModel):
+    body: str
+    author: str = "user"
+
+
+class BrainRetrieveIn(BaseModel):
+    text: str
+    k: int = Field(default=8, ge=1, le=20)
+    cloud: bool = False
+    model: str | None = None
+
+
 def _json(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: _json(v) for k, v in value.items()}
@@ -872,6 +899,74 @@ def create_app() -> FastAPI:
         if not db.delete_grid(grid_id):
             raise HTTPException(404, "Grille introuvable")
         return {"ok": True}
+
+    @app.get("/api/brain/status")
+    def brain_status() -> dict[str, Any]:
+        from synchro import brain as brain_mod
+
+        return {"ok": True, "ollama": brain_mod.ping_ollama()}
+
+    @app.get("/api/brain/readings")
+    def brain_readings(
+        handle: str | None = None,
+        lab: str | None = None,
+        limit: int = Query(80, ge=1, le=200),
+    ) -> dict[str, Any]:
+        try:
+            items = db.list_brain_readings(handle=handle, lab=lab, limit=limit)
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return {"items": [_json(db.serialize_row(item, drop=())) for item in items]}
+
+    @app.post("/api/brain/readings")
+    def create_brain_reading(payload: BrainReadingIn) -> dict[str, Any]:
+        from synchro import brain as brain_mod
+
+        body = payload.model_dump()
+        if payload.cloud_embed:
+            raise HTTPException(400, "Pas d'embedding cloud automatique. Décoche cloud.")
+        if payload.embed:
+            packed = brain_mod.pack_embed_text(payload.payload, [payload.comment or ""])
+            embedded = brain_mod.embed_text(packed)
+            if embedded.get("ok"):
+                body["embedding"] = embedded["embedding"]
+                body["embedding_model"] = embedded["model"]
+        try:
+            row = db.insert_brain_reading(body)
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return _json(db.serialize_row(row, drop=()))
+
+    @app.post("/api/brain/readings/{reading_id}/notes")
+    def create_brain_note(reading_id: int, payload: BrainNoteIn) -> dict[str, Any]:
+        body = payload.body.strip()
+        if not body:
+            raise HTTPException(400, "Note vide")
+        author = payload.author if payload.author in {"user", "brain"} else "user"
+        try:
+            row = db.insert_brain_note(reading_id, author, body)
+        except KeyError as exc:
+            raise HTTPException(404, "Lecture introuvable") from exc
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return _json(db.serialize_row(row, drop=()))
+
+    @app.post("/api/brain/retrieve")
+    def brain_retrieve(payload: BrainRetrieveIn) -> dict[str, Any]:
+        from synchro import brain as brain_mod
+
+        if payload.cloud:
+            raise HTTPException(400, "Retrieve cloud refusé : passe par l'embed local.")
+        model = payload.model or brain_mod.DEFAULT_EMBED_MODEL
+        embedded = brain_mod.embed_text(payload.text, model=model)
+        if not embedded.get("ok"):
+            return {"ok": False, "items": [], "error": embedded.get("error") or "embed local indisponible"}
+        try:
+            rows = db.readings_with_embeddings(model=embedded.get("model"))
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        items = brain_mod.retrieve(embedded["embedding"], rows, k=payload.k)
+        return {"ok": True, "model": embedded["model"], "items": [_json(db.serialize_row(item, drop=())) for item in items]}
 
     @app.post("/api/sync")
     def sync() -> dict[str, Any]:

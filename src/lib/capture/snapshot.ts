@@ -29,6 +29,7 @@ export type LabId =
   | "harmo"
   | "admin"
   | "ia"
+  | "brain"
   | "other"
 
 export type SeriesPoint = { date: string; value: number }
@@ -86,6 +87,7 @@ export function labFromPath(pathname: string): LabId {
   if (pathname.startsWith("/harmo")) return "harmo"
   if (pathname.startsWith("/admin")) return "admin"
   if (pathname.startsWith("/ia")) return "ia"
+  if (pathname.startsWith("/brain")) return "brain"
   return "other"
 }
 
@@ -102,6 +104,7 @@ export function labLabel(lab: LabId) {
     harmo: "Harmo",
     admin: "Admin",
     ia: "IA",
+    brain: "Brain",
     other: "Synchro",
   }
   return labels[lab]

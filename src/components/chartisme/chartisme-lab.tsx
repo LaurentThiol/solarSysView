@@ -63,6 +63,7 @@ import {
   studyBanner,
   type StudyPreset,
 } from "@/lib/chartisme/window"
+import { asStudyPreset, readLabSearch } from "@/lib/lab-search"
 import { useDraws } from "@/lib/use-draws"
 
 type ModuleStatus = {
@@ -147,6 +148,14 @@ export function ChartismeLab() {
   const [selection, setSelection] = useState<CurveSelection | null>(null)
   const [status, setStatus] = useState<ModuleStatus | null>(null)
   const [firedCount, setFiredCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    const params = readLabSearch()
+    const curve = params.get("curve")
+    if (curve) setCurveId(curve)
+    const nextPreset = asStudyPreset(params.get("preset"))
+    if (nextPreset) setPreset(nextPreset)
+  }, [])
 
   useEffect(() => {
     void (async () => {

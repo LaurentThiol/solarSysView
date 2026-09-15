@@ -82,7 +82,7 @@ export function clearPending() {
 export function readProvider(): IaProviderId | null {
   if (!canUseStorage()) return null
   const value = window.localStorage.getItem(IA_PROVIDER_KEY)
-  return value === "google" || value === "openai" ? value : null
+  return value === "google" || value === "openai" || value === "local" ? value : null
 }
 
 export function writeProvider(id: IaProviderId) {
@@ -102,6 +102,7 @@ export function readModels(): StoredModels {
     const out: StoredModels = {}
     if (isModelId(parsed.google)) out.google = parsed.google
     if (isModelId(parsed.openai)) out.openai = parsed.openai
+    if (isModelId(parsed.local)) out.local = parsed.local
     if (isModelId(parsed.last)) out.last = parsed.last
     if (isModelId(parsed.compare)) out.compare = parsed.compare
     return out
@@ -117,7 +118,7 @@ export function readModel(provider: IaProviderId): string | null {
 export function readLastModel(): string | null {
   const stored = readModels()
   if (isModelId(stored.last)) return stored.last
-  return stored.google || stored.openai || null
+  return stored.google || stored.openai || stored.local || null
 }
 
 export function writeModel(provider: IaProviderId, model: string) {

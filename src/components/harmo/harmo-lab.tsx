@@ -41,6 +41,12 @@ import {
   type HarmoReport,
   type HarmoStatus,
 } from "@/lib/harmo"
+import {
+  asPositiveInt,
+  asVariableName,
+  asWindowPreset,
+  readLabSearch,
+} from "@/lib/lab-search"
 import { useDraws } from "@/lib/use-draws"
 
 const TABS = [
@@ -115,6 +121,22 @@ export function HarmoLab() {
   const [payload, setPayload] = useState<HarmoReport | null>(null)
   const [orders, setOrders] = useState<HarmoReport | null>(null)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const params = readLabSearch()
+    const nextVariable = asVariableName(params.get("variable"))
+    if (nextVariable) setVariable(nextVariable)
+    const nextPreset = asWindowPreset(params.get("preset"))
+    if (nextPreset) setPreset(nextPreset)
+    const tabId = params.get("tab")
+    if (tabId && TABS.some((item) => item.id === tabId)) setTab(tabId as TabId)
+    const n = asPositiveInt(params.get("n"), 1, 50)
+    if (n != null) {
+      const target = nextVariable ?? "sum"
+      if (variableNeedsStar(target)) setStar(Math.min(12, n))
+      else if (variableNeedsBall(target)) setBall(n)
+    }
+  }, [])
 
   const archive = useMemo(
     () => [...draws].sort((a, b) => a.date.localeCompare(b.date)),

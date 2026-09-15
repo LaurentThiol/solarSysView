@@ -55,9 +55,11 @@ import { groupIaTurns, historyForLane } from "@/lib/ia/turns"
 type Status = {
   google: boolean
   openai: boolean
+  local?: boolean
+  localHost?: string
   default: IaProviderId | null
   models?: IaModelOption[]
-  live?: { google: boolean | null; openai: boolean | null }
+  live?: { google: boolean | null; openai: boolean | null; local?: boolean | null }
 }
 
 type AskOptions = {
@@ -155,7 +157,7 @@ export function IaLab() {
         setModel(nextModel)
         setModelB(pickCompareModel(models, nextModel, readCompareModel()))
       } catch {
-        setStatus({ google: false, openai: false, default: null, models: [] })
+        setStatus({ google: false, openai: false, local: false, default: null, models: [] })
       }
     })()
   }, [])
@@ -207,7 +209,7 @@ export function IaLab() {
       const chosen = options.provider
       const chosenModel = options.model
       if (!chosen || !chosenModel) {
-        setError("Aucune clé Gemini / OpenAI. Configure-les dans Admin.")
+        setError("Aucun LLM. Lance Ollama ou configure Gemini / OpenAI dans Admin.")
         return
       }
       const compareRun = Boolean(options.compare && options.modelB && options.modelB !== chosenModel)
@@ -455,6 +457,9 @@ export function IaLab() {
   const catalogOpenAI = allModels.filter(
     (item) => item.source === "catalog" && item.provider === "openai"
   )
+  const catalogLocal = allModels.filter(
+    (item) => item.source === "catalog" && item.provider === "local"
+  )
   const catalogModels = provider
     ? providerModels.filter((item) => item.source === "catalog")
     : []
@@ -474,6 +479,7 @@ export function IaLab() {
   const groupedAll = [
     { label: "Gemini", items: catalogGoogle },
     { label: "OpenAI", items: catalogOpenAI },
+    { label: "Local", items: catalogLocal },
     { label: "Autres sur cette clé", items: liveAll },
   ]
   const groupedA =
@@ -669,6 +675,13 @@ export function IaLab() {
               active={provider === "openai"}
               onSelect={selectProvider}
             />
+            <ProviderPill
+              id="local"
+              label="Local"
+              enabled={Boolean(status?.local)}
+              active={provider === "local"}
+              onSelect={selectProvider}
+            />
             <button
               type="button"
               aria-pressed={compare}
@@ -685,9 +698,9 @@ export function IaLab() {
               title="Comparer"
               body="Même pack, deux lectures en parallèle. Utile en Chartisme / Harmo : un modèle rapide contre un plus précis, ou Gemini contre OpenAI. Les réponses arrivent en flux."
             />
-            {!status?.google && !status?.openai ? (
+            {!status?.google && !status?.openai && !status?.local ? (
               <span className="text-xs text-muted-foreground">
-                Clés dans Admin (Google / OpenAI).
+                Ollama en local, ou clés Gemini / OpenAI dans Admin.
               </span>
             ) : null}
           </div>

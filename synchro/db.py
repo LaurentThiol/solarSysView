@@ -182,6 +182,33 @@ CREATE TABLE IF NOT EXISTS chartisme_firings (
 );
 CREATE INDEX IF NOT EXISTS chartisme_firings_draw ON chartisme_firings (draw_date DESC);
 CREATE INDEX IF NOT EXISTS chartisme_firings_rule ON chartisme_firings (rule_id);
+
+CREATE TABLE IF NOT EXISTS brain_readings (
+    id              BIGSERIAL PRIMARY KEY,
+    catalog_id      TEXT NOT NULL,
+    handle          TEXT NOT NULL,
+    lab             TEXT NOT NULL,
+    params          JSONB NOT NULL DEFAULT '{}'::jsonb,
+    window           JSONB NOT NULL DEFAULT '{}'::jsonb,
+    observed_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    draw_to         DATE,
+    payload         JSONB NOT NULL DEFAULT '{}'::jsonb,
+    source          TEXT NOT NULL DEFAULT 'user',
+    thread_id       TEXT,
+    embedding       DOUBLE PRECISION[],
+    embedding_model TEXT
+);
+CREATE INDEX IF NOT EXISTS brain_readings_handle_time ON brain_readings (handle, observed_at DESC);
+CREATE INDEX IF NOT EXISTS brain_readings_lab ON brain_readings (lab, observed_at DESC);
+
+CREATE TABLE IF NOT EXISTS brain_reading_notes (
+    id              BIGSERIAL PRIMARY KEY,
+    reading_id      BIGINT NOT NULL REFERENCES brain_readings(id) ON DELETE CASCADE,
+    author          TEXT NOT NULL DEFAULT 'user',
+    body            TEXT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS brain_reading_notes_reading ON brain_reading_notes (reading_id, created_at);
 """
 
 _pool: ConnectionPool | None = None
@@ -969,4 +996,122 @@ def list_chartisme_firings(limit: int = 60) -> list[dict[str, Any]]:
                 """,
                 (limit,),
             )
+            return [dict(r) for r in cur.fetchall()]
+
+
+def list_brain_readings(
+    handle: str | None = None,
+    lab: str | None = None,
+    limit: int = 80,
+) -> list[dict[str, Any]]:
+    sql = "SELECT * FROM brain_readings"
+    clauses: list[str] = []
+    params: dict[str, Any] = {"limit": limit}
+    if handle:
+        clauses.append("handle = %(handle)s")
+        params["handle"] = handle.lstrip("@")
+    if lab:
+        clauses.append("lab = %(lab)s")
+        params["lab"] = lab
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY observed_at DESC LIMIT %(limit)s"
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            rows = [dict(r) for r in cur.fetchall()]
+            ids = [row["id"] for row in rows]
+            notes: dict[int, list[dict[str, Any]]] = {row_id: [] for row_id in ids}
+            if ids:
+                cur.execute(
+                    """
+                    SELECT * FROM brain_reading_notes
+                     WHERE reading_id = ANY(%s)
+                     ORDER BY created_at ASC
+                    """,
+                    (ids,),
+                )
+                for note in cur.fetchall():
+                    notes.setdefault(note["reading_id"], []).append(dict(note))
+            for row in rows:
+                row["notes"] = notes.get(row["id"], [])
+            return rows
+
+
+def insert_brain_reading(payload: dict[str, Any]) -> dict[str, Any]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO brain_readings (
+                    catalog_id, handle, lab, params, window, draw_to, payload,
+                    source, thread_id, embedding, embedding_model
+                ) VALUES (
+                    %(catalog_id)s, %(handle)s, %(lab)s, %(params)s, %(window)s,
+                    %(draw_to)s, %(payload)s, %(source)s, %(thread_id)s,
+                    %(embedding)s, %(embedding_model)s
+                )
+                RETURNING *
+                """,
+                {
+                    "catalog_id": payload["catalog_id"],
+                    "handle": str(payload["handle"]).lstrip("@"),
+                    "lab": payload["lab"],
+                    "params": Jsonb(payload.get("params") or {}),
+                    "window": Jsonb(payload.get("window") or {}),
+                    "draw_to": payload.get("draw_to"),
+                    "payload": Jsonb(payload.get("payload") or {}),
+                    "source": payload.get("source") or "user",
+                    "thread_id": payload.get("thread_id"),
+                    "embedding": payload.get("embedding"),
+                    "embedding_model": payload.get("embedding_model"),
+                },
+            )
+            row = dict(cur.fetchone())
+            notes: list[dict[str, Any]] = []
+            comment = (payload.get("comment") or "").strip()
+            if comment:
+                cur.execute(
+                    """
+                    INSERT INTO brain_reading_notes (reading_id, author, body)
+                    VALUES (%s, %s, %s)
+                    RETURNING *
+                    """,
+                    (row["id"], "user", comment),
+                )
+                notes.append(dict(cur.fetchone()))
+        conn.commit()
+    row["notes"] = notes
+    return row
+
+
+def insert_brain_note(reading_id: int, author: str, body: str) -> dict[str, Any]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM brain_readings WHERE id = %s", (reading_id,))
+            if not cur.fetchone():
+                raise KeyError(reading_id)
+            cur.execute(
+                """
+                INSERT INTO brain_reading_notes (reading_id, author, body)
+                VALUES (%s, %s, %s)
+                RETURNING *
+                """,
+                (reading_id, author, body),
+            )
+            row = dict(cur.fetchone())
+        conn.commit()
+        return row
+
+
+def readings_with_embeddings(model: str | None = None) -> list[dict[str, Any]]:
+    sql = "SELECT * FROM brain_readings WHERE embedding IS NOT NULL"
+    params: dict[str, Any] = {}
+    if model:
+        sql += " AND embedding_model = %(model)s"
+        params["model"] = model
+    sql += " ORDER BY observed_at DESC LIMIT 400"
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
             return [dict(r) for r in cur.fetchall()]

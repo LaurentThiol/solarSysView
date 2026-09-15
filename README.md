@@ -31,7 +31,7 @@ Le lanceur (même modèle que PaxVideo) installe les dépendances si besoin, lib
 | `./launch status` | Qui écoute, `/api/alive`, santé Neon |
 | `./launch logs` / `./launch logs -f` | Journaux `.run/` (aperçu ou suivi) |
 | `./launch update` / `make update` | Contrôle GitHub (`git fetch`) et tire `origin` en fast-forward |
-| `./launch doctor` | Python, venv, Node, `.env`, ports, VLM, chartisme, harmo |
+| `./launch doctor` | Python, venv, Node, `.env`, ports, VLM, chartisme, harmo, Ollama |
 | `./launch install` | Dépendances seulement |
 | `./launch install-vlm` | Moondream local (torch + transformers + accelerate) |
 | `./launch install-chartisme` | Réseaux chartisme (optionnels) |
@@ -241,6 +241,14 @@ Lecture d’une capture (visuel + données de fenêtre). L’onglet propose **Ge
 
 L’historique (colonne **Captures**) se **renomme**, s’**épingle**, s’**exporte** (Markdown, JSON, PDF du fil) et se **supprime**. Un JSON réimporte les lectures. Les épinglées ne tombent pas des huit derniers fils. Les clés sont dans Admin. L’assistant décrit l’archive, il ne pronostique pas.
 
+Un troisième fournisseur **Local** (Ollama / llama-server) sert surtout les lectures **texte** du pack. Un 404 Ollama **ne bascule pas** sur Gemini / OpenAI.
+
+## Brain (`/brain`)
+
+Catalog nommé des indicateurs (`@rsi`, `@sum.rsi`, `@ete`, `@fft`), journal persisté (Neon, repli local), mémoire vectorielle locale (`nomic-embed-text`) et **agent manuel** (catalog ou 142 courbes Chartisme). Le panneau **Objets** est exactement le prompt. Chat et lots passent par Ollama ; **Escalader** / **Lots cloud** sont opt-in. L’onglet IA n’est pas fusionné : il reste la lecture de captures.
+
+`./launch doctor` ping Ollama. `OLLAMA_HOST` (défaut `http://127.0.0.1:11434`) est dans `.env.example`.
+
 ## Admin (`/admin`)
 
 Page locale pour les consoles et les secrets (Neon, Google, OpenAI, Brave Search). Les valeurs sont lues/écrites dans `.env` — **jamais commitées**. Révélation / copie, test de connexion, mise à jour GitHub (`git fetch` / `git pull --ff-only`, équivalent `./launch update`), synchro FDJ.
@@ -249,7 +257,7 @@ En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, défini
 
 ## Interface web (Next.js)
 
-App Next.js (onglets **Tirage** `/tirage`, **Évolution** `/evolution`, **Analyse** `/analyse`, **Combinaisons** `/combinaisons`, **Jeux** `/jeux`, **Morpho** `/morpho`, **Relief** `/relief`, **Chartisme** `/chartisme`, **Harmo** `/harmo`, **IA** `/ia` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
+App Next.js (onglets **Tirage** `/tirage`, **Évolution** `/evolution`, **Analyse** `/analyse`, **Combinaisons** `/combinaisons`, **Jeux** `/jeux`, **Morpho** `/morpho`, **Relief** `/relief`, **Chartisme** `/chartisme`, **Harmo** `/harmo`, **Brain** `/brain`, **IA** `/ia` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install

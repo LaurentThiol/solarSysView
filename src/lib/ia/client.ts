@@ -8,6 +8,7 @@ export async function streamIaChat(
     model?: string | null
     messages: IaChatMessage[]
     snapshot?: IaSnapshotPayload | null
+    systemPrompt?: string | null
   },
   handlers: {
     onEvent: (event: IaStreamEvent) => void

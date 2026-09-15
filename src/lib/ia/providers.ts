@@ -4,11 +4,13 @@ import { IMAGE_MAX_CHARS, JSON_BUDGET } from "@/lib/capture/snapshot"
 import {
   guessVision,
   isGeminiChatModel,
+  isLocalChatModel,
   isModelId,
   isOpenAiChatModel,
   mergeModelOptions,
   modelSequence,
   openaiUsesMaxCompletionTokens,
+  pickAvailableModel,
   preferredModel,
   resolveRequestedModel,
   stripGeminiName,
@@ -62,6 +64,24 @@ function openaiKey() {
   return value && !isPlaceholder(value) ? value : ""
 }
 
+export function localLlmBase() {
+  const fromEnv = (liveEnv("LOCAL_LLM_BASE_URL") || liveEnv("OLLAMA_HOST")).trim()
+  return (fromEnv || "http://127.0.0.1:11434").replace(/\/$/, "")
+}
+
+function localChatCompletionsUrl(base: string) {
+  if (/\/v1$/.test(base)) return `${base}/chat/completions`
+  return `${base}/v1/chat/completions`
+}
+
+function systemText(override?: string | null) {
+  const text = (override ?? requestSystem)?.trim()
+  if (text && text.length > 0 && text.length <= 12_000) return text
+  return IA_SYSTEM_PROMPT
+}
+
+let requestSystem: string | null = null
+
 const LIVE_TIMEOUT_MS = 5_000
 
 async function listGeminiIds(key: string): Promise<string[] | null> {
@@ -104,14 +124,53 @@ async function listOpenAiIds(key: string): Promise<string[] | null> {
   }
 }
 
+async function listLocalIds(base: string): Promise<string[] | null> {
+  try {
+    const tags = await fetch(`${base}/api/tags`, {
+      signal: AbortSignal.timeout(LIVE_TIMEOUT_MS),
+      cache: "no-store",
+    })
+    if (tags.ok) {
+      const data = (await tags.json()) as { models?: Array<{ name?: string }> }
+      const ids = (data.models ?? [])
+        .map((item) => item.name || "")
+        .filter((id) => isModelId(id) && isLocalChatModel(id))
+      return ids
+    }
+  } catch {
+    /* try OpenAI-compat */
+  }
+  try {
+    const modelsUrl = /\/v1$/.test(base) ? `${base}/models` : `${base}/v1/models`
+    const response = await fetch(modelsUrl, {
+      signal: AbortSignal.timeout(LIVE_TIMEOUT_MS),
+      cache: "no-store",
+    })
+    if (!response.ok) return null
+    const data = (await response.json()) as { data?: Array<{ id?: string }> }
+    return (data.data ?? [])
+      .map((item) => item.id || "")
+      .filter((id) => isModelId(id) && isLocalChatModel(id))
+  } catch {
+    return null
+  }
+}
+
 export async function iaStatus(options: { live?: boolean } = {}) {
   const google = Boolean(googleKey())
   const openai = Boolean(openaiKey())
-  const fallback: IaProviderId | null = google ? "google" : openai ? "openai" : null
+  const host = localLlmBase()
+  let liveLocal: string[] | null = null
   let liveGoogle: string[] | null = null
   let liveOpenAI: string[] | null = null
+  let local = false
   if (options.live) {
     const tasks: Array<Promise<void>> = []
+    tasks.push(
+      listLocalIds(host).then((ids) => {
+        liveLocal = ids
+      })
+    )
     if (google) {
       tasks.push(
         listGeminiIds(googleKey()).then((ids) => {
@@ -127,21 +186,38 @@ export async function iaStatus(options: { live?: boolean } = {}) {
       )
     }
     await Promise.all(tasks)
+    local = liveLocal !== null
+  } else {
+    try {
+      const response = await fetch(`${host}/api/tags`, {
+        signal: AbortSignal.timeout(1_500),
+        cache: "no-store",
+      })
+      local = response.ok
+    } catch {
+      local = false
+    }
   }
+  const fallback: IaProviderId | null = google ? "google" : openai ? "openai" : local ? "local" : null
   const models: IaModelOption[] = mergeModelOptions({
     google,
     openai,
+    local,
     liveGoogle,
     liveOpenAI,
+    liveLocal,
   })
   return {
     google,
     openai,
+    local,
+    localHost: host,
     default: fallback,
-    defaultModel: fallback ? preferredModel(fallback) : null,
+    defaultModel: fallback ? pickAvailableModel(models, fallback) ?? preferredModel(fallback) : null,
     live: {
       google: google ? liveGoogle !== null : null,
       openai: openai ? liveOpenAI !== null : null,
+      local: options.live ? liveLocal !== null : local,
     },
     models,
   }
@@ -243,7 +319,7 @@ async function generateGeminiOnce(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: IA_SYSTEM_PROMPT }] },
+        systemInstruction: { parts: [{ text: systemText() }] },
         contents: geminiContents(messages, packed.snapshot),
         generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
       }),
@@ -283,7 +359,7 @@ async function streamGeminiOnce(
 ): Promise<OnceResult> {
   const packed = withOptionalImage(snapshot, model, "google")
   const body = JSON.stringify({
-    systemInstruction: { parts: [{ text: IA_SYSTEM_PROMPT }] },
+    systemInstruction: { parts: [{ text: systemText() }] },
     contents: geminiContents(messages, packed.snapshot),
     generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
   })
@@ -356,10 +432,14 @@ async function completeGemini(
   return { ok: false, error: lastError }
 }
 
-function openaiMessages(messages: IaChatMessage[], snapshot: IaSnapshotPayload | null) {
+function openaiMessages(
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  system?: string | null
+) {
   const pack = snapshotText(snapshot)
   const image = parseDataUrl(snapshot?.imageDataUrl)
-  const out: Array<Record<string, unknown>> = [{ role: "system", content: IA_SYSTEM_PROMPT }]
+  const out: Array<Record<string, unknown>> = [{ role: "system", content: systemText(system) }]
   messages.forEach((message, index) => {
     if (message.role === "assistant") {
       out.push({ role: "assistant", content: message.content })
@@ -387,11 +467,12 @@ function openaiPayload(
   model: string,
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
-  stream = false
+  stream = false,
+  system?: string | null
 ) {
   const body: Record<string, unknown> = {
     model,
-    messages: openaiMessages(messages, snapshot),
+    messages: openaiMessages(messages, snapshot, system),
   }
   if (openaiUsesMaxCompletionTokens(model)) {
     body.max_completion_tokens = 4096
@@ -408,14 +489,17 @@ async function generateOpenAIOnce(
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
   key: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  endpoint?: { url: string; label: string }
 ): Promise<OnceResult> {
-  const packed = withOptionalImage(snapshot, model, "openai")
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const packed = withOptionalImage(snapshot, model, endpoint ? "local" : "openai")
+  const url = endpoint?.url ?? "https://api.openai.com/v1/chat/completions"
+  const label = endpoint?.label ?? "OpenAI"
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      Authorization: `Bearer ${key}`,
+      Authorization: `Bearer ${key || "local"}`,
     },
     body: JSON.stringify(openaiPayload(model, messages, packed.snapshot)),
     signal: requestSignal(signal),
@@ -424,7 +508,7 @@ async function generateOpenAIOnce(
   if (!response.ok) {
     return {
       ok: false,
-      error: `OpenAI HTTP ${response.status}${raw ? ` · ${raw.slice(0, 220)}` : ""}`,
+      error: `${label} HTTP ${response.status}${raw ? ` · ${raw.slice(0, 220)}` : ""}`,
       retry: shouldRetryStatus(response.status, raw),
     }
   }
@@ -445,14 +529,17 @@ async function streamOpenAIOnce(
   snapshot: IaSnapshotPayload | null,
   key: string,
   onDelta: (text: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  endpoint?: { url: string; label: string }
 ): Promise<OnceResult> {
-  const packed = withOptionalImage(snapshot, model, "openai")
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const packed = withOptionalImage(snapshot, model, endpoint ? "local" : "openai")
+  const url = endpoint?.url ?? "https://api.openai.com/v1/chat/completions"
+  const label = endpoint?.label ?? "OpenAI"
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      Authorization: `Bearer ${key}`,
+      Authorization: `Bearer ${key || "local"}`,
     },
     body: JSON.stringify(openaiPayload(model, messages, packed.snapshot, true)),
     signal: requestSignal(signal),
@@ -460,11 +547,11 @@ async function streamOpenAIOnce(
   if (!response.ok) {
     const raw = await response.text().catch(() => "")
     if (shouldRetryStatus(response.status, raw)) {
-      return generateOpenAIOnce(model, messages, snapshot, key, signal)
+      return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint)
     }
     return {
       ok: false,
-      error: `OpenAI HTTP ${response.status}${raw ? ` · ${raw.slice(0, 220)}` : ""}`,
+      error: `${label} HTTP ${response.status}${raw ? ` · ${raw.slice(0, 220)}` : ""}`,
       retry: false,
     }
   }
@@ -483,9 +570,9 @@ async function streamOpenAIOnce(
   } catch (error) {
     if (signal?.aborted) throw error
     if (text.trim()) return { ok: true, text: text.trim() }
-    return generateOpenAIOnce(model, messages, snapshot, key, signal)
+    return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint)
   }
-  if (!text.trim()) return generateOpenAIOnce(model, messages, snapshot, key, signal)
+  if (!text.trim()) return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint)
   return { ok: true, text: text.trim() }
 }
 
@@ -523,15 +610,58 @@ export async function completeIa(options: {
   messages: IaChatMessage[]
   snapshot?: IaSnapshotPayload | null
   signal?: AbortSignal
+  systemPrompt?: string | null
 }): Promise<IaCompleteOk | IaCompleteErr> {
-  const requested = resolveRequestedModel(options.provider, options.model)
-  if (!requested) {
-    return { ok: false, error: "Aucun modèle pour ce fournisseur." }
+  requestSystem = options.systemPrompt ?? null
+  try {
+    const requested = resolveRequestedModel(options.provider, options.model)
+    if (!requested) {
+      return { ok: false, error: "Aucun modèle pour ce fournisseur." }
+    }
+    if (options.provider === "google") {
+      return completeGemini(options.messages, options.snapshot ?? null, requested, options.signal)
+    }
+    if (options.provider === "local") {
+      return completeLocal(options.messages, options.snapshot ?? null, requested, options.signal)
+    }
+    return completeOpenAI(options.messages, options.snapshot ?? null, requested, options.signal)
+  } finally {
+    requestSystem = null
   }
-  if (options.provider === "google") {
-    return completeGemini(options.messages, options.snapshot ?? null, requested, options.signal)
+}
+
+async function completeLocal(
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  requested: string,
+  signal?: AbortSignal
+): Promise<IaCompleteOk | IaCompleteErr> {
+  const endpoint = { url: localChatCompletionsUrl(localLlmBase()), label: "LLM local" }
+  let lastError = "LLM local injoignable (Ollama ?). Pas de bascule cloud."
+  for (const model of modelSequence("local", requested)) {
+    const packed = withOptionalImage(snapshot, model, "local")
+    try {
+      const result = await generateOpenAIOnce(model, messages, snapshot, "local", signal, endpoint)
+      if (result.ok) {
+        return {
+          ok: true,
+          text: result.text,
+          model,
+          provider: "local",
+          requested,
+          imageOmitted: packed.imageOmitted,
+        }
+      }
+      lastError = result.error
+      if (!result.retry) return { ok: false, error: lastError }
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "LLM local injoignable. Pas de bascule cloud.",
+      }
+    }
   }
-  return completeOpenAI(options.messages, options.snapshot ?? null, requested, options.signal)
+  return { ok: false, error: lastError }
 }
 
 export async function streamIa(
@@ -541,47 +671,38 @@ export async function streamIa(
     messages: IaChatMessage[]
     snapshot?: IaSnapshotPayload | null
     signal?: AbortSignal
+    systemPrompt?: string | null
   },
   onEvent: (event: IaStreamEvent) => void
 ): Promise<IaCompleteOk | IaCompleteErr> {
-  const requested = resolveRequestedModel(options.provider, options.model)
-  if (!requested) {
-    const error = "Aucun modèle pour ce fournisseur."
-    onEvent({ type: "error", error })
-    return { ok: false, error }
-  }
-  const snapshot = options.snapshot ?? null
-  const key = options.provider === "google" ? googleKey() : openaiKey()
-  if (!key) {
-    const error =
-      options.provider === "google" ? "GOOGLE_API_KEY absente (Admin)." : "OPENAI_API_KEY absente (Admin)."
-    onEvent({ type: "error", error })
-    return { ok: false, error }
-  }
-  let lastError = "IA indisponible"
-  for (const model of modelSequence(options.provider, requested)) {
-    const packed = withOptionalImage(snapshot, model, options.provider)
-    let emitted = false
-    const onDelta = (chunk: string) => {
-      if (!emitted) {
-        emitted = true
-        onEvent({
-          type: "meta",
-          model,
-          provider: options.provider,
-          requested,
-          imageOmitted: packed.imageOmitted,
-        })
-      }
-      onEvent({ type: "delta", text: chunk })
+  requestSystem = options.systemPrompt ?? null
+  try {
+    const requested = resolveRequestedModel(options.provider, options.model)
+    if (!requested) {
+      const error = "Aucun modèle pour ce fournisseur."
+      onEvent({ type: "error", error })
+      return { ok: false, error }
     }
-    try {
-      const result =
-        options.provider === "google"
-          ? await streamGeminiOnce(model, options.messages, snapshot, key, onDelta, options.signal)
-          : await streamOpenAIOnce(model, options.messages, snapshot, key, onDelta, options.signal)
-      if (result.ok) {
+    const snapshot = options.snapshot ?? null
+    const localEndpoint =
+      options.provider === "local"
+        ? { url: localChatCompletionsUrl(localLlmBase()), label: "LLM local" }
+        : undefined
+    const key =
+      options.provider === "google" ? googleKey() : options.provider === "local" ? "local" : openaiKey()
+    if (options.provider !== "local" && !key) {
+      const error =
+        options.provider === "google" ? "GOOGLE_API_KEY absente (Admin)." : "OPENAI_API_KEY absente (Admin)."
+      onEvent({ type: "error", error })
+      return { ok: false, error }
+    }
+    let lastError = "IA indisponible"
+    for (const model of modelSequence(options.provider, requested)) {
+      const packed = withOptionalImage(snapshot, model, options.provider)
+      let emitted = false
+      const onDelta = (chunk: string) => {
         if (!emitted) {
+          emitted = true
           onEvent({
             type: "meta",
             model,
@@ -589,39 +710,72 @@ export async function streamIa(
             requested,
             imageOmitted: packed.imageOmitted,
           })
-          onEvent({ type: "delta", text: result.text })
         }
-        onEvent({
-          type: "done",
-          text: result.text,
-          model,
-          provider: options.provider,
-          requested,
-          imageOmitted: packed.imageOmitted,
-        })
-        return {
-          ok: true,
-          text: result.text,
-          model,
-          provider: options.provider,
-          requested,
-          imageOmitted: packed.imageOmitted,
+        onEvent({ type: "delta", text: chunk })
+      }
+      try {
+        const result =
+          options.provider === "google"
+            ? await streamGeminiOnce(model, options.messages, snapshot, key, onDelta, options.signal)
+            : await streamOpenAIOnce(
+                model,
+                options.messages,
+                snapshot,
+                key,
+                onDelta,
+                options.signal,
+                localEndpoint
+              )
+        if (result.ok) {
+          if (!emitted) {
+            onEvent({
+              type: "meta",
+              model,
+              provider: options.provider,
+              requested,
+              imageOmitted: packed.imageOmitted,
+            })
+            onEvent({ type: "delta", text: result.text })
+          }
+          onEvent({
+            type: "done",
+            text: result.text,
+            model,
+            provider: options.provider,
+            requested,
+            imageOmitted: packed.imageOmitted,
+          })
+          return {
+            ok: true,
+            text: result.text,
+            model,
+            provider: options.provider,
+            requested,
+            imageOmitted: packed.imageOmitted,
+          }
         }
-      }
-      lastError = result.error
-      if (emitted || !result.retry) {
-        onEvent({ type: "error", error: lastError })
-        return { ok: false, error: lastError }
-      }
-    } catch (error) {
-      if (options.signal?.aborted) throw error
-      lastError = error instanceof Error ? error.message : "échec IA"
-      if (emitted) {
-        onEvent({ type: "error", error: lastError })
-        return { ok: false, error: lastError }
+        lastError = result.error
+        if (emitted || !result.retry) {
+          onEvent({ type: "error", error: lastError })
+          return { ok: false, error: lastError }
+        }
+      } catch (error) {
+        if (options.signal?.aborted) throw error
+        lastError =
+          options.provider === "local"
+            ? "LLM local injoignable. Pas de bascule cloud."
+            : error instanceof Error
+              ? error.message
+              : "échec IA"
+        if (emitted || options.provider === "local") {
+          onEvent({ type: "error", error: lastError })
+          return { ok: false, error: lastError }
+        }
       }
     }
+    onEvent({ type: "error", error: lastError })
+    return { ok: false, error: lastError }
+  } finally {
+    requestSystem = null
   }
-  onEvent({ type: "error", error: lastError })
-  return { ok: false, error: lastError }
 }

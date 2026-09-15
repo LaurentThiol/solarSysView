@@ -1,4 +1,4 @@
-export type IaProviderId = "google" | "openai"
+export type IaProviderId = "google" | "openai" | "local"
 
 export type IaModelTier = "fast" | "balanced" | "precise"
 
@@ -136,6 +136,15 @@ export const IA_MODELS: IaModelDef[] = [
     vision: true,
     tier: "precise",
   },
+  {
+    id: "llama3.2",
+    provider: "local",
+    label: "Local",
+    hint: "Ollama / llama-server",
+    vision: false,
+    tier: "balanced",
+    preferred: true,
+  },
 ]
 
 const LIVE_EXTRA_CAP = 10
@@ -145,13 +154,24 @@ export function isModelId(value: unknown): value is string {
 }
 
 export function providerLabel(id: IaProviderId) {
-  return id === "google" ? "Gemini" : "OpenAI"
+  if (id === "google") return "Gemini"
+  if (id === "local") return "Local"
+  return "OpenAI"
+}
+
+export function isLocalChatModel(id: string) {
+  const lower = id.toLowerCase()
+  if (/(embed|nomic-embed|tts|whisper|clip)/i.test(lower)) return false
+  return true
 }
 
 export function providerOfModel(id: string): IaProviderId | null {
   const lower = id.toLowerCase()
   if (lower.startsWith("gemini") || lower.startsWith("models/gemini")) return "google"
   if (/^(gpt-|o1|o3|o4-mini)/.test(lower)) return "openai"
+  if (isModelId(id) && !lower.startsWith("gemini") && !/^(gpt-|o1|o3|o4-mini)/.test(lower)) {
+    return "local"
+  }
   return null
 }
 
@@ -175,6 +195,7 @@ export function guessVision(id: string, provider: IaProviderId) {
   const known = IA_MODELS.find((item) => item.id === id)
   if (known) return known.vision
   if (provider === "google") return /gemini/i.test(id) && !/(embed|tts|imagen|veo)/i.test(id)
+  if (provider === "local") return /(llava|vision|qwen.*vl|moondream)/i.test(id)
   return /^(gpt-4o|gpt-4\.1|gpt-5)/.test(id)
 }
 
@@ -201,6 +222,7 @@ export function isOpenAiChatModel(id: string) {
 }
 
 export function resolveRequestedModel(provider: IaProviderId, requested?: string | null) {
+  if (provider === "local" && isModelId(requested)) return requested
   if (isModelId(requested) && providerOfModel(requested) === provider) return requested
   return preferredModel(provider)
 }
@@ -231,6 +253,7 @@ function extraFromLive(
     if (catalogIds.has(id) || extras.some((item) => item.id === id)) continue
     if (provider === "google" && !isGeminiChatModel(id)) continue
     if (provider === "openai" && !isOpenAiChatModel(id)) continue
+    if (provider === "local" && !isLocalChatModel(id)) continue
     extras.push({
       id,
       provider,
@@ -249,11 +272,18 @@ function extraFromLive(
 export function mergeModelOptions(input: {
   google: boolean
   openai: boolean
+  local?: boolean
   liveGoogle: string[] | null
   liveOpenAI: string[] | null
+  liveLocal?: string[] | null
 }): IaModelOption[] {
   const catalog: IaModelOption[] = IA_MODELS.map((item) => {
-    const enabled = item.provider === "google" ? input.google : input.openai
+    const enabled =
+      item.provider === "google"
+        ? input.google
+        : item.provider === "openai"
+          ? input.openai
+          : Boolean(input.local)
     return { ...item, available: enabled, source: "catalog" as const }
   })
   const extras: IaModelOption[] = []
@@ -272,6 +302,15 @@ export function mergeModelOptions(input: {
         "openai",
         input.liveOpenAI,
         new Set(catalog.filter((item) => item.provider === "openai").map((item) => item.id))
+      )
+    )
+  }
+  if (input.local && input.liveLocal) {
+    extras.push(
+      ...extraFromLive(
+        "local",
+        input.liveLocal,
+        new Set(catalog.filter((item) => item.provider === "local").map((item) => item.id))
       )
     )
   }
@@ -301,7 +340,7 @@ export function pickCompareModel(
   if (stored && stored !== primary && pool.some((item) => item.id === stored)) return stored
   const primaryProvider = primary ? providerOfModel(primary) : null
   const otherProvider: IaProviderId | null =
-    primaryProvider === "google" ? "openai" : primaryProvider === "openai" ? "google" : null
+    primaryProvider === "google" ? "openai" : primaryProvider === "openai" ? "google" : "google"
   const otherPreferred = otherProvider
     ? pool.find((item) => item.provider === otherProvider && item.preferred) ??
       pool.find((item) => item.provider === otherProvider)

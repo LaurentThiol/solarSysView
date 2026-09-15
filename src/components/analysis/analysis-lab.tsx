@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useEffect, useState } from "react"
 
 import { AveragesPanel } from "@/components/analysis/averages-panel"
 import { FiguresPanel } from "@/components/analysis/figures-panel"
@@ -53,6 +53,12 @@ import {
 import { parseQueryNumbers, drawMatchesQuery } from "@/lib/draws"
 import { packAnalyse } from "@/lib/capture/pack"
 import { techPack } from "@/lib/ta"
+import {
+  asPositiveInt,
+  asVariableName,
+  asWindowPreset,
+  readLabSearch,
+} from "@/lib/lab-search"
 import { useDraws } from "@/lib/use-draws"
 
 const TECH_TABS = [
@@ -272,6 +278,22 @@ export function AnalysisLab() {
     n_sim?: number
   } | null>(null)
   const [mcError, setMcError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const params = readLabSearch()
+    const nextVariable = asVariableName(params.get("variable"))
+    if (nextVariable) setVariable(nextVariable)
+    const nextPreset = asWindowPreset(params.get("preset"))
+    if (nextPreset) setPreset(nextPreset)
+    const x = asPositiveInt(params.get("x"), 2, 200)
+    if (x != null) setWindowSize(x)
+    const n = asPositiveInt(params.get("n"), 1, 50)
+    if (n != null) {
+      const target = nextVariable ?? "sum"
+      if (variableNeedsStar(target)) setStar(Math.min(12, n))
+      else setBall(n)
+    }
+  }, [])
 
   const archive = useMemo(
     () => [...draws].sort((a, b) => a.date.localeCompare(b.date)),

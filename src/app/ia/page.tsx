@@ -16,8 +16,8 @@ export default function IaPage() {
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Envoie une capture (bouton Capture du bandeau) : le graphique à
           l’écran plus les données de la fenêtre. L’historique se renomme,
-          s’exporte (Markdown / JSON / PDF) ou se supprime. Choisis Gemini ou
-          OpenAI, puis le modèle — catalogue recommandé, plus ceux visibles sur tes
+          s’exporte (Markdown / JSON / PDF) ou se supprime. Choisis Gemini, OpenAI
+          ou un modèle local (Ollama) — catalogue recommandé, plus ceux visibles sur tes
           clés (Admin). La réponse arrive en flux. Comparer lit le même pack avec
           deux modèles (Chartisme / Harmo). Les tirages sont indépendants —
           l’assistant décrit, il ne joue pas.

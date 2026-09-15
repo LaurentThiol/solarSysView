@@ -10,6 +10,7 @@ import {
 } from "@/components/capture"
 import { HelpModeProvider } from "@/components/help"
 import { SiteHeader } from "@/components/startup-status"
+import { WatchlistSync } from "@/components/brain/watchlist-sync"
 
 import "./globals.css"
 
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <HelpModeProvider>
           <CaptureProvider>
             <SiteHeader />
+            <WatchlistSync />
             <CaptureRoot>{children}</CaptureRoot>
             <CaptureDrawer />
             <CaptureFlash />

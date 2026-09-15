@@ -21,6 +21,7 @@ type Body = {
   messages?: IaChatMessage[]
   snapshot?: IaSnapshotPayload | null
   stream?: boolean
+  systemPrompt?: string | null
 }
 
 type ChatRequest = {
@@ -29,6 +30,7 @@ type ChatRequest = {
   messages: IaChatMessage[]
   snapshot: IaSnapshotPayload | null
   stream: boolean
+  systemPrompt?: string | null
 }
 
 function cleanedMessages(messages: IaChatMessage[]) {
@@ -55,11 +57,13 @@ async function resolveChat(request: Request): Promise<{ error: NextResponse } | 
     return { error: NextResponse.json({ ok: false, error: "Requête invalide" }, { status: 400 }) }
   }
   const provider: IaProviderId | null =
-    body.provider === "google" || body.provider === "openai" ? body.provider : status.default
+    body.provider === "google" || body.provider === "openai" || body.provider === "local"
+      ? body.provider
+      : status.default
   if (!provider) {
     return {
       error: NextResponse.json(
-        { ok: false, error: "Aucune clé Gemini / OpenAI. Configure-les dans Admin." },
+        { ok: false, error: "Aucun LLM. Lance Ollama ou configure Gemini / OpenAI dans Admin." },
         { status: 400 }
       ),
     }
@@ -72,6 +76,14 @@ async function resolveChat(request: Request): Promise<{ error: NextResponse } | 
   if (provider === "openai" && !status.openai) {
     return {
       error: NextResponse.json({ ok: false, error: "OPENAI_API_KEY absente (Admin)." }, { status: 400 }),
+    }
+  }
+  if (provider === "local" && !status.local) {
+    return {
+      error: NextResponse.json(
+        { ok: false, error: "LLM local injoignable (Ollama). Pas de bascule cloud." },
+        { status: 400 }
+      ),
     }
   }
   const messages = Array.isArray(body.messages) ? body.messages.slice(-40) : []
@@ -98,13 +110,14 @@ async function resolveChat(request: Request): Promise<{ error: NextResponse } | 
     messages: cleaned,
     snapshot: body.snapshot ?? null,
     stream: Boolean(body.stream),
+    systemPrompt: typeof body.systemPrompt === "string" ? body.systemPrompt : null,
   }
 }
 
 export async function POST(request: Request) {
   const parsed = await resolveChat(request)
   if ("error" in parsed) return parsed.error
-  const { provider, model, messages, snapshot, stream } = parsed
+  const { provider, model, messages, snapshot, stream, systemPrompt } = parsed
 
   if (!stream) {
     try {
@@ -113,6 +126,7 @@ export async function POST(request: Request) {
         model,
         messages,
         snapshot,
+        systemPrompt,
         signal: request.signal,
       })
       if (!result.ok) {
@@ -145,7 +159,7 @@ export async function POST(request: Request) {
       }
       try {
         await streamIa(
-          { provider, model, messages, snapshot, signal: request.signal },
+          { provider, model, messages, snapshot, systemPrompt, signal: request.signal },
           send
         )
       } catch (error) {

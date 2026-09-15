@@ -66,6 +66,13 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
       "Rappelle que la couleur n’est pas une prédiction : ce sont des sorties déjà tirées, posées côte à côte.",
     ]
   }
+  if (lab === "brain") {
+    return [
+      "Lis les fiches du working set (@rsi, @adx…) : que décrivent-elles sur cette fenêtre, sans pronostic ?",
+      "Quels handles du catalog manquent encore sur le plateau pour répondre ?",
+      "Les souvenirs rappelés sont des lectures passées, pas une série prédictive. Confirme-le.",
+    ]
+  }
   return [
     "Explique ce que montre cet écran, à partir du visuel et des données jointes.",
     "Quels éléments techniques regarder en premier, et lesquels ignorer ?",

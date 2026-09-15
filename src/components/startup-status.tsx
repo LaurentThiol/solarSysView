@@ -149,6 +149,7 @@ export function StartupStatus() {
       setEnsuring(true)
       try {
         await fetch("/api/sync/ensure", { method: "POST", cache: "no-store" })
+        window.dispatchEvent(new Event("synchro:sync-ensure"))
       } catch {
         // le rattrapage peut échouer si FDJ/Neon sont lents
       } finally {
@@ -398,6 +399,7 @@ export function StartupStatus() {
           />
         </HelpWrap>
         <MorphoFiringPill />
+        <LocalLlmPill />
         {quitButton}
       </div>
     </>
@@ -431,6 +433,56 @@ function MorphoFiringPill() {
         tone="warn"
         title={`${firing.name} · ${firing.draw_date ?? ""}`}
         onClick={() => router.push("/morpho")}
+      />
+    </HelpWrap>
+  )
+}
+
+function LocalLlmPill() {
+  const router = useRouter()
+  const [local, setLocal] = useState<"ok" | "off" | "load">("load")
+  const [host, setHost] = useState("Ollama")
+
+  useEffect(() => {
+    let cancelled = false
+    const ping = async () => {
+      try {
+        const response = await fetch("/api/brain/status", { cache: "no-store" })
+        const payload = (await response.json()) as {
+          ollama?: { ok?: boolean; host?: string }
+          local?: boolean
+          localHost?: string
+        }
+        if (cancelled) return
+        const ok = Boolean(payload.ollama?.ok || payload.local)
+        setLocal(ok ? "ok" : "off")
+        const host = payload.ollama?.host || payload.localHost
+        if (host) setHost(host.replace(/^https?:\/\//, ""))
+      } catch {
+        if (!cancelled) setLocal("off")
+      }
+    }
+    void ping()
+    const id = window.setInterval(() => void ping(), 30_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [])
+
+  return (
+    <HelpWrap
+      help={{
+        title: "LLM local",
+        body: "Ollama (ou llama-server) sur cette machine. Brain l’utilise par défaut. Un 404 Ollama ne bascule jamais sur Gemini / OpenAI. Sur Netlify la pastille reste éteinte.",
+      }}
+    >
+      <Pill
+        label="LLM local"
+        detail={local === "ok" ? host : "off"}
+        tone={local === "load" ? "load" : local === "ok" ? "ok" : "off"}
+        title={local === "ok" ? `Joignable · ${host}` : "Injoignable — pas de bascule cloud"}
+        onClick={() => router.push("/brain")}
       />
     </HelpWrap>
   )
@@ -507,6 +559,14 @@ const NAV_ITEMS = [
     help: {
       title: "Harmo",
       body: "Étude harmonique des séries de tirages : mélange réseau / mécanique / acoustique, FFT, STFT, Hilbert. Unités en cycles/tirage, pas des hertz. Décrit le tracé, pas le prochain tirage.",
+    },
+  },
+  {
+    href: "/brain",
+    label: "Brain",
+    help: {
+      title: "Brain",
+      body: "Catalog nommé (@rsi, @ete…), journal daté, mémoire locale et agent manuel. LLM local (Ollama) par défaut ; Gemini / OpenAI seulement si tu escalades. L’onglet IA reste la lecture de captures.",
     },
   },
   {
