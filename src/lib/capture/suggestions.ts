@@ -48,6 +48,12 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
     ]
   }
   if (lab === "jeux") {
+    if (tab === "histoJeux") {
+      return [
+        "Décris le journal : tickets en attente vs tranchés, rangs obtenus, correspondances. Ce n’est pas un pronostic.",
+        "La loi officielle P(gain) est identique pour toute grille 5+2. Un taux observé sur un petit journal ne dit rien du prochain tirage.",
+      ]
+    }
     return [
       "Combien de grilles restent, et quelles restrictions (somme, forme, décennies) ont le plus réduit l’univers ?",
       "Parmi les propositions de Combinaisons, combien survivent ici ? Sépare décompte et masse pondérée.",

@@ -27,15 +27,33 @@ def _as_date(value: Any) -> date | None:
     return None
 
 
+def next_play_date(now: datetime | None = None) -> date:
+    """Prochain tirage encore jouable (mardi/vendredi, avant 20h45 Paris)."""
+    current = _paris_now(now)
+    today = current.date()
+    still_open = current.weekday() in DRAW_WEEKDAYS and (
+        current.hour,
+        current.minute,
+    ) < (20, 45)
+    if still_open:
+        return today
+    cursor = today + timedelta(days=1)
+    while cursor.weekday() not in DRAW_WEEKDAYS:
+        cursor += timedelta(days=1)
+    return cursor
+
+
+def _paris_now(now: datetime | None = None) -> datetime:
+    if now is None:
+        return datetime.now(PARIS)
+    if now.tzinfo is None:
+        return now.replace(tzinfo=PARIS)
+    return now.astimezone(PARIS)
+
+
 def expected_last_draw_date(now: datetime | None = None) -> date:
     """Dernier mardi/vendredi dont l'archive FDJ est censée être publiée (~21h45 Paris)."""
-    if now is None:
-        current = datetime.now(PARIS)
-    elif now.tzinfo is None:
-        current = now.replace(tzinfo=PARIS)
-    else:
-        current = now.astimezone(PARIS)
-
+    current = _paris_now(now)
     today = current.date()
     published_today = current.weekday() in DRAW_WEEKDAYS and (
         current.hour,

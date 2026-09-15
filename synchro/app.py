@@ -74,9 +74,18 @@ from synchro.morpho.vlm import contrastive_query, draft_rule
 from synchro.morpho.vlm import ensure_loaded as vlm_ensure_loaded
 from synchro.morpho.vlm import sequence_query
 from synchro.morpho.vlm import status as vlm_status
+from synchro.plays import (
+    MAX_COPIES,
+    decorate_play,
+    normalize_copies,
+    normalize_source,
+    parse_play_date,
+    summarize_plays,
+    validate_play_grid,
+)
 from synchro.ranks import evaluate_grid, validate_grid
 from synchro.stats import compute_stats
-from synchro.sync import ensure_draws, freshness, sync_draws
+from synchro.sync import ensure_draws, freshness, next_play_date, sync_draws
 
 _LOCAL_SHUTDOWN_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
 
@@ -89,6 +98,38 @@ class GridIn(BaseModel):
 
 class GridLabelIn(BaseModel):
     label: str = Field(max_length=200)
+
+
+class PlayItemIn(BaseModel):
+    label: str = "Grille"
+    numbers: list[int] = Field(min_length=5, max_length=5)
+    stars: list[int] = Field(min_length=2, max_length=2)
+    copies: int = Field(default=1, ge=1, le=MAX_COPIES)
+    note: str | None = None
+    source: str = "manuel"
+    grid_id: int | None = None
+
+
+class PlayIn(BaseModel):
+    play_date: str
+    label: str = "Grille"
+    numbers: list[int] | None = Field(default=None, min_length=5, max_length=5)
+    stars: list[int] | None = Field(default=None, min_length=2, max_length=2)
+    copies: int = Field(default=1, ge=1, le=MAX_COPIES)
+    note: str | None = None
+    source: str = "manuel"
+    grid_id: int | None = None
+    items: list[PlayItemIn] | None = None
+
+
+class PlayPatch(BaseModel):
+    label: str | None = None
+    numbers: list[int] | None = Field(default=None, min_length=5, max_length=5)
+    stars: list[int] | None = Field(default=None, min_length=2, max_length=2)
+    play_date: str | None = None
+    source: str | None = None
+    note: str | None = None
+    copies: int | None = Field(default=None, ge=1, le=MAX_COPIES)
 
 
 class CheckIn(BaseModel):
@@ -918,7 +959,10 @@ def create_app() -> FastAPI:
 
     @app.post("/api/grids")
     def create_grid(payload: GridIn) -> dict[str, Any]:
-        validate_grid(payload.numbers, payload.stars)
+        try:
+            validate_grid(payload.numbers, payload.stars)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         row = db.insert_grid(
             payload.label,
             sorted(payload.numbers),
@@ -937,6 +981,139 @@ def create_app() -> FastAPI:
     def remove_grid(grid_id: int) -> dict[str, bool]:
         if not db.delete_grid(grid_id):
             raise HTTPException(404, "Grille introuvable")
+        return {"ok": True}
+
+    def _decorate_plays(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        dates = []
+        for row in rows:
+            try:
+                dates.append(parse_play_date(row.get("play_date")))
+            except ValueError:
+                continue
+        draws = db.draws_by_dates(dates)
+        out = []
+        for row in rows:
+            payload = db.serialize_row(row)
+            day = None
+            try:
+                day = parse_play_date(row.get("play_date"))
+            except ValueError:
+                pass
+            draw = draws.get(day) if day else None
+            out.append(decorate_play(payload, draw))
+        return out
+
+    def _play_items_from_payload(payload: PlayIn) -> list[PlayItemIn]:
+        if payload.items:
+            return payload.items
+        if payload.numbers is None or payload.stars is None:
+            raise HTTPException(400, "Il faut 5 numéros et 2 étoiles.")
+        return [
+            PlayItemIn(
+                label=payload.label,
+                numbers=payload.numbers,
+                stars=payload.stars,
+                copies=payload.copies,
+                note=payload.note,
+                source=payload.source,
+                grid_id=payload.grid_id,
+            )
+        ]
+
+    def _rows_from_items(play_date: date, items: list[PlayItemIn]) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for item in items:
+            try:
+                numbers, stars = validate_play_grid(item.numbers, item.stars)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            rows.append(
+                {
+                    "label": item.label.strip() or "Grille",
+                    "numbers": numbers,
+                    "stars": stars,
+                    "play_date": play_date,
+                    "source": normalize_source(item.source),
+                    "note": (item.note or "").strip() or None,
+                    "copies": normalize_copies(item.copies),
+                    "grid_id": item.grid_id,
+                }
+            )
+        return rows
+
+    @app.get("/api/plays")
+    def plays() -> dict[str, Any]:
+        try:
+            rows = db.list_plays()
+            items = _decorate_plays(rows)
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return {
+            "items": [_json(item) for item in items],
+            "stats": summarize_plays(items),
+            "next_play_date": next_play_date().isoformat(),
+        }
+
+    @app.post("/api/plays")
+    def create_plays(payload: PlayIn) -> dict[str, Any]:
+        try:
+            play_date = parse_play_date(payload.play_date)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        rows = _rows_from_items(play_date, _play_items_from_payload(payload))
+        try:
+            stored = db.insert_plays(rows)
+            items = _decorate_plays(stored)
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return {
+            "ok": True,
+            "items": [_json(item) for item in items],
+            "item": _json(items[0]) if items else None,
+            "next_play_date": next_play_date().isoformat(),
+        }
+
+    @app.patch("/api/plays/{play_id}")
+    def patch_play(play_id: int, payload: PlayPatch) -> dict[str, Any]:
+        fields: dict[str, Any] = {}
+        if payload.label is not None:
+            fields["label"] = payload.label.strip() or "Grille"
+        if payload.note is not None:
+            fields["note"] = payload.note.strip() or None
+        if payload.source is not None:
+            fields["source"] = normalize_source(payload.source)
+        if payload.copies is not None:
+            fields["copies"] = normalize_copies(payload.copies)
+        if payload.play_date is not None:
+            try:
+                fields["play_date"] = parse_play_date(payload.play_date)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+        if payload.numbers is not None or payload.stars is not None:
+            current = db.get_play(play_id)
+            if not current:
+                raise HTTPException(404, "Grille jouée introuvable")
+            numbers = payload.numbers if payload.numbers is not None else list(current["numbers"])
+            stars = payload.stars if payload.stars is not None else list(current["stars"])
+            try:
+                numbers, stars = validate_play_grid(numbers, stars)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            fields["numbers"] = numbers
+            fields["stars"] = stars
+        try:
+            row = db.update_play(play_id, fields)
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        if not row:
+            raise HTTPException(404, "Grille jouée introuvable")
+        item = _decorate_plays([row])[0]
+        return _json(item)
+
+    @app.delete("/api/plays/{play_id}")
+    def remove_play(play_id: int) -> dict[str, bool]:
+        if not db.delete_play(play_id):
+            raise HTTPException(404, "Grille jouée introuvable")
         return {"ok": True}
 
     @app.get("/api/brain/status")

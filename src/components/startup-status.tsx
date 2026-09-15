@@ -567,7 +567,7 @@ const NAV_ITEMS = [
     label: "Jeux",
     help: {
       title: "Jeux",
-      body: "Compteur combinatoire : somme, parité, étendue, consécutifs, décennies et chances. Intersection avec les propositions de Combinaisons. Ce n’est pas un pronostic.",
+      body: "Solutions : compteur combinatoire (somme, parité, forme, chances). histoJeux : journal Neon des grilles jouées, relues contre le tirage FDJ. Ce n’est pas un pronostic.",
     },
   },
   {

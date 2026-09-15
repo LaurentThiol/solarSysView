@@ -72,6 +72,7 @@ import {
   type PoolResult,
   type StoredSpec,
 } from "@/lib/jeux"
+import { formatPlayDate, nextPlayDate, persistPlays } from "@/lib/plays"
 import { useDraws } from "@/lib/use-draws"
 import { cn } from "@/lib/utils"
 
@@ -135,6 +136,10 @@ const HELP = {
   intersection: {
     title: "Intersection Combinaisons",
     body: "Parmi les grilles proposées dans Combinaisons (session), combien respectent les restrictions d’ici. Ce n’est pas un score de gain : une grille survit ou elle sort.",
+  },
+  consign: {
+    title: "Consigner",
+    body: "Envoie cette grille dans histoJeux pour le prochain tirage encore ouvert. Le rang se calcule après synchro FDJ.",
   },
 } satisfies Record<string, HelpCopy>
 
@@ -384,6 +389,32 @@ function gridLabel(grid: CombinationGrid) {
   return `${grid.numbers.join(" ")} + ${grid.stars.join(" ")}`
 }
 
+function GridLine({
+  grid,
+  onOpen,
+  onConsign,
+}: {
+  grid: CombinationGrid
+  onOpen: () => void
+  onConsign: () => void
+}) {
+  return (
+    <li className="flex flex-col gap-2 rounded-lg border border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+      <DrawBalls numbers={grid.numbers} stars={grid.stars} />
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onOpen}>
+          Combinaisons
+        </Button>
+        <HelpWrap help={HELP.consign}>
+          <Button type="button" variant="outline" size="sm" onClick={onConsign}>
+            Consigner
+          </Button>
+        </HelpWrap>
+      </div>
+    </li>
+  )
+}
+
 export function JeuxPanel() {
   const router = useRouter()
   const { draws } = useDraws("all")
@@ -392,6 +423,7 @@ export function JeuxPanel() {
   const [sampleSeed, setSampleSeed] = useState(1)
   const [sampleOn, setSampleOn] = useState(false)
   const [proposals, setProposals] = useState<CombinationGrid[]>([])
+  const [consignNote, setConsignNote] = useState<string | null>(null)
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -607,6 +639,21 @@ export function JeuxPanel() {
       /* ignore */
     }
     router.push("/combinaisons")
+  }
+
+  async function consignGrid(grid: CombinationGrid) {
+    const playDate = nextPlayDate()
+    const result = await persistPlays({
+      play_date: playDate,
+      items: [{ ...grid, label: "Jeux", source: "jeux" }],
+    })
+    if (result.items.length === 0) {
+      setConsignNote(result.error)
+      return
+    }
+    setConsignNote(
+      `Consigné pour le ${formatPlayDate(playDate)}. Voir histoJeux.`
+    )
   }
 
   const solutions = listedGrids.length > 0 ? listedGrids : samples
@@ -1021,16 +1068,12 @@ export function JeuxPanel() {
           ) : game.grids <= LIST_LIMIT ? (
             <ul className="flex flex-col gap-2">
               {solutions.map((grid) => (
-                <li key={gridLabel(grid)}>
-                  <button
-                    type="button"
-                    onClick={() => sendGrid(grid)}
-                    className="flex w-full flex-col gap-2 rounded-lg border border-border px-3 py-2 text-left hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <DrawBalls numbers={grid.numbers} stars={grid.stars} />
-                    <span className="text-xs text-muted-foreground">Ouvrir dans Combinaisons</span>
-                  </button>
-                </li>
+                <GridLine
+                  key={gridLabel(grid)}
+                  grid={grid}
+                  onOpen={() => sendGrid(grid)}
+                  onConsign={() => void consignGrid(grid)}
+                />
               ))}
             </ul>
           ) : (
@@ -1044,16 +1087,12 @@ export function JeuxPanel() {
               {sampleOn && samples.length > 0 ? (
               <ul className="flex flex-col gap-2">
                 {samples.map((grid) => (
-                  <li key={gridLabel(grid)}>
-                    <button
-                      type="button"
-                      onClick={() => sendGrid(grid)}
-                      className="flex w-full flex-col gap-2 rounded-lg border border-border px-3 py-2 text-left hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <DrawBalls numbers={grid.numbers} stars={grid.stars} />
-                      <span className="text-xs text-muted-foreground">Ouvrir dans Combinaisons</span>
-                    </button>
-                  </li>
+                  <GridLine
+                    key={gridLabel(grid)}
+                    grid={grid}
+                    onOpen={() => sendGrid(grid)}
+                    onConsign={() => void consignGrid(grid)}
+                  />
                 ))}
               </ul>
               ) : null}
@@ -1080,8 +1119,17 @@ export function JeuxPanel() {
           <Disclaimer>
             Univers : {formatCount(TOTAL_GRIDS)} grilles. Part restante :{" "}
             {formatPct(game.fraction, 4)}. Masse {formatMass(game.mass)} (poids des
-            chances). Cliquez une grille pour l’envoyer au composeur.
+            chances). Cliquez une grille pour l’envoyer au composeur, ou
+            consignez-la dans histoJeux.
           </Disclaimer>
+          {consignNote ? (
+            <p className="text-sm text-muted-foreground">
+              {consignNote}{" "}
+              <Link className="underline underline-offset-2 hover:text-foreground" href="/jeux?tab=histoJeux">
+                Ouvrir histoJeux
+              </Link>
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -1115,16 +1163,12 @@ export function JeuxPanel() {
               {intersection.survivors.length > 0 ? (
                 <ul className="flex flex-col gap-2">
                   {intersection.survivors.map((grid) => (
-                    <li key={gridLabel(grid)}>
-                      <button
-                        type="button"
-                        onClick={() => sendGrid(grid)}
-                        className="flex w-full flex-col gap-2 rounded-lg border border-border px-3 py-2 text-left hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <DrawBalls numbers={grid.numbers} stars={grid.stars} />
-                        <span className="text-xs text-muted-foreground">Ouvrir dans Combinaisons</span>
-                      </button>
-                    </li>
+                    <GridLine
+                      key={gridLabel(grid)}
+                      grid={grid}
+                      onOpen={() => sendGrid(grid)}
+                      onConsign={() => void consignGrid(grid)}
+                    />
                   ))}
                 </ul>
               ) : (

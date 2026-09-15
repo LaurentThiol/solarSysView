@@ -29,12 +29,17 @@ export function DrawBalls({
   numbers,
   stars,
   highlights = [],
+  highlightNumbers,
+  highlightStars,
 }: {
   numbers: number[]
   stars: number[]
   highlights?: number[]
+  highlightNumbers?: number[]
+  highlightStars?: number[]
 }) {
-  const wanted = new Set(highlights)
+  const numberHits = new Set(highlightNumbers ?? highlights)
+  const starHits = new Set(highlightStars ?? highlights)
   return (
     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
       {numbers.map((n) => (
@@ -42,7 +47,7 @@ export function DrawBalls({
           key={`n-${n}`}
           value={n}
           variant="number"
-          highlight={wanted.has(n)}
+          highlight={numberHits.has(n)}
         />
       ))}
       <span className="mx-1 text-muted-foreground" aria-hidden>
@@ -53,7 +58,7 @@ export function DrawBalls({
           key={`s-${n}`}
           value={n}
           variant="star"
-          highlight={wanted.has(n)}
+          highlight={starHits.has(n)}
         />
       ))}
     </div>

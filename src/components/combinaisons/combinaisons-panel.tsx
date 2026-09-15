@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { Pencil } from "lucide-react"
 
@@ -71,6 +72,13 @@ import {
   type SumBoundMode,
 } from "@/lib/combinations"
 import { HANDOFF_KEY } from "@/lib/jeux"
+import {
+  formatPlayDate,
+  nextPlayDate,
+  persistPlays,
+  playDateOptions,
+  type PlaySource,
+} from "@/lib/plays"
 import {
   expectedNumberHits,
   expectedStarHits,
@@ -251,7 +259,23 @@ const HELP = {
   },
   save: {
     title: "Enregistrer",
-    body: "Envoie la grille 5+2 courante. Inactif tant que la sélection est incomplète.",
+    body: "Envoie la grille 5+2 courante comme modèle réutilisable (Neon si l’API répond, sinon session). Ce n’est pas encore un ticket joué.",
+  },
+  consign: {
+    title: "Consigner",
+    body: "Copie la grille dans histoJeux pour le tirage visé (mardi/vendredi). Après synchro FDJ, le rang s’affiche. Distinct de Enregistrer, qui garde un modèle.",
+  },
+  consignBatch: {
+    title: "Consigner les propositions",
+    body: "Envoie la salve actuelle (jusqu’à 20) dans histoJeux, même date de tirage. Utile pour rejouer une salve entière et relire les rangs plus tard.",
+  },
+  playDate: {
+    title: "Tirage visé",
+    body: "Date du tirage pour lequel on consigne. Défaut : prochain mardi/vendredi encore ouvert (avant 20h45 Paris).",
+  },
+  rename: {
+    title: "Renommer",
+    body: "Change le libellé du modèle, sans toucher aux boules.",
   },
   rename: {
     title: "Renommer",
@@ -490,12 +514,14 @@ function SavedGridItem({
   onLoad,
   onRemove,
   onRename,
+  onConsign,
 }: {
   item: SavedGrid
   rate: { p: number; wins: number; n: number } | null
   onLoad: () => void
   onRemove: () => void
   onRename: (label: string) => Promise<boolean>
+  onConsign: () => void
 }) {
   const displayLabel = item.label || DEFAULT_GRID_LABEL
   const [editing, setEditing] = useState(false)
@@ -597,6 +623,11 @@ function SavedGridItem({
                 Renommer
               </Button>
             </HelpWrap>
+            <HelpWrap help={HELP.consign}>
+              <Button type="button" variant="outline" size="sm" onClick={onConsign}>
+                Consigner
+              </Button>
+            </HelpWrap>
             <HelpWrap help={HELP.load}>
               <Button type="button" variant="outline" size="sm" onClick={onLoad}>
                 Recharger
@@ -646,6 +677,8 @@ export function CombinaisonsPanel() {
   )
   const [gridsError, setGridsError] = useState<string | null>(null)
   const [officialTableOpen, setOfficialTableOpen] = useState(true)
+  const [playDate, setPlayDate] = useState(nextPlayDate)
+  const [consignNote, setConsignNote] = useState<string | null>(null)
 
   const archive = useMemo(
     () => [...draws].sort((a, b) => a.date.localeCompare(b.date)),
@@ -707,6 +740,7 @@ export function CombinaisonsPanel() {
       }),
     [sumMinMode, sumMinInput, sumMaxMode, sumMaxInput, work]
   )
+  const playDates = useMemo(() => playDateOptions(), [])
   const requestedCount = useMemo(() => {
     const parsed = Number.parseInt(proposeCount, 10)
     if (!Number.isFinite(parsed)) return 5
@@ -965,6 +999,40 @@ export function CombinaisonsPanel() {
     const next = saved.filter((row) => row.id !== item.id)
     setSaved(next)
     writeSessionGrids(next)
+  }
+
+  async function consignGrid(item: CombinationGrid, labelText = label, origin: PlaySource = "combinaisons") {
+    const result = await persistPlays({
+      play_date: playDate,
+      items: [{ ...item, label: labelText, source: origin }],
+      preferSession: false,
+    })
+    if (result.items.length === 0) {
+      setConsignNote(result.error)
+      return
+    }
+    setConsignNote(
+      `Consigné dans histoJeux pour le ${formatPlayDate(playDate)}${result.source === "session" ? " (session)" : ""}.`
+    )
+  }
+
+  async function consignProposals() {
+    if (proposals.length === 0) return
+    const result = await persistPlays({
+      play_date: playDate,
+      items: proposals.map((item, index) => ({
+        ...item,
+        label: `${label.trim() || "Grille"} ${index + 1}`,
+        source: "combinaisons" as const,
+      })),
+    })
+    if (result.items.length === 0) {
+      setConsignNote(result.error)
+      return
+    }
+    setConsignNote(
+      `${result.items.length} proposition${result.items.length > 1 ? "s" : ""} consignées pour le ${formatPlayDate(playDate)}.`
+    )
   }
 
   if (loading) {
@@ -1328,6 +1396,16 @@ export function CombinaisonsPanel() {
               Aucune proposition pour l’instant.
             </p>
           ) : (
+            <>
+            <HelpWrap help={HELP.consignBatch}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void consignProposals()}
+              >
+                Consigner les {proposalRows.length} propositions
+              </Button>
+            </HelpWrap>
             <ul className="flex flex-col gap-3">
               {proposalRows.map((row) => (
                 <li key={`${row.grid.numbers.join("-")}-${row.grid.stars.join("-")}`}>
@@ -1350,6 +1428,7 @@ export function CombinaisonsPanel() {
                 </li>
               ))}
             </ul>
+            </>
           )}
         </CardContent>
       </Card>
@@ -1370,12 +1449,47 @@ export function CombinaisonsPanel() {
                 maxLength={MAX_GRID_LABEL}
               />
             </LabelHelp>
+            <LabelHelp label="Tirage visé" help={HELP.playDate}>
+              <Select value={playDate} onValueChange={(value) => value && setPlayDate(value)}>
+                <SelectTrigger className="w-full sm:w-56" aria-label="Date du tirage à consigner">
+                  <span className="flex flex-1 text-left">{formatPlayDate(playDate)}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  {[...playDates.upcoming, ...playDates.recent.filter((day) => !playDates.upcoming.includes(day))].map(
+                    (day) => (
+                      <SelectItem key={day} value={day}>
+                        {formatPlayDate(day)}
+                        {day === playDates.next ? " · prochain" : ""}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
+            </LabelHelp>
             <HelpWrap help={HELP.save}>
               <Button type="button" onClick={() => void saveGrid()} disabled={!complete}>
                 Enregistrer
               </Button>
             </HelpWrap>
+            <HelpWrap help={HELP.consign}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void consignGrid(grid)}
+                disabled={!complete}
+              >
+                Consigner
+              </Button>
+            </HelpWrap>
           </div>
+          {consignNote ? (
+            <p className="text-sm text-muted-foreground">
+              {consignNote}{" "}
+              <Link className="underline underline-offset-2 hover:text-foreground" href="/jeux?tab=histoJeux">
+                Ouvrir histoJeux
+              </Link>
+            </p>
+          ) : null}
           {gridsError ? (
             <p className="text-xs text-muted-foreground">
               {gridsError}
@@ -1398,6 +1512,7 @@ export function CombinaisonsPanel() {
                     onLoad={() => loadSavedGrid(item)}
                     onRemove={() => void removeGrid(item)}
                     onRename={(nextLabel) => renameGrid(item, nextLabel)}
+                    onConsign={() => void consignGrid(item, item.label || "Grille")}
                   />
                 )
               })}
