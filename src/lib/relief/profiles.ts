@@ -1,4 +1,21 @@
-import type { OffsetMode, ReliefLayout } from "./layout"
+import { clamp01, type OffsetMode, type ReliefLayout } from "./layout"
+
+/** Valeur initiale du curseur « Écarter les tirages ». */
+export const DEFAULT_FUSION = 0.42
+
+/** Pas le long du temps. 0 = serré, 1 = chaque tirage se détache. */
+export function profileTimeStep(fusion: number) {
+  const f = clamp01(fusion)
+  return 0.42 + 1.26 * f
+}
+
+/** Écart des origines (hex / or / Hilbert / centroïde). */
+export function originSpread(fusion: number) {
+  const f = clamp01(fusion)
+  return 0.55 + 1.05 * f
+}
+
+const COMB_STEP = 0.28
 
 export const RANK_LABELS = ["n1", "n2", "n3", "n4", "n5"] as const
 export type RankIndex = 0 | 1 | 2 | 3 | 4
@@ -50,6 +67,8 @@ export type ProfileMap = {
   profiles: DrawProfile[]
   connected: boolean
   yWorld: number
+  fusion: number
+  mode: OffsetMode
 }
 
 export function ranksOf(numbers: number[]): number[] {
@@ -75,8 +94,10 @@ export function valueHeight(n: number, pool = 50) {
 export function buildProfiles(layout: ReliefLayout): ProfileMap {
   const connected = axisConnected(layout.mode)
   const count = layout.anchors.length
-  const rankStep = connected ? 1 : Math.max(0.28, layout.glyphScale * 2.4)
-  const timeStep = layout.mode === "superpose" ? 0 : 0.72 + 0.55 * layout.fusion
+  const fusion = clamp01(layout.fusion)
+  const rankStep = connected ? 1 : COMB_STEP
+  const timeStep = layout.mode === "superpose" ? 0 : profileTimeStep(fusion)
+  const spread = connected ? 1 : originSpread(fusion)
   const latest = count ? count - 1 : -1
   const profiles: DrawProfile[] = layout.anchors.map((anchor) => {
     const ranks = ranksOf(anchor.numbers)
@@ -86,15 +107,16 @@ export function buildProfiles(layout: ReliefLayout): ProfileMap {
       ? layout.mode === "superpose"
         ? 0
         : anchor.drawIndex * timeStep
-      : anchor.z
+      : anchor.z * spread
+    const ox = connected ? 0 : anchor.x * spread
     const points: ProfilePoint[] = ranks.map((n, rank) => {
       const r = rank as RankIndex
-      const x = connected ? r : anchor.x + (r - 2) * rankStep
+      const x = connected ? r : ox + (r - 2) * rankStep
       return { rank: r, n, x, y: valueHeight(n), z }
     })
     const starPoints: StarPoint[] = starVals.map((n, i) => {
       const e = (i === 0 ? 1 : 2) as 1 | 2
-      const x = connected ? 5.15 + i * 0.55 : anchor.x + 2.15 * rankStep + i * rankStep * 0.45
+      const x = connected ? 5.15 + i * 0.55 : ox + 2.15 * rankStep + i * rankStep * 0.45
       return { e, n, x, y: valueHeight(n), z }
     })
     return {
@@ -110,7 +132,7 @@ export function buildProfiles(layout: ReliefLayout): ProfileMap {
       recency,
     }
   })
-  return { profiles, connected, yWorld: Y_WORLD }
+  return { profiles, connected, yWorld: Y_WORLD, fusion, mode: layout.mode }
 }
 
 export function profileBounds(map: ProfileMap, stars = false) {
@@ -141,6 +163,58 @@ export function profileBounds(map: ProfileMap, stars = false) {
     maxZ: maxZ + padZ,
     maxY,
   }
+}
+
+/**
+ * Cadre de la vue, calé sur le curseur par défaut.
+ * Sans ça, fitScale recadre dès qu’on écarte, et l’écart disparaît à l’écran.
+ */
+export function profileFitBounds(map: ProfileMap, stars = false) {
+  const n = map.profiles.length
+  if (n === 0) return profileBounds(map, stars)
+  if (!map.connected) {
+    const actual = originSpread(map.fusion)
+    const k = originSpread(DEFAULT_FUSION) / (actual > 1e-9 ? actual : 1)
+    const box = profileBounds(map, stars)
+    const midX = (box.minX + box.maxX) / 2
+    const midZ = (box.minZ + box.maxZ) / 2
+    return {
+      minX: midX + (box.minX - midX) * k,
+      maxX: midX + (box.maxX - midX) * k,
+      minZ: midZ + (box.minZ - midZ) * k,
+      maxZ: midZ + (box.maxZ - midZ) * k,
+      maxY: box.maxY,
+    }
+  }
+  const step = map.mode === "superpose" ? 0 : profileTimeStep(DEFAULT_FUSION)
+  const z1 = Math.max(0, n - 1) * step
+  const x1 = stars ? 5.7 : 4
+  const padX = 0.85
+  const padZ = 0.9
+  return {
+    minX: -padX,
+    maxX: x1 + padX,
+    minZ: -padZ,
+    maxZ: z1 + padZ,
+    maxY: map.yWorld,
+  }
+}
+
+export function profilePaintKey(map: ProfileMap | null, stars = false) {
+  if (!map || map.profiles.length === 0) return "empty"
+  const first = map.profiles[0].points[0]
+  const last = map.profiles[map.profiles.length - 1].points[0]
+  const n5 = map.profiles[0].points[4]
+  return [
+    map.mode,
+    map.fusion.toFixed(3),
+    map.profiles.length,
+    stars ? 1 : 0,
+    first?.z.toFixed(4) ?? "0",
+    last?.z.toFixed(4) ?? "0",
+    n5?.x.toFixed(3) ?? "0",
+    last?.n ?? 0,
+  ].join("|")
 }
 
 export function rgbCssOf(rgb: [number, number, number], alpha = 1) {

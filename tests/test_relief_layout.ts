@@ -15,9 +15,27 @@ import {
 } from "../src/lib/relief/layout"
 import { heightColor } from "../src/lib/relief/color"
 import { rasterizePeaks } from "../src/lib/relief/heightmap"
-import { clampCamera, DEFAULT_CAMERA, ZOOM_MAX, fitScale, focusPoint, homeZoom, projectPoint, zoomToward, autoExaggeration } from "../src/lib/relief/project"
+import {
+  autoExaggeration,
+  clampCamera,
+  DEFAULT_CAMERA,
+  ZOOM_MAX,
+  fitScale,
+  focusPoint,
+  homeZoom,
+  projectPoint,
+  zoomToward,
+} from "../src/lib/relief/project"
 import { buildStampMap } from "../src/lib/relief/stamps"
-import { axisConnected, buildProfiles, profileBounds, ranksOf, rankTimeLinks } from "../src/lib/relief/profiles"
+import {
+  axisConnected,
+  buildProfiles,
+  profileBounds,
+  profileFitBounds,
+  profilePaintKey,
+  ranksOf,
+  rankTimeLinks,
+} from "../src/lib/relief/profiles"
 
 function draw(i: number): Draw {
   const date = new Date(Date.UTC(2024, 0, 1 + i)).toISOString().slice(0, 10)
@@ -259,6 +277,59 @@ test("rank-time links join the same order statistic across consecutive draws", (
     assert.ok(link.bz > link.az)
     assert.equal(link.toIndex, link.fromIndex + 1)
   }
+})
+
+function gapZ(map: ReturnType<typeof buildProfiles>) {
+  return map.profiles[1].points[0].z - map.profiles[0].points[0].z
+}
+
+test("écarter les tirages spreads consecutive profiles along time", () => {
+  const packed = buildProfiles(
+    layoutDraws(draws(20), { mode: "temps", height: "valeur", fusion: 0, stars: false })
+  )
+  const spread = buildProfiles(
+    layoutDraws(draws(20), { mode: "temps", height: "valeur", fusion: 1, stars: false })
+  )
+  assert.ok(gapZ(spread) > gapZ(packed) * 2)
+  assert.notEqual(profilePaintKey(packed), profilePaintKey(spread))
+})
+
+test("écarter stays visible because the camera frame does not follow the gap", () => {
+  const packed = buildProfiles(
+    layoutDraws(draws(20), { mode: "temps", height: "valeur", fusion: 0, stars: false })
+  )
+  const spread = buildProfiles(
+    layoutDraws(draws(20), { mode: "temps", height: "valeur", fusion: 1, stars: false })
+  )
+  const fitP = profileFitBounds(packed, false)
+  const fitS = profileFitBounds(spread, false)
+  assert.ok(Math.abs(fitP.maxZ - fitP.minZ - (fitS.maxZ - fitS.minZ)) < 1e-9)
+  const scaleP = fitScale(fitP.minX, fitP.maxX, fitP.minZ, fitP.maxZ, 800, 500)
+  const scaleS = fitScale(fitS.minX, fitS.maxX, fitS.minZ, fitS.maxZ, 800, 500)
+  assert.ok(Math.abs(scaleP - scaleS) < 1e-9)
+  assert.ok(gapZ(spread) * scaleS > gapZ(packed) * scaleP * 2)
+
+  const actualP = profileBounds(packed, false)
+  const actualS = profileBounds(spread, false)
+  const naiveP = fitScale(actualP.minX, actualP.maxX, actualP.minZ, actualP.maxZ, 800, 500)
+  const naiveS = fitScale(actualS.minX, actualS.maxX, actualS.minZ, actualS.maxZ, 800, 500)
+  const naiveRatio = (gapZ(spread) * naiveS) / (gapZ(packed) * naiveP)
+  assert.ok(naiveRatio < 1.25, `auto-fit on actual bounds still hides the slider (${naiveRatio})`)
+})
+
+test("écarter spreads hex combs on the lattice", () => {
+  const packed = buildProfiles(
+    layoutDraws(draws(20), { mode: "hex", height: "valeur", fusion: 0, stars: false })
+  )
+  const spread = buildProfiles(
+    layoutDraws(draws(20), { mode: "hex", height: "valeur", fusion: 1, stars: false })
+  )
+  const dist = (map: ReturnType<typeof buildProfiles>) =>
+    Math.hypot(
+      map.profiles[1].points[2].x - map.profiles[0].points[2].x,
+      map.profiles[1].points[2].z - map.profiles[0].points[2].z
+    )
+  assert.ok(dist(spread) > dist(packed) * 1.4)
 })
 
 test("dense samples prefer point markers, balls stay larger", () => {

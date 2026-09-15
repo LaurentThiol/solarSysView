@@ -9,7 +9,8 @@ import {
   RANK_RGB,
   STAR_RGB,
   distToSegment,
-  profileBounds,
+  profileFitBounds,
+  profilePaintKey,
   rankTimeLinks,
   rgbCssOf,
   type DrawProfile,
@@ -362,6 +363,7 @@ function paintScene(
     (cam.panY ?? 0).toFixed(1),
     map?.profiles.length ?? 0,
     map?.connected ? 1 : 0,
+    profilePaintKey(map, stars),
     style,
     hoverOwner ?? -1,
     yScale.toFixed(3),
@@ -392,7 +394,7 @@ function paintScene(
       canvas.dataset.relief = `${cssW}x${cssH}`
       return
     }
-    const box = profileBounds(map, stars)
+    const box = profileFitBounds(map, stars)
     const scale = fitScale(box.minX, box.maxX, box.minZ, box.maxZ, cssW, cssH)
     const cx = cssW * 0.5
     const cy = cssH * 0.58

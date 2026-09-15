@@ -30,6 +30,7 @@ import {
   STYLE_LABELS,
   VIEW_STYLES,
   buildProfiles,
+  DEFAULT_FUSION,
   homeCamera,
   layoutDraws,
   layoutNote,
@@ -51,7 +52,7 @@ export function ReliefLab() {
   const [offset, setOffset] = useState<OffsetMode>("temps")
   const [style, setStyle] = useState<ViewStyle>("scene")
   const [marker, setMarker] = useState<MarkerStyle>("boule")
-  const [fusion, setFusion] = useState(0.42)
+  const [fusion, setFusion] = useState(DEFAULT_FUSION)
   const [yScale, setYScale] = useState(1.15)
   const [stars, setStars] = useState(false)
   const [labels, setLabels] = useState(true)
@@ -254,12 +255,16 @@ export function ReliefLab() {
           </LabelHelp>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-          <label className="flex min-w-56 flex-1 flex-col gap-1 text-xs text-muted-foreground">
+          <label
+            className={`flex min-w-56 flex-1 flex-col gap-1 text-xs text-muted-foreground${
+              offset === "superpose" ? " opacity-50" : ""
+            }`}
+          >
             <span className="inline-flex items-center gap-1">
               Écarter les tirages
               <HelpTip
                 title="Écarter"
-                body="Espace entre les lignes. Bas : les profils se serrent. Haut : chaque tirage se détache. Ils ne fusionnent plus en collines."
+                body="Espace entre les lignes, à l’écran. Bas : les profils se serrent. Haut : chaque tirage se détache. La vue ne recadre pas, donc l’écart se voit. Sans effet en superposé : ils partagent déjà le même axe."
               />
             </span>
             <input
@@ -268,8 +273,10 @@ export function ReliefLab() {
               max={1}
               step={0.01}
               value={fusion}
+              disabled={offset === "superpose"}
               onChange={(event) => setFusion(Number(event.target.value))}
               aria-label="Écarter les tirages"
+              aria-disabled={offset === "superpose"}
               className="accent-primary"
             />
           </label>
