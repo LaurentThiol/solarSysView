@@ -306,6 +306,14 @@ test("fitScale keeps n1→n5 readable on a 200-draw time series", () => {
     500
   )
   assert.ok(Math.abs(compactScale - compactPacked) < 1e-9)
+  const mid = layoutDraws(draws(80), { mode: "temps", height: "valeur", fusion: 0.42, stars: false })
+  const midBox = profileBounds(buildProfiles(mid), false)
+  const midPacked = Math.min(
+    (0.86 * 1000) / (midBox.maxX - midBox.minX),
+    (0.78 * 500) / (midBox.maxZ - midBox.minZ)
+  )
+  const midScale = fitScale(midBox.minX, midBox.maxX, midBox.minZ, midBox.maxZ, 1000, 500)
+  assert.ok(midScale > midPacked * 1.8, `80-draw scale ${midScale} vs packed ${midPacked}`)
 })
 
 test("focusPoint frames the newest slice when time overflows", () => {

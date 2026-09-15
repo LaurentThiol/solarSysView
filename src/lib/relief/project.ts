@@ -50,9 +50,9 @@ export function clampCamera(camera: CameraInput): Camera {
 export function homeZoom(sample: number, style: "scene" | "plan" = "scene"): number {
   const n = Math.max(1, sample)
   let z = 1
-  if (n >= 200) z = 1.38
-  else if (n >= 100) z = 1.22
-  else if (n >= 50) z = 1.08
+  if (n >= 200) z = 1.55
+  else if (n >= 100) z = 1.32
+  else if (n >= 50) z = 1.12
   if (style === "plan") z *= 1.06
   return Math.min(ZOOM_MAX, z)
 }
@@ -120,9 +120,10 @@ export function fitScale(
   const sx = (0.86 * width) / spanX
   const sz = (0.78 * height) / spanZ
   const packed = Math.min(sx, sz)
+  // ~40 tirages en temps : l’axe Z commence à écraser n1→n5. 20 reste packé.
   const aspect = spanZ / spanX
-  if (aspect < 12) return packed
-  const targetZ = Math.min(spanZ, spanX * 7.4)
+  if (aspect < 6.5) return packed
+  const targetZ = Math.min(spanZ, spanX * 6.2)
   const byZ = (0.82 * height) / targetZ
   const byX = (0.62 * width) / spanX
   return Math.min(byX, byZ)
