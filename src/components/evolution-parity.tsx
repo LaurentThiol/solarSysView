@@ -11,6 +11,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { sma } from "@/lib/analysis"
+import { overlayPeriodFor } from "@/lib/draw-overlays"
 import {
   type Draw,
   type ParityChartPoint,
@@ -85,12 +86,6 @@ const SUMMARY_HELP: HelpCopy = {
 type ChartPoint = ParityChartPoint & {
   smaNumbers: number | null
   smaStars: number | null
-}
-
-function smaPeriodFor(length: number) {
-  if (length >= 40) return 10
-  if (length >= 10) return 5
-  return 0
 }
 
 function formatStat(value: number, digits = 1) {
@@ -239,7 +234,7 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
   const [showBand, setShowBand] = useState(false)
 
   const points = useMemo(() => toParityChart(draws), [draws])
-  const smaPeriod = smaPeriodFor(points.length)
+  const smaPeriod = overlayPeriodFor(points.length)
   const numberKey = view === "walk" ? "walkNumbers" : "parityNumbers"
   const starKey = view === "walk" ? "walkStars" : "parityStars"
   const showNumbers = !hidden.numbers

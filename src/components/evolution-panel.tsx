@@ -299,9 +299,9 @@ function EvolutionContent() {
       {lastWindow ? <EvolutionDraws draws={filtered} /> : null}
 
       <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
-        Chaque tirage est indépendant. Les fréquences, la SMA et le cumul
-        pair/impair décrivent la fenêtre choisie, elles ne prédisent pas le
-        prochain tirage.
+        Chaque tirage est indépendant. Les fréquences, la SMA, les bandes de
+        Bollinger et le cumul pair/impair décrivent la fenêtre choisie, elles
+        ne prédisent pas le prochain tirage.
       </p>
     </div>
   )
