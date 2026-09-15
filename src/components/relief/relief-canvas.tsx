@@ -10,6 +10,7 @@ import {
   STAR_RGB,
   distToSegment,
   profileBounds,
+  rankTimeLinks,
   rgbCssOf,
   type DrawProfile,
   type ProfileMap,
@@ -55,6 +56,8 @@ type Scene = {
   hoverOwner: number | null
   labels: boolean
   stars: boolean
+  rankTime: boolean
+  stems: boolean
 }
 
 export function ReliefCanvas({
@@ -68,6 +71,8 @@ export function ReliefCanvas({
   onHover,
   labels,
   stars,
+  rankTime,
+  stems,
 }: {
   map: ProfileMap | null
   style: ViewStyle
@@ -79,6 +84,8 @@ export function ReliefCanvas({
   onHover: (owner: number | null) => void
   labels: boolean
   stars: boolean
+  rankTime: boolean
+  stems: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -87,7 +94,16 @@ export function ReliefCanvas({
   const hitsRef = useRef<Hit[]>([])
   const segsRef = useRef<Seg[]>([])
   const [hint, setHint] = useState<Hover>(null)
-  const sceneRef = useRef<Scene>({ map, style, yScale, hoverOwner, labels, stars })
+  const sceneRef = useRef<Scene>({
+    map,
+    style,
+    yScale,
+    hoverOwner,
+    labels,
+    stars,
+    rankTime,
+    stems,
+  })
   const lastKeyRef = useRef("")
   const home = style === "plan" ? PLAN_CAMERA : DEFAULT_CAMERA
 
@@ -96,8 +112,8 @@ export function ReliefCanvas({
   }, [camera])
 
   useEffect(() => {
-    sceneRef.current = { map, style, yScale, hoverOwner, labels, stars }
-  }, [hoverOwner, labels, map, stars, style, yScale])
+    sceneRef.current = { map, style, yScale, hoverOwner, labels, stars, rankTime, stems }
+  }, [hoverOwner, labels, map, rankTime, stars, stems, style, yScale])
 
   useEffect(() => {
     if (!autoRotate) return
@@ -252,7 +268,10 @@ export function ReliefCanvas({
         }}
       />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-3 text-[11px] text-white/75">
-        <p>Un trait = un tirage · cinq points = n1→n5 · hauteur = valeur 1–50</p>
+        <p>
+          Un trait = un tirage · cinq points = n1→n5 · hauteur = valeur 1–50
+          {rankTime ? " · calque rangs dans le temps" : ""}
+        </p>
         {hint ? <p className="tabular-nums">tirage #{hint.owner + 1}</p> : null}
       </div>
       <div className="pointer-events-none absolute top-3 right-3 flex flex-col items-center gap-1">
@@ -294,7 +313,7 @@ function paintScene(
   const dpr = Math.min(2, typeof window === "undefined" ? 1 : window.devicePixelRatio || 1)
   const bw = Math.max(1, Math.round(cssW * dpr))
   const bh = Math.max(1, Math.round(cssH * dpr))
-  const { map, style, yScale, hoverOwner, labels, stars } = scene
+  const { map, style, yScale, hoverOwner, labels, stars, rankTime, stems } = scene
   const key = [
     cssW,
     cssH,
@@ -308,6 +327,8 @@ function paintScene(
     yScale.toFixed(3),
     labels ? 1 : 0,
     stars ? 1 : 0,
+    rankTime ? 1 : 0,
+    stems ? 1 : 0,
   ].join("|")
   if (
     key === lastKeyRef.current &&
@@ -368,8 +389,11 @@ function paintScene(
     const hits: Hit[] = []
     const segs: Seg[] = []
     const labelAll = labels && map.profiles.length <= 20
+    if (rankTime) {
+      paintRankTime(ctx, map, proj, hoverOwner, segs)
+    }
     for (const profile of ranked) {
-      paintProfile(ctx, profile, proj, hoverOwner, labelAll, stars, hits, segs)
+      paintProfile(ctx, profile, proj, hoverOwner, labelAll, stars, stems, hits, segs)
     }
     hitsRef.current = hits
     segsRef.current = segs
@@ -436,6 +460,37 @@ function paintAxes(
   }
 }
 
+function paintRankTime(
+  ctx: CanvasRenderingContext2D,
+  map: ProfileMap,
+  proj: (x: number, y: number, z: number) => { x: number; y: number },
+  hoverOwner: number | null,
+  segs: Seg[]
+) {
+  const links = rankTimeLinks(map)
+  for (const link of links) {
+    const a = proj(link.ax, link.ay, link.az)
+    const b = proj(link.bx, link.by, link.bz)
+    const hot = hoverOwner === link.fromIndex || hoverOwner === link.toIndex
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.strokeStyle = rgbCssOf(RANK_RGB[link.rank], hot ? 0.72 : 0.32)
+    ctx.lineWidth = hot ? 2.2 : 1.35
+    ctx.setLineDash(hot ? [] : [5, 4])
+    ctx.lineCap = "round"
+    ctx.stroke()
+    ctx.setLineDash([])
+    segs.push({
+      owner: link.toIndex,
+      ax: a.x,
+      ay: a.y,
+      bx: b.x,
+      by: b.y,
+    })
+  }
+}
+
 function paintProfile(
   ctx: CanvasRenderingContext2D,
   profile: DrawProfile,
@@ -443,6 +498,7 @@ function paintProfile(
   hoverOwner: number | null,
   labelAll: boolean,
   stars: boolean,
+  stems: boolean,
   hits: Hit[],
   segs: Seg[]
 ) {
@@ -463,7 +519,7 @@ function paintProfile(
     ctx.stroke()
   }
 
-  if (hovered || latest || rec > 0.35) {
+  if (stems && (hovered || latest || rec > 0.35)) {
     for (let i = 0; i < 5; i++) {
       const foot = proj(profile.points[i].x, 0, profile.points[i].z)
       ctx.beginPath()

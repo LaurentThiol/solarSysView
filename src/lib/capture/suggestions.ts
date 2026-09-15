@@ -62,6 +62,7 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   if (lab === "relief") {
     return [
       "Chaque ligne est un tirage : cinq points n1→n5, la hauteur est la valeur 1–50. Lis le profil du plus récent (halo or).",
+      "Le calque « rangs dans le temps » relie n1 à n1, n2 à n2… d’un tirage au suivant : c’est Évolution, pas une prédiction.",
       "Le décalage (temps, superposé, hexagone…) change-t-il le voisinage des profils, ou seulement l’esthétique ?",
       "Rappelle que ce n’est pas une prédiction : ce sont des sorties déjà tirées, posées en lignes de points.",
     ]

@@ -542,7 +542,7 @@ const NAV_ITEMS = [
     label: "Relief",
     help: {
       title: "Relief",
-      body: "Une ligne n1→n5 par tirage. Cinq points, hauteur = valeur 1–50. Profils 3D, décalage temps / hexagone, rotation. Le glyphe 5×10 reste Morpho.",
+      body: "Une ligne n1→n5 par tirage. Calque optionnel : mêmes rangs dans le temps. Tiges verticales masquables. Le glyphe 5×10 reste Morpho.",
     },
   },
   {

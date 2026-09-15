@@ -168,3 +168,42 @@ export function distToSegment(
   else if (t > 1) t = 1
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
 }
+
+export type RankTimeLink = {
+  rank: RankIndex
+  fromIndex: number
+  toIndex: number
+  ax: number
+  ay: number
+  az: number
+  bx: number
+  by: number
+  bz: number
+}
+
+/** Relie le même rang d’un tirage au suivant (calque Évolution). */
+export function rankTimeLinks(map: ProfileMap): RankTimeLink[] {
+  const sorted = [...map.profiles].sort((a, b) => a.drawIndex - b.drawIndex)
+  const links: RankTimeLink[] = []
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = sorted[i]
+    const b = sorted[i + 1]
+    for (let r = 0; r < 5; r++) {
+      const pa = a.points[r]
+      const pb = b.points[r]
+      if (!pa || !pb) continue
+      links.push({
+        rank: r as RankIndex,
+        fromIndex: a.drawIndex,
+        toIndex: b.drawIndex,
+        ax: pa.x,
+        ay: pa.y,
+        az: pa.z,
+        bx: pb.x,
+        by: pb.y,
+        bz: pb.z,
+      })
+    }
+  }
+  return links
+}

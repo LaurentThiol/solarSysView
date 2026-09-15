@@ -55,6 +55,8 @@ export function ReliefLab() {
   const [yScale, setYScale] = useState(1.15)
   const [stars, setStars] = useState(false)
   const [labels, setLabels] = useState(true)
+  const [rankTime, setRankTime] = useState(false)
+  const [stems, setStems] = useState(true)
   const [autoRotate, setAutoRotate] = useState(false)
   const [camera, setCamera] = useState<Camera>(DEFAULT_CAMERA)
   const [hoverOwner, setHoverOwner] = useState<number | null>(null)
@@ -100,6 +102,8 @@ export function ReliefLab() {
       fusion,
       yScale,
       stars,
+      rankTime,
+      stems,
       maxH: bounds.maxY * yScale,
       recommended: OFFSET_LABELS[recommended],
     })
@@ -124,6 +128,8 @@ export function ReliefLab() {
                 onHover={setHoverOwner}
                 labels={labels}
                 stars={stars}
+                rankTime={rankTime}
+                stems={stems}
               />
             )}
           </div>
@@ -134,7 +140,8 @@ export function ReliefLab() {
         <span className="text-foreground">Un trait = un tirage.</span> Les cinq
         points sont les statistiques d’ordre <span className="text-foreground">n1→n5</span>{" "}
         (plus petite boule → plus grande), pas l’ordre de sortie. La hauteur est
-        la valeur 1–50. Le glyphe 5×10 reste l’onglet Morpho.
+        la valeur 1–50. Un calque optionnel relie les mêmes rangs dans le temps
+        (comme Évolution). Le glyphe 5×10 reste l’onglet Morpho.
       </p>
 
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
@@ -267,6 +274,24 @@ export function ReliefLab() {
               help={{
                 title: "Numéros",
                 body: "Écrit la valeur sur chaque point. À 20 tirages c’est le mode de lecture. À 200, mieux vaut les masquer et survoler une ligne.",
+              }}
+            />
+            <OverlayToggle
+              label="Rangs dans le temps"
+              on={rankTime}
+              onClick={() => setRankTime((v) => !v)}
+              help={{
+                title: "Rangs dans le temps",
+                body: "Calque optionnel : relie n1 d’un tirage à n1 du suivant, et ainsi de suite jusqu’à n5. C’est le tracé d’Évolution, posé sur la carte. Ce n’est pas une prédiction.",
+              }}
+            />
+            <OverlayToggle
+              label="Tiges"
+              on={stems}
+              onClick={() => setStems((v) => !v)}
+              help={{
+                title: "Tiges",
+                body: "Lignes de rappel verticales, du sol jusqu’à chaque point, pour lire la hauteur 1–50. On peut les masquer.",
               }}
             />
             <OverlayToggle

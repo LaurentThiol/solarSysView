@@ -15,7 +15,7 @@ import { heightColor } from "../src/lib/relief/color"
 import { rasterizePeaks } from "../src/lib/relief/heightmap"
 import { clampCamera, DEFAULT_CAMERA, projectPoint, autoExaggeration } from "../src/lib/relief/project"
 import { buildStampMap } from "../src/lib/relief/stamps"
-import { axisConnected, buildProfiles, ranksOf } from "../src/lib/relief/profiles"
+import { axisConnected, buildProfiles, ranksOf, rankTimeLinks } from "../src/lib/relief/profiles"
 
 function draw(i: number): Draw {
   const date = new Date(Date.UTC(2024, 0, 1 + i)).toISOString().slice(0, 10)
@@ -239,5 +239,20 @@ test("hex offset keeps a 5-point comb at each draw, not a 5×10 grid", () => {
     assert.equal(profile.points.length, 5)
     const zs = new Set(profile.points.map((p) => p.z))
     assert.equal(zs.size, 1)
+  }
+})
+
+test("rank-time links join the same order statistic across consecutive draws", () => {
+  const layout = layoutDraws(draws(8), { mode: "temps", height: "valeur", fusion: 0.4, stars: false })
+  const map = buildProfiles(layout)
+  const links = rankTimeLinks(map)
+  assert.equal(links.length, 7 * 5)
+  const n1 = links.filter((l) => l.rank === 0)
+  assert.equal(n1.length, 7)
+  for (const link of n1) {
+    assert.equal(link.ax, 0)
+    assert.equal(link.bx, 0)
+    assert.ok(link.bz > link.az)
+    assert.equal(link.toIndex, link.fromIndex + 1)
   }
 })

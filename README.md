@@ -90,7 +90,7 @@ Carte 3D des tirages : **une ligne de cinq points = un tirage**. Les points sont
 - **Superposé n1→n5** — tous les profils sur le même axe (faisceau) ;
 - **Hexagone / angle d’or / Hilbert / centroïde** — un peigne n1→n5 par tirage, sans grille 5×10.
 
-Lecture **Profils 3D** ou **Plan**. Glisser fait tourner ; molette pour zoomer. Ce n’est pas un pronostic : le voisinage sur la carte est un choix de mise en page.
+Lecture **Profils 3D** ou **Plan**. Calques optionnels : **rangs dans le temps** (n1 relié à n1 d’un tirage au suivant, comme Évolution) et **tiges** (rappel vertical sol → point, masquable). Glisser fait tourner ; molette pour zoomer. Ce n’est pas un pronostic : le voisinage sur la carte est un choix de mise en page.
 
 ## Chartisme (`/chartisme`)
 

@@ -370,6 +370,8 @@ export function packRelief(input: {
   fusion: number
   yScale: number
   stars: boolean
+  rankTime?: boolean
+  stems?: boolean
   maxH: number
   recommended: string
 }): CaptureContext {
@@ -377,6 +379,7 @@ export function packRelief(input: {
     `Relief · profils n1→n5 · ${input.style} · ${input.offset}`,
     `${input.drawn} tirages (échantillon ${input.sample}) · ${input.from ?? "?"} → ${input.to ?? "?"}`,
     `Hauteur = ${input.height} · écart ${input.fusion.toFixed(2)} · max ${roundish(input.maxH, 2)}`,
+    `Calque rangs dans le temps : ${input.rankTime ? "oui" : "non"} · tiges : ${input.stems === false ? "off" : "on"}`,
     `Décalage recommandé pour cette taille : ${input.recommended}`,
   ]
   return {
@@ -400,6 +403,8 @@ export function packRelief(input: {
       fusion: roundish(input.fusion, 3),
       yScale: roundish(input.yScale, 3),
       stars: input.stars,
+      rankTime: input.rankTime ?? false,
+      stems: input.stems !== false,
       maxH: roundish(input.maxH, 3),
       recommended: input.recommended,
       disclaimer: INDEPENDENCE_DISCLAIMER,

@@ -71,12 +71,14 @@ export {
   distToSegment,
   profileBounds,
   ranksOf,
+  rankTimeLinks,
   rgbCssOf,
   starsOf,
   valueHeight,
   type DrawProfile,
   type ProfileMap,
   type ProfilePoint,
+  type RankTimeLink,
   type StarPoint,
 } from "./profiles"
 export {
