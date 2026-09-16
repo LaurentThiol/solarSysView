@@ -212,7 +212,7 @@ export function lastWatchlistRun(): string | null {
   return localStorage.getItem(WATCH_AT)
 }
 
-export async function retrieveMemories(text: string, k = 8): Promise<{
+export async function retrieveMemories(text: string, k = 12): Promise<{
   items: Array<BrainReading & { score?: number }>
   ok: boolean
 }> {

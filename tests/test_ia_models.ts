@@ -3,7 +3,9 @@ import test from "node:test"
 
 import {
   guessVision,
+  isLocalChatModel,
   isOpenAiChatModel,
+  localChatRank,
   mergeModelOptions,
   modelSequence,
   pickAvailableModel,
@@ -11,6 +13,7 @@ import {
   providerOfModel,
   resolveRequestedModel,
   stripGeminiName,
+  supportsLocalThink,
 } from "../src/lib/ia/models"
 
 test("the requested Gemini model is tried before the catalog fallbacks", () => {
@@ -91,7 +94,7 @@ test("local prefers a model actually served over the catalog default", () => {
     liveOpenAI: null,
     liveLocal: ["qwen2.5", "mistral"],
   })
-  assert.equal(pickAvailableModel(models, "local", "llama3.2"), "mistral")
+  assert.equal(pickAvailableModel(models, "local", "llama3.2"), "qwen2.5")
   assert.equal(pickAvailableModel(models, "local", "qwen2.5"), "qwen2.5")
 })
 
@@ -100,4 +103,56 @@ test("local vision ids include moondream, llava and minicpm-v", () => {
   assert.equal(guessVision("llava", "local"), true)
   assert.equal(guessVision("minicpm-v", "local"), true)
   assert.equal(guessVision("llama3.2", "local"), false)
+})
+
+test("vision and embed ids are not local chat models", () => {
+  assert.equal(isLocalChatModel("moondream"), false)
+  assert.equal(isLocalChatModel("llava"), false)
+  assert.equal(isLocalChatModel("qwen2-vl"), false)
+  assert.equal(isLocalChatModel("nomic-embed-text"), false)
+  assert.equal(isLocalChatModel("qwen2.5"), true)
+})
+
+test("local chat ranking prefers qwen2.5 over mistral over llama3.2", () => {
+  assert.ok(localChatRank("qwen2.5") > localChatRank("mistral"))
+  assert.ok(localChatRank("mistral") > localChatRank("llama3.2"))
+  assert.ok(localChatRank("qwen3:8b") > localChatRank("qwen2.5"))
+})
+
+test("LOCAL_LLM_MODEL wins when the id is actually served", () => {
+  const models = mergeModelOptions({
+    google: false,
+    openai: false,
+    local: true,
+    liveGoogle: null,
+    liveOpenAI: null,
+    liveLocal: ["qwen2.5", "mistral"],
+  })
+  assert.equal(
+    pickAvailableModel(models, "local", "qwen2.5", { envModel: "mistral", liveIds: ["qwen2.5", "mistral"] }),
+    "mistral"
+  )
+})
+
+test("moondream is omitted from local chat extras", () => {
+  const models = mergeModelOptions({
+    google: false,
+    openai: false,
+    local: true,
+    liveGoogle: null,
+    liveOpenAI: null,
+    liveLocal: ["moondream", "qwen2.5"],
+  })
+  assert.ok(!models.some((item) => item.id === "moondream"))
+  assert.equal(pickAvailableModel(models, "local", "llama3.2"), "qwen2.5")
+})
+
+test("think is reserved to known reasoning ids", () => {
+  assert.equal(supportsLocalThink("qwen3:8b"), true)
+  assert.equal(supportsLocalThink("deepseek-r1"), true)
+  assert.equal(supportsLocalThink("gpt-oss"), true)
+  assert.equal(supportsLocalThink("r1:latest"), true)
+  assert.equal(supportsLocalThink("llama3.2"), false)
+  assert.equal(supportsLocalThink("llama3.1"), false)
+  assert.equal(supportsLocalThink("qwen2.5"), false)
 })

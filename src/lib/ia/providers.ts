@@ -1,7 +1,7 @@
 import { apiBase } from "@/lib/api-base"
 import { liveEnv } from "@/lib/env-file"
 import { isPlaceholder } from "@/lib/secrets"
-import { IMAGE_MAX_CHARS, JSON_BUDGET } from "@/lib/capture/snapshot"
+import { IMAGE_MAX_CHARS, JSON_BUDGET, packCharBudget } from "@/lib/capture/snapshot"
 import {
   guessVision,
   isGeminiChatModel,
@@ -15,23 +15,31 @@ import {
   preferredModel,
   resolveRequestedModel,
   stripGeminiName,
+  supportsLocalThink,
   type IaChatMessage,
   type IaModelOption,
   type IaProviderId,
 } from "@/lib/ia/models"
 import {
+  isNativeOllamaKind,
   localChatCompletionsUrl,
   localLlmCandidates,
   localLlmOffMessage,
   localLlmSearchBases,
+  localNativeChatUrl,
   localProbeUrls,
   normalizeLocalLlmBase,
+  probeKindFromUrl,
+  type LocalProbeKind,
 } from "@/lib/ia/local-url"
+import { localGenParams, localPackBudget, ollamaNumCtx } from "@/lib/ia/local-options"
 import { llmFetch } from "@/lib/ia/loopback-fetch"
 import { IA_SYSTEM_PROMPT } from "@/lib/ia/prompt"
 import {
   geminiDeltaText,
+  ollamaDeltaText,
   openaiDeltaText,
+  readNdjson,
   readSseJson,
   type IaStreamEvent,
 } from "@/lib/ia/sse"
@@ -154,20 +162,20 @@ function idsFromLocalPayload(data: {
 async function probeLocalUrl(
   url: string,
   timeoutMs: number
-): Promise<{ ids: string[] | null; error?: string }> {
+): Promise<{ ids: string[] | null; kind: LocalProbeKind | null; error?: string }> {
   try {
     const response = await llmFetch(url, { method: "GET", cache: "no-store" }, timeoutMs)
-    if (!response.ok) return { ids: null, error: `HTTP ${response.status} ${url}` }
+    if (!response.ok) return { ids: null, kind: null, error: `HTTP ${response.status} ${url}` }
     const data = (await response.json()) as {
       models?: Array<{ name?: string }>
       data?: Array<{ id?: string }>
       version?: string
     }
     const ids = idsFromLocalPayload(data)
-    if (ids === null) return { ids: null, error: `réponse inattendue ${url}` }
-    return { ids }
+    if (ids === null) return { ids: null, kind: null, error: `réponse inattendue ${url}` }
+    return { ids, kind: probeKindFromUrl(url) }
   } catch (error) {
-    return { ids: null, error: error instanceof Error ? error.message : String(error) }
+    return { ids: null, kind: null, error: error instanceof Error ? error.message : String(error) }
   }
 }
 
@@ -191,11 +199,20 @@ async function listLocalIdsViaPython(): Promise<string[] | null> {
   }
 }
 
-type LocalProbe = { ok: boolean; ids: string[] | null; at: number; host: string; error?: string }
+type LocalProbe = {
+  ok: boolean
+  ids: string[] | null
+  kind: LocalProbeKind | null
+  at: number
+  host: string
+  error?: string
+}
 
 let localProbeCache: (LocalProbe & { requested: string }) | null = null
 const LOCAL_PROBE_TTL_MS = 10_000
 const LOCAL_PROBE_TIMEOUT_MS = 800
+const LOCAL_CHAT_TIMEOUT_MS = 180_000
+const CLOUD_CHAT_TIMEOUT_MS = 45_000
 
 export function clearLocalLlmProbeCache() {
   localProbeCache = null
@@ -215,18 +232,22 @@ export async function probeLocalLlm(host = localLlmBase(), timeoutMs = LOCAL_PRO
       const probes = await Promise.all(localProbeUrls(candidate).map((url) => probeLocalUrl(url, timeoutMs)))
       const hit = probes.find((item) => item.ids !== null)
       const error = probes.map((item) => item.error).filter(Boolean)[0]
-      return { ids: hit?.ids ?? null, host: candidate, error }
+      return { ids: hit?.ids ?? null, host: candidate, kind: hit?.kind ?? null, error }
     })
   )
   let hit = attempts.find((item) => item.ids !== null)
+  let pythonFallback = false
   if (!hit) {
     const ids = await listLocalIdsViaPython()
-    if (ids !== null) hit = { ids, host, error: undefined }
-    else attempts.push({ ids: null, host, error: "API Python : Ollama injoignable" })
+    if (ids !== null) {
+      hit = { ids, host, kind: "openai", error: undefined }
+      pythonFallback = true
+    } else attempts.push({ ids: null, host, kind: null, error: "API Python : Ollama injoignable" })
   }
   const probe: LocalProbe = {
     ok: Boolean(hit),
     ids: hit?.ids ?? null,
+    kind: pythonFallback ? "openai" : hit?.kind ?? null,
     at: Date.now(),
     host: hit?.host ?? host,
     error: hit
@@ -274,13 +295,20 @@ export async function iaStatus(options: { live?: boolean } = {}) {
     liveOpenAI,
     liveLocal,
   })
+  const envModel = liveEnv("LOCAL_LLM_MODEL").trim()
   return {
     google,
     openai,
     local,
     localHost,
+    localModelEnv: envModel || null,
     default: fallback,
-    defaultModel: fallback ? pickAvailableModel(models, fallback) ?? preferredModel(fallback) : null,
+    defaultModel: fallback
+      ? pickAvailableModel(models, fallback, null, {
+          envModel,
+          liveIds: liveLocal,
+        }) ?? preferredModel(fallback)
+      : null,
     live: {
       google: google ? liveGoogle !== null : null,
       openai: openai ? liveOpenAI !== null : null,
@@ -290,19 +318,19 @@ export async function iaStatus(options: { live?: boolean } = {}) {
   }
 }
 
-function clipTech(tech: unknown) {
+function clipTech(tech: unknown, budget = JSON_BUDGET) {
   try {
     const json = JSON.stringify(tech ?? {})
-    if (json.length <= JSON_BUDGET) return json
-    return `${json.slice(0, JSON_BUDGET)}\n… [tronqué]`
+    if (json.length <= budget) return json
+    return `${json.slice(0, budget)}\n… [tronqué]`
   } catch {
     return "{}"
   }
 }
 
-function snapshotText(snapshot: IaSnapshotPayload | null | undefined) {
+function snapshotText(snapshot: IaSnapshotPayload | null | undefined, budget = JSON_BUDGET) {
   if (!snapshot) return ""
-  const lines = [
+  const header = [
     "Pack de lecture Synchro (données sous-jacentes ; un pronostic est une hypothèse, pas une certitude).",
     snapshot.disclaimer || "",
     `Laboratoire : ${snapshot.lab ?? "?"} · onglet : ${snapshot.tab ?? "—"} · route : ${snapshot.route ?? "—"}`,
@@ -310,9 +338,11 @@ function snapshotText(snapshot: IaSnapshotPayload | null | undefined) {
     snapshot.gitSha ? `Git : ${snapshot.gitSha}` : "",
     snapshot.archive ? `Archive : ${JSON.stringify(snapshot.archive)}` : "",
     snapshot.summary?.length ? `Résumé :\n- ${snapshot.summary.join("\n- ")}` : "",
-    `Données techniques JSON :\n${clipTech(snapshot.tech)}`,
   ]
-  return lines.filter(Boolean).join("\n")
+    .filter(Boolean)
+    .join("\n")
+  const techBudget = Math.max(1_000, budget - header.length - 28)
+  return `${header}\nDonnées techniques JSON :\n${clipTech(snapshot.tech, techBudget)}`
 }
 
 function parseDataUrl(dataUrl: string | null | undefined) {
@@ -361,8 +391,8 @@ function shouldRetryStatus(status: number, raw: string) {
   return false
 }
 
-function requestSignal(external?: AbortSignal) {
-  const timeout = AbortSignal.timeout(45_000)
+function requestSignal(external?: AbortSignal, timeoutMs = CLOUD_CHAT_TIMEOUT_MS) {
+  const timeout = AbortSignal.timeout(timeoutMs)
   if (!external) return timeout
   if (typeof AbortSignal.any === "function") return AbortSignal.any([external, timeout])
   return timeout
@@ -502,9 +532,10 @@ async function completeGemini(
 function openaiMessages(
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
-  system?: string | null
+  system?: string | null,
+  budget = JSON_BUDGET
 ) {
-  const pack = snapshotText(snapshot)
+  const pack = snapshotText(snapshot, budget)
   const image = parseDataUrl(snapshot?.imageDataUrl)
   const out: Array<Record<string, unknown>> = [{ role: "system", content: systemText(system) }]
   messages.forEach((message, index) => {
@@ -535,17 +566,22 @@ function openaiPayload(
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
   stream = false,
-  system?: string | null
+  system?: string | null,
+  opts?: { deepen?: boolean; local?: boolean }
 ) {
+  const deepen = Boolean(opts?.deepen && opts.local)
+  const params = localGenParams(deepen)
+  const budget = localPackBudget(false)
   const body: Record<string, unknown> = {
     model,
-    messages: openaiMessages(messages, snapshot, system),
+    messages: openaiMessages(messages, snapshot, system, budget),
   }
-  if (openaiUsesMaxCompletionTokens(model)) {
-    body.max_completion_tokens = 4096
+  if (openaiUsesMaxCompletionTokens(model) && !opts?.local) {
+    body.max_completion_tokens = params.predict
   } else {
-    body.temperature = 0.3
-    body.max_tokens = 4096
+    body.temperature = params.temperature
+    body.max_tokens = params.predict
+    if (params.topP != null) body.top_p = params.topP
   }
   if (stream) body.stream = true
   return body
@@ -557,11 +593,14 @@ async function generateOpenAIOnce(
   snapshot: IaSnapshotPayload | null,
   key: string,
   signal?: AbortSignal,
-  endpoint?: { url: string; label: string }
+  endpoint?: { url: string; label: string },
+  deepen = false
 ): Promise<OnceResult> {
   const packed = withOptionalImage(snapshot, model, endpoint ? "local" : "openai")
   const url = endpoint?.url ?? "https://api.openai.com/v1/chat/completions"
   const label = endpoint?.label ?? "OpenAI"
+  const local = Boolean(endpoint)
+  const timeoutMs = local ? LOCAL_CHAT_TIMEOUT_MS : CLOUD_CHAT_TIMEOUT_MS
   const response = await llmFetch(
     url,
     {
@@ -570,10 +609,10 @@ async function generateOpenAIOnce(
         "content-type": "application/json",
         Authorization: `Bearer ${key || "local"}`,
       },
-      body: JSON.stringify(openaiPayload(model, messages, packed.snapshot)),
-      signal: requestSignal(signal),
+      body: JSON.stringify(openaiPayload(model, messages, packed.snapshot, false, null, { deepen, local })),
+      signal: requestSignal(signal, timeoutMs),
     },
-    45_000
+    timeoutMs
   )
   const raw = await response.text()
   if (!response.ok) {
@@ -601,11 +640,14 @@ async function streamOpenAIOnce(
   key: string,
   onDelta: (text: string) => void,
   signal?: AbortSignal,
-  endpoint?: { url: string; label: string }
+  endpoint?: { url: string; label: string },
+  deepen = false
 ): Promise<OnceResult> {
   const packed = withOptionalImage(snapshot, model, endpoint ? "local" : "openai")
   const url = endpoint?.url ?? "https://api.openai.com/v1/chat/completions"
   const label = endpoint?.label ?? "OpenAI"
+  const local = Boolean(endpoint)
+  const timeoutMs = local ? LOCAL_CHAT_TIMEOUT_MS : CLOUD_CHAT_TIMEOUT_MS
   const response = await llmFetch(
     url,
     {
@@ -614,15 +656,15 @@ async function streamOpenAIOnce(
         "content-type": "application/json",
         Authorization: `Bearer ${key || "local"}`,
       },
-      body: JSON.stringify(openaiPayload(model, messages, packed.snapshot, true)),
-      signal: requestSignal(signal),
+      body: JSON.stringify(openaiPayload(model, messages, packed.snapshot, true, null, { deepen, local })),
+      signal: requestSignal(signal, timeoutMs),
     },
-    45_000
+    timeoutMs
   )
   if (!response.ok) {
     const raw = await response.text().catch(() => "")
     if (shouldRetryStatus(response.status, raw)) {
-      return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint)
+      return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint, deepen)
     }
     return {
       ok: false,
@@ -645,9 +687,9 @@ async function streamOpenAIOnce(
   } catch (error) {
     if (signal?.aborted) throw error
     if (text.trim()) return { ok: true, text: text.trim() }
-    return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint)
+    return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint, deepen)
   }
-  if (!text.trim()) return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint)
+  if (!text.trim()) return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint, deepen)
   return { ok: true, text: text.trim() }
 }
 
@@ -679,6 +721,142 @@ async function completeOpenAI(
   return { ok: false, error: lastError }
 }
 
+function ollamaMessages(messages: IaChatMessage[], snapshot: IaSnapshotPayload | null, budget: number) {
+  const pack = snapshotText(snapshot, budget)
+  const image = parseDataUrl(snapshot?.imageDataUrl)
+  const out: Array<Record<string, unknown>> = [{ role: "system", content: systemText() }]
+  messages.forEach((message, index) => {
+    if (message.role === "assistant") {
+      out.push({ role: "assistant", content: message.content })
+      return
+    }
+    const text = index === 0 && pack ? `${pack}\n\nQuestion :\n${message.content}` : message.content
+    if (index === 0 && image) {
+      out.push({ role: "user", content: text, images: [image.data] })
+      return
+    }
+    out.push({ role: "user", content: text })
+  })
+  return out
+}
+
+export function buildOllamaChatBody(
+  model: string,
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  options: { stream?: boolean; deepen?: boolean } = {}
+) {
+  const deepen = Boolean(options.deepen)
+  const params = localGenParams(deepen)
+  const packed = withOptionalImage(snapshot, model, "local")
+  const body: Record<string, unknown> = {
+    model,
+    stream: Boolean(options.stream),
+    keep_alive: "30m",
+    messages: ollamaMessages(messages, packed.snapshot, packCharBudget(ollamaNumCtx())),
+    options: {
+      num_ctx: ollamaNumCtx(),
+      num_predict: params.predict,
+      temperature: params.temperature,
+      ...(params.topP != null ? { top_p: params.topP } : {}),
+    },
+  }
+  if (deepen && supportsLocalThink(model)) body.think = true
+  return body
+}
+
+async function generateOllamaOnce(
+  host: string,
+  model: string,
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  signal?: AbortSignal,
+  deepen = false
+): Promise<OnceResult> {
+  const url = localNativeChatUrl(host)
+  const response = await llmFetch(
+    url,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(buildOllamaChatBody(model, messages, snapshot, { stream: false, deepen })),
+      signal: requestSignal(signal, LOCAL_CHAT_TIMEOUT_MS),
+    },
+    LOCAL_CHAT_TIMEOUT_MS
+  )
+  const raw = await response.text()
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: `LLM local HTTP ${response.status}${raw ? ` · ${raw.slice(0, 220)}` : ""}`,
+      retry: shouldRetryStatus(response.status, raw),
+    }
+  }
+  let payload: unknown
+  try {
+    payload = JSON.parse(raw)
+  } catch {
+    return { ok: false, error: "réponse Ollama illisible", retry: true }
+  }
+  const text = ollamaDeltaText(payload).trim()
+  if (!text) {
+    return { ok: false, error: "réponse vide", retry: true }
+  }
+  return { ok: true, text }
+}
+
+async function streamOllamaOnce(
+  host: string,
+  model: string,
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  onDelta: (text: string) => void,
+  signal?: AbortSignal,
+  deepen = false
+): Promise<OnceResult> {
+  const url = localNativeChatUrl(host)
+  const response = await llmFetch(
+    url,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(buildOllamaChatBody(model, messages, snapshot, { stream: true, deepen })),
+      signal: requestSignal(signal, LOCAL_CHAT_TIMEOUT_MS),
+    },
+    LOCAL_CHAT_TIMEOUT_MS
+  )
+  if (!response.ok) {
+    const raw = await response.text().catch(() => "")
+    if (shouldRetryStatus(response.status, raw)) {
+      return generateOllamaOnce(host, model, messages, snapshot, signal, deepen)
+    }
+    return {
+      ok: false,
+      error: `LLM local HTTP ${response.status}${raw ? ` · ${raw.slice(0, 220)}` : ""}`,
+      retry: false,
+    }
+  }
+  let text = ""
+  try {
+    await readNdjson(
+      response,
+      (payload) => {
+        const chunk = ollamaDeltaText(payload)
+        if (!chunk) return
+        text += chunk
+        onDelta(chunk)
+      },
+      signal
+    )
+  } catch (error) {
+    if (signal?.aborted) throw error
+    if (text.trim()) return { ok: true, text: text.trim() }
+    return generateOllamaOnce(host, model, messages, snapshot, signal, deepen)
+  }
+  if (!text.trim()) return generateOllamaOnce(host, model, messages, snapshot, signal, deepen)
+  return { ok: true, text: text.trim() }
+}
+
 export async function completeIa(options: {
   provider: IaProviderId
   model?: string | null
@@ -686,8 +864,10 @@ export async function completeIa(options: {
   snapshot?: IaSnapshotPayload | null
   signal?: AbortSignal
   systemPrompt?: string | null
+  deepen?: boolean
 }): Promise<IaCompleteOk | IaCompleteErr> {
   requestSystem = options.systemPrompt ?? null
+  const deepen = options.provider === "local" && Boolean(options.deepen)
   try {
     const requested = resolveRequestedModel(options.provider, options.model)
     if (!requested) {
@@ -697,7 +877,7 @@ export async function completeIa(options: {
       return completeGemini(options.messages, options.snapshot ?? null, requested, options.signal)
     }
     if (options.provider === "local") {
-      return completeLocal(options.messages, options.snapshot ?? null, requested, options.signal)
+      return completeLocal(options.messages, options.snapshot ?? null, requested, options.signal, deepen)
     }
     return completeOpenAI(options.messages, options.snapshot ?? null, requested, options.signal)
   } finally {
@@ -709,9 +889,11 @@ async function completeLocal(
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
   requested: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  deepen = false
 ): Promise<IaCompleteOk | IaCompleteErr> {
   const probe = await probeLocalLlm()
+  const native = isNativeOllamaKind(probe.kind)
   const bases = probe.ok ? [probe.host] : localLlmCandidates(localLlmBase())
   let lastError = "LLM local injoignable (Ollama ?). Pas de bascule cloud."
   for (const base of bases) {
@@ -719,7 +901,9 @@ async function completeLocal(
     for (const model of modelSequence("local", requested)) {
       const packed = withOptionalImage(snapshot, model, "local")
       try {
-        const result = await generateOpenAIOnce(model, messages, snapshot, "local", signal, endpoint)
+        const result = native
+          ? await generateOllamaOnce(base, model, messages, snapshot, signal, deepen)
+          : await generateOpenAIOnce(model, messages, snapshot, "local", signal, endpoint, deepen)
         if (result.ok) {
           return {
             ok: true,
@@ -749,10 +933,12 @@ export async function streamIa(
     snapshot?: IaSnapshotPayload | null
     signal?: AbortSignal
     systemPrompt?: string | null
+    deepen?: boolean
   },
   onEvent: (event: IaStreamEvent) => void
 ): Promise<IaCompleteOk | IaCompleteErr> {
   requestSystem = options.systemPrompt ?? null
+  const deepen = options.provider === "local" && Boolean(options.deepen)
   try {
     const requested = resolveRequestedModel(options.provider, options.model)
     if (!requested) {
@@ -770,6 +956,7 @@ export async function streamIa(
       return { ok: false, error }
     }
     const localProbe = options.provider === "local" ? await probeLocalLlm() : null
+    const native = isNativeOllamaKind(localProbe?.kind)
     const localBases =
       options.provider === "local"
         ? localProbe?.ok
@@ -803,15 +990,26 @@ export async function streamIa(
           const result =
             options.provider === "google"
               ? await streamGeminiOnce(model, options.messages, snapshot, key, onDelta, options.signal)
-              : await streamOpenAIOnce(
-                  model,
-                  options.messages,
-                  snapshot,
-                  key,
-                  onDelta,
-                  options.signal,
-                  localEndpoint
-                )
+              : options.provider === "local" && native
+                ? await streamOllamaOnce(
+                    localBase,
+                    model,
+                    options.messages,
+                    snapshot,
+                    onDelta,
+                    options.signal,
+                    deepen
+                  )
+                : await streamOpenAIOnce(
+                    model,
+                    options.messages,
+                    snapshot,
+                    key,
+                    onDelta,
+                    options.signal,
+                    localEndpoint,
+                    deepen
+                  )
           if (result.ok) {
             if (!emitted) {
               onEvent({

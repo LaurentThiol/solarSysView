@@ -71,6 +71,8 @@ def test_launch_reloads_only_python_package() -> None:
     assert "ollama_version_label" in text
     assert "SYNCHRO_OLLAMA" in text
     assert "ollama pull moondream" in text
+    assert "llm_chat_names" in text
+    assert "petit modèle de chat" in text
 
 
 def test_stop_force_is_accepted() -> None:

@@ -162,7 +162,56 @@ export function providerLabel(id: IaProviderId) {
 export function isLocalChatModel(id: string) {
   const lower = id.toLowerCase()
   if (/(embed|nomic-embed|tts|whisper|clip)/i.test(lower)) return false
+  if (/(llava|vision|qwen.*vl|moondream|minicpm-?v)/i.test(lower)) return false
   return true
+}
+
+export function supportsLocalThink(id: string) {
+  const lower = id.toLowerCase()
+  return /qwen3|deepseek-r1|gpt-oss|(^|[^a-z0-9])r1([^a-z0-9]|$)/i.test(lower)
+}
+
+export function localModelSizeB(id: string) {
+  const lower = id.toLowerCase()
+  const tagged = lower.match(/:(\d+(?:\.\d+)?)b\b/)
+  if (tagged) return Number(tagged[1])
+  if (/llama3\.2/.test(lower)) return 3
+  if (/mistral-nemo/.test(lower)) return 12
+  return 7
+}
+
+export function localFamilyBonus(id: string) {
+  const lower = id.toLowerCase()
+  if (/qwen3|deepseek-r1|gpt-oss|(^|[^a-z0-9])r1([^a-z0-9]|$)/.test(lower)) return 50
+  if (/qwen2\.5/.test(lower)) return 40
+  if (/llama3\.[13]|mistral-nemo|mistral-small|mixtral/.test(lower)) return 30
+  if (/(^|[:/])mistral([^a-z]|$)/.test(lower) || /^mistral/.test(lower)) return 20
+  if (/llama3\.2|\bphi|gemma|tinyllama/.test(lower)) return 0
+  return 10
+}
+
+export function localSizeBonus(size: number) {
+  if (size >= 32) return 80
+  if (size >= 13) return 60
+  if (size >= 7) return 40
+  if (size >= 4) return 20
+  return 0
+}
+
+export function localChatRank(id: string) {
+  return localFamilyBonus(id) + localSizeBonus(localModelSizeB(id))
+}
+
+export function compareLocalChatIds(left: string, right: string) {
+  return localChatRank(right) - localChatRank(left) || left.localeCompare(right)
+}
+
+export function localLiveIds(models: Array<Pick<IaModelOption, "id" | "provider" | "source">>) {
+  return models.filter((item) => item.provider === "local" && item.source === "live").map((item) => item.id)
+}
+
+function idServed(id: string, liveIds: string[]) {
+  return liveIds.some((live) => live === id || live.startsWith(`${id}:`) || id.startsWith(`${live}:`))
 }
 
 export function providerOfModel(id: string): IaProviderId | null {
@@ -244,11 +293,14 @@ function extraFromLive(
   catalogIds: Set<string>
 ): IaModelOption[] {
   const extras: IaModelOption[] = []
-  const sorted = [...liveIds].sort((left, right) => {
-    const dated = (id: string) => (/\d{4}-\d{2}/.test(id) ? 1 : 0)
-    if (dated(left) !== dated(right)) return dated(left) - dated(right)
-    return left.length - right.length || left.localeCompare(right)
-  })
+  const sorted =
+    provider === "local"
+      ? [...liveIds].sort(compareLocalChatIds)
+      : [...liveIds].sort((left, right) => {
+          const dated = (id: string) => (/\d{4}-\d{2}/.test(id) ? 1 : 0)
+          if (dated(left) !== dated(right)) return dated(left) - dated(right)
+          return left.length - right.length || left.localeCompare(right)
+        })
   for (const id of sorted) {
     if (catalogIds.has(id) || extras.some((item) => item.id === id)) continue
     if (provider === "google" && !isGeminiChatModel(id)) continue
@@ -317,17 +369,30 @@ export function mergeModelOptions(input: {
   return [...catalog, ...extras]
 }
 
+export type PickLocalModelOpts = {
+  envModel?: string | null
+  liveIds?: string[] | null
+}
+
 export function pickAvailableModel(
   models: IaModelOption[],
   provider: IaProviderId,
-  stored?: string | null
+  stored?: string | null,
+  opts?: PickLocalModelOpts
 ) {
   const available = models.filter((item) => item.provider === provider && item.available)
   if (!available.length) return null
-  const live = available.filter((item) => item.source === "live")
-  if (provider === "local" && live.length) {
-    if (stored && live.some((item) => item.id === stored)) return stored
-    return live[0].id
+  if (provider === "local") {
+    const liveIds = (opts?.liveIds ?? localLiveIds(available)).filter((id) => isModelId(id) && isLocalChatModel(id))
+    const served = (id?: string | null): id is string =>
+      Boolean(id && isModelId(id) && isLocalChatModel(id) && idServed(id, liveIds))
+    const envModel = opts?.envModel?.trim() || ""
+    if (served(envModel)) return envModel
+    if (served(stored)) return stored
+    if (liveIds.length) {
+      const ranked = [...liveIds].sort(compareLocalChatIds)
+      return ranked[0]
+    }
   }
   if (stored && available.some((item) => item.id === stored)) return stored
   return available.find((item) => item.preferred)?.id ?? available[0].id

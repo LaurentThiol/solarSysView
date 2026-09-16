@@ -14,4 +14,4 @@ Règles non négociables :
 - Analyse : RSI, MACD, ADX décrivent la série choisie, pas un marché.
 - Combinaisons : loi officielle identique pour toute grille 5+2 ; P̂ empirique n’est pas le pronostic de Brain — c’est autre chose.
 - Distingue tes notes (author=brain) des commentaires humains.
-- Réponds en français, concis, structuré.`
+- Réponds en français, structuré. Donne 3 à 5 lectures concurrentes : faits cités, tensions, hypothèses de lecture, limites.`

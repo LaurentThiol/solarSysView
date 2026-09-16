@@ -1,4 +1,4 @@
-import { INDEPENDENCE_DISCLAIMER, JSON_BUDGET, withinBudget } from "@/lib/capture/snapshot"
+import { INDEPENDENCE_DISCLAIMER, packCharBudget, withinBudget } from "@/lib/capture/snapshot"
 import type { IaSnapshotPayload } from "@/lib/ia/providers"
 import type { WorkingObject } from "@/lib/brain/types"
 
@@ -8,24 +8,27 @@ export const SPECIALIST_DISCLAIMER =
 export function workingSetPayload(objects: WorkingObject[]): Record<string, unknown> {
   const inPrompt = objects.filter((item) => item.inPrompt)
   const hasSpecialist = inPrompt.some((item) => item.fiche?.lab === "specialist" || item.handle.includes("specialist."))
-  return withinBudget({
-    kind: "brain-working-set",
-    disclaimer: hasSpecialist ? `${INDEPENDENCE_DISCLAIMER} ${SPECIALIST_DISCLAIMER}` : INDEPENDENCE_DISCLAIMER,
-    objects: inPrompt.map((item) => ({
-      kind: item.kind,
-      id: item.id,
-      handle: item.handle,
-      label: item.label,
-      summary: item.summary,
-      score: item.score ?? null,
-      last: item.fiche?.last ?? null,
-      flags: item.fiche?.flags ?? [],
-      window: item.fiche?.window ?? null,
-      reading: item.fiche?.reading ?? null,
-      instructions: item.fiche?.last?.instructions ?? item.fiche?.reading ?? null,
-      lab: item.fiche?.lab ?? null,
-    })),
-  })
+  return withinBudget(
+    {
+      kind: "brain-working-set",
+      disclaimer: hasSpecialist ? `${INDEPENDENCE_DISCLAIMER} ${SPECIALIST_DISCLAIMER}` : INDEPENDENCE_DISCLAIMER,
+      objects: inPrompt.map((item) => ({
+        kind: item.kind,
+        id: item.id,
+        handle: item.handle,
+        label: item.label,
+        summary: item.summary,
+        score: item.score ?? null,
+        last: item.fiche?.last ?? null,
+        flags: item.fiche?.flags ?? [],
+        window: item.fiche?.window ?? null,
+        reading: item.fiche?.reading ?? null,
+        instructions: item.fiche?.last?.instructions ?? item.fiche?.reading ?? null,
+        lab: item.fiche?.lab ?? null,
+      })),
+    },
+    packCharBudget()
+  )
 }
 
 export function packWorkingSet(objects: WorkingObject[]): IaSnapshotPayload {
@@ -39,7 +42,7 @@ export function packWorkingSet(objects: WorkingObject[]): IaSnapshotPayload {
   } catch {
     json = "{}"
   }
-  if (json.length > JSON_BUDGET) {
+  if (json.length > packCharBudget()) {
     summary.push(`Pack tronqué (${json.length} octets).`)
   }
   return {

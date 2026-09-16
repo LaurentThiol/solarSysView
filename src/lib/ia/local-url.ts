@@ -63,6 +63,29 @@ export function localChatCompletionsUrl(base: string) {
   return `${base}/v1/chat/completions`
 }
 
+export function localNativeChatUrl(base: string) {
+  return `${base.replace(/\/v1$/, "")}/api/chat`
+}
+
+export type LocalProbeKind = "tags" | "version" | "openai"
+
+export function probeKindFromUrl(url: string): LocalProbeKind | null {
+  let path = url
+  try {
+    path = new URL(url).pathname
+  } catch {
+    /* keep raw */
+  }
+  if (path.includes("/api/tags")) return "tags"
+  if (path.includes("/api/version")) return "version"
+  if (path.endsWith("/v1/models") || path.endsWith("/models")) return "openai"
+  return null
+}
+
+export function isNativeOllamaKind(kind?: LocalProbeKind | null) {
+  return kind === "tags" || kind === "version"
+}
+
 export function localProbeUrls(base: string) {
   return [`${base}/api/tags`, localModelsUrl(base), `${base}/api/version`]
 }

@@ -8,8 +8,10 @@ import {
   localLlmOffMessage,
   localLlmSearchBases,
   localModelsUrl,
+  localNativeChatUrl,
   localProbeUrls,
   normalizeLocalLlmBase,
+  probeKindFromUrl,
 } from "../src/lib/ia/local-url"
 
 test("localhost LLM base is rewritten to IPv4", () => {
@@ -30,6 +32,11 @@ test("OpenAI-compat model and chat URLs respect a /v1 suffix", () => {
     localChatCompletionsUrl("http://127.0.0.1:11434"),
     "http://127.0.0.1:11434/v1/chat/completions"
   )
+  assert.equal(localNativeChatUrl("http://127.0.0.1:11434"), "http://127.0.0.1:11434/api/chat")
+  assert.equal(localNativeChatUrl("http://127.0.0.1:11434/v1"), "http://127.0.0.1:11434/api/chat")
+  assert.equal(probeKindFromUrl("http://127.0.0.1:11434/api/tags"), "tags")
+  assert.equal(probeKindFromUrl("http://127.0.0.1:11434/api/version"), "version")
+  assert.equal(probeKindFromUrl("http://127.0.0.1:1234/v1/models"), "openai")
 })
 
 test("loopback candidates retry localhost and IPv6 when 127.0.0.1 is used", () => {

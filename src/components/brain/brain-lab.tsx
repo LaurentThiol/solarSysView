@@ -99,15 +99,18 @@ import { runWatchlist } from "@/lib/brain/watchlist"
 import { packWorkingSet } from "@/lib/brain/working-set"
 import type { BrainFiche, ResolveContext, WalkerState, WorkingObject } from "@/lib/brain/types"
 import { fetchHarmo } from "@/lib/harmo"
+import { INDEPENDENCE_DISCLAIMER } from "@/lib/capture/snapshot"
+import { readModel, writeModel } from "@/lib/capture/store"
 import { streamIaChat } from "@/lib/ia/client"
 import {
+  localLiveIds,
   pickAvailableModel,
   preferredModel,
   type IaChatMessage,
+  type IaModelOption,
   type IaProviderId,
 } from "@/lib/ia/models"
 import { readStoredProposals, writeStoredProposals } from "@/lib/combinations"
-import { INDEPENDENCE_DISCLAIMER } from "@/lib/capture/snapshot"
 import { useDraws } from "@/lib/use-draws"
 import { cn } from "@/lib/utils"
 
@@ -116,9 +119,10 @@ type Status = {
   openai: boolean
   local?: boolean
   localHost?: string
+  localModelEnv?: string | null
   default: IaProviderId | null
   defaultModel?: string | null
-  models?: Array<{ id: string; provider: IaProviderId; label: string; available: boolean }>
+  models?: IaModelOption[]
 }
 
 function download(name: string, text: string, type: string) {
@@ -182,6 +186,7 @@ export function BrainLab() {
   const [provider, setProvider] = useState<IaProviderId>("local")
   const [model, setModel] = useState<string | null>(preferredModel("local"))
   const [escalate, setEscalate] = useState(false)
+  const [deepen, setDeepen] = useState(false)
   const [inspector, setInspector] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
@@ -283,7 +288,12 @@ export function BrainLab() {
         setStatus(payload)
         setProvider("local")
         const models = payload.models ?? []
-        setModel(pickAvailableModel(models as never, "local", payload.defaultModel) ?? preferredModel("local"))
+        setModel(
+          pickAvailableModel(models, "local", readModel("local"), {
+            envModel: payload.localModelEnv,
+            liveIds: localLiveIds(models),
+          }) ?? preferredModel("local")
+        )
       } catch {
         setStatus({ google: false, openai: false, local: false, default: null })
       }
@@ -344,7 +354,7 @@ export function BrainLab() {
       for (const item of parsed) {
         if (item.entry) pinEntry(item.entry)
       }
-      const retrieved = await retrieveMemories(question, 8)
+      const retrieved = await retrieveMemories(question, 12)
       const memoryObjects: WorkingObject[] = retrieved.items.map((item) => ({
         kind: "memory",
         id: `mem-${item.id}`,
@@ -393,6 +403,7 @@ export function BrainLab() {
             messages: history,
             snapshot,
             systemPrompt: BRAIN_SYSTEM_PROMPT,
+            deepen: nextProvider === "local" ? deepen : false,
           },
           {
             signal: controller.signal,
@@ -422,7 +433,7 @@ export function BrainLab() {
         setBusy(false)
       }
     },
-    [escalate, fiches, handleCtx, messages, model, pinEntry, status]
+    [deepen, escalate, fiches, handleCtx, messages, model, pinEntry, status]
   )
 
   const sendDraft = useCallback(() => {
@@ -538,7 +549,7 @@ export function BrainLab() {
                   {
                     role: "user",
                     content:
-                      "Commente ce lot de fiches flaggées. Cite @handle#id si l’id est là. Shortlist les plus remarquables. Si les fiches le portent, ajoute un pronostic d’évolution (hypothèse, pas une certitude).",
+                      "Propose 3–5 lectures concurrentes (faits cités, tensions, hypothèses, limites). Shortlist les plus remarquables. Cite @handle#id si l’id est là. Si les fiches le portent, ajoute un pronostic d’évolution (hypothèse, pas une certitude).",
                   },
                 ],
                 snapshot,
@@ -979,10 +990,37 @@ export function BrainLab() {
           <CardContent className="flex flex-col gap-3 pt-3">
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <StatusDot ok={localOn} label={localOn ? "local" : "local off"} />
-              <span className="text-muted-foreground">
-                {localOn ? `${provider} · ${model ?? "modèle…"}` : "en attente d’Ollama"}
-              </span>
+              {localOn ? (
+                <select
+                  className="max-w-48 rounded-md border border-border bg-background px-1.5 py-0.5 text-xs"
+                  value={model ?? ""}
+                  onChange={(event) => {
+                    const next = event.target.value
+                    setModel(next)
+                    writeModel("local", next)
+                  }}
+                  aria-label="Modèle local"
+                >
+                  {model &&
+                  !(status?.models ?? []).some((item) => item.provider === "local" && item.id === model) ? (
+                    <option value={model}>{model}</option>
+                  ) : null}
+                  {(status?.models ?? [])
+                    .filter((item) => item.provider === "local" && item.available)
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label === item.id ? item.id : `${item.label} (${item.id})`}
+                      </option>
+                    ))}
+                </select>
+              ) : (
+                <span className="text-muted-foreground">en attente d’Ollama</span>
+              )}
               {escalate ? <Badge variant="secondary">ce tour dans le cloud</Badge> : null}
+              <label className="flex items-center gap-1.5 text-muted-foreground">
+                <input type="checkbox" checked={deepen} onChange={(e) => setDeepen(e.target.checked)} />
+                Approfondir
+              </label>
               <label className="ml-auto flex items-center gap-1.5 text-muted-foreground">
                 <input type="checkbox" checked={escalate} onChange={(e) => setEscalate(e.target.checked)} />
                 Ce tour dans le cloud
