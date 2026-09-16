@@ -319,7 +319,7 @@ function combinaisonsEntries(): CatalogEntry[] {
       kind: "grid",
       label: "Score de grille",
       units: "loi + P̂ empirique",
-      reading: "Loi officielle identique pour toute grille 5+2 ; P̂ = part des tirages où elle aurait été payée. Pas un pronostic.",
+      reading: "Loi officielle identique pour toute grille 5+2 ; P̂ = part des tirages où elle aurait été payée. Ce n’est pas P(prochain tirage).",
       defaults: {},
     },
     {

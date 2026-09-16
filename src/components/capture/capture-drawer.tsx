@@ -65,7 +65,8 @@ export function CaptureDrawer() {
             </h2>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               Zone visible et graphique à l’écran, plus les données de la
-              fenêtre. L’IA décrit l’archive, elle ne pronostique pas.
+              fenêtre. L’IA décrit l’archive, puis peut pronostiquer
+              (hypothèse, pas une certitude).
             </p>
           </div>
           <button

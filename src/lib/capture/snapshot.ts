@@ -1,5 +1,5 @@
 export const INDEPENDENCE_DISCLAIMER =
-  "Chaque tirage EuroMillions est indépendant. Les indicateurs, figures et spectres décrivent l’archive dans la fenêtre choisie. Ils ne prédisent pas le prochain tirage et ne recommandent aucune grille."
+  "Chaque tirage EuroMillions est indépendant en loi officielle. Les indicateurs décrivent la fenêtre ; un pronostic d’évolution ou de grille est une hypothèse de lecture, pas une certitude."
 
 export const JSON_BUDGET = 80_000
 export const SERIES_MAX_POINTS = 400

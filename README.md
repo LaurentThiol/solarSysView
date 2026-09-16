@@ -246,17 +246,15 @@ Sans Neon, Harmo lit l’archive JSON embarquée (`src/data/euromillions-2026.js
 
 Lecture d’une capture (visuel + données de fenêtre). L’onglet propose **Gemini** et **OpenAI**, puis un **choix de modèle** : un catalogue recommandé pour la lecture d’écran, plus les modèles de chat visibles sur tes clés. La réponse **s’écrit en flux**. **Comparer** envoie le même pack à deux modèles (Flash contre Pro, ou Gemini contre OpenAI) — utile en Chartisme / Harmo. Le modèle réellement utilisé s’affiche sous la réponse ; un aperçu introuvable replie vers le catalogue, sauf si des jetons ont déjà commencé.
 
-L’historique (colonne **Captures**) se **renomme**, s’**épingle**, s’**exporte** (Markdown, JSON, PDF du fil) et se **supprime**. Un JSON réimporte les lectures. Les épinglées ne tombent pas des huit derniers fils. Les clés sont dans Admin. L’assistant décrit l’archive, il ne pronostique pas.
+L’historique (colonne **Captures**) se **renomme**, s’**épingle**, s’**exporte** (Markdown, JSON, PDF du fil) et se **supprime**. Un JSON réimporte les lectures. Les épinglées ne tombent pas des huit derniers fils. Les clés sont dans Admin. L’assistant décrit l’archive, puis peut pronostiquer (hypothèse, pas une certitude).
 
 Un troisième fournisseur **Local** (Ollama / llama-server) sert surtout les lectures **texte** du pack. Un 404 Ollama **ne bascule pas** sur Gemini / OpenAI.
 
 ## Brain (`/brain`)
 
-Catalog nommé des indicateurs (`@rsi`, `@sum.rsi`, `@ete`, `@fft`), **spécialistes** (un petit réseau par série — parité, somme… — entraîné sur l’ère formule, noté sur les 20/50/100 derniers, sauvé dans `.brain/specialists/`), journal persisté (Neon, repli local), mémoire vectorielle locale (`nomic-embed-text`) et **agent manuel** (catalog ou 142 courbes Chartisme). Le panneau **Objets** est exactement le prompt. Chat et lots passent par Ollama ; **Escalader** / **Lots cloud** sont opt-in. L’onglet IA n’est pas fusionné : il reste la lecture de captures. Un spécialiste peut citer un forecast de série nommée ; Brain ne recommande aucune grille 5+2.
+Catalog nommé des indicateurs (`@rsi`, `@sum.rsi`, `@ete`, `@fft`), **spécialistes** (un petit réseau par série — parité, somme… — entraîné sur l’ère formule, noté sur les 20/50/100 derniers, sauvé dans `.brain/specialists/`), journal persisté (Neon, repli local), mémoire vectorielle locale (`nomic-embed-text`) et **agent manuel** (catalog ou 142 courbes Chartisme). Le panneau **Objets** est exactement le prompt. Chat et lots passent par Ollama ; **Escalader** / **Lots cloud** sont opt-in. L’onglet IA n’est pas fusionné : il reste la lecture de captures. Un spécialiste cite un forecast de série nommée ; Brain peut aussi pronostiquer une grille (hypothèse, pas une certitude).
 
 `./launch doctor` ping Ollama. `OLLAMA_HOST` (défaut `http://127.0.0.1:11434`) est dans `.env.example`. Entraînement d’un spécialiste : `./launch brain-specialist-train` (ou le panneau Spécialistes de `/brain`).
-
-`./launch doctor` ping Ollama. `OLLAMA_HOST` (défaut `http://127.0.0.1:11434`) est dans `.env.example`.
 
 ## Admin (`/admin`)
 

@@ -507,7 +507,7 @@ export function BrainLab() {
                   {
                     role: "user",
                     content:
-                      "Commente ce lot de fiches flaggées. Cite @handle#id si l’id est là. Shortlist les plus remarquables. Pas de pronostic.",
+                      "Commente ce lot de fiches flaggées. Cite @handle#id si l’id est là. Shortlist les plus remarquables. Si les fiches le portent, ajoute un pronostic d’évolution (hypothèse, pas une certitude).",
                   },
                 ],
                 snapshot,
@@ -623,8 +623,11 @@ export function BrainLab() {
             <h1 className="mt-1 text-3xl font-semibold tracking-tight">Brain</h1>
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
               Épingle un nom — <span className="text-foreground">@rsi</span>,{" "}
-              <span className="text-foreground">@ete</span>, <span className="text-foreground">@specialist.pere-impair</span>{" "}
-              — puis pose une question. Les spécialistes forecast une série nommée. Brain ne recommande aucune grille.
+              <span className="text-foreground">@ete</span>,{" "}
+              <span className="text-foreground">@specialist.pere-impair</span>{" "}
+              — puis pose une question. Les spécialistes forecast une série
+              nommée. Brain décrit la fenêtre, puis peut pronostiquer
+              (hypothèse, pas une certitude).
             </p>
             <ol className="mt-3 flex flex-wrap gap-2 text-xs">
               <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">1. Épingle</li>

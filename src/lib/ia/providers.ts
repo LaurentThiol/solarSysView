@@ -303,7 +303,7 @@ function clipTech(tech: unknown) {
 function snapshotText(snapshot: IaSnapshotPayload | null | undefined) {
   if (!snapshot) return ""
   const lines = [
-    "Pack de lecture Synchro (données sous-jacentes, pas un pronostic).",
+    "Pack de lecture Synchro (données sous-jacentes ; un pronostic est une hypothèse, pas une certitude).",
     snapshot.disclaimer || "",
     `Laboratoire : ${snapshot.lab ?? "?"} · onglet : ${snapshot.tab ?? "—"} · route : ${snapshot.route ?? "—"}`,
     snapshot.capturedAt ? `Capturé : ${snapshot.capturedAt}` : "",

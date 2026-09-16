@@ -237,3 +237,20 @@ def test_brain_mascot_is_a_two_lobe_drawing() -> None:
     assert 'mood === "talk"' in src
     assert "M30 30c-9 1-16 10-16 20" not in src
     assert "clipPath" in src
+
+
+def test_brain_and_ia_prompts_allow_forecast_as_hypothesis() -> None:
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    brain = (root / "src/lib/brain/prompt.ts").read_text(encoding="utf-8")
+    ia = (root / "src/lib/ia/prompt.ts").read_text(encoding="utf-8")
+    disclaimer = (root / "src/lib/capture/snapshot.ts").read_text(encoding="utf-8")
+    for prompt in (brain, ia):
+        assert "hypothèse" in prompt
+        assert "pronostic" in prompt
+        assert "refuse" not in prompt
+        assert "Tu ne prédis pas" not in prompt
+    assert "indépendant" in disclaimer
+    assert "hypothèse" in disclaimer
+    assert "Ils ne prédisent pas" not in disclaimer

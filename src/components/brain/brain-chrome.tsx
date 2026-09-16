@@ -49,7 +49,7 @@ export const STARTER_QUESTIONS = [
   "Que disent @rsi et @adx sur cette fenêtre ?",
   "Lis @ete : figure complète, ou juste une ressemblance ?",
   "@fft : quelle raie est lisible, laquelle est un artefact de fenêtre ?",
-  "Cite le forecast du spécialiste épinglé : valeur, σ, skill 20/50/100. Pas de grille.",
+  "Cite le forecast du spécialiste épinglé : valeur, σ, skill 20/50/100. Une grille 5+2, si tu en proposes une, est une hypothèse séparée.",
 ]
 
 export const LAB_TONE: Record<BrainLab, string> = {

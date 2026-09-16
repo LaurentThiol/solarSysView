@@ -2,15 +2,16 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { BRAIN_CATALOG, catalogCollisions, catalogEntry } from "../src/lib/brain/catalog"
-import { parseHandle, parseHandlesInText, formatHandle } from "../src/lib/brain/handles"
+import { formatHandle, parseHandle, parseHandlesInText } from "../src/lib/brain/handles"
+import { BRAIN_SYSTEM_PROMPT } from "../src/lib/brain/prompt"
 import { cosine } from "../src/lib/brain/retrieve"
 import { objectsEqualPrompt, packWorkingSet } from "../src/lib/brain/working-set"
-import { BRAIN_SYSTEM_PROMPT } from "../src/lib/brain/prompt"
 import { setSpecialistIndex, specialistToEntry } from "../src/lib/brain/specialists"
 import { catalogJobs, curveJobs } from "../src/lib/brain/walker"
 import { curveSpecs } from "../src/lib/chartisme/curves"
-import { labFromPath, labLabel } from "../src/lib/capture/snapshot"
+import { INDEPENDENCE_DISCLAIMER, labFromPath, labLabel } from "../src/lib/capture/snapshot"
 import { suggestionsFor } from "../src/lib/capture/suggestions"
+import { IA_SYSTEM_PROMPT } from "../src/lib/ia/prompt"
 import type { WorkingObject } from "../src/lib/brain/types"
 
 test("handles parse @rsi, @sum.rsi, @delay:7.rsi, @ete alias, citation", () => {
@@ -104,6 +105,18 @@ test("Brain is a first-class lab in capture nav", () => {
   assert.ok(suggestionsFor("brain").length >= 2)
 })
 
+test("Brain and IA prompts allow a forecast as an hypothesis, they do not refuse it", () => {
+  for (const prompt of [BRAIN_SYSTEM_PROMPT, IA_SYSTEM_PROMPT]) {
+    assert.match(prompt, /hypothèse/)
+    assert.match(prompt, /pronostic/)
+    assert.doesNotMatch(prompt, /refuse/)
+    assert.doesNotMatch(prompt, /Tu ne prédis pas/)
+  }
+  assert.match(INDEPENDENCE_DISCLAIMER, /indépendant/)
+  assert.match(INDEPENDENCE_DISCLAIMER, /hypothèse/)
+  assert.doesNotMatch(INDEPENDENCE_DISCLAIMER, /Ils ne prédisent pas/)
+})
+
 test("@specialist.pere-impair resolves after the specialist index is loaded", () => {
   setSpecialistIndex([
     {
@@ -160,11 +173,12 @@ test("working set pack includes specialist instructions and skill", () => {
   assert.match(String((packed.tech as { disclaimer?: string }).disclaimer), /forecast de série nommée/i)
 })
 
-test("Brain prompt allows specialist forecasts and still forbids grids", () => {
+test("Brain prompt allows specialist forecasts and a grid as a separate hypothesis", () => {
   assert.match(BRAIN_SYSTEM_PROMPT, /@specialist/)
   assert.match(BRAIN_SYSTEM_PROMPT, /forecast/)
-  assert.match(BRAIN_SYSTEM_PROMPT, /aucune grille 5\+2/)
+  assert.match(BRAIN_SYSTEM_PROMPT, /hypothèse/)
   assert.doesNotMatch(BRAIN_SYSTEM_PROMPT, /Tu ne prédis pas le prochain tirage/)
+  assert.doesNotMatch(BRAIN_SYSTEM_PROMPT, /refuse/)
 })
 
 test("specialist catalog entries stay out of the static catalog", () => {

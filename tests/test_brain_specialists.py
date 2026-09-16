@@ -217,5 +217,6 @@ def test_specialist_api_train_list_infer_delete(tmp_path: Path, monkeypatch) -> 
 def test_brain_prompt_allows_specialist_forecast() -> None:
     src = (Path(__file__).resolve().parents[1] / "src/lib/brain/prompt.ts").read_text(encoding="utf-8")
     assert "@specialist" in src
-    assert "Tu ne recommandes aucune grille 5+2" in src
     assert "tu PEUX citer leur forecast" in src
+    assert "hypothèse" in src
+    assert "refuse" not in src

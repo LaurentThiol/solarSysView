@@ -38,7 +38,7 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   if (lab === "tirage") {
     return [
       "Que voit-on sur le filtre actuel (mois, numéros) ?",
-      "Comment lire ce tableau sans en faire un pronostic ?",
+      "Que peut-on en tirer comme pronostic d’évolution (hypothèse), au-delà de la lecture du tableau ?",
     ]
   }
   if (lab === "combinaisons") {
@@ -70,9 +70,10 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   }
   if (lab === "brain") {
     return [
-      "Lis les fiches du working set (@rsi, @adx, @specialist.*) : décris-les, et cite le forecast d’un spécialiste s’il est sur la table (σ, skill 20/50/100).",
+      "Lis les fiches du working set (@rsi, @adx, @specialist.*) : que décrivent-elles, et quel pronostic d’évolution (hypothèse) portent-elles ?",
+      "Cite le forecast d’un spécialiste s’il est sur la table (σ, skill 20/50/100). Un forecast de série nommée n’est pas une grille 5+2 : une 5+2, si tu en proposes une, est une hypothèse séparée.",
       "Quels handles du catalog manquent encore sur le plateau pour répondre ?",
-      "Un forecast de série nommée n’est pas une grille 5+2. Confirme-le si un spécialiste est épinglé.",
+      "Les souvenirs rappelés sont des lectures passées. Sers-t’en pour un pronostic d’hypothèse, sans les prendre pour une série déjà prédite.",
     ]
   }
   return [
