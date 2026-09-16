@@ -272,6 +272,7 @@ def test_brain_demo_is_wired_in_the_lab() -> None:
     assert "sans modèle" in lecture
     assert "Lancer la démo" in bar
     assert "Lire la table" in lab
+    assert "listSpecialists" in lab
     assert "demoWantsStart" in lab
     assert "/brain?demo=1" in readme
     assert 'id: "tour"' in catalog

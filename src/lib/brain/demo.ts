@@ -28,7 +28,7 @@ export const DEMO_NOTE =
 
 export const DEMO_STEPS = [
   { id: "window", label: "Fenêtre", hint: "100 derniers tirages, série somme", target: "window" },
-  { id: "pin", label: "Épingles", hint: "Un handle par lab + kit momentum", target: "library" },
+  { id: "pin", label: "Épingles", hint: "Un handle par lab + un spécialiste s’il existe", target: "library" },
   { id: "table", label: "Table", hint: "Fiches résolues : c’est le prompt", target: "table" },
   { id: "chat", label: "Lecture", hint: "Brain lit la table, chiffres réels", target: "discussion" },
   { id: "watch", label: "Suivi", hint: "@rsi à chaque synchro", target: "library" },

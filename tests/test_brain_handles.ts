@@ -219,6 +219,22 @@ test("demo tour pins one handle per lab and honors ?demo=1", () => {
     assert.ok(labs.includes(lab), lab)
   }
   assert.equal(demoJobs(entries).length, entries.length)
+  const withSpecialist = demoEntries([
+    {
+      id: "specialist/pere-impair",
+      handle: "pere-impair",
+      aliases: ["specialist.pere-impair"],
+      lab: "specialist",
+      family: "specialiste",
+      kind: "specialist",
+      label: "Père impair",
+      units: "",
+      reading: "Forecast",
+      defaults: {},
+    },
+  ])
+  assert.ok(withSpecialist.some((item) => item.lab === "specialist"))
+  assert.equal(withSpecialist.length, DEMO_HANDLES.length + 1)
 })
 
 test("table lecture cites handles, flags, and refuses an empty table", () => {

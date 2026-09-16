@@ -71,7 +71,7 @@ import {
 import { deepLinkFor } from "@/lib/brain/deep-links"
 import { formatHandle, parseHandle, parseHandlesInText } from "@/lib/brain/handles"
 import { DEMO_QUESTION, lectureFromWorkingSet, TABLE_LECTURE_MODEL } from "@/lib/brain/lecture"
-import { specialistToEntry } from "@/lib/brain/specialists"
+import { listSpecialists, specialistToEntry } from "@/lib/brain/specialists"
 import {
   addNote,
   lastWatchlistRun,
@@ -638,14 +638,17 @@ export function BrainLab() {
       setDemoStep(step)
       const target = { window: "window", pin: "library", table: "table", chat: "discussion", watch: "library", scan: "scan", journal: "journal" }[step]
       scrollDemoTarget(target)
-      await waitMs(280)
+      await waitMs(700)
       return !demoStopRef.current
     }
 
     try {
       if (!(await go("window"))) return
       if (!(await go("pin"))) return
-      const entries = demoEntries(specialists, handleCtx)
+      const specialistIndex = await listSpecialists()
+      const liveSpecialists = specialistIndex.items.map((item) => specialistToEntry(item))
+      if (liveSpecialists.length) setSpecialists(liveSpecialists)
+      const entries = demoEntries(liveSpecialists.length ? liveSpecialists : specialists, handleCtx)
       setPins(entries)
       if (!(await go("table"))) return
       const demoCtx: Omit<ResolveContext, "entry"> = {
