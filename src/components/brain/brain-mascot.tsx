@@ -1,5 +1,7 @@
 "use client"
 
+import { useId } from "react"
+
 import { cn } from "@/lib/utils"
 
 export type BrainMood = "idle" | "talk" | "think" | "sleep"
@@ -10,6 +12,10 @@ const SIZES = {
   lg: "size-24",
 } as const
 
+/** Two-lobe walnut silhouette with readable gyri, even at 40px. */
+const OUTLINE =
+  "M48 16C43.5 15.5 40 14.8 36.5 15.8C31 13.2 23.5 15 20.5 19.8C14.5 18.5 8.5 23 8 29.5C3.2 33.5 3.5 42 8.2 47C4.5 52.5 7 61 13.5 64.5C12 70.5 17.5 76.5 24.5 77.5C28 82.5 36 84.5 43.5 81.5C45.5 83.8 48 84 48 81C48 84 50.5 83.8 52.5 81.5C60 84.5 68 82.5 71.5 77.5C78.5 76.5 84 70.5 82.5 64.5C89 61 91.5 52.5 87.8 47C92.5 42 92.8 33.5 88 29.5C87.5 23 81.5 18.5 75.5 19.8C72.5 15 65 13.2 59.5 15.8C56 14.8 52.5 15.5 48 16Z"
+
 export function BrainMascot({
   mood = "idle",
   size = "md",
@@ -19,7 +25,13 @@ export function BrainMascot({
   size?: keyof typeof SIZES
   className?: string
 }) {
+  const uid = useId().replace(/:/g, "")
+  const fillId = `brain-fill-${uid}`
+  const shineId = `brain-shine-${uid}`
+  const shadeId = `brain-shade-${uid}`
+  const clipId = `brain-clip-${uid}`
   const busy = mood === "think" || mood === "talk"
+
   return (
     <span
       className={cn(
@@ -30,66 +42,75 @@ export function BrainMascot({
       )}
       aria-hidden
     >
-      <svg viewBox="0 0 96 96" className="size-full drop-shadow-[0_8px_18px_oklch(0.82_0.12_85_/_0.28)]">
+      <svg viewBox="0 0 96 96" className="size-full overflow-visible drop-shadow-[0_8px_18px_oklch(0.82_0.12_85_/_0.28)]">
         <defs>
-          <linearGradient id="brain-fill" x1="18" y1="12" x2="78" y2="86" gradientUnits="userSpaceOnUse">
-            <stop stopColor="oklch(0.9 0.1 85)" />
-            <stop offset="0.55" stopColor="oklch(0.82 0.14 85)" />
-            <stop offset="1" stopColor="oklch(0.72 0.12 55)" />
+          <linearGradient id={fillId} x1="14" y1="10" x2="84" y2="88" gradientUnits="userSpaceOnUse">
+            <stop stopColor="oklch(0.94 0.08 85)" />
+            <stop offset="0.48" stopColor="oklch(0.84 0.14 85)" />
+            <stop offset="1" stopColor="oklch(0.69 0.13 58)" />
           </linearGradient>
-          <linearGradient id="brain-shine" x1="28" y1="16" x2="52" y2="44" gradientUnits="userSpaceOnUse">
-            <stop stopColor="oklch(0.98 0.04 95)" stopOpacity="0.85" />
-            <stop offset="1" stopColor="oklch(0.98 0.04 95)" stopOpacity="0" />
+          <linearGradient id={shineId} x1="22" y1="12" x2="56" y2="44" gradientUnits="userSpaceOnUse">
+            <stop stopColor="oklch(0.99 0.03 95)" stopOpacity="0.95" />
+            <stop offset="1" stopColor="oklch(0.99 0.03 95)" stopOpacity="0" />
           </linearGradient>
+          <radialGradient id={shadeId} cx="48" cy="78" r="30" gradientUnits="userSpaceOnUse">
+            <stop stopColor="oklch(0.48 0.1 55)" stopOpacity="0.28" />
+            <stop offset="1" stopColor="oklch(0.48 0.1 55)" stopOpacity="0" />
+          </radialGradient>
+          <clipPath id={clipId}>
+            <path d={OUTLINE} />
+          </clipPath>
         </defs>
-        <ellipse cx="48" cy="84" rx="22" ry="5" fill="oklch(0.18 0.04 260 / 0.28)" />
+        <ellipse cx="48" cy="89.2" rx="22" ry="4" fill="oklch(0.18 0.04 260 / 0.32)" />
         <path
-          d="M30 30c-9 1-16 10-16 20 0 8 5 15 12 18 2 8 10 14 22 14s20-6 22-14c7-3 12-10 12-18 0-10-7-19-16-20-2-8-10-14-22-14s-20 6-22 14z"
-          fill="url(#brain-fill)"
-          stroke="oklch(0.55 0.1 70)"
-          strokeWidth="1.6"
+          d={OUTLINE}
+          fill={`url(#${fillId})`}
+          stroke="oklch(0.46 0.1 70)"
+          strokeWidth="2.1"
+          strokeLinejoin="round"
         />
-        <path
-          d="M48 16c-7 8-8 18-8 28 0 10 1 20 8 28"
-          fill="none"
-          stroke="oklch(0.55 0.1 70)"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-        <path
-          d="M28 36c4-3 8-2 11 2M27 46c5-2 9 0 12 4M62 36c-4-3-8-2-11 2M63 46c-5-2-9 0-12 4M32 58c5 2 9 2 14-1M50 57c5 3 10 3 15 0"
-          fill="none"
-          stroke="oklch(0.55 0.08 70 / 0.7)"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        />
-        <path d="M34 24c8-6 20-6 28 0" fill="url(#brain-shine)" />
-        {mood === "sleep" ? (
-          <>
-            <path d="M36 52c3 2 6 2 9 0" fill="none" stroke="oklch(0.32 0.06 260)" strokeWidth="2.2" strokeLinecap="round" />
-            <path d="M51 52c3 2 6 2 9 0" fill="none" stroke="oklch(0.32 0.06 260)" strokeWidth="2.2" strokeLinecap="round" />
-            <text x="70" y="28" fontSize="11" fill="oklch(0.86 0.08 85)" fontFamily="ui-sans-serif, system-ui">
-              z
-            </text>
-            <text x="78" y="18" fontSize="14" fill="oklch(0.9 0.08 85)" fontFamily="ui-sans-serif, system-ui">
-              z
-            </text>
-          </>
-        ) : (
-          <>
-            <circle cx="38" cy="50" r={mood === "think" ? 3.2 : 4.2} fill="oklch(0.28 0.05 260)" />
-            <circle cx="58" cy="50" r={mood === "think" ? 3.2 : 4.2} fill="oklch(0.28 0.05 260)" />
-            <circle cx="39.4" cy="48.6" r="1.2" fill="oklch(0.98 0.02 95)" />
-            <circle cx="59.4" cy="48.6" r="1.2" fill="oklch(0.98 0.02 95)" />
-            <path
-              d={mood === "think" ? "M42 63c3 2 9 2 12 0" : "M40 62c4 5 12 5 16 0"}
-              fill="none"
-              stroke="oklch(0.32 0.06 260)"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-            />
-          </>
-        )}
+        <g clipPath={`url(#${clipId})`}>
+          <ellipse cx="48" cy="76" rx="26" ry="14" fill={`url(#${shadeId})`} />
+          <path
+            d="M44 22c-10-2-18 4-23 14M44 30c-11-2-20 6-24 16M32 20c-8 10-10 24-4 38M44 54c-8 4-14 10-16 16"
+            fill="none"
+            stroke="oklch(0.48 0.1 70 / 0.7)"
+            strokeWidth="1.45"
+            strokeLinecap="round"
+          />
+          <path
+            d="M52 22c10-2 18 4 23 14M52 30c11-2 20 6 24 16M64 20c8 10 10 24 4 38M52 54c8 4 14 10 16 16"
+            fill="none"
+            stroke="oklch(0.48 0.1 70 / 0.7)"
+            strokeWidth="1.45"
+            strokeLinecap="round"
+          />
+          <path
+            d="M48 19c-2.5 19-2.5 39 0 59"
+            fill="none"
+            stroke="oklch(0.46 0.1 70 / 0.82)"
+            strokeWidth="1.85"
+            strokeLinecap="round"
+          />
+          <path
+            d="M50.4 21c2.6 17 2.6 37 0 55"
+            fill="none"
+            stroke="oklch(0.99 0.03 95 / 0.32)"
+            strokeWidth="1.3"
+            strokeLinecap="round"
+          />
+          <path d="M28 22c12-6.5 28-6.5 40 0" fill={`url(#${shineId})`} />
+          <path
+            d="M34 77q14-4 28 0M38 80.5q10-2.6 20 0"
+            fill="none"
+            stroke="oklch(0.48 0.1 70 / 0.45)"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+          />
+          <ellipse cx="29.5" cy="56" rx="6" ry="3.3" fill="oklch(0.76 0.13 25 / 0.45)" />
+          <ellipse cx="66.5" cy="56" rx="6" ry="3.3" fill="oklch(0.76 0.13 25 / 0.45)" />
+        </g>
+        <Face mood={mood} />
       </svg>
       {mood === "think" ? (
         <span className="absolute -top-1 right-0 flex gap-0.5">
@@ -99,5 +120,81 @@ export function BrainMascot({
         </span>
       ) : null}
     </span>
+  )
+}
+
+function Face({ mood }: { mood: BrainMood }) {
+  const ink = "oklch(0.3 0.06 260)"
+  if (mood === "sleep") {
+    return (
+      <>
+        <path d="M30 50c4.2 3.4 9 3.4 13.2 0" fill="none" stroke={ink} strokeWidth="2.15" strokeLinecap="round" />
+        <path d="M52.8 50c4.2 3.4 9 3.4 13.2 0" fill="none" stroke={ink} strokeWidth="2.15" strokeLinecap="round" />
+        <path d="M42 62c4 2 8 2 12 0" fill="none" stroke={ink} strokeWidth="1.8" strokeLinecap="round" />
+        <path
+          d="M69 26h7.5l-7.5 7.5h7.5"
+          fill="none"
+          stroke="oklch(0.9 0.08 85)"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M77 15h9.5l-9.5 9.5h9.5"
+          fill="none"
+          stroke="oklch(0.93 0.08 85)"
+          strokeWidth="1.85"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </>
+    )
+  }
+
+  const lookY = mood === "think" ? 46.2 : 49.2
+  const lookX = mood === "think" ? 1.25 : 0.45
+  const eyeR = mood === "think" ? 3.05 : 3.35
+  const brow =
+    mood === "think"
+      ? "M29.5 38.2c3.4-3.4 9.4-3.6 12.6-.6"
+      : mood === "talk"
+        ? "M30 38.8c3.6-2.8 9.2-2.4 12.4.6"
+        : "M30 39.6c3.4-2.2 9-2.2 12.2 0"
+  const browRight =
+    mood === "think"
+      ? "M54.2 38.2c3.4-3.4 9.4-3.6 12.6-.6"
+      : mood === "talk"
+        ? "M53.6 38.8c3.6-2.8 9.2-2.4 12.4.6"
+        : "M53.8 39.6c3.4-2.2 9-2.2 12.2 0"
+
+  return (
+    <>
+      <ellipse cx="36" cy="48" rx="6.3" ry="7.1" fill="oklch(0.985 0.02 95)" stroke={ink} strokeWidth="1.15" />
+      <ellipse cx="60" cy="48" rx="6.3" ry="7.1" fill="oklch(0.985 0.02 95)" stroke={ink} strokeWidth="1.15" />
+      <circle cx={36 + lookX} cy={lookY} r={eyeR} fill="oklch(0.27 0.06 260)" />
+      <circle cx={60 + lookX} cy={lookY} r={eyeR} fill="oklch(0.27 0.06 260)" />
+      <circle cx={37.7 + lookX} cy={lookY - 1.8} r="1.35" fill="white" />
+      <circle cx={61.7 + lookX} cy={lookY - 1.8} r="1.35" fill="white" />
+      <circle cx={35.3 + lookX} cy={lookY + 1.5} r="0.6" fill="white" fillOpacity={0.7} />
+      <circle cx={59.3 + lookX} cy={lookY + 1.5} r="0.6" fill="white" fillOpacity={0.7} />
+      <path d={brow} fill="none" stroke={ink} strokeWidth="1.7" strokeLinecap="round" />
+      <path d={browRight} fill="none" stroke={ink} strokeWidth="1.7" strokeLinecap="round" />
+      {mood === "talk" ? (
+        <>
+          <path
+            d="M39.5 58.8c2.8 7.4 14.2 7.4 17 0-4.2 2.2-12.8 2.2-17 0z"
+            fill="oklch(0.4 0.11 22)"
+            stroke={ink}
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
+          <ellipse cx="48" cy="65.2" rx="3.1" ry="1.7" fill="oklch(0.62 0.16 25)" />
+        </>
+      ) : mood === "think" ? (
+        <path d="M43 62.2c3.2 1.5 6.8 1.5 10 0" fill="none" stroke={ink} strokeWidth="2" strokeLinecap="round" />
+      ) : (
+        <path d="M40 61.2c4 5.4 12 5.4 16 0" fill="none" stroke={ink} strokeWidth="2.15" strokeLinecap="round" />
+      )}
+    </>
   )
 }

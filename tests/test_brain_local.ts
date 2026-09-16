@@ -40,3 +40,14 @@ test("watchlist sync does not prefetch era=current on every page", () => {
   assert.match(src, /SYNC_ENSURE_EVENT/)
   assert.match(src, /\/api\/draws\?era=current/)
 })
+
+test("brain mascot is a two-lobe drawing with unique paint ids", () => {
+  const src = readFileSync(new URL("../src/components/brain/brain-mascot.tsx", import.meta.url), "utf8")
+  assert.match(src, /useId\(/)
+  assert.match(src, /brain-fill-\$\{uid\}/)
+  assert.match(src, /mood === "sleep"/)
+  assert.match(src, /mood === "think"/)
+  assert.match(src, /mood === "talk"/)
+  assert.doesNotMatch(src, /M30 30c-9 1-16 10-16 20/)
+  assert.match(src, /clipPath/)
+})

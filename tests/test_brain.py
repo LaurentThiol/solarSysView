@@ -222,3 +222,18 @@ def test_brain_retrieve_skips_when_ollama_down() -> None:
     body = response.json()
     assert body["ok"] is False
     assert body["items"] == []
+
+
+def test_brain_mascot_is_a_two_lobe_drawing() -> None:
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "src/components/brain/brain-mascot.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "useId(" in src
+    assert "brain-fill-${uid}" in src
+    assert 'mood === "sleep"' in src
+    assert 'mood === "think"' in src
+    assert 'mood === "talk"' in src
+    assert "M30 30c-9 1-16 10-16 20" not in src
+    assert "clipPath" in src
