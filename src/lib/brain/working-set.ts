@@ -2,11 +2,15 @@ import { INDEPENDENCE_DISCLAIMER, JSON_BUDGET, withinBudget } from "@/lib/captur
 import type { IaSnapshotPayload } from "@/lib/ia/providers"
 import type { WorkingObject } from "@/lib/brain/types"
 
+export const SPECIALIST_DISCLAIMER =
+  "Un spécialiste Brain publie un forecast de série nommée (parité, somme…) avec son skill vs le hasard. Ce n’est pas une recommandation de grille 5+2."
+
 export function workingSetPayload(objects: WorkingObject[]): Record<string, unknown> {
   const inPrompt = objects.filter((item) => item.inPrompt)
+  const hasSpecialist = inPrompt.some((item) => item.fiche?.lab === "specialist" || item.handle.includes("specialist."))
   return withinBudget({
     kind: "brain-working-set",
-    disclaimer: INDEPENDENCE_DISCLAIMER,
+    disclaimer: hasSpecialist ? `${INDEPENDENCE_DISCLAIMER} ${SPECIALIST_DISCLAIMER}` : INDEPENDENCE_DISCLAIMER,
     objects: inPrompt.map((item) => ({
       kind: item.kind,
       id: item.id,
@@ -18,6 +22,8 @@ export function workingSetPayload(objects: WorkingObject[]): Record<string, unkn
       flags: item.fiche?.flags ?? [],
       window: item.fiche?.window ?? null,
       reading: item.fiche?.reading ?? null,
+      instructions: item.fiche?.last?.instructions ?? item.fiche?.reading ?? null,
+      lab: item.fiche?.lab ?? null,
     })),
   })
 }

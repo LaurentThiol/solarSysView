@@ -208,6 +208,22 @@ class BrainRetrieveIn(BaseModel):
     model: str | None = None
 
 
+class BrainSpecialistIn(BaseModel):
+    name: str
+    target: str
+    indicators: list[str] = Field(min_length=1)
+    instructions: str
+    task: str | None = None
+    horizon: str = "value"
+    n: int | None = Field(default=None, ge=1, le=50)
+    hidden: int = Field(default=16, ge=4, le=64)
+    epochs: int = Field(default=80, ge=10, le=400)
+    seed: int = 0
+    force: bool = False
+    era: str = "current"
+    abstain: float = Field(default=0.45, ge=0.0, le=1.0)
+
+
 def _json(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: _json(v) for k, v in value.items()}
@@ -990,6 +1006,158 @@ def create_app() -> FastAPI:
             raise HTTPException(503, str(exc)) from exc
         items = brain_mod.retrieve(embedded["embedding"], rows, k=payload.k)
         return {"ok": True, "model": embedded["model"], "items": [_json(db.serialize_row(item, drop=())) for item in items]}
+
+    def _specialist_draws(era: str = "current") -> tuple[list[dict[str, Any]], str]:
+        if db.database_configured():
+            try:
+                rows = db.all_draws(era=era if era in {"current", "all"} else "current")
+                if rows:
+                    return rows, "neon"
+            except Exception:
+                pass
+        snapshot = ROOT / "src" / "data" / "euromillions-2026.json"
+        if snapshot.exists():
+            import json as _jsonlib
+
+            items = _jsonlib.loads(snapshot.read_text(encoding="utf-8"))
+            return items, "json"
+        raise HTTPException(503, "Aucun tirage : Neon indisponible et snapshot JSON absent.")
+
+    def _sync_specialist_row(record: dict[str, Any]) -> None:
+        if not record.get("saved"):
+            return
+        if not db.database_configured():
+            return
+        try:
+            db.upsert_brain_specialist(
+                {
+                    "slug": record["slug"],
+                    "name": record["name"],
+                    "handle": record["handle"],
+                    "target": record["target"],
+                    "task": record["task"],
+                    "horizon": record["horizon"],
+                    "indicators": record["indicators"],
+                    "instructions": record["instructions"],
+                    "config": {
+                        "hidden": record.get("hidden"),
+                        "epochs": record.get("epochs"),
+                        "seed": record.get("seed"),
+                        "abstain": record.get("abstain"),
+                        "n": record.get("n"),
+                    },
+                    "report": {
+                        "windows": record.get("windows"),
+                        "skill": record.get("skill"),
+                        "verdict": record.get("verdict"),
+                    },
+                    "last_forecast": record.get("last_forecast"),
+                }
+            )
+        except Exception:
+            return
+
+    @app.get("/api/brain/specialists/features")
+    def brain_specialist_features() -> dict[str, Any]:
+        from synchro.brain_specialists.features import FEATURES, FEATURE_IDS
+
+        return {
+            "ok": True,
+            "items": [
+                {"id": name, **FEATURES[name]}
+                for name in FEATURE_IDS
+            ],
+        }
+
+    @app.get("/api/brain/specialists")
+    def brain_specialists() -> dict[str, Any]:
+        from synchro.brain_specialists import list_specialists
+
+        return {"ok": True, "items": list_specialists()}
+
+    @app.post("/api/brain/specialists")
+    def create_brain_specialist(payload: BrainSpecialistIn) -> dict[str, Any]:
+        from synchro.brain_specialists import train_specialist
+
+        draws, source = _specialist_draws(payload.era)
+        try:
+            record = train_specialist(
+                draws,
+                name=payload.name,
+                target=payload.target,
+                indicators=payload.indicators,
+                instructions=payload.instructions,
+                task=payload.task,
+                horizon=payload.horizon,
+                n=payload.n,
+                hidden=payload.hidden,
+                epochs=payload.epochs,
+                seed=payload.seed,
+                force=payload.force,
+                abstain=payload.abstain,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        record["source"] = source
+        _sync_specialist_row(record)
+        return _json(record)
+
+    @app.get("/api/brain/specialists/{slug}")
+    def brain_specialist(slug: str) -> dict[str, Any]:
+        from synchro.brain_specialists import load_specialist
+
+        try:
+            packed = load_specialist(slug)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "Spécialiste introuvable") from exc
+        config = packed["config"]
+        report = packed["report"]
+        return _json(
+            {
+                "ok": True,
+                "slug": config["slug"],
+                "name": config["name"],
+                "handle": config["handle"],
+                "target": config["target"],
+                "task": config["task"],
+                "horizon": config.get("horizon") or "value",
+                "indicators": config["indicators"],
+                "instructions": config["instructions"],
+                "windows": report.get("windows") or {},
+                "skill": report.get("skill"),
+                "verdict": report.get("verdict"),
+                "last_forecast": report.get("last_forecast"),
+                "disclaimer": config.get("disclaimer"),
+            }
+        )
+
+    @app.post("/api/brain/specialists/{slug}/infer")
+    def infer_brain_specialist(slug: str, era: str = Query("current", pattern="^(current|all)$")) -> dict[str, Any]:
+        from synchro.brain_specialists import infer_specialist
+
+        draws, source = _specialist_draws(era)
+        try:
+            payload = infer_specialist(draws, slug)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "Spécialiste introuvable") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        payload["source"] = source
+        return _json(payload)
+
+    @app.delete("/api/brain/specialists/{slug}")
+    def remove_brain_specialist(slug: str) -> dict[str, Any]:
+        from synchro.brain_specialists import delete_specialist
+
+        deleted = delete_specialist(slug)
+        if db.database_configured():
+            try:
+                db.delete_brain_specialist(slug)
+            except Exception:
+                pass
+        if not deleted:
+            raise HTTPException(404, "Spécialiste introuvable")
+        return {"ok": True, "slug": slug}
 
     @app.post("/api/sync")
     def sync() -> dict[str, Any]:

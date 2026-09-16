@@ -49,6 +49,8 @@ def test_launch_help_lists_new_commands() -> None:
     out = result.stdout
     assert "./launch logs" in out
     assert "./launch restart" in out
+    assert "./launch chartisme-train" in out
+    assert "./launch brain-specialist-train" in out
     assert "./launch stop --force" in out
     assert "HOST du .env" in out
     assert "vérifie Neon / Ollama" in out

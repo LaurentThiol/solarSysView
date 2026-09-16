@@ -45,6 +45,26 @@ def main(argv: list[str] | None = None) -> int:
     chartisme.add_argument("--min-confidence", type=float, default=0.6)
     chartisme.add_argument("--max-curves", type=int, default=12)
 
+    specialist = sub.add_parser(
+        "specialist",
+        help="Spécialistes Brain : entraîner / lister / inférer un réseau par série",
+    )
+    specialist.add_argument("action", choices=("train", "list", "infer", "delete"))
+    specialist.add_argument("--name", default="Père impair")
+    specialist.add_argument("--target", default="parity")
+    specialist.add_argument("--indicators", default="lag1,lag2,rsi,macd,bollinger")
+    specialist.add_argument(
+        "--instructions",
+        default="Forecast de la parité (nombre de pairs 0–5) à t+1. Pas une grille.",
+    )
+    specialist.add_argument("--task", default=None, choices=("regression", "classes", "binary"))
+    specialist.add_argument("--horizon", default="value", choices=("value", "delta"))
+    specialist.add_argument("--era", default="current", choices=("current", "all"))
+    specialist.add_argument("--force", action="store_true")
+    specialist.add_argument("--slug", default=None)
+    specialist.add_argument("--epochs", type=int, default=80)
+    specialist.add_argument("--hidden", type=int, default=16)
+
     args = parser.parse_args(argv)
 
     if args.command == "init-db":
@@ -88,6 +108,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "chartisme":
         return run_chartisme(args)
+
+    if args.command == "specialist":
+        return run_specialist(args)
 
     if args.command == "serve":
         settings = get_settings()
@@ -235,6 +258,78 @@ def run_chartisme(args: argparse.Namespace) -> int:
         return 0
 
     return 1
+
+
+def run_specialist(args: argparse.Namespace) -> int:
+    from synchro.brain_specialists import (
+        delete_specialist,
+        infer_specialist,
+        list_specialists,
+        train_specialist,
+    )
+
+    def draws_of() -> list[dict[str, Any]]:
+        db.init_db()
+        return [db.serialize_draw(row) for row in db.all_draws(era=args.era)]
+
+    if args.action == "list":
+        items = list_specialists()
+        if not items:
+            print("Aucun spécialiste sauvé dans .brain/specialists/")
+            return 0
+        for item in items:
+            print(
+                f"  @{item['handle']:<28} {item['target']:<12} "
+                f"skill {item.get('skill')} · {item.get('verdict')}"
+            )
+        return 0
+
+    if args.action == "delete":
+        slug = args.slug
+        if not slug:
+            print("--slug obligatoire pour delete", file=sys.stderr)
+            return 1
+        if not delete_specialist(slug):
+            print(f"Introuvable: {slug}", file=sys.stderr)
+            return 1
+        print(f"Supprimé: {slug}")
+        return 0
+
+    if args.action == "infer":
+        slug = args.slug
+        if not slug:
+            print("--slug obligatoire pour infer", file=sys.stderr)
+            return 1
+        payload = infer_specialist(draws_of(), slug)
+        forecast = payload.get("forecast") or {}
+        print(
+            f"@{payload['handle']} → {forecast.get('value')} "
+            f"(σ {forecast.get('sigma')}, skill {payload.get('skill')})"
+        )
+        if forecast.get("abstain"):
+            print("  abstention (confiance trop basse)")
+        return 0
+
+    indicators = [part.strip() for part in str(args.indicators).split(",") if part.strip()]
+    record = train_specialist(
+        draws_of(),
+        name=args.name,
+        target=args.target,
+        indicators=indicators,
+        instructions=args.instructions,
+        task=args.task,
+        horizon=args.horizon,
+        epochs=args.epochs,
+        hidden=args.hidden,
+        force=args.force,
+    )
+    print(
+        f"{record['name']} @{record['handle']} skill {record['skill']} "
+        f"({record.get('verdict')}) saved={record['saved']}"
+    )
+    if record.get("reason"):
+        print(f"  {record['reason']}")
+    return 0 if record.get("saved") or record.get("reason") else 1
 
 
 if __name__ == "__main__":

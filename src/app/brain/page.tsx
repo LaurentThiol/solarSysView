@@ -5,7 +5,7 @@ import { BrainLab } from "@/components/brain/brain-lab"
 export const metadata: Metadata = {
   title: "Brain — Synchro",
   description:
-    "Épingle des indicateurs (@rsi, @ete…) et discute avec Brain. Il décrit la fenêtre, il ne joue pas. Ollama d’abord ; le cloud seulement si tu le demandes.",
+    "Épingle des indicateurs (@rsi, @ete, @specialist.pere-impair) et discute avec Brain. Les spécialistes forecast une série nommée ; aucune grille 5+2. Ollama d’abord ; le cloud seulement si tu le demandes.",
 }
 
 export default function BrainPage() {

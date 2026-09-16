@@ -70,9 +70,9 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   }
   if (lab === "brain") {
     return [
-      "Lis les fiches du working set (@rsi, @adx…) : que décrivent-elles sur cette fenêtre, sans pronostic ?",
+      "Lis les fiches du working set (@rsi, @adx, @specialist.*) : décris-les, et cite le forecast d’un spécialiste s’il est sur la table (σ, skill 20/50/100).",
       "Quels handles du catalog manquent encore sur le plateau pour répondre ?",
-      "Les souvenirs rappelés sont des lectures passées, pas une série prédictive. Confirme-le.",
+      "Un forecast de série nommée n’est pas une grille 5+2. Confirme-le si un spécialiste est épinglé.",
     ]
   }
   return [

@@ -252,7 +252,9 @@ Un troisième fournisseur **Local** (Ollama / llama-server) sert surtout les lec
 
 ## Brain (`/brain`)
 
-Catalog nommé des indicateurs (`@rsi`, `@sum.rsi`, `@ete`, `@fft`), journal persisté (Neon, repli local), mémoire vectorielle locale (`nomic-embed-text`) et **agent manuel** (catalog ou 142 courbes Chartisme). Le panneau **Objets** est exactement le prompt. Chat et lots passent par Ollama ; **Escalader** / **Lots cloud** sont opt-in. L’onglet IA n’est pas fusionné : il reste la lecture de captures.
+Catalog nommé des indicateurs (`@rsi`, `@sum.rsi`, `@ete`, `@fft`), **spécialistes** (un petit réseau par série — parité, somme… — entraîné sur l’ère formule, noté sur les 20/50/100 derniers, sauvé dans `.brain/specialists/`), journal persisté (Neon, repli local), mémoire vectorielle locale (`nomic-embed-text`) et **agent manuel** (catalog ou 142 courbes Chartisme). Le panneau **Objets** est exactement le prompt. Chat et lots passent par Ollama ; **Escalader** / **Lots cloud** sont opt-in. L’onglet IA n’est pas fusionné : il reste la lecture de captures. Un spécialiste peut citer un forecast de série nommée ; Brain ne recommande aucune grille 5+2.
+
+`./launch doctor` ping Ollama. `OLLAMA_HOST` (défaut `http://127.0.0.1:11434`) est dans `.env.example`. Entraînement d’un spécialiste : `./launch brain-specialist-train` (ou le panneau Spécialistes de `/brain`).
 
 `./launch doctor` ping Ollama. `OLLAMA_HOST` (défaut `http://127.0.0.1:11434`) est dans `.env.example`.
 

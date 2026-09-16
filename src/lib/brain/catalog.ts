@@ -1,10 +1,11 @@
+import { specialistCatalogEntry, specialistEntries } from "@/lib/brain/specialists"
 import { VARIABLE_LABELS, VARIABLE_NAMES, type VariableName } from "@/lib/analysis"
 import { FIGURE_IDS, FIGURE_LABELS, type FigureId } from "@/lib/chartisme/catalog"
 import { MOTIF_IDS, MOTIF_LABELS } from "@/lib/morpho/lexicon"
 
-export type BrainLab = "analyse" | "chartisme" | "harmo" | "morpho" | "combinaisons"
+export type BrainLab = "analyse" | "chartisme" | "harmo" | "morpho" | "combinaisons" | "specialist"
 
-export type CatalogKind = "indicator" | "variable" | "figure" | "spectrum" | "motif" | "grid"
+export type CatalogKind = "indicator" | "variable" | "figure" | "spectrum" | "motif" | "grid" | "specialist"
 
 export type CatalogEntry = {
   id: string
@@ -364,7 +365,7 @@ export const BRAIN_PACKS: NamedPack[] = [
   { id: "harmo", label: "Harmo", handles: ["fft", "welch", "comb"] },
 ]
 
-export const BRAIN_LABS: BrainLab[] = ["analyse", "chartisme", "harmo", "morpho", "combinaisons"]
+export const BRAIN_LABS: BrainLab[] = ["analyse", "chartisme", "harmo", "morpho", "combinaisons", "specialist"]
 
 export const BRAIN_LAB_LABELS: Record<BrainLab, string> = {
   analyse: "Analyse",
@@ -372,18 +373,20 @@ export const BRAIN_LAB_LABELS: Record<BrainLab, string> = {
   harmo: "Harmo",
   morpho: "Morpho",
   combinaisons: "Combinaisons",
+  specialist: "Spécialistes",
 }
 
 const BY_ID = new Map(BRAIN_CATALOG.map((entry) => [entry.id, entry]))
 
 export function catalogEntry(id: string): CatalogEntry | undefined {
-  return BY_ID.get(id)
+  return BY_ID.get(id) ?? specialistCatalogEntry(id)
 }
 
 export function catalogByHandle(handle: string, activeLab?: BrainLab | null): CatalogEntry[] {
   const key = handle.trim().toLowerCase()
   if (!key) return []
-  const matches = BRAIN_CATALOG.filter(
+  const catalog = [...BRAIN_CATALOG, ...specialistEntries()]
+  const matches = catalog.filter(
     (entry) => entry.handle === key || entry.aliases.includes(key)
   )
   if (activeLab) {

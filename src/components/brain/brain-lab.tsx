@@ -27,6 +27,7 @@ import {
   WALKER_STATUS_LABELS,
 } from "@/components/brain/brain-chrome"
 import { BrainMascot } from "@/components/brain/brain-mascot"
+import { BrainSpecialists } from "@/components/brain/brain-specialists"
 import { useRegisterCapture } from "@/components/capture"
 import { HelpTip } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
@@ -55,7 +56,8 @@ import {
   type CatalogEntry,
 } from "@/lib/brain/catalog"
 import { deepLinkFor } from "@/lib/brain/deep-links"
-import { parseHandle, parseHandlesInText } from "@/lib/brain/handles"
+import { formatHandle, parseHandle, parseHandlesInText } from "@/lib/brain/handles"
+import { specialistToEntry } from "@/lib/brain/specialists"
 import {
   addNote,
   lastWatchlistRun,
@@ -158,6 +160,7 @@ export function BrainLab() {
   const [inspector, setInspector] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
+  const [specialists, setSpecialists] = useState<CatalogEntry[]>([])
   const abortRef = useRef<AbortController | null>(null)
   const chatRef = useRef<HTMLDivElement | null>(null)
 
@@ -199,12 +202,13 @@ export function BrainLab() {
 
   const catalog = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return BRAIN_CATALOG.filter((entry) => {
+    const all = [...BRAIN_CATALOG, ...specialists]
+    return all.filter((entry) => {
       if (activeLab !== "all" && entry.lab !== activeLab) return false
       if (!q) return true
       return `${entry.handle} ${entry.label} ${entry.aliases.join(" ")}`.toLowerCase().includes(q)
     })
-  }, [activeLab, query])
+  }, [activeLab, query, specialists])
 
   const catalogGroups = useMemo(() => {
     const order: string[] = []
@@ -276,7 +280,7 @@ export function BrainLab() {
       objects.push({
         kind: "pin",
         id: entry.id,
-        handle: `@${entry.handle}`,
+        handle: formatHandle(entry),
         label: entry.label,
         inPrompt: true,
         summary: fiche.summary,
@@ -619,8 +623,8 @@ export function BrainLab() {
             <h1 className="mt-1 text-3xl font-semibold tracking-tight">Brain</h1>
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
               Épingle un nom — <span className="text-foreground">@rsi</span>,{" "}
-              <span className="text-foreground">@ete</span>, <span className="text-foreground">@fft</span> —
-              puis pose une question. Brain décrit la fenêtre. Il ne joue pas.
+              <span className="text-foreground">@ete</span>, <span className="text-foreground">@specialist.pere-impair</span>{" "}
+              — puis pose une question. Les spécialistes forecast une série nommée. Brain ne recommande aucune grille.
             </p>
             <ol className="mt-3 flex flex-wrap gap-2 text-xs">
               <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">1. Épingle</li>
@@ -891,7 +895,7 @@ export function BrainLab() {
                       onClick={() => setPins((prev) => prev.filter((item) => item.id !== entry.id))}
                       title="Retirer de la table"
                     >
-                      @{entry.handle} ×
+                      @{formatHandle(entry).replace(/^@/, "")} ×
                     </button>
                   ))}
                 </div>
@@ -1020,7 +1024,7 @@ export function BrainLab() {
                               title={entry.reading}
                               onClick={() => pinEntry(entry)}
                             >
-                              <span className="font-mono text-[13px] text-primary">@{entry.handle}</span>
+                              <span className="font-mono text-[13px] text-primary">{formatHandle(entry)}</span>
                               <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">
                                 {entry.label}
                                 {entry.units ? ` · ${entry.units}` : ""}
@@ -1055,6 +1059,12 @@ export function BrainLab() {
           </Card>
         </div>
       </div>
+
+      <BrainSpecialists
+        era={era}
+        onPin={pinEntry}
+        onIndex={(items) => setSpecialists(items.map((item) => specialistToEntry(item)))}
+      />
 
       <Card>
         <CardHeader>

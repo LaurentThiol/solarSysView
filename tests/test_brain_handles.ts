@@ -2,9 +2,11 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { BRAIN_CATALOG, catalogCollisions, catalogEntry } from "../src/lib/brain/catalog"
-import { parseHandle, parseHandlesInText } from "../src/lib/brain/handles"
+import { parseHandle, parseHandlesInText, formatHandle } from "../src/lib/brain/handles"
 import { cosine } from "../src/lib/brain/retrieve"
 import { objectsEqualPrompt, packWorkingSet } from "../src/lib/brain/working-set"
+import { BRAIN_SYSTEM_PROMPT } from "../src/lib/brain/prompt"
+import { setSpecialistIndex, specialistToEntry } from "../src/lib/brain/specialists"
 import { catalogJobs, curveJobs } from "../src/lib/brain/walker"
 import { curveSpecs } from "../src/lib/chartisme/curves"
 import { labFromPath, labLabel } from "../src/lib/capture/snapshot"
@@ -101,3 +103,86 @@ test("Brain is a first-class lab in capture nav", () => {
   assert.equal(labLabel("brain"), "Brain")
   assert.ok(suggestionsFor("brain").length >= 2)
 })
+
+test("@specialist.pere-impair resolves after the specialist index is loaded", () => {
+  setSpecialistIndex([
+    {
+      slug: "pere-impair",
+      name: "Père impair",
+      handle: "specialist.pere-impair",
+      target: "parity",
+      task: "classes",
+      horizon: "value",
+      indicators: ["lag1", "rsi"],
+      instructions: "Forecast du nombre de pairs. Pas une grille.",
+      skill: 0.02,
+      skill_50: 0.02,
+    },
+  ])
+  const parsed = parseHandle("@specialist.pere-impair")
+  assert.equal(parsed.error, null)
+  assert.equal(parsed.entry?.id, "specialist/pere-impair")
+  assert.equal(parsed.entry?.lab, "specialist")
+  assert.equal(formatHandle(parsed.entry!), "@specialist.pere-impair")
+  setSpecialistIndex([])
+})
+
+test("working set pack includes specialist instructions and skill", () => {
+  const objects: WorkingObject[] = [
+    {
+      kind: "pin",
+      id: "specialist/pere-impair",
+      handle: "@specialist.pere-impair",
+      label: "Père impair",
+      inPrompt: true,
+      summary: "forecast 3 · skill 0.02",
+      fiche: {
+        id: "specialist/pere-impair",
+        handle: "pere-impair",
+        lab: "specialist",
+        label: "Père impair",
+        units: "forecast t+1",
+        reading: "Forecast du nombre de pairs. Pas une grille.",
+        params: { variable: "parity", n: null, periodX: 14, curveId: null },
+        window: { preset: "last_100", from: null, to: null, n: 100, warmup: 52, banner: "100" },
+        last: { forecast: 3, sigma: 0.4, skill: 0.02, skill_50: 0.02, instructions: "Pas une grille." },
+        flags: [],
+        flagged: false,
+        summary: "forecast 3",
+        disclaimer: "pas une grille",
+      },
+    },
+  ]
+  const packed = packWorkingSet(objects)
+  const sent = (packed.tech as { objects: Array<{ instructions?: string; last?: { skill?: number } }>; disclaimer?: string }).objects
+  assert.equal(sent[0].instructions, "Pas une grille.")
+  assert.equal(sent[0].last?.skill, 0.02)
+  assert.match(String((packed.tech as { disclaimer?: string }).disclaimer), /forecast de série nommée/i)
+})
+
+test("Brain prompt allows specialist forecasts and still forbids grids", () => {
+  assert.match(BRAIN_SYSTEM_PROMPT, /@specialist/)
+  assert.match(BRAIN_SYSTEM_PROMPT, /forecast/)
+  assert.match(BRAIN_SYSTEM_PROMPT, /aucune grille 5\+2/)
+  assert.doesNotMatch(BRAIN_SYSTEM_PROMPT, /Tu ne prédis pas le prochain tirage/)
+})
+
+test("specialist catalog entries stay out of the static catalog", () => {
+  assert.equal(
+    BRAIN_CATALOG.filter((entry) => entry.lab === "specialist").length,
+    0
+  )
+  const entry = specialistToEntry({
+    slug: "somme-totale",
+    name: "Somme totale",
+    handle: "specialist.somme-totale",
+    target: "sum",
+    task: "regression",
+    horizon: "value",
+    indicators: ["lag1"],
+    instructions: "Forecast de la somme. Pas une grille.",
+  })
+  assert.equal(entry.id, "specialist/somme-totale")
+  assert.equal(entry.kind, "specialist")
+})
+

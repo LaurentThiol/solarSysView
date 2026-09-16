@@ -60,6 +60,7 @@ Usage:
   ./launch install-chartisme  Installe les réseaux du chartisme (torch + torch-geometric)
   ./launch install-harmo      Installe les extras Harmo (PyWavelets, ssqueezepy, librosa)
   ./launch chartisme-train    Entraîne les réseaux du chartisme (options passées au CLI)
+  ./launch brain-specialist-train  Entraîne un spécialiste Brain (options passées au CLI)
   ./launch shortcut        Installe un raccourci bureau / menu applications
   ./launch help            Cette aide
 
@@ -1043,6 +1044,13 @@ cmd_chartisme_train() {
   "$py" -m synchro chartisme train "$@"
 }
 
+cmd_brain_specialist_train() {
+  local venv="$ROOT/.venv" py="$ROOT/.venv/bin/python"
+  [[ -x "$py" ]] || die "Pas de venv — ./launch install"
+  info "Entraînement d’un spécialiste Brain (numpy, processeur)…"
+  "$py" -m synchro specialist train "$@"
+}
+
 chartisme_doctor() {
   local py="$ROOT/.venv/bin/python"
   if [[ ! -x "$py" ]]; then
@@ -1682,7 +1690,7 @@ while [[ $# -gt 0 ]]; do
       CMD="$1"
       shift
       ;;
-    logs|chartisme-train)
+    logs|chartisme-train|brain-specialist-train)
       # Le reste part tel quel (logs : -f/--api ; train : --epochs…).
       CMD="$1"
       shift
@@ -1716,6 +1724,7 @@ case "$CMD" in
   install-chartisme) cmd_install_chartisme ;;
   install-harmo) cmd_install_harmo ;;
   chartisme-train) cmd_chartisme_train "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" ;;
+  brain-specialist-train) cmd_brain_specialist_train "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" ;;
   shortcut) cmd_shortcut ;;
   *) die "Commande inconnue : $CMD" ;;
 esac

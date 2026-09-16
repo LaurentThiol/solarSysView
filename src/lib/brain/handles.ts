@@ -32,7 +32,7 @@ const HANDLE_RE = new RegExp(
   `^@(?:(${HANDLE_TOKEN})\\.)?(${HANDLE_TOKEN})(?::(\\d{1,2}))?(?:\\.(${HANDLE_TOKEN}))?(?:@(${HANDLE_TOKEN}(?::\\d{1,2})?))?(?:#(\\d+))?$`
 )
 
-const LABS = new Set<BrainLab>(["analyse", "chartisme", "harmo", "morpho", "combinaisons"])
+const LABS = new Set<BrainLab>(["analyse", "chartisme", "harmo", "morpho", "combinaisons", "specialist"])
 
 function asLab(value: string | undefined): BrainLab | null {
   if (!value) return null
@@ -143,6 +143,7 @@ export function parseHandlesInText(text: string, ctx: HandleContext = {}): Parse
 }
 
 export function formatHandle(entry: CatalogEntry, extra?: { variable?: VariableName | null; n?: number | null }) {
+  if (entry.lab === "specialist") return `@specialist.${entry.handle}`
   const variable = extra?.variable && extra.variable !== entry.defaults.variable ? extra.variable : null
   const n = extra?.n ?? null
   if (variable && n != null) return `@${variable}:${n}.${entry.handle}`

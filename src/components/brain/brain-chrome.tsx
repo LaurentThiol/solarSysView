@@ -17,6 +17,7 @@ export const BRAIN_FAMILY_LABELS: Record<string, string> = {
   acoustique: "Peigne",
   motif: "Motifs",
   grille: "Grille",
+  specialiste: "Spécialistes",
 }
 
 export const KIND_LABELS: Record<WorkingKind, string> = {
@@ -48,6 +49,7 @@ export const STARTER_QUESTIONS = [
   "Que disent @rsi et @adx sur cette fenêtre ?",
   "Lis @ete : figure complète, ou juste une ressemblance ?",
   "@fft : quelle raie est lisible, laquelle est un artefact de fenêtre ?",
+  "Cite le forecast du spécialiste épinglé : valeur, σ, skill 20/50/100. Pas de grille.",
 ]
 
 export const LAB_TONE: Record<BrainLab, string> = {
@@ -56,6 +58,7 @@ export const LAB_TONE: Record<BrainLab, string> = {
   harmo: "border-chart-3/40 bg-chart-3/15 text-foreground",
   morpho: "border-chart-5/40 bg-chart-5/15 text-foreground",
   combinaisons: "border-chart-4/40 bg-chart-4/15 text-foreground",
+  specialist: "border-primary/40 bg-primary/15 text-foreground",
 }
 
 export const KIND_TONE: Record<WorkingKind, string> = {
@@ -77,6 +80,7 @@ export function LabChip({ lab, className }: { lab: BrainLab; className?: string 
     harmo: "Harmo",
     morpho: "Morpho",
     combinaisons: "Combinaisons",
+    specialist: "Spécialistes",
   }
   return (
     <span

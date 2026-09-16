@@ -45,6 +45,11 @@ export function flagReasons(fiche: Pick<BrainFiche, "handle" | "lab" | "last" | 
   }
   if (fiche.lab === "morpho" && last.present === true) reasons.push("motif présent")
   if (fiche.lab === "combinaisons" && last.pEmpirical != null) reasons.push("grille profilée")
+  if (fiche.lab === "specialist") {
+    const skill = num(last.skill) ?? num(last.skill_50)
+    if (skill != null && skill > 0) reasons.push("spécialiste bat le nul")
+    if (last.abstain === true) reasons.push("spécialiste s’abstient")
+  }
   return reasons
 }
 

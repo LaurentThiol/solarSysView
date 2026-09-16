@@ -223,6 +223,23 @@ CREATE TABLE IF NOT EXISTS brain_reading_notes (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS brain_reading_notes_reading ON brain_reading_notes (reading_id, created_at);
+
+CREATE TABLE IF NOT EXISTS brain_specialists (
+    slug            TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    handle          TEXT NOT NULL,
+    target          TEXT NOT NULL,
+    task            TEXT NOT NULL,
+    horizon         TEXT NOT NULL DEFAULT 'value',
+    indicators      JSONB NOT NULL DEFAULT '[]'::jsonb,
+    instructions    TEXT NOT NULL DEFAULT '',
+    config          JSONB NOT NULL DEFAULT '{}'::jsonb,
+    report          JSONB NOT NULL DEFAULT '{}'::jsonb,
+    last_forecast   JSONB,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS brain_specialists_updated ON brain_specialists (updated_at DESC);
 """
 
 _pool: ConnectionPool | None = None
@@ -1224,3 +1241,75 @@ def readings_with_embeddings(model: str | None = None) -> list[dict[str, Any]]:
         with conn.cursor() as cur:
             cur.execute(sql, params)
             return [dict(r) for r in cur.fetchall()]
+
+
+def upsert_brain_specialist(payload: dict[str, Any]) -> dict[str, Any]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO brain_specialists (
+                    slug, name, handle, target, task, horizon, indicators,
+                    instructions, config, report, last_forecast
+                ) VALUES (
+                    %(slug)s, %(name)s, %(handle)s, %(target)s, %(task)s, %(horizon)s,
+                    %(indicators)s, %(instructions)s, %(config)s, %(report)s,
+                    %(last_forecast)s
+                )
+                ON CONFLICT (slug) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    handle = EXCLUDED.handle,
+                    target = EXCLUDED.target,
+                    task = EXCLUDED.task,
+                    horizon = EXCLUDED.horizon,
+                    indicators = EXCLUDED.indicators,
+                    instructions = EXCLUDED.instructions,
+                    config = EXCLUDED.config,
+                    report = EXCLUDED.report,
+                    last_forecast = EXCLUDED.last_forecast,
+                    updated_at = now()
+                RETURNING *
+                """,
+                {
+                    "slug": payload["slug"],
+                    "name": payload["name"],
+                    "handle": payload["handle"],
+                    "target": payload["target"],
+                    "task": payload["task"],
+                    "horizon": payload.get("horizon") or "value",
+                    "indicators": Jsonb(payload.get("indicators") or []),
+                    "instructions": payload.get("instructions") or "",
+                    "config": Jsonb(payload.get("config") or {}),
+                    "report": Jsonb(payload.get("report") or {}),
+                    "last_forecast": Jsonb(payload.get("last_forecast"))
+                    if payload.get("last_forecast") is not None
+                    else None,
+                },
+            )
+            row = dict(cur.fetchone())
+        conn.commit()
+        return row
+
+
+def list_brain_specialists() -> list[dict[str, Any]]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM brain_specialists ORDER BY updated_at DESC")
+            return [dict(r) for r in cur.fetchall()]
+
+
+def get_brain_specialist(slug: str) -> dict[str, Any] | None:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM brain_specialists WHERE slug = %s", (slug,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
+def delete_brain_specialist(slug: str) -> bool:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM brain_specialists WHERE slug = %s", (slug,))
+            deleted = cur.rowcount > 0
+        conn.commit()
+        return deleted

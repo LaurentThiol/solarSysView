@@ -18,6 +18,7 @@ import { harmoQuery } from "@/lib/harmo"
 import { detect } from "@/lib/morpho/geometry"
 import { techPack } from "@/lib/ta"
 import type { CatalogEntry } from "@/lib/brain/catalog"
+import { inferSpecialist, specialistByHandle } from "@/lib/brain/specialists"
 import type { BrainFiche, ResolveContext } from "@/lib/brain/types"
 import { flagFiche } from "@/lib/brain/flag"
 
@@ -300,12 +301,73 @@ function resolveCombinaisons(ctx: ResolveContext, entry: CatalogEntry): BrainFic
   })
 }
 
+async function resolveSpecialist(ctx: ResolveContext, entry: CatalogEntry): Promise<BrainFiche> {
+  const variable = (entry.defaults.variable ?? ctx.variable) as VariableName
+  const base = ficheBase(entry, ctx, variable, null)
+  const cached = specialistByHandle(entry.handle)
+  try {
+    const inferred = await inferSpecialist(entry.handle, ctx.era === "all" ? "all" : "current")
+    const forecast = inferred.forecast ?? inferred.last_forecast ?? null
+    const last = {
+      forecast: forecast?.value ?? null,
+      sigma: forecast?.sigma ?? null,
+      confidence: forecast?.confidence ?? null,
+      abstain: forecast?.abstain ?? null,
+      skill_20: inferred.skill_20 ?? null,
+      skill_50: inferred.skill_50 ?? null,
+      skill_100: inferred.skill_100 ?? null,
+      skill: inferred.skill ?? null,
+      verdict: inferred.verdict ?? null,
+      target: inferred.target,
+      instructions: inferred.instructions,
+      as_of: forecast?.as_of ?? null,
+    }
+    const summary = forecast?.abstain
+      ? `${entry.label} s’abstient (confiance ${last.confidence ?? "—"}) · skill ${last.skill ?? "—"}`
+      : `${entry.label} forecast ${last.forecast ?? "—"} · σ ${last.sigma ?? "—"} · skill ${last.skill ?? "—"} (${last.verdict ?? "—"})`
+    return finish({
+      ...base,
+      reading: inferred.instructions || entry.reading,
+      last,
+      summary,
+      disclaimer:
+        inferred.disclaimer ||
+        "Forecast d’une série nommée, pas d’une grille 5+2. Les tirages restent indépendants.",
+    })
+  } catch (error) {
+    const forecast = cached?.last_forecast ?? cached?.forecast ?? null
+    if (forecast || cached) {
+      return finish({
+        ...base,
+        reading: cached?.instructions || entry.reading,
+        last: {
+          forecast: forecast?.value ?? null,
+          sigma: forecast?.sigma ?? null,
+          skill: cached?.skill ?? null,
+          skill_20: cached?.skill_20 ?? null,
+          skill_50: cached?.skill_50 ?? null,
+          skill_100: cached?.skill_100 ?? null,
+          verdict: cached?.verdict ?? null,
+          instructions: cached?.instructions ?? null,
+        },
+        summary: `${entry.label} · dernier skill ${cached?.skill ?? "—"} (inférence API : ${error instanceof Error ? error.message : "échec"})`,
+      })
+    }
+    return finish({
+      ...base,
+      last: {},
+      error: error instanceof Error ? error.message : "spécialiste injoignable",
+    })
+  }
+}
+
 export async function resolveEntry(ctx: ResolveContext): Promise<BrainFiche> {
   const entry = ctx.entry
   if (entry.lab === "analyse") return resolveAnalyse(ctx, entry)
   if (entry.lab === "chartisme") return resolveChartisme(ctx, entry)
   if (entry.lab === "harmo") return resolveHarmo(ctx, entry)
   if (entry.lab === "morpho") return resolveMorpho(ctx, entry)
+  if (entry.lab === "specialist") return resolveSpecialist(ctx, entry)
   return resolveCombinaisons(ctx, entry)
 }
 

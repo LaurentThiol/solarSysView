@@ -63,3 +63,6 @@ next-env.d.ts
 
 # module chartisme (courbes exportées, poids, état des cycles)
 .chartisme/
+
+# spécialistes Brain (poids numpy, rapports)
+.brain/
