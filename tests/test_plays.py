@@ -3,11 +3,19 @@ from __future__ import annotations
 from datetime import date, datetime
 from unittest.mock import patch
 
+import math
 import pytest
 from fastapi.testclient import TestClient
 
 from synchro.app import create_app
-from synchro.plays import decorate_play, parse_play_date, summarize_plays
+from synchro.plays import (
+    binom_two_sided_exact,
+    decorate_play,
+    official_p_any_rank,
+    parse_play_date,
+    summarize_play_spec,
+    summarize_plays,
+)
 from synchro.sync import PARIS, next_play_date
 
 
@@ -125,6 +133,63 @@ def test_summarize_weights_copies() -> None:
     assert stats["unique_grids"] == 2
     assert stats["wilson"] is not None
     assert stats["wilson"]["lo"] <= stats["p_win"] <= stats["wilson"]["hi"]
+    assert stats["binomial"] is not None
+    assert stats["binomial"]["n"] == 2
+    assert stats["binomial"]["wins"] == 1
+    assert stats["binomial"]["tickets"] == 3
+    assert stats["binomial"]["compatible"] is True
+    assert stats["p0"] == official_p_any_rank()
+    assert 0.07 < stats["p0"] < 0.08
+
+
+def test_binomial_two_sided_matches_known_values() -> None:
+    assert binom_two_sided_exact(0, 0, 0.1) == 1.0
+    assert math.isclose(binom_two_sided_exact(0, 1, 0.5), 1.0, abs_tol=1e-12)
+    assert math.isclose(binom_two_sided_exact(10, 10, 0.5), 2 / 1024, rel_tol=1e-9)
+    assert math.isclose(binom_two_sided_exact(0, 10, 0.5), 2 / 1024, rel_tol=1e-9)
+
+
+def test_binomial_rejects_long_losing_streak() -> None:
+    stats = summarize_plays(
+        [
+            decorate_play(
+                {
+                    "id": i,
+                    "numbers": [10, 11, 12, 13, 14],
+                    "stars": [3, 4],
+                    "play_date": "2026-09-01",
+                    "source": "manuel",
+                    "copies": 1,
+                },
+                {"numbers": [1, 2, 3, 4, 5], "stars": [1, 2]},
+            )
+            for i in range(80)
+        ]
+    )
+    assert stats["binomial"] is not None
+    assert stats["binomial"]["wins"] == 0
+    assert stats["binomial"]["n"] == 80
+    assert stats["binomial"]["compatible"] is False
+    assert stats["binomial"]["p_value"] < 0.05
+
+
+def test_spec_summary_lists_restrictions() -> None:
+    chips = summarize_play_spec(
+        {
+            "numberMinSum": 80,
+            "numberMaxSum": 140,
+            "numberMinEven": 2,
+            "numberMaxEven": 3,
+            "numberDecadeMax": [2, 5, 5, 5, 5],
+            "numberForced": [7, 23],
+            "numberChance": [0] + [100] * 49,
+        }
+    )
+    assert "Σ 80–140" in chips
+    assert "2–3 paires" in chips
+    assert "1–10 0–2" in chips
+    assert "forcés 7, 23" in chips
+    assert "hors 1" in chips
 
 
 def test_plays_api_create_and_list() -> None:
@@ -225,3 +290,46 @@ def test_plays_api_batch() -> None:
             )
     assert response.status_code == 200
     assert len(response.json()["items"]) == 2
+
+
+def test_plays_api_stores_spec() -> None:
+    stored = [
+        {
+            "id": 9,
+            "label": "Jeux",
+            "numbers": [1, 2, 3, 4, 5],
+            "stars": [1, 2],
+            "play_date": date(2026, 9, 1),
+            "source": "jeux",
+            "note": None,
+            "copies": 1,
+            "spec": {"numberMinSum": 80, "numberMaxSum": 140},
+            "active": True,
+        }
+    ]
+    with (
+        patch("synchro.db.database_configured", return_value=False),
+        patch("synchro.db.insert_plays", return_value=stored) as insert,
+        patch("synchro.db.draws_by_dates", return_value={}),
+        patch("synchro.db.serialize_row", side_effect=lambda row: {**row, "play_date": row["play_date"].isoformat()}),
+        patch("synchro.app.next_play_date", return_value=date(2026, 9, 15)),
+    ):
+        with _client() as client:
+            response = client.post(
+                "/api/plays",
+                json={
+                    "play_date": "2026-09-01",
+                    "numbers": [1, 2, 3, 4, 5],
+                    "stars": [1, 2],
+                    "source": "jeux",
+                    "label": "Jeux",
+                    "spec": {"numberMinSum": 80, "numberMaxSum": 140, "ignored": True},
+                },
+            )
+    assert response.status_code == 200
+    insert.assert_called_once()
+    row = insert.call_args[0][0][0]
+    assert row["spec"]["numberMinSum"] == 80
+    assert row["spec"]["numberMaxSum"] == 140
+    assert "ignored" not in row["spec"]
+    assert "Σ 80–140" in response.json()["item"]["spec_summary"]

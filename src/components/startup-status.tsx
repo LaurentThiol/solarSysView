@@ -567,7 +567,7 @@ const NAV_ITEMS = [
     label: "Jeux",
     help: {
       title: "Jeux",
-      body: "Solutions : compteur combinatoire (somme, parité, forme, chances). histoJeux : journal Neon des grilles jouées, relues contre le tirage FDJ. Ce n’est pas un pronostic.",
+      body: "Solutions : compteur combinatoire (somme, parité, forme, chances). histoJeux : journal Neon des grilles jouées, relues contre le tirage FDJ, test binomial vs 7,71 %. Ce n’est pas un pronostic.",
     },
   },
   {

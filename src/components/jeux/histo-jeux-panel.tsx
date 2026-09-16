@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 
 import { Disclaimer } from "@/components/analysis/shared"
 import { useRegisterCapture } from "@/components/capture"
@@ -26,12 +27,20 @@ import {
   SelectTrigger,
 } from "@/components/ui/select"
 import { gridKey, isCompleteGrid, type CombinationGrid } from "@/lib/combinations"
-import { NUMBER_VALUES, STAR_VALUES } from "@/lib/jeux"
+import {
+  NUMBER_VALUES,
+  STAR_VALUES,
+  parseStoredSpec,
+  summarizeStoredSpec,
+  writeStoredSpec,
+  type StoredSpec,
+} from "@/lib/jeux"
 import {
   PLAY_SOURCES,
   PLAY_SOURCE_LABELS,
   PLAYS_EVENT,
   decoratePlays,
+  formatPValue,
   formatPct,
   formatPlayDate,
   friendlyPlaysError,
@@ -84,11 +93,19 @@ const HELP = {
   },
   stats: {
     title: "Lecture",
-    body: "Totaux descriptifs du journal : tickets, part des grilles tranchées qui ont eu un rang, distribution des correspondances. La loi officielle P(gain) ≈ 7,71 % reste la même pour toute grille 5+2 ; l’écart observé ici est du petit échantillon, pas un biais du hasard.",
+    body: "Totaux descriptifs du journal. Le taux de rangs pondère les copies (tickets). Le test binomial compte une consignation = un essai, H0 : P(gain) = 7,71 %. Plusieurs grilles le même tirage ne sont pas indépendantes ; un p petit décrit le journal, pas le prochain tirage.",
+  },
+  binomial: {
+    title: "Test binomial",
+    body: "H0 : chaque consignation tranchée a P(rang) = 7,71 % (loi officielle, identique pour toute grille 5+2). Test exact bilatéral. Les copies du même ticket ne sont pas des essais de plus. Un p ≥ 5 % veut dire : l’écart au hasard n’est pas détectable sur ce journal.",
+  },
+  spec: {
+    title: "Spec Jeux",
+    body: "Curseurs (somme, parité, étendue, décennies, forcés…) au moment de la consignation depuis Solutions. Ça relit pourquoi la grille a été jouée, pas un score de gain. « Rouvrir dans Jeux » recharge ces curseurs.",
   },
   export: {
     title: "Export CSV",
-    body: "Une ligne par consignation : date, boules, rang, correspondances. Pour une analyse hors de l’app (tableur).",
+    body: "Une ligne par consignation : date, boules, rang, correspondances, spec Jeux. Pour une analyse hors de l’app (tableur).",
   },
   note: {
     title: "Note",
@@ -171,6 +188,7 @@ function downloadCsv(items: DecoratedPlay[]) {
 }
 
 export function HistoJeuxPanel() {
+  const router = useRouter()
   const { draws } = useDraws("all")
   const dates = useMemo(() => playDateOptions(), [])
   const [playDate, setPlayDate] = useState(dates.next)
@@ -178,6 +196,7 @@ export function HistoJeuxPanel() {
   const [note, setNote] = useState("")
   const [copies, setCopies] = useState("1")
   const [source, setSource] = useState<PlaySource>("manuel")
+  const [playSpec, setPlaySpec] = useState<StoredSpec | null>(null)
   const [numbers, setNumbers] = useState<number[]>([])
   const [stars, setStars] = useState<number[]>([])
   const [saved, setSaved] = useState<PlayRecord[]>([])
@@ -236,6 +255,7 @@ export function HistoJeuxPanel() {
         setSource(first.source || "manuel")
         setCopies(String(first.copies ?? 1))
         setNote(first.note || "")
+        setPlaySpec(parseStoredSpec(first.spec))
       }
       if (handoff.items.length > 1) {
         setPendingBatch(handoff.items)
@@ -281,14 +301,19 @@ export function HistoJeuxPanel() {
       `${stats.pending} en attente · ${stats.settled} tranchés`,
       stats.p_win == null
         ? "Aucun tirage encore tranché"
-        : `Rangs obtenus : ${stats.wins}/${stats.settled} (${formatPct(stats.p_win)})`,
-    ],
+        : `Rangs obtenus : ${stats.wins}/${stats.settled} (${formatPct(stats.p_win)}) vs ${formatPct(stats.p0, 2)}`,
+      stats.binomial
+        ? `Binomial ${stats.binomial.wins}/${stats.binomial.n} · p = ${formatPValue(stats.binomial.p_value)} · ${stats.binomial.verdict}`
+        : null,
+    ].filter((item): item is string => Boolean(item)),
     tech: {
       tickets: stats.tickets,
       pending: stats.pending,
       settled: stats.settled,
       wins: stats.wins,
       unique: stats.unique_grids,
+      p0: stats.p0,
+      binomial: stats.binomial,
       byRank: stats.by_rank,
       byMatch: stats.by_match,
     },
@@ -318,6 +343,7 @@ export function HistoJeuxPanel() {
       source?: PlaySource
       copies?: number
       note?: string | null
+      spec?: StoredSpec | null
     }>,
     date = playDate
   ) {
@@ -355,6 +381,7 @@ export function HistoJeuxPanel() {
         source,
         copies: Number.isFinite(parsedCopies) ? parsedCopies : 1,
         note: note.trim() || null,
+        spec: playSpec,
       },
     ])
   }
@@ -415,6 +442,14 @@ export function HistoJeuxPanel() {
     setCopies(String(item.copies))
     setNote(item.note || "")
     setPlayDate(item.play_date)
+    setPlaySpec(parseStoredSpec(item.spec))
+  }
+
+  function reopenInJeux(spec: StoredSpec | null | undefined) {
+    const parsed = parseStoredSpec(spec)
+    if (!parsed) return
+    writeStoredSpec(parsed)
+    router.push("/jeux")
   }
 
   const dateChoices = [...dates.upcoming, ...dates.recent.filter((day) => !dates.upcoming.includes(day))]
@@ -467,6 +502,13 @@ export function HistoJeuxPanel() {
                 IC Wilson {formatPct(stats.wilson.lo)} – {formatPct(stats.wilson.hi)}
               </p>
             ) : null}
+            {stats.binomial ? (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                <TitleHelp help={HELP.binomial}>vs {formatPct(stats.p0, 2)}</TitleHelp>
+                {" · p = "}
+                {formatPValue(stats.binomial.p_value)}
+              </p>
+            ) : null}
           </CardHeader>
         </Card>
       </section>
@@ -503,10 +545,30 @@ export function HistoJeuxPanel() {
                   .join(" · ")}
               </p>
             ) : null}
+            {stats.binomial ? (
+              <p className="text-xs leading-5 text-muted-foreground">
+                <TitleHelp help={HELP.binomial}>Test binomial</TitleHelp>
+                {" · H0 : P(gain) = "}
+                {formatPct(stats.p0, 2)}
+                {` · ${stats.binomial.wins} rang${stats.binomial.wins > 1 ? "s" : ""} / ${stats.binomial.n} consignation${stats.binomial.n > 1 ? "s" : ""} (attendu ${stats.binomial.expected.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}) · p = ${formatPValue(stats.binomial.p_value)} · ${stats.binomial.verdict}`}
+                {stats.binomial.tickets > stats.binomial.n
+                  ? ` · ${stats.binomial.tickets} tickets (copies non comptées comme essais)`
+                  : ""}
+                {stats.binomial.draws < stats.binomial.n
+                  ? ` · ${stats.binomial.draws} tirage${stats.binomial.draws > 1 ? "s" : ""} (grilles d’un même tirage ne sont pas indépendantes)`
+                  : ""}
+                {stats.covers_p0 === false
+                  ? " · 7,71 % hors de l’IC Wilson (tickets)"
+                  : stats.covers_p0
+                    ? " · 7,71 % dans l’IC Wilson"
+                    : ""}
+                .
+              </p>
+            ) : null}
             <Disclaimer>
-              P(gain) officielle ≈ 7,71 % pour toute grille 5+2. Un taux observé
-              différent sur {stats.settled} ticket{stats.settled > 1 ? "s" : ""} ne
-              dit rien du prochain tirage.
+              P(gain) officielle {formatPct(stats.p0, 2)} pour toute grille 5+2. Un
+              taux observé différent sur {stats.settled} ticket
+              {stats.settled > 1 ? "s" : ""} ne dit rien du prochain tirage.
             </Disclaimer>
           </CardContent>
         </Card>
@@ -592,6 +654,13 @@ export function HistoJeuxPanel() {
                   {shape.consecutive} consécutif{shape.consecutive > 1 ? "s" : ""}
                 </p>
               ) : null}
+              {playSpec ? (
+                <p className="text-xs text-muted-foreground">
+                  <TitleHelp help={HELP.spec}>Spec Jeux</TitleHelp>
+                  {" · "}
+                  {summarizeStoredSpec(playSpec).join(" · ") || "univers libre"}
+                </p>
+              ) : null}
               {duplicate > 0 ? (
                 <p className="text-xs text-muted-foreground">
                   Déjà {duplicate} consignation{duplicate > 1 ? "s" : ""} de cette grille
@@ -625,6 +694,7 @@ export function HistoJeuxPanel() {
                 setNumbers([])
                 setStars([])
                 setNote("")
+                setPlaySpec(null)
               }}
             >
               Vider
@@ -751,11 +821,31 @@ export function HistoJeuxPanel() {
                         Σ {shapeRow.sum} · {shapeRow.even}p/{shapeRow.odd}i · étendue {shapeRow.spread}
                         {item.note ? ` · ${item.note}` : ""}
                       </p>
+                      {item.spec ? (
+                        <p className="text-xs text-muted-foreground">
+                          <TitleHelp help={HELP.spec}>Spec Jeux</TitleHelp>
+                          {" · "}
+                          {(item.spec_summary?.length
+                            ? item.spec_summary
+                            : summarizeStoredSpec(item.spec)
+                          ).join(" · ") || "univers libre"}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button type="button" variant="outline" size="sm" onClick={() => loadPlay(item)}>
                         Recharger
                       </Button>
+                      {item.spec ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => reopenInJeux(item.spec)}
+                        >
+                          Rouvrir dans Jeux
+                        </Button>
+                      ) : null}
                       <Button
                         type="button"
                         variant="outline"

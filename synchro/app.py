@@ -78,6 +78,7 @@ from synchro.plays import (
     MAX_COPIES,
     decorate_play,
     normalize_copies,
+    normalize_play_spec,
     normalize_source,
     parse_play_date,
     summarize_plays,
@@ -108,6 +109,7 @@ class PlayItemIn(BaseModel):
     note: str | None = None
     source: str = "manuel"
     grid_id: int | None = None
+    spec: dict[str, Any] | None = None
 
 
 class PlayIn(BaseModel):
@@ -119,6 +121,7 @@ class PlayIn(BaseModel):
     note: str | None = None
     source: str = "manuel"
     grid_id: int | None = None
+    spec: dict[str, Any] | None = None
     items: list[PlayItemIn] | None = None
 
 
@@ -1017,6 +1020,7 @@ def create_app() -> FastAPI:
                 note=payload.note,
                 source=payload.source,
                 grid_id=payload.grid_id,
+                spec=payload.spec,
             )
         ]
 
@@ -1037,6 +1041,7 @@ def create_app() -> FastAPI:
                     "note": (item.note or "").strip() or None,
                     "copies": normalize_copies(item.copies),
                     "grid_id": item.grid_id,
+                    "spec": normalize_play_spec(item.spec),
                 }
             )
         return rows

@@ -1,13 +1,19 @@
-import { evenCount, wilson } from "@/lib/analysis"
+import { binomTwoSided, evenCount, wilson } from "@/lib/analysis"
 import {
   evaluateGrid,
   gridKey,
   isCompleteGrid,
   numberSum,
+  officialWinProbability,
   sortedGrid,
   type CombinationGrid,
 } from "@/lib/combinations"
 import { consecutiveCount, decadeCounts, spreadOf } from "@/lib/grid-shape"
+import {
+  parseStoredSpec,
+  summarizeStoredSpec,
+  type StoredSpec,
+} from "@/lib/jeux"
 
 export const PLAY_SOURCES = ["combinaisons", "jeux", "manuel"] as const
 export type PlaySource = (typeof PLAY_SOURCES)[number]
@@ -48,6 +54,8 @@ export type PlayRecord = CombinationGrid & {
   source: PlaySource
   note?: string | null
   copies: number
+  spec?: StoredSpec | null
+  spec_summary?: string[]
   local?: boolean
   created_at?: string
   updated_at?: string
@@ -77,8 +85,24 @@ export type PlayHandoff = {
     source?: PlaySource
     copies?: number
     note?: string | null
+    spec?: StoredSpec | null
   }>
 }
+
+export type PlayBinomial = {
+  n: number
+  wins: number
+  p0: number
+  expected: number
+  p_value: number
+  alpha: number
+  compatible: boolean
+  verdict: string
+  tickets: number
+  draws: number
+}
+
+export const BINOM_ALPHA = 0.05
 
 export type PlayStats = {
   plays: number
@@ -88,7 +112,10 @@ export type PlayStats = {
   settled: number
   wins: number
   p_win: number | null
+  p0: number
   wilson: { p: number; lo: number; hi: number } | null
+  covers_p0: boolean | null
+  binomial: PlayBinomial | null
   unique_grids: number
   by_rank: Array<{ rank: number | null; label: string; count: number }>
   by_match: Array<{ label: string; count: number }>
@@ -219,11 +246,14 @@ export function decoratePlay(
   const playDate = play.play_date.slice(0, 10)
   const source = normalizeSource(play.source)
   const copies = normalizeCopies(play.copies)
+  const spec = parseStoredSpec(play.spec)
   const base: DecoratedPlay = {
     ...play,
     ...grid,
     copies,
     source,
+    spec,
+    spec_summary: summarizeStoredSpec(spec),
     source_label: PLAY_SOURCE_LABELS[source],
     weekday: weekdayFr(playDate),
     status: "pending",
@@ -315,6 +345,7 @@ export function summarizePlays(items: DecoratedPlay[]): PlayStats {
 
   const settledN = weighted(settled)
   const winN = weighted(wins)
+  const p0 = officialWinProbability().pWin
   const rankRows: PlayStats["by_rank"] = []
   for (let rank = 1; rank <= 13; rank += 1) {
     const count = byRank.get(String(rank)) ?? 0
@@ -329,6 +360,28 @@ export function summarizePlays(items: DecoratedPlay[]): PlayStats {
       .slice(0, take)
       .map(([value, played]) => ({ value, played, hits: hits.get(value) ?? 0 }))
 
+  const settledDates = new Set(settled.map((item) => item.play_date.slice(0, 10)))
+  const binomialN = settled.length
+  const binomialWins = wins.length
+  const wilsonInterval = settledN > 0 ? wilson(winN, settledN) : null
+  const pValue = binomialN > 0 ? binomTwoSided(binomialWins, binomialN, p0) : 1
+  const compatible = pValue >= BINOM_ALPHA
+  const binomial: PlayBinomial | null =
+    binomialN > 0
+      ? {
+          n: binomialN,
+          wins: binomialWins,
+          p0,
+          expected: binomialN * p0,
+          p_value: pValue,
+          alpha: BINOM_ALPHA,
+          compatible,
+          verdict: compatible ? "écart non détectable" : "écart notable vs le hasard",
+          tickets: settledN,
+          draws: settledDates.size,
+        }
+      : null
+
   return {
     plays: weighted(items),
     tickets: weighted(items),
@@ -337,7 +390,10 @@ export function summarizePlays(items: DecoratedPlay[]): PlayStats {
     settled: settledN,
     wins: winN,
     p_win: settledN > 0 ? winN / settledN : null,
-    wilson: settledN > 0 ? wilson(winN, settledN) : null,
+    p0,
+    wilson: wilsonInterval,
+    covers_p0: wilsonInterval ? wilsonInterval.lo <= p0 && p0 <= wilsonInterval.hi : null,
+    binomial,
     unique_grids: unique.size,
     by_rank: rankRows,
     by_match: [...byMatch.entries()]
@@ -387,6 +443,15 @@ export function formatPct(value: number | null | undefined, digits = 1) {
   })
 }
 
+export function formatPValue(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) return "—"
+  if (value < 0.001) return "< 0,001"
+  return value.toLocaleString("fr-FR", {
+    maximumFractionDigits: 3,
+    minimumFractionDigits: value < 0.1 ? 3 : 2,
+  })
+}
+
 export function playsToCsv(items: DecoratedPlay[]) {
   const header = [
     "play_date",
@@ -407,11 +472,13 @@ export function playsToCsv(items: DecoratedPlay[]) {
     "rank",
     "rank_label",
     "note",
+    "spec",
   ]
   const lines = [header.join(",")]
   for (const item of items) {
     const nums = [...item.numbers, "", "", "", "", ""].slice(0, 5)
     const stars = [...item.stars, "", ""].slice(0, 2)
+    const specText = (item.spec_summary ?? summarizeStoredSpec(item.spec)).join(" · ")
     const cells = [
       item.play_date,
       item.weekday,
@@ -426,6 +493,7 @@ export function playsToCsv(items: DecoratedPlay[]) {
       item.result?.rank == null ? "" : String(item.result.rank),
       csvCell(item.result?.label ?? ""),
       csvCell(item.note ?? ""),
+      csvCell(specText),
     ]
     lines.push(cells.join(","))
   }
@@ -482,6 +550,7 @@ export function readPlayHandoff(): PlayHandoff | null {
       source: normalizeSource(item.source),
       copies: normalizeCopies(item.copies),
       note: item.note ?? null,
+      spec: parseStoredSpec(item.spec),
     }))
     if (items.length === 0) return null
     return { play_date: parsePlayDate(parsed.play_date) ?? undefined, items }
@@ -513,6 +582,7 @@ export async function persistPlays(payload: {
     source: normalizeSource(item.source),
     copies: normalizeCopies(item.copies),
     note: item.note ?? null,
+    spec: parseStoredSpec(item.spec),
   }))
   if (items.length === 0) {
     return { items: [], source: "session", error: "Il faut 5 numéros et 2 étoiles." }

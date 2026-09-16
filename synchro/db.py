@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS plays (
     note        TEXT,
     copies      SMALLINT NOT NULL DEFAULT 1,
     grid_id     BIGINT,
+    spec        JSONB,
     active      BOOLEAN NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -78,6 +79,7 @@ CREATE TABLE IF NOT EXISTS plays (
 
 CREATE INDEX IF NOT EXISTS plays_play_date_desc ON plays (play_date DESC, id DESC);
 CREATE INDEX IF NOT EXISTS plays_active_date ON plays (active, play_date DESC);
+ALTER TABLE plays ADD COLUMN IF NOT EXISTS spec JSONB;
 
 CREATE TABLE IF NOT EXISTS sync_log (
     id              BIGSERIAL PRIMARY KEY,
@@ -679,8 +681,8 @@ def insert_plays(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for row in rows:
                 cur.execute(
                     """
-                    INSERT INTO plays (label, numbers, stars, play_date, source, note, copies, grid_id)
-                    VALUES (%(label)s, %(numbers)s, %(stars)s, %(play_date)s, %(source)s, %(note)s, %(copies)s, %(grid_id)s)
+                    INSERT INTO plays (label, numbers, stars, play_date, source, note, copies, grid_id, spec)
+                    VALUES (%(label)s, %(numbers)s, %(stars)s, %(play_date)s, %(source)s, %(note)s, %(copies)s, %(grid_id)s, %(spec)s)
                     RETURNING *
                     """,
                     {
@@ -692,6 +694,7 @@ def insert_plays(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         "note": row.get("note"),
                         "copies": row.get("copies") or 1,
                         "grid_id": row.get("grid_id"),
+                        "spec": Jsonb(row["spec"]) if row.get("spec") is not None else None,
                     },
                 )
                 out.append(dict(cur.fetchone()))
@@ -708,6 +711,7 @@ def update_play(play_id: int, fields: dict[str, Any]) -> dict[str, Any] | None:
         "source",
         "note",
         "copies",
+        "spec",
     }
     assignments = []
     params: dict[str, Any] = {"id": play_id}
@@ -715,7 +719,10 @@ def update_play(play_id: int, fields: dict[str, Any]) -> dict[str, Any] | None:
         if key not in allowed:
             continue
         assignments.append(f"{key} = %({key})s")
-        params[key] = value
+        if key == "spec":
+            params[key] = Jsonb(value) if value is not None else None
+        else:
+            params[key] = value
     if not assignments:
         return get_play(play_id)
     sql = f"""

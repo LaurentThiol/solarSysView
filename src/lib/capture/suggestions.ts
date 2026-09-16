@@ -50,8 +50,8 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   if (lab === "jeux") {
     if (tab === "histoJeux") {
       return [
-        "Décris le journal : tickets en attente vs tranchés, rangs obtenus, correspondances. Ce n’est pas un pronostic.",
-        "La loi officielle P(gain) est identique pour toute grille 5+2. Un taux observé sur un petit journal ne dit rien du prochain tirage.",
+        "Décris le journal : tickets en attente vs tranchés, rangs obtenus, correspondances, spec Jeux s’il est là. Ce n’est pas un pronostic.",
+        "Le test binomial vs 7,71 % dit si l’écart du journal au hasard est détectable. Un p petit décrit ce journal, pas le prochain tirage. Les copies et les grilles d’un même tirage ne sont pas des essais indépendants.",
       ]
     }
     return [

@@ -2,6 +2,7 @@ import { comb } from "@/lib/analysis"
 import { mulberry32, type CombinationGrid } from "@/lib/combinations"
 import {
   DECADE_COUNT,
+  DECADE_LABELS,
   DECADE_MAX_PER,
   NUMBER_CONSEC_MAX,
   NUMBER_CONSEC_MIN,
@@ -957,6 +958,128 @@ export function defaultStoredSpec(): StoredSpec {
     starMinConsecutive: starShape.minConsecutive,
     starMaxConsecutive: starShape.maxConsecutive,
   }
+}
+
+function clampForced(values: unknown, poolMax: number) {
+  if (!Array.isArray(values)) return []
+  const seen = new Set<number>()
+  const out: number[] = []
+  for (const item of values) {
+    const n = Number(item)
+    if (!Number.isInteger(n) || n < 1 || n > poolMax) continue
+    if (seen.has(n)) continue
+    seen.add(n)
+    out.push(n)
+  }
+  return out
+}
+
+function clampDecadeRow(raw: unknown, fallback: number[], fill: number) {
+  return fallback.map((_, i) => {
+    const n = Number(Array.isArray(raw) ? raw[i] : Number.NaN)
+    return Number.isFinite(n) ? clampInt(n, 0, DECADE_MAX_PER) : fill
+  })
+}
+
+export function parseStoredSpec(value: unknown): StoredSpec | null {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return null
+  const parsed = value as Partial<StoredSpec>
+  const base = defaultStoredSpec()
+  const numberChance = Array.isArray(parsed.numberChance)
+    ? NUMBER_VALUES.map((_, i) => clampChance(Number(parsed.numberChance?.[i] ?? DEFAULT_CHANCE)))
+    : base.numberChance
+  const starChance = Array.isArray(parsed.starChance)
+    ? STAR_VALUES.map((_, i) => clampChance(Number(parsed.starChance?.[i] ?? DEFAULT_CHANCE)))
+    : base.starChance
+  return {
+    ...base,
+    numberChance,
+    starChance,
+    numberThreshold: clampInt(Number(parsed.numberThreshold ?? base.numberThreshold), 0, 100),
+    starThreshold: clampInt(Number(parsed.starThreshold ?? base.starThreshold), 0, 100),
+    numberForced: clampForced(parsed.numberForced, NUMBER_POOL),
+    starForced: clampForced(parsed.starForced, STAR_POOL),
+    numberMinSum: clampInt(Number(parsed.numberMinSum ?? base.numberMinSum), NUMBER_SUM_MIN, NUMBER_SUM_MAX),
+    numberMaxSum: clampInt(Number(parsed.numberMaxSum ?? base.numberMaxSum), NUMBER_SUM_MIN, NUMBER_SUM_MAX),
+    numberMinEven: clampInt(Number(parsed.numberMinEven ?? 0), 0, NUMBER_DRAW),
+    numberMaxEven: clampInt(Number(parsed.numberMaxEven ?? NUMBER_DRAW), 0, NUMBER_DRAW),
+    numberMinSpread: clampInt(Number(parsed.numberMinSpread ?? base.numberMinSpread), NUMBER_SPREAD_MIN, NUMBER_SPREAD_MAX),
+    numberMaxSpread: clampInt(Number(parsed.numberMaxSpread ?? base.numberMaxSpread), NUMBER_SPREAD_MIN, NUMBER_SPREAD_MAX),
+    numberMinConsecutive: clampInt(Number(parsed.numberMinConsecutive ?? base.numberMinConsecutive), 0, NUMBER_CONSEC_MAX),
+    numberMaxConsecutive: clampInt(Number(parsed.numberMaxConsecutive ?? base.numberMaxConsecutive), 0, NUMBER_CONSEC_MAX),
+    numberDecadeMin: clampDecadeRow(parsed.numberDecadeMin, base.numberDecadeMin, 0),
+    numberDecadeMax: clampDecadeRow(parsed.numberDecadeMax, base.numberDecadeMax, DECADE_MAX_PER),
+    starMinSum: clampInt(Number(parsed.starMinSum ?? base.starMinSum), STAR_SUM_MIN, STAR_SUM_MAX),
+    starMaxSum: clampInt(Number(parsed.starMaxSum ?? base.starMaxSum), STAR_SUM_MIN, STAR_SUM_MAX),
+    starMinEven: clampInt(Number(parsed.starMinEven ?? 0), 0, STAR_DRAW),
+    starMaxEven: clampInt(Number(parsed.starMaxEven ?? STAR_DRAW), 0, STAR_DRAW),
+    starMinSpread: clampInt(Number(parsed.starMinSpread ?? base.starMinSpread), STAR_SPREAD_MIN, STAR_SPREAD_MAX),
+    starMaxSpread: clampInt(Number(parsed.starMaxSpread ?? base.starMaxSpread), STAR_SPREAD_MIN, STAR_SPREAD_MAX),
+    starMinConsecutive: clampInt(Number(parsed.starMinConsecutive ?? base.starMinConsecutive), 0, STAR_CONSEC_MAX),
+    starMaxConsecutive: clampInt(Number(parsed.starMaxConsecutive ?? base.starMaxConsecutive), 0, STAR_CONSEC_MAX),
+  }
+}
+
+export function writeStoredSpec(spec: StoredSpec) {
+  if (typeof window === "undefined") return
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(spec))
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+export function summarizeStoredSpec(spec: StoredSpec | null | undefined): string[] {
+  if (!spec) return []
+  const base = defaultStoredSpec()
+  const chips: string[] = []
+  if (spec.numberMinSum > base.numberMinSum || spec.numberMaxSum < base.numberMaxSum) {
+    chips.push(`Σ ${spec.numberMinSum}–${spec.numberMaxSum}`)
+  }
+  if (spec.numberMinEven > 0 || spec.numberMaxEven < NUMBER_DRAW) {
+    chips.push(`${spec.numberMinEven}–${spec.numberMaxEven} paires`)
+  }
+  if (spec.numberMinSpread > base.numberMinSpread || spec.numberMaxSpread < base.numberMaxSpread) {
+    chips.push(`étendue ${spec.numberMinSpread}–${spec.numberMaxSpread}`)
+  }
+  if (
+    spec.numberMinConsecutive > base.numberMinConsecutive ||
+    spec.numberMaxConsecutive < base.numberMaxConsecutive
+  ) {
+    chips.push(`${spec.numberMinConsecutive}–${spec.numberMaxConsecutive} consécutifs`)
+  }
+  for (let i = 0; i < DECADE_COUNT; i += 1) {
+    const min = spec.numberDecadeMin[i] ?? 0
+    const max = spec.numberDecadeMax[i] ?? DECADE_MAX_PER
+    if (min > 0 || max < DECADE_MAX_PER) {
+      chips.push(`${DECADE_LABELS[i]} ${min}–${max}`)
+    }
+  }
+  if (spec.numberForced.length > 0) {
+    chips.push(`forcés ${[...spec.numberForced].sort((a, b) => a - b).join(", ")}`)
+  }
+  const excluded = NUMBER_VALUES.filter((_, i) => (spec.numberChance[i] ?? DEFAULT_CHANCE) <= 0)
+  if (excluded.length > 0) {
+    const shown = excluded.slice(0, 6)
+    chips.push(`hors ${shown.join(", ")}${excluded.length > 6 ? "…" : ""}`)
+  }
+  if (spec.numberThreshold > DEFAULT_THRESHOLD) {
+    chips.push(`seuil ${spec.numberThreshold} %`)
+  }
+  if (spec.starMinSum > base.starMinSum || spec.starMaxSum < base.starMaxSum) {
+    chips.push(`★ Σ ${spec.starMinSum}–${spec.starMaxSum}`)
+  }
+  if (spec.starMinEven > 0 || spec.starMaxEven < STAR_DRAW) {
+    chips.push(`★ ${spec.starMinEven}–${spec.starMaxEven} paires`)
+  }
+  if (spec.starForced.length > 0) {
+    chips.push(`★ forcées ${[...spec.starForced].sort((a, b) => a - b).join(", ")}`)
+  }
+  const starExcluded = STAR_VALUES.filter((_, i) => (spec.starChance[i] ?? DEFAULT_CHANCE) <= 0)
+  if (starExcluded.length > 0) {
+    chips.push(`★ hors ${starExcluded.join(", ")}`)
+  }
+  return chips
 }
 
 export function chanceArrayToIndexed(kind: PoolKind, values: number[]) {

@@ -66,8 +66,10 @@ import {
   intersectGrids,
   listGrids,
   listPool,
+  parseStoredSpec,
   samplePool,
   storedToPoolSpecs,
+  writeStoredSpec,
   type PoolKind,
   type PoolResult,
   type StoredSpec,
@@ -139,7 +141,7 @@ const HELP = {
   },
   consign: {
     title: "Consigner",
-    body: "Envoie cette grille dans histoJeux pour le prochain tirage encore ouvert. Le rang se calcule après synchro FDJ.",
+    body: "Envoie cette grille dans histoJeux pour le prochain tirage encore ouvert, avec le spec (somme, décennies, forcés…). Le rang se calcule après synchro FDJ.",
   },
 } satisfies Record<string, HelpCopy>
 
@@ -159,56 +161,18 @@ function formatPct(value: number | null | undefined, digits = 2) {
 }
 
 function readStored(): StoredSpec {
-  const fallback = defaultStoredSpec()
-  if (typeof window === "undefined") return fallback
+  if (typeof window === "undefined") return defaultStoredSpec()
   try {
     const raw = sessionStorage.getItem(SESSION_KEY)
-    if (!raw) return fallback
-    const parsed = JSON.parse(raw) as Partial<StoredSpec>
-    const base = defaultStoredSpec()
-    const numberChance = Array.isArray(parsed.numberChance)
-      ? NUMBER_VALUES.map((_, i) =>
-          Math.min(100, Math.max(0, Math.round(Number(parsed.numberChance?.[i]) || 0)))
-        )
-      : base.numberChance
-    const starChance = Array.isArray(parsed.starChance)
-      ? STAR_VALUES.map((_, i) =>
-          Math.min(100, Math.max(0, Math.round(Number(parsed.starChance?.[i]) || 0)))
-        )
-      : base.starChance
-    const numberDecadeMin = Array.isArray(parsed.numberDecadeMin)
-      ? base.numberDecadeMin.map((_, i) => {
-          const n = Number(parsed.numberDecadeMin?.[i])
-          return Number.isFinite(n) ? Math.min(5, Math.max(0, Math.round(n))) : 0
-        })
-      : base.numberDecadeMin
-    const numberDecadeMax = Array.isArray(parsed.numberDecadeMax)
-      ? base.numberDecadeMax.map((_, i) => {
-          const n = Number(parsed.numberDecadeMax?.[i])
-          return Number.isFinite(n) ? Math.min(5, Math.max(0, Math.round(n))) : 5
-        })
-      : base.numberDecadeMax
-    return {
-      ...base,
-      ...parsed,
-      numberChance,
-      starChance,
-      numberForced: Array.isArray(parsed.numberForced) ? parsed.numberForced : [],
-      starForced: Array.isArray(parsed.starForced) ? parsed.starForced : [],
-      numberDecadeMin,
-      numberDecadeMax,
-    }
+    if (!raw) return defaultStoredSpec()
+    return parseStoredSpec(JSON.parse(raw)) ?? defaultStoredSpec()
   } catch {
-    return fallback
+    return defaultStoredSpec()
   }
 }
 
 function writeStored(spec: StoredSpec) {
-  try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(spec))
-  } catch {
-    /* quota / private mode */
-  }
+  writeStoredSpec(spec)
 }
 
 function RangeField({
@@ -645,7 +609,7 @@ export function JeuxPanel() {
     const playDate = nextPlayDate()
     const result = await persistPlays({
       play_date: playDate,
-      items: [{ ...grid, label: "Jeux", source: "jeux" }],
+      items: [{ ...grid, label: "Jeux", source: "jeux", spec }],
     })
     if (result.items.length === 0) {
       setConsignNote(result.error)

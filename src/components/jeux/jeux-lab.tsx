@@ -20,7 +20,7 @@ const TABS = [
     label: "histoJeux",
     help: {
       title: "histoJeux",
-      body: "Journal Neon des grilles réellement jouées, datées sur un tirage mardi/vendredi. Le rang se calcule après synchro FDJ.",
+      body: "Journal Neon des grilles réellement jouées, datées sur un tirage mardi/vendredi. Rang après synchro FDJ, test binomial vs 7,71 %, spec Jeux pour relire les curseurs.",
     },
   },
 ] as const

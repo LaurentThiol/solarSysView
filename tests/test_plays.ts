@@ -74,6 +74,11 @@ test("summarizePlays weights copies and unique grids", () => {
   assert.equal(stats.unique_grids, 1)
   assert.ok(stats.wilson)
   assert.ok(stats.wilson.lo <= (stats.p_win ?? 0))
+  assert.ok(stats.binomial)
+  assert.equal(stats.binomial.n, 1)
+  assert.equal(stats.binomial.wins, 1)
+  assert.equal(stats.binomial.tickets, 2)
+  assert.ok(stats.p0 > 0.07 && stats.p0 < 0.08)
 })
 
 test("CSV export has a header and one row", () => {
@@ -93,4 +98,5 @@ test("CSV export has a header and one row", () => {
   assert.match(csv, /^play_date,/)
   assert.match(csv, /"Test, grille"/)
   assert.match(csv, /Pas de gain/)
+  assert.match(csv, /,spec\n/)
 })

@@ -6,7 +6,7 @@ import { JeuxLab } from "@/components/jeux/jeux-lab"
 export const metadata: Metadata = {
   title: "Jeux — Synchro",
   description:
-    "Compter les grilles EuroMillions 5+2 restantes, et consigner les grilles jouées (histoJeux) pour relire les rangs après le tirage.",
+    "Compter les grilles EuroMillions 5+2 restantes, et consigner les grilles jouées (histoJeux) pour relire rangs, test binomial et spec Jeux.",
 }
 
 export default function JeuxPage() {
@@ -17,7 +17,8 @@ export default function JeuxPage() {
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Solutions : combien de grilles 5+2 restent une fois les restrictions
           posées. histoJeux : les grilles réellement jouées, stockées dans Neon,
-          relues contre le tirage FDJ. Ce n’est pas un pronostic.
+          relues contre le tirage FDJ (rang, test binomial vs 7,71 %, spec Jeux).
+          Ce n’est pas un pronostic.
         </p>
       </div>
       <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 pb-12 sm:px-6">
