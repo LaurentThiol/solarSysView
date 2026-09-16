@@ -152,7 +152,7 @@ export function BrainDemoPopup({
         data-demo="popup"
         className={cn(
           "pointer-events-auto absolute left-1/2 w-[min(28rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-2xl border border-primary/40 bg-popover p-4 text-popover-foreground shadow-2xl ring-1 ring-primary/20",
-          placement === "top" ? "top-4 sm:top-6" : "bottom-4 sm:bottom-6"
+          placement === "top" ? "top-16 sm:top-20" : "bottom-4 sm:bottom-6"
         )}
       >
         <div className="flex items-start gap-3">
