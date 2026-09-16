@@ -16,9 +16,10 @@ export default function CombinaisonsPage() {
           Combinaisons · EuroMillions
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          Composez une grille 5+2, ou demandez des propositions. Les retards et
-          totaux de la fenêtre servent à choisir les boules ; le score affiché
-          est une proba de gain (loi officielle + taux empirique sur la fenêtre).
+          Composez une grille 5+2, ou demandez des propositions. Enregistrer
+          garde un modèle ; Consigner l’envoie dans histoJeux pour un tirage
+          donné. Le score affiché est une proba de gain (loi officielle + taux
+          empirique), pas un pronostic.
         </p>
       </div>
       <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 pb-12 sm:px-6">

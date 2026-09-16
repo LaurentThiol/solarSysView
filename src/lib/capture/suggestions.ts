@@ -48,6 +48,12 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
     ]
   }
   if (lab === "jeux") {
+    if (tab === "histoJeux") {
+      return [
+        "Décris le journal : tickets en attente vs tranchés, rangs obtenus, correspondances, spec Jeux s’il est là. Ce n’est pas un pronostic.",
+        "Le test binomial vs 7,71 % dit si l’écart du journal au hasard est détectable. Un p petit décrit ce journal, pas le prochain tirage. Les copies et les grilles d’un même tirage ne sont pas des essais indépendants.",
+      ]
+    }
     return [
       "Combien de grilles restent, et quelles restrictions (somme, forme, décennies) ont le plus réduit l’univers ?",
       "Parmi les propositions de Combinaisons, combien survivent ici ? Sépare décompte et masse pondérée.",
@@ -73,6 +79,7 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
       "Lis les fiches du working set (@rsi, @adx, @specialist.*) : que décrivent-elles, et quel pronostic d’évolution (hypothèse) portent-elles ?",
       "Cite le forecast d’un spécialiste s’il est sur la table (σ, skill 20/50/100). Un forecast de série nommée n’est pas une grille 5+2 : une 5+2, si tu en proposes une, est une hypothèse séparée.",
       "Démo : @rsi, @ete, @fft, @cluster et @score sont-ils sur la table, et que disent-ils sur cette fenêtre ?",
+      "Démo Spécialistes : le formulaire Père impair est-il cohérent (cible parité, features causales, consignes, skill vs hasard) ?",
       "Quels handles du catalog manquent encore sur le plateau pour répondre ?",
       "Les souvenirs rappelés sont des lectures passées. Sers-t’en pour un pronostic d’hypothèse, sans les prendre pour une série déjà prédite.",
     ]

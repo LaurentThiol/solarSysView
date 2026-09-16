@@ -5,7 +5,7 @@ import { createPortal } from "react-dom"
 import { Play, RotateCcw, StopCircle } from "lucide-react"
 
 import { BrainMascot } from "@/components/brain/brain-mascot"
-import { HelpTip } from "@/components/help"
+import { HelpTip, type HelpCopy } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import {
   DEMO_STEPS,
@@ -16,33 +16,46 @@ import {
 } from "@/lib/brain/demo"
 import { cn } from "@/lib/utils"
 
-export function BrainDemoBar({
+export function DemoTourBar({
+  title,
+  help,
+  steps,
   step,
   running,
   done,
   waiting,
+  idleHint,
+  doneHint,
   onStart,
   onStop,
+  startLabel = "Lancer la démo",
+  replayLabel = "Rejouer",
+  dataDemo = "bar",
 }: {
-  step: DemoStepId | null
+  title: string
+  help: HelpCopy
+  steps: readonly { id: string; label: string; hint: string }[]
+  step: string | null
   running: boolean
   done: boolean
   waiting?: boolean
+  idleHint: string
+  doneHint: string
   onStart: () => void
   onStop: () => void
+  startLabel?: string
+  replayLabel?: string
+  dataDemo?: string
 }) {
-  const current = step ? demoStepOf(step) : null
+  const current = steps.find((item) => item.id === step)
   return (
     <div
-      data-demo="bar"
+      data-demo={dataDemo}
       className="rounded-2xl border border-primary/30 bg-primary/8 px-3 py-3 sm:px-4"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-sm font-medium">Démo des fonctions</p>
-        <HelpTip
-          title="Démo Brain"
-          body="Parcourt vraiment l’onglet : fenêtre, épingles (@rsi, @ete, @fft, @cluster, @score), table, lecture sans modèle, suivi, mini-balayage, carnet. Un pop-up t’arrête après chaque phase : Suivant ou Annuler. Les chiffres viennent des tirages chargés. Ollama n’est pas requis."
-        />
+        <p className="text-sm font-medium">{title}</p>
+        <HelpTip {...help} />
         <span className="text-[11px] text-muted-foreground">
           {running
             ? waiting && current
@@ -51,8 +64,8 @@ export function BrainDemoBar({
                 ? `${current.label} — ${current.hint}`
                 : "en cours…"
             : done
-              ? "Terminée : la table, le carnet et le balayage restent sous tes yeux."
-              : "Un handle par lab, lecture réelle, sans Ollama. Tu avances à ton rythme."}
+              ? doneHint
+              : idleHint}
         </span>
         <div className="ml-auto flex gap-1.5">
           {running ? (
@@ -63,15 +76,15 @@ export function BrainDemoBar({
           ) : (
             <Button size="sm" onClick={onStart}>
               {done ? <RotateCcw /> : <Play />}
-              {done ? "Rejouer" : "Lancer la démo"}
+              {done ? replayLabel : startLabel}
             </Button>
           )}
         </div>
       </div>
       <ol className="mt-3 flex flex-wrap gap-1.5">
-        {DEMO_STEPS.map((item, index) => {
+        {steps.map((item, index) => {
           const active = item.id === step
-          const passed = step != null && demoStepIndex(step) > index
+          const passed = step != null && steps.findIndex((row) => row.id === step) > index
           return (
             <li
               key={item.id}
@@ -90,6 +103,41 @@ export function BrainDemoBar({
         })}
       </ol>
     </div>
+  )
+}
+
+export function BrainDemoBar({
+  step,
+  running,
+  done,
+  waiting,
+  onStart,
+  onStop,
+}: {
+  step: DemoStepId | null
+  running: boolean
+  done: boolean
+  waiting?: boolean
+  onStart: () => void
+  onStop: () => void
+}) {
+  return (
+    <DemoTourBar
+      title="Démo des fonctions"
+      help={{
+        title: "Démo Brain",
+        body: "Parcourt vraiment l’onglet : fenêtre, épingles (@rsi, @ete, @fft, @cluster, @score), table, lecture sans modèle, suivi, mini-balayage, carnet. Un pop-up t’arrête après chaque phase : Suivant ou Annuler. Les chiffres viennent des tirages chargés. Ollama n’est pas requis.",
+      }}
+      steps={DEMO_STEPS}
+      step={step}
+      running={running}
+      done={done}
+      waiting={waiting}
+      idleHint="Un handle par lab, lecture réelle, sans Ollama. Tu avances à ton rythme."
+      doneHint="Terminée : la table, le carnet et le balayage restent sous tes yeux."
+      onStart={onStart}
+      onStop={onStop}
+    />
   )
 }
 

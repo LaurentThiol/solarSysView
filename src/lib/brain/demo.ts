@@ -104,7 +104,15 @@ export function isLastDemoStep(id: DemoStepId) {
 
 export function demoWantsStart(search: string) {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
-  const value = params.get("demo")
+  const value = (params.get("demo") ?? "").trim().toLowerCase()
+  if (
+    value === "specialistes" ||
+    value === "specialist" ||
+    value === "specialiste" ||
+    value === "spécialistes"
+  ) {
+    return false
+  }
   return value === "1" || value === "true" || value === "oui"
 }
 

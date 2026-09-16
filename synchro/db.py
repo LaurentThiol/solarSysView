@@ -61,6 +61,26 @@ CREATE TABLE IF NOT EXISTS grids (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS plays (
+    id          BIGSERIAL PRIMARY KEY,
+    label       TEXT NOT NULL DEFAULT 'Grille',
+    numbers     SMALLINT[] NOT NULL,
+    stars       SMALLINT[] NOT NULL,
+    play_date   DATE NOT NULL,
+    source      TEXT NOT NULL DEFAULT 'manuel',
+    note        TEXT,
+    copies      SMALLINT NOT NULL DEFAULT 1,
+    grid_id     BIGINT,
+    spec        JSONB,
+    active      BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS plays_play_date_desc ON plays (play_date DESC, id DESC);
+CREATE INDEX IF NOT EXISTS plays_active_date ON plays (active, play_date DESC);
+ALTER TABLE plays ADD COLUMN IF NOT EXISTS spec JSONB;
+
 CREATE TABLE IF NOT EXISTS sync_log (
     id              BIGSERIAL PRIMARY KEY,
     started_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -618,6 +638,124 @@ def delete_grid(grid_id: int) -> bool:
             cur.execute(
                 "UPDATE grids SET active = FALSE WHERE id = %s AND active = TRUE",
                 (grid_id,),
+            )
+            updated = cur.rowcount > 0
+        conn.commit()
+        return updated
+
+
+def draws_by_dates(dates: list[date]) -> dict[date, dict[str, Any]]:
+    if not dates:
+        return {}
+    unique = list({day for day in dates})
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT {DRAW_COLUMNS} FROM draws WHERE draw_date = ANY(%s)",
+                (unique,),
+            )
+            return {row["draw_date"]: dict(row) for row in cur.fetchall()}
+
+
+def list_plays(limit: int = 500) -> list[dict[str, Any]]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM plays
+                WHERE active = TRUE
+                ORDER BY play_date DESC, id DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+
+def insert_plays(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not rows:
+        return []
+    out: list[dict[str, Any]] = []
+    with connection() as conn:
+        with conn.cursor() as cur:
+            for row in rows:
+                cur.execute(
+                    """
+                    INSERT INTO plays (label, numbers, stars, play_date, source, note, copies, grid_id, spec)
+                    VALUES (%(label)s, %(numbers)s, %(stars)s, %(play_date)s, %(source)s, %(note)s, %(copies)s, %(grid_id)s, %(spec)s)
+                    RETURNING *
+                    """,
+                    {
+                        "label": row["label"],
+                        "numbers": row["numbers"],
+                        "stars": row["stars"],
+                        "play_date": row["play_date"],
+                        "source": row.get("source") or "manuel",
+                        "note": row.get("note"),
+                        "copies": row.get("copies") or 1,
+                        "grid_id": row.get("grid_id"),
+                        "spec": Jsonb(row["spec"]) if row.get("spec") is not None else None,
+                    },
+                )
+                out.append(dict(cur.fetchone()))
+        conn.commit()
+    return out
+
+
+def update_play(play_id: int, fields: dict[str, Any]) -> dict[str, Any] | None:
+    allowed = {
+        "label",
+        "numbers",
+        "stars",
+        "play_date",
+        "source",
+        "note",
+        "copies",
+        "spec",
+    }
+    assignments = []
+    params: dict[str, Any] = {"id": play_id}
+    for key, value in fields.items():
+        if key not in allowed:
+            continue
+        assignments.append(f"{key} = %({key})s")
+        if key == "spec":
+            params[key] = Jsonb(value) if value is not None else None
+        else:
+            params[key] = value
+    if not assignments:
+        return get_play(play_id)
+    sql = f"""
+        UPDATE plays
+        SET {", ".join(assignments)}, updated_at = now()
+        WHERE id = %(id)s AND active = TRUE
+        RETURNING *
+    """
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+
+
+def get_play(play_id: int) -> dict[str, Any] | None:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM plays WHERE id = %s AND active = TRUE",
+                (play_id,),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
+def delete_play(play_id: int) -> bool:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE plays SET active = FALSE, updated_at = now() WHERE id = %s AND active = TRUE",
+                (play_id,),
             )
             updated = cur.rowcount > 0
         conn.commit()

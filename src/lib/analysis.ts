@@ -596,6 +596,35 @@ export function wilson(successes: number, n: number, z = 1.96) {
   return { p, lo: Math.max(0, center - margin), hi: Math.min(1, center + margin) }
 }
 
+function logChoose(n: number, k: number) {
+  if (k < 0 || k > n) return Number.NEGATIVE_INFINITY
+  const take = Math.min(k, n - k)
+  let log = 0
+  for (let i = 1; i <= take; i += 1) {
+    log += Math.log(n - take + i) - Math.log(i)
+  }
+  return log
+}
+
+function logBinomPmf(k: number, n: number, p: number) {
+  if (p <= 0) return k === 0 ? 0 : Number.NEGATIVE_INFINITY
+  if (p >= 1) return k === n ? 0 : Number.NEGATIVE_INFINITY
+  return logChoose(n, k) + k * Math.log(p) + (n - k) * Math.log1p(-p)
+}
+
+/** Test binomial exact bilatéral (somme des P(K=k) ≤ P(observé)). */
+export function binomTwoSided(successes: number, n: number, p0: number) {
+  if (n <= 0) return 1
+  const k = Math.min(n, Math.max(0, Math.round(successes)))
+  const target = logBinomPmf(k, n, p0)
+  let total = 0
+  for (let i = 0; i <= n; i += 1) {
+    const value = logBinomPmf(i, n, p0)
+    if (value <= target + 1e-9) total += Math.exp(value)
+  }
+  return Math.min(1, total)
+}
+
 function daysBetween(from: string, to: string) {
   const a = Date.parse(`${from.slice(0, 10)}T12:00:00Z`)
   const b = Date.parse(`${to.slice(0, 10)}T12:00:00Z`)

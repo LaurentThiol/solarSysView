@@ -63,11 +63,15 @@ Les tirages sont indépendants : ces outils décrivent l’archive, ils ne préd
 
 ## Combinaisons (`/combinaisons`)
 
-Composeur EuroMillions 5+2 : chaque boule affiche **total de sorties** et **retard** dans la même fenêtre de travail qu’Analyse. Cinq stratégies proposent jusqu’à 20 grilles (équilibré, retards, totaux élevés / faibles, aléatoire). Le score affiché est une **proba de gain** : loi officielle des 13 rangs (identique pour toute grille 5+2) et **P̂ empirique** (part des tirages de la fenêtre où la grille aurait été payée, avec IC Wilson). Les grilles se sauvegardent via `/api/grids` (Neon) ou, à défaut, en session. La dernière salve de propositions est lue par **Jeux** pour l’intersection.
+Composeur EuroMillions 5+2 : chaque boule affiche **total de sorties** et **retard** dans la même fenêtre de travail qu’Analyse. Cinq stratégies proposent jusqu’à 20 grilles (équilibré, retards, totaux élevés / faibles, aléatoire). Le score affiché est une **proba de gain** : loi officielle des 13 rangs (identique pour toute grille 5+2) et **P̂ empirique** (part des tirages de la fenêtre où la grille aurait été payée, avec IC Wilson). Les **modèles** se sauvegardent via `/api/grids` (Neon) ou, à défaut, en session. **Consigner** envoie une grille (ou toute la salve) dans **histoJeux** pour un tirage mardi/vendredi. La dernière salve de propositions est lue par **Jeux** pour l’intersection.
 
 ## Jeux (`/jeux`)
 
-Compteur combinatoire de l’univers EuroMillions (5 parmi 50 × 2 parmi 12 = 139 838 160). Les curseurs de somme, de parité pair/impair, d’étendue, de consécutifs, de décennies (1–10 … 41–50) et de chance 0–100 % par boule réduisent l’espace ; le bandeau affiche en permanence le nombre exact de grilles restantes. 0 % exclut une boule ; un seuil de présence fait entrer les pourcentages intermédiaires dans le décompte entier ; un clic impose une boule. Sous 50 solutions la liste s’affiche, sinon un échantillon uniforme. Les propositions de Combinaisons (session, jusqu’à 20) sont filtrées : combien survivent ici. Ce n’est pas un pronostic : le tirage officiel reste uniforme.
+Deux onglets.
+
+**Solutions** — compteur combinatoire de l’univers EuroMillions (5 parmi 50 × 2 parmi 12 = 139 838 160). Les curseurs de somme, de parité pair/impair, d’étendue, de consécutifs, de décennies (1–10 … 41–50) et de chance 0–100 % par boule réduisent l’espace ; le bandeau affiche en permanence le nombre exact de grilles restantes. 0 % exclut une boule ; un seuil de présence fait entrer les pourcentages intermédiaires dans le décompte entier ; un clic impose une boule. Sous 50 solutions la liste s’affiche, sinon un échantillon uniforme. Les propositions de Combinaisons (session, jusqu’à 20) sont filtrées : combien survivent ici. Ce n’est pas un pronostic : le tirage officiel reste uniforme.
+
+**histoJeux** — journal des grilles **réellement jouées**, stocké dans Neon (`plays`). Chaque ligne a une date de tirage (mardi/vendredi, défaut = prochain tirage encore ouvert avant 20h45 Paris). Après synchro FDJ, rang et correspondances se calculent. Stats descriptives (rangs, matches, boules les plus jouées), **IC Wilson** et **test binomial exact** vs P(gain) officielle ≈ 7,71 % (une consignation = un essai ; les copies ne sont pas des essais de plus). Les consignations depuis Solutions emportent le **spec Jeux** (somme, décennies, forcés…) pour relire pourquoi la grille a été jouée, et **Rouvrir dans Jeux** recharge ces curseurs. Export CSV. Repli session si l’API ne répond pas. Distinct de Mes grilles, qui reste une bibliothèque de modèles.
 
 ## Morpho (`/morpho`)
 
@@ -252,9 +256,9 @@ Un troisième fournisseur **Local** (Ollama / llama-server) sert surtout les lec
 
 ## Brain (`/brain`)
 
-Catalog nommé des indicateurs (`@rsi`, `@sum.rsi`, `@ete`, `@fft`), **spécialistes** (un petit réseau par série — parité, somme… — entraîné sur l’ère formule, noté sur les 20/50/100 derniers, sauvé dans `.brain/specialists/`), journal persisté (Neon, repli local), mémoire vectorielle locale (`nomic-embed-text`) et **agent manuel** (catalog ou 142 courbes Chartisme). Le panneau **Objets** est exactement le prompt. Chat et lots passent par Ollama ; **Ce tour dans le cloud** / **Lots cloud** sont opt-in. **Approfondir** n’agit que sur le chat local (pas les lots). **Lire la table** décrit les fiches sans modèle. Une **démo guidée** (`/brain?demo=1` ou bouton « Lancer la démo ») épingle un handle par lab, lit la table, suit `@rsi`, balaye ces fiches et les consigne au carnet. Après chaque phase un pop-up explique ce que tu vois : **Suivant** ou **Annuler**. L’onglet IA n’est pas fusionné : il reste la lecture de captures. Un spécialiste cite un forecast de série nommée ; Brain peut aussi pronostiquer une grille (hypothèse, pas une certitude).
+Catalog nommé des indicateurs (`@rsi`, `@sum.rsi`, `@ete`, `@fft`), **spécialistes** (un petit réseau par série — parité, somme… — entraîné sur l’ère formule, noté sur les 20/50/100 derniers, sauvé dans `.brain/specialists/`), journal persisté (Neon, repli local), mémoire vectorielle locale (`nomic-embed-text`) et **agent manuel** (catalog ou 142 courbes Chartisme). Le panneau **Objets** est exactement le prompt. Chat et lots passent par Ollama ; **Ce tour dans le cloud** / **Lots cloud** sont opt-in. **Approfondir** n’agit que sur le chat local (pas les lots). **Lire la table** décrit les fiches sans modèle. Une **démo guidée** (`/brain?demo=1` ou bouton « Lancer la démo ») épingle un handle par lab, lit la table, suit `@rsi`, balaye ces fiches et les consigne au carnet. Après chaque phase un pop-up explique ce que tu vois : **Suivant** ou **Annuler**. **Spécialistes** (`/brain/specialistes` ou `/brain?demo=specialistes`) a sa propre démo : pastilles sur nom, cible, forme, indicateurs, skill vs hasard, sauvés ; elle n’entraîne pas toute seule. L’onglet IA n’est pas fusionné : il reste la lecture de captures. Un spécialiste cite un forecast de série nommée ; Brain peut aussi pronostiquer une grille (hypothèse, pas une certitude).
 
-`./launch doctor` ping Ollama (lecture seule, ne démarre pas le serveur) et prévient si seuls des 3B de chat sont tirés. `OLLAMA_HOST` (défaut `http://127.0.0.1:11434`), `OLLAMA_NUM_CTX` et `LOCAL_LLM_MODEL` sont dans `.env.example`. Pull manuel : `ollama pull qwen2.5:7b`. Un clic glyphe Morpho peut décharger le 7B (`keep_alive` 10m vs 30m côté chat). Entraînement d’un spécialiste : `./launch brain-specialist-train` (ou le panneau Spécialistes de `/brain`).
+`./launch doctor` ping Ollama (lecture seule, ne démarre pas le serveur) et prévient si seuls des 3B de chat sont tirés. `OLLAMA_HOST` (défaut `http://127.0.0.1:11434`), `OLLAMA_NUM_CTX` et `LOCAL_LLM_MODEL` sont dans `.env.example`. Pull manuel : `ollama pull qwen2.5:7b`. Un clic glyphe Morpho peut décharger le 7B (`keep_alive` 10m vs 30m côté chat). Entraînement d’un spécialiste : `./launch brain-specialist-train` (ou le panneau Spécialistes de `/brain` / `/brain/specialistes`).
 
 ## Admin (`/admin`)
 
@@ -264,7 +268,7 @@ En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, défini
 
 ## Interface web (Next.js)
 
-App Next.js (onglets **Tirage** `/tirage`, **Évolution** `/evolution`, **Analyse** `/analyse`, **Combinaisons** `/combinaisons`, **Jeux** `/jeux`, **Morpho** `/morpho`, **Relief** `/relief`, **Chartisme** `/chartisme`, **Harmo** `/harmo`, **Brain** `/brain`, **IA** `/ia` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
+App Next.js (onglets **Tirage** `/tirage`, **Évolution** `/evolution`, **Analyse** `/analyse`, **Combinaisons** `/combinaisons`, **Jeux** `/jeux`, **Morpho** `/morpho`, **Relief** `/relief`, **Chartisme** `/chartisme`, **Harmo** `/harmo`, **Brain** `/brain`, **Spécialistes** `/brain/specialistes`, **IA** `/ia` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install
@@ -315,7 +319,8 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 - `GET /api/analysis/proba` — combinatoire exacte (sans Neon)
 - `GET /api/analysis/variables|ohlc|inference|montecarlo|bayes|dependence|lab|ta|numbers` — calculés sur les tirages (`era`, `from_date`, `to_date`, `preset`, `last_n`, `warmup`)
 - `POST /api/check` `{ numbers, stars, last_n }`
-- `GET\|POST /api/grids` · `DELETE /api/grids/{id}`
+- `GET\|POST /api/grids` · `PATCH\|DELETE /api/grids/{id}`
+- `GET\|POST /api/plays` · `PATCH\|DELETE /api/plays/{id}` — histoJeux (grilles jouées, date de tirage, scoring vs FDJ)
 - `POST /api/reload-env` — relit `.env` et recrée le pool Neon
 - `POST /api/sync` — historique complet (bouton Admin)
 - `POST /api/sync/ensure` — rattrapage si Neon est en retard (`./launch`)

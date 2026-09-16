@@ -54,6 +54,7 @@ import {
   BRAIN_LABS,
   BRAIN_LAB_LABELS,
   BRAIN_PACKS,
+  catalogEntry,
   type BrainLab,
   type CatalogEntry,
 } from "@/lib/brain/catalog"
@@ -69,6 +70,11 @@ import {
   scrollDemoTarget,
   type DemoStepId,
 } from "@/lib/brain/demo"
+import {
+  clearPendingBrainPins,
+  readPendingBrainPins,
+  specialistDemoWantsStart,
+} from "@/lib/brain/specialist-demo"
 import { deepLinkFor } from "@/lib/brain/deep-links"
 import { formatHandle, parseHandle, parseHandlesInText } from "@/lib/brain/handles"
 import { DEMO_QUESTION, lectureFromWorkingSet, TABLE_LECTURE_MODEL } from "@/lib/brain/lecture"
@@ -309,6 +315,20 @@ export function BrainLab() {
   const pinEntry = useCallback((entry: CatalogEntry) => {
     setPins((prev) => (prev.some((item) => item.id === entry.id) ? prev : [...prev, entry]))
   }, [])
+
+  useEffect(() => {
+    const ids = readPendingBrainPins()
+    if (!ids.length) return
+    let pinned = 0
+    for (const id of ids) {
+      const entry = specialists.find((item) => item.id === id) ?? catalogEntry(id)
+      if (entry) {
+        pinEntry(entry)
+        pinned += 1
+      }
+    }
+    if (pinned) clearPendingBrainPins()
+  }, [pinEntry, specialists])
 
   const pinPack = useCallback(
     (handles: string[]) => {
@@ -818,6 +838,16 @@ export function BrainLab() {
     }, 50)
     return () => window.clearTimeout(timer)
   }, [loading, runDemo])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const wants =
+      specialistDemoWantsStart(window.location.search, window.location.pathname) ||
+      window.location.hash.toLowerCase().includes("special")
+    if (!wants) return
+    const timer = window.setTimeout(() => scrollDemoTarget("specialists"), 80)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   const suggestions = useMemo(() => {
     const last = draft.split(/\s/).pop() ?? ""
