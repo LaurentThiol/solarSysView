@@ -27,7 +27,7 @@ import {
   StatusDot,
   WALKER_STATUS_LABELS,
 } from "@/components/brain/brain-chrome"
-import { BrainDemoBar } from "@/components/brain/brain-demo"
+import { BrainDemoBar, BrainDemoPopup } from "@/components/brain/brain-demo"
 import { BrainMascot } from "@/components/brain/brain-mascot"
 import { BrainSpecialists } from "@/components/brain/brain-specialists"
 import { useRegisterCapture } from "@/components/capture"
@@ -63,6 +63,7 @@ import {
   DEMO_WATCH_ID,
   demoEntries,
   demoJobs,
+  demoStepOf,
   demoWantsStart,
   resolveDemoPins,
   scrollDemoTarget,
@@ -137,9 +138,12 @@ function formatObserved(value: string) {
   return date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })
 }
 
-function demoHighlight(step: DemoStepId | null, ids: DemoStepId[]) {
+function demoHighlight(step: DemoStepId | null, ids: DemoStepId[], elevate = false) {
   return step && ids.includes(step)
-    ? "ring-2 ring-primary/80 ring-offset-2 ring-offset-background"
+    ? cn(
+        "ring-2 ring-primary/80 ring-offset-2 ring-offset-background",
+        elevate && "relative z-[70]"
+      )
     : ""
 }
 
@@ -190,10 +194,12 @@ export function BrainLab() {
   const [demoStep, setDemoStep] = useState<DemoStepId | null>(null)
   const [demoRunning, setDemoRunning] = useState(false)
   const [demoDone, setDemoDone] = useState(false)
+  const [demoWaiting, setDemoWaiting] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const chatRef = useRef<HTMLDivElement | null>(null)
   const demoStopRef = useRef(false)
   const demoAutoRef = useRef(false)
+  const demoGateRef = useRef<{ resolve: (ok: boolean) => void } | null>(null)
 
   const archive = useMemo(
     () => [...draws].sort((a, b) => a.date.localeCompare(b.date)),
@@ -606,6 +612,13 @@ export function BrainLab() {
     [ctxBase.window.banner, ctxBase.window.n, fiches, source]
   )
 
+  const finishDemoGate = useCallback((ok: boolean) => {
+    const gate = demoGateRef.current
+    demoGateRef.current = null
+    setDemoWaiting(false)
+    gate?.resolve(ok)
+  }, [])
+
   const stopDemo = useCallback(() => {
     demoStopRef.current = true
     stopRef.current = true
@@ -613,7 +626,12 @@ export function BrainLab() {
     setPaused(false)
     setDemoRunning(false)
     setDemoDone(true)
-  }, [])
+    finishDemoGate(false)
+  }, [finishDemoGate])
+
+  const nextDemoStep = useCallback(() => {
+    finishDemoGate(true)
+  }, [finishDemoGate])
 
   const runDemo = useCallback(async () => {
     if (demoRunning || loading) return
@@ -622,6 +640,7 @@ export function BrainLab() {
     stopRef.current = false
     setDemoRunning(true)
     setDemoDone(false)
+    setDemoWaiting(false)
     setError(null)
     setInspector(true)
     setScanOpen(true)
@@ -633,24 +652,38 @@ export function BrainLab() {
     writeStoredProposals([DEMO_GRID])
     setGridOverride(DEMO_GRID)
 
-    const go = async (step: DemoStepId) => {
+    const begin = (step: DemoStepId) => {
+      setDemoStep(step)
+      setDemoWaiting(false)
+      scrollDemoTarget(demoStepOf(step).target)
+    }
+
+    const ask = async (step: DemoStepId) => {
       if (demoStopRef.current) return false
       setDemoStep(step)
-      const target = { window: "window", pin: "library", table: "table", chat: "discussion", watch: "library", scan: "scan", journal: "journal" }[step]
-      scrollDemoTarget(target)
-      await waitMs(700)
-      return !demoStopRef.current
+      scrollDemoTarget(demoStepOf(step).target)
+      await waitMs(380)
+      if (demoStopRef.current) return false
+      setDemoWaiting(true)
+      const ok = await new Promise<boolean>((resolve) => {
+        demoGateRef.current = { resolve }
+      })
+      return ok && !demoStopRef.current
     }
 
     try {
-      if (!(await go("window"))) return
-      if (!(await go("pin"))) return
+      begin("window")
+      if (!(await ask("window"))) return
+
+      begin("pin")
       const specialistIndex = await listSpecialists()
       const liveSpecialists = specialistIndex.items.map((item) => specialistToEntry(item))
       if (liveSpecialists.length) setSpecialists(liveSpecialists)
       const entries = demoEntries(liveSpecialists.length ? liveSpecialists : specialists, handleCtx)
       setPins(entries)
-      if (!(await go("table"))) return
+      if (!(await ask("pin"))) return
+
+      begin("table")
       const demoCtx: Omit<ResolveContext, "entry"> = {
         ...ctxBase,
         grid: DEMO_GRID,
@@ -670,8 +703,9 @@ export function BrainLab() {
       const objects = await resolveDemoPins(demoCtx, entries)
       if (demoStopRef.current) return
       setFiches(objects)
+      if (!(await ask("table"))) return
 
-      if (!(await go("chat"))) return
+      begin("chat")
       const answer = lectureFromWorkingSet(objects, {
         banner: demoCtx.window.banner,
         n: demoCtx.window.n,
@@ -681,13 +715,15 @@ export function BrainLab() {
         { role: "user", content: DEMO_QUESTION },
         { role: "assistant", content: answer, provider: "local", model: TABLE_LECTURE_MODEL },
       ])
+      if (!(await ask("chat"))) return
 
-      if (!(await go("watch"))) return
+      begin("watch")
       setWatch([DEMO_WATCH_ID])
       writeWatchlist([DEMO_WATCH_ID])
       await runWatchlist(demoCtx)
+      if (!(await ask("watch"))) return
 
-      if (!(await go("scan"))) return
+      begin("scan")
       const jobs = demoJobs(entries)
       const flagged: BrainFiche[] = []
       setWalker({
@@ -742,16 +778,19 @@ export function BrainLab() {
         ])
       }
       setWalker((prev) => (prev ? { ...prev, status: "done", flagged } : prev))
+      if (!(await ask("scan"))) return
 
-      if (!(await go("journal"))) return
+      begin("journal")
       await refreshJournal()
       const listed = await listReadings()
       const first = listed.items[0]
       if (first) await addNote(first.id, DEMO_NOTE, "user")
       await refreshJournal()
+      if (!(await ask("journal"))) return
     } catch (err) {
       setError(err instanceof Error ? err.message : "La démo a buté.")
     } finally {
+      setDemoWaiting(false)
       setDemoRunning(false)
       setDemoDone(true)
       if (!demoStopRef.current) setDemoStep("journal")
@@ -874,11 +913,18 @@ export function BrainLab() {
         step={demoStep}
         running={demoRunning}
         done={demoDone}
+        waiting={demoWaiting}
         onStart={() => void runDemo()}
         onStop={stopDemo}
       />
+      <BrainDemoPopup
+        step={demoStep}
+        open={demoRunning && demoWaiting}
+        onNext={nextDemoStep}
+        onCancel={stopDemo}
+      />
 
-      <div data-demo="window" className={cn("flex flex-col gap-2 rounded-xl", demoHighlight(demoStep, ["window"]))}>
+      <div data-demo="window" className={cn("flex flex-col gap-2 rounded-xl", demoHighlight(demoStep, ["window"], demoWaiting))}>
       <WindowBar
         window={resolved}
         preset={preset}
@@ -963,7 +1009,7 @@ export function BrainLab() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
         <Card
           data-demo="discussion"
-          className={cn("border-primary/20", demoHighlight(demoStep, ["chat"]))}
+          className={cn("border-primary/20", demoHighlight(demoStep, ["chat"], demoWaiting))}
         >
           <CardHeader className="border-b border-border/60">
             <CardTitle className="flex items-center gap-2">
@@ -1107,7 +1153,7 @@ export function BrainLab() {
         <div className="flex flex-col gap-4">
           <Card
             data-demo="table"
-            className={demoHighlight(demoStep, ["table"])}
+            className={demoHighlight(demoStep, ["table"], demoWaiting)}
           >
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1193,7 +1239,7 @@ export function BrainLab() {
 
           <Card
             data-demo="library"
-            className={demoHighlight(demoStep, ["pin", "watch"])}
+            className={demoHighlight(demoStep, ["pin", "watch"], demoWaiting)}
           >
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1304,7 +1350,7 @@ export function BrainLab() {
 
       <div
         data-demo="specialists"
-        className={cn("rounded-xl", demoHighlight(demoStep, ["pin"]))}
+        className={cn("rounded-xl", demoHighlight(demoStep, ["pin"], demoWaiting))}
       >
         <BrainSpecialists
           era={era}
@@ -1315,7 +1361,7 @@ export function BrainLab() {
 
       <Card
         data-demo="scan"
-        className={demoHighlight(demoStep, ["scan"])}
+        className={demoHighlight(demoStep, ["scan"], demoWaiting)}
       >
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
@@ -1433,7 +1479,7 @@ export function BrainLab() {
 
       <Card
         data-demo="journal"
-        className={demoHighlight(demoStep, ["journal"])}
+        className={demoHighlight(demoStep, ["journal"], demoWaiting)}
       >
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
