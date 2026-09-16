@@ -28,6 +28,7 @@ import {
   WALKER_STATUS_LABELS,
 } from "@/components/brain/brain-chrome"
 import { BrainDemoBar } from "@/components/brain/brain-demo"
+import { DemoCoach } from "@/components/brain/demo-coach"
 import { BrainMascot } from "@/components/brain/brain-mascot"
 import { BrainSpecialists } from "@/components/brain/brain-specialists"
 import { useRegisterCapture } from "@/components/capture"
@@ -54,12 +55,14 @@ import {
   BRAIN_LABS,
   BRAIN_LAB_LABELS,
   BRAIN_PACKS,
+  catalogEntry,
   type BrainLab,
   type CatalogEntry,
 } from "@/lib/brain/catalog"
 import {
   DEMO_GRID,
   DEMO_NOTE,
+  DEMO_STEPS,
   DEMO_WATCH_ID,
   demoEntries,
   demoJobs,
@@ -68,6 +71,11 @@ import {
   scrollDemoTarget,
   type DemoStepId,
 } from "@/lib/brain/demo"
+import {
+  clearPendingBrainPins,
+  readPendingBrainPins,
+  specialistDemoWantsStart,
+} from "@/lib/brain/specialist-demo"
 import { deepLinkFor } from "@/lib/brain/deep-links"
 import { formatHandle, parseHandle, parseHandlesInText } from "@/lib/brain/handles"
 import { DEMO_QUESTION, lectureFromWorkingSet, TABLE_LECTURE_MODEL } from "@/lib/brain/lecture"
@@ -303,6 +311,20 @@ export function BrainLab() {
   const pinEntry = useCallback((entry: CatalogEntry) => {
     setPins((prev) => (prev.some((item) => item.id === entry.id) ? prev : [...prev, entry]))
   }, [])
+
+  useEffect(() => {
+    const ids = readPendingBrainPins()
+    if (!ids.length) return
+    let pinned = 0
+    for (const id of ids) {
+      const entry = specialists.find((item) => item.id === id) ?? catalogEntry(id)
+      if (entry) {
+        pinEntry(entry)
+        pinned += 1
+      }
+    }
+    if (pinned) clearPendingBrainPins()
+  }, [pinEntry, specialists])
 
   const pinPack = useCallback(
     (handles: string[]) => {
@@ -780,6 +802,16 @@ export function BrainLab() {
     return () => window.clearTimeout(timer)
   }, [loading, runDemo])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const wants =
+      specialistDemoWantsStart(window.location.search, window.location.pathname) ||
+      window.location.hash.toLowerCase().includes("special")
+    if (!wants) return
+    const timer = window.setTimeout(() => scrollDemoTarget("specialists"), 80)
+    return () => window.clearTimeout(timer)
+  }, [])
+
   const suggestions = useMemo(() => {
     const last = draft.split(/\s/).pop() ?? ""
     if (!last.startsWith("@") || last.length < 2) return []
@@ -888,6 +920,7 @@ export function BrainLab() {
         onStart={() => void runDemo()}
         onStop={stopDemo}
       />
+      {demoRunning ? <DemoCoach stepId={demoStep} steps={DEMO_STEPS} /> : null}
 
       <div data-demo="window" className={cn("flex flex-col gap-2 rounded-xl", demoHighlight(demoStep, ["window"]))}>
       <WindowBar

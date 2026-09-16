@@ -611,6 +611,14 @@ const NAV_ITEMS = [
     },
   },
   {
+    href: "/brain/specialistes",
+    label: "Spécialistes",
+    help: {
+      title: "Spécialistes",
+      body: "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté 20/50/100. Jamais une grille 5+2. Démo guidée avec pastilles explicatives.",
+    },
+  },
+  {
     href: "/ia",
     label: "IA",
     help: {
@@ -650,7 +658,9 @@ export function SiteHeader() {
           <nav className="flex flex-wrap items-center gap-x-4 gap-y-1" aria-label="Sections">
             {NAV_ITEMS.map((item) => {
               const active =
-                pathname === item.href || pathname.startsWith(`${item.href}/`)
+                item.href === "/brain"
+                  ? pathname === "/brain"
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`)
               return (
                 <HelpWrap key={item.href} help={item.help}>
                   <Link

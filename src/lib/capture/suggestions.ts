@@ -79,6 +79,7 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
       "Lis les fiches du working set (@rsi, @adx, @specialist.*) : que décrivent-elles, et quel pronostic d’évolution (hypothèse) portent-elles ?",
       "Cite le forecast d’un spécialiste s’il est sur la table (σ, skill 20/50/100). Un forecast de série nommée n’est pas une grille 5+2 : une 5+2, si tu en proposes une, est une hypothèse séparée.",
       "Démo : @rsi, @ete, @fft, @cluster et @score sont-ils sur la table, et que disent-ils sur cette fenêtre ?",
+      "Démo Spécialistes : le formulaire Père impair est-il cohérent (cible parité, features causales, consignes, skill vs hasard) ?",
       "Quels handles du catalog manquent encore sur le plateau pour répondre ?",
       "Les souvenirs rappelés sont des lectures passées. Sers-t’en pour un pronostic d’hypothèse, sans les prendre pour une série déjà prédite.",
     ]

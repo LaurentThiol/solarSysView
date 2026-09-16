@@ -39,7 +39,7 @@ export function deepLinkFor(input: {
     return { href: "/morpho", lab: "morpho" }
   }
   if (input.entry.lab === "specialist") {
-    return { href: "/brain", lab: "brain" }
+    return { href: "/brain/specialistes", lab: "brain" }
   }
   return { href: "/combinaisons", lab: "combinaisons" }
 }

@@ -27,20 +27,77 @@ export const DEMO_NOTE =
   "Démo Brain : table lue sans modèle, @rsi suivi, mini-balayage consigné. Pas une grille à jouer."
 
 export const DEMO_STEPS = [
-  { id: "window", label: "Fenêtre", hint: "100 derniers tirages, série somme", target: "window" },
-  { id: "pin", label: "Épingles", hint: "Un handle par lab + un spécialiste s’il existe", target: "library" },
-  { id: "table", label: "Table", hint: "Fiches résolues : c’est le prompt", target: "table" },
-  { id: "chat", label: "Lecture", hint: "Brain lit la table, chiffres réels", target: "discussion" },
-  { id: "watch", label: "Suivi", hint: "@rsi à chaque synchro", target: "library" },
-  { id: "scan", label: "Balayage", hint: "Mini agent sur les fiches de la démo", target: "scan" },
-  { id: "journal", label: "Carnet", hint: "Lectures + note datées", target: "journal" },
+  {
+    id: "window",
+    label: "Fenêtre",
+    hint: "100 derniers tirages, série somme",
+    target: "window",
+    title: "Fenêtre",
+    body: "La démo pose les 100 derniers tirages, série somme. C’est la même fenêtre que les autres labs.",
+  },
+  {
+    id: "pin",
+    label: "Épingles",
+    hint: "Un handle par lab + un spécialiste s’il existe",
+    target: "library",
+    title: "Épingles",
+    body: "Un nom par lab : @rsi, @macd, @adx, @ete, @fft, @cluster, @score. Un spécialiste déjà entraîné est collé s’il existe.",
+  },
+  {
+    id: "table",
+    label: "Table",
+    hint: "Fiches résolues : c’est le prompt",
+    target: "table",
+    title: "Sur la table",
+    body: "Exactement ce que Brain reçoit. Les fiches sont calculées sur les tirages chargés. S’il n’est pas ici, Brain ne le voit pas.",
+  },
+  {
+    id: "chat",
+    label: "Lecture",
+    hint: "Brain lit la table, chiffres réels",
+    target: "discussion",
+    title: "Lecture",
+    body: "Brain lit la table sans Ollama. Chiffres réels, pas un texte inventé. Une 5+2, s’il y en a une, serait une hypothèse séparée.",
+  },
+  {
+    id: "watch",
+    label: "Suivi",
+    hint: "@rsi à chaque synchro",
+    target: "library",
+    title: "Suivi",
+    body: "L’étoile sur @rsi le recalcule à chaque synchro, sans LLM.",
+  },
+  {
+    id: "scan",
+    label: "Balayage",
+    hint: "Mini agent sur les fiches de la démo",
+    target: "scan",
+    title: "Balayage",
+    body: "Mini-agent sur les fiches de la démo seulement. D’habitude, rien ne part tout seul.",
+  },
+  {
+    id: "journal",
+    label: "Carnet",
+    hint: "Lectures + note datées",
+    target: "journal",
+    title: "Carnet",
+    body: "Lectures datées et une note. Neon si disponible, sinon cet ordinateur.",
+  },
 ] as const
 
 export type DemoStepId = (typeof DEMO_STEPS)[number]["id"]
 
 export function demoWantsStart(search: string) {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
-  const value = params.get("demo")
+  const value = (params.get("demo") ?? "").trim().toLowerCase()
+  if (
+    value === "specialistes" ||
+    value === "specialist" ||
+    value === "specialiste" ||
+    value === "spécialistes"
+  ) {
+    return false
+  }
   return value === "1" || value === "true" || value === "oui"
 }
 

@@ -13,6 +13,13 @@ import { INDEPENDENCE_DISCLAIMER, labFromPath, labLabel } from "../src/lib/captu
 import { suggestionsFor } from "../src/lib/capture/suggestions"
 import { IA_SYSTEM_PROMPT } from "../src/lib/ia/prompt"
 import { DEMO_HANDLES, DEMO_LAB_FOR, demoEntries, demoJobs, demoLabsCovered, demoWantsStart } from "../src/lib/brain/demo"
+import {
+  DEMO_SPECIALIST,
+  DEMO_SPECIALIST_STEPS,
+  isSpecialistDemoQuery,
+  specialistDemoWantsStart,
+} from "../src/lib/brain/specialist-demo"
+import { deepLinkFor } from "../src/lib/brain/deep-links"
 import { lectureFromWorkingSet } from "../src/lib/brain/lecture"
 import type { WorkingObject } from "../src/lib/brain/types"
 
@@ -103,6 +110,7 @@ test("cosine of identical vectors is 1; orthogonal is 0", () => {
 
 test("Brain is a first-class lab in capture nav", () => {
   assert.equal(labFromPath("/brain"), "brain")
+  assert.equal(labFromPath("/brain/specialistes"), "brain")
   assert.equal(labLabel("brain"), "Brain")
   assert.ok(suggestionsFor("brain").length >= 2)
 })
@@ -208,6 +216,7 @@ test("demo tour pins one handle per lab and honors ?demo=1", () => {
   assert.ok(demoWantsStart("?demo=1"))
   assert.ok(demoWantsStart("demo=oui"))
   assert.equal(demoWantsStart(""), false)
+  assert.equal(demoWantsStart("?demo=specialistes"), false)
   const entries = demoEntries()
   assert.equal(entries.length, DEMO_HANDLES.length)
   for (const handle of DEMO_HANDLES) {
@@ -236,6 +245,35 @@ test("demo tour pins one handle per lab and honors ?demo=1", () => {
   ])
   assert.ok(withSpecialist.some((item) => item.lab === "specialist"))
   assert.equal(withSpecialist.length, DEMO_HANDLES.length + 1)
+})
+
+test("specialist demo is a separate tour with pop-ups and does not start the Brain demo", () => {
+  assert.ok(isSpecialistDemoQuery("?demo=specialistes"))
+  assert.ok(specialistDemoWantsStart("?demo=specialistes"))
+  assert.ok(specialistDemoWantsStart("?demo=1", "/brain/specialistes"))
+  assert.equal(specialistDemoWantsStart("?demo=1", "/brain"), false)
+  assert.equal(demoWantsStart("?demo=specialistes"), false)
+  const ids = DEMO_SPECIALIST_STEPS.map((item) => item.id)
+  for (const id of ["intro", "name", "target", "features", "train", "saved", "pin"] as const) {
+    assert.ok(ids.includes(id), id)
+  }
+  assert.equal(DEMO_SPECIALIST.target, "parity")
+  assert.ok(DEMO_SPECIALIST.indicators.includes("rsi"))
+  const link = deepLinkFor({
+    entry: {
+      id: "specialist/pere-impair",
+      handle: "pere-impair",
+      aliases: ["specialist.pere-impair"],
+      lab: "specialist",
+      family: "specialiste",
+      kind: "specialist",
+      label: "Père impair",
+      units: "",
+      reading: "Forecast",
+      defaults: {},
+    },
+  })
+  assert.equal(link.href, "/brain/specialistes")
 })
 
 test("table lecture cites handles, flags, and refuses an empty table", () => {
