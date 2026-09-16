@@ -72,14 +72,14 @@ export function BrainMascot({
         <g clipPath={`url(#${clipId})`}>
           <ellipse cx="48" cy="76" rx="26" ry="14" fill={`url(#${shadeId})`} />
           <path
-            d="M44 22c-10-2-18 4-23 14M44 30c-11-2-20 6-24 16M32 20c-8 10-10 24-4 38M44 54c-8 4-14 10-16 16"
+            d="M40 20c-10-2-17 4-21 13M28 22c-8 10-10 24-4 38M40 58c-8 5-14 12-15 18"
             fill="none"
             stroke="oklch(0.48 0.1 70 / 0.7)"
             strokeWidth="1.45"
             strokeLinecap="round"
           />
           <path
-            d="M52 22c10-2 18 4 23 14M52 30c11-2 20 6 24 16M64 20c8 10 10 24 4 38M52 54c8 4 14 10 16 16"
+            d="M56 20c10-2 17 4 21 13M68 22c8 10 10 24 4 38M56 58c8 5 14 12 15 18"
             fill="none"
             stroke="oklch(0.48 0.1 70 / 0.7)"
             strokeWidth="1.45"
@@ -182,13 +182,13 @@ function Face({ mood }: { mood: BrainMood }) {
       {mood === "talk" ? (
         <>
           <path
-            d="M39.5 58.8c2.8 7.4 14.2 7.4 17 0-4.2 2.2-12.8 2.2-17 0z"
+            d="M38 58.5Q48 78 58 58.5Q48 63.5 38 58.5Z"
             fill="oklch(0.4 0.11 22)"
             stroke={ink}
             strokeWidth="1.7"
             strokeLinejoin="round"
           />
-          <ellipse cx="48" cy="65.2" rx="3.1" ry="1.7" fill="oklch(0.62 0.16 25)" />
+          <ellipse cx="48" cy="66.4" rx="3.2" ry="1.8" fill="oklch(0.62 0.16 25)" />
         </>
       ) : mood === "think" ? (
         <path d="M43 62.2c3.2 1.5 6.8 1.5 10 0" fill="none" stroke={ink} strokeWidth="2" strokeLinecap="round" />
