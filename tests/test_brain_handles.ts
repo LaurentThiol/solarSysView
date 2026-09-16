@@ -111,6 +111,7 @@ test("Brain and IA prompts allow a forecast as an hypothesis, they do not refuse
   for (const prompt of [BRAIN_SYSTEM_PROMPT, IA_SYSTEM_PROMPT]) {
     assert.match(prompt, /hypothèse/)
     assert.match(prompt, /pronostic/)
+    assert.match(prompt, /3 à 5 lectures/)
     assert.doesNotMatch(prompt, /refuse/)
     assert.doesNotMatch(prompt, /Tu ne prédis pas/)
   }

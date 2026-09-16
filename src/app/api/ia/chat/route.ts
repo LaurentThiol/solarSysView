@@ -14,7 +14,7 @@ import { encodeSse, type IaStreamEvent } from "@/lib/ia/sse"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
-export const maxDuration = 60
+export const maxDuration = 180
 
 type Body = {
   provider?: IaProviderId
@@ -23,6 +23,7 @@ type Body = {
   snapshot?: IaSnapshotPayload | null
   stream?: boolean
   systemPrompt?: string | null
+  deepen?: boolean
 }
 
 type ChatRequest = {
@@ -32,6 +33,7 @@ type ChatRequest = {
   snapshot: IaSnapshotPayload | null
   stream: boolean
   systemPrompt?: string | null
+  deepen?: boolean
 }
 
 function cleanedMessages(messages: IaChatMessage[]) {
@@ -112,13 +114,14 @@ async function resolveChat(request: Request): Promise<{ error: NextResponse } | 
     snapshot: body.snapshot ?? null,
     stream: Boolean(body.stream),
     systemPrompt: typeof body.systemPrompt === "string" ? body.systemPrompt : null,
+    deepen: Boolean(body.deepen),
   }
 }
 
 export async function POST(request: Request) {
   const parsed = await resolveChat(request)
   if ("error" in parsed) return parsed.error
-  const { provider, model, messages, snapshot, stream, systemPrompt } = parsed
+  const { provider, model, messages, snapshot, stream, systemPrompt, deepen } = parsed
 
   if (!stream) {
     try {
@@ -128,6 +131,7 @@ export async function POST(request: Request) {
         messages,
         snapshot,
         systemPrompt,
+        deepen,
         signal: request.signal,
       })
       if (!result.ok) {
@@ -160,7 +164,7 @@ export async function POST(request: Request) {
       }
       try {
         await streamIa(
-          { provider, model, messages, snapshot, systemPrompt, signal: request.signal },
+          { provider, model, messages, snapshot, systemPrompt, deepen, signal: request.signal },
           send
         )
       } catch (error) {

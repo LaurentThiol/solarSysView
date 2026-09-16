@@ -2,8 +2,15 @@ export const INDEPENDENCE_DISCLAIMER =
   "Chaque tirage EuroMillions est indépendant en loi officielle. Les indicateurs décrivent la fenêtre ; un pronostic d’évolution ou de grille est une hypothèse de lecture, pas une certitude."
 
 export const JSON_BUDGET = 80_000
+export const PACK_RESERVE_TOKENS = 4096
+export const DEFAULT_NUM_CTX = 16_384
 export const SERIES_MAX_POINTS = 400
 export const IMAGE_MAX_CHARS = 1_800_000
+
+export function packCharBudget(numCtx = DEFAULT_NUM_CTX): number {
+  const ctx = Number.isFinite(numCtx) && numCtx > 0 ? numCtx : DEFAULT_NUM_CTX
+  return Math.min(JSON_BUDGET, Math.max(8_000, (ctx - PACK_RESERVE_TOKENS) * 4))
+}
 
 export function formatCapturedAt(iso: string) {
   const date = new Date(iso)

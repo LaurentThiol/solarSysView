@@ -41,6 +41,7 @@ import { downloadThreadJson, downloadThreadMarkdown, downloadThreadsJson, parseT
 import { streamIaChat } from "@/lib/ia/client"
 import {
   IA_MODELS,
+  localLiveIds,
   modelLabel,
   pickAvailableModel,
   pickCompareModel,
@@ -57,6 +58,7 @@ type Status = {
   openai: boolean
   local?: boolean
   localHost?: string
+  localModelEnv?: string | null
   default: IaProviderId | null
   models?: IaModelOption[]
   live?: { google: boolean | null; openai: boolean | null; local?: boolean | null }
@@ -65,6 +67,7 @@ type Status = {
 type AskOptions = {
   compare?: boolean
   modelB?: string | null
+  deepen?: boolean
 }
 
 function pickProvider(status: Status | null, stored: IaProviderId | null): IaProviderId | null {
@@ -106,6 +109,7 @@ export function IaLab() {
   const [model, setModel] = useState<string | null>(preferredModel("google"))
   const [modelB, setModelB] = useState<string | null>(null)
   const [compare, setCompare] = useState(false)
+  const [deepen, setDeepen] = useState(false)
   const [threads, setThreads] = useState<IaThread[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<DiagnosticSnapshot | null>(null)
@@ -152,7 +156,10 @@ export function IaLab() {
         setProvider(nextProvider)
         const models = payload.models ?? []
         const nextModel = nextProvider
-          ? pickAvailableModel(models, nextProvider, readModel(nextProvider))
+          ? pickAvailableModel(models, nextProvider, readModel(nextProvider), {
+              envModel: payload.localModelEnv,
+              liveIds: localLiveIds(models),
+            })
           : readLastModel() || preferredModel("google")
         setModel(nextModel)
         setModelB(pickCompareModel(models, nextModel, readCompareModel()))
@@ -277,6 +284,7 @@ export function IaLab() {
               model: modelId,
               messages: requestMessages,
               snapshot: pack ? snapshotPayload(pack) : null,
+              deepen: providerId === "local" ? Boolean(options.deepen) : false,
             },
             {
               signal: abort.signal,
@@ -497,7 +505,10 @@ export function IaLab() {
     setSnapshot(thread.snapshot)
     setMessages(thread.messages)
     setProvider(thread.provider)
-    setModel(thread.model || pickAvailableModel(allModels, thread.provider, readModel(thread.provider)))
+    setModel(thread.model || pickAvailableModel(allModels, thread.provider, readModel(thread.provider), {
+      envModel: status?.localModelEnv,
+      liveIds: localLiveIds(allModels),
+    }))
     setError(null)
     setNotice(null)
     setBusy(false)
@@ -511,7 +522,10 @@ export function IaLab() {
   function selectProvider(id: IaProviderId) {
     setProvider(id)
     writeProvider(id)
-    const next = pickAvailableModel(allModels, id, readModel(id))
+    const next = pickAvailableModel(allModels, id, readModel(id), {
+      envModel: status?.localModelEnv,
+      liveIds: localLiveIds(allModels),
+    })
     setModel(next)
     if (compare) {
       const nextB = pickCompareModel(allModels, next, readCompareModel())
@@ -694,6 +708,15 @@ export function IaLab() {
             >
               Comparer
             </button>
+            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={deepen}
+                onChange={(event) => setDeepen(event.target.checked)}
+                disabled={provider !== "local"}
+              />
+              Approfondir
+            </label>
             <HelpTip
               title="Comparer"
               body="Même pack, deux lectures en parallèle. Utile en Chartisme / Harmo : un modèle rapide contre un plus précis, ou Gemini contre OpenAI. Les réponses arrivent en flux."
@@ -970,6 +993,7 @@ export function IaLab() {
               model,
               compare,
               modelB,
+              deepen: provider === "local" ? deepen : false,
             })
           }}
         >

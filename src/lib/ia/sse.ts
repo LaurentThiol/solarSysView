@@ -65,6 +65,55 @@ export function openaiDeltaText(payload: unknown) {
   return record.choices?.[0]?.delta?.content || ""
 }
 
+export async function readNdjson(
+  response: Response,
+  onJson: (payload: unknown) => void,
+  signal?: AbortSignal
+) {
+  if (!response.body) throw new Error("réponse vide")
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+  try {
+    while (true) {
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
+      const { done, value } = await reader.read()
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() ?? ""
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed) continue
+        onJson(JSON.parse(trimmed))
+      }
+      if (done) {
+        const rest = buffer.trim()
+        if (rest) onJson(JSON.parse(rest))
+        return
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock()
+    } catch {
+      /* already released */
+    }
+  }
+}
+
+export function ollamaDeltaText(payload: unknown) {
+  if (!payload || typeof payload !== "object") return ""
+  const record = payload as {
+    error?: string
+    message?: { content?: string | null }
+    response?: string
+  }
+  if (record.error) throw new Error(record.error)
+  if (typeof record.message?.content === "string") return record.message.content
+  if (typeof record.response === "string") return record.response
+  return ""
+}
+
 export async function readSseJson(
   response: Response,
   onJson: (payload: unknown) => void,
