@@ -65,7 +65,7 @@ export type WalkerJob = {
   handle: string
   label: string
   lab: string
-  mode: "catalog" | "curves"
+  mode: "catalog" | "curves" | "demo"
   curveId?: string
   status: WalkerJobStatus
   fiche?: BrainFiche
@@ -77,7 +77,7 @@ export type WalkerJob = {
 
 export type WalkerState = {
   id: string
-  mode: "catalog" | "curves"
+  mode: "catalog" | "curves" | "demo"
   status: "idle" | "running" | "paused" | "done" | "error"
   index: number
   jobs: WalkerJob[]

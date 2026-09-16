@@ -254,3 +254,24 @@ def test_brain_and_ia_prompts_allow_forecast_as_hypothesis() -> None:
     assert "indépendant" in disclaimer
     assert "hypothèse" in disclaimer
     assert "Ils ne prédisent pas" not in disclaimer
+
+
+def test_brain_demo_is_wired_in_the_lab() -> None:
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    demo = (root / "src/lib/brain/demo.ts").read_text(encoding="utf-8")
+    lecture = (root / "src/lib/brain/lecture.ts").read_text(encoding="utf-8")
+    lab = (root / "src/components/brain/brain-lab.tsx").read_text(encoding="utf-8")
+    bar = (root / "src/components/brain/brain-demo.tsx").read_text(encoding="utf-8")
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    catalog = (root / "src/lib/brain/catalog.ts").read_text(encoding="utf-8")
+    for handle in ("rsi", "ete", "fft", "cluster", "score"):
+        assert handle in demo
+    assert "lectureFromWorkingSet" in lecture
+    assert "sans modèle" in lecture
+    assert "Lancer la démo" in bar
+    assert "Lire la table" in lab
+    assert "demoWantsStart" in lab
+    assert "/brain?demo=1" in readme
+    assert 'id: "tour"' in catalog

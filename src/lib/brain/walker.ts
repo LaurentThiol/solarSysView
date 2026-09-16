@@ -3,7 +3,7 @@ import { parseCurveId, curveSpecs } from "@/lib/chartisme/curves"
 import { resolveEntry } from "@/lib/brain/resolve"
 import type { ResolveContext, WalkerJob, WalkerState } from "@/lib/brain/types"
 
-export type WalkerMode = "catalog" | "curves"
+export type WalkerMode = "catalog" | "curves" | "demo"
 
 export function newWalkerId() {
   return `walk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`

@@ -359,6 +359,7 @@ export const BRAIN_CATALOG: CatalogEntry[] = [
 ]
 
 export const BRAIN_PACKS: NamedPack[] = [
+  { id: "tour", label: "Tour des labs", handles: ["rsi", "ete", "fft", "cluster", "score"] },
   { id: "momentum", label: "Momentum", handles: ["rsi", "macd", "adx"] },
   { id: "volatilite", label: "Volatilité", handles: ["atr", "bollinger", "squeeze"] },
   { id: "figures", label: "Figures clés", handles: ["ete", "double_bottom", "triangle_sym"] },

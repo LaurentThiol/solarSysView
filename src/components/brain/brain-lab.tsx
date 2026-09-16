@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   BookOpen,
   Cloud,
+  ListChecks,
   NotebookPen,
   Pause,
   Pin,
@@ -26,6 +27,7 @@ import {
   StatusDot,
   WALKER_STATUS_LABELS,
 } from "@/components/brain/brain-chrome"
+import { BrainDemoBar } from "@/components/brain/brain-demo"
 import { BrainMascot } from "@/components/brain/brain-mascot"
 import { BrainSpecialists } from "@/components/brain/brain-specialists"
 import { useRegisterCapture } from "@/components/capture"
@@ -55,8 +57,20 @@ import {
   type BrainLab,
   type CatalogEntry,
 } from "@/lib/brain/catalog"
+import {
+  DEMO_GRID,
+  DEMO_NOTE,
+  DEMO_WATCH_ID,
+  demoEntries,
+  demoJobs,
+  demoWantsStart,
+  resolveDemoPins,
+  scrollDemoTarget,
+  type DemoStepId,
+} from "@/lib/brain/demo"
 import { deepLinkFor } from "@/lib/brain/deep-links"
 import { formatHandle, parseHandle, parseHandlesInText } from "@/lib/brain/handles"
+import { DEMO_QUESTION, lectureFromWorkingSet, TABLE_LECTURE_MODEL } from "@/lib/brain/lecture"
 import { specialistToEntry } from "@/lib/brain/specialists"
 import {
   addNote,
@@ -78,6 +92,7 @@ import {
   createWalker,
   flaggedLots,
   LLM_LOT_SIZE,
+  newWalkerId,
   runJob,
 } from "@/lib/brain/walker"
 import { runWatchlist } from "@/lib/brain/watchlist"
@@ -91,7 +106,7 @@ import {
   type IaChatMessage,
   type IaProviderId,
 } from "@/lib/ia/models"
-import { readStoredProposals } from "@/lib/combinations"
+import { readStoredProposals, writeStoredProposals } from "@/lib/combinations"
 import { INDEPENDENCE_DISCLAIMER } from "@/lib/capture/snapshot"
 import { useDraws } from "@/lib/use-draws"
 import { cn } from "@/lib/utils"
@@ -120,6 +135,16 @@ function formatObserved(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })
+}
+
+function demoHighlight(step: DemoStepId | null, ids: DemoStepId[]) {
+  return step && ids.includes(step)
+    ? "ring-2 ring-primary/80 ring-offset-2 ring-offset-background"
+    : ""
+}
+
+function waitMs(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 }
 
 export function BrainLab() {
@@ -161,8 +186,14 @@ export function BrainLab() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const [specialists, setSpecialists] = useState<CatalogEntry[]>([])
+  const [gridOverride, setGridOverride] = useState<typeof DEMO_GRID | null>(null)
+  const [demoStep, setDemoStep] = useState<DemoStepId | null>(null)
+  const [demoRunning, setDemoRunning] = useState(false)
+  const [demoDone, setDemoDone] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const chatRef = useRef<HTMLDivElement | null>(null)
+  const demoStopRef = useRef(false)
+  const demoAutoRef = useRef(false)
 
   const archive = useMemo(
     () => [...draws].sort((a, b) => a.date.localeCompare(b.date)),
@@ -195,10 +226,10 @@ export function BrainLab() {
       window,
       era,
       source,
-      grid: proposals[0] ?? null,
+      grid: gridOverride ?? proposals[0] ?? null,
       fetchHarmo: (path, params) => fetchHarmo(path, params),
     }
-  }, [archive, resolved, variable, ball, star, curveId, periodX, era, source])
+  }, [archive, resolved, variable, ball, star, curveId, periodX, era, source, gridOverride])
 
   const catalog = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -558,6 +589,183 @@ export function BrainLab() {
     await refreshJournal()
   }, [ctxBase, refreshJournal])
 
+  const readTable = useCallback(
+    (question?: string) => {
+      const asked = question?.trim() || "Lis la table."
+      const answer = lectureFromWorkingSet(fiches, {
+        banner: ctxBase.window.banner,
+        n: ctxBase.window.n,
+        source,
+      })
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: asked },
+        { role: "assistant", content: answer, provider: "local", model: TABLE_LECTURE_MODEL },
+      ])
+    },
+    [ctxBase.window.banner, ctxBase.window.n, fiches, source]
+  )
+
+  const stopDemo = useCallback(() => {
+    demoStopRef.current = true
+    stopRef.current = true
+    pausedRef.current = false
+    setPaused(false)
+    setDemoRunning(false)
+    setDemoDone(true)
+  }, [])
+
+  const runDemo = useCallback(async () => {
+    if (demoRunning || loading) return
+    demoAutoRef.current = true
+    demoStopRef.current = false
+    stopRef.current = false
+    setDemoRunning(true)
+    setDemoDone(false)
+    setError(null)
+    setInspector(true)
+    setScanOpen(true)
+    setActiveLab("all")
+    setQuery("")
+    setPreset("last_100")
+    setVariable("sum")
+    setCurveId("sum")
+    writeStoredProposals([DEMO_GRID])
+    setGridOverride(DEMO_GRID)
+
+    const go = async (step: DemoStepId) => {
+      if (demoStopRef.current) return false
+      setDemoStep(step)
+      const target = { window: "window", pin: "library", table: "table", chat: "discussion", watch: "library", scan: "scan", journal: "journal" }[step]
+      scrollDemoTarget(target)
+      await waitMs(280)
+      return !demoStopRef.current
+    }
+
+    try {
+      if (!(await go("window"))) return
+      if (!(await go("pin"))) return
+      const entries = demoEntries(specialists, handleCtx)
+      setPins(entries)
+      if (!(await go("table"))) return
+      const demoCtx: Omit<ResolveContext, "entry"> = {
+        ...ctxBase,
+        grid: DEMO_GRID,
+        fetchHarmo: async (path, params) => {
+          try {
+            return await Promise.race([
+              fetchHarmo(path, params),
+              new Promise<never>((_, reject) => {
+                window.setTimeout(() => reject(new Error("Harmo trop lent pour la démo")), 5000)
+              }),
+            ])
+          } catch (err) {
+            return { ok: false, error: err instanceof Error ? err.message : "Harmo injoignable" }
+          }
+        },
+      }
+      const objects = await resolveDemoPins(demoCtx, entries)
+      if (demoStopRef.current) return
+      setFiches(objects)
+
+      if (!(await go("chat"))) return
+      const answer = lectureFromWorkingSet(objects, {
+        banner: demoCtx.window.banner,
+        n: demoCtx.window.n,
+        source,
+      })
+      setMessages([
+        { role: "user", content: DEMO_QUESTION },
+        { role: "assistant", content: answer, provider: "local", model: TABLE_LECTURE_MODEL },
+      ])
+
+      if (!(await go("watch"))) return
+      setWatch([DEMO_WATCH_ID])
+      writeWatchlist([DEMO_WATCH_ID])
+      await runWatchlist(demoCtx)
+
+      if (!(await go("scan"))) return
+      const jobs = demoJobs(entries)
+      const flagged: BrainFiche[] = []
+      setWalker({
+        id: newWalkerId(),
+        mode: "demo",
+        status: "running",
+        index: 0,
+        jobs,
+        flagged: [],
+        localCalls: 0,
+        cloudCalls: 0,
+        notes: 0,
+        tokensApprox: 0,
+        startedAt: new Date().toISOString(),
+        cloudLots: false,
+      })
+      for (let i = 0; i < jobs.length; i += 1) {
+        if (demoStopRef.current || stopRef.current) break
+        jobs[i] = { ...jobs[i], status: "running" }
+        setWalker((prev) => (prev ? { ...prev, index: i, jobs: [...jobs] } : prev))
+        const done = await runJob(jobs[i], demoCtx)
+        if (done.fiche) {
+          const saved = await saveReading({ fiche: done.fiche, source: "agent" })
+          done.readingId = saved.id
+        }
+        jobs[i] = done
+        if (done.fiche?.flagged) flagged.push(done.fiche)
+        setWalker((prev) =>
+          prev
+            ? {
+                ...prev,
+                index: i + 1,
+                jobs: [...jobs],
+                flagged: [...flagged],
+                status: i + 1 >= jobs.length ? "done" : "running",
+              }
+            : prev
+        )
+      }
+      if (flagged.length) {
+        setFiches((prev) => [
+          ...prev.filter((item) => item.kind !== "shortlist"),
+          ...flagged.map((fiche) => ({
+            kind: "shortlist" as const,
+            id: `flag-${fiche.id}`,
+            handle: `@${fiche.handle}`,
+            label: fiche.label,
+            inPrompt: true,
+            summary: fiche.summary,
+            fiche,
+          })),
+        ])
+      }
+      setWalker((prev) => (prev ? { ...prev, status: "done", flagged } : prev))
+
+      if (!(await go("journal"))) return
+      await refreshJournal()
+      const listed = await listReadings()
+      const first = listed.items[0]
+      if (first) await addNote(first.id, DEMO_NOTE, "user")
+      await refreshJournal()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "La démo a buté.")
+    } finally {
+      setDemoRunning(false)
+      setDemoDone(true)
+      if (!demoStopRef.current) setDemoStep("journal")
+    }
+  }, [ctxBase, demoRunning, handleCtx, loading, refreshJournal, source, specialists])
+
+  useEffect(() => {
+    if (demoAutoRef.current || loading) return
+    if (typeof window === "undefined" || !demoWantsStart(window.location.search)) return
+    const timer = window.setTimeout(() => {
+      if (demoAutoRef.current) return
+      demoAutoRef.current = true
+      void runDemo()
+    }, 50)
+    return () => window.clearTimeout(timer)
+  }, [loading, runDemo])
+
   const suggestions = useMemo(() => {
     const last = draft.split(/\s/).pop() ?? ""
     if (!last.startsWith("@") || last.length < 2) return []
@@ -600,7 +808,7 @@ export function BrainLab() {
     return `${item.handle} ${summary} ${notes}`.toLowerCase().includes(q)
   })
 
-  const mascotMood = busy || walker?.status === "running" ? "think" : status?.local === false ? "sleep" : messages.length ? "talk" : "idle"
+  const mascotMood = busy || walker?.status === "running" || demoRunning ? "think" : status?.local === false ? "sleep" : messages.length ? "talk" : "idle"
   const scanProgress = walker && walker.jobs.length ? Math.min(100, (walker.index / walker.jobs.length) * 100) : 0
   const localOn = Boolean(status?.local)
   const cloudReady = Boolean(status?.google || status?.openai)
@@ -659,6 +867,15 @@ export function BrainLab() {
         {INDEPENDENCE_DISCLAIMER}
       </p>
 
+      <BrainDemoBar
+        step={demoStep}
+        running={demoRunning}
+        done={demoDone}
+        onStart={() => void runDemo()}
+        onStop={stopDemo}
+      />
+
+      <div data-demo="window" className={cn("flex flex-col gap-2 rounded-xl", demoHighlight(demoStep, ["window"]))}>
       <WindowBar
         window={resolved}
         preset={preset}
@@ -738,9 +955,13 @@ export function BrainLab() {
           </div>
         ) : null}
       </div>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
-        <Card className="border-primary/20">
+        <Card
+          data-demo="discussion"
+          className={cn("border-primary/20", demoHighlight(demoStep, ["chat"]))}
+        >
           <CardHeader className="border-b border-border/60">
             <CardTitle className="flex items-center gap-2">
               <BrainMascot mood={mascotMood} size="sm" />
@@ -774,8 +995,8 @@ export function BrainLab() {
                   <p className="text-sm font-medium">Salut, je suis Brain.</p>
                   <p className="max-w-sm text-xs leading-5 text-muted-foreground">
                     {localOn
-                      ? "Épingle un indicateur à droite, ou clique une question pour démarrer."
-                      : "Ollama est éteint : allume-le, ou coche « ce tour dans le cloud » si tu as une clé."}
+                      ? "Épingle un indicateur à droite, clique une question, ou lance la démo."
+                      : "Ollama est éteint : lance la démo ou « Lire la table » — les chiffres sont calculés ici. Le cloud seulement si tu coches « ce tour »."}
                   </p>
                   <div className="flex w-full max-w-md flex-col gap-1.5">
                     {STARTER_QUESTIONS.map((question) => (
@@ -863,6 +1084,15 @@ export function BrainLab() {
             </div>
             <div className="flex items-center gap-2">
               <p className="text-[11px] text-muted-foreground">Entrée envoie · Maj+Entrée pour une ligne</p>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || demoRunning}
+                onClick={() => readTable()}
+              >
+                <ListChecks />
+                Lire la table
+              </Button>
               <Button size="sm" className="ml-auto" disabled={busy || !draft.trim()} onClick={sendDraft}>
                 <Send />
                 {busy ? "…" : "Envoyer"}
@@ -872,7 +1102,10 @@ export function BrainLab() {
         </Card>
 
         <div className="flex flex-col gap-4">
-          <Card>
+          <Card
+            data-demo="table"
+            className={demoHighlight(demoStep, ["table"])}
+          >
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Pin className="size-4 text-primary" />
@@ -955,7 +1188,10 @@ export function BrainLab() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            data-demo="library"
+            className={demoHighlight(demoStep, ["pin", "watch"])}
+          >
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BookOpen className="size-4 text-primary" />
@@ -1063,13 +1299,21 @@ export function BrainLab() {
         </div>
       </div>
 
-      <BrainSpecialists
-        era={era}
-        onPin={pinEntry}
-        onIndex={(items) => setSpecialists(items.map((item) => specialistToEntry(item)))}
-      />
+      <div
+        data-demo="specialists"
+        className={cn("rounded-xl", demoHighlight(demoStep, ["pin"]))}
+      >
+        <BrainSpecialists
+          era={era}
+          onPin={pinEntry}
+          onIndex={(items) => setSpecialists(items.map((item) => specialistToEntry(item)))}
+        />
+      </div>
 
-      <Card>
+      <Card
+        data-demo="scan"
+        className={demoHighlight(demoStep, ["scan"])}
+      >
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
             <div className="min-w-0 flex-1">
@@ -1142,7 +1386,9 @@ export function BrainLab() {
             {walker ? (
               <div className="flex flex-col gap-2 text-xs">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">{walker.mode === "curves" ? "142 courbes" : "bibliothèque"}</Badge>
+                  <Badge variant="secondary">
+                    {walker.mode === "curves" ? "142 courbes" : walker.mode === "demo" ? "démo" : "bibliothèque"}
+                  </Badge>
                   <span>{WALKER_STATUS_LABELS[walker.status] ?? walker.status}</span>
                   <span className="text-muted-foreground">
                     {walker.index} / {walker.jobs.length} · {walker.flagged.length} à relire · local {walker.localCalls} / cloud{" "}
@@ -1182,7 +1428,10 @@ export function BrainLab() {
         ) : null}
       </Card>
 
-      <Card>
+      <Card
+        data-demo="journal"
+        className={demoHighlight(demoStep, ["journal"])}
+      >
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <NotebookPen className="size-4 text-primary" />

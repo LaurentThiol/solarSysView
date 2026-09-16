@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { BRAIN_CATALOG, catalogCollisions, catalogEntry } from "../src/lib/brain/catalog"
+import { BRAIN_CATALOG, BRAIN_PACKS, catalogCollisions, catalogEntry } from "../src/lib/brain/catalog"
 import { formatHandle, parseHandle, parseHandlesInText } from "../src/lib/brain/handles"
 import { BRAIN_SYSTEM_PROMPT } from "../src/lib/brain/prompt"
 import { cosine } from "../src/lib/brain/retrieve"
@@ -12,6 +12,8 @@ import { curveSpecs } from "../src/lib/chartisme/curves"
 import { INDEPENDENCE_DISCLAIMER, labFromPath, labLabel } from "../src/lib/capture/snapshot"
 import { suggestionsFor } from "../src/lib/capture/suggestions"
 import { IA_SYSTEM_PROMPT } from "../src/lib/ia/prompt"
+import { DEMO_HANDLES, DEMO_LAB_FOR, demoEntries, demoJobs, demoLabsCovered, demoWantsStart } from "../src/lib/brain/demo"
+import { lectureFromWorkingSet } from "../src/lib/brain/lecture"
 import type { WorkingObject } from "../src/lib/brain/types"
 
 test("handles parse @rsi, @sum.rsi, @delay:7.rsi, @ete alias, citation", () => {
@@ -198,5 +200,69 @@ test("specialist catalog entries stay out of the static catalog", () => {
   })
   assert.equal(entry.id, "specialist/somme-totale")
   assert.equal(entry.kind, "specialist")
+})
+
+test("demo tour pins one handle per lab and honors ?demo=1", () => {
+  assert.equal(BRAIN_PACKS[0]?.id, "tour")
+  assert.ok(demoWantsStart("?demo=1"))
+  assert.ok(demoWantsStart("demo=oui"))
+  assert.equal(demoWantsStart(""), false)
+  const entries = demoEntries()
+  assert.equal(entries.length, DEMO_HANDLES.length)
+  for (const handle of DEMO_HANDLES) {
+    const parsed = parseHandle(`@${handle}`, { activeLab: DEMO_LAB_FOR[handle] })
+    assert.equal(parsed.error, null, `@${handle} ${parsed.error}`)
+    assert.equal(parsed.entry?.lab, DEMO_LAB_FOR[handle])
+  }
+  const labs = demoLabsCovered(entries)
+  for (const lab of ["analyse", "chartisme", "harmo", "morpho", "combinaisons"]) {
+    assert.ok(labs.includes(lab), lab)
+  }
+  assert.equal(demoJobs(entries).length, entries.length)
+})
+
+test("table lecture cites handles, flags, and refuses an empty table", () => {
+  const empty = lectureFromWorkingSet([])
+  assert.match(empty, /Table vide/)
+  assert.match(empty, /indépendant/)
+  const objects: WorkingObject[] = [
+    {
+      kind: "pin",
+      id: "analyse/rsi",
+      handle: "@rsi",
+      label: "RSI",
+      inPrompt: true,
+      summary: "RSI sur Somme · rsi 72",
+      fiche: {
+        id: "analyse/rsi",
+        handle: "rsi",
+        lab: "analyse",
+        label: "RSI",
+        units: "0–100",
+        reading: "Oscillateur",
+        params: { variable: "sum", n: null, periodX: 14, curveId: null },
+        window: { preset: "last_100", from: null, to: null, n: 100, warmup: 52, banner: "100" },
+        last: { rsi: 72 },
+        flags: ["RSI hors 30–70"],
+        flagged: true,
+        summary: "RSI sur Somme · rsi 72",
+        disclaimer: "",
+      },
+    },
+    {
+      kind: "current",
+      id: "running",
+      handle: "@macd",
+      label: "en cours",
+      inPrompt: false,
+      summary: "hors prompt",
+    },
+  ]
+  const text = lectureFromWorkingSet(objects, { banner: "100 tirages", n: 100, source: "json" })
+  assert.match(text, /@rsi/)
+  assert.match(text, /à relire/)
+  assert.doesNotMatch(text, /hors prompt/)
+  assert.match(text, /pas de spécialiste/)
+  assert.match(text, /100 tirages/)
 })
 
