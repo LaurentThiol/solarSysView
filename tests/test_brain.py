@@ -271,6 +271,12 @@ def test_brain_demo_is_wired_in_the_lab() -> None:
     assert "lectureFromWorkingSet" in lecture
     assert "sans modèle" in lecture
     assert "Lancer la démo" in bar
+    assert "Suivant" in bar
+    assert "Annuler" in bar
+    assert "BrainDemoPopup" in lab
+    assert "demoWaiting" in lab
+    assert "title:" in demo
+    assert "La fenêtre de travail" in demo
     assert "Lire la table" in lab
     assert "listSpecialists" in lab
     assert "demoWantsStart" in lab

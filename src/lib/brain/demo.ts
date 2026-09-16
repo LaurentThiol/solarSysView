@@ -32,60 +32,75 @@ export const DEMO_STEPS = [
     label: "Fenêtre",
     hint: "100 derniers tirages, série somme",
     target: "window",
-    title: "Fenêtre",
-    body: "La démo pose les 100 derniers tirages, série somme. C’est la même fenêtre que les autres labs.",
+    title: "La fenêtre de travail",
+    body: "Tous les labs lisent ce jeu de tirages. Ici : les 100 derniers (ou moins s’il y en a moins), série somme des numéros. Les indicateurs décrivent cette archive — ils ne disent pas le prochain tirage.",
   },
   {
     id: "pin",
     label: "Épingles",
     hint: "Un handle par lab + un spécialiste s’il existe",
     target: "library",
-    title: "Épingles",
-    body: "Un nom par lab : @rsi, @macd, @adx, @ete, @fft, @cluster, @score. Un spécialiste déjà entraîné est collé s’il existe.",
+    title: "Les noms sur la table",
+    body: "Un handle par lab : @rsi, @ete, @fft, @cluster, @score, plus un spécialiste s’il est déjà sauvé. Sans épingle, Brain n’a rien à lire. L’étoile, c’est le suivi — on y vient juste après.",
   },
   {
     id: "table",
     label: "Table",
     hint: "Fiches résolues : c’est le prompt",
     target: "table",
-    title: "Sur la table",
-    body: "Exactement ce que Brain reçoit. Les fiches sont calculées sur les tirages chargés. S’il n’est pas ici, Brain ne le voit pas.",
+    title: "La table, c’est le prompt",
+    body: "Chaque fiche est calculée sur la fenêtre. Pastilles en haut, cartes à droite : c’est exactement ce que Brain voit. Une fiche flaggée demande une relecture, pas une mise.",
   },
   {
     id: "chat",
     label: "Lecture",
     hint: "Brain lit la table, chiffres réels",
     target: "discussion",
-    title: "Lecture",
-    body: "Brain lit la table sans Ollama. Chiffres réels, pas un texte inventé. Une 5+2, s’il y en a une, serait une hypothèse séparée.",
+    title: "Lecture sans modèle",
+    body: "Ollama est éteint : Brain lit quand même la table, avec les vrais chiffres. Le bouton « Lire la table » reste dispo hors démo. Un forecast de spécialiste n’est pas une grille 5+2.",
   },
   {
     id: "watch",
     label: "Suivi",
     hint: "@rsi à chaque synchro",
     target: "library",
-    title: "Suivi",
-    body: "L’étoile sur @rsi le recalcule à chaque synchro, sans LLM.",
+    title: "Le suivi",
+    body: "@rsi est étoilé. À chaque synchro, Brain recalcule cette fiche et la consigne. Tu choisis quoi suivre — rien ne part tout seul.",
   },
   {
     id: "scan",
     label: "Balayage",
     hint: "Mini agent sur les fiches de la démo",
     target: "scan",
-    title: "Balayage",
-    body: "Mini-agent sur les fiches de la démo seulement. D’habitude, rien ne part tout seul.",
+    title: "Le mini-balayage",
+    body: "Un agent a lu uniquement les fiches de cette démo, pas les 142 courbes. « à relire » = signal à discuter. Le badge démo rappelle que ce n’était pas un balayage complet.",
   },
   {
     id: "journal",
     label: "Carnet",
     hint: "Lectures + note datées",
     target: "journal",
-    title: "Carnet",
-    body: "Lectures datées et une note. Neon si disponible, sinon cet ordinateur.",
+    title: "Le carnet",
+    body: "Les lectures sont datées ici (sur cet ordinateur si Neon est down). La note rappelle : pas une grille à jouer. Tu peux filtrer, commenter, exporter en MD ou CSV.",
   },
 ] as const
 
 export type DemoStepId = (typeof DEMO_STEPS)[number]["id"]
+export type DemoStep = (typeof DEMO_STEPS)[number]
+
+export function demoStepOf(id: DemoStepId): DemoStep {
+  const step = DEMO_STEPS.find((item) => item.id === id)
+  if (!step) throw new Error(`étape de démo inconnue: ${id}`)
+  return step
+}
+
+export function demoStepIndex(id: DemoStepId) {
+  return DEMO_STEPS.findIndex((item) => item.id === id)
+}
+
+export function isLastDemoStep(id: DemoStepId) {
+  return demoStepIndex(id) === DEMO_STEPS.length - 1
+}
 
 export function demoWantsStart(search: string) {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)

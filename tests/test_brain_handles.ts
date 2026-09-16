@@ -12,7 +12,7 @@ import { curveSpecs } from "../src/lib/chartisme/curves"
 import { INDEPENDENCE_DISCLAIMER, labFromPath, labLabel } from "../src/lib/capture/snapshot"
 import { suggestionsFor } from "../src/lib/capture/suggestions"
 import { IA_SYSTEM_PROMPT } from "../src/lib/ia/prompt"
-import { DEMO_HANDLES, DEMO_LAB_FOR, demoEntries, demoJobs, demoLabsCovered, demoWantsStart } from "../src/lib/brain/demo"
+import { DEMO_HANDLES, DEMO_LAB_FOR, DEMO_STEPS, demoEntries, demoJobs, demoLabsCovered, demoStepOf, demoWantsStart, isLastDemoStep } from "../src/lib/brain/demo"
 import {
   DEMO_SPECIALIST,
   DEMO_SPECIALIST_STEPS,
@@ -245,6 +245,11 @@ test("demo tour pins one handle per lab and honors ?demo=1", () => {
   ])
   assert.ok(withSpecialist.some((item) => item.lab === "specialist"))
   assert.equal(withSpecialist.length, DEMO_HANDLES.length + 1)
+  assert.equal(DEMO_STEPS.length, 7)
+  assert.ok(DEMO_STEPS.every((step) => step.title.length > 0 && step.body.length > 20))
+  assert.equal(demoStepOf("journal").target, "journal")
+  assert.equal(isLastDemoStep("journal"), true)
+  assert.equal(isLastDemoStep("window"), false)
 })
 
 test("specialist demo is a separate tour with pop-ups and does not start the Brain demo", () => {
