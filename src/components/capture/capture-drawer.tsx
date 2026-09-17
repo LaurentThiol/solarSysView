@@ -32,7 +32,7 @@ export function CaptureButton() {
         }`}
       >
         <Camera className="size-3.5" />
-        Capture
+        <span className="hidden sm:inline">Capture</span>
       </button>
     </HelpWrap>
   )

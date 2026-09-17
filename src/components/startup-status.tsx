@@ -84,7 +84,9 @@ function Pill({
     >
       <span className={`size-1.5 rounded-full ${dots[tone]}`} />
       <span>{label}</span>
-      {detail ? <span className="font-normal opacity-80">{detail}</span> : null}
+      {detail ? (
+        <span className="hidden font-normal opacity-80 sm:inline">{detail}</span>
+      ) : null}
     </button>
   )
 }
@@ -222,7 +224,7 @@ export function StartupStatus() {
     return (
       <>
         {overlay}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-nowrap items-center gap-2">
           <HelpWrap
             help={{
               title: "API",
@@ -261,7 +263,7 @@ export function StartupStatus() {
     return (
       <>
         {overlay}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-nowrap items-center gap-2">
           <HelpWrap
             help={{
               title: "Statut",
@@ -361,7 +363,7 @@ export function StartupStatus() {
   return (
     <>
       {overlay}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-nowrap items-center gap-2">
         <HelpWrap
           help={{
             title: "API",
@@ -715,8 +717,8 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur">
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:px-6">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="relative z-10 mx-auto flex w-full max-w-6xl items-center gap-2 px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:gap-3 sm:px-6">
+        <div className="flex shrink-0 items-center gap-3">
           <button
             type="button"
             className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-foreground lg:hidden"
@@ -742,10 +744,12 @@ export function SiteHeader() {
           </HelpWrap>
           <NavLinks pathname={pathname} />
         </div>
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-          <CaptureButton />
-          <HelpModeToggle />
-          <StartupStatus />
+        <div className="flex min-w-0 flex-1 justify-end">
+          <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+            <CaptureButton />
+            <HelpModeToggle />
+            <StartupStatus />
+          </div>
         </div>
       </div>
       {menuOpen ? (

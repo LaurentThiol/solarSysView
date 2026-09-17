@@ -120,7 +120,7 @@ export function HelpModeToggle() {
       <span className="inline-flex size-3.5 items-center justify-center rounded-full border border-current text-[9px] font-bold leading-none">
         !
       </span>
-      Aide
+      <span className="hidden sm:inline">Aide</span>
     </button>
   )
 }
