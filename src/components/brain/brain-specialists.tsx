@@ -1,15 +1,30 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { BrainCircuit, FlaskConical, Loader2 } from "lucide-react"
 
+import { DemoTourBar, SpecialistDemoPopup } from "@/components/brain/brain-demo"
 import { SpecialistCard } from "@/components/brain/specialist-card"
-import { HelpTip } from "@/components/help"
+import { HelpTip, HelpWrap, LabelHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { VARIABLE_LABELS, VARIABLE_NAMES, type VariableName } from "@/lib/analysis"
 import type { CatalogEntry } from "@/lib/brain/catalog"
+import {
+  DEMO_SPECIALIST,
+  DEMO_SPECIALIST_NOTE,
+  DEMO_SPECIALIST_STEPS,
+  queueBrainPin,
+  scrollSpecialistDemo,
+  specialistDemoHighlight,
+  specialistDemoStepOf,
+  specialistDemoWantsStart,
+  waitDemoMs,
+  type SpecialistDemoStepId,
+} from "@/lib/brain/specialist-demo"
 import {
   deleteSpecialist,
   inferSpecialist,
@@ -26,7 +41,62 @@ import {
 import { beatsChanceCount, formatSkill, skillOf } from "@/lib/brain/specialist-view"
 import { cn } from "@/lib/utils"
 
-const DEFAULT_INDICATORS = ["lag1", "lag2", "rsi", "macd", "bollinger"]
+const DEFAULT_INDICATORS = [...DEMO_SPECIALIST.indicators]
+
+const HELP = {
+  title: {
+    title: "Spécialistes",
+    body: "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté sur les 20/50/100 derniers. Le skill dit s’il bat le hasard. Jamais une grille 5+2.",
+  },
+  name: {
+    title: "Nom",
+    body: "Libellé humain. Il devient le handle @specialist.paire-impair, sauvé dans .brain/specialists/.",
+  },
+  target: {
+    title: "Cible",
+    body: "Série à forecast : parité (0–5 pairs), somme, étendue… Pas une grille. Le réseau ne voit que cette question.",
+  },
+  task: {
+    title: "Forme",
+    body: "auto choisit classes pour une parité, régression pour une somme. Binaire = plus de pairs, ou pas.",
+    items: [
+      { label: "classes", text: "Une étiquette parmi 0–5 (nombre de pairs, etc.)." },
+      { label: "régression", text: "Une valeur continue (somme, étendue…)." },
+    ],
+  },
+  horizon: {
+    title: "Horizon",
+    body: "valeur = le prochain point (t+1). Δ = son évolution. Les deux restent une série nommée, pas une 5+2.",
+  },
+  features: {
+    title: "Indicateurs",
+    body: "Entrées du réseau, calculées jusqu’au tirage t. Pas de fuite du futur. Au moins un indicateur.",
+  },
+  instructions: {
+    title: "Instructions",
+    body: "Consignes collées à Brain : comment lire ce spécialiste, quand s’abstenir. Obligatoire.",
+  },
+  force: {
+    title: "Sauver même si skill ≤ 0",
+    body: "Par défaut on ne sauve pas un réseau qui ne bat pas le hasard. Coche seulement pour inspecter un échec.",
+  },
+  train: {
+    title: "Entraîner",
+    body: "Ère formule, score sur 20 / 50 / 100. CPU, une minute tout au plus. N’écrit que si le skill est > 0, sauf force.",
+  },
+  saved: {
+    title: "Sauvés",
+    body: "Réseaux déjà écrits. Réinférer = nouveau forecast t+1. Épingler = Brain le voit. Supprimer retire le dossier.",
+  },
+  pin: {
+    title: "Épingler",
+    body: "Pose le spécialiste sur la table de Brain. Sans ça, Brain ne le cite pas.",
+  },
+  infer: {
+    title: "Réinférer",
+    body: "Recalcule le forecast t+1 sur l’ère affichée, sans réentraîner.",
+  },
+}
 
 const TRAIN_TARGETS = VARIABLE_NAMES.filter(
   (item) => item !== "delay" && item !== "hit" && item !== "star_delay" && item !== "star_hit"
@@ -43,14 +113,12 @@ export function BrainSpecialists({
 }) {
   const [items, setItems] = useState<SpecialistRecord[]>(() => specialistIndex())
   const [features, setFeatures] = useState(() => specialistFeatures())
-  const [name, setName] = useState("Père impair")
-  const [target, setTarget] = useState<VariableName>("parity")
-  const [task, setTask] = useState<SpecialistTask | "auto">("auto")
-  const [horizon, setHorizon] = useState<SpecialistHorizon>("value")
+  const [name, setName] = useState(DEMO_SPECIALIST.name)
+  const [target, setTarget] = useState<VariableName>(DEMO_SPECIALIST.target)
+  const [task, setTask] = useState<SpecialistTask | "auto">(DEMO_SPECIALIST.task)
+  const [horizon, setHorizon] = useState<SpecialistHorizon>(DEMO_SPECIALIST.horizon)
   const [picked, setPicked] = useState<string[]>(DEFAULT_INDICATORS)
-  const [instructions, setInstructions] = useState(
-    "Forecast du nombre de pairs (0–5) à t+1. S’abstenir si la confiance est basse. Pas une grille."
-  )
+  const [instructions, setInstructions] = useState(DEMO_SPECIALIST.instructions)
   const [force, setForce] = useState(false)
   const [busy, setBusy] = useState(false)
   const [inferring, setInferring] = useState<string | null>(null)
@@ -60,26 +128,39 @@ export function BrainSpecialists({
   const [atelierForced, setAtelierForced] = useState<boolean | null>(() =>
     specialistIndex().length > 0 ? false : null
   )
+  const [demoStep, setDemoStep] = useState<SpecialistDemoStepId | null>(null)
+  const [demoRunning, setDemoRunning] = useState(false)
+  const [demoDone, setDemoDone] = useState(false)
+  const [demoWaiting, setDemoWaiting] = useState(false)
+  const demoStopRef = useRef(false)
+  const demoAutoRef = useRef(false)
+  const demoGateRef = useRef<{ resolve: (ok: boolean) => void } | null>(null)
+  const pathname = usePathname()
+  const dedicated = pathname.includes("specialistes")
 
-  const atelierOpen = atelierForced ?? (ready && items.length === 0)
+  const atelierOpen = demoRunning || (atelierForced ?? (ready && items.length === 0))
   const beating = beatsChanceCount(items)
 
-  const refresh = async () => {
+  const onIndexRef = useRef(onIndex)
+  onIndexRef.current = onIndex
+
+  const refresh = useCallback(async () => {
     try {
       const listed = await listSpecialists()
       setItems(listed.items)
-      onIndex?.(listed.items)
+      onIndexRef.current?.(listed.items)
       if (listed.error && !listed.items.length) setError(listed.error)
       const nextFeatures = await listSpecialistFeatures()
       setFeatures(nextFeatures)
+      return listed.items
     } finally {
       setReady(true)
     }
-  }
+  }, [])
 
   useEffect(() => {
     void refresh()
-  }, [])
+  }, [refresh])
 
   const grouped = useMemo(() => {
     const order: string[] = []
@@ -93,6 +174,11 @@ export function BrainSpecialists({
     }
     return order.map((family) => ({ family, items: map.get(family) ?? [] }))
   }, [features])
+
+  const pinEntry = (entry: CatalogEntry) => {
+    onPin(entry)
+    queueBrainPin(entry.id)
+  }
 
   const train = async () => {
     setBusy(true)
@@ -133,18 +219,150 @@ export function BrainSpecialists({
     }
   }
 
+  const finishDemoGate = useCallback((ok: boolean) => {
+    const gate = demoGateRef.current
+    demoGateRef.current = null
+    setDemoWaiting(false)
+    gate?.resolve(ok)
+  }, [])
+
+  const stopDemo = useCallback(() => {
+    demoStopRef.current = true
+    setDemoRunning(false)
+    setDemoDone(true)
+    setDemoStep(null)
+    finishDemoGate(false)
+  }, [finishDemoGate])
+
+  const nextDemoStep = useCallback(() => {
+    finishDemoGate(true)
+  }, [finishDemoGate])
+
+  const runDemo = useCallback(async () => {
+    if (demoRunning) return
+    demoAutoRef.current = true
+    demoStopRef.current = false
+    setDemoRunning(true)
+    setDemoDone(false)
+    setDemoWaiting(false)
+    setError(null)
+    setAtelierForced(true)
+
+    const begin = (step: SpecialistDemoStepId) => {
+      setDemoStep(step)
+      setDemoWaiting(false)
+      scrollSpecialistDemo(specialistDemoStepOf(step).target)
+    }
+
+    const ask = async (step: SpecialistDemoStepId) => {
+      if (demoStopRef.current) return false
+      setDemoStep(step)
+      scrollSpecialistDemo(specialistDemoStepOf(step).target)
+      await waitDemoMs(380)
+      if (demoStopRef.current) return false
+      setDemoWaiting(true)
+      const ok = await new Promise<boolean>((resolve) => {
+        demoGateRef.current = { resolve }
+      })
+      return ok && !demoStopRef.current
+    }
+
+    try {
+      begin("intro")
+      if (!(await ask("intro"))) return
+
+      begin("name")
+      setName(DEMO_SPECIALIST.name)
+      if (!(await ask("name"))) return
+
+      begin("target")
+      setTarget(DEMO_SPECIALIST.target)
+      if (!(await ask("target"))) return
+
+      begin("task")
+      setTask(DEMO_SPECIALIST.task)
+      if (!(await ask("task"))) return
+
+      begin("horizon")
+      setHorizon(DEMO_SPECIALIST.horizon)
+      if (!(await ask("horizon"))) return
+
+      begin("features")
+      setPicked([...DEMO_SPECIALIST.indicators])
+      if (!(await ask("features"))) return
+
+      begin("instructions")
+      setInstructions(DEMO_SPECIALIST.instructions)
+      if (!(await ask("instructions"))) return
+
+      begin("force")
+      setForce(false)
+      if (!(await ask("force"))) return
+
+      begin("train")
+      if (!(await ask("train"))) return
+
+      begin("saved")
+      const listed = await refresh()
+      const first = listed[0]
+      if (first) {
+        try {
+          const fresh = await inferSpecialist(first.slug, era)
+          if (demoStopRef.current) return
+          setLast(fresh)
+        } catch {
+          setLast(first)
+        }
+      }
+      if (!(await ask("saved"))) return
+
+      begin("pin")
+      if (first) {
+        const entry = specialistToEntry(first)
+        onPin(entry)
+        queueBrainPin(entry.id)
+      }
+      if (!(await ask("pin"))) return
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "La démo a buté.")
+    } finally {
+      setDemoWaiting(false)
+      setDemoRunning(false)
+      setDemoDone(true)
+      if (!demoStopRef.current) setDemoStep("pin")
+    }
+  }, [demoRunning, era, onPin, refresh])
+
+  useEffect(() => {
+    if (demoAutoRef.current) return
+    if (typeof window === "undefined") return
+    if (!specialistDemoWantsStart(window.location.search, window.location.pathname)) return
+    const timer = window.setTimeout(() => {
+      if (demoAutoRef.current) return
+      void runDemo()
+    }, 80)
+    return () => window.clearTimeout(timer)
+  }, [runDemo])
+
   return (
-    <Card>
+    <Card
+      id="specialistes"
+      data-demo="specialists"
+      className={cn("scroll-mt-24", specialistDemoHighlight(demoStep, ["intro"], demoWaiting))}
+    >
+      <SpecialistDemoPopup
+        step={demoStep}
+        open={demoRunning && demoWaiting}
+        onNext={nextDemoStep}
+        onCancel={stopDemo}
+      />
       <CardHeader>
         <div className="flex flex-wrap items-center gap-2">
           <div className="min-w-0 flex-1">
             <CardTitle className="flex flex-wrap items-center gap-2">
               <BrainCircuit className="size-4 text-primary" />
               Spécialistes
-              <HelpTip
-                title="Spécialistes"
-                body="Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté sur les 20/50/100 derniers. Le skill dit s’il bat le hasard. Jamais une grille 5+2."
-              />
+              <HelpTip {...HELP.title} />
               {items.length ? (
                 <span className="rounded-full border border-primary/35 bg-primary/12 px-2 py-0.5 text-[10px] font-medium">
                   {items.length}
@@ -165,7 +383,16 @@ export function BrainSpecialists({
             </CardTitle>
             <CardDescription>
               Un réseau, une question. Roster d’abord : skill, verdict, forecast. L’atelier entraîne un nouveau
-              spécialiste.
+              spécialiste.{" "}
+              {dedicated ? (
+                <Link className="text-primary underline-offset-2 hover:underline" href="/brain">
+                  Discussion Brain
+                </Link>
+              ) : (
+                <Link className="text-primary underline-offset-2 hover:underline" href="/brain/specialistes">
+                  Page dédiée
+                </Link>
+              )}
             </CardDescription>
           </div>
           <Button
@@ -180,38 +407,75 @@ export function BrainSpecialists({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {items.length === 0 && !atelierOpen ? (
-          <div
-            data-specialist-empty=""
-            className="rounded-xl border border-dashed border-border px-3 py-5 text-center"
-          >
-            <p className="text-xs text-muted-foreground">
-              Aucun spécialiste. Crée « Père impair » ou « Somme totale » dans l’atelier.
-            </p>
-            <Button size="sm" className="mt-3" onClick={() => setAtelierForced(true)}>
-              <FlaskConical />
-              Ouvrir l’atelier
-            </Button>
-          </div>
-        ) : null}
+        <DemoTourBar
+          title="Démo Spécialistes"
+          help={{
+            title: "Démo Spécialistes",
+            body: `${DEMO_SPECIALIST_NOTE} Un pop-up t’arrête après chaque étape : Suivant ou Annuler. Ollama n’est pas requis.`,
+          }}
+          steps={DEMO_SPECIALIST_STEPS}
+          step={demoStep}
+          running={demoRunning}
+          done={demoDone}
+          waiting={demoWaiting}
+          idleHint="Formulaire Paire impair, pop-up Suivant/Annuler, épinglage s’il existe. Sans entraîner."
+          doneHint="Terminée : le formulaire, les sauvés et l’épingle restent sous tes yeux."
+          onStart={() => void runDemo()}
+          onStop={stopDemo}
+          startLabel="Lancer la démo"
+          dataDemo="spec-bar"
+        />
 
-        {items.length ? (
-          <div data-specialist-roster="" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {items.map((item) => (
-              <SpecialistCard
-                key={item.slug}
-                record={item}
-                highlighted={last?.slug === item.slug}
-                inferring={inferring === item.slug}
-                onPin={() => onPin(specialistToEntry(item))}
-                onInfer={() => void infer(item.slug)}
-                onDelete={() => {
-                  void deleteSpecialist(item.slug).then(() => refresh())
-                }}
-              />
-            ))}
-          </div>
-        ) : null}
+        <div
+          data-demo="spec-saved"
+          className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["saved"], demoWaiting))}
+        >
+          <p className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-medium">
+            Sauvés
+            <HelpTip {...HELP.saved} />
+          </p>
+          {items.length === 0 ? (
+            <div
+              data-specialist-empty=""
+              data-demo="spec-pin"
+              className="rounded-xl border border-dashed border-border px-3 py-5 text-center"
+            >
+              <p className="text-xs text-muted-foreground">
+                Aucun spécialiste. Crée « Paire impair » ou « Somme totale » dans l’atelier.
+              </p>
+              {!atelierOpen ? (
+                <Button size="sm" className="mt-3" onClick={() => setAtelierForced(true)}>
+                  <FlaskConical />
+                  Ouvrir l’atelier
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <div data-specialist-roster="" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {items.map((item, index) => (
+                <div
+                  key={item.slug}
+                  data-demo={index === 0 ? "spec-pin" : undefined}
+                  className={cn(
+                    "rounded-xl",
+                    index === 0 ? specialistDemoHighlight(demoStep, ["pin"], demoWaiting) : ""
+                  )}
+                >
+                  <SpecialistCard
+                    record={item}
+                    highlighted={last?.slug === item.slug || (demoStep === "pin" && index === 0)}
+                    inferring={inferring === item.slug}
+                    onPin={() => pinEntry(specialistToEntry(item))}
+                    onInfer={() => void infer(item.slug)}
+                    onDelete={() => {
+                      void deleteSpecialist(item.slug).then(() => refresh())
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {atelierOpen ? (
           <div
@@ -225,52 +489,78 @@ export function BrainSpecialists({
               </p>
             </div>
             <div className="grid gap-3 lg:grid-cols-2">
-              <label className="flex flex-col gap-1 text-xs">
-                Nom
-                <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Père impair" />
-              </label>
-              <label className="flex flex-col gap-1 text-xs">
-                Cible
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2"
-                  value={target}
-                  onChange={(event) => setTarget(event.target.value as VariableName)}
-                >
-                  {TRAIN_TARGETS.map((item) => (
-                    <option key={item} value={item}>
-                      {VARIABLE_LABELS[item]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-xs">
-                Forme
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2"
-                  value={task}
-                  onChange={(event) => setTask(event.target.value as SpecialistTask | "auto")}
-                >
-                  <option value="auto">auto (classes si parité…)</option>
-                  <option value="classes">classes (0–5)</option>
-                  <option value="binary">binaire (plus de pairs)</option>
-                  <option value="regression">régression (somme…)</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-xs">
-                Horizon
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2"
-                  value={horizon}
-                  onChange={(event) => setHorizon(event.target.value as SpecialistHorizon)}
-                >
-                  <option value="value">valeur t+1</option>
-                  <option value="delta">évolution Δ</option>
-                </select>
-              </label>
+              <div
+                data-demo="spec-name"
+                className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["name"], demoWaiting))}
+              >
+                <LabelHelp label="Nom" help={HELP.name}>
+                  <Input
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="Paire impair"
+                  />
+                </LabelHelp>
+              </div>
+              <div
+                data-demo="spec-target"
+                className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["target"], demoWaiting))}
+              >
+                <LabelHelp label="Cible" help={HELP.target}>
+                  <select
+                    className="h-8 rounded-lg border border-border bg-background px-2"
+                    value={target}
+                    onChange={(event) => setTarget(event.target.value as VariableName)}
+                  >
+                    {TRAIN_TARGETS.map((item) => (
+                      <option key={item} value={item}>
+                        {VARIABLE_LABELS[item]}
+                      </option>
+                    ))}
+                  </select>
+                </LabelHelp>
+              </div>
+              <div
+                data-demo="spec-task"
+                className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["task"], demoWaiting))}
+              >
+                <LabelHelp label="Forme" help={HELP.task}>
+                  <select
+                    className="h-8 rounded-lg border border-border bg-background px-2"
+                    value={task}
+                    onChange={(event) => setTask(event.target.value as SpecialistTask | "auto")}
+                  >
+                    <option value="auto">auto (classes si parité…)</option>
+                    <option value="classes">classes (0–5)</option>
+                    <option value="binary">binaire (plus de pairs)</option>
+                    <option value="regression">régression (somme…)</option>
+                  </select>
+                </LabelHelp>
+              </div>
+              <div
+                data-demo="spec-horizon"
+                className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["horizon"], demoWaiting))}
+              >
+                <LabelHelp label="Horizon" help={HELP.horizon}>
+                  <select
+                    className="h-8 rounded-lg border border-border bg-background px-2"
+                    value={horizon}
+                    onChange={(event) => setHorizon(event.target.value as SpecialistHorizon)}
+                  >
+                    <option value="value">valeur t+1</option>
+                    <option value="delta">évolution Δ</option>
+                  </select>
+                </LabelHelp>
+              </div>
             </div>
 
-            <div>
-              <p className="mb-1.5 text-xs font-medium">Indicateurs (features causales jusqu’à t)</p>
+            <div
+              data-demo="spec-features"
+              className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["features"], demoWaiting))}
+            >
+              <p className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-medium">
+                Indicateurs (features causales jusqu’à t)
+                <HelpTip {...HELP.features} />
+              </p>
               <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card/30 p-2">
                 {grouped.map((group) => (
                   <div key={group.family} className="flex flex-wrap gap-1.5">
@@ -282,10 +572,14 @@ export function BrainSpecialists({
                           type="button"
                           className={cn(
                             "rounded-full border px-2 py-0.5 text-[11px]",
-                            on ? "border-primary/50 bg-primary/15 text-foreground" : "border-border text-muted-foreground"
+                            on
+                              ? "border-primary/50 bg-primary/15 text-foreground"
+                              : "border-border text-muted-foreground"
                           )}
                           onClick={() =>
-                            setPicked((prev) => (on ? prev.filter((id) => id !== feature.id) : [...prev, feature.id]))
+                            setPicked((prev) =>
+                              on ? prev.filter((id) => id !== feature.id) : [...prev, feature.id]
+                            )
                           }
                         >
                           {feature.label}
@@ -297,30 +591,54 @@ export function BrainSpecialists({
               </div>
             </div>
 
-            <label className="flex flex-col gap-1 text-xs">
-              Instructions complémentaires
-              <textarea
-                className="min-h-20 rounded-lg border border-border bg-background px-2.5 py-2 text-sm"
-                value={instructions}
-                onChange={(event) => setInstructions(event.target.value)}
-                placeholder="Comment Brain doit lire ce spécialiste, quand s’abstenir…"
-              />
-            </label>
+            <div
+              data-demo="spec-instructions"
+              className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["instructions"], demoWaiting))}
+            >
+              <LabelHelp label="Instructions complémentaires" help={HELP.instructions}>
+                <textarea
+                  className="min-h-20 rounded-lg border border-border bg-background px-2.5 py-2 text-sm"
+                  value={instructions}
+                  onChange={(event) => setInstructions(event.target.value)}
+                  placeholder="Comment Brain doit lire ce spécialiste, quand s’abstenir…"
+                />
+              </LabelHelp>
+            </div>
 
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <label
+              data-demo="spec-force"
+              className={cn(
+                "flex items-center gap-2 rounded-xl p-0.5 text-xs text-muted-foreground",
+                specialistDemoHighlight(demoStep, ["force"], demoWaiting)
+              )}
+            >
               <input type="checkbox" checked={force} onChange={(event) => setForce(event.target.checked)} />
-              Sauver même si le skill ≤ 0 (ne bat pas le hasard)
+              <span className="inline-flex items-center gap-1">
+                Sauver même si le skill ≤ 0 (ne bat pas le hasard)
+                <HelpTip {...HELP.force} />
+              </span>
             </label>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                disabled={busy || !name.trim() || !instructions.trim() || picked.length === 0}
-                onClick={() => void train()}
-              >
-                {busy ? <Loader2 className="animate-spin" /> : <BrainCircuit />}
-                {busy ? "Entraînement…" : "Entraîner"}
-              </Button>
+            <div
+              data-demo="spec-train"
+              className={cn(
+                "flex flex-wrap items-center gap-2 rounded-xl p-0.5",
+                specialistDemoHighlight(demoStep, ["train"], demoWaiting)
+              )}
+            >
+              <HelpWrap help={HELP.train}>
+                <Button
+                  size="sm"
+                  disabled={busy || demoRunning || !name.trim() || !instructions.trim() || picked.length === 0}
+                  onClick={() => void train()}
+                >
+                  {busy ? <Loader2 className="animate-spin" /> : <BrainCircuit />}
+                  {busy ? "Entraînement…" : "Entraîner"}
+                </Button>
+              </HelpWrap>
+              <span className="text-[11px] text-muted-foreground">
+                Ère formule, score sur 20 / 50 / 100. CPU, une minute tout au plus.
+              </span>
             </div>
           </div>
         ) : null}

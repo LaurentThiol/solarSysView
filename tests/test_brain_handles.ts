@@ -16,7 +16,9 @@ import { DEMO_HANDLES, DEMO_LAB_FOR, DEMO_STEPS, demoEntries, demoJobs, demoLabs
 import {
   DEMO_SPECIALIST,
   DEMO_SPECIALIST_STEPS,
+  isLastSpecialistDemoStep,
   isSpecialistDemoQuery,
+  specialistDemoStepOf,
   specialistDemoWantsStart,
 } from "../src/lib/brain/specialist-demo"
 import { deepLinkFor } from "../src/lib/brain/deep-links"
@@ -266,6 +268,10 @@ test("specialist demo is a separate tour with pop-ups and does not start the Bra
   }
   assert.equal(DEMO_SPECIALIST.target, "parity")
   assert.ok(DEMO_SPECIALIST.indicators.includes("rsi"))
+  assert.ok(DEMO_SPECIALIST_STEPS.every((step) => step.title.length > 0 && step.body.length > 20))
+  assert.equal(specialistDemoStepOf("pin").target, "spec-pin")
+  assert.equal(isLastSpecialistDemoStep("pin"), true)
+  assert.equal(isLastSpecialistDemoStep("intro"), false)
   const link = deepLinkFor({
     entry: {
       id: "specialist/paire-impair",

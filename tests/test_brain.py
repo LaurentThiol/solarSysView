@@ -290,21 +290,25 @@ def test_brain_specialist_demo_is_wired() -> None:
     root = Path(__file__).resolve().parents[1]
     demo = (root / "src/lib/brain/specialist-demo.ts").read_text(encoding="utf-8")
     panel = (root / "src/components/brain/brain-specialists.tsx").read_text(encoding="utf-8")
-    coach = (root / "src/components/brain/demo-coach.tsx").read_text(encoding="utf-8")
+    bar = (root / "src/components/brain/brain-demo.tsx").read_text(encoding="utf-8")
     page = (root / "src/app/brain/specialistes/page.tsx").read_text(encoding="utf-8")
     nav = (root / "src/components/startup-status.tsx").read_text(encoding="utf-8")
     readme = (root / "README.md").read_text(encoding="utf-8")
     assert "DEMO_SPECIALIST_STEPS" in demo
     assert "Paire impair" in demo
     assert "specialistDemoWantsStart" in demo
-    assert "DemoCoach" in panel
+    assert "specialistDemoStepOf" in demo
+    assert "SpecialistDemoPopup" in panel
+    assert "DemoCoach" not in panel
+    assert "demoWaiting" in panel
     assert "Lancer la démo" in panel
     assert "spec-name" in panel
     assert "spec-features" in panel
     assert "trainSpecialist" in panel
     assert "demoRunning" in panel
     assert "Aucune" in panel or "Aucun spécialiste" in panel
-    assert "pastille" in coach.lower() or "étape" in coach
+    assert "Suivant" in bar
+    assert "Annuler" in bar
     assert "BrainSpecialistsLab" in page
     assert "/brain/specialistes" in nav
     assert "/brain?demo=specialistes" in readme

@@ -102,13 +102,28 @@ export const DEMO_SPECIALIST_STEPS = [
     id: "pin",
     label: "Épingler",
     hint: "Brain ne voit que la table",
-    target: "spec-saved",
+    target: "spec-pin",
     title: "Épingler",
     body: "Pose @specialist.* sur la table de Brain. S’il n’est pas épinglé, Brain ne le cite pas. La démo épingle le premier sauvé, s’il y en a un.",
   },
 ] as const
 
 export type SpecialistDemoStepId = (typeof DEMO_SPECIALIST_STEPS)[number]["id"]
+export type SpecialistDemoStep = (typeof DEMO_SPECIALIST_STEPS)[number]
+
+export function specialistDemoStepOf(id: SpecialistDemoStepId): SpecialistDemoStep {
+  const step = DEMO_SPECIALIST_STEPS.find((item) => item.id === id)
+  if (!step) throw new Error(`étape de démo inconnue: ${id}`)
+  return step
+}
+
+export function specialistDemoStepIndex(id: SpecialistDemoStepId) {
+  return DEMO_SPECIALIST_STEPS.findIndex((item) => item.id === id)
+}
+
+export function isLastSpecialistDemoStep(id: SpecialistDemoStepId) {
+  return specialistDemoStepIndex(id) === DEMO_SPECIALIST_STEPS.length - 1
+}
 
 function demoQuery(search: string) {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
@@ -133,10 +148,15 @@ export function specialistDemoWantsStart(search: string, pathname = "") {
   return value === "1" || value === "true" || value === "oui"
 }
 
-export function specialistDemoHighlight(step: SpecialistDemoStepId | null, ids: SpecialistDemoStepId[]) {
-  return step && ids.includes(step)
-    ? "ring-2 ring-primary/80 ring-offset-2 ring-offset-background"
-    : ""
+export function specialistDemoHighlight(
+  step: SpecialistDemoStepId | null,
+  ids: SpecialistDemoStepId[],
+  elevate = false
+) {
+  if (!step || !ids.includes(step)) return ""
+  return elevate
+    ? "ring-2 ring-primary/80 ring-offset-2 ring-offset-background relative z-[70]"
+    : "ring-2 ring-primary/80 ring-offset-2 ring-offset-background"
 }
 
 export function scrollSpecialistDemo(target: string) {

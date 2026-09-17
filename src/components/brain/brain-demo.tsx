@@ -7,13 +7,8 @@ import { Play, RotateCcw, StopCircle } from "lucide-react"
 import { BrainMascot } from "@/components/brain/brain-mascot"
 import { HelpTip, type HelpCopy } from "@/components/help"
 import { Button } from "@/components/ui/button"
-import {
-  DEMO_STEPS,
-  demoStepIndex,
-  demoStepOf,
-  isLastDemoStep,
-  type DemoStepId,
-} from "@/lib/brain/demo"
+import { DEMO_STEPS, type DemoStepId } from "@/lib/brain/demo"
+import { DEMO_SPECIALIST_STEPS, type SpecialistDemoStepId } from "@/lib/brain/specialist-demo"
 import { cn } from "@/lib/utils"
 
 export function DemoTourBar({
@@ -141,37 +136,53 @@ export function BrainDemoBar({
   )
 }
 
-export function BrainDemoPopup({
+export type DemoPopupStep = {
+  id: string
+  label: string
+  title: string
+  body: string
+  target: string
+}
+
+export function DemoPopup({
   step,
+  steps,
   open,
   onNext,
   onCancel,
+  titleId = "demo-popup-title",
+  nextId = "demo-next",
 }: {
-  step: DemoStepId | null
+  step: string | null
+  steps: readonly DemoPopupStep[]
   open: boolean
   onNext: () => void
   onCancel: () => void
+  titleId?: string
+  nextId?: string
 }) {
   const [mounted, setMounted] = useState(false)
   const [placement, setPlacement] = useState<"top" | "bottom">("bottom")
+  const current = step ? steps.find((item) => item.id === step) : undefined
+  const index = step ? steps.findIndex((item) => item.id === step) : -1
+  const last = index >= 0 && index === steps.length - 1
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
   useLayoutEffect(() => {
-    if (!open || !step) return
-    const target = demoStepOf(step).target
-    const node = document.querySelector(`[data-demo="${target}"]`)
+    if (!open || !current) return
+    const node = document.querySelector(`[data-demo="${current.target}"]`)
     const rect = node?.getBoundingClientRect()
     const mid = (rect?.top ?? 0) + (rect?.height ?? 0) / 2
     setPlacement(mid > window.innerHeight * 0.48 ? "top" : "bottom")
-  }, [open, step])
+  }, [open, current])
 
   useEffect(() => {
     if (!open) return
     const timer = window.setTimeout(() => {
-      document.getElementById("brain-demo-next")?.focus()
+      document.getElementById(nextId)?.focus()
     }, 30)
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -184,19 +195,16 @@ export function BrainDemoPopup({
       window.clearTimeout(timer)
       window.removeEventListener("keydown", onKey)
     }
-  }, [open, onCancel, onNext])
+  }, [open, onCancel, onNext, nextId])
 
-  if (!mounted || !open || !step) return null
-  const current = demoStepOf(step)
-  const index = demoStepIndex(step)
-  const last = isLastDemoStep(step)
+  if (!mounted || !open || !current) return null
 
   return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[80]">
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="brain-demo-popup-title"
+        aria-labelledby={titleId}
         data-demo="popup"
         className={cn(
           "pointer-events-auto absolute left-1/2 w-[min(28rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-2xl border border-primary/40 bg-popover p-4 text-popover-foreground shadow-2xl ring-1 ring-primary/20",
@@ -207,9 +215,9 @@ export function BrainDemoPopup({
           <BrainMascot mood="talk" size="sm" className="mt-0.5" />
           <div className="min-w-0 flex-1">
             <p className="text-[11px] tracking-wide text-muted-foreground uppercase">
-              Étape {index + 1} / {DEMO_STEPS.length} · {current.label}
+              Étape {index + 1} / {steps.length} · {current.label}
             </p>
-            <h2 id="brain-demo-popup-title" className="mt-0.5 text-base font-medium">
+            <h2 id={titleId} className="mt-0.5 text-base font-medium">
               {current.title}
             </h2>
             <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{current.body}</p>
@@ -219,12 +227,60 @@ export function BrainDemoPopup({
           <Button type="button" size="sm" variant="outline" onClick={onCancel}>
             Annuler
           </Button>
-          <Button id="brain-demo-next" type="button" size="sm" onClick={onNext}>
+          <Button id={nextId} type="button" size="sm" onClick={onNext}>
             {last ? "Terminer" : "Suivant"}
           </Button>
         </div>
       </div>
     </div>,
     document.body
+  )
+}
+
+export function BrainDemoPopup({
+  step,
+  open,
+  onNext,
+  onCancel,
+}: {
+  step: DemoStepId | null
+  open: boolean
+  onNext: () => void
+  onCancel: () => void
+}) {
+  return (
+    <DemoPopup
+      step={step}
+      steps={DEMO_STEPS}
+      open={open}
+      onNext={onNext}
+      onCancel={onCancel}
+      titleId="brain-demo-popup-title"
+      nextId="brain-demo-next"
+    />
+  )
+}
+
+export function SpecialistDemoPopup({
+  step,
+  open,
+  onNext,
+  onCancel,
+}: {
+  step: SpecialistDemoStepId | null
+  open: boolean
+  onNext: () => void
+  onCancel: () => void
+}) {
+  return (
+    <DemoPopup
+      step={step}
+      steps={DEMO_SPECIALIST_STEPS}
+      open={open}
+      onNext={onNext}
+      onCancel={onCancel}
+      titleId="specialist-demo-popup-title"
+      nextId="specialist-demo-next"
+    />
   )
 }

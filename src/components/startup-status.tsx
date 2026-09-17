@@ -615,7 +615,7 @@ const NAV_ITEMS = [
     label: "Spécialistes",
     help: {
       title: "Spécialistes",
-      body: "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté 20/50/100. Jamais une grille 5+2. Démo guidée avec pastilles explicatives.",
+      body: "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté 20/50/100. Jamais une grille 5+2. Démo guidée : Suivant ou Annuler.",
     },
   },
   {

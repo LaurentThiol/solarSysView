@@ -5,7 +5,7 @@ import { BrainSpecialistsLab } from "@/components/brain/brain-specialists-lab"
 export const metadata: Metadata = {
   title: "Spécialistes — Brain — Synchro",
   description:
-    "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté 20/50/100. Jamais une grille 5+2. Démo guidée avec pastilles.",
+    "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté 20/50/100. Jamais une grille 5+2. Démo guidée : Suivant ou Annuler.",
 }
 
 export default function BrainSpecialistsPage() {

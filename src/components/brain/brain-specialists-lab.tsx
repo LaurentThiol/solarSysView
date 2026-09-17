@@ -54,7 +54,7 @@ export function BrainSpecialistsLab() {
             <h1 className="mt-1 text-3xl font-semibold tracking-tight">Spécialistes</h1>
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
               Un réseau, une série nommée (parité, somme…). Forecast t+1, skill vs le hasard. Jamais une grille 5+2.
-              La démo ouvre des pastilles sur chaque champ, sans lancer l’entraînement.
+              Un pop-up t’arrête après chaque champ : Suivant ou Annuler. Sans lancer l’entraînement.
             </p>
             <ol className="mt-3 flex flex-wrap gap-2 text-xs">
               <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">1. Nomme la question</li>
