@@ -6,6 +6,7 @@ import { BacktestPanel } from "@/components/chartisme/backtest-panel"
 import { CurveCanvas, type CurveSelection } from "@/components/chartisme/curve-canvas"
 import { CurveMap } from "@/components/chartisme/curve-map"
 import { FigureName, FigureThumb } from "@/components/chartisme/figure-thumb"
+import { CurveName } from "@/components/chartisme/curve-thumb"
 import { LabelAtelier } from "@/components/chartisme/label-atelier"
 import { useRegisterCapture } from "@/components/capture"
 import { RulesPanel } from "@/components/chartisme/rules-panel"
@@ -33,7 +34,7 @@ import {
   thresholdForBaseRate,
   type BaseRateThreshold,
 } from "@/lib/chartisme/base-rate"
-import { buildCurve, curveLabel, curveSpecs, type Curve } from "@/lib/chartisme/curves"
+import { buildCurve, curveLabel, curveSpecs, parseCurveId, type Curve } from "@/lib/chartisme/curves"
 import { catalog, labelOf } from "@/lib/chartisme/catalog"
 import { rankKey } from "@/lib/chartisme/figures"
 import {
@@ -541,9 +542,14 @@ export function ChartismeLab() {
             >
               <Select value={curveId} onValueChange={(v) => setCurveId(v ?? curveId)}>
                 <SelectTrigger className="w-full" aria-label="Courbe">
-                  <span className="flex flex-1 text-left">{curveId}</span>
+                  <span className="flex flex-1 text-left">
+                    <CurveName
+                      kind={curve?.variable ?? parseCurveId(curveId).variable}
+                      label={`${curveId} · ${curve?.label ?? curveLabel(parseCurveId(curveId).variable, parseCurveId(curveId).n)}`}
+                    />
+                  </span>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="min-w-64">
                   {specs.map((spec) => {
                     const id = spec.n === null ? spec.variable : `${spec.variable}:${spec.n}`
                     return (
@@ -551,7 +557,7 @@ export function ChartismeLab() {
                         {/* L'identifiant d'abord : c'est lui qu'une règle vise et
                             que le journal consigne. Le libellé suit pour qu'on
                             sache ce qu'on choisit dans une liste de {specs.length}. */}
-                        {id} · {curveLabel(spec.variable, spec.n)}
+                        <CurveName kind={spec.variable} label={`${id} · ${curveLabel(spec.variable, spec.n)}`} />
                       </SelectItem>
                     )
                   })}

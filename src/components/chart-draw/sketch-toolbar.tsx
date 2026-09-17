@@ -3,6 +3,7 @@
 import { Pencil, Trash2, Undo2, X } from "lucide-react"
 
 import { FigureName, FigureThumb } from "@/components/chartisme/figure-thumb"
+import { CurveName } from "@/components/chartisme/curve-thumb"
 import { HelpTip, LabelHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -118,15 +119,20 @@ export function SketchToolbar({
                 }}
               >
                 <Select value={seriesKey} onValueChange={(value) => value && onSeries(value)}>
-                  <SelectTrigger className="h-7 w-40 px-2 text-xs" aria-label="Courbe visée">
+                  <SelectTrigger className="h-7 w-48 px-2 text-xs" aria-label="Courbe visée">
                     <span className="flex flex-1 text-left">
-                      {seriesOptions.find((item) => item.value === seriesKey)?.label ?? seriesKey}
+                      <CurveName
+                        kind={seriesKey}
+                        label={
+                          seriesOptions.find((item) => item.value === seriesKey)?.label ?? seriesKey
+                        }
+                      />
                     </span>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="min-w-52">
                     {seriesOptions.map((item) => (
                       <SelectItem key={item.value} value={item.value}>
-                        {item.label}
+                        <CurveName kind={item.value} label={item.label} />
                       </SelectItem>
                     ))}
                   </SelectContent>

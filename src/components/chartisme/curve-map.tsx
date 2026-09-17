@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react"
 
 import { LabelHelp, TitleHelp } from "@/components/help"
+import { CurveName } from "@/components/chartisme/curve-thumb"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -325,7 +326,9 @@ export function CurveMap({
                       } ${row.threshold === null ? "text-muted-foreground" : ""}`}
                       onClick={() => onPick(row.id)}
                     >
-                      <td className="px-3 py-1.5">{row.label}</td>
+                      <td className="px-3 py-1.5">
+                        <CurveName kind={row.id} label={row.label} />
+                      </td>
                       <td className="px-3 py-1.5">{Math.round(row.noise * 100)} %</td>
                       <td className="px-3 py-1.5">
                         {row.threshold === null ? (

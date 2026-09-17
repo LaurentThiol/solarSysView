@@ -31,12 +31,19 @@ import { BrainDemoBar, BrainDemoPopup } from "@/components/brain/brain-demo"
 import { BrainMascot } from "@/components/brain/brain-mascot"
 import { BrainSpecialists } from "@/components/brain/brain-specialists"
 import { FigureThumb } from "@/components/chartisme/figure-thumb"
+import { CurveName, CurveThumb } from "@/components/chartisme/curve-thumb"
 import { useRegisterCapture } from "@/components/capture"
 import { HelpTip } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select"
 import {
   DEFAULT_WARMUP,
   resolveWindow,
@@ -999,17 +1006,23 @@ export function BrainLab() {
           </label>
           <label className="flex items-center gap-1">
             Série
-            <select
-              className="rounded-md border border-border bg-background px-2 py-1"
+            <Select
               value={variable}
-              onChange={(event) => setVariable(event.target.value as VariableName)}
+              onValueChange={(value) => value && setVariable(value as VariableName)}
             >
-              {VARIABLE_NAMES.map((name) => (
-                <option key={name} value={name}>
-                  {VARIABLE_LABELS[name]}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger size="sm" className="min-w-48" aria-label="Série">
+                <span className="flex flex-1 text-left">
+                  <CurveName kind={variable} label={VARIABLE_LABELS[variable]} />
+                </span>
+              </SelectTrigger>
+              <SelectContent className="min-w-56">
+                {VARIABLE_NAMES.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    <CurveName kind={name} label={VARIABLE_LABELS[name]} />
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
           {variableNeedsBall(variable) ? (
             <label className="flex items-center gap-1">
@@ -1195,6 +1208,7 @@ export function BrainLab() {
                     >
                       <span className="font-mono text-primary">@{entry.handle}</span>
                       {entry.kind === "figure" ? <FigureThumb figure={entry.handle} /> : null}
+                      {entry.kind === "variable" ? <CurveThumb kind={entry.handle} /> : null}
                       <span className="truncate text-muted-foreground">{entry.label}</span>
                     </button>
                   ))}
@@ -1385,6 +1399,7 @@ export function BrainLab() {
                               <span className="font-mono text-[13px] text-primary">{formatHandle(entry)}</span>
                               <span className="mt-0.5 flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
                                 {entry.kind === "figure" ? <FigureThumb figure={entry.handle} /> : null}
+                                {entry.kind === "variable" ? <CurveThumb kind={entry.handle} /> : null}
                                 {entry.label}
                                 {entry.units ? ` · ${entry.units}` : ""}
                               </span>

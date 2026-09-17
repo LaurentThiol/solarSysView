@@ -209,11 +209,12 @@ export function sparklinePoints(
   values: number[],
   width: number,
   height: number,
-  pad = 1
+  pad = 1,
+  bounds?: { min: number; max: number }
 ): string {
   if (values.length < 2) return ""
-  const lo = Math.min(...values)
-  const hi = Math.max(...values)
+  const lo = bounds?.min ?? Math.min(...values)
+  const hi = bounds?.max ?? Math.max(...values)
   const span = hi - lo || 1
   const innerW = Math.max(1, width - 2 * pad)
   const innerH = Math.max(1, height - 2 * pad)

@@ -10,7 +10,14 @@ import { SpecialistCard } from "@/components/brain/specialist-card"
 import { HelpTip, HelpWrap, LabelHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CurveName } from "@/components/chartisme/curve-thumb"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select"
 import { VARIABLE_LABELS, VARIABLE_NAMES, type VariableName } from "@/lib/analysis"
 import type { CatalogEntry } from "@/lib/brain/catalog"
 import {
@@ -506,17 +513,23 @@ export function BrainSpecialists({
                 className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["target"], demoWaiting))}
               >
                 <LabelHelp label="Cible" help={HELP.target}>
-                  <select
-                    className="h-8 rounded-lg border border-border bg-background px-2"
+                  <Select
                     value={target}
-                    onChange={(event) => setTarget(event.target.value as VariableName)}
+                    onValueChange={(value) => value && setTarget(value as VariableName)}
                   >
-                    {TRAIN_TARGETS.map((item) => (
-                      <option key={item} value={item}>
-                        {VARIABLE_LABELS[item]}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-full" aria-label="Cible">
+                      <span className="flex flex-1 text-left">
+                        <CurveName kind={target} label={VARIABLE_LABELS[target]} />
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent className="min-w-56">
+                      {TRAIN_TARGETS.map((item) => (
+                        <SelectItem key={item} value={item}>
+                          <CurveName kind={item} label={VARIABLE_LABELS[item]} />
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </LabelHelp>
               </div>
               <div

@@ -18,6 +18,7 @@ import {
 import { CoordHud } from "@/components/chart-draw/coord-hud"
 import { useChartDrawOptional } from "@/components/chart-draw/chart-draw-context"
 import { SketchToolbar } from "@/components/chart-draw/sketch-toolbar"
+import { CurveName } from "@/components/chartisme/curve-thumb"
 import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -1080,13 +1081,16 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               >
                 <SelectTrigger className="w-full sm:w-64 sm:shrink-0" aria-label="Série affichée">
                   <span className="flex flex-1 text-left">
-                    {MODES.find((item) => item.value === mode)?.label}
+                    <CurveName
+                      kind={mode}
+                      label={MODES.find((item) => item.value === mode)?.label ?? mode}
+                    />
                   </span>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="min-w-56">
                   {MODES.map((item) => (
                     <SelectItem key={item.value} value={item.value}>
-                      {item.label}
+                      <CurveName kind={item.value} label={item.label} />
                     </SelectItem>
                   ))}
                 </SelectContent>

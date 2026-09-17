@@ -28,6 +28,7 @@ import {
   type ChartSketch,
 } from "../src/lib/chart-draw/types"
 import { catalog } from "../src/lib/chartisme/catalog"
+import { curveKind, curveSparkSeries } from "../src/lib/chartisme/curve-shapes"
 import { sparklinePoints, sparkValues, synthCurve, templateFigures } from "../src/lib/chartisme/sketch-shapes"
 
 test("magnet snaps to a nearby swing pivot, not the neighbouring sample", () => {
@@ -136,6 +137,60 @@ test("the chartist table lists tunnel droit among 18 figures with a template", (
   const [, y0] = start.split(",").map(Number)
   const [, y1] = end.split(",").map(Number)
   assert.ok(y0 > y1)
+})
+
+test("each curve type has a schematic sparkline", () => {
+  const kinds = [
+    "sum",
+    "spread",
+    "parity",
+    "high_low",
+    "consecutive",
+    "centroid",
+    "n1",
+    "n2",
+    "n3",
+    "n4",
+    "n5",
+    "g1",
+    "g2",
+    "g3",
+    "g4",
+    "delay",
+    "hit",
+    "star_sum",
+    "e1",
+    "e2",
+    "star_delay",
+    "star_hit",
+    "eachNumber",
+    "eachStar",
+    "sumBoth",
+  ]
+  for (const name of kinds) {
+    const series = curveSparkSeries(name)
+    assert.ok(series.length >= 1, name)
+    assert.ok(series[0].length > 8, name)
+  }
+  assert.equal(curveKind("delay:7"), "delay")
+  assert.equal(curveKind("curve:sum"), "sum")
+  assert.equal(curveKind("family:hit"), "hit")
+  assert.equal(curveKind("sumNumbers"), "sum")
+  assert.equal(curveKind("any"), "")
+  const delay = curveSparkSeries("delay:12")[0]
+  assert.ok(delay.some((value, index) => index > 0 && value < delay[index - 1]))
+  assert.deepEqual([...new Set(curveSparkSeries("hit").flat())].sort(), [0, 1])
+  const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length
+  assert.ok(mean(curveSparkSeries("n1")[0]) < mean(curveSparkSeries("n5")[0]))
+  assert.equal(curveSparkSeries("eachNumber").length, 5)
+  assert.equal(curveSparkSeries("sumBoth").length, 2)
+  assert.ok(sparklinePoints(curveSparkSeries("delay")[0], 48, 20).includes(","))
+  const box = { min: 1, max: 50 }
+  const yOf = (kind: string) => {
+    const points = sparklinePoints(curveSparkSeries(kind)[0], 48, 20, 1.5, box)
+    return Number(points.split(" ")[0].split(",")[1])
+  }
+  assert.ok(yOf("n1") > yOf("n5"), "n1 sits lower than n5 in the school box")
 })
 
 test("a window shorter than 8 bars is rejected", () => {

@@ -24,6 +24,7 @@ import { useRegisterCapture } from "@/components/capture"
 import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
 import { TabScroller } from "@/components/tab-scroller"
 import { WindowBar } from "@/components/analysis/window-bar"
+import { CurveName } from "@/components/chartisme/curve-thumb"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -475,14 +476,16 @@ export function AnalysisLab() {
         >
           <Select value={variable} onValueChange={(v) => setVariable(v as VariableName)}>
             <SelectTrigger className="w-full sm:w-56" aria-label="Variable">
-              <span className="flex flex-1 text-left">{VARIABLE_LABELS[variable]}</span>
+              <span className="flex flex-1 text-left">
+                <CurveName kind={variable} label={VARIABLE_LABELS[variable]} />
+              </span>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="min-w-56">
               <SelectGroup>
                 <SelectLabel>Numéros</SelectLabel>
                 {NUMBER_VARIABLE_NAMES.map((name) => (
                   <SelectItem key={name} value={name}>
-                    {VARIABLE_LABELS[name]}
+                    <CurveName kind={name} label={VARIABLE_LABELS[name]} />
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -491,7 +494,7 @@ export function AnalysisLab() {
                 <SelectLabel>Étoiles</SelectLabel>
                 {STAR_VARIABLE_NAMES.map((name) => (
                   <SelectItem key={name} value={name}>
-                    {VARIABLE_LABELS[name]}
+                    <CurveName kind={name} label={VARIABLE_LABELS[name]} />
                   </SelectItem>
                 ))}
               </SelectGroup>

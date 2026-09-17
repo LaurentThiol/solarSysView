@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 
 import { FigureName, FigureThumb } from "@/components/chartisme/figure-thumb"
+import { CurveName } from "@/components/chartisme/curve-thumb"
 import { LabelHelp, TitleHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -338,14 +339,19 @@ export function RulesPanel({
               >
                 <SelectTrigger className="w-full" aria-label="Courbe visée">
                   <span className="flex flex-1 text-left">
-                    {CURVE_TARGET_LABELS[curveTargetValue(draft.condition)] ??
-                      curveTargetValue(draft.condition)}
+                    <CurveName
+                      kind={curveTargetValue(draft.condition)}
+                      label={
+                        CURVE_TARGET_LABELS[curveTargetValue(draft.condition)] ??
+                        curveTargetValue(draft.condition)
+                      }
+                    />
                   </span>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="min-w-64">
                   {CURVE_TARGETS.map((target) => (
                     <SelectItem key={target.value} value={target.value}>
-                      {target.label}
+                      <CurveName kind={target.value} label={target.label} />
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -477,14 +483,19 @@ export function RulesPanel({
                   >
                     <SelectTrigger className="w-full" aria-label="Courbe voisine">
                       <span className="flex flex-1 text-left">
-                        {VARIABLE_LABELS[draft.condition.alongside_curve ?? ""] ??
-                          draft.condition.alongside_curve}
+                        <CurveName
+                          kind={draft.condition.alongside_curve ?? ALONGSIDE_CURVES[0].value}
+                          label={
+                            VARIABLE_LABELS[draft.condition.alongside_curve ?? ""] ??
+                            draft.condition.alongside_curve
+                          }
+                        />
                       </span>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="min-w-64">
                       {ALONGSIDE_CURVES.map((entry) => (
                         <SelectItem key={entry.value} value={entry.value}>
-                          {entry.value} · {entry.label}
+                          <CurveName kind={entry.value} label={`${entry.value} · ${entry.label}`} />
                         </SelectItem>
                       ))}
                     </SelectContent>
