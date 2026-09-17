@@ -225,11 +225,12 @@ export function CurveCanvas({
           <g>
             <rect
               x={PAD}
-              y={PAD / 2}
+              y={BANNER_HIT}
               width={Math.max(0, x(contextCount) - PAD)}
-              height={chartH - PAD}
+              height={chartH - PAD / 2 - BANNER_HIT}
               fill="var(--muted-foreground)"
               opacity={0.08}
+              style={{ pointerEvents: "none" }}
             />
             <line
               x1={x(contextCount)}
@@ -321,22 +322,24 @@ export function CurveCanvas({
         {active && active.toIndex !== active.fromIndex ? (
           <rect
             x={x(Math.min(active.fromIndex, active.toIndex))}
-            y={PAD / 2}
+            y={BANNER_HIT}
             width={Math.abs(x(active.toIndex) - x(active.fromIndex))}
-            height={chartH - PAD}
+            height={chartH - PAD / 2 - BANNER_HIT}
             fill="var(--chart-1)"
             opacity={0.12}
+            style={{ pointerEvents: "none" }}
           />
         ) : null}
 
         {hit ? (
           <rect
             x={x(hit.from_index)}
-            y={PAD / 2}
+            y={BANNER_HIT}
             width={Math.max(2, x(hit.to_index) - x(hit.from_index))}
-            height={chartH - PAD}
+            height={chartH - PAD / 2 - BANNER_HIT}
             fill="var(--chart-4)"
             opacity={0.07}
+            style={{ pointerEvents: "none" }}
           />
         ) : null}
 
