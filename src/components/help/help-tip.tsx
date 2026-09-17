@@ -28,6 +28,12 @@ export type HelpCopy = {
 
 const PANEL_NARROW = 320
 const PANEL_WIDE = 380
+const PANEL_PAD = 16
+
+function clampedPanelWidth(desired: number) {
+  if (typeof window === "undefined") return desired
+  return Math.min(desired, Math.max(200, window.innerWidth - PANEL_PAD))
+}
 
 function placePanel(
   button: HTMLElement,
@@ -92,15 +98,17 @@ export function HelpTip({
   const open = openId === uid
   const btnRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
-  const [coords, setCoords] = useState({ top: 0, left: 0, maxHeight: 320 })
-  const panelWidth = wide ? PANEL_WIDE : PANEL_NARROW
+  const [coords, setCoords] = useState({ top: 0, left: 0, maxHeight: 320, width: PANEL_NARROW })
+  const desiredWidth = wide ? PANEL_WIDE : PANEL_NARROW
   const maxCap = wide ? 520 : 480
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return
     const update = () => {
       if (!btnRef.current) return
-      setCoords(placePanel(btnRef.current, panelRef.current, panelWidth, maxCap))
+      const panelWidth = clampedPanelWidth(desiredWidth)
+      const placed = placePanel(btnRef.current, panelRef.current, panelWidth, maxCap)
+      setCoords({ ...placed, width: panelWidth })
     }
     update()
     const frame = window.requestAnimationFrame(update)
@@ -111,7 +119,7 @@ export function HelpTip({
       window.removeEventListener("resize", update)
       window.removeEventListener("scroll", update, true)
     }
-  }, [open, title, body, items, panelWidth, maxCap])
+  }, [open, title, body, items, desiredWidth, maxCap])
 
   useEffect(() => {
     if (!open) return
@@ -161,7 +169,7 @@ export function HelpTip({
               style={{
                 top: coords.top,
                 left: coords.left,
-                width: panelWidth,
+                width: coords.width,
                 maxHeight: coords.maxHeight,
               }}
               className="fixed z-[200] overflow-auto rounded-lg border border-amber-400/35 bg-popover p-3 text-popover-foreground shadow-xl ring-1 ring-amber-400/20"
@@ -222,8 +230,8 @@ export function LabelHelp({
     <label
       className={cn(
         row
-          ? "flex items-center gap-2 text-sm"
-          : "flex flex-col gap-1 text-xs text-muted-foreground",
+          ? "flex min-w-0 items-center gap-2 text-sm"
+          : "flex w-full min-w-0 flex-col gap-1 text-xs text-muted-foreground sm:w-auto",
         className
       )}
     >

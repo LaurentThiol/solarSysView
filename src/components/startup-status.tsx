@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { LogOut } from "lucide-react"
+import { LogOut, Menu, X } from "lucide-react"
 
 import { CaptureButton } from "@/components/capture"
 import { HelpModeToggle, HelpWrap, WithHelp } from "@/components/help"
@@ -636,12 +636,97 @@ const NAV_ITEMS = [
   },
 ] as const
 
+function navItemActive(pathname: string, href: string) {
+  if (href === "/brain") return pathname === "/brain"
+  return pathname === href || pathname.startsWith(`${href}/`)
+}
+
+function NavLinks({
+  pathname,
+  onNavigate,
+  stacked = false,
+}: {
+  pathname: string
+  onNavigate?: () => void
+  stacked?: boolean
+}) {
+  return (
+    <nav
+      className={
+        stacked
+          ? "flex flex-col gap-1"
+          : "hidden items-center gap-x-4 lg:flex"
+      }
+      aria-label="Sections"
+    >
+      {NAV_ITEMS.map((item) => {
+        const active = navItemActive(pathname, item.href)
+        const link = (
+          <Link
+            href={item.href}
+            aria-current={active ? "page" : undefined}
+            onClick={onNavigate}
+            className={
+              stacked
+                ? `rounded-md px-3 py-2 text-sm ${
+                    active
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  }`
+                : `text-xs ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`
+            }
+          >
+            {item.label}
+          </Link>
+        )
+        return stacked ? (
+          <span key={item.href}>{link}</span>
+        ) : (
+          <HelpWrap key={item.href} help={item.help}>
+            {link}
+          </HelpWrap>
+        )
+      })}
+    </nav>
+  )
+}
+
 export function SiteHeader() {
   const pathname = usePathname()
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [pathname])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false)
+    }
+    window.addEventListener("keydown", onKey)
+    const previous = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      document.body.style.overflow = previous
+    }
+  }, [menuOpen])
+
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div className="flex items-center gap-4">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur">
+      <div className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-foreground lg:hidden"
+            aria-expanded={menuOpen}
+            aria-controls="site-nav-drawer"
+            aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+          </button>
           <HelpWrap
             help={{
               title: "Synchro",
@@ -650,37 +735,37 @@ export function SiteHeader() {
           >
             <Link
               href="/tirage"
-              className="text-xs font-medium tracking-[0.2em] text-primary uppercase"
+              className="shrink-0 text-xs font-medium tracking-[0.2em] text-primary uppercase"
             >
               Synchro
             </Link>
           </HelpWrap>
-          <nav className="flex flex-wrap items-center gap-x-4 gap-y-1" aria-label="Sections">
-            {NAV_ITEMS.map((item) => {
-              const active =
-                item.href === "/brain"
-                  ? pathname === "/brain"
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`)
-              return (
-                <HelpWrap key={item.href} help={item.help}>
-                  <Link
-                    href={item.href}
-                    aria-current={active ? "page" : undefined}
-                    className={`text-xs ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    {item.label}
-                  </Link>
-                </HelpWrap>
-              )
-            })}
-          </nav>
+          <NavLinks pathname={pathname} />
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <CaptureButton />
           <HelpModeToggle />
           <StartupStatus />
         </div>
       </div>
+      {menuOpen ? (
+        <div className="fixed inset-0 z-30 lg:hidden" id="site-nav-drawer">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Fermer le menu"
+            onClick={() => setMenuOpen(false)}
+          />
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sections"
+            className="relative flex h-full w-[min(18rem,calc(100vw-3rem))] flex-col gap-4 overflow-auto border-r border-border bg-background p-4 pt-[max(1rem,calc(env(safe-area-inset-top)+0.75rem))] pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl"
+          >
+            <NavLinks pathname={pathname} stacked onNavigate={() => setMenuOpen(false)} />
+          </aside>
+        </div>
+      ) : null}
     </header>
   )
 }

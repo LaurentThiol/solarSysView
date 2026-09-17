@@ -134,15 +134,13 @@ export function Sketchpad({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="overflow-x-auto">
+        <div className="min-w-0">
           <svg
             ref={svgRef}
             viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-            width={WIDTH}
-            height={HEIGHT}
             role="img"
             aria-label="Zone de croquis"
-            className="max-w-none touch-none rounded-lg border border-border bg-muted/20"
+            className="h-auto w-full max-w-full touch-none rounded-lg border border-border bg-muted/20"
             onPointerDown={(event) => {
               setDrawing(true)
               setPoints([at(event)])

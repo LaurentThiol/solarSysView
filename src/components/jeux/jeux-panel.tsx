@@ -1147,7 +1147,7 @@ export function JeuxPanel() {
       </Card>
 
       <div
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur"
         role="status"
         aria-live="polite"
       >

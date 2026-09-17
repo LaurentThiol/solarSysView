@@ -215,7 +215,7 @@ export function ViewPanel({
           {payload.points.length === 0 ? (
             <p className="text-sm text-muted-foreground">Aucun tirage dans la fenêtre.</p>
           ) : (
-            <ChartContainer config={lineConfig} className="aspect-auto h-[280px] w-full">
+            <ChartContainer config={lineConfig} className="aspect-auto h-[220px] w-full sm:h-[280px] lg:h-[340px]">
               <LineChart data={seriesData} margin={{ left: 4, right: 8, top: 8 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} />
@@ -261,7 +261,7 @@ export function ViewPanel({
               }}
             >
               <Select value={block} onValueChange={(v) => setBlock(v as typeof block)}>
-                <SelectTrigger className="w-40" aria-label="Bloc">
+                <SelectTrigger className="w-full min-w-0 sm:w-40" aria-label="Bloc">
                   <span className="flex flex-1 text-left">
                     {block === "month" ? "Mois" : block === "week" ? "Semaine" : "Paquets de X"}
                   </span>
@@ -281,7 +281,7 @@ export function ViewPanel({
               }}
             >
               <Select value={style} onValueChange={(v) => setStyle(v as typeof style)}>
-                <SelectTrigger className="w-40" aria-label="Style">
+                <SelectTrigger className="w-full min-w-0 sm:w-40" aria-label="Style">
                   <span className="flex flex-1 text-left">
                     {style === "ohlc" ? "OHLC" : style === "heikin" ? "Heikin-Ashi" : "Renko"}
                   </span>

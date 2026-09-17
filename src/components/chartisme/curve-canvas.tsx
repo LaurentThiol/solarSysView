@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import type { FigureHit, Guide } from "@/lib/chartisme"
 import {
@@ -88,10 +88,23 @@ export function CurveCanvas({
   label?: string
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<CurveSelection | null>(null)
+  const [containerW, setContainerW] = useState(0)
   const [hover, setHover] = useState<number | null>(null)
 
-  const width = Math.max(480, Math.min(1280, values.length * 8))
+  useEffect(() => {
+    const node = wrapRef.current
+    if (!node) return
+    const apply = () => setContainerW(node.clientWidth)
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+
+  const dataWidth = Math.min(1280, Math.max(values.length * 8, 160))
+  const width = Math.max(containerW, dataWidth)
   const chartH = showActivity && activity.length ? HEIGHT - ACTIVITY_HEIGHT : HEIGHT
   const innerH = chartH - PAD * 2
 
@@ -183,7 +196,7 @@ export function CurveCanvas({
   const curvePoints = values.map((value, index) => `${x(index)},${y(value)}`).join(" ")
 
   return (
-    <div className="overflow-x-auto">
+    <div ref={wrapRef} className="min-w-0 overflow-x-auto">
       <svg
         ref={svgRef}
         data-capture-visual=""

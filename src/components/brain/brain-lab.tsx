@@ -903,7 +903,7 @@ export function BrainLab() {
   }, [messages, busy])
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex min-w-0 flex-col gap-5">
       <section className="relative overflow-hidden rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/22 via-chart-5/12 to-card p-5 sm:p-6">
         <div className="pointer-events-none absolute -top-12 -right-6 size-44 rounded-full bg-primary/25 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-16 left-1/4 size-40 rounded-full bg-chart-5/20 blur-3xl" />
@@ -911,7 +911,7 @@ export function BrainLab() {
           <BrainMascot mood={mascotMood} size="lg" />
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-medium tracking-[0.18em] text-primary uppercase">Laboratoire de lecture</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight">Brain</h1>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Brain</h1>
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
               Épingle un nom — <span className="text-foreground">@rsi</span>,{" "}
               <span className="text-foreground">@ete</span>,{" "}
@@ -1039,7 +1039,7 @@ export function BrainLab() {
             </label>
             <label className="flex items-center gap-1">
               Courbe
-              <Input className="w-28" value={curveId} onChange={(e) => setCurveId(e.target.value || "sum")} />
+              <Input className="w-full min-w-0 sm:w-28" value={curveId} onChange={(e) => setCurveId(e.target.value || "sum")} />
             </label>
             <span className="text-muted-foreground">n={seriesIndex(variable, ball, star)}</span>
           </div>
@@ -1047,7 +1047,7 @@ export function BrainLab() {
       </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
         <Card
           data-demo="discussion"
           className={cn("border-primary/20", demoHighlight(demoStep, ["chat"], demoWaiting))}
@@ -1592,8 +1592,8 @@ export function BrainLab() {
               ))
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Input placeholder="commentaire sur la lecture la plus récente…" value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} />
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+            <Input placeholder="commentaire sur la lecture la plus récente…" value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} className="min-w-0 flex-1" />
             <Button
               size="sm"
               variant="outline"

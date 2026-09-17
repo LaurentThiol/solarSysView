@@ -31,7 +31,7 @@ export function ModelSelect({
           {current ? current.label : "Choisir un modèle"}
         </span>
       </SelectTrigger>
-      <SelectContent align="start" alignItemWithTrigger={false} className="min-w-72">
+      <SelectContent align="start" alignItemWithTrigger={false} className="min-w-[min(18rem,calc(100vw-1.5rem))]">
         {groups.map((group) =>
           group.items.length ? (
             <SelectGroup key={group.label}>

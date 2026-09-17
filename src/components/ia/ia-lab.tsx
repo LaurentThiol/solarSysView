@@ -671,7 +671,7 @@ export function IaLab() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <div className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -921,7 +921,7 @@ export function IaLab() {
               return (
                 <div
                   key={`user-${turn.index}`}
-                  className="ml-auto max-w-[46rem] rounded-lg bg-primary/15 px-3 py-2 text-sm leading-6 whitespace-pre-wrap"
+                  className="ml-auto max-w-[min(46rem,100%)] rounded-lg bg-primary/15 px-3 py-2 text-sm leading-6 whitespace-pre-wrap"
                 >
                   {turn.message.content}
                 </div>
@@ -1067,7 +1067,7 @@ function AssistantBubble({
   streaming: boolean
 }) {
   return (
-    <div className="max-w-[46rem] rounded-lg bg-muted/40 px-3 py-2 text-sm leading-6 whitespace-pre-wrap">
+    <div className="max-w-[min(46rem,100%)] rounded-lg bg-muted/40 px-3 py-2 text-sm leading-6 whitespace-pre-wrap">
       {message.content}
       {streaming ? <Caret /> : null}
       {message.model ? (

@@ -22,6 +22,7 @@ import { ViewPanel } from "@/components/analysis/view-panel"
 import { VolatilityPanel } from "@/components/analysis/volatility-panel"
 import { useRegisterCapture } from "@/components/capture"
 import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
+import { TabScroller } from "@/components/tab-scroller"
 import { WindowBar } from "@/components/analysis/window-bar"
 import { Input } from "@/components/ui/input"
 import {
@@ -236,9 +237,9 @@ function TabRow({
   label: string
 }) {
   return (
-    <nav className="flex flex-wrap gap-2" aria-label={label}>
+    <TabScroller label={label}>
       {items.map((item) => (
-        <span key={item.id} className="inline-flex items-center gap-1">
+        <span key={item.id} className="inline-flex shrink-0 items-center gap-1">
           <button
             type="button"
             onClick={() => setTab(item.id as TabId)}
@@ -253,7 +254,7 @@ function TabRow({
           <HelpTip {...item.help} />
         </span>
       ))}
-    </nav>
+    </TabScroller>
   )
 }
 
@@ -512,7 +513,7 @@ export function AnalysisLab() {
               value={ball}
               onChange={(e) => setBall(Number(e.target.value) || 7)}
               aria-label="Boule"
-              className="w-24"
+              className="w-full min-w-0 sm:w-24"
             />
           </LabelHelp>
         )}
@@ -531,7 +532,7 @@ export function AnalysisLab() {
               value={star}
               onChange={(e) => setStar(Number(e.target.value) || 1)}
               aria-label="Étoile"
-              className="w-24"
+              className="w-full min-w-0 sm:w-24"
             />
           </LabelHelp>
         )}
@@ -548,7 +549,7 @@ export function AnalysisLab() {
             max={200}
             value={windowSize}
             onChange={(e) => setWindowSize(Number(e.target.value) || 20)}
-            className="w-20"
+            className="w-full min-w-0 sm:w-20"
             aria-label="Période des indicateurs"
           />
         </LabelHelp>
@@ -563,7 +564,7 @@ export function AnalysisLab() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filtrer par numéros"
-            className="sm:w-56"
+            className="w-full min-w-0 sm:w-56"
           />
         </LabelHelp>
         </div>

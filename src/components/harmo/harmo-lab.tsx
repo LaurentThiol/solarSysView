@@ -9,6 +9,7 @@ import { MixPanel } from "@/components/harmo/mix-panel"
 import { TestsPanel } from "@/components/harmo/tests-panel"
 import { TfPanel } from "@/components/harmo/tf-panel"
 import { WindowBar } from "@/components/analysis/window-bar"
+import { TabScroller } from "@/components/tab-scroller"
 import { useRegisterCapture } from "@/components/capture"
 import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
@@ -419,7 +420,7 @@ export function HarmoLab() {
                 max={50}
                 value={ball}
                 onChange={(e) => setBall(Number(e.target.value) || 7)}
-                className="w-24"
+                className="w-full min-w-0 sm:w-24"
               />
             </LabelHelp>
           ) : null}
@@ -434,7 +435,7 @@ export function HarmoLab() {
                 max={12}
                 value={star}
                 onChange={(e) => setStar(Number(e.target.value) || 1)}
-                className="w-24"
+                className="w-full min-w-0 sm:w-24"
               />
             </LabelHelp>
           ) : null}
@@ -469,15 +470,15 @@ export function HarmoLab() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Filtrer par numéros"
-              className="sm:w-56"
+              className="w-full min-w-0 sm:w-56"
             />
           </LabelHelp>
         </div>
       </div>
 
-      <nav className="flex flex-wrap gap-2" aria-label="Harmo">
+      <TabScroller label="Harmo">
         {TABS.map((item) => (
-          <span key={item.id} className="inline-flex items-center gap-1">
+          <span key={item.id} className="inline-flex shrink-0 items-center gap-1">
             <button
               type="button"
               onClick={() => setTab(item.id)}
@@ -492,7 +493,7 @@ export function HarmoLab() {
             <HelpTip {...(item.help as HelpCopy)} />
           </span>
         ))}
-      </nav>
+      </TabScroller>
 
       {tab === "tf" ? (
         <div>

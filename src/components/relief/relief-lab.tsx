@@ -115,7 +115,7 @@ export function ReliefLab() {
     <div className="flex flex-col gap-3">
       <Card className="overflow-hidden">
         <CardContent className="p-0">
-          <div className="h-[min(68vh,600px)] min-h-[380px]">
+          <div className="h-[min(68vh,600px)] min-h-[240px] sm:min-h-[380px]">
             {chronological.length === 0 ? (
               <p className="p-6 text-sm text-muted-foreground">Aucun tirage à tracer.</p>
             ) : (
@@ -219,7 +219,7 @@ export function ReliefLab() {
                 setCamera(homeCamera(next, chronological.length || sample))
               }}
             >
-              <SelectTrigger className="w-44" aria-label="Lecture">
+              <SelectTrigger className="w-full min-w-0 sm:w-44" aria-label="Lecture">
                 <span className="flex flex-1 text-left">{STYLE_LABELS[style]}</span>
               </SelectTrigger>
               <SelectContent>
@@ -256,7 +256,7 @@ export function ReliefLab() {
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <label
-            className={`flex min-w-56 flex-1 flex-col gap-1 text-xs text-muted-foreground${
+            className={`flex w-full min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground sm:min-w-56${
               offset === "superpose" ? " opacity-50" : ""
             }`}
           >
@@ -280,7 +280,7 @@ export function ReliefLab() {
               className="accent-primary"
             />
           </label>
-          <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-muted-foreground">
+          <label className="flex w-full min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground sm:min-w-48">
             <span className="inline-flex items-center gap-1">
               Hauteur (1–50)
               <HelpTip

@@ -112,7 +112,7 @@ export function SystemPanel({ tech }: { tech: Tech }) {
                 type="number"
                 value={capital}
                 onChange={(e) => setCapital(Number(e.target.value) || 0)}
-                className="w-28"
+                className="w-full min-w-0 sm:w-28"
               />
             </LabelHelp>
             <LabelHelp
@@ -127,7 +127,7 @@ export function SystemPanel({ tech }: { tech: Tech }) {
                 step="0.005"
                 value={risk}
                 onChange={(e) => setRisk(Number(e.target.value) || 0)}
-                className="w-24"
+                className="w-full min-w-0 sm:w-24"
               />
             </LabelHelp>
             <LabelHelp
@@ -141,7 +141,7 @@ export function SystemPanel({ tech }: { tech: Tech }) {
                 type="number"
                 value={entry}
                 onChange={(e) => setEntry(Number(e.target.value) || 0)}
-                className="w-24"
+                className="w-full min-w-0 sm:w-24"
               />
             </LabelHelp>
             <LabelHelp
@@ -155,7 +155,7 @@ export function SystemPanel({ tech }: { tech: Tech }) {
                 type="number"
                 value={stop}
                 onChange={(e) => setStop(Number(e.target.value) || 0)}
-                className="w-24"
+                className="w-full min-w-0 sm:w-24"
               />
             </LabelHelp>
           </div>

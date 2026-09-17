@@ -84,7 +84,7 @@ export function WindowBar({
             type="date"
             value={fromDate}
             onChange={(e) => onFrom(e.target.value)}
-            className="w-40"
+            className="w-full min-w-0 sm:w-40"
             aria-label="Date de début"
           />
         </LabelHelp>
@@ -99,7 +99,7 @@ export function WindowBar({
             type="date"
             value={toDate}
             onChange={(e) => onTo(e.target.value)}
-            className="w-40"
+            className="w-full min-w-0 sm:w-40"
             aria-label="Date de fin"
           />
         </LabelHelp>
@@ -118,7 +118,7 @@ export function WindowBar({
               value={lastN}
               onChange={(e) => onLastN(e.target.value)}
               placeholder="auto"
-              className="w-24"
+              className="w-full min-w-0 sm:w-24"
               aria-label="Derniers N tirages"
             />
           </LabelHelp>
@@ -136,7 +136,7 @@ export function WindowBar({
             max={400}
             value={warmup}
             onChange={(e) => onWarmup(Number(e.target.value) || 0)}
-            className="w-24"
+            className="w-full min-w-0 sm:w-24"
             aria-label="Tirages de warmup"
           />
         </LabelHelp>

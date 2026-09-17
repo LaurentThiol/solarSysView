@@ -210,7 +210,7 @@ export function ReliefCanvas({
   return (
     <div
       ref={wrapRef}
-      className="relative h-full min-h-[400px] w-full overflow-hidden rounded-lg bg-[#12182a]"
+      className="relative h-full min-h-0 w-full overflow-hidden rounded-lg bg-[#12182a]"
     >
       <canvas
         ref={canvasRef}

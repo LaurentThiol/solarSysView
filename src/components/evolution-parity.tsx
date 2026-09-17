@@ -204,7 +204,7 @@ function ParityTooltip({
   }
 
   return (
-    <div className="grid min-w-48 items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
+    <div className="grid min-w-0 max-w-[min(18rem,calc(100vw-2rem))] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
       <div className="font-medium">{formatDrawDate(String(label ?? point.date))}</div>
       {view === "walk" ? (
         <p className="text-muted-foreground">Cumul depuis le début de la fenêtre.</p>
@@ -315,7 +315,7 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
           <>
             <ChartContainer
               config={chartConfig}
-              className="aspect-auto h-[280px] w-full sm:h-[340px]"
+              className="aspect-auto h-[220px] w-full sm:h-[280px] lg:h-[340px]"
             >
               <LineChart
                 key={`${view}-${showBand ? "band" : "plain"}`}

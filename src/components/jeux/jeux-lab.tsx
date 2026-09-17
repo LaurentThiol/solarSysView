@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { HelpTip, type HelpCopy } from "@/components/help"
 import { HistoJeuxPanel } from "@/components/jeux/histo-jeux-panel"
 import { JeuxPanel } from "@/components/jeux/jeux-panel"
+import { TabScroller } from "@/components/tab-scroller"
 
 const TABS = [
   {
@@ -46,9 +47,9 @@ export function JeuxLab() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <nav className="flex flex-wrap gap-2" aria-label="Jeux">
+      <TabScroller label="Jeux">
         {TABS.map((item) => (
-          <span key={item.id} className="inline-flex items-center gap-1">
+          <span key={item.id} className="inline-flex shrink-0 items-center gap-1">
             <button
               type="button"
               onClick={() => selectTab(item.id)}
@@ -63,7 +64,7 @@ export function JeuxLab() {
             <HelpTip {...(item.help as HelpCopy)} />
           </span>
         ))}
-      </nav>
+      </TabScroller>
       {tab === "solutions" ? <JeuxPanel /> : <HistoJeuxPanel />}
     </div>
   )

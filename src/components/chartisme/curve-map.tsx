@@ -203,7 +203,7 @@ export function CurveMap({
               value={String(target)}
               onValueChange={(v) => onTarget(Number(v ?? target))}
             >
-              <SelectTrigger className="w-40" aria-label="Rareté visée">
+              <SelectTrigger className="w-full min-w-0 sm:w-40" aria-label="Rareté visée">
                 <span className="flex flex-1 text-left">{Math.round(target * 100)} %</span>
               </SelectTrigger>
               <SelectContent>
@@ -227,7 +227,7 @@ export function CurveMap({
               value={String(length)}
               onValueChange={(v) => setChosen(Number(v ?? length))}
             >
-              <SelectTrigger className="w-32" aria-label="Échelle mesurée">
+              <SelectTrigger className="w-full min-w-0 sm:w-32" aria-label="Échelle mesurée">
                 <span className="flex flex-1 text-left">{length || "—"}</span>
               </SelectTrigger>
               <SelectContent>

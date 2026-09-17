@@ -44,14 +44,14 @@ export function BrainSpecialistsLab() {
   }, [])
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex min-w-0 flex-col gap-5">
       <section className="relative overflow-hidden rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/22 via-chart-5/12 to-card p-5 sm:p-6">
         <div className="pointer-events-none absolute -top-12 -right-6 size-44 rounded-full bg-primary/25 blur-3xl" />
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
           <BrainMascot mood="idle" size="lg" />
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-medium tracking-[0.18em] text-primary uppercase">Brain</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight">Spécialistes</h1>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Spécialistes</h1>
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
               Un réseau, une série nommée (parité, somme…). Forecast t+1, skill vs le hasard. Jamais une grille 5+2.
               Un pop-up t’arrête après chaque champ : Suivant ou Annuler. Sans lancer l’entraînement.

@@ -75,7 +75,7 @@ export function DrawsExplorer() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-6">
       <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
         {archiveSummary(draws)} 5 numéros (1–50) et 2 étoiles (1–12). Données
         recoupées avec les archives publiques ; source officielle : FDJ

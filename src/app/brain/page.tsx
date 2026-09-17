@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 
 import { BrainLab } from "@/components/brain/brain-lab"
+import { PageShell } from "@/components/page-shell"
 
 export const metadata: Metadata = {
   title: "Brain — Synchro",
@@ -10,10 +11,8 @@ export const metadata: Metadata = {
 
 export default function BrainPage() {
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
-      <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 py-6 pb-12 sm:px-6">
-        <BrainLab />
-      </main>
-    </div>
+    <PageShell footer={false}>
+      <BrainLab />
+    </PageShell>
   )
 }

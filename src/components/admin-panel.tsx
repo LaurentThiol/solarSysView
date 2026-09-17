@@ -134,7 +134,7 @@ function SecretRow({
         {label}
         <HelpTip {...help} />
       </label>
-      <div className="flex gap-2">
+      <div className="flex min-w-0 gap-2">
         <Input
           type={visible ? "text" : "password"}
           autoComplete="off"
@@ -411,7 +411,7 @@ export function AdminPanel() {
             : "indisponible"
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-6">
       {error ? <p className="text-sm text-red-300">{error}</p> : null}
       {!data.writable ? (
         <p className="text-sm text-amber-200">

@@ -363,7 +363,7 @@ function SumBoundField({
     <LabelHelp label={label} help={help}>
       <div className="flex flex-wrap items-center gap-2">
         <Select value={mode} onValueChange={onMode}>
-          <SelectTrigger className="w-28" aria-label={modeAria}>
+          <SelectTrigger className="w-full min-w-0 sm:w-28" aria-label={modeAria}>
             <span className="flex flex-1 text-left">
               {SUM_BOUND_MODE_LABELS[mode]}
             </span>
@@ -383,7 +383,7 @@ function SumBoundField({
           value={mode === "auto" ? String(resolved) : input}
           onChange={(event) => onInput(event.target.value)}
           disabled={mode === "auto"}
-          className="w-24"
+          className="w-full min-w-0 sm:w-24"
           aria-label={valueAria}
         />
       </div>
@@ -1348,7 +1348,7 @@ export function CombinaisonsPanel() {
                 max={MAX_PROPOSALS}
                 value={proposeCount}
                 onChange={(event) => setProposeCount(event.target.value)}
-                className="w-24"
+                className="w-full min-w-0 sm:w-24"
                 aria-label="Nombre de grilles"
               />
             </LabelHelp>

@@ -623,7 +623,7 @@ export function HistoJeuxPanel() {
                 max={20}
                 value={copies}
                 onChange={(event) => setCopies(event.target.value)}
-                className="w-24"
+                className="w-full min-w-0 sm:w-24"
                 aria-label="Nombre de copies"
               />
             </LabelHelp>
@@ -718,7 +718,7 @@ export function HistoJeuxPanel() {
           <div className="flex flex-wrap items-end gap-2">
             <LabelHelp label="Statut" help={HELP.settled}>
               <Select value={filter} onValueChange={(value) => setFilter(value as FilterId)}>
-                <SelectTrigger className="w-40" aria-label="Filtrer par statut">
+                <SelectTrigger className="w-full min-w-0 sm:w-40" aria-label="Filtrer par statut">
                   <span className="flex flex-1 text-left">
                     {filter === "all" ? "Tous" : filter === "pending" ? "En attente" : "Tranchés"}
                   </span>
@@ -735,7 +735,7 @@ export function HistoJeuxPanel() {
                 value={sourceFilter}
                 onValueChange={(value) => setSourceFilter(value as "all" | PlaySource)}
               >
-                <SelectTrigger className="w-40" aria-label="Filtrer par origine">
+                <SelectTrigger className="w-full min-w-0 sm:w-40" aria-label="Filtrer par origine">
                   <span className="flex flex-1 text-left">
                     {sourceFilter === "all" ? "Toutes" : PLAY_SOURCE_LABELS[sourceFilter]}
                   </span>

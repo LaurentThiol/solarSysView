@@ -358,7 +358,7 @@ function CombinedTooltip({
   }
 
   return (
-    <div className="grid min-w-40 items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
+    <div className="grid min-w-0 max-w-[min(18rem,calc(100vw-2rem))] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
       <div className="font-medium">{formatDrawDate(String(label ?? point.date))}</div>
       <div className="grid gap-1.5">
         {rows.map((row) => (
@@ -429,7 +429,7 @@ function SeriesTooltip({
   if (!point) return null
 
   return (
-    <div className="grid min-w-40 items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
+    <div className="grid min-w-0 max-w-[min(18rem,calc(100vw-2rem))] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
       <div className="font-medium">{formatDrawDate(String(label ?? point.date))}</div>
       <div className="grid gap-1.5">
         {keys
@@ -717,7 +717,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           <>
             <ChartContainer
               config={chartConfig}
-              className="aspect-auto h-[280px] w-full sm:h-[340px]"
+              className="aspect-auto h-[220px] w-full sm:h-[280px] lg:h-[340px]"
             >
               <ComposedChart
                 key={`${mode}-${combined ? scale : "abs"}`}
