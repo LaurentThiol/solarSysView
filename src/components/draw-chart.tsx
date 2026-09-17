@@ -786,6 +786,18 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     })
   }, [drawing, draftStart, draftLive, draftFigure, series, dates, targetKey])
 
+  const lastSketch = visibleSketches[0] ?? null
+  const hudStart = draftStart ?? lastSketch?.start ?? null
+  const hudEnd = draftStart ? null : lastSketch?.end ?? null
+  const draftReading = useMemo(() => {
+    if (draftStart && draftLive && draftLive.index !== draftStart.index) {
+      if (windowTooShort(draftStart.index, draftLive.index)) return null
+      const values = series.map((point) => point[sourceKey(targetKey)])
+      return readWindow(values, dates, draftStart.index, draftLive.index)
+    }
+    return lastSketch?.reading ?? null
+  }, [draftStart, draftLive, series, dates, targetKey, lastSketch])
+
   const plotData = useMemo(() => {
     if (!visibleSketches.length && !draftPoints.length) return chartData
     const bySketch = visibleSketches.map((sketch) => ({
@@ -980,9 +992,6 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     })
     setHint("Annotation posée. Clique un nouveau départ, ou désactive le dessin.")
   }
-
-  const lastSketch = visibleSketches[0] ?? null
-  const draftReading = lastSketch?.reading ?? null
 
   function changeMode(next: DrawChartMode) {
     const leavingSums = !isRankMode(mode)
@@ -1410,7 +1419,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
             {draw?.drawing ? (
               <CoordHud
                 live={draw.live}
-                start={draw.draft?.start ?? null}
+                start={hudStart}
+                end={hudEnd}
                 figureLabel={sketchFigureLabel(draw.figure)}
                 seriesLabel={chartConfig[targetKey].label}
                 reading={draftReading}
