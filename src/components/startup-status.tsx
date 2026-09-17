@@ -733,8 +733,8 @@ export function SiteHeader() {
   }, [menuOpen])
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur">
-      <div className="relative z-10 mx-auto flex w-full items-center gap-2 px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:gap-3 sm:px-6">
+    <header className="sticky top-0 z-40 overflow-x-clip border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur">
+      <div className="relative z-10 mx-auto flex w-full min-w-0 max-w-full items-center gap-2 overflow-x-clip px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:gap-3 sm:px-6">
         <button
           type="button"
           className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-foreground lg:hidden"
@@ -768,7 +768,9 @@ export function SiteHeader() {
             <HelpModeToggle />
             <StartupStatus />
           </div>
-          <QuitButton />
+          <div className="relative z-20 shrink-0">
+            <QuitButton />
+          </div>
         </div>
       </div>
       {menuOpen ? (
