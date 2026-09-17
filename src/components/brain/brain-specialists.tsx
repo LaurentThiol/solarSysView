@@ -170,7 +170,7 @@ export function BrainSpecialists({
           </div>
           <Button
             size="sm"
-            variant="ghost"
+            variant="outline"
             className="shrink-0"
             onClick={() => setAtelierForced(!atelierOpen)}
           >
