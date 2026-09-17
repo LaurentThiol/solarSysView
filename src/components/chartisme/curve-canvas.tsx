@@ -3,7 +3,12 @@
 import { useMemo, useRef, useState } from "react"
 
 import type { FigureHit, Guide } from "@/lib/chartisme"
-import { PIVOT_ROLE_LABELS } from "@/lib/chartisme"
+import {
+  PIVOT_ROLE_LABELS,
+  coveringHitIndices,
+  cycleHitIndex,
+  hoverHitIndex,
+} from "@/lib/chartisme"
 import { cn } from "@/lib/utils"
 
 // Recharts est écarté ici : il n'expose pas les coordonnées pixel, donc
@@ -13,6 +18,11 @@ const HEIGHT = 300
 const ACTIVITY_HEIGHT = 56
 const PAD = 20
 const LABEL_GAP = 14
+/** Zone cliquable du bandeau de lectures, dans le padding du tracé. */
+const BANNER_HIT = 16
+const BANNER_Y = 3
+const BANNER_H = 6
+const BANNER_H_ACTIVE = 9
 
 export type CurveSelection = { fromIndex: number; toIndex: number }
 
@@ -38,6 +48,7 @@ export function CurveCanvas({
   hits = [],
   selection = null,
   onSelect,
+  onHitSelect,
   showActivity = true,
   contextCount = 0,
   label,
@@ -50,6 +61,8 @@ export function CurveCanvas({
   hits?: Array<FigureHit & { rare?: boolean }>
   selection?: CurveSelection | null
   onSelect?: (selection: CurveSelection) => void
+  /** Clic sur une marque du bandeau : la lecture correspondante, ou la suivante si plusieurs se superposent. */
+  onHitSelect?: (index: number) => void
   showActivity?: boolean
   /** Tirages de tête calculés mais hors fenêtre d'étude — tracés en retrait. */
   contextCount?: number
@@ -57,6 +70,7 @@ export function CurveCanvas({
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [drag, setDrag] = useState<CurveSelection | null>(null)
+  const [hover, setHover] = useState<number | null>(null)
 
   const width = Math.max(480, Math.min(1280, values.length * 8))
   const chartH = showActivity && activity.length ? HEIGHT - ACTIVITY_HEIGHT : HEIGHT
@@ -105,14 +119,41 @@ export function CurveCanvas({
     })
   }, [activity])
 
-  function indexAt(clientX: number) {
+  function posAt(clientX: number, clientY?: number) {
     const svg = svgRef.current
-    if (!svg) return 0
-    const box = svg.getBoundingClientRect()
-    const ratio = (clientX - box.left) / box.width
-    const raw = Math.round(((ratio * width - PAD) / (width - PAD * 2)) * (values.length - 1))
-    return Math.max(0, Math.min(values.length - 1, raw))
+    const box = svg?.getBoundingClientRect()
+    const ratioX = box ? (clientX - box.left) / box.width : 0
+    const ratioY = box && clientY != null ? (clientY - box.top) / box.height : 0
+    const raw = Math.round(
+      ((ratioX * width - PAD) / (width - PAD * 2)) * (values.length - 1)
+    )
+    return {
+      index: Math.max(0, Math.min(values.length - 1, raw)),
+      y: ratioY * HEIGHT,
+    }
   }
+
+  function indexAt(clientX: number) {
+    return posAt(clientX).index
+  }
+
+  const selectedIndex = hit
+    ? hits.findIndex(
+        (found) =>
+          found.figure === hit.figure &&
+          found.from_index === hit.from_index &&
+          found.to_index === hit.to_index
+      )
+    : -1
+
+  const paintOrder = hits.map((_, index) => index).sort((a, b) => {
+    const aOn = a === selectedIndex || a === hover ? 1 : 0
+    const bOn = b === selectedIndex || b === hover ? 1 : 0
+    if (aOn !== bOn) return aOn - bOn
+    return b - a
+  })
+
+  const hoverFound = hover != null ? (hits[hover] ?? null) : null
 
   const active = drag ?? selection
 
@@ -127,16 +168,46 @@ export function CurveCanvas({
         width={width}
         height={HEIGHT}
         role="img"
-        aria-label={label ? `Courbe ${label}` : "Courbe annotée"}
-        className={cn("max-w-none touch-none", onSelect && "cursor-crosshair")}
+        aria-label={
+          label
+            ? `Courbe ${label}${
+                onHitSelect
+                  ? " — clic sur le bandeau au-dessus du tracé pour choisir une lecture"
+                  : ""
+              }`
+            : "Courbe annotée"
+        }
+        className={cn(
+          "max-w-none touch-none",
+          hover != null ? "cursor-pointer" : onSelect && "cursor-crosshair"
+        )}
         onPointerDown={(event) => {
+          if (onHitSelect && hits.length && posAt(event.clientX, event.clientY).y <= BANNER_HIT) {
+            const next = cycleHitIndex(
+              coveringHitIndices(hits, indexAt(event.clientX)),
+              selectedIndex
+            )
+            if (next != null) {
+              onHitSelect(next)
+              return
+            }
+          }
           if (!onSelect) return
           const index = indexAt(event.clientX)
           setDrag({ fromIndex: index, toIndex: index })
         }}
         onPointerMove={(event) => {
-          if (!drag || !onSelect) return
-          setDrag({ ...drag, toIndex: indexAt(event.clientX) })
+          if (drag && onSelect) {
+            setDrag({ ...drag, toIndex: indexAt(event.clientX) })
+            return
+          }
+          if (!hits.length) return
+          const { index, y } = posAt(event.clientX, event.clientY)
+          if (y > BANNER_HIT) {
+            setHover(null)
+            return
+          }
+          setHover(hoverHitIndex(coveringHitIndices(hits, index), selectedIndex))
         }}
         onPointerUp={() => {
           if (!drag || !onSelect) return
@@ -145,7 +216,10 @@ export function CurveCanvas({
           setDrag(null)
           if (to - from >= 7) onSelect({ fromIndex: from, toIndex: to })
         }}
-        onPointerLeave={() => setDrag(null)}
+        onPointerLeave={() => {
+          setDrag(null)
+          setHover(null)
+        }}
       >
         {contextCount > 0 && contextCount < values.length ? (
           <g>
@@ -177,25 +251,72 @@ export function CurveCanvas({
           </g>
         ) : null}
 
-        {hits.map((found, index) => {
-          const selected =
-            hit != null &&
-            found.figure === hit.figure &&
-            found.from_index === hit.from_index &&
-            found.to_index === hit.to_index
+        {paintOrder.map((index) => {
+          const found = hits[index]
+          if (!found) return null
+          const selected = index === selectedIndex
+          const hovered = index === hover
           const widthPx = Math.max(2, x(found.to_index) - x(found.from_index))
+          const hitWidth = Math.max(12, widthPx)
+          const hitX = x(found.from_index) - (hitWidth - widthPx) / 2
           return (
-            <rect
+            <g
               key={`span-${found.figure}-${found.from_index}-${index}`}
-              x={x(found.from_index)}
-              y={4}
-              width={widthPx}
-              height={selected ? 8 : 5}
-              fill={found.rare === false ? "var(--muted-foreground)" : "var(--chart-4)"}
-              opacity={selected ? 0.9 : 0.35}
-            />
+              data-banner-hit={index}
+              className={onHitSelect ? "cursor-pointer" : undefined}
+              onPointerDown={(event) => {
+                if (!onHitSelect) return
+                event.stopPropagation()
+                const next = cycleHitIndex(
+                  coveringHitIndices(hits, indexAt(event.clientX)),
+                  selectedIndex
+                )
+                onHitSelect(next ?? index)
+              }}
+              onPointerEnter={() => setHover(index)}
+              onPointerLeave={() =>
+                setHover((current) => (current === index ? null : current))
+              }
+            >
+              <title>
+                {found.label} · {found.confidence.toFixed(2)}
+                {found.rare === false ? " · bruit" : ""}
+                {onHitSelect ? " — clic pour sélectionner" : ""}
+              </title>
+              <rect
+                x={hitX}
+                y={0}
+                width={hitWidth}
+                height={BANNER_HIT}
+                fill="transparent"
+              />
+              <rect
+                x={x(found.from_index)}
+                y={BANNER_Y}
+                width={widthPx}
+                height={selected || hovered ? BANNER_H_ACTIVE : BANNER_H}
+                fill={found.rare === false ? "var(--muted-foreground)" : "var(--chart-4)"}
+                opacity={selected ? 0.95 : hovered ? 0.75 : 0.4}
+              />
+            </g>
           )
         })}
+
+        {hoverFound ? (
+          <text
+            x={Math.min(
+              width - PAD,
+              Math.max(PAD, (x(hoverFound.from_index) + x(hoverFound.to_index)) / 2)
+            )}
+            y={BANNER_HIT + 1}
+            textAnchor="middle"
+            className="fill-foreground text-[9px]"
+            style={{ pointerEvents: "none" }}
+          >
+            {hoverFound.label}
+            {hoverFound.rare === false ? " · bruit" : ""}
+          </text>
+        ) : null}
 
         {active && active.toIndex !== active.fromIndex ? (
           <rect

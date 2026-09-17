@@ -40,15 +40,16 @@ import {
   scanCurve,
   type ScanHit,
 } from "@/lib/chartisme/scan"
+import { cycleHitIndex, hitIndicesForLabel } from "@/lib/chartisme/banner"
 import {
   alongsideIndex,
+  evaluateRules,
   stateFromHit,
   type AlongsideFigure,
   type ChartismeRule,
 } from "@/lib/chartisme/rules"
 import { loadRules, recordFirings } from "@/lib/chartisme/store"
 import { packChartisme } from "@/lib/capture/pack"
-import { evaluateRules } from "@/lib/chartisme/rules"
 import {
   DEFAULT_STUDY_PRESET,
   MAX_CYCLE,
@@ -507,7 +508,7 @@ export function ChartismeLab() {
             <TitleHelp
               help={{
                 title: "Figures sur une courbe",
-                body: "Le balayage déplace une fenêtre sur la zone étudiée, aux échelles qui y tiennent. Chaque figure repérée est dessinée avec ses pivots nommés, sa ligne de cou ou ses bornes, sa cassure et son objectif projeté selon la table de référence. Une figure entièrement contenue dans le contexte grisé n'est pas listée : elle appartient au passé calculé pour alimenter les indicateurs, pas à la fenêtre.",
+                body: "Le balayage déplace une fenêtre sur la zone étudiée, aux échelles qui y tiennent. Chaque figure repérée est dessinée avec ses pivots nommés, sa ligne de cou ou ses bornes, sa cassure et son objectif projeté selon la table de référence. Une figure entièrement contenue dans le contexte grisé n'est pas listée : elle appartient au passé calculé pour alimenter les indicateurs, pas à la fenêtre. Le bandeau de marques au-dessus du tracé reprend chaque lecture : un clic la sélectionne — et un second clic au même endroit passe à la lecture qui se superpose. Les pastilles de figures au-dessus du graphe font de même, figure par figure.",
               }}
             >
               Courbe et figures
@@ -771,11 +772,36 @@ export function ChartismeLab() {
                     {annotatedHits.length} forme{annotatedHits.length > 1 ? "s" : ""}
                   </span>
                 ) : null}
-                {byFigure.slice(0, 6).map(([label, count]) => (
-                  <Badge key={label} variant="outline">
-                    {label} × {count}
-                  </Badge>
-                ))}
+                {byFigure.slice(0, 6).map(([label, count]) => {
+                  const on = hit?.label === label
+                  return (
+                    <Badge
+                      key={label}
+                      variant={on ? "default" : "outline"}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={on}
+                      className="cursor-pointer hover:bg-muted"
+                      title={
+                        count > 1
+                          ? `${count} lectures ${label} — clic pour parcourir`
+                          : `Sélectionner ${label}`
+                      }
+                      onClick={() => {
+                        const next = cycleHitIndex(hitIndicesForLabel(hits, label), selected)
+                        if (next != null) setSelected(next)
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return
+                        event.preventDefault()
+                        const next = cycleHitIndex(hitIndicesForLabel(hits, label), selected)
+                        if (next != null) setSelected(next)
+                      }}
+                    >
+                      {label} × {count}
+                    </Badge>
+                  )
+                })}
               </div>
 
               <CurveCanvas
@@ -786,6 +812,7 @@ export function ChartismeLab() {
                 hits={hits}
                 selection={selection}
                 onSelect={setSelection}
+                onHitSelect={setSelected}
                 contextCount={study.contextCount}
                 label={curve.label}
               />
