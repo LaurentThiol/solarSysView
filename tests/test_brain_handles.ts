@@ -128,12 +128,12 @@ test("Brain and IA prompts allow a forecast as an hypothesis, they do not refuse
   assert.doesNotMatch(INDEPENDENCE_DISCLAIMER, /Ils ne prédisent pas/)
 })
 
-test("@specialist.pere-impair resolves after the specialist index is loaded", () => {
+test("@specialist.paire-impair resolves after the specialist index is loaded", () => {
   setSpecialistIndex([
     {
-      slug: "pere-impair",
-      name: "Père impair",
-      handle: "specialist.pere-impair",
+      slug: "paire-impair",
+      name: "Paire impair",
+      handle: "specialist.paire-impair",
       target: "parity",
       task: "classes",
       horizon: "value",
@@ -143,11 +143,13 @@ test("@specialist.pere-impair resolves after the specialist index is loaded", ()
       skill_50: 0.02,
     },
   ])
-  const parsed = parseHandle("@specialist.pere-impair")
+  const parsed = parseHandle("@specialist.paire-impair")
   assert.equal(parsed.error, null)
-  assert.equal(parsed.entry?.id, "specialist/pere-impair")
+  assert.equal(parsed.entry?.id, "specialist/paire-impair")
   assert.equal(parsed.entry?.lab, "specialist")
-  assert.equal(formatHandle(parsed.entry!), "@specialist.pere-impair")
+  assert.equal(formatHandle(parsed.entry!), "@specialist.paire-impair")
+  const legacy = parseHandle("@specialist.pere-impair")
+  assert.equal(legacy.entry?.id, "specialist/paire-impair")
   setSpecialistIndex([])
 })
 
@@ -155,16 +157,16 @@ test("working set pack includes specialist instructions and skill", () => {
   const objects: WorkingObject[] = [
     {
       kind: "pin",
-      id: "specialist/pere-impair",
-      handle: "@specialist.pere-impair",
-      label: "Père impair",
+      id: "specialist/paire-impair",
+      handle: "@specialist.paire-impair",
+      label: "Paire impair",
       inPrompt: true,
       summary: "forecast 3 · skill 0.02",
       fiche: {
-        id: "specialist/pere-impair",
-        handle: "pere-impair",
+        id: "specialist/paire-impair",
+        handle: "paire-impair",
         lab: "specialist",
-        label: "Père impair",
+        label: "Paire impair",
         units: "forecast t+1",
         reading: "Forecast du nombre de pairs. Pas une grille.",
         params: { variable: "parity", n: null, periodX: 14, curveId: null },
@@ -231,13 +233,13 @@ test("demo tour pins one handle per lab and honors ?demo=1", () => {
   assert.equal(demoJobs(entries).length, entries.length)
   const withSpecialist = demoEntries([
     {
-      id: "specialist/pere-impair",
-      handle: "pere-impair",
-      aliases: ["specialist.pere-impair"],
+      id: "specialist/paire-impair",
+      handle: "paire-impair",
+      aliases: ["specialist.paire-impair"],
       lab: "specialist",
       family: "specialiste",
       kind: "specialist",
-      label: "Père impair",
+      label: "Paire impair",
       units: "",
       reading: "Forecast",
       defaults: {},
@@ -266,13 +268,13 @@ test("specialist demo is a separate tour with pop-ups and does not start the Bra
   assert.ok(DEMO_SPECIALIST.indicators.includes("rsi"))
   const link = deepLinkFor({
     entry: {
-      id: "specialist/pere-impair",
-      handle: "pere-impair",
-      aliases: ["specialist.pere-impair"],
+      id: "specialist/paire-impair",
+      handle: "paire-impair",
+      aliases: ["specialist.paire-impair"],
       lab: "specialist",
       family: "specialiste",
       kind: "specialist",
-      label: "Père impair",
+      label: "Paire impair",
       units: "",
       reading: "Forecast",
       defaults: {},

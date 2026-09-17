@@ -20,8 +20,32 @@ from synchro.brain_specialists.train import build_dataset, make_uniform_draws
 
 
 def test_slugify_strips_accents() -> None:
-    assert slugify("Père impair") == "pere-impair"
+    assert slugify("Paire impair") == "paire-impair"
+    assert slugify("Père impair") == "paire-impair"
+    assert slugify("Été chaud") == "ete-chaud"
     assert slugify("Somme totale") == "somme-totale"
+
+
+def test_legacy_pere_impair_folder_is_renamed(tmp_path: Path) -> None:
+    from synchro.brain_specialists.store import list_slugs, read_json, write_json
+
+    old = tmp_path / "pere-impair"
+    old.mkdir()
+    write_json(
+        old / "config.json",
+        {
+            "slug": "pere-impair",
+            "name": "Père impair",
+            "handle": "specialist.pere-impair",
+            "target": "parity",
+        },
+    )
+    assert list_slugs(tmp_path) == ["paire-impair"]
+    assert not (tmp_path / "pere-impair").exists()
+    config = read_json(tmp_path / "paire-impair" / "config.json")
+    assert config["slug"] == "paire-impair"
+    assert config["name"] == "Paire impair"
+    assert config["handle"] == "specialist.paire-impair"
 
 
 def test_unknown_indicator_is_rejected() -> None:
@@ -85,7 +109,7 @@ def test_save_load_infer_roundtrip(tmp_path: Path) -> None:
     draws = make_uniform_draws(120, seed=5)
     record = train_specialist(
         draws,
-        name="Père impair",
+        name="Paire impair",
         target="parity",
         indicators=["lag1", "lag2", "rsi"],
         instructions="Forecast du nombre de pairs. Pas une grille.",
@@ -97,10 +121,10 @@ def test_save_load_infer_roundtrip(tmp_path: Path) -> None:
         root=tmp_path,
     )
     assert record["saved"] is True
-    packed = load_specialist("pere-impair", root=tmp_path)
+    packed = load_specialist("paire-impair", root=tmp_path)
     assert packed["config"]["target"] == "parity"
-    assert (tmp_path / "pere-impair" / "weights.npz").exists()
-    inferred = infer_specialist(draws, "pere-impair", root=tmp_path)
+    assert (tmp_path / "paire-impair" / "weights.npz").exists()
+    inferred = infer_specialist(draws, "paire-impair", root=tmp_path)
     assert inferred["forecast"]["ok"] is True
     assert inferred["forecast"]["value"] is not None
     assert "pas d’une grille" in (inferred["disclaimer"] or "")
@@ -180,7 +204,7 @@ def test_specialist_api_train_list_infer_delete(tmp_path: Path, monkeypatch) -> 
         created = client.post(
             "/api/brain/specialists",
             json={
-                "name": "Père impair",
+                "name": "Paire impair",
                 "target": "parity",
                 "indicators": ["lag1", "lag2", "rsi"],
                 "instructions": "Forecast pair/impair. Pas une grille.",
@@ -193,14 +217,14 @@ def test_specialist_api_train_list_infer_delete(tmp_path: Path, monkeypatch) -> 
         assert created.status_code == 200, created.text
         body = created.json()
         assert body["saved"] is True
-        assert body["handle"] == "specialist.pere-impair"
+        assert body["handle"] == "specialist.paire-impair"
 
         listed = client.get("/api/brain/specialists")
         assert listed.status_code == 200
         slugs = [item["slug"] for item in listed.json()["items"]]
-        assert "pere-impair" in slugs
+        assert "paire-impair" in slugs
 
-        inferred = client.post("/api/brain/specialists/pere-impair/infer")
+        inferred = client.post("/api/brain/specialists/paire-impair/infer")
         assert inferred.status_code == 200, inferred.text
         assert inferred.json()["forecast"]["ok"] is True
 
@@ -209,7 +233,7 @@ def test_specialist_api_train_list_infer_delete(tmp_path: Path, monkeypatch) -> 
         ids = [item["id"] for item in features.json()["items"]]
         assert "rsi" in ids and "lag1" in ids
 
-        deleted = client.delete("/api/brain/specialists/pere-impair")
+        deleted = client.delete("/api/brain/specialists/paire-impair")
         assert deleted.status_code == 200
         assert client.get("/api/brain/specialists").json()["items"] == []
 

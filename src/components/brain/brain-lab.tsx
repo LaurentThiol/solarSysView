@@ -915,7 +915,7 @@ export function BrainLab() {
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
               Épingle un nom — <span className="text-foreground">@rsi</span>,{" "}
               <span className="text-foreground">@ete</span>,{" "}
-              <span className="text-foreground">@specialist.pere-impair</span>{" "}
+              <span className="text-foreground">@specialist.paire-impair</span>{" "}
               — puis pose une question. Les spécialistes forecast une série
               nommée. Brain décrit la fenêtre, puis peut pronostiquer
               (hypothèse, pas une certitude).

@@ -16,16 +16,50 @@ BRAIN_DIR = ROOT / ".brain"
 SPECIALISTS_DIR = BRAIN_DIR / "specialists"
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
+# « Père impair » était une coquille de « Paire impair ».
+_SLUG_ALIASES = {"pere-impair": "paire-impair"}
+_NAME_ALIASES = {"père impair": "Paire impair", "pere impair": "Paire impair"}
 
 
 def slugify(name: str) -> str:
     text = unicodedata.normalize("NFKD", name or "")
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     text = _SLUG_RE.sub("-", text.lower()).strip("-")
-    return text[:80] or "specialiste"
+    slug = text[:80] or "specialiste"
+    return _SLUG_ALIASES.get(slug, slug)
+
+
+def canonicalize_config(config: dict[str, Any]) -> dict[str, Any]:
+    slug = slugify(str(config.get("slug") or config.get("name") or ""))
+    config["slug"] = slug
+    config["handle"] = f"specialist.{slug}"
+    name = (config.get("name") or "").strip()
+    if name.lower() in _NAME_ALIASES:
+        config["name"] = _NAME_ALIASES[name.lower()]
+    return config
+
+
+def migrate_legacy_slugs(root: Path | None = None) -> None:
+    base = (root or SPECIALISTS_DIR).resolve()
+    if not base.exists():
+        return
+    for old, new in _SLUG_ALIASES.items():
+        src, dst = base / old, base / new
+        if src.is_dir() and src.resolve() != dst.resolve() and not dst.exists():
+            src.rename(dst)
+        config_path = dst / "config.json"
+        if not config_path.exists():
+            continue
+        config = read_json(config_path)
+        before = (config.get("slug"), config.get("name"), config.get("handle"))
+        canonicalize_config(config)
+        after = (config.get("slug"), config.get("name"), config.get("handle"))
+        if before != after:
+            write_json(config_path, config)
 
 
 def specialist_dir(slug: str, *, root: Path | None = None) -> Path:
+    migrate_legacy_slugs(root)
     base = (root or SPECIALISTS_DIR).resolve()
     return base / slugify(slug)
 
@@ -54,6 +88,7 @@ def load_weights(path: Path) -> dict[str, np.ndarray]:
 
 
 def list_slugs(root: Path | None = None) -> list[str]:
+    migrate_legacy_slugs(root)
     base = root or SPECIALISTS_DIR
     if not base.exists():
         return []

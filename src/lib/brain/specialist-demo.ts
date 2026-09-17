@@ -3,7 +3,7 @@ import type { SpecialistHorizon, SpecialistTask } from "@/lib/brain/specialists"
 import type { VariableName } from "@/lib/analysis"
 
 export const DEMO_SPECIALIST = {
-  name: "Père impair",
+  name: "Paire impair",
   target: "parity" as VariableName,
   task: "auto" as SpecialistTask | "auto",
   horizon: "value" as SpecialistHorizon,
@@ -13,7 +13,7 @@ export const DEMO_SPECIALIST = {
 }
 
 export const DEMO_SPECIALIST_NOTE =
-  "Démo Spécialistes : formulaire Père impair, skill vs hasard, épinglage s’il existe. Pas d’entraînement lancé tout seul."
+  "Démo Spécialistes : formulaire Paire impair, skill vs hasard, épinglage s’il existe. Pas d’entraînement lancé tout seul."
 
 const PENDING_PINS_KEY = "synchro.brain.pending-pins"
 
@@ -29,10 +29,10 @@ export const DEMO_SPECIALIST_STEPS = [
   {
     id: "name",
     label: "Nom",
-    hint: "Devient @specialist.pere-impair",
+    hint: "Devient @specialist.paire-impair",
     target: "spec-name",
     title: "Nom",
-    body: "Le libellé devient le handle. « Père impair » → @specialist.pere-impair, sauvé dans .brain/specialists/ pour réemploi.",
+    body: "Le libellé devient le handle. « Paire impair » → @specialist.paire-impair, sauvé dans .brain/specialists/ pour réemploi.",
   },
   {
     id: "target",

@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Spécialistes Brain : entraîner / lister / inférer un réseau par série",
     )
     specialist.add_argument("action", choices=("train", "list", "infer", "delete"))
-    specialist.add_argument("--name", default="Père impair")
+    specialist.add_argument("--name", default="Paire impair")
     specialist.add_argument("--target", default="parity")
     specialist.add_argument("--indicators", default="lag1,lag2,rsi,macd,bollinger")
     specialist.add_argument(

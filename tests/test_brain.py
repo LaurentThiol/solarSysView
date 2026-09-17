@@ -295,7 +295,7 @@ def test_brain_specialist_demo_is_wired() -> None:
     nav = (root / "src/components/startup-status.tsx").read_text(encoding="utf-8")
     readme = (root / "README.md").read_text(encoding="utf-8")
     assert "DEMO_SPECIALIST_STEPS" in demo
-    assert "Père impair" in demo
+    assert "Paire impair" in demo
     assert "specialistDemoWantsStart" in demo
     assert "DemoCoach" in panel
     assert "Lancer la démo" in panel

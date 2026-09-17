@@ -49,7 +49,7 @@ const HELP = {
   },
   name: {
     title: "Nom",
-    body: "Libellé humain. Il devient le handle @specialist.pere-impair, sauvé dans .brain/specialists/.",
+    body: "Libellé humain. Il devient le handle @specialist.paire-impair, sauvé dans .brain/specialists/.",
   },
   target: {
     title: "Cible",
@@ -302,7 +302,7 @@ export function BrainSpecialists({
           step={demoStep}
           running={demoRunning}
           done={demoDone}
-          idleHint="Formulaire Père impair, pop-ups, épinglage s’il existe. Sans entraîner."
+          idleHint="Formulaire Paire impair, pop-ups, épinglage s’il existe. Sans entraîner."
           doneHint="Terminée : le formulaire, les sauvés et l’épingle restent sous tes yeux."
           onStart={() => void runDemo()}
           onStop={stopDemo}
@@ -316,7 +316,7 @@ export function BrainSpecialists({
             className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["name"]))}
           >
             <LabelHelp label="Nom" help={HELP.name}>
-              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Père impair" />
+              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Paire impair" />
             </LabelHelp>
           </div>
           <div
@@ -476,7 +476,7 @@ export function BrainSpecialists({
           </p>
           {items.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
-              Aucun spécialiste. Crée « Père impair » ou « Somme totale » ci-dessus.
+              Aucun spécialiste. Crée « Paire impair » ou « Somme totale » ci-dessus.
             </p>
           ) : (
             <div className="flex flex-col gap-2">

@@ -108,10 +108,14 @@ export function specialistFeatures() {
 
 export function specialistToEntry(item: SpecialistRecord): CatalogEntry {
   const handle = item.slug || item.handle.replace(/^specialist\./, "")
+  const aliases = [item.handle.replace(/^@/, ""), `specialist.${handle}`]
+  if (handle === "paire-impair") {
+    aliases.push("specialist.pere-impair", "pere-impair")
+  }
   return {
     id: `specialist/${handle}`,
     handle,
-    aliases: [item.handle.replace(/^@/, ""), `specialist.${handle}`],
+    aliases,
     lab: "specialist",
     family: "specialiste",
     kind: "specialist",

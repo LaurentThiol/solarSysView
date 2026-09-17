@@ -29,6 +29,7 @@ from synchro.brain_specialists.model import (
 )
 from synchro.brain_specialists.store import (
     SPECIALISTS_DIR,
+    canonicalize_config,
     ensure_dir,
     list_slugs,
     load_weights,
@@ -551,7 +552,7 @@ def load_specialist(slug: str, *, root: Path | None = None) -> dict[str, Any]:
     config_path = directory / "config.json"
     if not config_path.exists():
         raise FileNotFoundError(slug)
-    config = read_json(config_path)
+    config = canonicalize_config(read_json(config_path))
     report = read_json(directory / "report.json") if (directory / "report.json").exists() else {}
     weights = load_weights(directory / "weights.npz")
     net = TinyMLP.load(
