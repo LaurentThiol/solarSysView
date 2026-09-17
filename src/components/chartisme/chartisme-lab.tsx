@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { BacktestPanel } from "@/components/chartisme/backtest-panel"
 import { CurveCanvas, type CurveSelection } from "@/components/chartisme/curve-canvas"
 import { CurveMap } from "@/components/chartisme/curve-map"
+import { FigureName, FigureThumb } from "@/components/chartisme/figure-thumb"
 import { LabelAtelier } from "@/components/chartisme/label-atelier"
 import { useRegisterCapture } from "@/components/capture"
 import { RulesPanel } from "@/components/chartisme/rules-panel"
@@ -33,6 +34,7 @@ import {
   type BaseRateThreshold,
 } from "@/lib/chartisme/base-rate"
 import { buildCurve, curveLabel, curveSpecs, type Curve } from "@/lib/chartisme/curves"
+import { catalog, labelOf } from "@/lib/chartisme/catalog"
 import { rankKey } from "@/lib/chartisme/figures"
 import {
   GEOMETRIC_FLOOR,
@@ -392,7 +394,7 @@ export function ChartismeLab() {
 
   const byFigure = useMemo(() => {
     const counts: Record<string, number> = {}
-    for (const found of hits) counts[found.label] = (counts[found.label] ?? 0) + 1
+    for (const found of hits) counts[found.figure] = (counts[found.figure] ?? 0) + 1
     return Object.entries(counts).sort((a, b) => b[1] - a[1])
   }, [hits])
 
@@ -496,7 +498,7 @@ export function ChartismeLab() {
               <code className="rounded bg-muted px-1 py-0.5">
                 {status.models.install_cmd}
               </code>
-              . Les 17 détecteurs géométriques fonctionnent sans eux.
+              . Les 18 détecteurs géométriques fonctionnent sans eux.
             </p>
           ) : null}
           {status?.error ? <p className="text-destructive">{status.error}</p> : null}
@@ -517,6 +519,18 @@ export function ChartismeLab() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-1">
+            {catalog().map((item) => (
+              <span
+                key={item.figure}
+                className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                title={`${item.label} · ${item.signal}`}
+              >
+                <FigureThumb figure={item.figure} />
+                {item.label}
+              </span>
+            ))}
+          </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <LabelHelp
               label="Courbe"
@@ -773,16 +787,17 @@ export function ChartismeLab() {
                     {annotatedHits.length} forme{annotatedHits.length > 1 ? "s" : ""}
                   </span>
                 ) : null}
-                {byFigure.slice(0, 6).map(([label, count]) => {
-                  const on = hit?.label === label
+                {byFigure.slice(0, 6).map(([figure, count]) => {
+                  const label = labelOf(figure)
+                  const on = hit?.figure === figure
                   return (
                     <Badge
-                      key={label}
+                      key={figure}
                       variant={on ? "default" : "outline"}
                       role="button"
                       tabIndex={0}
                       aria-pressed={on}
-                      className="cursor-pointer hover:bg-muted"
+                      className="cursor-pointer gap-1 hover:bg-muted"
                       title={
                         count > 1
                           ? `${count} lectures ${label} — clic pour parcourir`
@@ -799,6 +814,7 @@ export function ChartismeLab() {
                         if (next != null) setSelected(next)
                       }}
                     >
+                      <FigureThumb figure={figure} className={on ? "text-primary-foreground" : undefined} />
                       {label} × {count}
                     </Badge>
                   )
@@ -835,7 +851,12 @@ export function ChartismeLab() {
                         size="xs"
                         variant={index === selected ? "default" : "outline"}
                         onClick={() => setSelected(index)}
+                        className="gap-1"
                       >
+                        <FigureThumb
+                          figure={found.figure}
+                          className={index === selected ? "text-primary-foreground" : undefined}
+                        />
                         {found.label} · {found.confidence.toFixed(2)}
                         {found.rare ? "" : " · bruit"}
                         {startsInContext(found, study.contextCount)
@@ -847,7 +868,9 @@ export function ChartismeLab() {
                   {hit ? (
                     <div className="rounded-lg border border-border p-3 text-xs">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-medium">{hit.label}</span>
+                        <span className="text-sm font-medium">
+                          <FigureName figure={hit.figure} label={hit.label} />
+                        </span>
                         <Badge variant="secondary">{hit.kind}</Badge>
                         <Badge variant={hit.rare ? "default" : "outline"}>
                           {hit.rare ? "rare à ce taux" : "commune au bruit"}

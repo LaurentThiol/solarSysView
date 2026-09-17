@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react"
 
+import { FigureName } from "@/components/chartisme/figure-thumb"
 import { LabelHelp, TitleHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -180,7 +181,7 @@ export function Sketchpad({
             label="Charger une figure de la table"
             help={{
               title: "Gabarit",
-              body: "Plutôt que de dessiner, pose le gabarit théorique d'une des 17 figures puis lance la recherche : tu vois immédiatement à quoi la forme ressemble dans l'archive réelle.",
+                body: "Plutôt que de dessiner, pose le gabarit théorique d'une des 18 figures puis lance la recherche : tu vois immédiatement à quoi la forme ressemble dans l'archive réelle.",
             }}
           >
             <Select value="" onValueChange={(v) => v && loadShape(v)}>
@@ -189,10 +190,10 @@ export function Sketchpad({
                   choisir une figure…
                 </span>
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="min-w-56">
                 {FIGURE_IDS.filter((id) => id !== "none").map((id) => (
                   <SelectItem key={id} value={id}>
-                    {labelOf(id)}
+                    <FigureName figure={id} label={labelOf(id)} />
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -2,6 +2,7 @@
 
 import { Pencil, Trash2, Undo2, X } from "lucide-react"
 
+import { FigureName, FigureThumb } from "@/components/chartisme/figure-thumb"
 import { HelpTip, LabelHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,7 +24,7 @@ const DRAW_HELP = {
 1. Choisis la figure et la série visée.
 2. Clique un départ : près de la courbe, l’aimant accroche le tirage le plus proche, et un pivot de swing s’il est tout près.
 3. Clique l’arrivée, même règle.
-4. Le gabarit est étiré sur cette fenêtre. Les coordonnées vivent dans l’espace des données : un changement de période les recale par date.
+4. Le gabarit est étiré sur cette fenêtre (le segment libre est une droite). Les coordonnées vivent dans l’espace des données : un changement de période les recale par date.
 
 La fenêtre flottante affiche date, indice, valeur et aimant. Capture : le tracé est dans le visuel, les ancres partent dans le JSON pour l’IA. Ce n’est pas un signal de jeu.`,
 }
@@ -87,18 +88,22 @@ export function SketchToolbar({
               label="Figure"
               help={{
                 title: "Figure chartiste",
-                body: "Les 17 formes de la table, ou un segment libre qui souligne simplement la courbe entre les deux ancres.",
+                body: "Les 18 formes de la table, ou un segment libre : une droite entre les deux ancres aimantées.",
               }}
             >
               <Select value={figure} onValueChange={(value) => value && onFigure(value)}>
-                <SelectTrigger className="h-7 w-44 px-2 text-xs" aria-label="Figure chartiste">
-                  <span className="flex flex-1 text-left">{figureLabel}</span>
+                <SelectTrigger className="h-7 w-56 px-2 text-xs" aria-label="Figure chartiste">
+                  <span className="flex flex-1 text-left">
+                    <FigureName figure={figure} label={figureLabel} />
+                  </span>
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={FREE_FIGURE}>Segment libre</SelectItem>
+                <SelectContent className="min-w-56">
+                  <SelectItem value={FREE_FIGURE}>
+                    <FigureName figure={FREE_FIGURE} label="Segment libre" />
+                  </SelectItem>
                   {catalog().map((item) => (
                     <SelectItem key={item.figure} value={item.figure}>
-                      {item.label}
+                      <FigureName figure={item.figure} label={item.label} />
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -146,6 +151,7 @@ export function SketchToolbar({
           {visible.map((sketch) => (
             <li key={sketch.id}>
               <Badge variant="outline" className="gap-1 pr-1">
+                <FigureThumb figure={sketch.figure} />
                 {sketch.figure === FREE_FIGURE
                   ? "Libre"
                   : FIGURE_LABELS[sketch.figure as FigureId] ?? sketch.figure}

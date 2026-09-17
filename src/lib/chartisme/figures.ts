@@ -1,4 +1,4 @@
-// Les 17 détecteurs chartistes, avec la géométrie nécessaire au dessin.
+// Les 18 détecteurs chartistes, avec la géométrie nécessaire au dessin.
 //
 // Chaque détection renvoie les pivots nommés (épaule gauche, tête, cou…), les
 // lignes à tracer, la cassure avec sa validation par l'activité — la règle d'or :
@@ -614,6 +614,10 @@ function classifyBounds(
     return null
   }
   if (upFlat && lowFlat) return ["rectangle", "any"]
+  // Bornes parallèles et inclinées : tunnel droit (canal à largeur constante).
+  const parallel =
+    Math.abs(up - low) <= Math.max(2 * flat, 0.3 * (Math.abs(up) + Math.abs(low)) / 2)
+  if (parallel) return ["tunnel_droit", "any"]
   return null
 }
 
@@ -630,7 +634,7 @@ function* pivotGroups(pivots: SwingPivot[], sizes: number[] = [6, 5, 4]) {
 }
 
 /**
- * Figures à deux bornes : biseaux, triangles, rectangle, broadening top.
+ * Figures à deux bornes : biseaux, triangles, rectangle, tunnel droit, broadening top.
  *
  * Les bornes sont ajustées sur un groupe de pivots *clos*, et la cassure est
  * cherchée après son dernier pivot : la jambe de sortie ne contamine donc pas
@@ -1100,6 +1104,7 @@ export const SPECIFICITY: Record<FigureId, number> = {
   broadening_top: 3,
   double_top: 2,
   double_bottom: 2,
+  tunnel_droit: 2,
   rectangle: 1,
   none: 0,
 }

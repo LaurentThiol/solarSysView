@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 
 import { CurveCanvas, type CurveSelection } from "@/components/chartisme/curve-canvas"
+import { FigureName } from "@/components/chartisme/figure-thumb"
 import { LabelHelp, TitleHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -287,25 +288,29 @@ export function LabelAtelier({
                 label="Classe"
                 help={{
                   title: "Classe",
-                  body: "Les 17 figures de la table, plus tes propres classes. Une classe libre est stockée à part : elle sert la recherche par ressemblance et le regroupement, sans polluer les détecteurs géométriques.",
+                  body: "Les 18 figures de la table, plus tes propres classes. Une classe libre est stockée à part : elle sert la recherche par ressemblance et le regroupement, sans polluer les détecteurs géométriques.",
                 }}
               >
                 <Select value={figure} onValueChange={(v) => setFigure(v ?? figure)}>
                   <SelectTrigger className="w-full" aria-label="Classe">
                     <span className="flex flex-1 text-left">
-                      {figure === FREE_CLASS
-                        ? "+ nouvelle classe libre…"
-                        : FIGURE_IDS.includes(figure as (typeof FIGURE_IDS)[number])
-                          ? labelOf(figure)
-                          : `${figure} (classe libre)`}
+                      {figure === FREE_CLASS ? (
+                        "+ nouvelle classe libre…"
+                      ) : FIGURE_IDS.includes(figure as (typeof FIGURE_IDS)[number]) ? (
+                        <FigureName figure={figure} label={labelOf(figure)} />
+                      ) : (
+                        `${figure} (classe libre)`
+                      )}
                     </span>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="min-w-56">
                     {allClasses.map((id) => (
                       <SelectItem key={id} value={id}>
-                        {FIGURE_IDS.includes(id as (typeof FIGURE_IDS)[number])
-                          ? labelOf(id)
-                          : `${id} (classe libre)`}
+                        {FIGURE_IDS.includes(id as (typeof FIGURE_IDS)[number]) ? (
+                          <FigureName figure={id} label={labelOf(id)} />
+                        ) : (
+                          `${id} (classe libre)`
+                        )}
                       </SelectItem>
                     ))}
                     <SelectItem value={FREE_CLASS}>+ nouvelle classe libre…</SelectItem>

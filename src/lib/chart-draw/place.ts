@@ -73,7 +73,8 @@ export function fitTemplateToWindow(
   return points
 }
 
-export function segmentFromSeries(
+/** Droite entre les deux ancres : le temps vient des tirages, Y interpolé. */
+export function straightSegment(
   values: number[],
   dates: string[],
   from: number,
@@ -81,10 +82,19 @@ export function segmentFromSeries(
 ): SketchPoint[] {
   const i0 = Math.min(from, to)
   const i1 = Math.max(from, to)
+  if (i0 < 0 || i1 >= values.length || i1 < i0) return []
+  // Même droite quel que soit l’ordre des clics : Y gauche → Y droite.
+  const y0 = values[i0]
+  const y1 = values[i1]
+  const span = i1 - i0
   const points: SketchPoint[] = []
   for (let i = i0; i <= i1; i += 1) {
-    if (i < 0 || i >= values.length) continue
-    points.push({ index: i, date: dates[i] ?? "", actual: values[i] })
+    const u = span === 0 ? 0 : (i - i0) / span
+    points.push({
+      index: i,
+      date: dates[i] ?? "",
+      actual: y0 + (y1 - y0) * u,
+    })
   }
   return points
 }
@@ -97,9 +107,9 @@ export function buildSketchPoints(options: {
   to: number
 }): SketchPoint[] {
   const { figure, values, dates, from, to } = options
-  if (figure === FREE_FIGURE) return segmentFromSeries(values, dates, from, to)
+  if (figure === FREE_FIGURE) return straightSegment(values, dates, from, to)
   const template = synthCurve(figure)
-  if (!template.length) return segmentFromSeries(values, dates, from, to)
+  if (!template.length) return straightSegment(values, dates, from, to)
   return fitTemplateToWindow(template, values, dates, from, to)
 }
 

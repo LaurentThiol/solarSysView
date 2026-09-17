@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 
+import { FigureName, FigureThumb } from "@/components/chartisme/figure-thumb"
 import { LabelHelp, TitleHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -301,16 +302,21 @@ export function RulesPanel({
               >
                 <SelectTrigger className="w-full" aria-label="Figure">
                   <span className="flex flex-1 text-left">
-                    {draft.condition.figures[0]
-                      ? labelOf(draft.condition.figures[0])
-                      : "toute figure"}
+                    {draft.condition.figures[0] ? (
+                      <FigureName
+                        figure={draft.condition.figures[0]}
+                        label={labelOf(draft.condition.figures[0])}
+                      />
+                    ) : (
+                      "toute figure"
+                    )}
                   </span>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="min-w-56">
                   <SelectItem value="any">toute figure</SelectItem>
                   {FIGURE_IDS.filter((id) => id !== "none").map((id) => (
                     <SelectItem key={id} value={id}>
-                      {labelOf(id)}
+                      <FigureName figure={id} label={labelOf(id)} />
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -667,7 +673,8 @@ export function RulesPanel({
               {Object.entries(summary.by_figure)
                 .slice(0, 6)
                 .map(([figure, count]) => (
-                  <Badge key={figure} variant="outline">
+                  <Badge key={figure} variant="outline" className="gap-1">
+                    <FigureThumb figure={figure} />
                     {labelOf(figure)} × {count}
                   </Badge>
                 ))}

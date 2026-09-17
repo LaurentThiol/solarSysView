@@ -27,7 +27,8 @@ import {
   sketchDataKey,
   type ChartSketch,
 } from "../src/lib/chart-draw/types"
-import { synthCurve } from "../src/lib/chartisme/sketch-shapes"
+import { catalog } from "../src/lib/chartisme/catalog"
+import { sparklinePoints, sparkValues, synthCurve, templateFigures } from "../src/lib/chartisme/sketch-shapes"
 
 test("magnet snaps to a nearby swing pivot, not the neighbouring sample", () => {
   const values = [1, 2, 10, 2, 1, 2, 9, 2, 1]
@@ -83,14 +84,24 @@ test("a catalog template is sampled then fitted to the series envelope", () => {
   assert.equal(points[2].date, "2026-01-03")
 })
 
-test("libre drawing follows the real series; a figure uses the textbook template", () => {
+test("libre drawing is a straight line between the two anchors", () => {
   const values = [5, 6, 7, 8, 9, 10, 11, 12, 11, 10]
   const dates = values.map((_, i) => `2026-02-${String(i + 1).padStart(2, "0")}`)
   const free = buildSketchPoints({ figure: FREE_FIGURE, values, dates, from: 1, to: 8 })
+  assert.equal(free.length, 8)
+  assert.equal(free[0].actual, 6)
+  assert.equal(free[free.length - 1].actual, 11)
+  for (let i = 0; i < free.length; i += 1) {
+    const expected = 6 + (11 - 6) * (i / 7)
+    assert.ok(Math.abs(free[i].actual - expected) < 1e-9)
+  }
+  const reversed = buildSketchPoints({ figure: FREE_FIGURE, values, dates, from: 8, to: 1 })
   assert.deepEqual(
-    free.map((point) => point.actual),
-    values.slice(1, 9)
+    reversed.map((point) => point.actual),
+    free.map((point) => point.actual)
   )
+  const mids = [free[0].actual, free[3].actual, free[7].actual]
+  assert.ok(mids[0] < mids[1] && mids[1] < mids[2])
   const template = synthCurve("double_top")
   assert.ok(template.length > 8)
   const overlay = buildSketchPoints({
@@ -105,6 +116,26 @@ test("libre drawing follows the real series; a figure uses the textbook template
   const trough = Math.min(...overlay.map((point) => point.actual))
   assert.equal(peak, Math.max(...values))
   assert.equal(trough, Math.min(...values))
+  assert.ok(synthCurve("tunnel_droit").length > 8)
+})
+
+test("the chartist table lists tunnel droit among 18 figures with a template", () => {
+  const rows = catalog()
+  assert.equal(rows.length, 18)
+  assert.ok(rows.some((row) => row.figure === "tunnel_droit" && row.label === "Tunnel droit"))
+  const templates = templateFigures()
+  assert.ok(templates.includes("tunnel_droit"))
+  for (const row of rows) {
+    assert.ok(templates.includes(row.figure), row.figure)
+  }
+  const spark = sparklinePoints(sparkValues("tunnel_droit"), 48, 20)
+  assert.ok(spark.includes(","))
+  const free = sparklinePoints(sparkValues("free"), 48, 20)
+  const [start, end] = free.split(" ")
+  assert.ok(start && end)
+  const [, y0] = start.split(",").map(Number)
+  const [, y1] = end.split(",").map(Number)
+  assert.ok(y0 > y1)
 })
 
 test("a window shorter than 8 bars is rejected", () => {

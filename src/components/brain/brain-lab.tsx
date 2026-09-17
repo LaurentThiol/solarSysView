@@ -30,6 +30,7 @@ import {
 import { BrainDemoBar, BrainDemoPopup } from "@/components/brain/brain-demo"
 import { BrainMascot } from "@/components/brain/brain-mascot"
 import { BrainSpecialists } from "@/components/brain/brain-specialists"
+import { FigureThumb } from "@/components/chartisme/figure-thumb"
 import { useRegisterCapture } from "@/components/capture"
 import { HelpTip } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
@@ -1193,6 +1194,7 @@ export function BrainLab() {
                       }}
                     >
                       <span className="font-mono text-primary">@{entry.handle}</span>
+                      {entry.kind === "figure" ? <FigureThumb figure={entry.handle} /> : null}
                       <span className="truncate text-muted-foreground">{entry.label}</span>
                     </button>
                   ))}
@@ -1381,7 +1383,8 @@ export function BrainLab() {
                               onClick={() => pinEntry(entry)}
                             >
                               <span className="font-mono text-[13px] text-primary">{formatHandle(entry)}</span>
-                              <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">
+                              <span className="mt-0.5 flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
+                                {entry.kind === "figure" ? <FigureThumb figure={entry.handle} /> : null}
                                 {entry.label}
                                 {entry.units ? ` · ${entry.units}` : ""}
                               </span>

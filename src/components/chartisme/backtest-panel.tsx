@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 
+import { FigureName } from "@/components/chartisme/figure-thumb"
 import { HelpTip, LabelHelp, TitleHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -306,7 +307,9 @@ export function BacktestPanel({
               <TableBody>
                 {localRows.map((row) => (
                   <TableRow key={row.figure}>
-                    <TableCell>{labelOf(row.figure)}</TableCell>
+                    <TableCell>
+                      <FigureName figure={row.figure} label={labelOf(row.figure)} />
+                    </TableCell>
                     <TableCell className="text-right">{row.reached}</TableCell>
                     <TableCell className="text-right">{row.invalidated}</TableCell>
                     <TableCell className="text-right">{row.open}</TableCell>
@@ -342,7 +345,9 @@ export function BacktestPanel({
               <TableBody>
                 {report.targets.figures.map((row) => (
                   <TableRow key={row.figure}>
-                    <TableCell>{row.label}</TableCell>
+                    <TableCell>
+                      <FigureName figure={row.figure} label={row.label} />
+                    </TableCell>
                     <TableCell className="text-right">{row.settled}</TableCell>
                     <TableCell className="text-right">{pct(row.hit_rate)}</TableCell>
                     <TableCell className="text-right font-mono text-xs">
@@ -385,8 +390,8 @@ export function BacktestPanel({
             </p>
             <div className="flex flex-wrap gap-1.5">
               {report.base_rates.figures.slice(0, 12).map((row) => (
-                <Badge key={row.figure} variant={row.base_rate > 0.2 ? "destructive" : "outline"}>
-                  {row.label} {pct(row.base_rate)}
+                <Badge key={row.figure} variant={row.base_rate > 0.2 ? "destructive" : "outline"} className="gap-1">
+                  <FigureName figure={row.figure} label={`${row.label} ${pct(row.base_rate)}`} />
                 </Badge>
               ))}
             </div>

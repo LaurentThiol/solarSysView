@@ -1063,7 +1063,7 @@ chartisme_doctor() {
     warn "Chartisme : module introuvable — dépôt incomplet ?"
     return 0
   fi
-  ok "Chartisme : 17 détecteurs géométriques + ressemblance DTW (sans dépendance)"
+  ok "Chartisme : 18 détecteurs géométriques + ressemblance DTW (sans dépendance)"
   if "$py" -c 'import torch, torch_geometric' 2>/dev/null; then
     ok "Chartisme : torch + torch-geometric (transformer hiérarchique et GNN)"
   elif "$py" -c 'import torch' 2>/dev/null; then

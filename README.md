@@ -51,7 +51,7 @@ Archives EuroMillions : tableau filtrable, jackpot / report, **totaux de gagnant
 
 ## Évolution (`/evolution`)
 
-Onglet admin : **évolution dans le temps** (SMA et Bollinger optionnels sur chaque n1–n5 / e1–e2 et sur les sommes), **dessin libre chartiste** (figure de la table, départ/arrivée aimantés sur la courbe, fenêtre de coordonnées, capture IA), **suivi pair/impair** (pair = +1, impair = −1, cumul numéros et étoiles), **forme de la grille** (étendue max−min, paires consécutives, occupation des cinq décennies 1–10 … 41–50, SMA et Bollinger optionnels comme sur la courbe), **20 / 50 derniers tirages**, **numéros et étoiles les plus sortis / en retard**, grille 1–50. Même accès que **Admin** (`ADMIN_PASSWORD`, ou ouvert en local sur `127.0.0.1`). Fenêtres : 20 tirages, 50 tirages, année en cours, formule actuelle, tout l’historique ; filtre mois sur les plages calendaires.
+Onglet admin : **évolution dans le temps** (SMA et Bollinger optionnels sur chaque n1–n5 / e1–e2 et sur les sommes), **dessin libre chartiste** (figure de la table, segment = droite, départ/arrivée aimantés, fenêtre de coordonnées, capture IA), **suivi pair/impair** (pair = +1, impair = −1, cumul numéros et étoiles), **forme de la grille** (étendue max−min, paires consécutives, occupation des cinq décennies 1–10 … 41–50, SMA et Bollinger optionnels comme sur la courbe), **20 / 50 derniers tirages**, **numéros et étoiles les plus sortis / en retard**, grille 1–50. Même accès que **Admin** (`ADMIN_PASSWORD`, ou ouvert en local sur `127.0.0.1`). Fenêtres : 20 tirages, 50 tirages, année en cours, formule actuelle, tout l’historique ; filtre mois sur les plages calendaires.
 
 ## Analyse (`/analyse`)
 
@@ -106,7 +106,7 @@ Lecture **Profils 3D** ou **Plan**. Marqueurs **boule** (défaut à 20/50) ou **
 
 ## Chartisme (`/chartisme`)
 
-Les **17 figures chartistes** de la table de référence (tête & épaules et son inverse, doubles / triples sommets et creux, biseaux, triangles, rectangle, drapeau / fanion, tasse avec anse, diamant, broadening top) cherchées sur les courbes du logiciel : somme, écart, pairs, retard et sorties de chaque boule, retard et sorties de chaque étoile — 142 courbes exportées de l’archive.
+Les **18 figures chartistes** de la table de référence (tête & épaules et son inverse, doubles / triples sommets et creux, biseaux, triangles, rectangle, tunnel droit, drapeau / fanion, tasse avec anse, diamant, broadening top) cherchées sur les courbes du logiciel : somme, écart, pairs, retard et sorties de chaque boule, retard et sorties de chaque étoile — 142 courbes exportées de l’archive.
 
 Parmi elles, les **cinq numéros du tirage suivis séparément** — `n1` à `n5` — et les **deux étoiles**, `e1` et `e2`, les mêmes séries que l’onglet Évolution. Ce sont des *statistiques d’ordre* : `n1` est le plus petit numéro du tirage, `n5` le plus grand, jamais la première ou la dernière boule sortie — l’ordre de sortie n’est pas publié. Séparées exprès : chacune a son régime, `n1` vivant contre le plancher 1 et `n5` contre le plafond 50, si bien qu’une même cassure n’y dit pas la même chose. L’espace de règles peut donc viser `n1` sans viser `n5`.
 
@@ -204,7 +204,7 @@ Les deux réseaux travaillent sur une fenêtre **ramenée au carré unité**, do
 
 Sans eux, l’onglet reste entier : détecteurs géométriques et recherche par ressemblance DTW n’ont besoin de rien. Poids dans `.chartisme/weights/`, hors dépôt ; `./launch doctor` affiche le verdict du dernier entraînement.
 
-**Atelier d’étiquetage** : sélection au pinceau sur la courbe, catalogue des 17 figures ou classe libre, placement des rôles de pivots (tête, épaules, ligne de cou…), bloc-croquis pour dessiner une forme et retrouver les fenêtres qui lui ressemblent, et une liste des fenêtres les plus incertaines à trancher en priorité. Tes étiquettes pèsent trois fois plus que le synthétique et partent d’abord en **validation** : un score mesuré sur les étiquettes faibles ne dirait que l’accord avec le détecteur.
+**Atelier d’étiquetage** : sélection au pinceau sur la courbe, catalogue des 18 figures ou classe libre, placement des rôles de pivots (tête, épaules, ligne de cou…), bloc-croquis pour dessiner une forme et retrouver les fenêtres qui lui ressemblent, et une liste des fenêtres les plus incertaines à trancher en priorité. Tes étiquettes pèsent trois fois plus que le synthétique et partent d’abord en **validation** : un score mesuré sur les étiquettes faibles ne dirait que l’accord avec le détecteur.
 
 **Espace de règles**, délibérément descriptif : QUAND figure ∧ courbe ∧ confiance ∧ cassure ∧ tendance ∧ simultanéité, ALORS `tag` / `alert` / `note` / `hypothesize` / `watch`. La courbe se vise à deux granularités, parce que le catalogue en a deux : une courbe précise pour les dix-huit séries sans indice — c’est ainsi qu’une règle porte sur `n1` et une autre sur `n5` — ou une famille entière pour les séries indexées par boule, personne n’écrivant cinquante règles pour dire « le retard d’une boule quelconque ».
 

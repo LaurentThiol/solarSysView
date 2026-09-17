@@ -15,8 +15,9 @@ export default function ChartismePage() {
       title="Chartisme · figures"
       description={
         <>
-          Les 17 figures de la table de référence sur les courbes exportées du
-          logiciel : épaules, biseaux, triangles, drapeaux, tasse avec anse.
+          Les 18 figures de la table de référence sur les courbes exportées du
+          logiciel : épaules, biseaux, triangles, drapeaux, tasse avec anse,
+          tunnel droit.
           Cassure validée seulement si l’activité dépasse sa moyenne mobile 20 et
           si la clôture confirme — sinon c’est un <em>fake breakout</em>.
         </>

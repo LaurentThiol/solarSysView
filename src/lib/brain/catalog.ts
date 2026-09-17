@@ -226,6 +226,7 @@ const FIGURE_ALIASES: Partial<Record<FigureId, string[]>> = {
   double_bottom: ["db"],
   triple_top: ["tt"],
   triple_bottom: ["tb"],
+  tunnel_droit: ["canal", "channel", "tunel", "tunnel"],
 }
 
 function chartismeFigures(): CatalogEntry[] {

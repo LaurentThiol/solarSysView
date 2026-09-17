@@ -215,6 +215,20 @@ def _rectangle(rng: random.Random, count: int) -> list[float]:
     )
 
 
+def _tunnel_droit(rng: random.Random, count: int) -> list[float]:
+    """Canal à bornes parallèles, inclinées : ce n'est pas un rectangle plat."""
+    h = rng.uniform(20.0, 36.0)
+    slope = rng.uniform(0.55, 1.2) * (1 if rng.random() < 0.5 else -1)
+    jitter = rng.uniform(-0.08, 0.08)
+    return _bounded(
+        rng, count,
+        up_slope=slope + jitter,
+        low_slope=slope - jitter,
+        height=h, touches=rng.randint(5, 7),
+        break_dir=rng.choice((-1, 1)),
+    )
+
+
 def _broadening_top(rng: random.Random, count: int) -> list[float]:
     h = rng.uniform(14.0, 24.0)
     return _bounded(
@@ -311,6 +325,7 @@ GENERATORS: dict[str, Callable[[random.Random, int], list[float]]] = {
     "triangle_asc": _triangle_asc,
     "triangle_desc": _triangle_desc,
     "rectangle": _rectangle,
+    "tunnel_droit": _tunnel_droit,
     "flag": lambda rng, n: _flag_like(rng, n, pennant=False),
     "pennant": lambda rng, n: _flag_like(rng, n, pennant=True),
     "cup_handle": _cup_handle,

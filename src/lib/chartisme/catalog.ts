@@ -19,6 +19,7 @@ export const FIGURE_IDS = [
   "cup_handle",
   "diamond",
   "broadening_top",
+  "tunnel_droit",
   "none",
 ] as const
 
@@ -45,6 +46,7 @@ export const FIGURE_LABELS: Record<FigureId, string> = {
   cup_handle: "Tasse avec anse",
   diamond: "Diamant",
   broadening_top: "Broadening top",
+  tunnel_droit: "Tunnel droit",
   none: "Aucune figure",
 }
 
@@ -66,6 +68,7 @@ export const FIGURE_KINDS: Record<FigureId, FigureKind> = {
   cup_handle: "reversal_up",
   diamond: "reversal_down",
   broadening_top: "reversal_down",
+  tunnel_droit: "continuation",
   none: "range",
 }
 
@@ -87,6 +90,7 @@ export const FIGURE_SIGNALS: Record<FigureId, string> = {
   cup_handle: "Cassure de la lèvre",
   diamond: "Cassure d'une des bornes",
   broadening_top: "Cassure du dernier creux",
+  tunnel_droit: "Cassure d'une des bornes du tunnel",
   none: "—",
 }
 
@@ -108,6 +112,7 @@ export const FIGURE_TARGETS: Record<FigureId, string> = {
   cup_handle: "Profondeur de la tasse reportée",
   diamond: "Hauteur reportée",
   broadening_top: "Hauteur reportée",
+  tunnel_droit: "Hauteur du tunnel reportée",
   none: "—",
 }
 
@@ -176,6 +181,7 @@ export const FLIP_MAP: Record<FigureId, FigureId> = {
   diamond: "diamond",
   cup_handle: "cup_handle",
   broadening_top: "broadening_top",
+  tunnel_droit: "tunnel_droit",
   none: "none",
 }
 

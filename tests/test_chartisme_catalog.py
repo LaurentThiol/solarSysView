@@ -23,9 +23,10 @@ from synchro.chartisme.catalog import (
 
 
 def test_every_figure_has_a_full_row() -> None:
-    """17 figures plus `none`, chacune avec type, signal et objectif."""
-    assert len(FIGURE_IDS) == 18
+    """18 figures plus `none`, chacune avec type, signal et objectif."""
+    assert len(FIGURE_IDS) == 19
     assert "none" in FIGURE_IDS
+    assert "tunnel_droit" in FIGURE_IDS
     for figure in FIGURE_IDS:
         assert FIGURE_LABELS[figure]
         assert FIGURE_KINDS[figure]
@@ -51,6 +52,7 @@ def test_table_matches_the_reference() -> None:
     assert kind_of("pennant") == "continuation"
     assert kind_of("cup_handle") == "reversal_up"
     assert kind_of("broadening_top") == "reversal_down"
+    assert kind_of("tunnel_droit") == "continuation"
 
     assert "cou" in signal_of("ete")
     assert "cou" in signal_of("ete_inv")
@@ -69,6 +71,7 @@ def test_flip_map_is_an_involution() -> None:
     assert flip_of("triangle_asc") == "triangle_desc"
     # Un rectangle retourné reste un rectangle.
     assert flip_of("rectangle") == "rectangle"
+    assert flip_of("tunnel_droit") == "tunnel_droit"
     assert flip_of("none") == "none"
 
 
@@ -113,10 +116,11 @@ def test_pivot_roles_all_labelled() -> None:
         assert role in PIVOT_ROLES
 
 
-def test_catalog_lists_the_seventeen_figures() -> None:
+def test_catalog_lists_the_eighteen_figures() -> None:
     """`none` n'est pas une figure : elle ne doit pas apparaître dans la table."""
     rows = catalog()
-    assert len(rows) == 17
+    assert len(rows) == 18
     assert {row["figure"] for row in rows} == set(FIGURE_IDS) - {"none"}
+    assert any(row["figure"] == "tunnel_droit" and row["label"] == "Tunnel droit" for row in rows)
     for row in rows:
         assert set(row) == {"figure", "label", "kind", "signal", "target"}

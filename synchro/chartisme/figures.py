@@ -1,4 +1,4 @@
-"""Les 17 détecteurs chartistes, avec la géométrie nécessaire au dessin.
+"""Les 18 détecteurs chartistes, avec la géométrie nécessaire au dessin.
 
 Chaque détection renvoie les pivots nommés (épaule gauche, tête, cou…), les
 lignes à tracer, la cassure avec sa validation par l'activité — la règle d'or :
@@ -538,6 +538,10 @@ def _classify_bounds(
         return None
     if up_flat and low_flat:
         return "rectangle", "any"
+    # Bornes parallèles et inclinées : tunnel droit (canal à largeur constante).
+    parallel = abs(up - low) <= max(2 * flat, 0.3 * (abs(up) + abs(low)) / 2)
+    if parallel:
+        return "tunnel_droit", "any"
     return None
 
 
@@ -553,7 +557,7 @@ def _pivot_groups(pivots: list[dict[str, Any]], sizes: Sequence[int] = (6, 5, 4)
 
 
 def detect_bounds(ctx: Context) -> list[dict[str, Any]]:
-    """Figures à deux bornes : biseaux, triangles, rectangle, broadening top.
+    """Figures à deux bornes : biseaux, triangles, rectangle, tunnel droit, broadening top.
 
     Les bornes sont ajustées sur un groupe de pivots *clos*, et la cassure est
     cherchée après son dernier pivot : la jambe de sortie ne contamine donc pas
@@ -945,6 +949,7 @@ SPECIFICITY: dict[str, int] = {
     "broadening_top": 3,
     "double_top": 2,
     "double_bottom": 2,
+    "tunnel_droit": 2,
     "rectangle": 1,
     "none": 0,
 }

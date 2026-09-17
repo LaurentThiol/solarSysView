@@ -182,6 +182,7 @@ const TEMPLATES: Record<string, () => number[]> = {
   triangle_asc: () => bounded(0, 0.7, 30, 5, 1),
   triangle_desc: () => bounded(-0.7, 0, 30, 5, -1),
   rectangle: () => bounded(0, 0, 28, 6, 1),
+  tunnel_droit: () => bounded(0.85, 0.85, 28, 6, 1),
   broadening_top: () => bounded(1.25, -1.25, 18, 6, -1),
   diamond,
   flag: () => flagLike(false),
@@ -195,4 +196,32 @@ export function synthCurve(figure: string): number[] {
 
 export function templateFigures(): string[] {
   return Object.keys(TEMPLATES)
+}
+
+/** Segment libre : une diagonale, pas un gabarit de la table. */
+export function sparkValues(figure: string): number[] {
+  if (figure === "free") return [0, 1]
+  return synthCurve(figure)
+}
+
+/** Points SVG d'un gabarit, Y vers le haut. */
+export function sparklinePoints(
+  values: number[],
+  width: number,
+  height: number,
+  pad = 1
+): string {
+  if (values.length < 2) return ""
+  const lo = Math.min(...values)
+  const hi = Math.max(...values)
+  const span = hi - lo || 1
+  const innerW = Math.max(1, width - 2 * pad)
+  const innerH = Math.max(1, height - 2 * pad)
+  return values
+    .map((value, index) => {
+      const x = pad + (index / (values.length - 1)) * innerW
+      const y = pad + (1 - (value - lo) / span) * innerH
+      return `${x.toFixed(2)},${y.toFixed(2)}`
+    })
+    .join(" ")
 }

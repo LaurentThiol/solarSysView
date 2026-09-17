@@ -1,4 +1,4 @@
-"""Les 17 détecteurs, mesurés sur les figures d'école puis sur du bruit."""
+"""Les 18 détecteurs, mesurés sur les figures d'école puis sur du bruit."""
 
 import random
 
@@ -213,6 +213,18 @@ def test_min_confidence_filters() -> None:
     strict = detect_figures(values, activity=activity, min_confidence=0.9)
     assert len(strict) <= len(loose)
     assert all(hit["confidence"] >= 0.9 for hit in strict)
+
+
+def test_tunnel_droit_has_parallel_bounds() -> None:
+    """Le canal incliné n'est plus un trou : rectangle reste plat, tunnel a une pente."""
+    values, activity = _clean("tunnel_droit", seed=1)
+    hits = detect_figures(values, activity=activity, min_confidence=0.0)
+    names = [hit["figure"] for hit in hits]
+    assert "tunnel_droit" in names[:3]
+    hit = next(hit for hit in hits if hit["figure"] == "tunnel_droit")
+    roles = {guide["role"] for guide in hit["guides"]}
+    assert {"upper", "lower"} <= roles
+    assert hit["kind"] == "continuation"
 
 
 def test_dedupe_keeps_one_reading_per_figure_and_zone() -> None:

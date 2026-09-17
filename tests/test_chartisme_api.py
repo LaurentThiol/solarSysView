@@ -74,15 +74,15 @@ def _with_draws():
 
 
 def test_catalog_serves_the_reference_table() -> None:
-    """La table des dix-sept figures, telle qu'affichée dans l'onglet."""
+    """La table des figures, telle qu'affichée dans l'onglet."""
     with _client() as client:
         response = client.get("/api/chartisme/catalog")
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is True
-    assert len(body["figures"]) == 17
     ids = {row["figure"] for row in body["figures"]}
-    assert {"ete", "ete_inv", "diamond", "broadening_top"} <= ids
+    assert len(body["figures"]) == 18
+    assert {"ete", "ete_inv", "diamond", "broadening_top", "tunnel_droit"} <= ids
     assert "none" not in ids
     for row in body["figures"]:
         assert row["label"] and row["kind"] and row["signal"] and row["target"]
