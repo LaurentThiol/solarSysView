@@ -97,8 +97,6 @@ export function StartupStatus() {
   const [data, setData] = useState<StartupPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [quitting, setQuitting] = useState(false)
-  const [quitDone, setQuitDone] = useState(false)
   const [localApp, setLocalApp] = useState(false)
   const [ensuring, setEnsuring] = useState(false)
   const inFlight = useRef(false)
@@ -166,65 +164,9 @@ export function StartupStatus() {
     await refresh({ silent: true })
   }, [data?.stale, ensuring, localApp, refresh])
 
-  const quit = useCallback(async () => {
-    if (quitting) return
-    const confirmed = window.confirm(
-      "Quitter Synchro ? L’API et l’interface vont s’arrêter."
-    )
-    if (!confirmed) return
-    setQuitting(true)
-    try {
-      await fetch("/api/shutdown", { method: "POST", cache: "no-store" })
-    } catch {
-      // le serveur peut déjà être coupé
-    } finally {
-      setQuitDone(true)
-    }
-  }, [quitting])
-
-  const showQuit =
-    localApp && !quitDone && data?.quitAvailable !== false
-
-  const quitButton =
-    showQuit ? (
-      <WithHelp
-        help={{
-          title: "Quitter",
-          body: "Arrête l’API et l’interface Synchro. Disponible seulement en local. Une confirmation est demandée.",
-        }}
-      >
-        <Button
-          type="button"
-          variant="destructive"
-          size="sm"
-          disabled={quitting}
-          onClick={() => void quit()}
-          title="Quitter le programme"
-          aria-label="Quitter le programme"
-          className="h-[26px] rounded-full px-2.5 text-[11px] font-medium tracking-wide"
-        >
-          <LogOut data-icon="inline-start" />
-          {quitting ? "Arrêt…" : "Quitter"}
-        </Button>
-      </WithHelp>
-    ) : null
-
-  const overlay = quitDone ? (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-background/95 p-6">
-      <div className="max-w-sm text-center">
-        <p className="text-lg font-medium tracking-tight">Synchro est arrêté</p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Vous pouvez fermer cet onglet.
-        </p>
-      </div>
-    </div>
-  ) : null
-
   if (loading && !data) {
     return (
-      <>
-        {overlay}
-        <div className="flex flex-nowrap items-center gap-2">
+      <div className="flex flex-nowrap items-center gap-2">
           <HelpWrap
             help={{
               title: "API",
@@ -253,17 +195,13 @@ export function StartupStatus() {
               onClick={() => void refresh({ git: true })}
             />
           </HelpWrap>
-          {quitButton}
         </div>
-      </>
     )
   }
 
   if (error || !data) {
     return (
-      <>
-        {overlay}
-        <div className="flex flex-nowrap items-center gap-2">
+      <div className="flex flex-nowrap items-center gap-2">
           <HelpWrap
             help={{
               title: "Statut",
@@ -277,9 +215,7 @@ export function StartupStatus() {
               onClick={() => void refresh()}
             />
           </HelpWrap>
-          {quitButton}
-        </div>
-      </>
+      </div>
     )
   }
 
@@ -361,54 +297,135 @@ export function StartupStatus() {
   }
 
   return (
+    <div className="flex flex-nowrap items-center gap-2">
+      <HelpWrap
+        help={{
+          title: "API",
+          body: "Cliquez pour retester l’API. Vert = backend joignable. Le détail indique le nombre de tirages chargés.",
+        }}
+      >
+        <Pill
+          label="API"
+          detail={apiDetail}
+          tone={apiTone}
+          onClick={() => void refresh()}
+        />
+      </HelpWrap>
+      <HelpWrap
+        help={{
+          title: "Neon",
+          body: `${neonTitle}. En local, un clic sur un indicateur « en retard » rattrape les tirages FDJ.`,
+        }}
+      >
+        <Pill
+          label="Neon"
+          detail={neonDetail}
+          tone={neonTone}
+          title={neonTitle}
+          onClick={() => void onNeon()}
+        />
+      </HelpWrap>
+      <HelpWrap
+        help={{
+          title: "GitHub",
+          body: "Compare le clone à origin (retest au focus et toutes les 5 min). En retard : cliquez pour ouvrir Admin et tirer la mise à jour.",
+        }}
+      >
+        <Pill
+          label="GitHub"
+          detail={gitDetail}
+          tone={gitTone}
+          title="Contrôler origin (Admin si une mise à jour est disponible)"
+          onClick={onGithub}
+        />
+      </HelpWrap>
+      <MorphoFiringPill />
+      <LocalLlmPill />
+    </div>
+  )
+}
+
+export function QuitButton() {
+  const [quitting, setQuitting] = useState(false)
+  const [quitDone, setQuitDone] = useState(false)
+  const [localApp, setLocalApp] = useState(false)
+  const [quitAvailable, setQuitAvailable] = useState(true)
+
+  useEffect(() => {
+    setLocalApp(isLocalHost(window.location.hostname))
+  }, [])
+
+  useEffect(() => {
+    if (!localApp) return
+    let cancelled = false
+    void fetch("/api/startup", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: StartupPayload | null) => {
+        if (cancelled || payload == null) return
+        if (payload.quitAvailable === false) setQuitAvailable(false)
+      })
+      .catch(() => {
+        // garder le bouton visible tant que l’API n’a pas dit non
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [localApp])
+
+  const quit = useCallback(async () => {
+    if (quitting) return
+    const confirmed = window.confirm(
+      "Quitter Synchro ? L’API et l’interface vont s’arrêter."
+    )
+    if (!confirmed) return
+    setQuitting(true)
+    try {
+      await fetch("/api/shutdown", { method: "POST", cache: "no-store" })
+    } catch {
+      // le serveur peut déjà être coupé
+    } finally {
+      setQuitDone(true)
+    }
+  }, [quitting])
+
+  const showQuit = localApp && !quitDone && quitAvailable
+  if (!showQuit && !quitDone) return null
+
+  return (
     <>
-      {overlay}
-      <div className="flex flex-nowrap items-center gap-2">
-        <HelpWrap
+      {quitDone ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-background/95 p-6">
+          <div className="max-w-sm text-center">
+            <p className="text-lg font-medium tracking-tight">Synchro est arrêté</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Vous pouvez fermer cet onglet.
+            </p>
+          </div>
+        </div>
+      ) : null}
+      {showQuit ? (
+        <WithHelp
           help={{
-            title: "API",
-            body: "Cliquez pour retester l’API. Vert = backend joignable. Le détail indique le nombre de tirages chargés.",
+            title: "Quitter",
+            body: "Arrête l’API et l’interface Synchro. Disponible seulement en local. Une confirmation est demandée.",
           }}
+          className="shrink-0"
         >
-          <Pill
-            label="API"
-            detail={apiDetail}
-            tone={apiTone}
-            onClick={() => void refresh()}
-          />
-        </HelpWrap>
-        <HelpWrap
-          help={{
-            title: "Neon",
-            body: `${neonTitle}. En local, un clic sur un indicateur « en retard » rattrape les tirages FDJ.`,
-          }}
-        >
-          <Pill
-            label="Neon"
-            detail={neonDetail}
-            tone={neonTone}
-            title={neonTitle}
-            onClick={() => void onNeon()}
-          />
-        </HelpWrap>
-        <HelpWrap
-          help={{
-            title: "GitHub",
-            body: "Compare le clone à origin (retest au focus et toutes les 5 min). En retard : cliquez pour ouvrir Admin et tirer la mise à jour.",
-          }}
-        >
-          <Pill
-            label="GitHub"
-            detail={gitDetail}
-            tone={gitTone}
-            title="Contrôler origin (Admin si une mise à jour est disponible)"
-            onClick={onGithub}
-          />
-        </HelpWrap>
-        <MorphoFiringPill />
-        <LocalLlmPill />
-        {quitButton}
-      </div>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            disabled={quitting}
+            onClick={() => void quit()}
+            title="Quitter le programme"
+            aria-label="Quitter le programme"
+            className="h-[26px] shrink-0 rounded-full px-2.5 text-[11px] font-medium tracking-wide"
+          >
+            <LogOut data-icon="inline-start" />
+            {quitting ? "Arrêt…" : "Quitter"}
+          </Button>
+        </WithHelp>
+      ) : null}
     </>
   )
 }
@@ -657,7 +674,7 @@ function NavLinks({
       className={
         stacked
           ? "flex flex-col gap-1"
-          : "hidden items-center gap-x-4 lg:flex"
+          : "flex items-center gap-x-3 whitespace-nowrap xl:gap-x-4"
       }
       aria-label="Sections"
     >
@@ -675,7 +692,7 @@ function NavLinks({
                       ? "bg-muted text-foreground"
                       : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                   }`
-                : `text-xs ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`
+                : `whitespace-nowrap text-xs ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`
             }
           >
             {item.label}
@@ -717,39 +734,41 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur">
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl items-center gap-2 px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:gap-3 sm:px-6">
-        <div className="flex shrink-0 items-center gap-3">
-          <button
-            type="button"
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-foreground lg:hidden"
-            aria-expanded={menuOpen}
-            aria-controls="site-nav-drawer"
-            aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
-            onClick={() => setMenuOpen((open) => !open)}
+      <div className="relative z-10 mx-auto flex w-full items-center gap-2 px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:gap-3 sm:px-6">
+        <button
+          type="button"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-foreground lg:hidden"
+          aria-expanded={menuOpen}
+          aria-controls="site-nav-drawer"
+          aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+        </button>
+        <HelpWrap
+          help={{
+            title: "Synchro",
+            body: "Retour à l’accueil : page Tirage, archives FDJ filtrables et export CSV.",
+          }}
+          className="shrink-0"
+        >
+          <Link
+            href="/tirage"
+            className="shrink-0 text-xs font-medium tracking-[0.2em] text-primary uppercase"
           >
-            {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
-          </button>
-          <HelpWrap
-            help={{
-              title: "Synchro",
-              body: "Retour à l’accueil : page Tirage, archives FDJ filtrables et export CSV.",
-            }}
-          >
-            <Link
-              href="/tirage"
-              className="shrink-0 text-xs font-medium tracking-[0.2em] text-primary uppercase"
-            >
-              Synchro
-            </Link>
-          </HelpWrap>
+            Synchro
+          </Link>
+        </HelpWrap>
+        <div className="hidden min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] lg:flex">
           <NavLinks pathname={pathname} />
         </div>
-        <div className="flex min-w-0 flex-1 justify-end">
-          <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2 lg:flex-none">
+          <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
             <CaptureButton />
             <HelpModeToggle />
             <StartupStatus />
           </div>
+          <QuitButton />
         </div>
       </div>
       {menuOpen ? (
