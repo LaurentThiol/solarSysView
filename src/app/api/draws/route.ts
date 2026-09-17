@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { apiBase, HEALTH_TIMEOUT_MS } from "@/lib/api-base"
+import { parsePrizeTiers } from "@/lib/draws"
 
 export const dynamic = "force-dynamic"
 
@@ -12,6 +13,7 @@ type NeonDraw = {
   numbers?: number[]
   stars?: number[]
   star_pool?: number
+  prizes?: unknown
 }
 
 function drawId(row: NeonDraw, date: string): number {
@@ -30,6 +32,7 @@ function toUi(row: NeonDraw) {
     numbers: Array.isArray(row.numbers) ? row.numbers : [],
     stars: Array.isArray(row.stars) ? row.stars : [],
     star_pool: row.star_pool,
+    prizes: parsePrizeTiers(row.prizes),
   }
 }
 

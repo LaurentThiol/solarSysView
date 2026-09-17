@@ -1,7 +1,15 @@
 from datetime import date
 from decimal import Decimal
 
-from synchro.fdj import parse_fdj_date, parse_fr_decimal, parse_row, parse_zip, star_pool_for
+from synchro.fdj import (
+    parse_fdj_date,
+    parse_fr_decimal,
+    parse_prizes,
+    parse_row,
+    parse_zip,
+    prizes_from_raw,
+    star_pool_for,
+)
 
 
 def test_parse_dates():
@@ -37,6 +45,12 @@ def test_parse_row_current_format():
             "nombre_de_gagnant_au_rang1_Euro_Millions_en_france": "0",
             "nombre_de_gagnant_au_rang1_Euro_Millions_en_europe": "0",
             "rapport_du_rang1_Euro_Millions": "0",
+            "nombre_de_gagnant_au_rang2_Euro_Millions_en_france": "1",
+            "nombre_de_gagnant_au_rang2_Euro_Millions_en_europe": "4",
+            "rapport_du_rang2_Euro_Millions": "245 123,45",
+            "rapport_du_rang13_Euro_Millions": "4,20",
+            "rapport_du_rang1_Etoile+": "999",
+            "nombre_de_gagnant_au_rang1_Etoile+_en_france": "12",
             "numero_My_Million": "TM 296 5205",
         }
     )
@@ -46,6 +60,16 @@ def test_parse_row_current_format():
     assert draw.star_pool == 12
     assert draw.my_million == "TM 296 5205"
     assert draw.weekday == "VENDREDI"
+    assert draw.prize_rank1 == Decimal("0")
+    assert draw.winners_rank1_eu == 0
+    assert len(draw.prizes) == 3
+    by_rank = {item["rank"]: item for item in draw.prizes}
+    assert by_rank[2]["prize"] == Decimal("245123.45")
+    assert by_rank[2]["winners_eu"] == 4
+    assert by_rank[13]["prize"] == Decimal("4.20")
+    assert 1 in by_rank
+    row = draw.as_row()
+    assert row["prizes"][1]["prize"] == 245123.45
 
 
 def test_parse_row_old_date_format():
@@ -84,3 +108,43 @@ def test_parse_zip_bytes():
     draws = parse_zip(buf.getvalue())
     assert len(draws) == 1
     assert draws[0].numbers == [1, 2, 3, 4, 5]
+
+
+def test_parse_prizes_prefers_euromillions_over_short_labels():
+    prizes = parse_prizes(
+        {
+            "rapport_du_rang1": "1",
+            "rapport_du_rang1_Euro_Millions": "17 000 000",
+            "nombre_de_gagnant_au_rang1_en_france": "0",
+            "nombre_de_gagnant_au_rang1_Euro_Millions_en_france": "2",
+        }
+    )
+    assert prizes[0]["prize"] == Decimal("17000000")
+    assert prizes[0]["winners_fr"] == 2
+
+
+def test_parse_prizes_old_headers_without_euro_millions():
+    prizes = parse_prizes(
+        {
+            "rapport_du_rang1": "15 000 000",
+            "nombre_de_gagnant_au_rang1_en_france": "1",
+            "nombre_de_gagnant_au_rang1_en_europe": "3",
+            "rapport_du_rang12": "3,50",
+        }
+    )
+    by_rank = {item["rank"]: item for item in prizes}
+    assert by_rank[1]["winners_eu"] == 3
+    assert by_rank[12]["prize"] == Decimal("3.50")
+
+
+def test_prizes_from_raw_folded_keys():
+    payload = prizes_from_raw(
+        {
+            "rapport_du_rang5_euro_millions": "146,00",
+            "nombre_de_gagnant_au_rang5_euro_millions_en_europe": "723",
+            "rapport_du_rang1_etoile+": "50",
+        }
+    )
+    assert payload == [
+        {"rank": 5, "winners_fr": None, "winners_eu": 723, "prize": 146.0}
+    ]

@@ -85,6 +85,25 @@ async function refreshFromLive() {
     : "Base vide — cliquez sur Synchroniser FDJ.";
 }
 
+function formatEuro(value) {
+  if (value == null || value === "") return "n.d.";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "n.d.";
+  return n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+}
+
+function jackpotLabel(draw) {
+  const rank1 = (draw.prizes || []).find((tier) => Number(tier.rank) === 1);
+  const prize = rank1 ? rank1.prize : draw.prize_rank1;
+  const winners = rank1
+    ? rank1.winners_eu ?? rank1.winners_fr
+    : draw.winners_rank1_eu ?? draw.winners_rank1_fr;
+  if (prize == null || prize === "") return "Report / n.d.";
+  const n = Number(prize);
+  if (n === 0 && (!winners || Number(winners) === 0)) return "Report";
+  return formatEuro(n);
+}
+
 function renderLatest(draw) {
   if (!draw) {
     $("latest-date").textContent = "Aucun tirage";
@@ -97,11 +116,19 @@ function renderLatest(draw) {
   wrap.innerHTML = "";
   for (const n of draw.numbers) wrap.appendChild(ball(n));
   for (const s of draw.stars) wrap.appendChild(ball(s, { star: true }));
+  const prizes = Array.isArray(draw.prizes) ? draw.prizes : [];
+  const ladder = prizes
+    .map(
+      (tier) =>
+        `<div><dt>Rang ${tier.rank}</dt><dd>${formatEuro(tier.prize)} · ${tier.winners_eu ?? "—"} EU / ${tier.winners_fr ?? "—"} FR</dd></div>`
+    )
+    .join("");
   $("latest-facts").innerHTML = `
     <div><dt>Gagnants rang 1 (EU)</dt><dd>${draw.winners_rank1_eu ?? "—"}</dd></div>
     <div><dt>Gagnants rang 1 (FR)</dt><dd>${draw.winners_rank1_fr ?? "—"}</dd></div>
-    <div><dt>Rapport rang 1</dt><dd>${draw.prize_rank1 ? draw.prize_rank1.toLocaleString("fr-FR") + " €" : "Report / n.d."}</dd></div>
+    <div><dt>Rapport rang 1</dt><dd>${jackpotLabel(draw)}</dd></div>
     <div><dt>My Million</dt><dd>${draw.my_million || "—"}</dd></div>
+    ${ladder}
   `;
 }
 

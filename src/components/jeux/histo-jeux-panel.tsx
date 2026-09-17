@@ -60,6 +60,7 @@ import {
   type PlayStats,
 } from "@/lib/plays"
 import { useDraws } from "@/lib/use-draws"
+import { formatEuro } from "@/lib/draws"
 import { cn } from "@/lib/utils"
 
 const HELP = {
@@ -89,7 +90,7 @@ const HELP = {
   },
   settled: {
     title: "Tranché",
-    body: "Le tirage officiel de cette date est connu. Les boules communes sont cerclées. Rang FDJ 1–13, ou pas de gain.",
+    body: "Le tirage officiel de cette date est connu. Les boules communes sont cerclées. Rang FDJ 1–13, ou pas de gain, plus le rapport € de ce rang (× copies).",
   },
   stats: {
     title: "Lecture",
@@ -105,7 +106,7 @@ const HELP = {
   },
   export: {
     title: "Export CSV",
-    body: "Une ligne par consignation : date, boules, rang, correspondances, spec Jeux. Pour une analyse hors de l’app (tableur).",
+    body: "Une ligne par consignation : date, boules, rang, correspondances, rapport €, spec Jeux. Pour une analyse hors de l’app (tableur).",
   },
   note: {
     title: "Note",
@@ -462,7 +463,7 @@ export function HistoJeuxPanel() {
         (Combinaisons) reste la bibliothèque de modèles.
       </p>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <p className="text-xs tracking-wide text-muted-foreground uppercase">
@@ -485,6 +486,26 @@ export function HistoJeuxPanel() {
               <TitleHelp help={HELP.settled}>Tranchés</TitleHelp>
             </p>
             <CardTitle className="text-lg tabular-nums">{stats.settled}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <p className="text-xs tracking-wide text-muted-foreground uppercase">
+              Gains FDJ
+            </p>
+            <CardTitle className="text-lg tabular-nums">
+              {stats.prize_known > 0 ? formatEuro(stats.prize_total) : "n.d."}
+            </CardTitle>
+            {stats.prize_known > 0 ? (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                Rapports du rang × copies, sur {stats.prize_known} ticket
+                {stats.prize_known > 1 ? "s" : ""}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Rapports FDJ absents (fichier local ou tirages sans échelle).
+              </p>
+            )}
           </CardHeader>
         </Card>
         <Card>
@@ -814,8 +835,8 @@ export function HistoJeuxPanel() {
                         {item.status === "pending"
                           ? "En attente du tirage officiel"
                           : item.result?.rank == null
-                            ? `${item.result?.matched_numbers ?? 0} n° + ${item.result?.matched_stars ?? 0} ★ · Pas de gain`
-                            : `Rang ${item.result.rank} · ${item.result.label} (${item.result.matched_numbers} n° + ${item.result.matched_stars} ★)`}
+                            ? `${item.result?.matched_numbers ?? 0} n° + ${item.result?.matched_stars ?? 0} ★ · Pas de gain${item.result?.prize != null ? ` · ${formatEuro(item.result.prize)}` : ""}`
+                            : `Rang ${item.result.rank} · ${item.result.label} (${item.result.matched_numbers} n° + ${item.result.matched_stars} ★)${item.result.prize != null ? ` · ${formatEuro(item.result.prize)}` : ""}`}
                       </p>
                       <p className="text-xs text-muted-foreground tabular-nums">
                         Σ {shapeRow.sum} · {shapeRow.even}p/{shapeRow.odd}i · étendue {shapeRow.spread}

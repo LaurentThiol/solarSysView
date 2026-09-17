@@ -125,6 +125,41 @@ def grid_key(numbers: list[int], stars: list[int]) -> str:
     return f"{nums}|{ets}"
 
 
+def prize_at_rank(draw: dict[str, Any] | None, rank: int | None) -> float | None:
+    if draw is None or rank is None:
+        return None
+    for item in draw.get("prizes") or []:
+        try:
+            if int(item.get("rank")) != rank:
+                continue
+        except (TypeError, ValueError):
+            continue
+        value = item.get("prize")
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def play_prize_amount(
+    draw: dict[str, Any] | None,
+    rank: int | None,
+    copies: int,
+) -> float | None:
+    """Rapport FDJ du rang × copies. 0 si pas de rang et échelle connue ; None si n.d."""
+    if not draw or not (draw.get("prizes") or []):
+        return None
+    if rank is None:
+        return 0.0
+    unit = prize_at_rank(draw, rank)
+    if unit is None:
+        return None
+    return unit * copies
+
+
 def official_p_any_rank(star_pool: int = 12) -> float:
     ranks = rank_probabilities(star_pool)
     p_no = next(float(row["p"]) for row in ranks if row["rank"] is None)
@@ -297,6 +332,7 @@ def decorate_play(play: dict[str, Any], draw: dict[str, Any] | None) -> dict[str
         list(draw.get("numbers") or []),
         list(draw.get("stars") or []),
     )
+    result["prize"] = play_prize_amount(draw, result.get("rank"), copies)
     out["status"] = "settled"
     out["result"] = result
     out["draw"] = {
@@ -304,6 +340,7 @@ def decorate_play(play: dict[str, Any], draw: dict[str, Any] | None) -> dict[str
         "stars": list(draw.get("stars") or []),
         "weekday": (draw.get("weekday") or out["weekday"]),
         "star_pool": draw.get("star_pool"),
+        "prizes": list(draw.get("prizes") or []),
     }
     return out
 
@@ -329,6 +366,8 @@ def summarize_plays(items: list[dict[str, Any]]) -> dict[str, Any]:
     number_hits: Counter[int] = Counter()
     star_hits: Counter[int] = Counter()
     unique_keys: set[str] = set()
+    prize_total = 0.0
+    prize_known = 0
 
     for item in items:
         copies = normalize_copies(item.get("copies"))
@@ -352,6 +391,10 @@ def summarize_plays(items: list[dict[str, Any]]) -> dict[str, Any]:
             number_hits[int(value)] += copies
         for value in result.get("winning_stars") or []:
             star_hits[int(value)] += copies
+        prize = result.get("prize")
+        if prize is not None:
+            prize_total += float(prize)
+            prize_known += copies
 
     settled_n = _weighted(settled)
     win_n = _weighted(wins)
@@ -401,6 +444,8 @@ def summarize_plays(items: list[dict[str, Any]]) -> dict[str, Any]:
         "covers_p0": covers_p0,
         "binomial": binomial,
         "unique_grids": len(unique_keys),
+        "prize_total": prize_total,
+        "prize_known": prize_known,
         "by_rank": rank_rows,
         "by_match": [
             {"label": key, "count": count}

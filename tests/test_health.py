@@ -364,8 +364,21 @@ def test_draw_select_omits_raw_json() -> None:
     cols = {part.strip() for part in db_mod.DRAW_COLUMNS.split(",")}
     assert "raw" not in cols
     assert "draw_date" in cols
+    assert "prizes" in cols
     source = Path(db_mod.__file__).read_text(encoding="utf-8")
     assert "SELECT * FROM draws" not in source
+    schema = db_mod.SCHEMA_SQL
+    assert "prizes          JSONB" in schema
+    assert "ADD COLUMN IF NOT EXISTS prizes JSONB" in schema
+
+
+def test_next_draws_route_forwards_prizes() -> None:
+    from pathlib import Path
+
+    route = (
+        Path(__file__).resolve().parents[1] / "src/app/api/draws/route.ts"
+    ).read_text(encoding="utf-8")
+    assert "parsePrizeTiers(row.prizes)" in route
 
 
 def test_ui_does_not_stampede_neon_on_every_page() -> None:

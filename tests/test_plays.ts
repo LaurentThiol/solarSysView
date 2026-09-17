@@ -40,6 +40,28 @@ test("decoratePlay scores a settled grid", () => {
   )
   assert.equal(play.status, "settled")
   assert.equal(play.result?.rank, 1)
+  assert.equal(play.result?.prize, null)
+})
+
+test("decoratePlay multiplies FDJ prize by copies", () => {
+  const play = decoratePlay(
+    {
+      id: 1,
+      label: "A",
+      numbers: [1, 2, 3, 4, 5],
+      stars: [1, 2],
+      play_date: "2026-09-01",
+      source: "jeux",
+      copies: 2,
+    },
+    {
+      date: "2026-09-01",
+      numbers: [1, 2, 3, 4, 5],
+      stars: [1, 2],
+      prizes: [{ rank: 1, winners_fr: 0, winners_eu: 1, prize: 17000000 }],
+    }
+  )
+  assert.equal(play.result?.prize, 34000000)
 })
 
 test("summarizePlays weights copies and unique grids", () => {
@@ -98,5 +120,5 @@ test("CSV export has a header and one row", () => {
   assert.match(csv, /^play_date,/)
   assert.match(csv, /"Test, grille"/)
   assert.match(csv, /Pas de gain/)
-  assert.match(csv, /,spec\n/)
+  assert.match(csv, /,prize,note,spec\n/)
 })

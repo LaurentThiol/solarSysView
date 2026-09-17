@@ -7,6 +7,13 @@ import {
   spreadOf,
 } from "@/lib/grid-shape"
 
+export type PrizeTier = {
+  rank: number
+  winners_fr: number | null
+  winners_eu: number | null
+  prize: number | null
+}
+
 export type Draw = {
   id: number
   date: string
@@ -14,6 +21,102 @@ export type Draw = {
   numbers: number[]
   stars: number[]
   star_pool?: number
+  prizes?: PrizeTier[]
+}
+
+export const PRIZE_RANK_LABELS: Record<number, string> = {
+  1: "5 numéros + 2 étoiles",
+  2: "5 numéros + 1 étoile",
+  3: "5 numéros",
+  4: "4 numéros + 2 étoiles",
+  5: "4 numéros + 1 étoile",
+  6: "3 numéros + 2 étoiles",
+  7: "4 numéros",
+  8: "2 numéros + 2 étoiles",
+  9: "3 numéros + 1 étoile",
+  10: "3 numéros",
+  11: "1 numéro + 2 étoiles",
+  12: "2 numéros + 1 étoile",
+  13: "2 numéros",
+}
+
+export function parsePrizeTiers(raw: unknown): PrizeTier[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  const tiers: PrizeTier[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue
+    const row = item as Record<string, unknown>
+    const rank = Number(row.rank)
+    if (!Number.isInteger(rank) || rank < 1 || rank > 13) continue
+    const prizeRaw = row.prize
+    const prizeNum =
+      prizeRaw == null || prizeRaw === "" ? NaN : Number(prizeRaw)
+    const winnersFr =
+      row.winners_fr == null || row.winners_fr === ""
+        ? null
+        : Number(row.winners_fr)
+    const winnersEu =
+      row.winners_eu == null || row.winners_eu === ""
+        ? null
+        : Number(row.winners_eu)
+    tiers.push({
+      rank,
+      winners_fr:
+        winnersFr == null || !Number.isFinite(winnersFr) ? null : winnersFr,
+      winners_eu:
+        winnersEu == null || !Number.isFinite(winnersEu) ? null : winnersEu,
+      prize: Number.isFinite(prizeNum) ? prizeNum : null,
+    })
+  }
+  return tiers.length > 0 ? tiers : undefined
+}
+
+export function prizeAtRank(
+  draw: Pick<Draw, "prizes"> | null | undefined,
+  rank: number | null | undefined
+): number | null {
+  if (rank == null || !draw?.prizes?.length) return null
+  const tier = draw.prizes.find((item) => item.rank === rank)
+  if (!tier || tier.prize == null || !Number.isFinite(tier.prize)) return null
+  return tier.prize
+}
+
+export function formatEuro(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "n.d."
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
+export function formatJackpot(draw: Pick<Draw, "prizes"> | null | undefined): string {
+  const tier = draw?.prizes?.find((item) => item.rank === 1)
+  if (!tier || tier.prize == null || !Number.isFinite(tier.prize)) return "n.d."
+  const winners = tier.winners_eu ?? tier.winners_fr
+  if (tier.prize === 0 && (winners == null || winners === 0)) return "Report"
+  return formatEuro(tier.prize)
+}
+
+export function meanPrizeByRank(
+  draws: Array<Pick<Draw, "prizes">>
+): Map<number, number | null> {
+  const sums = new Map<number, { total: number; n: number }>()
+  for (const draw of draws) {
+    for (const tier of draw.prizes ?? []) {
+      if (tier.prize == null || !Number.isFinite(tier.prize)) continue
+      const slot = sums.get(tier.rank) ?? { total: 0, n: 0 }
+      slot.total += tier.prize
+      slot.n += 1
+      sums.set(tier.rank, slot)
+    }
+  }
+  const out = new Map<number, number | null>()
+  for (const [rank, slot] of sums) {
+    out.set(rank, slot.n > 0 ? slot.total / slot.n : null)
+  }
+  return out
 }
 
 export const DRAWS: Draw[] = [...rawDraws].sort((a, b) =>
@@ -112,7 +215,21 @@ export function drawMatchesQuery(draw: Draw, wanted: number[]) {
 }
 
 export function toCsv(draws: Draw[]) {
-  const header = "date,jour,tirage,n1,n2,n3,n4,n5,etoile1,etoile2"
+  const ranks = Array.from({ length: 13 }, (_, i) => i + 1)
+  const header = [
+    "date",
+    "jour",
+    "tirage",
+    "n1",
+    "n2",
+    "n3",
+    "n4",
+    "n5",
+    "etoile1",
+    "etoile2",
+    "jackpot",
+    ...ranks.slice(1).map((rank) => `r${rank}`),
+  ].join(",")
   const rows = [...draws]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((draw) =>
@@ -122,6 +239,10 @@ export function toCsv(draws: Draw[]) {
         draw.id,
         ...draw.numbers,
         ...draw.stars,
+        ...ranks.map((rank) => {
+          const value = prizeAtRank(draw, rank)
+          return value == null ? "" : String(value)
+        }),
       ].join(",")
     )
   return `${header}\n${rows.join("\n")}\n`

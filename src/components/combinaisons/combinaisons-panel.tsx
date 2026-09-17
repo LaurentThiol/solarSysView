@@ -82,6 +82,8 @@ import {
 import {
   expectedNumberHits,
   expectedStarHits,
+  formatEuro,
+  meanPrizeByRank,
   numberFrequencyTable,
   starFrequencyTable,
   type FrequencyItem,
@@ -146,7 +148,7 @@ const HELP = {
   },
   officialTable: {
     title: "Tableau des rangs",
-    body: "Les 13 rangs FDJ plus « pas de gain ». P est exacte ; « 1 sur N » = arrondi de 1/P.",
+    body: "Les 13 rangs FDJ plus « pas de gain ». P est exacte ; « 1 sur N » = arrondi de 1/P. Le rapport moyen est la moyenne des rapports FDJ de la fenêtre (descriptif, pas une prédiction).",
   },
   officialCollapse: {
     title: "Réduire le tableau",
@@ -167,6 +169,10 @@ const HELP = {
   oneInCol: {
     title: "1 sur",
     body: "Inverse arrondi de P. Vide quand P ≥ 0,5 (cas « pas de gain »).",
+  },
+  meanPrizeCol: {
+    title: "Rapport moyen",
+    body: "Moyenne des rapports FDJ de ce rang dans la fenêtre de travail. Descriptif : le jackpot reporté à 0 € tire la moyenne vers le bas. Vide si l’archive n’a pas d’euros (JSON local).",
   },
   empiricalP: {
     title: "P̂(gain) empirique",
@@ -304,6 +310,10 @@ const HELP = {
   checkRank: {
     title: "Rang",
     body: "Rang FDJ obtenu sur ce tirage, ou « Pas de gain ».",
+  },
+  checkPrize: {
+    title: "Rapport",
+    body: "Montant FDJ du rang sur ce tirage (une grille). Vide si pas de rang ou si l’échelle n’est pas chargée.",
   },
 } satisfies Record<string, HelpCopy>
 
@@ -700,6 +710,7 @@ export function CombinaisonsPanel() {
   const numberStats = useMemo(() => numberFrequencyTable(work), [work])
   const starStats = useMemo(() => starFrequencyTable(work), [work])
   const official = useMemo(() => officialWinProbability(12), [])
+  const meanPrizes = useMemo(() => meanPrizeByRank(work), [work])
 
   const grid = useMemo(
     () => ({ numbers: [...numbers].sort((a, b) => a - b), stars: [...stars].sort((a, b) => a - b) }),
@@ -1210,8 +1221,11 @@ export function CombinaisonsPanel() {
                       <th className="py-1 pr-3">
                         <TitleHelp help={HELP.pCol}>P</TitleHelp>
                       </th>
-                      <th className="py-1">
+                      <th className="py-1 pr-3">
                         <TitleHelp help={HELP.oneInCol}>1 sur</TitleHelp>
+                      </th>
+                      <th className="py-1">
+                        <TitleHelp help={HELP.meanPrizeCol}>Rapport moyen</TitleHelp>
                       </th>
                     </tr>
                   </thead>
@@ -1225,8 +1239,13 @@ export function CombinaisonsPanel() {
                         <td className="py-1 pr-3 tabular-nums">
                           {row.p.toExponential(3)}
                         </td>
-                        <td className="py-1 tabular-nums">
+                        <td className="py-1 pr-3 tabular-nums">
                           {row.oneIn?.toLocaleString("fr-FR") ?? "—"}
+                        </td>
+                        <td className="py-1 tabular-nums">
+                          {row.rank == null || meanPrizes.get(row.rank) == null
+                            ? "—"
+                            : formatEuro(meanPrizes.get(row.rank))}
                         </td>
                       </tr>
                     ))}
@@ -1301,7 +1320,11 @@ export function CombinaisonsPanel() {
             <Disclaimer>
               {profile.empirical.wins} gain
               {profile.empirical.wins > 1 ? "s" : ""} sur {profile.empirical.n}{" "}
-              tirages. Attendu étoiles : {formatStat(profile.expectedStars, 1)}.
+              tirages
+              {profile.empirical.prizeKnown > 0
+                ? ` · ${formatEuro(profile.empirical.prizeTotal)} de rapports FDJ`
+                : ""}
+              . Attendu étoiles : {formatStat(profile.expectedStars, 1)}.
               Somme moyenne de la fenêtre : {formatStat(profile.windowSumMean, 1)}.
             </Disclaimer>
           </CardContent>
@@ -1546,6 +1569,9 @@ export function CombinaisonsPanel() {
                     <TableHead>
                       <TitleHelp help={HELP.checkRank}>Rang</TitleHelp>
                     </TableHead>
+                    <TableHead>
+                      <TitleHelp help={HELP.checkPrize}>Rapport</TitleHelp>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1557,6 +1583,9 @@ export function CombinaisonsPanel() {
                       </TableCell>
                       <TableCell>
                         {row.rank == null ? row.label : `${row.rank} · ${row.label}`}
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {row.prize == null ? "—" : formatEuro(row.prize)}
                       </TableCell>
                     </TableRow>
                   ))}

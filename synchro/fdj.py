@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -33,6 +34,9 @@ USER_AGENT = (
     "Mozilla/5.0 (compatible; Synchro/0.1; +https://github.com/LaurentThiol/Synchro)"
 )
 
+_RANK_RE = re.compile(r"rang(\d+)")
+MAX_PRIZE_RANK = 13
+
 
 @dataclass(frozen=True)
 class Draw:
@@ -47,6 +51,7 @@ class Draw:
     prize_rank1: Decimal | None
     my_million: str | None
     raw: dict[str, str]
+    prizes: list[dict[str, Any]] = field(default_factory=list)
 
     def as_row(self) -> dict[str, Any]:
         return {
@@ -60,6 +65,7 @@ class Draw:
             "winners_rank1_eu": self.winners_rank1_eu,
             "prize_rank1": self.prize_rank1,
             "my_million": self.my_million,
+            "prizes": prizes_as_json(self.prizes),
             "source": "fdj",
             "raw": self.raw,
         }
@@ -137,6 +143,101 @@ def _find_contains(row: dict[str, str], *needles: str) -> str:
     return ""
 
 
+def _is_add_on_key(key: str) -> bool:
+    compact = key.replace(" ", "").replace("_", "")
+    if "etoile+" in compact or "etoileplus" in compact:
+        return True
+    if "mymillion" in compact:
+        return True
+    return False
+
+
+def prizes_as_json(prizes: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    payload: list[dict[str, Any]] = []
+    for item in prizes or []:
+        rank = item.get("rank")
+        try:
+            rank_n = int(rank)
+        except (TypeError, ValueError):
+            continue
+        prize = item.get("prize")
+        payload.append(
+            {
+                "rank": rank_n,
+                "winners_fr": item.get("winners_fr"),
+                "winners_eu": item.get("winners_eu"),
+                "prize": float(prize) if prize is not None else None,
+            }
+        )
+    return payload
+
+
+def parse_prizes(row: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Échelle EuroMillions (rangs 1–13) depuis une ligne CSV FDJ, clés foldées ou non.
+
+    Ignore Étoile+ / My Million. Préfère les colonnes « Euro_Millions » aux
+    libellés courts quand les deux existent.
+    """
+    if not row:
+        return []
+    indexed: dict[str, str] = {}
+    for key, value in row.items():
+        if key is None:
+            continue
+        indexed[_fold(str(key))] = "" if value is None else str(value)
+
+    prize: dict[int, tuple[int, Decimal]] = {}
+    winners_fr: dict[int, tuple[int, int]] = {}
+    winners_eu: dict[int, tuple[int, int]] = {}
+
+    for key, value in indexed.items():
+        if _is_add_on_key(key):
+            continue
+        if "rapport" not in key and "gagnant" not in key:
+            continue
+        match = _RANK_RE.search(key)
+        if not match:
+            continue
+        rank = int(match.group(1))
+        if rank < 1 or rank > MAX_PRIZE_RANK:
+            continue
+        score = 2 if "euro_millions" in key or "euromillions" in key else 1
+        if "rapport" in key:
+            parsed = parse_fr_decimal(value)
+            if parsed is None:
+                continue
+            prev = prize.get(rank)
+            if prev is None or score >= prev[0]:
+                prize[rank] = (score, parsed)
+        elif "gagnant" in key:
+            parsed_n = parse_fr_int(value)
+            if parsed_n is None:
+                continue
+            if "france" in key:
+                prev_fr = winners_fr.get(rank)
+                if prev_fr is None or score >= prev_fr[0]:
+                    winners_fr[rank] = (score, parsed_n)
+            elif "europe" in key:
+                prev_eu = winners_eu.get(rank)
+                if prev_eu is None or score >= prev_eu[0]:
+                    winners_eu[rank] = (score, parsed_n)
+
+    ranks = sorted(set(prize) | set(winners_fr) | set(winners_eu))
+    return [
+        {
+            "rank": rank,
+            "winners_fr": winners_fr[rank][1] if rank in winners_fr else None,
+            "winners_eu": winners_eu[rank][1] if rank in winners_eu else None,
+            "prize": prize[rank][1] if rank in prize else None,
+        }
+        for rank in ranks
+    ]
+
+
+def prizes_from_raw(raw: dict[str, Any] | None) -> list[dict[str, Any]]:
+    return prizes_as_json(parse_prizes(raw))
+
+
 def normalize_weekday(value: str) -> str | None:
     text = value.strip().upper()
     if not text:
@@ -167,26 +268,8 @@ def parse_row(row: dict[str, str | None]) -> Draw:
     if len(set(stars)) != 2 or any(s < 1 or s > pool for s in stars):
         raise ValueError("Étoiles invalides")
 
-    winners_fr = parse_fr_int(
-        _get(
-            idx,
-            "nombre_de_gagnant_au_rang1_Euro_Millions_en_france",
-            "nombre_de_gagnant_au_rang1_en_france",
-        )
-        or _find_contains(idx, "gagnant", "rang1", "france")
-    )
-    winners_eu = parse_fr_int(
-        _get(
-            idx,
-            "nombre_de_gagnant_au_rang1_Euro_Millions_en_europe",
-            "nombre_de_gagnant_au_rang1_en_europe",
-        )
-        or _find_contains(idx, "gagnant", "rang1", "europe")
-    )
-    prize = parse_fr_decimal(
-        _get(idx, "rapport_du_rang1_Euro_Millions", "rapport_du_rang1")
-        or _find_contains(idx, "rapport", "rang1")
-    )
+    prizes = parse_prizes(idx)
+    rank1 = next((item for item in prizes if item["rank"] == 1), None)
     million = _get(idx, "numero_My_Million") or _find_contains(idx, "my_million")
     million = " ".join(million.split()) or None
 
@@ -197,10 +280,11 @@ def parse_row(row: dict[str, str | None]) -> Draw:
         numbers=numbers,
         stars=stars,
         star_pool=pool,
-        winners_rank1_fr=winners_fr,
-        winners_rank1_eu=winners_eu,
-        prize_rank1=prize,
+        winners_rank1_fr=None if rank1 is None else rank1["winners_fr"],
+        winners_rank1_eu=None if rank1 is None else rank1["winners_eu"],
+        prize_rank1=None if rank1 is None else rank1["prize"],
         my_million=million,
+        prizes=prizes,
         raw={k: v for k, v in idx.items() if k},
     )
 

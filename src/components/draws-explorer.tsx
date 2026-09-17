@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { Download, Search } from "lucide-react"
+import { Fragment, useEffect, useMemo, useState } from "react"
+import { ChevronDown, Download, Search } from "lucide-react"
 
 import { LabelHelp, TitleHelp, WithHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
@@ -28,17 +28,23 @@ import {
   archiveSummary,
   drawMatchesQuery,
   formatDrawDate,
+  formatEuro,
+  formatJackpot,
   monthOf,
   monthsPresent,
   parseQueryNumbers,
   toCsv,
+  type Draw,
+  PRIZE_RANK_LABELS,
 } from "@/lib/draws"
 import { useDraws } from "@/lib/use-draws"
+import { cn } from "@/lib/utils"
 
 export function DrawsExplorer() {
   const { draws, source } = useDraws("year")
   const [month, setMonth] = useState("all")
   const [query, setQuery] = useState("")
+  const [openDate, setOpenDate] = useState<string | null>(null)
   const wanted = useMemo(() => parseQueryNumbers(query), [query])
   const monthOptions = useMemo(() => monthsPresent(draws), [draws])
 
@@ -96,7 +102,7 @@ export function DrawsExplorer() {
           value={last ? last.numbers.join(" · ") : "—"}
           hint={
             last
-              ? `Étoiles ${last.stars.join(" et ")} · n° ${last.id}`
+              ? `Étoiles ${last.stars.join(" et ")} · n° ${last.id} · ${formatJackpot(last)}`
               : "Aucun tirage"
           }
         />
@@ -127,7 +133,7 @@ export function DrawsExplorer() {
             <WithHelp
               help={{
                 title: "Télécharger le CSV",
-                body: "Exporte les tirages actuellement affichés (après filtres mois et numéros) au format CSV, encodage UTF-8.",
+                body: "Exporte les tirages actuellement affichés (après filtres mois et numéros) au format CSV, encodage UTF-8. Colonnes jackpot puis r2–r13 : rapports FDJ en euros.",
               }}
             >
               <Button type="button" variant="outline" onClick={downloadCsv}>
@@ -198,53 +204,153 @@ export function DrawsExplorer() {
                       <TableHead>Date</TableHead>
                       <TableHead>Tirage</TableHead>
                       <TableHead>Numéros + étoiles</TableHead>
+                      <TableHead className="text-right">Jackpot</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.map((draw) => (
-                      <TableRow key={`${draw.date}-${draw.id}`}>
-                        <TableCell className="whitespace-nowrap capitalize">
-                          {formatDrawDate(draw.date)}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground tabular-nums">
-                          {draw.id}
-                        </TableCell>
-                        <TableCell>
-                          <DrawBalls
-                            numbers={draw.numbers}
-                            stars={draw.stars}
-                            highlights={wanted}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filtered.map((draw) => {
+                      const open = openDate === draw.date
+                      return (
+                        <Fragment key={`${draw.date}-${draw.id}`}>
+                          <TableRow
+                            className="cursor-pointer"
+                            data-state={open ? "selected" : undefined}
+                            onClick={() =>
+                              setOpenDate(open ? null : draw.date)
+                            }
+                          >
+                            <TableCell className="whitespace-nowrap capitalize">
+                              {formatDrawDate(draw.date)}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground tabular-nums">
+                              {draw.id}
+                            </TableCell>
+                            <TableCell>
+                              <DrawBalls
+                                numbers={draw.numbers}
+                                stars={draw.stars}
+                                highlights={wanted}
+                              />
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              <span className="inline-flex items-center justify-end gap-1">
+                                {formatJackpot(draw)}
+                                <ChevronDown
+                                  className={cn(
+                                    "size-3.5 text-muted-foreground transition-transform",
+                                    open && "rotate-180"
+                                  )}
+                                />
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                          {open ? (
+                            <TableRow>
+                              <TableCell colSpan={4} className="bg-muted/30">
+                                <PrizeLadder draw={draw} />
+                              </TableCell>
+                            </TableRow>
+                          ) : null}
+                        </Fragment>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
               <div className="flex flex-col gap-3 md:hidden">
-                {filtered.map((draw) => (
-                  <article
-                    key={`${draw.date}-${draw.id}`}
-                    className="rounded-xl border border-border bg-card/60 p-4"
-                  >
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium capitalize">
-                        {formatDrawDate(draw.date)}
-                      </p>
-                      <Badge variant="outline">n° {draw.id}</Badge>
-                    </div>
-                    <DrawBalls
-                      numbers={draw.numbers}
-                      stars={draw.stars}
-                      highlights={wanted}
-                    />
-                  </article>
-                ))}
+                {filtered.map((draw) => {
+                  const open = openDate === draw.date
+                  return (
+                    <article
+                      key={`${draw.date}-${draw.id}`}
+                      className="rounded-xl border border-border bg-card/60 p-4"
+                    >
+                      <button
+                        type="button"
+                        className="mb-3 flex w-full items-center justify-between gap-2 text-left"
+                        onClick={() => setOpenDate(open ? null : draw.date)}
+                        aria-expanded={open}
+                      >
+                        <p className="text-sm font-medium capitalize">
+                          {formatDrawDate(draw.date)}
+                        </p>
+                        <span className="flex items-center gap-2">
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {formatJackpot(draw)}
+                          </span>
+                          <Badge variant="outline">n° {draw.id}</Badge>
+                          <ChevronDown
+                            className={cn(
+                              "size-3.5 text-muted-foreground transition-transform",
+                              open && "rotate-180"
+                            )}
+                          />
+                        </span>
+                      </button>
+                      <DrawBalls
+                        numbers={draw.numbers}
+                        stars={draw.stars}
+                        highlights={wanted}
+                      />
+                      {open ? (
+                        <div className="mt-3">
+                          <PrizeLadder draw={draw} />
+                        </div>
+                      ) : null}
+                    </article>
+                  )
+                })}
               </div>
             </>
           )}
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function PrizeLadder({ draw }: { draw: Draw }) {
+  const prizes = draw.prizes ?? []
+  if (prizes.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Rapports FDJ indisponibles pour ce tirage (fichier local ou archive
+        ancienne sans colonnes de rangs).
+      </p>
+    )
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-left text-muted-foreground">
+            <th className="py-1 pr-3 font-medium">Rang</th>
+            <th className="py-1 pr-3 font-medium">Gain</th>
+            <th className="py-1 pr-3 font-medium">Rapport</th>
+            <th className="py-1 pr-3 font-medium">Gagnants EU</th>
+            <th className="py-1 font-medium">Gagnants FR</th>
+          </tr>
+        </thead>
+        <tbody>
+          {prizes.map((tier) => (
+            <tr key={tier.rank} className="border-t border-border">
+              <td className="py-1 pr-3 tabular-nums">{tier.rank}</td>
+              <td className="py-1 pr-3">
+                {PRIZE_RANK_LABELS[tier.rank] ?? `Rang ${tier.rank}`}
+              </td>
+              <td className="py-1 pr-3 tabular-nums">
+                {tier.rank === 1
+                  ? formatJackpot(draw)
+                  : formatEuro(tier.prize)}
+              </td>
+              <td className="py-1 pr-3 tabular-nums">
+                {tier.winners_eu ?? "—"}
+              </td>
+              <td className="py-1 tabular-nums">{tier.winners_fr ?? "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

@@ -89,6 +89,63 @@ def test_decorate_settled_jackpot() -> None:
     assert row["status"] == "settled"
     assert row["result"]["rank"] == 1
     assert row["copies"] == 2
+    assert row["result"]["prize"] is None
+
+
+def test_decorate_settled_multiplies_fdj_prize_by_copies() -> None:
+    play = {
+        "id": 1,
+        "label": "A",
+        "numbers": [1, 2, 3, 4, 5],
+        "stars": [1, 2],
+        "play_date": date(2026, 9, 1),
+        "source": "combinaisons",
+        "copies": 2,
+    }
+    draw = {
+        "numbers": [5, 4, 3, 2, 1],
+        "stars": [2, 1],
+        "weekday": "mardi",
+        "prizes": [{"rank": 1, "winners_fr": 0, "winners_eu": 1, "prize": 17000000}],
+    }
+    row = decorate_play(play, draw)
+    assert row["result"]["prize"] == 34000000.0
+
+
+def test_summarize_adds_fdj_prizes() -> None:
+    win = decorate_play(
+        {
+            "id": 1,
+            "numbers": [1, 2, 3, 4, 5],
+            "stars": [1, 2],
+            "play_date": "2026-09-01",
+            "source": "jeux",
+            "copies": 2,
+        },
+        {
+            "numbers": [1, 2, 3, 4, 5],
+            "stars": [1, 2],
+            "prizes": [{"rank": 1, "winners_fr": 0, "winners_eu": 1, "prize": 12.5}],
+        },
+    )
+    miss = decorate_play(
+        {
+            "id": 2,
+            "numbers": [10, 11, 12, 13, 14],
+            "stars": [3, 4],
+            "play_date": "2026-09-01",
+            "source": "jeux",
+            "copies": 1,
+        },
+        {
+            "numbers": [1, 2, 3, 4, 5],
+            "stars": [1, 2],
+            "prizes": [{"rank": 1, "winners_fr": 0, "winners_eu": 1, "prize": 12.5}],
+        },
+    )
+    stats = summarize_plays([win, miss])
+    assert stats["prize_total"] == 25.0
+    assert stats["prize_known"] == 3
 
 
 def test_summarize_weights_copies() -> None:
@@ -140,6 +197,8 @@ def test_summarize_weights_copies() -> None:
     assert stats["binomial"]["compatible"] is True
     assert stats["p0"] == official_p_any_rank()
     assert 0.07 < stats["p0"] < 0.08
+    assert stats["prize_total"] == 0
+    assert stats["prize_known"] == 0
 
 
 def test_binomial_two_sided_matches_known_values() -> None:

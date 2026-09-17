@@ -29,7 +29,7 @@ POOL_MAX_LIFETIME_SEC = 30 * 60
 DRAW_COLUMNS = (
     "id, draw_date, draw_code, weekday, numbers, stars, star_pool, "
     "winners_rank1_fr, winners_rank1_eu, prize_rank1, my_million, "
-    "source, imported_at"
+    "prizes, source, imported_at"
 )
 
 SCHEMA_SQL = """
@@ -45,12 +45,14 @@ CREATE TABLE IF NOT EXISTS draws (
     winners_rank1_eu INTEGER,
     prize_rank1     NUMERIC,
     my_million      TEXT,
+    prizes          JSONB,
     source          TEXT NOT NULL DEFAULT 'fdj',
     imported_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     raw             JSONB
 );
 
 CREATE INDEX IF NOT EXISTS draws_date_desc ON draws (draw_date DESC);
+ALTER TABLE draws ADD COLUMN IF NOT EXISTS prizes JSONB;
 
 CREATE TABLE IF NOT EXISTS grids (
     id          BIGSERIAL PRIMARY KEY,
@@ -461,6 +463,42 @@ def init_db() -> None:
         with conn.cursor() as cur:
             cur.execute(SCHEMA_SQL)
         conn.commit()
+    backfill_prizes_from_raw()
+
+
+def backfill_prizes_from_raw() -> int:
+    """Remplit `prizes` depuis `raw` (archives déjà importées, sans re-télécharger)."""
+    from synchro.fdj import prizes_from_raw
+
+    updated = 0
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, raw
+                FROM draws
+                WHERE prizes IS NULL AND raw IS NOT NULL
+                """
+            )
+            rows = list(cur.fetchall())
+            for row in rows:
+                raw = row["raw"] or {}
+                if isinstance(raw, str):
+                    try:
+                        import json
+
+                        raw = json.loads(raw)
+                    except json.JSONDecodeError:
+                        raw = {}
+                if not isinstance(raw, dict):
+                    raw = {}
+                cur.execute(
+                    "UPDATE draws SET prizes = %(prizes)s WHERE id = %(id)s",
+                    {"prizes": Jsonb(prizes_from_raw(raw)), "id": row["id"]},
+                )
+                updated += 1
+        conn.commit()
+    return updated
 
 
 def _json_ready(value: Any) -> Any:
@@ -482,11 +520,11 @@ def upsert_draws(rows: list[dict[str, Any]]) -> int:
         INSERT INTO draws (
             draw_date, draw_code, weekday, numbers, stars, star_pool,
             winners_rank1_fr, winners_rank1_eu, prize_rank1, my_million,
-            source, raw
+            prizes, source, raw
         ) VALUES (
             %(draw_date)s, %(draw_code)s, %(weekday)s, %(numbers)s, %(stars)s,
             %(star_pool)s, %(winners_rank1_fr)s, %(winners_rank1_eu)s,
-            %(prize_rank1)s, %(my_million)s, %(source)s, %(raw)s
+            %(prize_rank1)s, %(my_million)s, %(prizes)s, %(source)s, %(raw)s
         )
         ON CONFLICT (draw_date) DO UPDATE SET
             draw_code = EXCLUDED.draw_code,
@@ -498,6 +536,7 @@ def upsert_draws(rows: list[dict[str, Any]]) -> int:
             winners_rank1_eu = EXCLUDED.winners_rank1_eu,
             prize_rank1 = EXCLUDED.prize_rank1,
             my_million = EXCLUDED.my_million,
+            prizes = EXCLUDED.prizes,
             source = EXCLUDED.source,
             raw = EXCLUDED.raw,
             imported_at = now()
@@ -508,6 +547,7 @@ def upsert_draws(rows: list[dict[str, Any]]) -> int:
             for row in rows:
                 payload = dict(row)
                 payload["raw"] = Jsonb(_json_ready(payload.get("raw") or {}))
+                payload["prizes"] = Jsonb(_json_ready(payload.get("prizes") or []))
                 cur.execute(sql, payload)
                 count += 1
         conn.commit()

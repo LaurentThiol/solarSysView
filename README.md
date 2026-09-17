@@ -47,7 +47,7 @@ Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait 
 
 ## Tirage (`/tirage`)
 
-Archives EuroMillions : tableau filtrable et export CSV. En local, les données viennent de **Neon** (année du dernier tirage) dès que l’API répond ; sinon repli sur `src/data/euromillions-2026.json`. L’accueil `/` redirige vers cet onglet.
+Archives EuroMillions : tableau filtrable, jackpot / report, échelle des 13 rangs FDJ au clic, et export CSV (numéros + rapports €). En local, les données viennent de **Neon** (année du dernier tirage) dès que l’API répond ; sinon repli sur `src/data/euromillions-2026.json` (sans euros). L’accueil `/` redirige vers cet onglet.
 
 ## Évolution (`/evolution`)
 
@@ -63,7 +63,7 @@ Les tirages sont indépendants : ces outils décrivent l’archive, ils ne préd
 
 ## Combinaisons (`/combinaisons`)
 
-Composeur EuroMillions 5+2 : chaque boule affiche **total de sorties** et **retard** dans la même fenêtre de travail qu’Analyse. Cinq stratégies proposent jusqu’à 20 grilles (équilibré, retards, totaux élevés / faibles, aléatoire). Le score affiché est une **proba de gain** : loi officielle des 13 rangs (identique pour toute grille 5+2) et **P̂ empirique** (part des tirages de la fenêtre où la grille aurait été payée, avec IC Wilson). Les **modèles** se sauvegardent via `/api/grids` (Neon) ou, à défaut, en session. **Consigner** envoie une grille (ou toute la salve) dans **histoJeux** pour un tirage mardi/vendredi. La dernière salve de propositions est lue par **Jeux** pour l’intersection.
+Composeur EuroMillions 5+2 : chaque boule affiche **total de sorties** et **retard** dans la même fenêtre de travail qu’Analyse. Cinq stratégies proposent jusqu’à 20 grilles (équilibré, retards, totaux élevés / faibles, aléatoire). Le score affiché est une **proba de gain** : loi officielle des 13 rangs (identique pour toute grille 5+2) et **P̂ empirique** (part des tirages de la fenêtre où la grille aurait été payée, avec IC Wilson). Le tableau officiel ajoute le **rapport moyen** FDJ de la fenêtre (descriptif). Le contrôle tirage par tirage affiche le rapport € du rang. Les **modèles** se sauvegardent via `/api/grids` (Neon) ou, à défaut, en session. **Consigner** envoie une grille (ou toute la salve) dans **histoJeux** pour un tirage mardi/vendredi. La dernière salve de propositions est lue par **Jeux** pour l’intersection.
 
 ## Jeux (`/jeux`)
 
@@ -71,7 +71,7 @@ Deux onglets.
 
 **Solutions** — compteur combinatoire de l’univers EuroMillions (5 parmi 50 × 2 parmi 12 = 139 838 160). Les curseurs de somme, de parité pair/impair, d’étendue, de consécutifs, de décennies (1–10 … 41–50) et de chance 0–100 % par boule réduisent l’espace ; le bandeau affiche en permanence le nombre exact de grilles restantes. 0 % exclut une boule ; un seuil de présence fait entrer les pourcentages intermédiaires dans le décompte entier ; un clic impose une boule. Sous 50 solutions la liste s’affiche, sinon un échantillon uniforme. Les propositions de Combinaisons (session, jusqu’à 20) sont filtrées : combien survivent ici. Ce n’est pas un pronostic : le tirage officiel reste uniforme.
 
-**histoJeux** — journal des grilles **réellement jouées**, stocké dans Neon (`plays`). Chaque ligne a une date de tirage (mardi/vendredi, défaut = prochain tirage encore ouvert avant 20h45 Paris). Après synchro FDJ, rang et correspondances se calculent. Stats descriptives (rangs, matches, boules les plus jouées), **IC Wilson** et **test binomial exact** vs P(gain) officielle ≈ 7,71 % (une consignation = un essai ; les copies ne sont pas des essais de plus). Les consignations depuis Solutions emportent le **spec Jeux** (somme, décennies, forcés…) pour relire pourquoi la grille a été jouée, et **Rouvrir dans Jeux** recharge ces curseurs. Export CSV. Repli session si l’API ne répond pas. Distinct de Mes grilles, qui reste une bibliothèque de modèles.
+**histoJeux** — journal des grilles **réellement jouées**, stocké dans Neon (`plays`). Chaque ligne a une date de tirage (mardi/vendredi, défaut = prochain tirage encore ouvert avant 20h45 Paris). Après synchro FDJ, rang, correspondances et **rapport €** (× copies) se calculent. Stats descriptives (rangs, matches, total des gains FDJ, boules les plus jouées), **IC Wilson** et **test binomial exact** vs P(gain) officielle ≈ 7,71 % (une consignation = un essai ; les copies ne sont pas des essais de plus). Les consignations depuis Solutions emportent le **spec Jeux** (somme, décennies, forcés…) pour relire pourquoi la grille a été jouée, et **Rouvrir dans Jeux** recharge ces curseurs. Export CSV. Repli session si l’API ne répond pas. Distinct de Mes grilles, qui reste une bibliothèque de modèles.
 
 ## Morpho (`/morpho`)
 
@@ -304,7 +304,7 @@ Puis http://127.0.0.1:8000 (docs : `/docs`).
 
 `DATABASE_URL` ne doit **jamais** être commitée. `.env` en local, variables d’environnement / secret GitHub Actions en déployé. Au premier `./launch`, le fichier `.env` est créé depuis `.env.example` s’il manque.
 
-Chaque ligne de `draws` contient la date, le jour, 5 numéros et 2 étoiles, `star_pool` (9 / 11 / **12 depuis le 27/09/2016**), les gagnants rang 1 FR/EU, et le code My Million s’il est dans l’archive.
+Chaque ligne de `draws` contient la date, le jour, 5 numéros et 2 étoiles, `star_pool` (9 / 11 / **12 depuis le 27/09/2016**), les gagnants rang 1 FR/EU, le code My Million s’il est dans l’archive, et **`prizes`** : l’échelle des rapports FDJ (rangs 1–13, gagnants FR/EU, montant en €). Un jackpot à 0 € sans gagnant est un report. Étoile+ n’est pas importé.
 
 Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heure de Paris) si le secret `DATABASE_URL` est défini.
 

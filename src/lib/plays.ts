@@ -8,6 +8,7 @@ import {
   sortedGrid,
   type CombinationGrid,
 } from "@/lib/combinations"
+import { prizeAtRank, type PrizeTier } from "@/lib/draws"
 import { consecutiveCount, decadeCounts, spreadOf } from "@/lib/grid-shape"
 import {
   parseStoredSpec,
@@ -38,6 +39,7 @@ export type PlayResult = {
   label: string
   winning_numbers: number[]
   winning_stars: number[]
+  prize?: number | null
 }
 
 export type PlayDraw = {
@@ -45,6 +47,7 @@ export type PlayDraw = {
   stars: number[]
   weekday?: string
   star_pool?: number | null
+  prizes?: PrizeTier[]
 }
 
 export type PlayRecord = CombinationGrid & {
@@ -117,6 +120,8 @@ export type PlayStats = {
   covers_p0: boolean | null
   binomial: PlayBinomial | null
   unique_grids: number
+  prize_total: number
+  prize_known: number
   by_rank: Array<{ rank: number | null; label: string; count: number }>
   by_match: Array<{ label: string; count: number }>
   by_source: Array<{ id: PlaySource; label: string; count: number }>
@@ -236,6 +241,19 @@ export type DrawLike = {
   stars: number[]
   weekday?: string
   star_pool?: number
+  prizes?: PrizeTier[]
+}
+
+export function playPrizeAmount(
+  draw: Pick<DrawLike, "prizes"> | null | undefined,
+  rank: number | null | undefined,
+  copies: number
+): number | null {
+  if (!draw?.prizes?.length) return null
+  if (rank == null) return 0
+  const unit = prizeAtRank(draw, rank)
+  if (unit == null) return null
+  return unit * copies
 }
 
 export function decoratePlay(
@@ -283,12 +301,14 @@ export function decoratePlay(
       label: evaluated.label,
       winning_numbers: evaluated.winningNumbers,
       winning_stars: evaluated.winningStars,
+      prize: playPrizeAmount(draw, evaluated.rank, copies),
     },
     draw: {
       numbers: [...draw.numbers],
       stars: [...draw.stars],
       weekday: draw.weekday || base.weekday,
       star_pool: draw.star_pool,
+      prizes: draw.prizes,
     },
   }
 }
@@ -318,6 +338,8 @@ export function summarizePlays(items: DecoratedPlay[]): PlayStats {
   const numberHits = new Map<number, number>()
   const starHits = new Map<number, number>()
   const unique = new Set<string>()
+  let prizeTotal = 0
+  let prizeKnown = 0
 
   for (const item of items) {
     const copies = normalizeCopies(item.copies)
@@ -340,6 +362,10 @@ export function summarizePlays(items: DecoratedPlay[]): PlayStats {
     }
     for (const value of item.result.winning_stars) {
       starHits.set(value, (starHits.get(value) ?? 0) + copies)
+    }
+    if (item.result.prize != null) {
+      prizeTotal += item.result.prize
+      prizeKnown += copies
     }
   }
 
@@ -395,6 +421,8 @@ export function summarizePlays(items: DecoratedPlay[]): PlayStats {
     covers_p0: wilsonInterval ? wilsonInterval.lo <= p0 && p0 <= wilsonInterval.hi : null,
     binomial,
     unique_grids: unique.size,
+    prize_total: prizeTotal,
+    prize_known: prizeKnown,
     by_rank: rankRows,
     by_match: [...byMatch.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -471,6 +499,7 @@ export function playsToCsv(items: DecoratedPlay[]) {
     "matched_stars",
     "rank",
     "rank_label",
+    "prize",
     "note",
     "spec",
   ]
@@ -492,6 +521,7 @@ export function playsToCsv(items: DecoratedPlay[]) {
       item.result ? String(item.result.matched_stars) : "",
       item.result?.rank == null ? "" : String(item.result.rank),
       csvCell(item.result?.label ?? ""),
+      item.result?.prize == null ? "" : String(item.result.prize),
       csvCell(item.note ?? ""),
       csvCell(specText),
     ]

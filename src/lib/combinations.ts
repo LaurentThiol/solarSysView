@@ -9,6 +9,7 @@ import {
   type FrequencyItem,
   expectedNumberHits,
   expectedStarHits,
+  prizeAtRank,
 } from "@/lib/draws"
 
 export type CombinationGrid = {
@@ -179,23 +180,28 @@ export type CheckRow = {
   label: string
   winningNumbers: number[]
   winningStars: number[]
+  prize: number | null
 }
 
 export function checkGridAgainstDraws(
   grid: CombinationGrid,
-  draws: Array<Pick<Draw, "date" | "numbers" | "stars">>
+  draws: Array<Pick<Draw, "date" | "numbers" | "stars" | "prizes">>
 ): CheckRow[] {
   return [...draws]
     .sort((a, b) => b.date.localeCompare(a.date))
     .map((draw) => {
       const result = evaluateGrid(grid, draw)
-      return { date: draw.date, ...result }
+      return {
+        date: draw.date,
+        ...result,
+        prize: prizeAtRank(draw, result.rank),
+      }
     })
 }
 
 export function empiricalWinRate(
   grid: CombinationGrid,
-  draws: Array<Pick<Draw, "date" | "numbers" | "stars">>
+  draws: Array<Pick<Draw, "date" | "numbers" | "stars" | "prizes">>
 ) {
   const results = checkGridAgainstDraws(grid, draws)
   const n = results.length
@@ -208,6 +214,8 @@ export function empiricalWinRate(
     const key = row.rank == null ? "none" : String(row.rank)
     byRank[key] = (byRank[key] ?? 0) + 1
   }
+  const priced = results.filter((row) => row.prize != null)
+  const prizeTotal = priced.reduce((sum, row) => sum + (row.prize ?? 0), 0)
   return {
     n,
     wins,
@@ -217,6 +225,8 @@ export function empiricalWinRate(
     pTop10: n > 0 ? winsTop10 / n : 0,
     byRank,
     results,
+    prizeTotal,
+    prizeKnown: priced.length,
   }
 }
 
@@ -535,7 +545,7 @@ export type GridProfile = {
 
 export function profileGrid(
   grid: CombinationGrid,
-  draws: Array<Pick<Draw, "date" | "numbers" | "stars">>,
+  draws: Array<Pick<Draw, "date" | "numbers" | "stars" | "prizes">>,
   numberStats: FrequencyItem[],
   starStats: FrequencyItem[]
 ): GridProfile {
@@ -687,7 +697,7 @@ export function proposeGrids({
 }: {
   numberStats: FrequencyItem[]
   starStats: FrequencyItem[]
-  draws: Array<Pick<Draw, "date" | "numbers" | "stars">>
+  draws: Array<Pick<Draw, "date" | "numbers" | "stars" | "prizes">>
   strategy: CombinationStrategy
   count: number
   seed?: number
