@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { LogOut, Menu, X } from "lucide-react"
 
 import { CaptureButton } from "@/components/capture"
@@ -548,10 +549,13 @@ function LocalLlmPill() {
   )
 }
 
+const NAV_GROUP_ORDER = ["Archives", "Laboratoires", "Assistants", "Système"] as const
+
 const NAV_ITEMS = [
   {
     href: "/tirage",
     label: "Tirage",
+    group: "Archives",
     help: {
       title: "Tirage",
       body: "Archives EuroMillions : filtrer par mois ou par numéros, puis exporter en CSV.",
@@ -560,6 +564,7 @@ const NAV_ITEMS = [
   {
     href: "/evolution",
     label: "Évolution",
+    group: "Archives",
     help: {
       title: "Évolution",
       body: "Courbes dans le temps, suivi pair/impair, forme de la grille (décennies, étendue, consécutifs), classements. Accès protégé par mot de passe admin.",
@@ -568,6 +573,7 @@ const NAV_ITEMS = [
   {
     href: "/analyse",
     label: "Analyse",
+    group: "Laboratoires",
     help: {
       title: "Analyse",
       body: "Laboratoire : indicateurs, numéros, hasard, probabilités. Tous les onglets lisent la même fenêtre de tirages.",
@@ -576,6 +582,7 @@ const NAV_ITEMS = [
   {
     href: "/combinaisons",
     label: "Combinaisons",
+    group: "Laboratoires",
     help: {
       title: "Combinaisons",
       body: "Composer, proposer et comparer des grilles EuroMillions. Retards et totaux pour choisir ; score = proba de gain (loi officielle + rétro-test), pas un pronostic.",
@@ -584,6 +591,7 @@ const NAV_ITEMS = [
   {
     href: "/jeux",
     label: "Jeux",
+    group: "Laboratoires",
     help: {
       title: "Jeux",
       body: "Solutions : compteur combinatoire (somme, parité, forme, chances). histoJeux : journal Neon des grilles jouées, relues contre le tirage FDJ, test binomial vs 7,71 %. Ce n’est pas un pronostic.",
@@ -592,6 +600,7 @@ const NAV_ITEMS = [
   {
     href: "/morpho",
     label: "Morpho",
+    group: "Laboratoires",
     help: {
       title: "Morpho",
       body: "Glyphes 5×10, lexique de formes, voisins visuels CLIP, VLM local (Ollama moondream ou Moondream2), règles QUAND/ALORS et anticipation.",
@@ -600,6 +609,7 @@ const NAV_ITEMS = [
   {
     href: "/relief",
     label: "Relief",
+    group: "Laboratoires",
     help: {
       title: "Relief",
       body: "Une ligne n1→n5 par tirage. Boule ou point. Zoom plus serré à 100/200. Calque rangs dans le temps. Tiges masquables. Le glyphe 5×10 reste Morpho.",
@@ -608,6 +618,7 @@ const NAV_ITEMS = [
   {
     href: "/chartisme",
     label: "Chartisme",
+    group: "Laboratoires",
     help: {
       title: "Chartisme",
       body: "Figures chartistes sur les courbes du logiciel : détection, annotation dessinée, atelier d'étiquetage, règles descriptives et rétro-test contre le hasard. Ne touche pas aux grilles.",
@@ -616,6 +627,7 @@ const NAV_ITEMS = [
   {
     href: "/harmo",
     label: "Harmo",
+    group: "Laboratoires",
     help: {
       title: "Harmo",
       body: "Étude harmonique des séries de tirages : mélange réseau / mécanique / acoustique, FFT, STFT, Hilbert. Unités en cycles/tirage, pas des hertz. Décrit le tracé, pas le prochain tirage.",
@@ -624,6 +636,7 @@ const NAV_ITEMS = [
   {
     href: "/brain",
     label: "Brain",
+    group: "Assistants",
     help: {
       title: "Brain",
       body: "Épingle des noms (@rsi, @ete…) : Brain ne lit que ce qui est sur la table. Discussion en local (Ollama). Gemini / OpenAI seulement si tu le demandes. L’onglet IA reste la lecture de captures.",
@@ -632,6 +645,7 @@ const NAV_ITEMS = [
   {
     href: "/brain/specialistes",
     label: "Spécialistes",
+    group: "Assistants",
     help: {
       title: "Spécialistes",
       body: "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté 20/50/100. Jamais une grille 5+2. Démo guidée : Suivant ou Annuler.",
@@ -640,6 +654,7 @@ const NAV_ITEMS = [
   {
     href: "/ia",
     label: "IA",
+    group: "Assistants",
     help: {
       title: "IA",
       body: "Lecture d’une capture : visuel du laboratoire plus les données de la fenêtre. Gemini ou OpenAI, puis le modèle. Historique local : renommer, épingler, exporter (Markdown / JSON / PDF) ou supprimer. Décrit l’archive, puis peut pronostiquer (hypothèse, pas une certitude).",
@@ -648,6 +663,7 @@ const NAV_ITEMS = [
   {
     href: "/admin",
     label: "Admin",
+    group: "Système",
     help: {
       title: "Admin",
       body: "Secrets Neon / API, tests de connexion, mises à jour GitHub et synchro FDJ → Postgres.",
@@ -660,50 +676,64 @@ function navItemActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
+function currentNavItem(pathname: string) {
+  let best: (typeof NAV_ITEMS)[number] | undefined
+  for (const item of NAV_ITEMS) {
+    if (!navItemActive(pathname, item.href)) continue
+    if (!best || item.href.length > best.href.length) best = item
+  }
+  return best
+}
+
+function isTypingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    target.isContentEditable
+  )
+}
+
 function NavLinks({
   pathname,
   onNavigate,
-  stacked = false,
 }: {
   pathname: string
   onNavigate?: () => void
-  stacked?: boolean
 }) {
   return (
-    <nav
-      className={
-        stacked
-          ? "flex flex-col gap-1"
-          : "flex items-center gap-x-3 whitespace-nowrap xl:gap-x-4"
-      }
-      aria-label="Sections"
-    >
-      {NAV_ITEMS.map((item) => {
-        const active = navItemActive(pathname, item.href)
-        const link = (
-          <Link
-            href={item.href}
-            aria-current={active ? "page" : undefined}
-            onClick={onNavigate}
-            className={
-              stacked
-                ? `rounded-md px-3 py-2 text-sm ${
-                    active
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                  }`
-                : `whitespace-nowrap text-xs ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`
-            }
-          >
-            {item.label}
-          </Link>
-        )
-        return stacked ? (
-          <span key={item.href}>{link}</span>
-        ) : (
-          <HelpWrap key={item.href} help={item.help}>
-            {link}
-          </HelpWrap>
+    <nav className="flex flex-col gap-4" aria-label="Sections">
+      {NAV_GROUP_ORDER.map((group) => {
+        const items = NAV_ITEMS.filter((item) => item.group === group)
+        return (
+          <div key={group}>
+            <p className="px-3 pb-1 text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+              {group}
+            </p>
+            <div className="flex flex-col gap-0.5">
+              {items.map((item) => {
+                const active = navItemActive(pathname, item.href)
+                return (
+                  <WithHelp key={item.href} help={item.help} className="w-full">
+                    <Link
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      onClick={onNavigate}
+                      className={`block rounded-md px-3 py-2 text-sm ${
+                        active
+                          ? "bg-muted text-foreground"
+                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  </WithHelp>
+                )
+              })}
+            </div>
+          </div>
         )
       })}
     </nav>
@@ -712,11 +742,29 @@ function NavLinks({
 
 export function SiteHeader() {
   const pathname = usePathname()
+  const headerRef = useRef<HTMLElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [portalReady, setPortalReady] = useState(false)
+  const [headerH, setHeaderH] = useState(52)
+  const current = currentNavItem(pathname)
+
+  useEffect(() => {
+    setPortalReady(true)
+  }, [])
 
   useEffect(() => {
     setMenuOpen(false)
   }, [pathname])
+
+  useLayoutEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const update = () => setHeaderH(Math.round(el.getBoundingClientRect().height))
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -732,37 +780,68 @@ export function SiteHeader() {
     }
   }, [menuOpen])
 
+  useEffect(() => {
+    if (!menuOpen) return
+    const root = document.getElementById("site-nav-drawer")
+    const active = root?.querySelector<HTMLElement>("[aria-current='page']")
+    ;(active ?? root?.querySelector<HTMLElement>("a"))?.focus()
+  }, [menuOpen])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "g" && event.key !== "G") return
+      if (event.altKey || event.ctrlKey || event.metaKey) return
+      if (isTypingTarget(event.target)) return
+      event.preventDefault()
+      setMenuOpen((open) => !open)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
+
   return (
-    <header className="sticky top-0 z-40 overflow-x-clip border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur">
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-50 overflow-x-clip border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur"
+    >
       <div className="relative z-10 mx-auto flex w-full min-w-0 max-w-full items-center gap-2 overflow-x-clip px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:gap-3 sm:px-6">
-        <button
-          type="button"
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-foreground lg:hidden"
-          aria-expanded={menuOpen}
-          aria-controls="site-nav-drawer"
-          aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
-        </button>
-        <HelpWrap
-          help={{
-            title: "Synchro",
-            body: "Retour à l’accueil : page Tirage, archives FDJ filtrables et export CSV.",
-          }}
-          className="shrink-0"
-        >
-          <Link
-            href="/tirage"
-            className="shrink-0 text-xs font-medium tracking-[0.2em] text-primary uppercase"
+        <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-foreground"
+            aria-expanded={menuOpen}
+            aria-controls="site-nav-drawer"
+            aria-haspopup="dialog"
+            aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+            title="Menu des sections — raccourci « g »"
+            onClick={() => setMenuOpen((open) => !open)}
           >
-            Synchro
-          </Link>
-        </HelpWrap>
-        <div className="hidden min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] lg:flex lg:min-w-[12rem]">
-          <NavLinks pathname={pathname} />
+            {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+          </button>
+          <HelpWrap
+            help={{
+              title: "Synchro",
+              body: "Retour à l’accueil : page Tirage, archives FDJ filtrables et export CSV.",
+            }}
+            className="shrink-0"
+          >
+            <Link
+              href="/tirage"
+              className="shrink-0 text-xs font-medium tracking-[0.2em] text-primary uppercase"
+            >
+              Synchro
+            </Link>
+          </HelpWrap>
+          {current ? (
+            <>
+              <span className="hidden h-4 w-px shrink-0 bg-border sm:block" aria-hidden />
+              <span className="max-w-[8.5rem] truncate text-sm font-medium text-foreground sm:max-w-[14rem]">
+                {current.label}
+              </span>
+            </>
+          ) : null}
         </div>
-        <div className="flex min-w-0 items-center justify-end gap-2 max-lg:flex-1">
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
           <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
             <CaptureButton />
             <HelpModeToggle />
@@ -773,24 +852,39 @@ export function SiteHeader() {
           </div>
         </div>
       </div>
-      {menuOpen ? (
-        <div className="fixed inset-0 z-30 lg:hidden" id="site-nav-drawer">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/40"
-            aria-label="Fermer le menu"
-            onClick={() => setMenuOpen(false)}
-          />
-          <aside
-            role="dialog"
-            aria-modal="true"
-            aria-label="Sections"
-            className="relative flex h-full w-[min(18rem,calc(100vw-3rem))] flex-col gap-4 overflow-auto border-r border-border bg-background p-4 pt-[max(1rem,calc(env(safe-area-inset-top)+0.75rem))] pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl"
-          >
-            <NavLinks pathname={pathname} stacked onNavigate={() => setMenuOpen(false)} />
-          </aside>
-        </div>
-      ) : null}
+      {portalReady && menuOpen
+        ? createPortal(
+            <div
+              id="site-nav-drawer"
+              className="fixed inset-x-0 bottom-0 z-40"
+              style={{ top: headerH }}
+            >
+              <button
+                type="button"
+                className="absolute inset-0 bg-black/40"
+                aria-label="Fermer le menu"
+                onClick={() => setMenuOpen(false)}
+              />
+              <aside
+                role="dialog"
+                aria-modal="true"
+                aria-label="Sections"
+                className="relative flex h-full w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-auto border-r border-border bg-background shadow-2xl"
+              >
+                <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-background/95 px-3 py-2">
+                  <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                    Aller à
+                  </p>
+                  <span className="text-[10px] text-muted-foreground">Échap ou g</span>
+                </div>
+                <div className="p-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                  <NavLinks pathname={pathname} onNavigate={() => setMenuOpen(false)} />
+                </div>
+              </aside>
+            </div>,
+            document.body
+          )
+        : null}
     </header>
   )
 }

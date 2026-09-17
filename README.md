@@ -43,7 +43,7 @@ Sur macOS, un double-clic sur `Synchro.command` à la racine du dépôt lance au
 
 Options : `--skip-install`, `--force-install`, `--no-open`. Ports : `SYNCHRO_BACKEND_PORT` (sinon `PORT` du `.env`, 8000) et `SYNCHRO_FRONTEND_PORT` (43147). L'API ne se recharge que si `synchro/` change, pas l'UI. Logs : `.run/` (`./launch logs -f` depuis un autre terminal).
 
-Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections **Tirage**, **Évolution**, **Analyse**, **Combinaisons**, **Jeux**, **Morpho**, **Relief**, **Chartisme**, **Harmo**, **Brain**, **IA** et **Admin** sont des onglets du bandeau.
+Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait les mêmes contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface. Les sections (**Tirage**, **Évolution**, **Analyse**, **Combinaisons**, **Jeux**, **Morpho**, **Relief**, **Chartisme**, **Harmo**, **Brain**, **Spécialistes**, **IA**, **Admin**) s’ouvrent depuis le **menu burger** ; le nom de la page reste dans le bandeau, les pastilles de connexion restent visibles. Raccourci **g** (hors champ de saisie) pour ouvrir ou fermer le menu.
 
 ## Tirage (`/tirage`)
 
@@ -268,7 +268,7 @@ En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, défini
 
 ## Interface web (Next.js)
 
-App Next.js (onglets **Tirage** `/tirage`, **Évolution** `/evolution`, **Analyse** `/analyse`, **Combinaisons** `/combinaisons`, **Jeux** `/jeux`, **Morpho** `/morpho`, **Relief** `/relief`, **Chartisme** `/chartisme`, **Harmo** `/harmo`, **Brain** `/brain`, **Spécialistes** `/brain/specialistes`, **IA** `/ia` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
+App Next.js (menu burger : **Tirage** `/tirage`, **Évolution** `/evolution`, **Analyse** `/analyse`, **Combinaisons** `/combinaisons`, **Jeux** `/jeux`, **Morpho** `/morpho`, **Relief** `/relief`, **Chartisme** `/chartisme`, **Harmo** `/harmo`, **Brain** `/brain`, **Spécialistes** `/brain/specialistes`, **IA** `/ia` et **Admin** `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install
