@@ -320,31 +320,30 @@ function plottedOf(
 
 type ChartPointerState = MouseHandlerDataParam
 
-function svgPoint(event: MouseEvent<SVGGraphicsElement>): { x: number; y: number } | null {
-  const node = event.currentTarget
-  const svg = node.ownerSVGElement ?? (node as SVGSVGElement)
-  if (typeof svg.createSVGPoint !== "function") {
-    return { x: event.clientX, y: event.clientY }
-  }
-  const pt = svg.createSVGPoint()
-  pt.x = event.clientX
-  pt.y = event.clientY
-  const ctm = svg.getScreenCTM()
-  if (!ctm) return null
-  const local = pt.matrixTransform(ctm.inverse())
-  return { x: local.x, y: local.y }
-}
-
 function pointerPixel(state: ChartPointerState, event?: MouseEvent<SVGGraphicsElement>) {
-  if (event) {
-    const fromEvent = svgPoint(event)
-    if (fromEvent) return fromEvent
-  }
+  if (event) return { x: event.clientX, y: event.clientY }
   const at = state.activeCoordinate
   if (at && Number.isFinite(at.x) && Number.isFinite(at.y)) {
     return { x: at.x, y: at.y }
   }
   return null
+}
+
+function chartSvg(event: MouseEvent<SVGGraphicsElement>): SVGSVGElement | null {
+  const node = event.currentTarget
+  if (node instanceof SVGSVGElement) return node
+  return node.ownerSVGElement ?? node.querySelector("svg")
+}
+
+function svgToClient(svg: SVGSVGElement, x: number, y: number) {
+  if (typeof svg.createSVGPoint !== "function") return { x, y }
+  const ctm = svg.getScreenCTM()
+  if (!ctm) return { x, y }
+  const pt = svg.createSVGPoint()
+  pt.x = x
+  pt.y = y
+  const screen = pt.matrixTransform(ctm)
+  return { x: screen.x, y: screen.y }
 }
 
 function MagnetHalo({
@@ -849,7 +848,14 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     if (!series.length) return null
     const values = seriesValues(targetKey)
     const pointer = pointerPixel(state, event)
-    const samples = pixelSamples(dates, values, targetKey, ranges, scalesRef.current)
+    const svg = chartSvg(event)
+    const rawSamples = pixelSamples(dates, values, targetKey, ranges, scalesRef.current)
+    const samples = svg
+      ? rawSamples.map((sample) => {
+          const client = svgToClient(svg, sample.px, sample.py)
+          return { index: sample.index, px: client.x, py: client.y }
+        })
+      : rawSamples
     let index: number | null = null
     let distance: number | null = null
     if (pointer && samples.length) {
@@ -862,9 +868,11 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     if (index == null) {
       index = readTooltipIndex(state.activeTooltipIndex ?? state.activeIndex)
       const active = state.activeCoordinate
-        ? { x: state.activeCoordinate.x, y: state.activeCoordinate.y }
-        : null
-      distance = pixelDistance(pointer, active)
+      if (active && svg) {
+        distance = pixelDistance(pointer, svgToClient(svg, active.x, active.y))
+      } else {
+        distance = pixelDistance(pointer, active ?? null)
+      }
     }
     if (index == null || index < 0 || index >= series.length) return null
     const snapped = isMagneted(distance)
@@ -901,7 +909,11 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       setHint("Approche la courbe pour ancrer le point.")
       return
     }
-    if (current.draft?.start && windowTooShort(current.draft.start.index, live.index)) {
+    if (
+      current.draft?.start &&
+      live.index !== current.draft.start.index &&
+      windowTooShort(current.draft.start.index, live.index)
+    ) {
       setHint("Au moins 8 tirages entre départ et arrivée.")
       return
     }
