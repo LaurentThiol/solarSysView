@@ -29,7 +29,7 @@ POOL_MAX_LIFETIME_SEC = 30 * 60
 DRAW_COLUMNS = (
     "id, draw_date, draw_code, weekday, numbers, stars, star_pool, "
     "winners_rank1_fr, winners_rank1_eu, prize_rank1, my_million, "
-    "prizes, source, imported_at"
+    "winners_total_fr, winners_total_eu, prizes, source, imported_at"
 )
 
 SCHEMA_SQL = """
@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS draws (
     winners_rank1_eu INTEGER,
     prize_rank1     NUMERIC,
     my_million      TEXT,
+    winners_total_fr INTEGER,
+    winners_total_eu INTEGER,
     prizes          JSONB,
     source          TEXT NOT NULL DEFAULT 'fdj',
     imported_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -53,6 +55,8 @@ CREATE TABLE IF NOT EXISTS draws (
 
 CREATE INDEX IF NOT EXISTS draws_date_desc ON draws (draw_date DESC);
 ALTER TABLE draws ADD COLUMN IF NOT EXISTS prizes JSONB;
+ALTER TABLE draws ADD COLUMN IF NOT EXISTS winners_total_fr INTEGER;
+ALTER TABLE draws ADD COLUMN IF NOT EXISTS winners_total_eu INTEGER;
 
 CREATE TABLE IF NOT EXISTS grids (
     id          BIGSERIAL PRIMARY KEY,
@@ -464,11 +468,12 @@ def init_db() -> None:
             cur.execute(SCHEMA_SQL)
         conn.commit()
     backfill_prizes_from_raw()
+    backfill_winner_totals()
 
 
 def backfill_prizes_from_raw() -> int:
     """Remplit `prizes` depuis `raw` (archives déjà importées, sans re-télécharger)."""
-    from synchro.fdj import prizes_from_raw
+    from synchro.fdj import prizes_from_raw, winners_totals
 
     updated = 0
     with connection() as conn:
@@ -492,11 +497,84 @@ def backfill_prizes_from_raw() -> int:
                         raw = {}
                 if not isinstance(raw, dict):
                     raw = {}
+                prizes = prizes_from_raw(raw)
+                fr_total, eu_total = winners_totals(prizes)
                 cur.execute(
-                    "UPDATE draws SET prizes = %(prizes)s WHERE id = %(id)s",
-                    {"prizes": Jsonb(prizes_from_raw(raw)), "id": row["id"]},
+                    """
+                    UPDATE draws SET
+                        prizes = %(prizes)s,
+                        winners_total_fr = %(winners_total_fr)s,
+                        winners_total_eu = %(winners_total_eu)s
+                    WHERE id = %(id)s
+                    """,
+                    {
+                        "prizes": Jsonb(prizes),
+                        "winners_total_fr": fr_total,
+                        "winners_total_eu": eu_total,
+                        "id": row["id"],
+                    },
                 )
                 updated += 1
+        conn.commit()
+    return updated
+
+
+def backfill_winner_totals() -> int:
+    """Calcule winners_total_fr / EU et prizes[].winners_total sans re-télécharger."""
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE draws AS d
+                SET
+                    winners_total_fr = s.fr,
+                    winners_total_eu = s.eu,
+                    prizes = s.prizes
+                FROM (
+                    SELECT
+                        id,
+                        (
+                            SELECT SUM((elem->>'winners_fr')::integer)
+                            FROM jsonb_array_elements(prizes) AS elem
+                            WHERE elem->>'winners_fr' IS NOT NULL
+                              AND elem->>'winners_fr' <> 'null'
+                        ) AS fr,
+                        (
+                            SELECT SUM((elem->>'winners_eu')::integer)
+                            FROM jsonb_array_elements(prizes) AS elem
+                            WHERE elem->>'winners_eu' IS NOT NULL
+                              AND elem->>'winners_eu' <> 'null'
+                        ) AS eu,
+                        (
+                            SELECT jsonb_agg(
+                                elem || jsonb_build_object(
+                                    'winners_total',
+                                    COALESCE(
+                                        (elem->>'winners_eu')::integer,
+                                        (elem->>'winners_fr')::integer
+                                    )
+                                )
+                                ORDER BY (elem->>'rank')::integer
+                            )
+                            FROM jsonb_array_elements(prizes) AS elem
+                        ) AS prizes
+                    FROM draws
+                    WHERE jsonb_typeof(prizes) = 'array'
+                      AND jsonb_array_length(prizes) > 0
+                ) AS s
+                WHERE d.id = s.id
+                  AND (
+                    d.winners_total_fr IS DISTINCT FROM s.fr
+                    OR d.winners_total_eu IS DISTINCT FROM s.eu
+                    OR NOT EXISTS (
+                      SELECT 1
+                      FROM jsonb_array_elements(d.prizes) AS tier
+                      WHERE tier ? 'winners_total'
+                    )
+                  )
+                """
+            )
+            updated = cur.rowcount
         conn.commit()
     return updated
 
@@ -516,15 +594,17 @@ def _json_ready(value: Any) -> Any:
 def upsert_draws(rows: list[dict[str, Any]]) -> int:
     if not rows:
         return 0
+    from synchro.fdj import prizes_as_json, winners_totals
     sql = """
         INSERT INTO draws (
             draw_date, draw_code, weekday, numbers, stars, star_pool,
             winners_rank1_fr, winners_rank1_eu, prize_rank1, my_million,
-            prizes, source, raw
+            winners_total_fr, winners_total_eu, prizes, source, raw
         ) VALUES (
             %(draw_date)s, %(draw_code)s, %(weekday)s, %(numbers)s, %(stars)s,
             %(star_pool)s, %(winners_rank1_fr)s, %(winners_rank1_eu)s,
-            %(prize_rank1)s, %(my_million)s, %(prizes)s, %(source)s, %(raw)s
+            %(prize_rank1)s, %(my_million)s, %(winners_total_fr)s,
+            %(winners_total_eu)s, %(prizes)s, %(source)s, %(raw)s
         )
         ON CONFLICT (draw_date) DO UPDATE SET
             draw_code = EXCLUDED.draw_code,
@@ -536,6 +616,8 @@ def upsert_draws(rows: list[dict[str, Any]]) -> int:
             winners_rank1_eu = EXCLUDED.winners_rank1_eu,
             prize_rank1 = EXCLUDED.prize_rank1,
             my_million = EXCLUDED.my_million,
+            winners_total_fr = EXCLUDED.winners_total_fr,
+            winners_total_eu = EXCLUDED.winners_total_eu,
             prizes = EXCLUDED.prizes,
             source = EXCLUDED.source,
             raw = EXCLUDED.raw,
@@ -546,8 +628,14 @@ def upsert_draws(rows: list[dict[str, Any]]) -> int:
         with conn.cursor() as cur:
             for row in rows:
                 payload = dict(row)
+                prizes = prizes_as_json(payload.get("prizes") or [])
+                fr_total, eu_total = winners_totals(prizes)
+                if payload.get("winners_total_fr") is None:
+                    payload["winners_total_fr"] = fr_total
+                if payload.get("winners_total_eu") is None:
+                    payload["winners_total_eu"] = eu_total
+                payload["prizes"] = Jsonb(_json_ready(prizes))
                 payload["raw"] = Jsonb(_json_ready(payload.get("raw") or {}))
-                payload["prizes"] = Jsonb(_json_ready(payload.get("prizes") or []))
                 cur.execute(sql, payload)
                 count += 1
         conn.commit()
@@ -866,7 +954,18 @@ def serialize_row(row: dict[str, Any], drop: tuple[str, ...] = ("raw",)) -> dict
 
 
 def serialize_draw(row: dict[str, Any]) -> dict[str, Any]:
-    return serialize_row(row)
+    from synchro.fdj import prizes_as_json, winners_totals
+
+    out = serialize_row(row)
+    prizes = out.get("prizes")
+    if isinstance(prizes, list):
+        out["prizes"] = prizes_as_json(prizes)
+    fr_total, eu_total = winners_totals(out.get("prizes") if isinstance(out.get("prizes"), list) else [])
+    if out.get("winners_total_fr") is None:
+        out["winners_total_fr"] = fr_total
+    if out.get("winners_total_eu") is None:
+        out["winners_total_eu"] = eu_total
+    return out
 
 
 def list_morpho_rules() -> list[dict[str, Any]]:

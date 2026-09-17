@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { apiBase, HEALTH_TIMEOUT_MS } from "@/lib/api-base"
-import { parsePrizeTiers } from "@/lib/draws"
+import { parsePrizeTiers, totalWinners } from "@/lib/draws"
 
 export const dynamic = "force-dynamic"
 
@@ -14,6 +14,8 @@ type NeonDraw = {
   stars?: number[]
   star_pool?: number
   prizes?: unknown
+  winners_total_fr?: number | null
+  winners_total_eu?: number | null
 }
 
 function drawId(row: NeonDraw, date: string): number {
@@ -25,6 +27,8 @@ function drawId(row: NeonDraw, date: string): number {
 
 function toUi(row: NeonDraw) {
   const iso = String(row.draw_date || "").slice(0, 10)
+  const prizes = parsePrizeTiers(row.prizes)
+  const summed = totalWinners({ prizes })
   return {
     id: Number(row.id) || drawId(row, iso),
     date: iso,
@@ -32,8 +36,16 @@ function toUi(row: NeonDraw) {
     numbers: Array.isArray(row.numbers) ? row.numbers : [],
     stars: Array.isArray(row.stars) ? row.stars : [],
     star_pool: row.star_pool,
-    prizes: parsePrizeTiers(row.prizes),
+    prizes,
+    winners_total_fr: toOptionalInt(row.winners_total_fr) ?? summed.fr,
+    winners_total_eu: toOptionalInt(row.winners_total_eu) ?? summed.eu,
   }
+}
+
+function toOptionalInt(value: unknown): number | null {
+  if (value == null || value === "") return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
 }
 
 async function fetchEra(base: string, era: "current" | "all") {

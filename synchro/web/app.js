@@ -104,6 +104,36 @@ function jackpotLabel(draw) {
   return formatEuro(n);
 }
 
+function winnerTotals(draw) {
+  if (draw.winners_total_fr != null || draw.winners_total_eu != null) {
+    return { fr: draw.winners_total_fr, eu: draw.winners_total_eu };
+  }
+  let fr = 0;
+  let eu = 0;
+  let hasFr = false;
+  let hasEu = false;
+  for (const tier of draw.prizes || []) {
+    if (tier.winners_fr != null && tier.winners_fr !== "") {
+      hasFr = true;
+      fr += Number(tier.winners_fr);
+    }
+    if (tier.winners_eu != null && tier.winners_eu !== "") {
+      hasEu = true;
+      eu += Number(tier.winners_eu);
+    }
+  }
+  return { fr: hasFr ? fr : null, eu: hasEu ? eu : null };
+}
+
+function formatWinnerTotals(draw) {
+  const { fr, eu } = winnerTotals(draw);
+  const fmt = (n) => (n == null || n === "" ? "—" : Number(n).toLocaleString("fr-FR"));
+  if (fr == null && eu == null) return "—";
+  if (fr == null) return `${fmt(eu)} EU`;
+  if (eu == null) return `${fmt(fr)} FR`;
+  return `${fmt(fr)} FR · ${fmt(eu)} EU`;
+}
+
 function renderLatest(draw) {
   if (!draw) {
     $("latest-date").textContent = "Aucun tirage";
@@ -124,6 +154,7 @@ function renderLatest(draw) {
     )
     .join("");
   $("latest-facts").innerHTML = `
+    <div><dt>Gagnants FR+EU</dt><dd>${formatWinnerTotals(draw)}</dd></div>
     <div><dt>Gagnants rang 1 (EU)</dt><dd>${draw.winners_rank1_eu ?? "—"}</dd></div>
     <div><dt>Gagnants rang 1 (FR)</dt><dd>${draw.winners_rank1_fr ?? "—"}</dd></div>
     <div><dt>Rapport rang 1</dt><dd>${jackpotLabel(draw)}</dd></div>
@@ -142,7 +173,7 @@ function renderHistory(items, total) {
       <td>${weekdayFr(draw.weekday)}</td>
       <td>${draw.numbers.map((n) => String(n).padStart(2, "0")).join(" · ")}</td>
       <td>${draw.stars.map((n) => String(n).padStart(2, "0")).join(" · ")}</td>
-      <td>${draw.winners_rank1_eu ?? "—"}</td>`;
+      <td>${formatWinnerTotals(draw)}</td>`;
     body.appendChild(tr);
   }
   $("history-count").textContent = `${body.children.length} / ${total} tirages`;

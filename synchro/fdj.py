@@ -54,6 +54,8 @@ class Draw:
     prizes: list[dict[str, Any]] = field(default_factory=list)
 
     def as_row(self) -> dict[str, Any]:
+        prizes = prizes_as_json(self.prizes)
+        fr_total, eu_total = winners_totals(prizes)
         return {
             "draw_date": self.draw_date,
             "draw_code": self.draw_code,
@@ -65,7 +67,9 @@ class Draw:
             "winners_rank1_eu": self.winners_rank1_eu,
             "prize_rank1": self.prize_rank1,
             "my_million": self.my_million,
-            "prizes": prizes_as_json(self.prizes),
+            "prizes": prizes,
+            "winners_total_fr": fr_total,
+            "winners_total_eu": eu_total,
             "source": "fdj",
             "raw": self.raw,
         }
@@ -152,6 +156,42 @@ def _is_add_on_key(key: str) -> bool:
     return False
 
 
+def _as_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def rank_winners_total(winners_fr: int | None, winners_eu: int | None) -> int | None:
+    """Total d’un rang : la colonne FDJ « en Europe » inclut la France."""
+    if winners_eu is not None:
+        return winners_eu
+    return winners_fr
+
+
+def winners_totals(
+    prizes: list[dict[str, Any]] | None,
+) -> tuple[int | None, int | None]:
+    """Somme des gagnants des rangs 1–13 (FR, EU). EU FDJ = tous pays, France comprise."""
+    fr_sum = 0
+    eu_sum = 0
+    has_fr = False
+    has_eu = False
+    for item in prizes or []:
+        fr = _as_int(item.get("winners_fr"))
+        eu = _as_int(item.get("winners_eu"))
+        if fr is not None:
+            fr_sum += fr
+            has_fr = True
+        if eu is not None:
+            eu_sum += eu
+            has_eu = True
+    return (fr_sum if has_fr else None, eu_sum if has_eu else None)
+
+
 def prizes_as_json(prizes: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     payload: list[dict[str, Any]] = []
     for item in prizes or []:
@@ -161,11 +201,19 @@ def prizes_as_json(prizes: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
         except (TypeError, ValueError):
             continue
         prize = item.get("prize")
+        winners_fr = _as_int(item.get("winners_fr"))
+        winners_eu = _as_int(item.get("winners_eu"))
+        stored_total = _as_int(item.get("winners_total"))
         payload.append(
             {
                 "rank": rank_n,
-                "winners_fr": item.get("winners_fr"),
-                "winners_eu": item.get("winners_eu"),
+                "winners_fr": winners_fr,
+                "winners_eu": winners_eu,
+                "winners_total": (
+                    stored_total
+                    if stored_total is not None
+                    else rank_winners_total(winners_fr, winners_eu)
+                ),
                 "prize": float(prize) if prize is not None else None,
             }
         )
@@ -223,15 +271,20 @@ def parse_prizes(row: dict[str, Any] | None) -> list[dict[str, Any]]:
                     winners_eu[rank] = (score, parsed_n)
 
     ranks = sorted(set(prize) | set(winners_fr) | set(winners_eu))
-    return [
-        {
-            "rank": rank,
-            "winners_fr": winners_fr[rank][1] if rank in winners_fr else None,
-            "winners_eu": winners_eu[rank][1] if rank in winners_eu else None,
-            "prize": prize[rank][1] if rank in prize else None,
-        }
-        for rank in ranks
-    ]
+    out: list[dict[str, Any]] = []
+    for rank in ranks:
+        winners_fr_n = winners_fr[rank][1] if rank in winners_fr else None
+        winners_eu_n = winners_eu[rank][1] if rank in winners_eu else None
+        out.append(
+            {
+                "rank": rank,
+                "winners_fr": winners_fr_n,
+                "winners_eu": winners_eu_n,
+                "winners_total": rank_winners_total(winners_fr_n, winners_eu_n),
+                "prize": prize[rank][1] if rank in prize else None,
+            }
+        )
+    return out
 
 
 def prizes_from_raw(raw: dict[str, Any] | None) -> list[dict[str, Any]]:

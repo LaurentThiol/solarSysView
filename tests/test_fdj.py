@@ -8,7 +8,9 @@ from synchro.fdj import (
     parse_row,
     parse_zip,
     prizes_from_raw,
+    rank_winners_total,
     star_pool_for,
+    winners_totals,
 )
 
 
@@ -66,10 +68,14 @@ def test_parse_row_current_format():
     by_rank = {item["rank"]: item for item in draw.prizes}
     assert by_rank[2]["prize"] == Decimal("245123.45")
     assert by_rank[2]["winners_eu"] == 4
+    assert by_rank[2]["winners_total"] == 4
     assert by_rank[13]["prize"] == Decimal("4.20")
     assert 1 in by_rank
     row = draw.as_row()
     assert row["prizes"][1]["prize"] == 245123.45
+    assert row["prizes"][1]["winners_total"] == 4
+    assert row["winners_total_fr"] == 1
+    assert row["winners_total_eu"] == 4
 
 
 def test_parse_row_old_date_format():
@@ -134,6 +140,7 @@ def test_parse_prizes_old_headers_without_euro_millions():
     )
     by_rank = {item["rank"]: item for item in prizes}
     assert by_rank[1]["winners_eu"] == 3
+    assert by_rank[1]["winners_total"] == 3
     assert by_rank[12]["prize"] == Decimal("3.50")
 
 
@@ -146,5 +153,20 @@ def test_prizes_from_raw_folded_keys():
         }
     )
     assert payload == [
-        {"rank": 5, "winners_fr": None, "winners_eu": 723, "prize": 146.0}
+        {
+            "rank": 5,
+            "winners_fr": None,
+            "winners_eu": 723,
+            "winners_total": 723,
+            "prize": 146.0,
+        }
     ]
+
+
+def test_winners_totals_sum_ranks_without_adding_fr_and_eu():
+    prizes = [
+        {"rank": 2, "winners_fr": 5, "winners_eu": 7},
+        {"rank": 13, "winners_fr": 195171, "winners_eu": 810916},
+    ]
+    assert rank_winners_total(5, 7) == 7
+    assert winners_totals(prizes) == (195176, 810923)

@@ -365,11 +365,15 @@ def test_draw_select_omits_raw_json() -> None:
     assert "raw" not in cols
     assert "draw_date" in cols
     assert "prizes" in cols
+    assert "winners_total_fr" in cols
+    assert "winners_total_eu" in cols
     source = Path(db_mod.__file__).read_text(encoding="utf-8")
     assert "SELECT * FROM draws" not in source
     schema = db_mod.SCHEMA_SQL
     assert "prizes          JSONB" in schema
     assert "ADD COLUMN IF NOT EXISTS prizes JSONB" in schema
+    assert "ADD COLUMN IF NOT EXISTS winners_total_fr INTEGER" in schema
+    assert "ADD COLUMN IF NOT EXISTS winners_total_eu INTEGER" in schema
 
 
 def test_next_draws_route_forwards_prizes() -> None:
@@ -379,6 +383,16 @@ def test_next_draws_route_forwards_prizes() -> None:
         Path(__file__).resolve().parents[1] / "src/app/api/draws/route.ts"
     ).read_text(encoding="utf-8")
     assert "parsePrizeTiers(row.prizes)" in route
+    assert "winners_total_fr" in route
+    assert "winners_total_eu" in route
+    explorer = (
+        Path(__file__).resolve().parents[1] / "src/components/draws-explorer.tsx"
+    ).read_text(encoding="utf-8")
+    assert "Gagnants FR+EU" in explorer
+    assert "Total FR+EU · 13 rangs" in explorer
+    assert "backfill_winner_totals()" in Path(
+        Path(__file__).resolve().parents[1] / "synchro/db.py"
+    ).read_text(encoding="utf-8")
 
 
 def test_ui_does_not_stampede_neon_on_every_page() -> None:

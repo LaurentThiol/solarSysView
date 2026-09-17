@@ -27,13 +27,16 @@ import { DrawBalls } from "@/components/draw-balls"
 import {
   archiveSummary,
   drawMatchesQuery,
+  formatCount,
   formatDrawDate,
   formatEuro,
   formatJackpot,
+  formatWinnerTotals,
   monthOf,
   monthsPresent,
   parseQueryNumbers,
   toCsv,
+  totalWinners,
   type Draw,
   PRIZE_RANK_LABELS,
 } from "@/lib/draws"
@@ -87,7 +90,7 @@ export function DrawsExplorer() {
         recoupées avec les archives publiques ; source officielle : FDJ
         {source === "neon" ? " · Neon." : " · fichier local."}
       </p>
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Tirages archivés"
           value={String(draws.length)}
@@ -103,6 +106,15 @@ export function DrawsExplorer() {
           hint={
             last
               ? `Étoiles ${last.stars.join(" et ")} · n° ${last.id} · ${formatJackpot(last)}`
+              : "Aucun tirage"
+          }
+        />
+        <StatCard
+          label="Gagnants FR+EU"
+          value={last ? formatWinnerTotals(last) : "—"}
+          hint={
+            last
+              ? "Somme des 13 rangs · EU comprend la France"
               : "Aucun tirage"
           }
         />
@@ -133,7 +145,7 @@ export function DrawsExplorer() {
             <WithHelp
               help={{
                 title: "Télécharger le CSV",
-                body: "Exporte les tirages actuellement affichés (après filtres mois et numéros) au format CSV, encodage UTF-8. Colonnes jackpot puis r2–r13 : rapports FDJ en euros.",
+                body: "Exporte les tirages actuellement affichés (après filtres mois et numéros) au format CSV, encodage UTF-8. Colonnes jackpot, totaux gagnants FR/EU (13 rangs), puis r2–r13 : rapports FDJ en euros.",
               }}
             >
               <Button type="button" variant="outline" onClick={downloadCsv}>
@@ -205,6 +217,16 @@ export function DrawsExplorer() {
                       <TableHead>Tirage</TableHead>
                       <TableHead>Numéros + étoiles</TableHead>
                       <TableHead className="text-right">Jackpot</TableHead>
+                      <TableHead className="text-right">
+                        <TitleHelp
+                          help={{
+                            title: "Gagnants FR+EU",
+                            body: "Somme des gagnants des 13 rangs EuroMillions. EU est le total des pays participants, France comprise (colonne FDJ « en Europe »). On n’additionne pas FR et EU rang par rang.",
+                          }}
+                        >
+                          Gagnants FR+EU
+                        </TitleHelp>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -233,8 +255,11 @@ export function DrawsExplorer() {
                               />
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
+                              {formatJackpot(draw)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums text-muted-foreground">
                               <span className="inline-flex items-center justify-end gap-1">
-                                {formatJackpot(draw)}
+                                {formatWinnerTotals(draw)}
                                 <ChevronDown
                                   className={cn(
                                     "size-3.5 text-muted-foreground transition-transform",
@@ -246,7 +271,7 @@ export function DrawsExplorer() {
                           </TableRow>
                           {open ? (
                             <TableRow>
-                              <TableCell colSpan={4} className="bg-muted/30">
+                              <TableCell colSpan={5} className="bg-muted/30">
                                 <PrizeLadder draw={draw} />
                               </TableCell>
                             </TableRow>
@@ -292,6 +317,9 @@ export function DrawsExplorer() {
                         stars={draw.stars}
                         highlights={wanted}
                       />
+                      <p className="mt-2 text-xs tabular-nums text-muted-foreground">
+                        Gagnants FR+EU · {formatWinnerTotals(draw)}
+                      </p>
                       {open ? (
                         <div className="mt-3">
                           <PrizeLadder draw={draw} />
@@ -311,6 +339,7 @@ export function DrawsExplorer() {
 
 function PrizeLadder({ draw }: { draw: Draw }) {
   const prizes = draw.prizes ?? []
+  const totals = totalWinners(draw)
   if (prizes.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
@@ -344,13 +373,30 @@ function PrizeLadder({ draw }: { draw: Draw }) {
                   : formatEuro(tier.prize)}
               </td>
               <td className="py-1 pr-3 tabular-nums">
-                {tier.winners_eu ?? "—"}
+                {formatCount(tier.winners_eu)}
               </td>
-              <td className="py-1 tabular-nums">{tier.winners_fr ?? "—"}</td>
+              <td className="py-1 tabular-nums">
+                {formatCount(tier.winners_fr)}
+              </td>
             </tr>
           ))}
         </tbody>
+        <tfoot>
+          <tr className="border-t border-border font-medium">
+            <td className="py-1.5 pr-3" colSpan={3}>
+              Total FR+EU · 13 rangs
+            </td>
+            <td className="py-1.5 pr-3 tabular-nums">
+              {formatCount(totals.eu)}
+            </td>
+            <td className="py-1.5 tabular-nums">{formatCount(totals.fr)}</td>
+          </tr>
+        </tfoot>
       </table>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        EU comprend la France. Le total d’un rang est le chiffre Europe, pas
+        FR+EU.
+      </p>
     </div>
   )
 }

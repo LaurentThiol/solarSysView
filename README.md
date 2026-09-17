@@ -47,7 +47,7 @@ Dans l’UI, le bandeau **API / Neon / GitHub** (en haut de chaque page) refait 
 
 ## Tirage (`/tirage`)
 
-Archives EuroMillions : tableau filtrable, jackpot / report, échelle des 13 rangs FDJ au clic, et export CSV (numéros + rapports €). En local, les données viennent de **Neon** (année du dernier tirage) dès que l’API répond ; sinon repli sur `src/data/euromillions-2026.json` (sans euros). L’accueil `/` redirige vers cet onglet.
+Archives EuroMillions : tableau filtrable, jackpot / report, **totaux de gagnants FR+EU** (somme des 13 rangs ; EU comprend la France), échelle des 13 rangs FDJ au clic, et export CSV (numéros, totaux, rapports €). En local, les données viennent de **Neon** (année du dernier tirage) dès que l’API répond ; sinon repli sur `src/data/euromillions-2026.json` (sans euros). L’accueil `/` redirige vers cet onglet.
 
 ## Évolution (`/evolution`)
 
@@ -304,7 +304,7 @@ Puis http://127.0.0.1:8000 (docs : `/docs`).
 
 `DATABASE_URL` ne doit **jamais** être commitée. `.env` en local, variables d’environnement / secret GitHub Actions en déployé. Au premier `./launch`, le fichier `.env` est créé depuis `.env.example` s’il manque.
 
-Chaque ligne de `draws` contient la date, le jour, 5 numéros et 2 étoiles, `star_pool` (9 / 11 / **12 depuis le 27/09/2016**), les gagnants rang 1 FR/EU, le code My Million s’il est dans l’archive, et **`prizes`** : l’échelle des rapports FDJ (rangs 1–13, gagnants FR/EU, montant en €). Un jackpot à 0 € sans gagnant est un report. Étoile+ n’est pas importé.
+Chaque ligne de `draws` contient la date, le jour, 5 numéros et 2 étoiles, `star_pool` (9 / 11 / **12 depuis le 27/09/2016**), les gagnants rang 1 FR/EU, **`winners_total_fr` / `winners_total_eu`** (somme des 13 rangs ; EU FDJ = tous pays, France comprise), le code My Million s’il est dans l’archive, et **`prizes`** : l’échelle des rapports FDJ (rangs 1–13, gagnants FR/EU, `winners_total` du rang, montant en €). Un jackpot à 0 € sans gagnant est un report. Étoile+ n’est pas importé.
 
 Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heure de Paris) si le secret `DATABASE_URL` est défini.
 

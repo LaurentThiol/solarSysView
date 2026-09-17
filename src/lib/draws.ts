@@ -11,6 +11,7 @@ export type PrizeTier = {
   rank: number
   winners_fr: number | null
   winners_eu: number | null
+  winners_total?: number | null
   prize: number | null
 }
 
@@ -22,6 +23,8 @@ export type Draw = {
   stars: number[]
   star_pool?: number
   prizes?: PrizeTier[]
+  winners_total_fr?: number | null
+  winners_total_eu?: number | null
 }
 
 export const PRIZE_RANK_LABELS: Record<number, string> = {
@@ -51,24 +54,76 @@ export function parsePrizeTiers(raw: unknown): PrizeTier[] | undefined {
     const prizeRaw = row.prize
     const prizeNum =
       prizeRaw == null || prizeRaw === "" ? NaN : Number(prizeRaw)
-    const winnersFr =
-      row.winners_fr == null || row.winners_fr === ""
-        ? null
-        : Number(row.winners_fr)
-    const winnersEu =
-      row.winners_eu == null || row.winners_eu === ""
-        ? null
-        : Number(row.winners_eu)
+    const winnersFr = toOptionalInt(row.winners_fr)
+    const winnersEu = toOptionalInt(row.winners_eu)
+    const winnersTotal = toOptionalInt(row.winners_total)
     tiers.push({
       rank,
-      winners_fr:
-        winnersFr == null || !Number.isFinite(winnersFr) ? null : winnersFr,
-      winners_eu:
-        winnersEu == null || !Number.isFinite(winnersEu) ? null : winnersEu,
+      winners_fr: winnersFr,
+      winners_eu: winnersEu,
+      winners_total:
+        winnersTotal ?? rankWinnersTotal(winnersFr, winnersEu),
       prize: Number.isFinite(prizeNum) ? prizeNum : null,
     })
   }
   return tiers.length > 0 ? tiers : undefined
+}
+
+function toOptionalInt(value: unknown): number | null {
+  if (value == null || value === "") return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+/** Total d’un rang : la colonne FDJ « en Europe » inclut la France. */
+export function rankWinnersTotal(
+  winnersFr: number | null | undefined,
+  winnersEu: number | null | undefined
+): number | null {
+  if (winnersEu != null && Number.isFinite(winnersEu)) return winnersEu
+  if (winnersFr != null && Number.isFinite(winnersFr)) return winnersFr
+  return null
+}
+
+export function totalWinners(
+  draw: Pick<Draw, "prizes" | "winners_total_fr" | "winners_total_eu"> | null | undefined
+): { fr: number | null; eu: number | null } {
+  if (draw?.winners_total_fr != null || draw?.winners_total_eu != null) {
+    return {
+      fr: draw.winners_total_fr ?? null,
+      eu: draw.winners_total_eu ?? null,
+    }
+  }
+  let fr = 0
+  let eu = 0
+  let hasFr = false
+  let hasEu = false
+  for (const tier of draw?.prizes ?? []) {
+    if (tier.winners_fr != null && Number.isFinite(tier.winners_fr)) {
+      fr += tier.winners_fr
+      hasFr = true
+    }
+    if (tier.winners_eu != null && Number.isFinite(tier.winners_eu)) {
+      eu += tier.winners_eu
+      hasEu = true
+    }
+  }
+  return { fr: hasFr ? fr : null, eu: hasEu ? eu : null }
+}
+
+export function formatCount(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—"
+  return value.toLocaleString("fr-FR")
+}
+
+export function formatWinnerTotals(
+  draw: Pick<Draw, "prizes" | "winners_total_fr" | "winners_total_eu"> | null | undefined
+): string {
+  const { fr, eu } = totalWinners(draw)
+  if (fr == null && eu == null) return "n.d."
+  if (fr == null) return `${formatCount(eu)} EU`
+  if (eu == null) return `${formatCount(fr)} FR`
+  return `${formatCount(fr)} FR · ${formatCount(eu)} EU`
 }
 
 export function prizeAtRank(
@@ -228,23 +283,29 @@ export function toCsv(draws: Draw[]) {
     "etoile1",
     "etoile2",
     "jackpot",
+    "gagnants_fr",
+    "gagnants_eu",
     ...ranks.slice(1).map((rank) => `r${rank}`),
   ].join(",")
   const rows = [...draws]
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map((draw) =>
-      [
+    .map((draw) => {
+      const totals = totalWinners(draw)
+      return [
         draw.date,
         draw.weekday,
         draw.id,
         ...draw.numbers,
         ...draw.stars,
-        ...ranks.map((rank) => {
+        prizeAtRank(draw, 1) == null ? "" : String(prizeAtRank(draw, 1)),
+        totals.fr == null ? "" : String(totals.fr),
+        totals.eu == null ? "" : String(totals.eu),
+        ...ranks.slice(1).map((rank) => {
           const value = prizeAtRank(draw, rank)
           return value == null ? "" : String(value)
         }),
       ].join(",")
-    )
+    })
   return `${header}\n${rows.join("\n")}\n`
 }
 

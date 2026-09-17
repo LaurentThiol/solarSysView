@@ -4,10 +4,13 @@ import test from "node:test"
 import {
   formatEuro,
   formatJackpot,
+  formatWinnerTotals,
   meanPrizeByRank,
   parsePrizeTiers,
   prizeAtRank,
+  rankWinnersTotal,
   toCsv,
+  totalWinners,
   type Draw,
 } from "../src/lib/draws"
 
@@ -30,8 +33,20 @@ test("parsePrizeTiers keeps numeric ranks and drops junk", () => {
     { rank: 3, prize: null },
   ])
   assert.deepEqual(tiers, [
-    { rank: 2, winners_fr: 1, winners_eu: 4, prize: 245123.45 },
-    { rank: 3, winners_fr: null, winners_eu: null, prize: null },
+    {
+      rank: 2,
+      winners_fr: 1,
+      winners_eu: 4,
+      winners_total: 4,
+      prize: 245123.45,
+    },
+    {
+      rank: 3,
+      winners_fr: null,
+      winners_eu: null,
+      winners_total: null,
+      prize: null,
+    },
   ])
 })
 
@@ -56,8 +71,26 @@ test("meanPrizeByRank averages available rapports", () => {
   assert.equal(means.get(1), 0)
 })
 
-test("toCsv includes jackpot and r2–r13", () => {
+test("toCsv includes jackpot, winner totals and r2–r13", () => {
   const csv = toCsv([sample])
-  assert.match(csv, /^date,jour,tirage,n1,n2,n3,n4,n5,etoile1,etoile2,jackpot,r2/)
-  assert.match(csv, /,0,,,,,,,,,,,4\.2\n/)
+  assert.match(
+    csv,
+    /^date,jour,tirage,n1,n2,n3,n4,n5,etoile1,etoile2,jackpot,gagnants_fr,gagnants_eu,r2/
+  )
+  assert.match(csv, /,0,10,80,,,,,,,,,,,4\.2\n/)
+})
+
+test("totalWinners sums ranks and does not add FR to EU", () => {
+  assert.equal(rankWinnersTotal(5, 7), 7)
+  assert.deepEqual(totalWinners(sample), { fr: 10, eu: 80 })
+  assert.match(formatWinnerTotals(sample), /10 FR/)
+  assert.match(formatWinnerTotals(sample), /80 EU/)
+  assert.deepEqual(
+    totalWinners({
+      ...sample,
+      winners_total_fr: 324137,
+      winners_total_eu: 1334600,
+    }),
+    { fr: 324137, eu: 1334600 }
+  )
 })
