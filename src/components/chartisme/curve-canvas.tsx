@@ -9,6 +9,7 @@ import {
   cycleHitIndex,
   hoverHitIndex,
 } from "@/lib/chartisme"
+import { contextBandLabel, startsInContext } from "@/lib/chartisme/window"
 import { cn } from "@/lib/utils"
 
 // Recharts est écarté ici : il n'expose pas les coordonnées pixel, donc
@@ -38,6 +39,24 @@ const GUIDE_STYLE: Record<string, { color: string; width: number }> = {
 
 function styleOf(role: string) {
   return GUIDE_STYLE[role] ?? { color: "var(--muted-foreground)", width: 1.3 }
+}
+
+/** Points d'une polyline entre deux indices, bornes comprises. */
+function polylinePoints(
+  series: number[],
+  from: number,
+  to: number,
+  xOf: (index: number) => number,
+  yOf: (value: number) => number
+) {
+  const pts: string[] = []
+  const last = Math.min(to, series.length - 1)
+  for (let index = Math.max(0, from); index <= last; index += 1) {
+    const value = series[index]
+    if (value === undefined) continue
+    pts.push(`${xOf(index)},${yOf(value)}`)
+  }
+  return pts.join(" ")
 }
 
 export function CurveCanvas({
@@ -157,6 +176,10 @@ export function CurveCanvas({
 
   const active = drag ?? selection
 
+  const splitAt =
+    contextCount > 0 && contextCount < values.length ? contextCount : null
+  const bandBottom =
+    showActivity && activity.length ? HEIGHT - 10 : chartH - PAD / 2
   const curvePoints = values.map((value, index) => `${x(index)},${y(value)}`).join(" ")
 
   return (
@@ -221,33 +244,38 @@ export function CurveCanvas({
           setHover(null)
         }}
       >
-        {contextCount > 0 && contextCount < values.length ? (
-          <g>
+        {splitAt != null ? (
+          <g style={{ pointerEvents: "none" }}>
             <rect
               x={PAD}
               y={BANNER_HIT}
-              width={Math.max(0, x(contextCount) - PAD)}
-              height={chartH - PAD / 2 - BANNER_HIT}
+              width={Math.max(0, x(splitAt) - PAD)}
+              height={Math.max(0, bandBottom - BANNER_HIT)}
               fill="var(--muted-foreground)"
               opacity={0.08}
-              style={{ pointerEvents: "none" }}
             />
             <line
-              x1={x(contextCount)}
-              x2={x(contextCount)}
-              y1={PAD / 2}
-              y2={chartH - PAD / 2}
+              x1={x(splitAt)}
+              x2={x(splitAt)}
+              y1={BANNER_HIT}
+              y2={bandBottom}
               stroke="var(--muted-foreground)"
               strokeWidth={1.2}
               strokeDasharray="3 3"
             />
             <text
-              x={x(contextCount) - 4}
-              y={PAD}
-              textAnchor="end"
+              x={PAD + 2}
+              y={PAD + 10}
               className="fill-muted-foreground text-[9px]"
             >
-              contexte
+              {contextBandLabel(contextCount)}
+            </text>
+            <text
+              x={x(splitAt) + 6}
+              y={PAD + 10}
+              className="fill-muted-foreground text-[9px]"
+            >
+              étude
             </text>
           </g>
         ) : null}
@@ -282,6 +310,9 @@ export function CurveCanvas({
               <title>
                 {found.label} · {found.confidence.toFixed(2)}
                 {found.rare === false ? " · bruit" : ""}
+                {startsInContext(found, contextCount)
+                  ? " · commence dans le contexte"
+                  : ""}
                 {onHitSelect ? " — clic pour sélectionner" : ""}
               </title>
               <rect
@@ -316,6 +347,7 @@ export function CurveCanvas({
           >
             {hoverFound.label}
             {hoverFound.rare === false ? " · bruit" : ""}
+            {startsInContext(hoverFound, contextCount) ? " · à cheval" : ""}
           </text>
         ) : null}
 
@@ -343,13 +375,36 @@ export function CurveCanvas({
           />
         ) : null}
 
-        <polyline
-          points={curvePoints}
-          fill="none"
-          stroke="var(--foreground)"
-          strokeWidth={1.6}
-          strokeLinejoin="round"
-        />
+        {splitAt != null ? (
+          <>
+            <polyline
+              points={polylinePoints(values, 0, splitAt, x, y)}
+              fill="none"
+              stroke="var(--muted-foreground)"
+              strokeWidth={1.15}
+              strokeLinejoin="round"
+              opacity={0.55}
+              style={{ pointerEvents: "none" }}
+            />
+            <polyline
+              points={polylinePoints(values, splitAt, values.length - 1, x, y)}
+              fill="none"
+              stroke="var(--foreground)"
+              strokeWidth={1.6}
+              strokeLinejoin="round"
+              style={{ pointerEvents: "none" }}
+            />
+          </>
+        ) : (
+          <polyline
+            points={curvePoints}
+            fill="none"
+            stroke="var(--foreground)"
+            strokeWidth={1.6}
+            strokeLinejoin="round"
+            style={{ pointerEvents: "none" }}
+          />
+        )}
 
         {(hit?.guides ?? []).map((guide, index) => (
           <GuideLine key={`${guide.role}-${index}`} guide={guide} x={x} y={y} />
@@ -448,15 +503,33 @@ export function CurveCanvas({
                 y2={activityY(value)}
                 stroke="var(--muted-foreground)"
                 strokeWidth={Math.max(1, (width - PAD * 2) / activity.length / 2)}
-                opacity={0.45}
+                opacity={splitAt != null && index < splitAt ? 0.16 : 0.45}
               />
             ))}
-            <polyline
-              points={mm20.map((value, index) => `${x(index)},${activityY(value)}`).join(" ")}
-              fill="none"
-              stroke="var(--chart-4)"
-              strokeWidth={1.3}
-            />
+            {splitAt != null ? (
+              <>
+                <polyline
+                  points={polylinePoints(mm20, 0, splitAt, x, activityY)}
+                  fill="none"
+                  stroke="var(--chart-4)"
+                  strokeWidth={1}
+                  opacity={0.4}
+                />
+                <polyline
+                  points={polylinePoints(mm20, splitAt, mm20.length - 1, x, activityY)}
+                  fill="none"
+                  stroke="var(--chart-4)"
+                  strokeWidth={1.3}
+                />
+              </>
+            ) : (
+              <polyline
+                points={mm20.map((value, index) => `${x(index)},${activityY(value)}`).join(" ")}
+                fill="none"
+                stroke="var(--chart-4)"
+                strokeWidth={1.3}
+              />
+            )}
             <text
               x={PAD}
               y={chartH + 16}
@@ -469,9 +542,25 @@ export function CurveCanvas({
 
         {dates?.length ? (
           <>
-            <text x={PAD} y={HEIGHT - 4} className="fill-muted-foreground text-[9px]">
-              {dates[0]}
-            </text>
+            {splitAt != null && dates[0] && x(splitAt) - PAD >= 72 ? (
+              <text x={PAD} y={HEIGHT - 4} className="fill-muted-foreground text-[9px]">
+                {dates[0]}
+              </text>
+            ) : splitAt == null && dates[0] ? (
+              <text x={PAD} y={HEIGHT - 4} className="fill-muted-foreground text-[9px]">
+                {dates[0]}
+              </text>
+            ) : null}
+            {splitAt != null && dates[splitAt] ? (
+              <text
+                x={x(splitAt)}
+                y={HEIGHT - 4}
+                textAnchor={x(splitAt) - PAD < 72 ? "start" : "middle"}
+                className="fill-muted-foreground text-[9px]"
+              >
+                {dates[splitAt]}
+              </text>
+            ) : null}
             <text
               x={width - PAD}
               y={HEIGHT - 4}

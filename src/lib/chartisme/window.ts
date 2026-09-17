@@ -6,7 +6,7 @@ import {
 } from "@/lib/analysis-window"
 
 import { ACTIVITY_PERIOD } from "./figures"
-import { MIN_WINDOW, type ScanHit } from "./scan"
+import { MIN_WINDOW } from "./scan"
 
 /**
  * Fenêtre d'étude du chartisme : la zone regardée, et le contexte devant elle.
@@ -121,10 +121,33 @@ export function contextFor(scales: ReadonlyArray<number>): number {
  * fenêtre est au contraire exactement ce qu'on cherche, même si son épaule
  * gauche est en amont.
  */
-export function liveInWindow(hit: ScanHit, contextCount: number): boolean {
+export function liveInWindow(
+  hit: { to_index: number; breakout?: { index?: number } | null },
+  contextCount: number
+): boolean {
   if (contextCount <= 0) return true
   const end = Math.max(hit.to_index, hit.breakout?.index ?? hit.to_index)
   return end >= contextCount
+}
+
+/**
+ * La figure commence-t-elle dans le contexte ?
+ *
+ * Les lectures listées s'achèvent dans la fenêtre (`liveInWindow`). Celles
+ * dont le premier pivot est en amont sont à cheval : l'épaule gauche alimente
+ * le calcul, seule la fin est étudiée. Sans ce signal on lirait la forme
+ * comme si elle tenait tout entière dans la fenêtre.
+ */
+export function startsInContext(
+  hit: { from_index: number },
+  contextCount: number
+): boolean {
+  return contextCount > 0 && hit.from_index < contextCount
+}
+
+/** Libellé de la bande grise, avec le nombre de tirages calculés. */
+export function contextBandLabel(count: number): string {
+  return `contexte · ${count} tirage${count > 1 ? "s" : ""}`
 }
 
 export type StudyWindow<T extends { date: string }> = {

@@ -61,6 +61,7 @@ import {
   scaleFitNote,
   shortScaleCaveat,
   shortWindowNote,
+  startsInContext,
   studyBanner,
   type StudyPreset,
 } from "@/lib/chartisme/window"
@@ -837,6 +838,9 @@ export function ChartismeLab() {
                       >
                         {found.label} · {found.confidence.toFixed(2)}
                         {found.rare ? "" : " · bruit"}
+                        {startsInContext(found, study.contextCount)
+                          ? " · à cheval"
+                          : ""}
                       </Button>
                     ))}
                   </div>
@@ -857,6 +861,9 @@ export function ChartismeLab() {
                         ) : (
                           <Badge variant="outline">en formation</Badge>
                         )}
+                        {startsInContext(hit, study.contextCount) ? (
+                          <Badge variant="outline">commence dans le contexte</Badge>
+                        ) : null}
                       </div>
                       <p className="mt-2 text-muted-foreground">
                         Signal : {hit.signal}.{" "}

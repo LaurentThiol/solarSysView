@@ -274,6 +274,18 @@ def live_in_window(hit: dict[str, Any], context: int) -> bool:
     return end >= context
 
 
+def starts_in_context(hit: dict[str, Any], context: int) -> bool:
+    """La figure commence-t-elle dans le contexte ?
+
+    Jumeau de `startsInContext` côté navigateur. Une lecture listée — donc
+    achevée dans la fenêtre — dont le premier pivot est en amont : c'est le
+    cas à cheval, celui qu'on badge.
+    """
+    if context <= 0:
+        return False
+    return int(hit.get("from_index") or 0) < context
+
+
 def scan_bundle(
     bundle: dict[str, Any],
     *,

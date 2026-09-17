@@ -31,6 +31,7 @@ from synchro.chartisme.scan import (
     scan_bundle,
     scan_curve,
     slice_curve,
+    starts_in_context,
     window_starts,
     windows_for_training,
     windows_of,
@@ -280,6 +281,14 @@ def test_live_in_window_keeps_figures_that_end_inside_it() -> None:
     assert live_in_window({"to_index": 25, "breakout": None}, 30) is False
 
 
+def test_starts_in_context_flags_a_figure_whose_first_pivot_is_upstream() -> None:
+    """Le badge « commence dans le contexte » suit le premier pivot, pas la cassure."""
+    assert starts_in_context({"from_index": 10}, 0) is False
+    assert starts_in_context({"from_index": 30}, 30) is False
+    assert starts_in_context({"from_index": 29}, 30) is True
+    assert starts_in_context({"from_index": 0}, 30) is True
+
+
 def test_slicing_then_scanning_only_reports_figures_of_the_window() -> None:
     """Le rétro-test borné ne doit pas compter les figures du contexte."""
     curve = build_curve(DRAWS, "sum", None)
@@ -410,3 +419,21 @@ def test_graph_is_resolution_free() -> None:
     for a, b in zip(left["nodes"], right["nodes"]):
         for x, y in zip(a, b):
             assert abs(x - y) < 1e-9
+
+
+def test_curve_canvas_draws_context_as_past() -> None:
+    """Le gris n'est pas qu'un fond : la courbe, l'activité et les dates le disent."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    canvas = (root / "src/components/chartisme/curve-canvas.tsx").read_text(encoding="utf-8")
+    lab = (root / "src/components/chartisme/chartisme-lab.tsx").read_text(encoding="utf-8")
+    window = (root / "src/lib/chartisme/window.ts").read_text(encoding="utf-8")
+    assert "contextBandLabel" in canvas
+    assert "étude" in canvas
+    assert "polylinePoints(values, 0, splitAt" in canvas
+    assert "dates[splitAt]" in canvas
+    assert "index < splitAt ? 0.16 : 0.45" in canvas
+    assert "commence dans le contexte" in lab
+    assert "startsInContext" in window
+    assert "contexte · ${count} tirage" in window
