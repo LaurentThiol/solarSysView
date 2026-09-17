@@ -759,10 +759,10 @@ export function SiteHeader() {
             Synchro
           </Link>
         </HelpWrap>
-        <div className="hidden min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] lg:flex">
+        <div className="hidden min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] lg:flex lg:min-w-[12rem]">
           <NavLinks pathname={pathname} />
         </div>
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-2 lg:flex-none">
+        <div className="flex min-w-0 items-center justify-end gap-2 max-lg:flex-1">
           <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
             <CaptureButton />
             <HelpModeToggle />
