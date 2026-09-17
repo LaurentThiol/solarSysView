@@ -1,16 +1,23 @@
 "use client"
 
-import { Fragment, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 import {
   Area,
   CartesianGrid,
   ComposedChart,
   Line,
+  ReferenceDot,
   ReferenceLine,
   XAxis,
   YAxis,
+  useXAxisScale,
+  useYAxisScale,
+  type MouseHandlerDataParam,
 } from "recharts"
 
+import { CoordHud } from "@/components/chart-draw/coord-hud"
+import { useChartDrawOptional } from "@/components/chart-draw/chart-draw-context"
+import { SketchToolbar } from "@/components/chart-draw/sketch-toolbar"
 import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -35,6 +42,26 @@ import {
   readOverlay,
   type BandPoint,
 } from "@/lib/draw-overlays"
+import {
+  DRAFT_KEY,
+  buildSketchPoints,
+  extremaIndices,
+  isMagneted,
+  nearestSample,
+  newSketchId,
+  pixelDistance,
+  readTooltipIndex,
+  readWindow,
+  remapSketch,
+  sketchDataKey,
+  sketchFigureLabel,
+  snapIndexToExtrema,
+  windowTooShort,
+  type AxisScales,
+  type ChartAnchor,
+  type LiveCursor,
+  type PixelSample,
+} from "@/lib/chart-draw"
 import { cn } from "@/lib/utils"
 import {
   NUMBER_SUM_RANGE,
@@ -281,6 +308,99 @@ function mergeOverlays(
   }))
 }
 
+function plottedOf(
+  key: SeriesKey,
+  actual: number,
+  ranges: { numbers: ValueRange; stars: ValueRange }
+) {
+  if (key === "relNumbers") return relativeToRange(actual, ranges.numbers)
+  if (key === "relStars") return relativeToRange(actual, ranges.stars)
+  return actual
+}
+
+type ChartPointerState = MouseHandlerDataParam
+
+function svgPoint(event: MouseEvent<SVGGraphicsElement>): { x: number; y: number } | null {
+  const node = event.currentTarget
+  const svg = node.ownerSVGElement ?? (node as SVGSVGElement)
+  if (typeof svg.createSVGPoint !== "function") {
+    return { x: event.clientX, y: event.clientY }
+  }
+  const pt = svg.createSVGPoint()
+  pt.x = event.clientX
+  pt.y = event.clientY
+  const ctm = svg.getScreenCTM()
+  if (!ctm) return null
+  const local = pt.matrixTransform(ctm.inverse())
+  return { x: local.x, y: local.y }
+}
+
+function pointerPixel(state: ChartPointerState, event?: MouseEvent<SVGGraphicsElement>) {
+  if (event) {
+    const fromEvent = svgPoint(event)
+    if (fromEvent) return fromEvent
+  }
+  const at = state.activeCoordinate
+  if (at && Number.isFinite(at.x) && Number.isFinite(at.y)) {
+    return { x: at.x, y: at.y }
+  }
+  return null
+}
+
+function MagnetHalo({
+  live,
+  plotted,
+  onScales,
+}: {
+  live: LiveCursor | null
+  plotted: number | null
+  onScales: (scales: AxisScales) => void
+}) {
+  const xScale = useXAxisScale()
+  const yScale = useYAxisScale()
+  useLayoutEffect(() => {
+    onScales({
+      x: xScale ? (value) => xScale(value, { position: "middle" }) ?? Number.NaN : null,
+      y: yScale ? (value) => yScale(value) ?? Number.NaN : null,
+    })
+  }, [xScale, yScale, onScales])
+  if (!live || plotted == null || !xScale || !yScale) return null
+  const mx = xScale(live.date, { position: "middle" })
+  const my = yScale(plotted)
+  if (mx == null || my == null || !Number.isFinite(mx) || !Number.isFinite(my)) return null
+  return (
+    <g pointerEvents="none">
+      <circle
+        cx={mx}
+        cy={my}
+        r={live.snapped ? 8 : 5}
+        fill="none"
+        stroke="var(--chart-4)"
+        strokeWidth={live.snapped ? 2 : 1}
+        strokeDasharray={live.snapped ? undefined : "3 2"}
+      />
+    </g>
+  )
+}
+
+function pixelSamples(
+  dates: string[],
+  values: number[],
+  key: SeriesKey,
+  ranges: { numbers: ValueRange; stars: ValueRange },
+  scales: AxisScales
+): PixelSample[] {
+  const { x, y } = scales
+  if (!x || !y) return []
+  const out: PixelSample[] = []
+  for (let i = 0; i < dates.length; i += 1) {
+    const px = x(dates[i])
+    const py = y(plottedOf(key, values[i], ranges))
+    if (Number.isFinite(px) && Number.isFinite(py)) out.push({ index: i, px, py })
+  }
+  return out
+}
+
 function CombinedTooltip({
   active,
   payload,
@@ -483,11 +603,22 @@ function SeriesTooltip({
 }
 
 export function DrawChart({ draws }: { draws: Draw[] }) {
+  const draw = useChartDrawOptional()
+  const drawRef = useRef(draw)
+  useLayoutEffect(() => {
+    drawRef.current = draw
+  })
+  const scalesRef = useRef<AxisScales>({ x: null, y: null })
+  const onScales = useCallback((scales: AxisScales) => {
+    scalesRef.current = scales
+  }, [])
   const [mode, setMode] = useState<DrawChartMode>("sumBoth")
   const [scale, setScale] = useState<RelativeScale>("theory")
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({})
   const [showSma, setShowSma] = useState(true)
   const [showBb, setShowBb] = useState(false)
+  const [targetKey, setTargetKey] = useState<SeriesKey>("relNumbers")
+  const [hint, setHint] = useState<string | null>(null)
 
   const series = useMemo(() => toDrawSeries(draws), [draws])
   const keys = MODE_KEYS[mode]
@@ -607,11 +738,246 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     )
   }, [combined, series])
 
+  const numberRange = useMemo(
+    () =>
+      resolveRange(
+        scale,
+        series.map((point) => point.sumNumbers),
+        NUMBER_SUM_RANGE
+      ),
+    [scale, series]
+  )
+  const starRange = useMemo(
+    () =>
+      resolveRange(
+        scale,
+        series.map((point) => point.sumStars),
+        STAR_SUM_RANGE
+      ),
+    [scale, series]
+  )
+  const ranges = useMemo(
+    () => ({ numbers: numberRange, stars: starRange }),
+    [numberRange, starRange]
+  )
+  const dates = useMemo(() => series.map((point) => point.date), [series])
+
+  const storedSketches = draw?.sketches
+  const visibleSketches = useMemo(() => {
+    if (!storedSketches) return []
+    return storedSketches
+      .map((sketch) => remapSketch(sketch, dates))
+      .filter((sketch): sketch is NonNullable<typeof sketch> => sketch != null)
+      .filter((sketch) => keys.includes(sketch.seriesKey as SeriesKey))
+  }, [storedSketches, dates, keys])
+
+  const draftStart = draw?.draft?.start ?? null
+  const draftLive = draw?.live ?? null
+  const draftFigure = draw?.figure ?? "ete"
+  const drawing = Boolean(draw?.drawing)
+  const draftPoints = useMemo(() => {
+    if (!drawing || !draftStart || !draftLive) return []
+    const values = series.map((point) => point[sourceKey(targetKey)])
+    return buildSketchPoints({
+      figure: draftFigure,
+      values,
+      dates,
+      from: draftStart.index,
+      to: draftLive.index,
+    })
+  }, [drawing, draftStart, draftLive, draftFigure, series, dates, targetKey])
+
+  const plotData = useMemo(() => {
+    if (!visibleSketches.length && !draftPoints.length) return chartData
+    const bySketch = visibleSketches.map((sketch) => ({
+      key: sketchDataKey(sketch.id),
+      seriesKey: sketch.seriesKey as SeriesKey,
+      at: new Map(sketch.points.map((point) => [point.date, point.actual])),
+    }))
+    const draftAt = new Map(draftPoints.map((point) => [point.date, point.actual]))
+    return chartData.map((point) => {
+      const extra: Record<string, number | null> = {}
+      for (const sketch of bySketch) {
+        const actual = sketch.at.get(String(point.date))
+        extra[sketch.key] =
+          actual == null ? null : plottedOf(sketch.seriesKey, actual, ranges)
+      }
+      if (draftPoints.length) {
+        const actual = draftAt.get(String(point.date))
+        extra[DRAFT_KEY] =
+          actual == null ? null : plottedOf(targetKey, actual, ranges)
+      }
+      return { ...point, ...extra }
+    })
+  }, [chartData, visibleSketches, draftPoints, ranges, targetKey])
+
+  const setChartMeta = draw?.setChartMeta
+  const visibleKeyList = visibleKeys.join(",")
+  useEffect(() => {
+    if (!setChartMeta) return
+    setChartMeta({
+      mode,
+      modeLabel: MODES.find((item) => item.value === mode)?.label ?? mode,
+      scale: combined ? scale : null,
+      showSma: showSma && smaPeriod > 0,
+      showBb: showBb && smaPeriod > 0,
+      smaPeriod,
+      visibleKeys: visibleKeyList ? visibleKeyList.split(",") : [],
+    })
+  }, [setChartMeta, mode, combined, scale, showSma, showBb, smaPeriod, visibleKeyList])
+
+  useEffect(() => {
+    if (!draw?.drawing) return
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return
+      const current = drawRef.current
+      if (current?.draft?.start) current.cancelDraft()
+      else current?.setDrawing(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [draw?.drawing])
+
+  function seriesValues(key: SeriesKey) {
+    return series.map((point) => point[sourceKey(key)])
+  }
+
+  function liveFromPointer(
+    state: ChartPointerState,
+    event: MouseEvent<SVGGraphicsElement>
+  ): LiveCursor | null {
+    if (!series.length) return null
+    const values = seriesValues(targetKey)
+    const pointer = pointerPixel(state, event)
+    const samples = pixelSamples(dates, values, targetKey, ranges, scalesRef.current)
+    let index: number | null = null
+    let distance: number | null = null
+    if (pointer && samples.length) {
+      const near = nearestSample(samples, pointer)
+      if (near) {
+        index = near.index
+        distance = near.distance
+      }
+    }
+    if (index == null) {
+      index = readTooltipIndex(state.activeTooltipIndex ?? state.activeIndex)
+      const active = state.activeCoordinate
+        ? { x: state.activeCoordinate.x, y: state.activeCoordinate.y }
+        : null
+      distance = pixelDistance(pointer, active)
+    }
+    if (index == null || index < 0 || index >= series.length) return null
+    const snapped = isMagneted(distance)
+    const magnet = snapped
+      ? snapIndexToExtrema(index, extremaIndices(values))
+      : { index, kind: "sample" as const }
+    const chosen = magnet.index
+    const sample = samples.find((item) => item.index === chosen)
+    if (sample && pointer) distance = Math.hypot(pointer.x - sample.px, pointer.y - sample.py)
+    return {
+      index: chosen,
+      date: series[chosen].date,
+      seriesKey: targetKey,
+      seriesLabel: chartConfig[targetKey].label,
+      actual: values[chosen],
+      snapped,
+      kind: snapped ? magnet.kind : "free",
+      distancePx: distance,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    }
+  }
+
+  function onChartMove(state: ChartPointerState, event: MouseEvent<SVGGraphicsElement>) {
+    const current = drawRef.current
+    if (!current?.drawing) return
+    const live = liveFromPointer(state, event)
+    current.setLive(live)
+    if (!live) {
+      setHint("Survole la courbe.")
+      return
+    }
+    if (!live.snapped) {
+      setHint("Approche la courbe pour ancrer le point.")
+      return
+    }
+    if (current.draft?.start && windowTooShort(current.draft.start.index, live.index)) {
+      setHint("Au moins 8 tirages entre départ et arrivée.")
+      return
+    }
+    setHint(current.draft?.start ? "Clique l’arrivée." : "Clique le départ.")
+  }
+
+  function onChartClick(state: ChartPointerState, event: MouseEvent<SVGGraphicsElement>) {
+    const current = drawRef.current
+    if (!current?.drawing) return
+    const live = liveFromPointer(state, event)
+    if (!live?.snapped) {
+      setHint("Approche la courbe pour ancrer le point.")
+      return
+    }
+    const start = current.draft?.start
+    if (!start) {
+      const anchor: ChartAnchor = {
+        index: live.index,
+        date: live.date,
+        seriesKey: live.seriesKey,
+        actual: live.actual,
+        snapped: live.snapped,
+        kind: live.kind,
+      }
+      current.setDraft({
+        figure: current.figure,
+        seriesKey: targetKey,
+        seriesLabel: chartConfig[targetKey].label,
+        start: anchor,
+      })
+      setHint("Clique l’arrivée.")
+      return
+    }
+    if (windowTooShort(start.index, live.index)) {
+      setHint("Au moins 8 tirages entre départ et arrivée.")
+      return
+    }
+    const values = seriesValues(targetKey)
+    const end: ChartAnchor = {
+      index: live.index,
+      date: live.date,
+      seriesKey: live.seriesKey,
+      actual: live.actual,
+      snapped: live.snapped,
+      kind: live.kind,
+    }
+    current.addSketch({
+      id: newSketchId(),
+      host: current.host,
+      figure: current.figure,
+      seriesKey: targetKey,
+      seriesLabel: chartConfig[targetKey].label,
+      start,
+      end,
+      points: buildSketchPoints({
+        figure: current.figure,
+        values,
+        dates,
+        from: start.index,
+        to: end.index,
+      }),
+      reading: readWindow(values, dates, start.index, end.index),
+      createdAt: new Date().toISOString(),
+    })
+    setHint("Annotation posée. Clique un nouveau départ, ou désactive le dessin.")
+  }
+
+  const lastSketch = visibleSketches[0] ?? null
+  const draftReading = lastSketch?.reading ?? null
+
   function changeMode(next: DrawChartMode) {
     const leavingSums = !isRankMode(mode)
     const enteringSums = isRankMode(mode) && !isRankMode(next)
     setMode(next)
     setHidden({})
+    setTargetKey(MODE_KEYS[next][0])
     if (leavingSums && isRankMode(next)) {
       setShowSma(false)
       setShowBb(false)
@@ -709,6 +1075,49 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
         </div>
       </CardHeader>
       <CardContent>
+        {draw ? (
+          <div className="mb-3">
+            <SketchToolbar
+              drawing={draw.drawing}
+              figure={draw.figure}
+              seriesKey={targetKey}
+              seriesOptions={keys.map((key) => ({
+                value: key,
+                label: chartConfig[key].label,
+              }))}
+              sketches={draw.sketches}
+              dates={dates}
+              canUndo={Boolean(draw.draft?.start)}
+              onToggle={() => {
+                const next = !draw.drawing
+                draw.setDrawing(next)
+                if (next) {
+                  draw.setDraft({
+                    figure: draw.figure,
+                    seriesKey: targetKey,
+                    seriesLabel: chartConfig[targetKey].label,
+                    start: null,
+                  })
+                  setHint("Clique le départ, près de la courbe.")
+                  if (hidden[targetKey]) {
+                    setHidden((current) => ({ ...current, [targetKey]: false }))
+                  }
+                } else {
+                  setHint(null)
+                }
+              }}
+              onFigure={draw.setFigure}
+              onSeries={(key) => {
+                setTargetKey(key as SeriesKey)
+                draw.cancelDraft()
+                setHint("Clique le départ, près de la courbe.")
+              }}
+              onCancel={draw.cancelDraft}
+              onClear={draw.clearSketches}
+              onRemove={draw.removeSketch}
+            />
+          </div>
+        ) : null}
         {series.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Aucun tirage à tracer : affinez le filtre.
@@ -717,13 +1126,27 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           <>
             <ChartContainer
               config={chartConfig}
-              className="aspect-auto h-[220px] w-full sm:h-[280px] lg:h-[340px]"
+              className={cn(
+                "aspect-auto h-[220px] w-full sm:h-[280px] lg:h-[340px]",
+                draw?.drawing && "cursor-crosshair"
+              )}
             >
               <ComposedChart
                 key={`${mode}-${combined ? scale : "abs"}`}
                 accessibilityLayer
-                data={chartData}
+                data={plotData}
                 margin={{ left: 4, right: 8, top: combined ? 16 : 8, bottom: 4 }}
+                onMouseMove={(state, event) => {
+                  if (!draw?.drawing) return
+                  onChartMove(state, event)
+                }}
+                onClick={(state, event) => {
+                  if (!draw?.drawing) return
+                  onChartClick(state, event)
+                }}
+                onMouseLeave={() => {
+                  if (draw?.drawing) draw.setLive(null)
+                }}
               >
                 <CartesianGrid vertical={false} />
                 <XAxis
@@ -752,8 +1175,11 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                   />
                 ) : null}
                 <ChartTooltip
+                  cursor={draw?.drawing ? false : undefined}
                   content={
-                    useCustomTooltip ? (
+                    draw?.drawing ? (
+                      () => null
+                    ) : useCustomTooltip ? (
                       <SeriesTooltip
                         keys={keys}
                         hidden={hidden}
@@ -871,8 +1297,115 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       </Fragment>
                     ))
                   : null}
+                {visibleSketches.map((sketch) => (
+                  <Line
+                    key={sketch.id}
+                    dataKey={sketchDataKey(sketch.id)}
+                    type="monotone"
+                    stroke="var(--chart-4)"
+                    strokeWidth={2}
+                    strokeDasharray="6 3"
+                    dot={false}
+                    connectNulls
+                    legendType="none"
+                    tooltipType="none"
+                    isAnimationActive={false}
+                    name={sketch.seriesLabel}
+                  />
+                ))}
+                {draftPoints.length > 0 ? (
+                  <Line
+                    dataKey={DRAFT_KEY}
+                    type="monotone"
+                    stroke="var(--chart-4)"
+                    strokeWidth={2}
+                    strokeDasharray="2 3"
+                    strokeOpacity={0.9}
+                    dot={false}
+                    connectNulls
+                    legendType="none"
+                    tooltipType="none"
+                    isAnimationActive={false}
+                  />
+                ) : null}
+                {draw?.draft?.start ? (
+                  <>
+                    <ReferenceLine
+                      x={draw.draft.start.date}
+                      stroke="var(--chart-4)"
+                      strokeDasharray="3 3"
+                      strokeOpacity={0.55}
+                    />
+                    <ReferenceDot
+                      x={draw.draft.start.date}
+                      y={plottedOf(
+                        draw.draft.start.seriesKey as SeriesKey,
+                        draw.draft.start.actual,
+                        ranges
+                      )}
+                      r={5}
+                      fill="var(--chart-4)"
+                      stroke="var(--background)"
+                    />
+                  </>
+                ) : null}
+                {draw?.drawing && draw.live ? (
+                  <>
+                    <ReferenceLine
+                      x={draw.live.date}
+                      stroke="var(--chart-4)"
+                      strokeDasharray="3 3"
+                      strokeOpacity={0.35}
+                    />
+                    <ReferenceDot
+                      x={draw.live.date}
+                      y={plottedOf(targetKey, draw.live.actual, ranges)}
+                      r={4}
+                      fill={draw.live.snapped ? "var(--chart-4)" : "transparent"}
+                      stroke="var(--chart-4)"
+                    />
+                  </>
+                ) : null}
+                {visibleSketches.map((sketch) => (
+                  <Fragment key={`${sketch.id}-anchors`}>
+                    <ReferenceDot
+                      x={sketch.start.date}
+                      y={plottedOf(sketch.seriesKey as SeriesKey, sketch.start.actual, ranges)}
+                      r={4}
+                      fill="var(--chart-4)"
+                      stroke="var(--background)"
+                    />
+                    <ReferenceDot
+                      x={sketch.end.date}
+                      y={plottedOf(sketch.seriesKey as SeriesKey, sketch.end.actual, ranges)}
+                      r={4}
+                      fill="var(--chart-4)"
+                      stroke="var(--background)"
+                    />
+                  </Fragment>
+                ))}
+                <MagnetHalo
+                  live={draw?.drawing ? draw.live : null}
+                  plotted={
+                    draw?.live
+                      ? plottedOf(targetKey, draw.live.actual, ranges)
+                      : null
+                  }
+                  onScales={onScales}
+                />
               </ComposedChart>
             </ChartContainer>
+            {draw?.drawing ? (
+              <CoordHud
+                live={draw.live}
+                start={draw.draft?.start ?? null}
+                figureLabel={sketchFigureLabel(draw.figure)}
+                seriesLabel={chartConfig[targetKey].label}
+                reading={draftReading}
+                drawCount={series.length}
+                hint={hint}
+              />
+            ) : null}
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
               {smaPeriod > 0 ? (
                 <>

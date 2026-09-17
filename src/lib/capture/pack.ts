@@ -1,4 +1,5 @@
 import { macd, rsi, VARIABLE_LABELS, type VariableName } from "@/lib/analysis"
+import { compactSketch, drawingSummaryLines, type ChartSketch, type EvolutionChartMeta } from "@/lib/chart-draw"
 import {
   formatWindowBanner,
   WINDOW_PRESET_LABELS,
@@ -409,6 +410,62 @@ export function packRelief(input: {
       marker: input.marker ?? "boule",
       maxH: roundish(input.maxH, 3),
       recommended: input.recommended,
+      disclaimer: INDEPENDENCE_DISCLAIMER,
+    }),
+  }
+}
+
+export function packEvolution(input: {
+  period: string
+  periodLabel: string
+  month: string
+  source: string
+  from: string | null
+  to: string | null
+  drawCount: number
+  sketches: ChartSketch[]
+  chartMeta?: EvolutionChartMeta | null
+}): CaptureContext {
+  const drawings = input.sketches.map(compactSketch)
+  const summary = [
+    `Évolution · ${input.periodLabel}`,
+    `${input.drawCount} tirages · ${input.from ?? "?"} → ${input.to ?? "?"}${
+      input.month !== "all" ? ` · mois ${input.month}` : ""
+    }`,
+    input.chartMeta
+      ? `Série ${input.chartMeta.modeLabel}${
+          input.chartMeta.showSma ? ` · SMA ${input.chartMeta.smaPeriod}` : ""
+        }${input.chartMeta.showBb ? " · Bollinger" : ""}`
+      : "Courbe d’évolution",
+  ]
+  if (drawings.length) {
+    summary.push(...drawingSummaryLines(input.sketches))
+  } else {
+    summary.push("Aucune annotation chartiste posée sur la courbe.")
+  }
+  return {
+    lab: "evolution",
+    tab: input.chartMeta?.mode ?? input.period,
+    archive: {
+      n: input.drawCount,
+      from: input.from,
+      to: input.to,
+      source: input.source,
+    },
+    summary,
+    tech: withinBudget({
+      lab: "evolution",
+      period: input.period,
+      periodLabel: input.periodLabel,
+      month: input.month === "all" ? null : input.month,
+      source: input.source,
+      window: {
+        from: input.from,
+        to: input.to,
+        n: input.drawCount,
+      },
+      chart: input.chartMeta ?? null,
+      drawings,
       disclaimer: INDEPENDENCE_DISCLAIMER,
     }),
   }

@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react"
 
+import { ChartDrawProvider, useChartDraw } from "@/components/chart-draw/chart-draw-context"
 import { HelpTip, LabelHelp } from "@/components/help"
 import { AdminGate } from "@/components/admin-gate"
+import { useRegisterCapture } from "@/components/capture"
 import { DrawChart } from "@/components/draw-chart"
 import { EvolutionDraws } from "@/components/evolution-draws"
 import { EvolutionHeat } from "@/components/evolution-heat"
@@ -17,6 +19,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select"
+import { packEvolution } from "@/lib/capture/pack"
 import {
   DRAWS,
   archiveSummary,
@@ -57,6 +60,7 @@ function EvolutionContent() {
   const [period, setPeriod] = useState<DrawWindow>("last_20")
   const [month, setMonth] = useState("all")
   const { draws, source, loading } = useDraws(period)
+  const { sketches, chartMeta } = useChartDraw()
   const lastWindow = isLastWindow(period)
   const archive = useMemo(() => mergeDraws(draws, DRAWS), [draws])
   const monthOptions = useMemo(() => monthsPresent(archive), [archive])
@@ -101,6 +105,27 @@ function EvolutionContent() {
       decades: summarizeValues(series.map((point) => point.decadeOccupied)),
     }
   }, [filtered])
+
+  const periodLabel = PERIODS.find((item) => item.id === period)?.label ?? period
+  const bounds = useMemo(() => {
+    if (!filtered.length) return { from: null as string | null, to: null as string | null }
+    const dates = filtered.map((draw) => draw.date).sort((a, b) => a.localeCompare(b))
+    return { from: dates[0] ?? null, to: dates[dates.length - 1] ?? null }
+  }, [filtered])
+
+  useRegisterCapture(() =>
+    packEvolution({
+      period,
+      periodLabel,
+      month: activeMonth,
+      source,
+      from: bounds.from,
+      to: bounds.to,
+      drawCount: filtered.length,
+      sketches,
+      chartMeta,
+    })
+  )
 
   if (loading && draws.length === 0) {
     return <p className="text-sm text-muted-foreground">Chargement des tirages…</p>
@@ -334,7 +359,9 @@ function StatCard({
 export function EvolutionPanel() {
   return (
     <AdminGate>
-      <EvolutionContent />
+      <ChartDrawProvider host="evolution">
+        <EvolutionContent />
+      </ChartDrawProvider>
     </AdminGate>
   )
 }
