@@ -166,6 +166,22 @@
   }
 }
 
+/* iPhone-style install clock: light pie from 12 o’clock, dark well, punched hole.
+   Parity lives on the rim (see HeatClock box-shadow), not in a faint tint. */
+.heat-clock {
+  --heat-clock-pie: color-mix(in srgb, var(--foreground) 88%, transparent);
+  --heat-clock-well: color-mix(in srgb, var(--foreground) 9%, var(--card));
+  --heat-clock-inset: 21%;
+}
+
+.heat-clock-hole {
+  inset: var(--heat-clock-inset);
+}
+
+.heat-clock-tick {
+  height: var(--heat-clock-inset);
+}
+
 .jeux-range {
   accent-color: var(--color-primary);
   height: 0.35rem;

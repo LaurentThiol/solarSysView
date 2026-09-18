@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
+import { HeatClock, HeatClockLegend } from "@/components/heat-clock"
 import { HelpTip, TitleHelp, WithHelp } from "@/components/help"
 import {
   ChartContainer,
@@ -39,14 +40,6 @@ function matchesFilter(row: BallRow, filter: Filter) {
   if (filter === "even") return row.even
   if (filter === "odd") return !row.even
   return true
-}
-
-function heatStyle(count: number, max: number, even: boolean) {
-  const t = max > 0 ? count / max : 0
-  const color = even ? "var(--chart-1)" : "var(--chart-2)"
-  return {
-    backgroundColor: `color-mix(in oklch, ${color} ${Math.round(14 + t * 62)}%, transparent)`,
-  }
 }
 
 export function NumbersPanel({
@@ -128,15 +121,15 @@ export function NumbersPanel({
             <TitleHelp
               help={{
                 title: "Grille 1–50",
-                body: "Cliquez un numéro pour le détail (sorties, retard, IC). Or = pair, bleu = impair. L’intensité suit le nombre de sorties dans la fenêtre. Les filtres Tous / Pairs / Impairs n’effacent pas la grille, ils atténuent l’autre camp.",
+                body: "Cliquez un numéro pour le détail (sorties, retard, IC). Chaque boule est une horloge : elle se remplit depuis midi selon le nombre de sorties, plein = plus sorti. L’anneau or = pair, bleu = impair. Le trait marque l’attendu. Les filtres Tous / Pairs / Impairs n’effacent pas la grille, ils atténuent l’autre camp.",
               }}
             >
               Grille 1–50
             </TitleHelp>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Cliquez un numéro pour le détail. Or = pair, bleu = impair. L’intensité suit le
-            nombre de sorties dans la fenêtre.
+            Cliquez un numéro pour le détail. Horloge = sorties (plein = plus sorti). Anneau
+            or = pair, bleu = impair.
           </p>
           <div className="flex flex-wrap gap-2">
             {FILTERS.map((item) => (
@@ -168,29 +161,26 @@ export function NumbersPanel({
                   aria-label={`Numéro ${row.value}, ${row.even ? "pair" : "impair"}, ${row.count} sortie${row.count === 1 ? "" : "s"}`}
                   title={`Sélectionner ${row.value} (${row.even ? "pair" : "impair"}, ${row.count} sortie${row.count === 1 ? "" : "s"})`}
                   onClick={() => onSelectBall(row.value)}
-                  style={heatStyle(row.count, maxCount, row.even)}
                   className={cn(
-                    "flex aspect-square w-full min-w-0 max-w-full items-center justify-center overflow-hidden rounded-md p-0 text-[10px] font-semibold tabular-nums sm:text-sm",
+                    "w-full min-w-0 max-w-full rounded-full p-0",
                     row.value === selected.value && "ring-2 ring-primary ring-offset-1 ring-offset-background",
                     muted && "opacity-25"
                   )}
                 >
-                  {row.value}
+                  <HeatClock
+                    value={row.count}
+                    peak={maxCount}
+                    even={row.even}
+                    expected={board.expected}
+                    className="w-full text-[10px] sm:text-sm"
+                  >
+                    {row.value}
+                  </HeatClock>
                 </button>
               )
             })}
           </div>
-          <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-sm" style={{ background: "var(--chart-1)" }} />
-              Pair
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-sm" style={{ background: "var(--chart-2)" }} />
-              Impair
-            </span>
-            <span>moins sorti → plus sorti</span>
-          </div>
+          <HeatClockLegend showExpected />
         </CardContent>
       </Card>
 

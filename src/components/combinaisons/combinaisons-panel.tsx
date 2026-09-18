@@ -11,6 +11,7 @@ import {
   formatStat,
 } from "@/components/analysis/shared"
 import { DrawBalls } from "@/components/draw-balls"
+import { HeatClock, HeatClockLegend } from "@/components/heat-clock"
 import {
   HelpWrap,
   LabelHelp,
@@ -131,12 +132,12 @@ const HELP = {
     body: "Cliquez pour ajouter ou retirer une étoile (2 max). Même overlay : total de sorties et retard.",
   },
   intensityCount: {
-    title: "Intensité · totaux",
-    body: "La couleur suit le nombre de sorties dans la fenêtre. Cela ne change pas la sélection, seulement le rendu.",
+    title: "Horloge · totaux",
+    body: "Chaque boule est une horloge (comme l’installation d’une app). Elle se remplit selon le nombre de sorties dans la fenêtre, plein = plus sorti. L’anneau or = pair, bleu = impair. Le trait marque l’attendu. Cela ne change pas la sélection, seulement le rendu.",
   },
   intensityDelay: {
-    title: "Intensité · retards",
-    body: "La couleur suit le retard (tirages depuis la dernière sortie). Cela ne change pas la sélection.",
+    title: "Horloge · retards",
+    body: "Même horloge, remplie selon le retard (tirages depuis la dernière sortie). Plein = plus longtemps absent. Cela ne change pas la sélection.",
   },
   selection: {
     title: "Sélection",
@@ -336,14 +337,6 @@ function formatExtent(min: number | null, max: number | null) {
   return `${formatStat(min, 0)}–${formatStat(max, 0)}`
 }
 
-function heatStyle(value: number, max: number, even: boolean) {
-  const t = max > 0 ? value / max : 0
-  const color = even ? "var(--chart-1)" : "var(--chart-2)"
-  return {
-    backgroundColor: `color-mix(in oklch, ${color} ${Math.round(14 + t * 62)}%, transparent)`,
-  }
-}
-
 function SumBoundField({
   label,
   help,
@@ -466,12 +459,14 @@ function BallPicker({
   items,
   selected,
   intensity,
+  expected,
   onToggle,
   ariaLabel,
 }: {
   items: FrequencyItem[]
   selected: Set<number>
   intensity: Intensity
+  expected?: number
   onToggle: (value: number) => void
   ariaLabel: string
 }) {
@@ -497,13 +492,20 @@ function BallPicker({
             aria-pressed={on}
             aria-label={`Boule ${item.value}, ${item.count} sorties, retard ${item.delayDraws}`}
             onClick={() => onToggle(item.value)}
-            style={heatStyle(metric, peak, item.value % 2 === 0)}
             className={cn(
-              "flex min-h-11 min-w-0 flex-col items-center justify-center rounded-md px-0.5 py-0.5 text-[10px] leading-tight tabular-nums sm:min-h-12 sm:text-xs",
+              "flex w-full min-w-0 flex-col items-center gap-0.5 rounded-md px-0.5 py-0.5 text-[10px] leading-tight tabular-nums sm:text-xs",
               on && "ring-2 ring-primary ring-offset-1 ring-offset-background"
             )}
           >
-            <span className="font-semibold">{item.value}</span>
+            <HeatClock
+              value={metric}
+              peak={peak}
+              even={item.value % 2 === 0}
+              expected={intensity === "count" ? expected : undefined}
+              className="w-full text-[10px] sm:text-xs"
+            >
+              {item.value}
+            </HeatClock>
             <span className="text-[9px] text-muted-foreground sm:text-[10px]">
               {item.count}× · R{item.delayDraws}
             </span>
@@ -1139,6 +1141,7 @@ export function CombinaisonsPanel() {
             items={numberStats}
             selected={numberSet}
             intensity={intensity}
+            expected={windowCards.expected}
             onToggle={toggleNumber}
             ariaLabel="Numéros 1 à 50"
           />
@@ -1150,10 +1153,17 @@ export function CombinaisonsPanel() {
               items={starStats}
               selected={starSet}
               intensity={intensity}
+              expected={windowCards.expectedStars}
               onToggle={toggleStar}
               ariaLabel="Étoiles 1 à 12"
             />
           </div>
+          <HeatClockLegend
+            fillLabel={
+              intensity === "count" ? "moins sorti → plus sorti" : "retard court → long"
+            }
+            showExpected={intensity === "count"}
+          />
           <div>
             <p className="mb-2 text-xs text-muted-foreground">
               <TitleHelp help={HELP.selection}>

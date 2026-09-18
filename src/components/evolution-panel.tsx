@@ -310,6 +310,8 @@ function EvolutionContent() {
         numbers={numberBoard}
         stars={starBoard}
         empty={filtered.length === 0}
+        expectedNumbers={expectedN}
+        expectedStars={expectedS}
       />
 
       {lastWindow ? <EvolutionDraws draws={filtered} /> : null}
