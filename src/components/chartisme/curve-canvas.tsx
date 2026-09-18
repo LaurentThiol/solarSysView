@@ -35,6 +35,8 @@ const GUIDE_STYLE: Record<string, { color: string; width: number }> = {
   lower: { color: "var(--chart-2)", width: 1.4 },
   pole: { color: "var(--chart-4)", width: 2.2 },
   height: { color: "var(--muted-foreground)", width: 1.2 },
+  base: { color: "var(--muted-foreground)", width: 1.2 },
+  median: { color: "var(--chart-3)", width: 1.15 },
 }
 
 function styleOf(role: string) {
@@ -71,6 +73,7 @@ export function CurveCanvas({
   showActivity = true,
   contextCount = 0,
   label,
+  showMedian = true,
 }: {
   values: number[]
   dates?: string[]
@@ -86,6 +89,7 @@ export function CurveCanvas({
   /** Tirages de tête calculés mais hors fenêtre de travail — tracés en retrait. */
   contextCount?: number
   label?: string
+  showMedian?: boolean
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -419,9 +423,11 @@ export function CurveCanvas({
           />
         )}
 
-        {(hit?.guides ?? []).map((guide, index) => (
-          <GuideLine key={`${guide.role}-${index}`} guide={guide} x={x} y={y} />
-        ))}
+        {(hit?.guides ?? [])
+          .filter((guide) => showMedian || guide.role !== "median")
+          .map((guide, index) => (
+            <GuideLine key={`${guide.role}-${index}`} guide={guide} x={x} y={y} />
+          ))}
 
         {hit?.target ? (
           <g>
@@ -616,6 +622,15 @@ function GuideLine({
           className="fill-[var(--chart-5)] text-[9px]"
         >
           ligne de cou
+        </text>
+      ) : null}
+      {guide.role === "median" ? (
+        <text
+          x={x(guide.points[0].index) + 4}
+          y={y(guide.points[0].value) - 5}
+          className="fill-[var(--chart-3)] text-[9px]"
+        >
+          médiane
         </text>
       ) : null}
     </g>

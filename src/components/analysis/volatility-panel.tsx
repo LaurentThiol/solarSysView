@@ -67,8 +67,18 @@ export function VolatilityPanel({
       </section>
       <div className="flex flex-wrap gap-2">
         <OverlayToggle label="Bollinger" on={showBb} onClick={() => setShowBb(!showBb)} help={HELP.bollinger} />
-        <OverlayToggle label="Keltner" on={showKc} onClick={() => setShowKc(!showKc)} help={HELP.keltner} />
-        <OverlayToggle label="Donchian" on={showDc} onClick={() => setShowDc(!showDc)} help={HELP.donchian} />
+        <OverlayToggle
+          label="Keltner (ATR)"
+          on={showKc}
+          onClick={() => setShowKc(!showKc)}
+          help={HELP.keltner}
+        />
+        <OverlayToggle
+          label="Donchian (extrêmes)"
+          on={showDc}
+          onClick={() => setShowDc(!showDc)}
+          help={HELP.donchian}
+        />
       </div>
       <Card>
         <CardHeader>

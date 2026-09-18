@@ -35,7 +35,7 @@ import {
   type BaseRateThreshold,
 } from "@/lib/chartisme/base-rate"
 import { buildCurve, curveLabel, curveSpecs, parseCurveId, type Curve } from "@/lib/chartisme/curves"
-import { catalog, labelOf } from "@/lib/chartisme/catalog"
+import { catalog, isChannelFigure, labelOf, slopeBiasLabel } from "@/lib/chartisme/catalog"
 import { rankKey } from "@/lib/chartisme/figures"
 import {
   GEOMETRIC_FLOOR,
@@ -153,6 +153,7 @@ export function ChartismeLab() {
   const [selection, setSelection] = useState<CurveSelection | null>(null)
   const [status, setStatus] = useState<ModuleStatus | null>(null)
   const [firedCount, setFiredCount] = useState<number | null>(null)
+  const [showMedian, setShowMedian] = useState(true)
 
   useEffect(() => {
     const params = readLabSearch()
@@ -827,6 +828,23 @@ export function ChartismeLab() {
                 })}
               </div>
 
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  aria-pressed={showMedian}
+                  onClick={() => setShowMedian((current) => !current)}
+                  className={
+                    showMedian
+                      ? "rounded-full border border-sky-400/50 bg-sky-400/15 px-2.5 py-1 text-xs text-sky-100"
+                      : "rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                  }
+                >
+                  Médiane
+                </button>
+                <span className="text-[11px] text-muted-foreground">
+                  Parallèle à mi-distance des deux bornes, pas une fourchette d’Andrews.
+                </span>
+              </div>
               <CurveCanvas
                 values={curve.values}
                 dates={curve.dates}
@@ -838,6 +856,7 @@ export function ChartismeLab() {
                 onHitSelect={setSelected}
                 contextCount={study.contextCount}
                 label={curve.label}
+                showMedian={showMedian}
               />
 
               {/* Hauteur fixe, pas minimale. Vider la liste raccourcissait la
@@ -863,7 +882,7 @@ export function ChartismeLab() {
                           figure={found.figure}
                           className={index === selected ? "text-primary-foreground" : undefined}
                         />
-                        {found.label} · {found.confidence.toFixed(2)}
+                        {slopeBiasLabel(found.figure, found.slopeBias)} · {found.confidence.toFixed(2)}
                         {found.rare ? "" : " · bruit"}
                         {startsInContext(found, study.contextCount)
                           ? " · à cheval"
@@ -875,9 +894,19 @@ export function ChartismeLab() {
                     <div className="rounded-lg border border-border p-3 text-xs">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-medium">
-                          <FigureName figure={hit.figure} label={hit.label} />
+                          <FigureName
+                            figure={hit.figure}
+                            label={slopeBiasLabel(hit.figure, hit.slopeBias)}
+                          />
                         </span>
                         <Badge variant="secondary">{hit.kind}</Badge>
+                        {isChannelFigure(hit.figure) && hit.slopeBias && hit.slopeBias !== "flat" ? (
+                          <Badge variant="outline">
+                            {hit.slopeBias === "up" ? "pente haussière" : "pente baissière"}
+                          </Badge>
+                        ) : isChannelFigure(hit.figure) ? (
+                          <Badge variant="outline">pente plate</Badge>
+                        ) : null}
                         <Badge variant={hit.rare ? "default" : "outline"}>
                           {hit.rare ? "rare à ce taux" : "commune au bruit"}
                         </Badge>

@@ -24,11 +24,12 @@ from __future__ import annotations
 from typing import Any, Sequence
 from uuid import uuid4
 
-from synchro.chartisme.catalog import FIGURE_IDS, canonical_figure, label_of
+from synchro.chartisme.catalog import FIGURE_IDS, SLOPE_BIASES, canonical_figure, label_of
 
 ACTION_TYPES = ("tag", "alert", "note", "hypothesize", "watch")
 BREAKOUT_STATES = ("any", "confirmed", "fake", "pending")
 DIRECTIONS = ("any", "up", "down")
+CHANNEL_SLOPES = ("any",) + SLOPE_BIASES
 TRENDS = ("any", "up", "down", "range")
 KINDS = ("reversal_down", "reversal_up", "continuation", "range")
 #: « peu importe » · « en même temps qu'une figure sur … » · « et pas sur … ».
@@ -82,6 +83,7 @@ def normalize_condition(raw: dict[str, Any] | None) -> dict[str, Any]:
         "min_confidence": _optional_float(src.get("min_confidence")),
         "breakout": _one_of(src.get("breakout"), BREAKOUT_STATES, "any"),
         "direction": _one_of(src.get("direction"), DIRECTIONS, "any"),
+        "channel_slope": _one_of(src.get("channel_slope"), CHANNEL_SLOPES, "any"),
         "trend": _one_of(src.get("trend"), TRENDS, "any"),
         "weekday": (str(src.get("weekday") or "").strip().lower() or None),
         "min_activity_ratio": _optional_float(src.get("min_activity_ratio")),
@@ -156,6 +158,8 @@ def match_condition(condition: dict[str, Any], state: dict[str, Any]) -> bool:
     if cond["breakout"] != "any" and str(state.get("breakout_state") or "") != cond["breakout"]:
         return False
     if cond["direction"] != "any" and str(state.get("direction") or "") != cond["direction"]:
+        return False
+    if cond["channel_slope"] != "any" and str(state.get("slope_bias") or "") != cond["channel_slope"]:
         return False
     if cond["trend"] != "any" and str(state.get("trend") or "") != cond["trend"]:
         return False
@@ -252,6 +256,7 @@ def state_from_hit(
         "curve_label": (curve or {}).get("label"),
         "breakout_state": _breakout_state(hit),
         "direction": breakout.get("direction"),
+        "slope_bias": hit.get("slope_bias"),
         "activity_ratio": breakout.get("activity_ratio"),
         "trend": trend or "any",
         "weekday": weekday,
@@ -373,6 +378,11 @@ def describe_condition(condition: dict[str, Any]) -> str:
         parts.append(_breakout_label(cond["breakout"]))
     if cond["direction"] != "any":
         parts.append("sens " + ("haussier" if cond["direction"] == "up" else "baissier"))
+    if cond["channel_slope"] != "any":
+        slope = {"up": "haussière", "down": "baissière", "flat": "plate"}.get(
+            cond["channel_slope"], cond["channel_slope"]
+        )
+        parts.append(f"pente du canal {slope}")
     if cond["trend"] != "any":
         parts.append(f"tendance de fond {cond['trend']}")
     if cond["weekday"]:

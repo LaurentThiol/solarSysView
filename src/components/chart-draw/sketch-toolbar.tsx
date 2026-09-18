@@ -13,7 +13,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select"
-import { catalog, labelOf } from "@/lib/chartisme/catalog"
+import { catalog, isRailFigure, labelOf } from "@/lib/chartisme/catalog"
 import { FREE_FIGURE, channelLabel, remapSketch, type ChartSketch } from "@/lib/chart-draw"
 import { cn } from "@/lib/utils"
 
@@ -23,11 +23,11 @@ const DRAW_HELP = {
   body: `Pose une figure de la table (ou un segment libre) sur la courbe d’évolution.
 
 1. Choisis la figure et la série visée.
-2. Clique un départ : près de la courbe, l’aimant accroche le tirage le plus proche. Un pivot de swing est seulement étiqueté (aimant · pivot) : il n’avale plus le voisin, chaque point de la courbe d’origine reste sélectionnable.
-3. Clique l’arrivée, même règle. Alt (⌥ Option) lâche l’aimant : l’abscisse reste un tirage, l’ordonnée suit le curseur — pour poser hors courbe (segment, gabarit ou canal).
-4. Le gabarit est étiré sur cette fenêtre (le segment libre est une droite). Le canal pose deux droites parallèles autour de la série — une au-dessus, une en dessous — plutôt qu’un zigzag d’école. Les coordonnées vivent dans l’espace des données : un changement de période les recale par date.
+2. Figures à rails (rectangle, canal, triangles, biseaux, broadening) : trois clics. Les deux premiers ferment la première borne ; le troisième pose le contact opposé — parallèle pour le canal / rectangle, contrainte de figure pour les triangles. L’aimant privilégie les pivots de touche (H pour la borne haute, L pour la basse).
+3. Les autres figures : deux clics. Près de la courbe, l’aimant accroche le tirage le plus proche. Un pivot de swing est seulement étiqueté (aimant · pivot) : il n’avale plus le voisin.
+4. Alt (⌥ Option) lâche l’aimant à l’arrivée : l’abscisse reste un tirage, l’ordonnée suit le curseur. Le gabarit d’école reste pour ETE, tasse, diamant ; sur les rails on dessine deux droites, la hauteur et l’objectif, pas le zigzag. Case Médiane : parallèle à mi-distance. Canal haussier / baissier = pente des bornes, pas une seconde classe.
 
-La fenêtre flottante affiche date, indice, valeur et aimant. Capture : le tracé est dans le visuel, les ancres partent dans le JSON pour l’IA. Ce n’est pas un signal de jeu.`,
+La fenêtre flottante affiche date, indice, valeur et aimant. Capture : rails, hauteur, objectif et touches partent dans le JSON. Ce n’est pas un signal de jeu.`,
 }
 
 export function SketchToolbar({
@@ -38,6 +38,8 @@ export function SketchToolbar({
   sketches,
   dates,
   canUndo,
+  showMedian = true,
+  onShowMedian,
   onToggle,
   onFigure,
   onSeries,
@@ -52,6 +54,8 @@ export function SketchToolbar({
   sketches: ChartSketch[]
   dates: string[]
   canUndo: boolean
+  showMedian?: boolean
+  onShowMedian?: (value: boolean) => void
   onToggle: () => void
   onFigure: (figure: string) => void
   onSeries: (key: string) => void
@@ -61,6 +65,7 @@ export function SketchToolbar({
 }) {
   const figureLabel =
     figure === FREE_FIGURE ? "Segment libre" : labelOf(figure)
+  const rails = isRailFigure(figure)
   const visible = sketches.filter((sketch) => remapSketch(sketch, dates))
 
   return (
@@ -89,7 +94,7 @@ export function SketchToolbar({
               label="Figure"
               help={{
                 title: "Figure chartiste",
-                body: "Les 18 formes de la table, ou un segment libre : une droite entre les deux ancres. Alt (⌥) démagnétise l’arrivée de n’importe quelle figure pour poser hors courbe. Le canal n’est pas une courbe : ce sont deux rails parallèles qui encadrent la série ; un clic hors courbe élargit le rail jusqu’au curseur.",
+                body: "Les 18 formes de la table, ou un segment libre. Rectangle, canal, triangles et biseaux se posent en trois clics (une borne, puis le contact opposé). Alt (⌥) démagnétise l’arrivée pour poser hors courbe. Le canal n’est pas une courbe : deux rails autour de la série. Haussier / baissier = pente des bornes, une seule classe.",
               }}
             >
               <Select value={figure} onValueChange={(value) => value && onFigure(value)}>
@@ -138,6 +143,21 @@ export function SketchToolbar({
                   </SelectContent>
                 </Select>
               </LabelHelp>
+            ) : null}
+            {rails && onShowMedian ? (
+              <button
+                type="button"
+                aria-pressed={showMedian}
+                onClick={() => onShowMedian(!showMedian)}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-xs",
+                  showMedian
+                    ? "border-sky-400/50 bg-sky-400/15 text-sky-100"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Médiane
+              </button>
             ) : null}
             <Button type="button" size="xs" variant="ghost" onClick={onCancel} disabled={!canUndo}>
               <Undo2 />

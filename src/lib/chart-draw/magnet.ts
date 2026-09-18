@@ -1,6 +1,8 @@
-import { swingPivots } from "../chartisme/pivots"
+import { swingPivots, type SwingPivot } from "../chartisme/pivots"
 
 import { type MagnetKind } from "./types"
+
+export type TouchKind = "H" | "L"
 
 export const DEFAULT_MAGNET_RADIUS_PX = 28
 
@@ -37,6 +39,47 @@ export function canFreePlaceArrival(hasStart: boolean, demagnetize: boolean) {
 /** Indices des pivots de swing : sommets et creux chartistes, pas tous les dents. */
 export function extremaIndices(values: number[]): number[] {
   return swingPivots(values).map((pivot) => pivot.index)
+}
+
+export function swingTouches(values: number[]): Pick<SwingPivot, "index" | "type">[] {
+  return swingPivots(values).map((pivot) => ({ index: pivot.index, type: pivot.type }))
+}
+
+/**
+ * Aimant des figures à rails : les pivots de touche d'abord (H ou L selon
+ * la borne), l'échantillon seulement s'il n'y en a pas dans le rayon.
+ */
+export function magnetOnTouches(
+  samples: PixelSample[],
+  pointer: PixelPoint,
+  touches: Pick<SwingPivot, "index" | "type">[],
+  prefer: TouchKind | "any" = "any",
+  radiusPx = DEFAULT_MAGNET_RADIUS_PX
+): { index: number; distance: number; snapped: boolean; kind: MagnetKind } | null {
+  const byIndex = new Map(samples.map((sample) => [sample.index, sample]))
+  const preferred = prefer === "any" ? touches : touches.filter((touch) => touch.type === prefer)
+  const pools = [preferred, prefer === "any" ? [] : touches]
+  for (const pool of pools) {
+    const candidates = pool
+      .map((touch) => byIndex.get(touch.index))
+      .filter((sample): sample is PixelSample => sample != null)
+    if (!candidates.length) continue
+    const near = nearestSample(candidates, pointer)
+    if (near && isMagneted(near.distance, radiusPx)) {
+      return {
+        index: near.index,
+        distance: near.distance,
+        snapped: true,
+        kind: "extrema",
+      }
+    }
+  }
+  return magnetOnCurve(
+    samples,
+    pointer,
+    touches.map((touch) => touch.index),
+    radiusPx
+  )
 }
 
 /** Pivot si ce tirage en est un, sinon simple échantillon. */

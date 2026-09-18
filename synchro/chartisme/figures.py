@@ -16,10 +16,10 @@ from typing import Any, Callable, Sequence
 from synchro.analysis.tech import activity_confirms
 from synchro.chartisme.catalog import kind_of, label_of, signal_of, target_basis
 from synchro.chartisme.pivots import DEFAULT_PCT, swing_pivots
+from synchro.chartisme.rails import FLAT_SLOPE, fit_rail_pair, line_at
 
 DEFAULT_ZIGZAG_PCT = DEFAULT_PCT
 DEFAULT_EPS = 0.05
-FLAT_SLOPE = 0.12
 ACTIVITY_PERIOD = 20
 HOLD_BARS = 2
 
@@ -203,6 +203,7 @@ def _hit(
     breakout: dict[str, Any] | None = None,
     target: float | None = None,
     detector: str = "geometric",
+    slope_bias: str | None = None,
 ) -> dict[str, Any]:
     indexes = [p["index"] for p in pivots] or [0]
     first, last = min(indexes), max(indexes)
@@ -221,6 +222,7 @@ def _hit(
         "breakout": breakout,
         "target": None if target is None else {"value": float(target), "basis": target_basis(figure)},
         "detector": detector,
+        **({"slope_bias": slope_bias} if slope_bias else {}),
     }
 
 
@@ -474,11 +476,6 @@ def _bounds(ctx: Context, pivots_h: list[dict[str, Any]], pivots_l: list[dict[st
     return upper, lower, err
 
 
-def _span(pivots_h: list[dict[str, Any]], pivots_l: list[dict[str, Any]]) -> tuple[int, int]:
-    idx = [p["index"] for p in pivots_h + pivots_l]
-    return min(idx), max(idx)
-
-
 def _bound_guides(
     upper: tuple[float, float],
     lower: tuple[float, float],
@@ -501,50 +498,6 @@ def _bound_pivots(
     return sorted(pivots, key=lambda p: p["index"])
 
 
-def _classify_bounds(
-    upper: tuple[float, float],
-    lower: tuple[float, float],
-    first: int,
-    last: int,
-) -> tuple[str, str] | None:
-    """Bornes ajustées → (figure, sens attendu de la cassure)."""
-    width = last - first
-    if width <= 0:
-        return None
-    h0 = _at(upper, first) - _at(lower, first)
-    h1 = _at(upper, last) - _at(lower, last)
-    if h0 <= 0:
-        return None
-    # « Plat » : la borne varie de moins de 12 % de la hauteur de la figure.
-    flat = FLAT_SLOPE * h0 / width
-    up, low = upper[0], lower[0]
-    up_flat, low_flat = abs(up) <= flat, abs(low) <= flat
-    ratio = h1 / h0
-    if ratio < 0.75:
-        if up > flat and low > flat:
-            return "wedge_rising", "down"
-        if up < -flat and low < -flat:
-            return "wedge_falling", "up"
-        if up_flat and low > flat:
-            return "triangle_asc", "up"
-        if low_flat and up < -flat:
-            return "triangle_desc", "down"
-        if up < -flat and low > flat:
-            return "triangle_sym", "any"
-        return None
-    if ratio > 1.3:
-        if up > flat and low < -flat:
-            return "broadening_top", "down"
-        return None
-    if up_flat and low_flat:
-        return "rectangle", "any"
-    # Bornes parallèles et inclinées : canal à largeur constante (pas un rectangle plat).
-    parallel = abs(up - low) <= max(2 * flat, 0.3 * (abs(up) + abs(low)) / 2)
-    if parallel:
-        return "canal", "any"
-    return None
-
-
 def _pivot_groups(pivots: list[dict[str, Any]], sizes: Sequence[int] = (6, 5, 4)):
     """Sous-suites contiguës de pivots, les plus longues d'abord."""
     for size in sizes:
@@ -565,21 +518,21 @@ def detect_bounds(ctx: Context) -> list[dict[str, Any]]:
     """
     out: list[dict[str, Any]] = []
     for _group, highs, lows in _pivot_groups(ctx.pivots):
-        fitted = _bounds(ctx, highs, lows)
-        if fitted is None:
+        pair = fit_rail_pair(highs, lows, eps=ctx.eps, scale=ctx.scale)
+        if pair is None or not pair.get("figure"):
             continue
-        upper, lower, err = fitted
-        first, last = _span(highs, lows)
-        verdict = _classify_bounds(upper, lower, first, last)
-        if verdict is None:
-            continue
-        figure, direction = verdict
-        base = _at(upper, first) - _at(lower, first)
+        upper, lower = pair["upper"], pair["lower"]
+        first, last = int(pair["first"]), int(pair["last"])
+        figure, direction = pair["figure"], pair["expected"]
+        err = float(pair["ls_error"])
+        err += NO_EVIDENCE * sum(1 for side in (highs, lows) if len(side) < 3)
+        base = float(pair["height"])
         if base <= ctx.eps * ctx.scale:
             continue
+        median = pair["median"]
         if figure == "rectangle":
-            top = sum(float(p["price"]) for p in highs) / len(highs)
-            bottom = sum(float(p["price"]) for p in lows) / len(lows)
+            top = line_at(upper, first)
+            bottom = line_at(lower, first)
             base = top - bottom
             up_level: Callable[[int], float] = lambda i, top=top: top
             down_level: Callable[[int], float] = lambda i, bottom=bottom: bottom
@@ -587,16 +540,26 @@ def detect_bounds(ctx: Context) -> list[dict[str, Any]]:
                 _guide("upper", [(first, top), (last, top)], kind="level"),
                 _guide("lower", [(first, bottom), (last, bottom)], kind="level"),
                 _guide("height", [(first, bottom), (first, top)], kind="measure"),
+                _guide(
+                    "median",
+                    [(first, line_at(median, first)), (last, line_at(median, last))],
+                    kind="median",
+                ),
             ]
         else:
-            up_level = lambda i, upper=upper: _at(upper, float(i))
-            down_level = lambda i, lower=lower: _at(lower, float(i))
+            up_level = lambda i, upper=upper: line_at(upper, float(i))
+            down_level = lambda i, lower=lower: line_at(lower, float(i))
             guides = _bound_guides(upper, lower, first, last) + [
                 _guide(
                     "base",
-                    [(first, _at(lower, first)), (first, _at(upper, first))],
+                    [(first, line_at(lower, first)), (first, line_at(upper, first))],
                     kind="measure",
-                )
+                ),
+                _guide(
+                    "median",
+                    [(first, line_at(median, first)), (last, line_at(median, last))],
+                    kind="median",
+                ),
             ]
         if figure == "broadening_top":
             # Le signal est la cassure du dernier creux, pas celle de la borne.
@@ -635,6 +598,7 @@ def detect_bounds(ctx: Context) -> list[dict[str, Any]]:
                 dates=ctx.dates,
                 breakout=breakout,
                 target=target,
+                slope_bias=pair.get("slope_bias"),
             )
         )
     return out

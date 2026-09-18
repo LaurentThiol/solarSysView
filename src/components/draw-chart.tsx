@@ -54,6 +54,7 @@ import {
   isMagneted,
   magnetKindAt,
   magnetOnCurve,
+  magnetOnTouches,
   nearestSampleByX,
   newSketchId,
   pixelDistance,
@@ -62,6 +63,7 @@ import {
   remapSketch,
   resolveSketchBand,
   sketchDataKey,
+  swingTouches,
   valueFromPixelY,
   windowTooShort,
   type AxisScales,
@@ -69,6 +71,7 @@ import {
   type LiveCursor,
   type PixelSample,
 } from "@/lib/chart-draw"
+import { isRailFigure } from "@/lib/chartisme/catalog"
 import { cn } from "@/lib/utils"
 import {
   NUMBER_SUM_RANGE,
@@ -406,6 +409,20 @@ function writeBandFields(
   extra[`${prefix}_span`] = Math.max(0, up - lo)
 }
 
+function writeMedianField(
+  extra: Record<string, number | null>,
+  prefix: string,
+  date: string,
+  medianAt: Map<string, number> | null,
+  seriesKey: SeriesKey,
+  ranges: { numbers: ValueRange; stars: ValueRange }
+) {
+  if (!medianAt) return
+  const mid = medianAt.get(date)
+  if (mid == null) return
+  extra[`${prefix}_median`] = clampPlotted(seriesKey, plottedOf(seriesKey, mid, ranges))
+}
+
 type ChartPointerState = MouseHandlerDataParam
 
 type PointerLike = {
@@ -739,33 +756,39 @@ function SeriesTooltip({
 function placementHint(options: {
   live: LiveCursor | null
   startIndex: number | null
+  midIndex?: number | null
+  rails?: boolean
 }) {
-  const { live, startIndex } = options
+  const { live, startIndex, midIndex, rails } = options
   if (!live) return "Survole la courbe."
   const hasStart = startIndex != null
+  const hasMid = midIndex != null
   if (live.offCurve) {
     if (
       startIndex != null &&
       live.index !== startIndex &&
       windowTooShort(startIndex, live.index)
     ) {
-      return "Au moins 8 tirages entre départ et arrivée."
+      return "Au moins 8 tirages entre le premier point et celui-ci."
     }
-    return "Arrivée hors courbe — clique pour poser."
+    return "Point hors courbe — clique pour poser."
   }
   if (!live.snapped) {
-    if (hasStart) return "Approche la courbe, ou Alt (⌥) pour poser hors courbe."
-    return "Approche la courbe pour ancrer le point."
+    if (hasStart) return "Approche un pivot de touche, ou Alt (⌥) pour poser hors courbe."
+    return "Approche un pivot pour ancrer la borne."
   }
   if (
     startIndex != null &&
     live.index !== startIndex &&
-    windowTooShort(startIndex, live.index)
+    windowTooShort(startIndex, live.index) &&
+    !hasMid
   ) {
-    return "Au moins 8 tirages entre départ et arrivée."
+    return "Au moins 8 tirages pour refermer la figure."
   }
+  if (rails && hasStart && !hasMid) return "Clique le second point de la borne."
+  if (rails && hasMid) return "Clique le contact opposé — le parallèle (ou la seconde borne)."
   if (hasStart) return "Clique l’arrivée. Alt (⌥) : hors courbe."
-  return "Clique le départ."
+  return rails ? "Clique le premier point de la borne." : "Clique le départ."
 }
 
 export function DrawChart({ draws }: { draws: Draw[] }) {
@@ -965,12 +988,26 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   }, [storedSketches, dates, keys])
 
   const draftStart = draw?.draft?.start ?? null
+  const draftMid = draw?.draft?.mid ?? null
   const draftLive = draw?.live ?? null
   const draftFigure = draw?.figure ?? "ete"
   const drawing = Boolean(draw?.drawing)
   const draftGeometry = useMemo(() => {
     if (!drawing || !draftStart || !draftLive) return null
     const values = seriesValuesOf(series, targetKey)
+    if (draftMid && isRailFigure(draftFigure)) {
+      return buildSketchGeometry({
+        figure: draftFigure,
+        values,
+        dates,
+        from: draftStart.index,
+        to: draftMid.index,
+        fromActual: draftStart.actual,
+        toActual: draftMid.actual,
+        via: draftLive.index,
+        viaActual: draftLive.actual,
+      })
+    }
     return buildSketchGeometry({
       figure: draftFigure,
       values,
@@ -980,7 +1017,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       fromActual: draftStart.actual,
       toActual: draftLive.actual,
     })
-  }, [drawing, draftStart, draftLive, draftFigure, series, dates, targetKey])
+  }, [drawing, draftStart, draftMid, draftLive, draftFigure, series, dates, targetKey])
   const draftPoints = draftGeometry?.points ?? []
   const draftBand = draftGeometry?.band
 
@@ -991,10 +1028,10 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     if (draftStart && draftLive && draftLive.index !== draftStart.index) {
       if (windowTooShort(draftStart.index, draftLive.index)) return null
       const values = seriesValuesOf(series, targetKey)
-      return readWindow(values, dates, draftStart.index, draftLive.index)
+      return readWindow(values, dates, draftStart.index, draftLive.index, draftBand)
     }
     return lastSketch?.reading ?? null
-  }, [draftStart, draftLive, series, dates, targetKey, lastSketch])
+  }, [draftStart, draftLive, draftBand, series, dates, targetKey, lastSketch])
 
   const plotData = useMemo(() => {
     if (!visibleSketches.length && !draftPoints.length && !draftBand) return chartData
@@ -1010,6 +1047,11 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
         band,
         upperAt: band ? new Map(band.upper.map((point) => [point.date, point.actual])) : null,
         lowerAt: band ? new Map(band.lower.map((point) => [point.date, point.actual])) : null,
+        medianAt:
+          band?.median && (sketch.showMedian ?? draw?.showMedian)
+            ? new Map(band.median.map((point) => [point.date, point.actual]))
+            : null,
+        target: band?.target ?? null,
       }
     })
     const draftAt = new Map(draftPoints.map((point) => [point.date, point.actual]))
@@ -1019,6 +1061,10 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     const draftLowerAt = draftBand
       ? new Map(draftBand.lower.map((point) => [point.date, point.actual]))
       : null
+    const draftMedianAt =
+      draftBand?.median && draw?.showMedian
+        ? new Map(draftBand.median.map((point) => [point.date, point.actual]))
+        : null
     return chartData.map((point) => {
       const extra: Record<string, number | null> = {}
       const date = String(point.date)
@@ -1033,6 +1079,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
             sketch.seriesKey,
             ranges
           )
+          writeMedianField(extra, sketch.key, date, sketch.medianAt, sketch.seriesKey, ranges)
         } else {
           const actual = sketch.at.get(date)
           extra[sketch.key] =
@@ -1041,13 +1088,24 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       }
       if (draftUpperAt && draftLowerAt) {
         writeBandFields(extra, DRAFT_KEY, date, draftUpperAt, draftLowerAt, targetKey, ranges)
+        writeMedianField(extra, DRAFT_KEY, date, draftMedianAt, targetKey, ranges)
       } else if (draftPoints.length) {
         const actual = draftAt.get(date)
         extra[DRAFT_KEY] = actual == null ? null : plottedOf(targetKey, actual, ranges)
       }
       return { ...point, ...extra }
     })
-  }, [chartData, visibleSketches, draftPoints, draftBand, ranges, targetKey, series, dates])
+  }, [
+    chartData,
+    visibleSketches,
+    draftPoints,
+    draftBand,
+    ranges,
+    targetKey,
+    series,
+    dates,
+    draw?.showMedian,
+  ])
 
   const setChartMeta = draw?.setChartMeta
   const visibleKeyList = visibleKeys.join(",")
@@ -1152,6 +1210,18 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       demagnetize
     )
     const extrema = extremaIndices(values)
+    const touches = swingTouches(values)
+    const rails = isRailFigure(current?.figure ?? "")
+    const startTouch = current?.draft?.start
+    const midTouch = current?.draft?.mid
+    let prefer: "H" | "L" | "any" = "any"
+    if (rails && startTouch && !midTouch) {
+      const atStart = touches.find((touch) => touch.index === startTouch.index)
+      prefer = atStart?.type ?? "any"
+    } else if (rails && startTouch && midTouch) {
+      const atStart = touches.find((touch) => touch.index === startTouch.index)
+      prefer = atStart?.type === "H" ? "L" : atStart?.type === "L" ? "H" : "any"
+    }
     let index: number | null = null
     let distance: number | null = null
     let curveKind: LiveCursor["kind"] | null = null
@@ -1166,7 +1236,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
             : near.distanceX
         }
       } else {
-        const hit = magnetOnCurve(samples, pointer, extrema)
+        const hit = rails
+          ? magnetOnTouches(samples, pointer, touches, prefer)
+          : magnetOnCurve(samples, pointer, extrema)
         if (hit) {
           index = hit.index
           distance = hit.distance
@@ -1248,6 +1320,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       placementHint({
         live,
         startIndex: current.draft?.start?.index ?? null,
+        midIndex: current.draft?.mid?.index ?? null,
+        rails: isRailFigure(current.figure),
       })
     )
   }
@@ -1277,54 +1351,75 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
         placementHint({
           live,
           startIndex: current.draft?.start?.index ?? null,
+          midIndex: current.draft?.mid?.index ?? null,
+          rails: isRailFigure(current.figure),
         })
       )
       return
     }
     const start = current.draft?.start
-    if (!start) {
-      if (!live.snapped) {
-        setHint("Approche la courbe pour ancrer le point.")
-        return
-      }
-      const anchor: ChartAnchor = {
-        index: live.index,
-        date: live.date,
-        seriesKey: live.seriesKey,
-        actual: live.actual,
-        snapped: live.snapped,
-        kind: live.kind,
-      }
-      current.setDraft({
-        figure: current.figure,
-        seriesKey: targetKey,
-        seriesLabel: chartConfig[targetKey].label,
-        start: anchor,
-      })
-      setHint("Clique l’arrivée. Alt (⌥) : hors courbe.")
-      return
-    }
-    if (windowTooShort(start.index, live.index)) {
-      setHint("Au moins 8 tirages entre départ et arrivée.")
-      return
-    }
-    const values = seriesValues(targetKey)
-    const end: ChartAnchor = {
+    const mid = current.draft?.mid
+    const rails = isRailFigure(current.figure)
+    const makeAnchor = (): ChartAnchor => ({
       index: live.index,
       date: live.date,
       seriesKey: live.seriesKey,
       actual: live.actual,
       snapped: live.snapped,
       kind: live.kind,
+    })
+    if (!start) {
+      if (!live.snapped) {
+        setHint("Approche un pivot pour ancrer la borne.")
+        return
+      }
+      current.setDraft({
+        figure: current.figure,
+        seriesKey: targetKey,
+        seriesLabel: chartConfig[targetKey].label,
+        start: makeAnchor(),
+        mid: null,
+      })
+      setHint(
+        rails
+          ? "Clique le second point de la borne."
+          : "Clique l’arrivée. Alt (⌥) : hors courbe."
+      )
+      return
     }
+    if (rails && !mid) {
+      if (live.index === start.index) {
+        setHint("Choisis un autre point pour fermer la borne.")
+        return
+      }
+      current.setDraft({
+        figure: current.figure,
+        seriesKey: targetKey,
+        seriesLabel: chartConfig[targetKey].label,
+        start,
+        mid: makeAnchor(),
+      })
+      setHint("Clique le contact opposé — le parallèle (ou la seconde borne).")
+      return
+    }
+    const left = Math.min(start.index, mid?.index ?? live.index, live.index)
+    const right = Math.max(start.index, mid?.index ?? live.index, live.index)
+    if (windowTooShort(left, right)) {
+      setHint("Au moins 8 tirages pour refermer la figure.")
+      return
+    }
+    const values = seriesValues(targetKey)
+    const end = makeAnchor()
     const geo = buildSketchGeometry({
       figure: current.figure,
       values,
       dates,
       from: start.index,
-      to: end.index,
+      to: rails && mid ? mid.index : end.index,
       fromActual: start.actual,
-      toActual: end.actual,
+      toActual: rails && mid ? mid.actual : end.actual,
+      via: rails ? end.index : undefined,
+      viaActual: rails ? end.actual : undefined,
     })
     current.addSketch({
       id: newSketchId(),
@@ -1333,10 +1428,12 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       seriesKey: targetKey,
       seriesLabel: chartConfig[targetKey].label,
       start,
+      mid: rails ? mid ?? undefined : undefined,
       end,
       points: geo.points,
       band: geo.band,
-      reading: readWindow(values, dates, start.index, end.index),
+      showMedian: current.showMedian,
+      reading: readWindow(values, dates, left, right, geo.band),
       createdAt: new Date().toISOString(),
     })
     setHint("Annotation posée. Clique un nouveau départ, ou désactive le dessin.")
@@ -1460,7 +1557,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               }))}
               sketches={draw.sketches}
               dates={dates}
-              canUndo={Boolean(draw.draft?.start)}
+              canUndo={Boolean(draw.draft?.start || draw.draft?.mid)}
+              showMedian={draw.showMedian}
+              onShowMedian={draw.setShowMedian}
               onToggle={() => {
                 const next = !draw.drawing
                 draw.setDrawing(next)
@@ -1470,8 +1569,13 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     seriesKey: targetKey,
                     seriesLabel: chartConfig[targetKey].label,
                     start: null,
+                    mid: null,
                   })
-                  setHint("Clique le départ, près de la courbe.")
+                  setHint(
+                    isRailFigure(draw.figure)
+                      ? "Clique le premier point de la borne."
+                      : "Clique le départ, près de la courbe."
+                  )
                   if (hidden[targetKey]) {
                     setHidden((current) => ({ ...current, [targetKey]: false }))
                   }
@@ -1483,7 +1587,11 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               onSeries={(key) => {
                 setTargetKey(key as SeriesKey)
                 draw.cancelDraft()
-                setHint("Clique le départ, près de la courbe.")
+                setHint(
+                  isRailFigure(draw.figure)
+                    ? "Clique le premier point de la borne."
+                    : "Clique le départ, près de la courbe."
+                )
               }}
               onCancel={draw.cancelDraft}
               onClear={draw.clearSketches}
@@ -1762,6 +1870,38 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                           isAnimationActive={false}
                           name={`${channelLabel(sketch.figure, band)} −`}
                         />
+                        {sketch.showMedian ?? draw?.showMedian ? (
+                          <Line
+                            dataKey={`${prefix}_median`}
+                            yAxisId={axisId}
+                            type="linear"
+                            stroke="var(--chart-5)"
+                            strokeWidth={1.25}
+                            strokeDasharray="4 3"
+                            strokeOpacity={0.85}
+                            dot={false}
+                            connectNulls
+                            legendType="none"
+                            tooltipType="none"
+                            isAnimationActive={false}
+                            name="Médiane"
+                          />
+                        ) : null}
+                        {band.target != null ? (
+                          <ReferenceLine
+                            y={plottedOf(seriesKey, band.target, ranges)}
+                            yAxisId={axisId}
+                            stroke="var(--chart-3)"
+                            strokeDasharray="2 4"
+                            strokeOpacity={0.8}
+                            label={{
+                              value: "objectif",
+                              fill: "var(--chart-3)",
+                              fontSize: 10,
+                              position: "insideTopRight",
+                            }}
+                          />
+                        ) : null}
                       </Fragment>
                     )
                   }
@@ -1834,6 +1974,31 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       tooltipType="none"
                       isAnimationActive={false}
                     />
+                    {draw?.showMedian ? (
+                      <Line
+                        dataKey={`${DRAFT_KEY}_median`}
+                        yAxisId={plotAxisId(targetKey, splitRank1)}
+                        type="linear"
+                        stroke="var(--chart-5)"
+                        strokeWidth={1.25}
+                        strokeDasharray="4 3"
+                        strokeOpacity={0.75}
+                        dot={false}
+                        connectNulls
+                        legendType="none"
+                        tooltipType="none"
+                        isAnimationActive={false}
+                      />
+                    ) : null}
+                    {draftBand.target != null ? (
+                      <ReferenceLine
+                        y={plottedOf(targetKey, draftBand.target, ranges)}
+                        yAxisId={plotAxisId(targetKey, splitRank1)}
+                        stroke="var(--chart-3)"
+                        strokeDasharray="2 4"
+                        strokeOpacity={0.7}
+                      />
+                    ) : null}
                   </Fragment>
                 ) : draftPoints.length > 0 ? (
                   <Line
@@ -1876,6 +2041,23 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     />
                   </>
                 ) : null}
+                {draw?.draft?.mid ? (
+                  <ReferenceDot
+                    x={draw.draft.mid.date}
+                    y={plottedOf(
+                      draw.draft.mid.seriesKey as SeriesKey,
+                      draw.draft.mid.actual,
+                      ranges
+                    )}
+                    yAxisId={plotAxisId(
+                      draw.draft.mid.seriesKey as SeriesKey,
+                      splitRank1
+                    )}
+                    r={5}
+                    fill="var(--chart-5)"
+                    stroke="var(--background)"
+                  />
+                ) : null}
                 {draw?.drawing && draw.live ? (
                   <>
                     <ReferenceLine
@@ -1912,6 +2094,16 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       fill="var(--chart-4)"
                       stroke="var(--background)"
                     />
+                    {sketch.mid ? (
+                      <ReferenceDot
+                        x={sketch.mid.date}
+                        y={plottedOf(sketch.seriesKey as SeriesKey, sketch.mid.actual, ranges)}
+                        yAxisId={plotAxisId(sketch.seriesKey as SeriesKey, splitRank1)}
+                        r={4}
+                        fill="var(--chart-5)"
+                        stroke="var(--background)"
+                      />
+                    ) : null}
                   </Fragment>
                 ))}
                 <MagnetHalo
@@ -1932,7 +2124,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               <CoordHud
                 live={draw.live}
                 start={hudStart}
+                mid={draftMid}
                 end={hudEnd}
+                rails={isRailFigure(draw.figure)}
                 figureLabel={channelLabel(draw.figure, draftBand)}
                 seriesLabel={chartConfig[targetKey].label}
                 reading={draftReading}

@@ -603,7 +603,14 @@ export function AnalysisLab() {
           tech={tech}
         />
       ) : null}
-      {tab === "figures" ? <FiguresPanel tech={tech} /> : null}
+      {tab === "figures" ? (
+        <FiguresPanel
+          tech={tech}
+          values={workSeries.values}
+          dates={workSeries.points.map((point) => point.date)}
+          activity={tech.activity.slice(warmupCount)}
+        />
+      ) : null}
       {tab === "flux" ? (
         <FlowPanel
           dates={workSeries.points.map((p) => p.date)}

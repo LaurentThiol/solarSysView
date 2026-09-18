@@ -1,4 +1,11 @@
-import { canonicalFigure, isChannelFigure, labelOf } from "../chartisme/catalog"
+import {
+  canonicalFigure,
+  isChannelFigure,
+  isRailFigure,
+  labelOf,
+  slopeBiasLabel,
+} from "../chartisme/catalog"
+import { constructRails, projectRailTarget } from "../chartisme/rails"
 import { synthCurve } from "../chartisme/sketch-shapes"
 
 import {
@@ -17,6 +24,10 @@ export function windowBarCount(from: number, to: number) {
 
 export function windowTooShort(from: number, to: number, min = MIN_SKETCH_BARS) {
   return windowBarCount(from, to) < min
+}
+
+export function railClickCount(figure: string): 2 | 3 {
+  return isRailFigure(figure) ? 3 : 2
 }
 
 export function sampleTemplate(template: number[], u: number) {
@@ -221,14 +232,31 @@ export function fitChannelBand(
   const points: SketchPoint[] = []
   const upper: SketchPoint[] = []
   const lower: SketchPoint[] = []
+  const median: SketchPoint[] = []
   for (let k = 0; k < slice.length; k += 1) {
     const index = i0 + k
     const date = dates[index] ?? ""
     points.push({ index, date, actual: mid[k] })
     upper.push({ index, date, actual: mid[k] + above })
     lower.push({ index, date, actual: mid[k] + below })
+    median.push({ index, date, actual: mid[k] })
   }
-  return { points, band: { upper, lower } }
+  const height = Math.abs((upper[0]?.actual ?? 0) - (lower[0]?.actual ?? 0))
+  const slopeBias = channelTilt({ upper, lower }) ?? "flat"
+  const upperLine: [number, number] = [slope, intercept + above - slope * i0]
+  const lowerLine: [number, number] = [slope, intercept + below - slope * i0]
+  const target = projectRailTarget(values, upperLine, lowerLine, i1)
+  return {
+    points,
+    band: {
+      upper,
+      lower,
+      median,
+      height,
+      slopeBias,
+      target: target?.value,
+    },
+  }
 }
 
 export function channelTilt(band: SketchBand | undefined): "up" | "down" | "flat" | null {
@@ -241,12 +269,29 @@ export function channelTilt(band: SketchBand | undefined): "up" | "down" | "flat
 
 export function channelLabel(figure: string, band?: SketchBand): string {
   if (figure === FREE_FIGURE || figure === "free") return "Segment libre"
-  const base = labelOf(figure)
-  if (!isChannelFigure(figure)) return base
-  const tilt = channelTilt(band)
-  if (tilt === "up") return "Canal haussier"
-  if (tilt === "down") return "Canal baissier"
-  return base
+  if (isChannelFigure(figure)) {
+    return slopeBiasLabel(figure, band?.slopeBias ?? channelTilt(band) ?? undefined)
+  }
+  return labelOf(figure)
+}
+
+function railsToGeometry(
+  figure: string,
+  values: number[],
+  built: NonNullable<ReturnType<typeof constructRails>>
+): SketchGeometry {
+  const target = projectRailTarget(values, built.upper, built.lower, built.last)
+  return {
+    points: built.samples.mid,
+    band: {
+      upper: built.samples.upper,
+      lower: built.samples.lower,
+      median: built.samples.median,
+      height: built.height,
+      slopeBias: built.slopeBias,
+      target: target?.value,
+    },
+  }
 }
 
 export function buildSketchGeometry(options: {
@@ -257,11 +302,31 @@ export function buildSketchGeometry(options: {
   to: number
   fromActual?: number
   toActual?: number
+  via?: number
+  viaActual?: number
 }): SketchGeometry {
-  const { figure, values, dates, from, to, fromActual, toActual } = options
+  const { figure, values, dates, from, to, fromActual, toActual, via, viaActual } = options
   const actuals =
     fromActual != null || toActual != null ? { from: fromActual, to: toActual } : undefined
-  if (isChannelFigure(figure)) return fitChannelBand(values, dates, from, to, actuals)
+  if (isRailFigure(figure)) {
+    const third =
+      via != null && Number.isFinite(via)
+        ? { index: via, actual: viaActual ?? values[via] }
+        : undefined
+    // 2-clics canal : enveloppe LS (tests + sketches déjà posés). 3e clic : rails.
+    if (third || !isChannelFigure(figure)) {
+      const built = constructRails({
+        figure,
+        dates,
+        a: { index: from, actual: fromActual ?? values[from] },
+        b: { index: to, actual: toActual ?? values[to] },
+        c: third,
+        values,
+      })
+      if (built) return railsToGeometry(figure, values, built)
+    }
+    if (isChannelFigure(figure)) return fitChannelBand(values, dates, from, to, actuals)
+  }
   if (figure === FREE_FIGURE) {
     return { points: straightSegment(values, dates, from, to, actuals) }
   }
@@ -278,22 +343,31 @@ export function buildSketchPoints(options: {
   to: number
   fromActual?: number
   toActual?: number
+  via?: number
+  viaActual?: number
 }): SketchPoint[] {
   return buildSketchGeometry(options).points
 }
 
 export function resolveSketchBand(
-  sketch: Pick<ChartSketch, "figure" | "band" | "start" | "end">,
+  sketch: Pick<ChartSketch, "figure" | "band" | "start" | "end" | "mid">,
   values: number[],
   dates: string[]
 ): SketchBand | undefined {
   if (sketch.band && sketch.band.upper.length >= 2 && sketch.band.lower.length >= 2) {
     return sketch.band
   }
-  if (!isChannelFigure(sketch.figure)) return undefined
-  return fitChannelBand(values, dates, sketch.start.index, sketch.end.index, {
-    from: sketch.start.actual,
-    to: sketch.end.actual,
+  if (!isRailFigure(sketch.figure)) return undefined
+  return buildSketchGeometry({
+    figure: sketch.figure,
+    values,
+    dates,
+    from: sketch.start.index,
+    to: sketch.end.index,
+    fromActual: sketch.start.actual,
+    toActual: sketch.end.actual,
+    via: sketch.mid?.index,
+    viaActual: sketch.mid?.actual,
   }).band
 }
 
@@ -312,12 +386,15 @@ export function remapSketch(sketch: ChartSketch, dates: string[]): ChartSketch |
   const startIndex = dates.indexOf(sketch.start.date)
   const endIndex = dates.indexOf(sketch.end.date)
   if (startIndex < 0 || endIndex < 0) return null
+  const midIndex = sketch.mid ? dates.indexOf(sketch.mid.date) : -1
   const points = remapPoints(sketch.points, dates)
   if (points.length < 2) return null
   const band = sketch.band
     ? {
+        ...sketch.band,
         upper: remapPoints(sketch.band.upper, dates),
         lower: remapPoints(sketch.band.lower, dates),
+        median: sketch.band.median ? remapPoints(sketch.band.median, dates) : undefined,
       }
     : undefined
   const validBand =
@@ -327,6 +404,8 @@ export function remapSketch(sketch: ChartSketch, dates: string[]): ChartSketch |
     figure: canonicalFigure(sketch.figure) === "canal" ? "canal" : sketch.figure,
     start: { ...sketch.start, index: startIndex },
     end: { ...sketch.end, index: endIndex },
+    mid:
+      sketch.mid && midIndex >= 0 ? { ...sketch.mid, index: midIndex } : sketch.mid,
     points,
     band: validBand,
   }

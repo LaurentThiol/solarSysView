@@ -28,6 +28,7 @@ import {
   ACTION_TYPES,
   ALONGSIDE_MODES,
   BREAKOUT_STATES,
+  CHANNEL_SLOPES,
   DIRECTIONS,
   describe,
   draftRuleFromHit,
@@ -40,6 +41,7 @@ import {
   type AlongsideFigure,
   type AlongsideMode,
   type BreakoutState,
+  type ChannelSlope,
   type ChartismeRule,
   type Direction,
 } from "@/lib/chartisme/rules"
@@ -116,6 +118,13 @@ const DIRECTION_LABELS: Record<Direction, string> = {
   any: "tout sens",
   up: "haussière",
   down: "baissière",
+}
+
+const CHANNEL_SLOPE_LABELS: Record<ChannelSlope, string> = {
+  any: "toute pente",
+  up: "pente haussière",
+  down: "pente baissière",
+  flat: "pente plate",
 }
 
 /**
@@ -383,6 +392,40 @@ export function RulesPanel({
                   {BREAKOUT_STATES.map((state) => (
                     <SelectItem key={state} value={state}>
                       {BREAKOUT_LABELS[state]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </LabelHelp>
+
+            <LabelHelp
+              label="Pente du canal"
+              help={{
+                title: "Pente du canal",
+                body: "Qualificatif d’affichage, pas une figure à part. Haussier / baissier = pente des bornes. Le filtre « sens » de cassure reste la règle d’or, distincte de cette pente.",
+              }}
+            >
+              <Select
+                value={draft.condition.channel_slope}
+                onValueChange={(value) =>
+                  setDraft({
+                    ...draft,
+                    condition: {
+                      ...draft.condition,
+                      channel_slope: (value as ChannelSlope) ?? "any",
+                    },
+                  })
+                }
+              >
+                <SelectTrigger className="w-full" aria-label="Pente du canal">
+                  <span className="flex flex-1 text-left">
+                    {CHANNEL_SLOPE_LABELS[draft.condition.channel_slope]}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {CHANNEL_SLOPES.map((slope) => (
+                    <SelectItem key={slope} value={slope}>
+                      {CHANNEL_SLOPE_LABELS[slope]}
                     </SelectItem>
                   ))}
                 </SelectContent>

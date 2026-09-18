@@ -136,6 +136,7 @@ export const PIVOT_ROLES = [
   "pole_end",
   "breakout",
   "point",
+  "median",
 ] as const
 
 export type PivotRole = (typeof PIVOT_ROLES)[number]
@@ -160,6 +161,7 @@ export const PIVOT_ROLE_LABELS: Record<PivotRole, string> = {
   pole_end: "Tête du mât",
   breakout: "Cassure",
   point: "Point",
+  median: "Médiane",
 }
 
 // Symétrie verticale d'une fenêtre : la figure devient son opposé.
@@ -205,6 +207,42 @@ export function isCatalogFigure(figureId: string) {
 /** Canal à bornes parallèles : l'ancien nom « tunnel droit » reste compris. */
 export function isChannelFigure(figureId: string) {
   return canonicalFigure(figureId) === "canal"
+}
+
+/** Figures à deux bornes : le dessin pose des rails, pas le zigzag d’école. */
+export const RAIL_FIGURES = [
+  "rectangle",
+  "canal",
+  "triangle_sym",
+  "triangle_asc",
+  "triangle_desc",
+  "wedge_rising",
+  "wedge_falling",
+  "broadening_top",
+] as const
+
+export type RailFigureId = (typeof RAIL_FIGURES)[number]
+
+export const PARALLEL_RAIL_FIGURES = ["rectangle", "canal"] as const
+
+/** Pente des bornes — qualificatif d’affichage, pas une classe du catalogue. */
+export type SlopeBias = "up" | "down" | "flat"
+
+export const SLOPE_BIASES = ["up", "down", "flat"] as const
+
+export function isRailFigure(figureId: string) {
+  return (RAIL_FIGURES as readonly string[]).includes(canonicalFigure(figureId))
+}
+
+export function isParallelRailFigure(figureId: string) {
+  return (PARALLEL_RAIL_FIGURES as readonly string[]).includes(canonicalFigure(figureId))
+}
+
+/** Canal haussier / baissier : badge de pente, une seule classe `canal`. */
+export function slopeBiasLabel(figureId: string, bias?: SlopeBias | null) {
+  const base = labelOf(figureId)
+  if (!isChannelFigure(figureId) || !bias || bias === "flat") return base
+  return bias === "up" ? "Canal haussier" : "Canal baissier"
 }
 
 /** Noms à interroger ensemble (actuel + hérités) pour une lecture ou un filtre. */

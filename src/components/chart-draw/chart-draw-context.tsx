@@ -28,11 +28,13 @@ type ChartDrawContextValue = {
   draft: DraftPlacement | null
   live: LiveCursor | null
   chartMeta: EvolutionChartMeta | null
+  showMedian: boolean
   setDrawing: (value: boolean) => void
   setFigure: (figure: string) => void
   setDraft: (draft: DraftPlacement | null) => void
   setLive: (live: LiveCursor | null) => void
   setChartMeta: (meta: EvolutionChartMeta | null) => void
+  setShowMedian: (value: boolean) => void
   addSketch: (sketch: ChartSketch) => void
   removeSketch: (id: string) => void
   clearSketches: () => void
@@ -54,6 +56,7 @@ export function ChartDrawProvider({
   const [draft, setDraft] = useState<DraftPlacement | null>(null)
   const [live, setLive] = useState<LiveCursor | null>(null)
   const [chartMeta, setChartMeta] = useState<EvolutionChartMeta | null>(null)
+  const [showMedian, setShowMedian] = useState(true)
 
   useEffect(() => {
     // localStorage n'existe pas au rendu serveur.
@@ -86,6 +89,7 @@ export function ChartDrawProvider({
         seriesKey: sketch.seriesKey,
         seriesLabel: sketch.seriesLabel,
         start: null,
+        mid: null,
       })
     },
     [host]
@@ -109,7 +113,13 @@ export function ChartDrawProvider({
   }, [host])
 
   const cancelDraft = useCallback(() => {
-    setDraft((current) => (current ? { ...current, start: null } : current))
+    setDraft((current) =>
+      current?.mid
+        ? { ...current, mid: null }
+        : current
+          ? { ...current, start: null, mid: null }
+          : current
+    )
     setLive(null)
   }, [])
 
@@ -122,11 +132,13 @@ export function ChartDrawProvider({
       draft,
       live,
       chartMeta,
+      showMedian,
       setDrawing,
       setFigure,
       setDraft,
       setLive,
       setChartMeta,
+      setShowMedian,
       addSketch,
       removeSketch,
       clearSketches,
@@ -140,8 +152,10 @@ export function ChartDrawProvider({
       draft,
       live,
       chartMeta,
+      showMedian,
       setDrawing,
       setFigure,
+      setShowMedian,
       addSketch,
       removeSketch,
       clearSketches,

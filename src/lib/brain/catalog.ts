@@ -227,6 +227,17 @@ const FIGURE_ALIASES: Partial<Record<FigureId, string[]>> = {
   triple_top: ["tt"],
   triple_bottom: ["tb"],
   canal: ["channel", "tunel", "tunnel", "tunnel_droit"],
+  rectangle: ["range", "canal-plat", "canalplat"],
+}
+
+function figureReading(id: FigureId) {
+  if (id === "canal") {
+    return "Canal à deux rails. Haussier / baissier = pente des bornes, pas une figure à part. La cassure reste la règle d’or (activité > MM20 et tenue)."
+  }
+  if (id === "rectangle") {
+    return "Canal plat : deux horizontales autour de la série, pas un zigzag de range. Alias : range, canal plat."
+  }
+  return "Lecture géométrique. Une cassure n’est retenue que si l’activité dépasse sa MM20 et si la clôture confirme."
 }
 
 function chartismeFigures(): CatalogEntry[] {
@@ -239,8 +250,7 @@ function chartismeFigures(): CatalogEntry[] {
     kind: "figure" as const,
     label: FIGURE_LABELS[id],
     units: "confiance géométrique",
-    reading:
-      "Lecture géométrique. Une cassure n’est retenue que si l’activité dépasse sa MM20 et si la clôture confirme.",
+    reading: figureReading(id),
     defaults: { variable: "sum" },
   }))
 }

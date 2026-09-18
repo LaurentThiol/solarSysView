@@ -83,6 +83,17 @@ def test_alongside_needs_a_neighbour_that_overlaps() -> None:
     assert match_condition({**cond, "alongside_within": 10}, far)
 
 
+def test_channel_slope_is_not_the_breakout_direction() -> None:
+    """La pente des bornes et le sens de cassure restent deux filtres distincts."""
+    up = state_from_hit(_hit(figure="canal", slope_bias="up"))
+    assert match_condition({"channel_slope": "up"}, up)
+    assert not match_condition({"channel_slope": "down"}, up)
+    assert match_condition({"direction": "down", "channel_slope": "up"}, up)
+    text = describe_condition({"channel_slope": "up"})
+    assert "pente du canal haussière" in text
+    assert "sens haussier" not in text
+
+
 def test_alongside_without_keeps_only_the_lonely_figures() -> None:
     """Le cas qui motive la condition : ne pas compter deux fois un seul fait.
 

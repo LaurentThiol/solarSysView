@@ -32,9 +32,13 @@ function compactRail(points: ChartSketch["points"]) {
 export function compactSketch(sketch: ChartSketch) {
   const values = compactRail(sketch.points)
   const height =
-    sketch.band && sketch.band.upper.length && sketch.band.lower.length
-      ? (sketch.band.upper[0].actual - sketch.band.lower[0].actual)
-      : null
+    sketch.band?.height ??
+    (sketch.band && sketch.band.upper.length && sketch.band.lower.length
+      ? sketch.band.upper[0].actual - sketch.band.lower[0].actual
+      : null)
+  const touches = [sketch.start, sketch.mid, sketch.end].filter(
+    (anchor): anchor is NonNullable<typeof anchor> => anchor != null
+  )
   return {
     id: sketch.id,
     host: sketch.host,
@@ -43,7 +47,9 @@ export function compactSketch(sketch: ChartSketch) {
     seriesKey: sketch.seriesKey,
     seriesLabel: sketch.seriesLabel,
     start: compactAnchor(sketch.start),
+    mid: sketch.mid ? compactAnchor(sketch.mid) : null,
     end: compactAnchor(sketch.end),
+    touches: touches.map(compactAnchor),
     bars: Math.abs(sketch.end.index - sketch.start.index) + 1,
     reading: sketch.reading
       ? {
@@ -58,9 +64,13 @@ export function compactSketch(sketch: ChartSketch) {
       ? {
           upper: compactRail(sketch.band.upper),
           lower: compactRail(sketch.band.lower),
+          median: sketch.band.median ? compactRail(sketch.band.median) : undefined,
           height: roundish(height),
+          slopeBias: sketch.band.slopeBias,
+          target: sketch.band.target != null ? roundish(sketch.band.target) : undefined,
         }
       : undefined,
+    showMedian: sketch.showMedian,
   }
 }
 
@@ -87,6 +97,7 @@ export function compactDraft(draft: DraftPlacement | null) {
     seriesKey: draft.seriesKey,
     seriesLabel: draft.seriesLabel,
     start: draft.start ? compactAnchor(draft.start) : null,
+    mid: draft.mid ? compactAnchor(draft.mid) : null,
   }
 }
 
@@ -94,12 +105,18 @@ export function drawingSummaryLines(sketches: ChartSketch[]) {
   const drawings = sketches.map(compactSketch)
   if (!drawings.length) return ["Aucune annotation chartiste posée sur la courbe."]
   const first = drawings[0]
-  const canal =
-    isChannelFigure(first.figure) && first.band?.height != null
-      ? ` · 2 rails parallèles, hauteur ${first.band.height}`
-      : ""
+  const rails =
+    first.band?.height != null
+      ? ` · 2 rails, hauteur ${first.band.height}${
+          first.band.slopeBias && first.band.slopeBias !== "flat"
+            ? ` · pente ${first.band.slopeBias === "up" ? "haussière" : "baissière"}`
+            : ""
+        }${first.band.target != null ? ` · objectif ${first.band.target}` : ""}`
+      : isChannelFigure(first.figure)
+        ? " · 2 rails parallèles"
+        : ""
   const lines = [
-    `${drawings.length} annotation(s) chartiste(s) · ${first.figureLabel} sur ${first.seriesLabel} (${first.start.date} → ${first.end.date})${canal}`,
+    `${drawings.length} annotation(s) chartiste(s) · ${first.figureLabel} sur ${first.seriesLabel} (${first.start.date} → ${first.end.date})${rails}`,
   ]
   if (first.reading) {
     lines.push(

@@ -919,25 +919,6 @@ export function detectChartPatterns(pivots: Pivot[], eps = 0.03) {
       }
     }
   }
-  const recent = pivots.slice(-6)
-  const rhs = recent.filter((p) => p.type === "H").map((p) => p.price)
-  const rls = recent.filter((p) => p.type === "L").map((p) => p.price)
-  if (rhs.length >= 2 && rls.length >= 2) {
-    const top = rhs.reduce((a, b) => a + b, 0) / rhs.length
-    const bot = rls.reduce((a, b) => a + b, 0) / rls.length
-    if (Math.max(...rhs) - Math.min(...rhs) <= eps * Math.max(...rhs) && Math.max(...rls) - Math.min(...rls) <= eps * Math.max(...rls.map(Math.abs))) {
-      const height = top - bot
-      patterns.push({
-        name: "rectangle",
-        kind: "range",
-        from: recent[0].date,
-        to: recent[recent.length - 1].date,
-        targetUp: top + height,
-        targetDown: bot - height,
-        neck: (top + bot) / 2,
-      })
-    }
-  }
   return patterns
 }
 

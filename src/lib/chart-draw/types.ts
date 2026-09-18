@@ -30,10 +30,14 @@ export type SketchPoint = {
   actual: number
 }
 
-/** Deux rails parallèles autour de la série : le dessin d'un canal. */
+/** Deux rails autour de la série — canal, rectangle, triangle, biseau. */
 export type SketchBand = {
   upper: SketchPoint[]
   lower: SketchPoint[]
+  median?: SketchPoint[]
+  height?: number
+  slopeBias?: "up" | "down" | "flat"
+  target?: number
 }
 
 export type SketchReading = {
@@ -49,9 +53,12 @@ export type ChartSketch = {
   seriesKey: string
   seriesLabel: string
   start: ChartAnchor
+  /** Second point of the first rail (3-click figures). */
+  mid?: ChartAnchor
   end: ChartAnchor
   points: SketchPoint[]
   band?: SketchBand
+  showMedian?: boolean
   reading: SketchReading | null
   createdAt: string
 }
@@ -76,6 +83,7 @@ export type DraftPlacement = {
   seriesKey: string
   seriesLabel: string
   start: ChartAnchor | null
+  mid: ChartAnchor | null
 }
 
 export type EvolutionChartMeta = {
@@ -97,12 +105,12 @@ export function sketchDataKey(id: string) {
 
 export function sketchBandKey(
   id: string,
-  rail: "upper" | "lower" | "base" | "span"
+  rail: "upper" | "lower" | "base" | "span" | "median"
 ) {
   return `${SKETCH_KEY_PREFIX}${id}_${rail}`
 }
 
-export function draftBandKey(rail: "upper" | "lower" | "base" | "span") {
+export function draftBandKey(rail: "upper" | "lower" | "base" | "span" | "median") {
   return `${DRAFT_KEY}_${rail}`
 }
 

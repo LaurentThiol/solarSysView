@@ -14,13 +14,16 @@ import {
   isMagneted,
   magnetKindAt,
   magnetOnCurve,
+  magnetOnTouches,
   nearestSample,
+  swingTouches,
   nearestSampleByX,
   pixelDistance,
   readTooltipIndex,
   snapIndexToExtrema,
   valueFromPixelY,
 } from "../src/lib/chart-draw/magnet"
+import { readWindow } from "../src/lib/chart-draw/reading"
 import {
   buildSketchPoints,
   buildSketchGeometry,
@@ -46,6 +49,31 @@ import {
   synthCurve,
   templateFigures,
 } from "../src/lib/chartisme/sketch-shapes"
+
+test("rail magnet prefers touch extrema of the requested side", () => {
+  const values = [12, 20, 11, 21, 10, 22, 13]
+  const touches = swingTouches(values)
+  const highs = touches.filter((touch) => touch.type === "H")
+  const lows = touches.filter((touch) => touch.type === "L")
+  assert.ok(highs.length >= 1)
+  assert.ok(lows.length >= 1)
+  const samples = values.map((value, index) => ({
+    index,
+    px: index * 40,
+    py: 200 - value * 4,
+  }))
+  const high = highs[0]
+  const nearHigh = samples.find((sample) => sample.index === high.index)
+  assert.ok(nearHigh)
+  const preferHigh = magnetOnTouches(samples, { x: nearHigh.px, y: nearHigh.py }, touches, "H")
+  assert.equal(preferHigh?.kind, "extrema")
+  assert.equal(preferHigh?.index, high.index)
+  const low = lows[0]
+  const nearLow = samples.find((sample) => sample.index === low.index)
+  assert.ok(nearLow)
+  const preferLow = magnetOnTouches(samples, { x: nearLow.px, y: nearLow.py }, touches, "L")
+  assert.equal(preferLow?.index, low.index)
+})
 
 test("magnet labels a swing pivot without stealing the neighbouring sample", () => {
   const values = [1, 2, 10, 2, 1, 2, 9, 2, 1]
@@ -377,6 +405,91 @@ test("placing a canal draws two parallel rails around the actual series", () => 
   })
   assert.ok(legacy.band)
   assert.equal(legacy.band.upper.length, values.length)
+})
+
+test("three-click canal builds parallels through the opposite contact", () => {
+  const values = [10, 12, 11, 14, 13, 16, 15, 18, 17, 20, 19, 22]
+  const dates = values.map((_, i) => `2026-09-${String(i + 1).padStart(2, "0")}`)
+  const geo = buildSketchGeometry({
+    figure: "canal",
+    values,
+    dates,
+    from: 1,
+    to: 8,
+    fromActual: 12,
+    toActual: 17,
+    via: 4,
+    viaActual: 4,
+  })
+  assert.ok(geo.band)
+  assert.equal(geo.band.slopeBias, "up")
+  assert.ok((geo.band.height ?? 0) > 0)
+  assert.ok(geo.band.target != null)
+  const atVia =
+    geo.band.lower.find((point) => point.index === 4)?.actual ??
+    geo.band.upper.find((point) => point.index === 4)?.actual
+  assert.ok(atVia != null)
+  assert.ok(Math.abs(atVia - 4) < 1e-6)
+  const reading = readWindow(values, dates, 1, 8, geo.band)
+  assert.equal(reading?.figure, "canal")
+  assert.equal(reading?.label, "Canal haussier")
+})
+
+test("capture payload keeps rails, height, slope and target", () => {
+  const dates = Array.from({ length: 8 }, (_, i) => `2026-10-${String(i + 1).padStart(2, "0")}`)
+  const sketch: ChartSketch = {
+    id: "rail-1",
+    host: "evolution",
+    figure: "canal",
+    seriesKey: "sumNumbers",
+    seriesLabel: "Somme",
+    start: {
+      index: 0,
+      date: dates[0],
+      seriesKey: "sumNumbers",
+      actual: 10,
+      snapped: true,
+      kind: "extrema",
+    },
+    mid: {
+      index: 3,
+      date: dates[3],
+      seriesKey: "sumNumbers",
+      actual: 13,
+      snapped: true,
+      kind: "extrema",
+    },
+    end: {
+      index: 7,
+      date: dates[7],
+      seriesKey: "sumNumbers",
+      actual: 4,
+      snapped: true,
+      kind: "extrema",
+    },
+    points: dates.map((date, index) => ({ index, date, actual: 10 + index })),
+    band: {
+      upper: dates.map((date, index) => ({ index, date, actual: 20 + index })),
+      lower: dates.map((date, index) => ({ index, date, actual: 4 + index })),
+      median: dates.map((date, index) => ({ index, date, actual: 12 + index })),
+      height: 16,
+      slopeBias: "up",
+      target: 36,
+    },
+    showMedian: true,
+    reading: { figure: "canal", label: "Canal haussier", confidence: 0.8 },
+    createdAt: "2026-10-21T00:00:00.000Z",
+  }
+  const compact = compactSketch(sketch)
+  assert.equal(compact.figureLabel, "Canal haussier")
+  assert.equal(compact.mid?.index, 3)
+  assert.equal(compact.touches?.length, 3)
+  assert.equal(compact.band?.height, 16)
+  assert.equal(compact.band?.slopeBias, "up")
+  assert.equal(compact.band?.target, 36)
+  const lines = drawingSummaryLines([sketch])
+  assert.ok(lines[0].includes("pente haussière"))
+  assert.ok(lines[0].includes("objectif"))
 })
 
 test("each curve type has a schematic sparkline", () => {

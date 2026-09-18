@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
-from synchro.chartisme.catalog import PIVOT_ROLE_LABELS, label_of
+from synchro.chartisme.catalog import PIVOT_ROLE_LABELS, label_of, slope_bias_label
 
 WIDTH = 720
 HEIGHT = 260
@@ -31,6 +31,7 @@ GUIDE_COLORS = {
     "lip": "#d4a017",
     "base": "#8a8f98",
     "height": "#8a8f98",
+    "median": "#4aa3a2",
     "depth": "#8a8f98",
     "measure": "#8a8f98",
     "pole": "#b05ccc",
@@ -240,7 +241,9 @@ def _badge(hit: dict[str, Any]) -> str:
     else:
         state = "fake breakout"
         color = BREAKOUT_FAKE
-    name = hit.get("label") or label_of(hit.get("figure", ""))
+    name = slope_bias_label(str(hit.get("figure") or ""), hit.get("slope_bias"))
+    if not name:
+        name = hit.get("label") or label_of(hit.get("figure", ""))
     confidence = float(hit.get("confidence") or 0.0)
     text = f"{name} · {confidence:.0%} · {state}"
     return (

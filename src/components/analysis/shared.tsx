@@ -98,12 +98,12 @@ export const HELP = {
     body: "Bandes SMA ± 2σ. Un squeeze (bandes étroites) précède souvent un élargissement. Afficher/masquer.",
   },
   keltner: {
-    title: "Keltner",
-    body: "Canal EMA ± k·ATR. Si Bollinger est à l’intérieur, c’est un squeeze. Afficher/masquer.",
+    title: "Keltner — canal d’ATR",
+    body: "Indicateur : EMA ± k·ATR, pas un tunnel chartiste. Si Bollinger est à l’intérieur, c’est un squeeze. Afficher/masquer.",
   },
   donchian: {
-    title: "Donchian",
-    body: "Plus haut / plus bas sur X tirages (canal Turtle). Afficher/masquer.",
+    title: "Donchian — canal des extrêmes",
+    body: "Indicateur : plus haut / plus bas sur X tirages (Turtle). Ce n’est pas le canal de la table Chartisme. Afficher/masquer.",
   },
   rsi: {
     title: "RSI",

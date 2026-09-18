@@ -54,7 +54,9 @@ function AnchorRow({
 export function CoordHud({
   live,
   start,
+  mid,
   end,
+  rails,
   figureLabel,
   seriesLabel,
   reading,
@@ -63,7 +65,9 @@ export function CoordHud({
 }: {
   live: LiveCursor | null
   start: ChartAnchor | null
+  mid?: ChartAnchor | null
   end?: ChartAnchor | null
+  rails?: boolean
   figureLabel: string
   seriesLabel: string
   reading: SketchReading | null
@@ -187,8 +191,13 @@ export function CoordHud({
         <p className="mt-2 text-muted-foreground">Survole la courbe pour lire un point.</p>
       )}
       <div className="mt-2 space-y-0.5 border-t border-border pt-2">
-        <AnchorRow label="Départ" anchor={start} total={drawCount} />
-        <AnchorRow label="Arrivée" anchor={end ?? null} total={drawCount} />
+        <AnchorRow label={rails ? "Borne 1" : "Départ"} anchor={start} total={drawCount} />
+        {rails ? <AnchorRow label="Borne 1 · 2" anchor={mid ?? null} total={drawCount} /> : null}
+        <AnchorRow
+          label={rails ? "Contact opposé" : "Arrivée"}
+          anchor={end ?? null}
+          total={drawCount}
+        />
       </div>
       {reading ? (
         <p className="mt-2 text-[11px] leading-4 text-muted-foreground">

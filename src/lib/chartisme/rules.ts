@@ -1,4 +1,12 @@
-import { FIGURE_IDS, canonicalFigure, labelOf, type FigureId, type FigureKind } from "./catalog"
+import {
+  FIGURE_IDS,
+  SLOPE_BIASES,
+  canonicalFigure,
+  labelOf,
+  type FigureId,
+  type FigureKind,
+  type SlopeBias,
+} from "./catalog"
 import type { FigureHit } from "./figures"
 
 export const ACTION_TYPES = ["tag", "alert", "note", "hypothesize", "watch"] as const
@@ -12,6 +20,11 @@ export type BreakoutState = (typeof BREAKOUT_STATES)[number]
 export const DIRECTIONS = ["any", "up", "down"] as const
 
 export type Direction = (typeof DIRECTIONS)[number]
+
+/** Pente des bornes du canal — qualificatif, pas le sens de cassure. */
+export const CHANNEL_SLOPES = ["any", ...SLOPE_BIASES] as const
+
+export type ChannelSlope = (typeof CHANNEL_SLOPES)[number]
 
 export const TRENDS = ["any", "up", "down", "range"] as const
 
@@ -33,6 +46,8 @@ export type RuleCondition = {
   min_confidence: number | null
   breakout: BreakoutState
   direction: Direction
+  /** Pente du canal (bornes), distincte du sens de cassure. */
+  channel_slope: ChannelSlope
   trend: Trend
   weekday: string | null
   min_activity_ratio: number | null
@@ -82,6 +97,7 @@ export type RuleState = {
   curve_label?: string | null
   breakout_state?: BreakoutState
   direction?: "up" | "down" | null
+  slopeBias?: SlopeBias | null
   activity_ratio?: number | null
   trend?: string | null
   weekday?: string | null
@@ -164,6 +180,7 @@ export function normalizeCondition(raw?: Partial<RuleCondition> | null): RuleCon
     min_confidence: optionalFloat(src.min_confidence),
     breakout: oneOf(src.breakout, BREAKOUT_STATES, "any"),
     direction: oneOf(src.direction, DIRECTIONS, "any"),
+    channel_slope: oneOf(src.channel_slope, CHANNEL_SLOPES, "any"),
     trend: oneOf(src.trend, TRENDS, "any"),
     weekday:
       String(src.weekday ?? "")
@@ -262,6 +279,9 @@ export function matchCondition(condition: RuleCondition, state: RuleState): bool
   }
   if (cond.breakout !== "any" && String(state.breakout_state ?? "") !== cond.breakout) return false
   if (cond.direction !== "any" && String(state.direction ?? "") !== cond.direction) return false
+  if (cond.channel_slope !== "any" && String(state.slopeBias ?? "") !== cond.channel_slope) {
+    return false
+  }
   if (cond.trend !== "any" && String(state.trend ?? "") !== cond.trend) return false
   if (cond.weekday && String(state.weekday ?? "").toLowerCase() !== cond.weekday) return false
   if (cond.min_activity_ratio !== null) {
@@ -303,6 +323,7 @@ export function stateFromHit(
     curve_label: curve?.label ?? null,
     breakout_state: breakoutStateOf(hit),
     direction: breakout?.direction ?? null,
+    slopeBias: hit.slopeBias ?? null,
     activity_ratio: breakout?.activity_ratio ?? null,
     trend: trend ?? "any",
     weekday,
@@ -426,6 +447,15 @@ export function describeCondition(condition: RuleCondition): string {
   if (cond.breakout !== "any") parts.push(breakoutLabel(cond.breakout))
   if (cond.direction !== "any") {
     parts.push(`sens ${cond.direction === "up" ? "haussier" : "baissier"}`)
+  }
+  if (cond.channel_slope !== "any") {
+    const slope =
+      cond.channel_slope === "up"
+        ? "haussière"
+        : cond.channel_slope === "down"
+          ? "baissière"
+          : "plate"
+    parts.push(`pente du canal ${slope}`)
   }
   if (cond.trend !== "any") parts.push(`tendance de fond ${cond.trend}`)
   if (cond.weekday) parts.push(`tirage du ${cond.weekday}`)

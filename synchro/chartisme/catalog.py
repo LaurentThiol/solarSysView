@@ -136,6 +136,7 @@ PIVOT_ROLES = (
     "pole_end",
     "breakout",
     "point",
+    "median",
 )
 
 PIVOT_ROLE_LABELS: dict[str, str] = {
@@ -158,6 +159,7 @@ PIVOT_ROLE_LABELS: dict[str, str] = {
     "pole_end": "Tête du mât",
     "breakout": "Cassure",
     "point": "Point",
+    "median": "Médiane",
 }
 
 # Symétrie verticale d'une fenêtre : la figure devient son opposé.
@@ -199,6 +201,37 @@ def canonical_figure(figure_id: str) -> str:
 def is_channel_figure(figure_id: str) -> bool:
     """Canal à bornes parallèles : l'ancien nom « tunnel droit » reste compris."""
     return canonical_figure(figure_id) == "canal"
+
+
+# Figures à deux bornes : le dessin pose des rails, pas le zigzag d'école.
+RAIL_FIGURES = (
+    "rectangle",
+    "canal",
+    "triangle_sym",
+    "triangle_asc",
+    "triangle_desc",
+    "wedge_rising",
+    "wedge_falling",
+    "broadening_top",
+)
+PARALLEL_RAIL_FIGURES = ("rectangle", "canal")
+SLOPE_BIASES = ("up", "down", "flat")
+
+
+def is_rail_figure(figure_id: str) -> bool:
+    return canonical_figure(figure_id) in RAIL_FIGURES
+
+
+def is_parallel_rail_figure(figure_id: str) -> bool:
+    return canonical_figure(figure_id) in PARALLEL_RAIL_FIGURES
+
+
+def slope_bias_label(figure_id: str, bias: str | None = None) -> str:
+    """Canal haussier / baissier : badge de pente, une seule classe `canal`."""
+    base = label_of(figure_id)
+    if not is_channel_figure(figure_id) or bias in (None, "", "flat"):
+        return base
+    return "Canal haussier" if bias == "up" else "Canal baissier"
 
 
 def is_catalog_figure(figure_id: str) -> bool:

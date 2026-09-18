@@ -54,6 +54,12 @@ test("handles parse @rsi, @sum.rsi, @delay:7.rsi, @ete alias, citation", () => {
   assert.equal(canal.entry?.id, "chartisme/canal")
   assert.equal(catalogEntry("chartisme/tunnel_droit")?.label, "Canal")
   assert.equal(catalogEntry("chartisme/canal")?.label, "Canal")
+  const range = parseHandle("@range")
+  assert.equal(range.error, null)
+  assert.equal(range.entry?.id, "chartisme/rectangle")
+  const canalPlat = parseHandle("@canal-plat")
+  assert.equal(canalPlat.entry?.id, "chartisme/rectangle")
+  assert.match(catalogEntry("chartisme/canal")?.reading ?? "", /pente des bornes/)
 
   const cited = parseHandle("@rsi#1842")
   assert.equal(cited.readingId, 1842)

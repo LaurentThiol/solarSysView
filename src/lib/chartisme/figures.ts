@@ -11,23 +11,24 @@ import {
   type FigureId,
   type FigureKind,
   type PivotRole,
+  type SlopeBias,
   kindOf,
   labelOf,
   signalOf,
   targetBasis,
 } from "./catalog"
 import { DEFAULT_PCT, type SwingPivot, swingPivots } from "./pivots"
+import { FLAT_SLOPE, fitRailPair, type Line } from "./rails"
 import { type Point, roundHalfEven } from "./svgpath"
 
 export const DEFAULT_ZIGZAG_PCT = DEFAULT_PCT
 export const DEFAULT_EPS = 0.05
-export const FLAT_SLOPE = 0.12
+export { FLAT_SLOPE }
 export const ACTIVITY_PERIOD = 20
 export const HOLD_BARS = 2
 export const DEFAULT_MAX_OVERLAP = 0.2
 
-/** Pente et ordonnée à l'origine d'une droite ajustée. */
-export type Line = [number, number]
+export type { Line }
 
 export type BreakoutDirection = "up" | "down"
 
@@ -83,6 +84,8 @@ export type FigureHit = {
   breakout: Breakout | null
   target: FigureTarget | null
   detector: string
+  /** Pente des bornes — badge, pas une classe. Absent hors figures à rails. */
+  slopeBias?: SlopeBias
 }
 
 export type FigureSummary = {
@@ -292,6 +295,7 @@ function hitOf(
     breakout?: Breakout | null
     target?: number | null
     detector?: string
+    slopeBias?: SlopeBias
   }
 ): FigureHit {
   const { pivots, guides, confidence, dates } = options
@@ -314,6 +318,7 @@ function hitOf(
     breakout: options.breakout ?? null,
     target: target == null ? null : { value: target, basis: targetBasis(figure) },
     detector: options.detector ?? "geometric",
+    ...(options.slopeBias ? { slopeBias: options.slopeBias } : {}),
   }
 }
 
@@ -558,11 +563,6 @@ function bounds(
   return [upper, lower, err]
 }
 
-function span(pivotsH: SwingPivot[], pivotsL: SwingPivot[]): [number, number] {
-  const idx = [...pivotsH, ...pivotsL].map((p) => p.index)
-  return [Math.min(...idx), Math.max(...idx)]
-}
-
 function boundGuides(upper: Line, lower: Line, first: number, last: number): Guide[] {
   return [
     guide("upper", [
@@ -580,45 +580,6 @@ function boundPivots(ctx: Context, pivotsH: SwingPivot[], pivotsL: SwingPivot[])
   const pivots = pivotsH.map((p) => figurePivot(p.index, p.price, "upper", ctx.dates))
   pivots.push(...pivotsL.map((p) => figurePivot(p.index, p.price, "lower", ctx.dates)))
   return pivots.sort((a, b) => a.index - b.index)
-}
-
-/** Bornes ajustées → (figure, sens attendu de la cassure). */
-function classifyBounds(
-  upper: Line,
-  lower: Line,
-  first: number,
-  last: number
-): [FigureId, BreakoutDirection | "any"] | null {
-  const width = last - first
-  if (width <= 0) return null
-  const h0 = lineAt(upper, first) - lineAt(lower, first)
-  const h1 = lineAt(upper, last) - lineAt(lower, last)
-  if (h0 <= 0) return null
-  // « Plat » : la borne varie de moins de 12 % de la hauteur de la figure.
-  const flat = (FLAT_SLOPE * h0) / width
-  const up = upper[0]
-  const low = lower[0]
-  const upFlat = Math.abs(up) <= flat
-  const lowFlat = Math.abs(low) <= flat
-  const ratio = h1 / h0
-  if (ratio < 0.75) {
-    if (up > flat && low > flat) return ["wedge_rising", "down"]
-    if (up < -flat && low < -flat) return ["wedge_falling", "up"]
-    if (upFlat && low > flat) return ["triangle_asc", "up"]
-    if (lowFlat && up < -flat) return ["triangle_desc", "down"]
-    if (up < -flat && low > flat) return ["triangle_sym", "any"]
-    return null
-  }
-  if (ratio > 1.3) {
-    if (up > flat && low < -flat) return ["broadening_top", "down"]
-    return null
-  }
-  if (upFlat && lowFlat) return ["rectangle", "any"]
-  // Bornes parallèles et inclinées : canal à largeur constante (pas un rectangle plat).
-  const parallel =
-    Math.abs(up - low) <= Math.max(2 * flat, 0.3 * (Math.abs(up) + Math.abs(low)) / 2)
-  if (parallel) return ["canal", "any"]
-  return null
 }
 
 /** Sous-suites contiguës de pivots, les plus longues d'abord. */
@@ -643,21 +604,20 @@ function* pivotGroups(pivots: SwingPivot[], sizes: number[] = [6, 5, 4]) {
 export function detectBounds(ctx: Context): FigureHit[] {
   const out: FigureHit[] = []
   for (const { highs, lows } of pivotGroups(ctx.pivots)) {
-    const fitted = bounds(ctx, highs, lows)
-    if (fitted === null) continue
-    const [upper, lower, err] = fitted
-    const [first, last] = span(highs, lows)
-    const verdict = classifyBounds(upper, lower, first, last)
-    if (verdict === null) continue
-    const [figure, direction] = verdict
-    let base = lineAt(upper, first) - lineAt(lower, first)
+    const pair = fitRailPair(highs, lows, { eps: ctx.eps, scale: ctx.scale })
+    if (pair === null || pair.verdict === null) continue
+    const { upper, lower, first, last, median } = pair
+    const { figure, expected: direction } = pair.verdict
+    let err = pair.lsError
+    err += NO_EVIDENCE * [highs, lows].filter((side) => side.length < 3).length
+    let base = pair.height
     if (base <= ctx.eps * ctx.scale) continue
     let upLevel: (index: number) => number
     let downLevel: (index: number) => number
     let guides: Guide[]
     if (figure === "rectangle") {
-      const top = sumOf(highs.map((p) => p.price)) / highs.length
-      const bottom = sumOf(lows.map((p) => p.price)) / lows.length
+      const top = lineAt(upper, first)
+      const bottom = lineAt(lower, first)
       base = top - bottom
       upLevel = () => top
       downLevel = () => bottom
@@ -686,6 +646,14 @@ export function detectBounds(ctx: Context): FigureHit[] {
           ],
           { kind: "measure" }
         ),
+        guide(
+          "median",
+          [
+            [first, lineAt(median, first)],
+            [last, lineAt(median, last)],
+          ],
+          { kind: "median", dashed: true }
+        ),
       ]
     } else {
       upLevel = (i) => lineAt(upper, i)
@@ -699,6 +667,14 @@ export function detectBounds(ctx: Context): FigureHit[] {
             [first, lineAt(upper, first)],
           ],
           { kind: "measure" }
+        ),
+        guide(
+          "median",
+          [
+            [first, lineAt(median, first)],
+            [last, lineAt(median, last)],
+          ],
+          { kind: "median", dashed: true }
         ),
       ]
     }
@@ -745,6 +721,7 @@ export function detectBounds(ctx: Context): FigureHit[] {
         dates: ctx.dates,
         breakout,
         target,
+        slopeBias: pair.slopeBias,
       })
     )
   }
