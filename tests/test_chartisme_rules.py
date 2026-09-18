@@ -204,9 +204,10 @@ def test_normalize_condition_fills_every_field() -> None:
         "curves",
         "variables",
         "min_confidence",
-        "breakout",
-        "direction",
-        "trend",
+            "breakout",
+            "direction",
+            "channel_slope",
+            "trend",
         "weekday",
         "min_activity_ratio",
         "alongside",
@@ -217,6 +218,7 @@ def test_normalize_condition_fills_every_field() -> None:
     }
     assert cond["figures"] == ["ete"]
     assert cond["breakout"] == "any"
+    assert cond["channel_slope"] == "any"
     assert cond["min_confidence"] is None
     assert normalize_condition(None)["figures"] == []
 
