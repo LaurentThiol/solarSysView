@@ -9,12 +9,14 @@ from synchro.app import create_app
 from synchro.llm_usage import (
     dashboard,
     estimate_tokens,
+    health_payload,
     normalize_event,
     percentile_p50,
     pick_chat_model,
     ping_generate,
     record_usage,
     summarize_rows,
+    vlm_health,
 )
 
 
@@ -119,6 +121,61 @@ def test_file_fallback_roundtrip(tmp_path, monkeypatch) -> None:
     assert recent[0]["model"] == "llama3.2"
 
 
+def test_vlm_health_follows_loaded_morpho_backend() -> None:
+    with (
+        patch(
+            "synchro.morpho.vlm.status",
+            return_value={
+                "loaded": True,
+                "backend": "transformers",
+                "model_id": "vikhyatk/moondream2",
+                "available": ["transformers"],
+            },
+        ),
+        patch("synchro.morpho.vlm.ollama_vision_status", return_value={"ok": False, "model": None}),
+    ):
+        probe = vlm_health()
+    assert probe["ok"] is True
+    assert probe["loaded"] is True
+    assert probe["backend"] == "transformers"
+    assert probe["model"] == "vikhyatk/moondream2"
+
+
+def test_vlm_health_absent_when_not_loaded_and_no_ollama_vision() -> None:
+    with (
+        patch(
+            "synchro.morpho.vlm.status",
+            return_value={"loaded": False, "backend": None, "model_id": None, "available": []},
+        ),
+        patch("synchro.morpho.vlm.ollama_vision_status", return_value={"ok": False, "model": None}),
+    ):
+        probe = vlm_health()
+    assert probe["ok"] is False
+    assert probe["loaded"] is False
+
+
+def test_health_payload_vlm_ok_when_morpho_loaded() -> None:
+    with (
+        patch(
+            "synchro.brain.ping_ollama",
+            return_value={"ok": True, "host": "http://127.0.0.1:11434", "models": ["llama3.2:latest"]},
+        ),
+        patch(
+            "synchro.morpho.vlm.status",
+            return_value={
+                "loaded": True,
+                "backend": "transformers",
+                "model_id": "vikhyatk/moondream2",
+                "available": ["transformers"],
+            },
+        ),
+        patch("synchro.morpho.vlm.ollama_vision_status", return_value={"ok": False, "model": None}),
+    ):
+        payload = health_payload([])
+    assert payload["vlm"]["ok"] is True
+    assert payload["embed"]["ok"] is False
+
+
 def test_usage_api_records_and_lists(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("SYNCHRO_LLM_USAGE_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setattr("synchro.db.database_configured", lambda: False)
@@ -179,4 +236,5 @@ def test_admin_panel_exposes_llm_card() -> None:
     assert "AdminLlmCard" in panel
     assert "Ping generate" in card
     assert "Usage 24 h" in card
+    assert "vlmLabel" in card
     assert "llm_usage" in (root / "synchro/db.py").read_text(encoding="utf-8")

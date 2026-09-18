@@ -62,7 +62,13 @@ type UsagePayload = {
     ollama?: { ok?: boolean; host?: string; models?: string[]; error?: string }
     envModel?: string | null
     chatModel?: string | null
-    vlm?: { ok?: boolean; model?: string | null }
+    vlm?: {
+      ok?: boolean
+      loaded?: boolean
+      backend?: string | null
+      model?: string | null
+      available?: string[]
+    }
     embed?: { ok?: boolean; model?: string }
     lastLocalOkAt?: string | null
     localeOk?: boolean
@@ -86,6 +92,17 @@ function StatusDot({ status }: { status: string }) {
   const tone =
     status === "ok" ? "bg-ok" : status === "err" ? "bg-err" : "bg-muted-foreground/50"
   return <span className={`inline-block size-2 rounded-full ${tone}`} />
+}
+
+function vlmLabel(vlm: NonNullable<UsagePayload["health"]>["vlm"]) {
+  if (!vlm?.ok) return "absent"
+  const model = vlm.model || ""
+  const short = model.includes("/") ? model.slice(model.lastIndexOf("/") + 1) : model
+  if (vlm.loaded) {
+    const backend = vlm.backend || "chargé"
+    return short ? `${backend} · ${short}` : backend
+  }
+  return short || "prêt"
 }
 
 function surfaceName(surface: string) {
@@ -225,7 +242,7 @@ export function AdminLlmCard() {
           <p className="text-sm">
             VLM Morpho{" "}
             <strong className={health?.vlm?.ok ? "text-ok" : "text-muted-foreground"}>
-              {health?.vlm?.ok ? health.vlm.model || "prêt" : "absent"}
+              {vlmLabel(health?.vlm)}
             </strong>
           </p>
           <p className="text-sm">

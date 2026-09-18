@@ -356,13 +356,34 @@ def load_events() -> tuple[list[dict[str, Any]], str]:
     return read_file_events(), "file"
 
 
+def vlm_health() -> dict[str, Any]:
+    """Morpho VLM : le backend chargé en mémoire, pas seulement /api/tags Ollama.
+
+    « Charger / interroger » pose transformers / photon dans le process Python.
+    Un probe Ollama sans moondream ne doit pas afficher « absent » dans ce cas.
+    """
+    from synchro.morpho.vlm import ollama_vision_status, status as vlm_status
+
+    state = vlm_status()
+    ollama_vlm = ollama_vision_status()
+    loaded = bool(state.get("loaded"))
+    ollama_ready = bool(ollama_vlm.get("ok"))
+    model = (state.get("model_id") if loaded else None) or ollama_vlm.get("model")
+    backend = state.get("backend") if loaded else ("ollama" if ollama_ready else None)
+    return {
+        "ok": loaded or ollama_ready,
+        "loaded": loaded,
+        "backend": backend,
+        "model": model,
+        "available": list(state.get("available") or []),
+    }
+
+
 def health_payload(events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     from synchro import brain as brain_mod
-    from synchro.morpho.vlm import ollama_vision_status
 
     ollama = brain_mod.ping_ollama()
     models = [str(item) for item in (ollama.get("models") or []) if item]
-    vlm = ollama_vision_status()
     embed_ok = any("nomic-embed" in name for name in models)
     env_model = env_chat_model()
     chat_model = pick_chat_model(models, env_model) if ollama.get("ok") else env_model or None
@@ -371,11 +392,7 @@ def health_payload(events: list[dict[str, Any]] | None = None) -> dict[str, Any]
         "ollama": ollama,
         "envModel": env_model or None,
         "chatModel": chat_model,
-        "vlm": {
-            "ok": bool(vlm.get("ok")),
-            "model": vlm.get("model"),
-            "host": vlm.get("host"),
-        },
+        "vlm": vlm_health(),
         "embed": {"ok": embed_ok, "model": "nomic-embed-text"},
         "lastLocalOkAt": last_ok,
         "localeOk": bool(ollama.get("ok") and last_ok),
