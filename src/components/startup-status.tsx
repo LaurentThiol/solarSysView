@@ -593,25 +593,27 @@ function FamilyLinks({
           <p className="px-3 pb-1 text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
             {family.label}
           </p>
-          {family.items.map((entry) => {
-            const current = isNavItemActive(pathname, entry.href)
-            return (
-              <HelpWrap key={entry.href} help={entry.help} className="w-full">
-                <Link
-                  href={entry.href}
-                  aria-current={current ? "page" : undefined}
-                  onClick={onNavigate}
-                  className={`block rounded-md px-3 py-2 text-sm ${
-                    current
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                  }`}
-                >
-                  {entry.label}
-                </Link>
-              </HelpWrap>
-            )
-          })}
+          <div className="flex flex-col gap-0.5 pl-4">
+            {family.items.map((entry) => {
+              const current = isNavItemActive(pathname, entry.href)
+              return (
+                <HelpWrap key={entry.href} help={entry.help} className="w-full">
+                  <Link
+                    href={entry.href}
+                    aria-current={current ? "page" : undefined}
+                    onClick={onNavigate}
+                    className={`block rounded-md px-3 py-2 text-sm ${
+                      current
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    }`}
+                  >
+                    {entry.label}
+                  </Link>
+                </HelpWrap>
+              )
+            })}
+          </div>
         </div>
       ))}
     </nav>
@@ -682,10 +684,10 @@ export function SiteHeader() {
       ref={headerRef}
       className="sticky top-0 z-50 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur"
     >
-      <div className="relative z-10 mx-auto flex w-full min-w-0 max-w-full items-start gap-2 px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:gap-3 sm:px-6">
+      <div className="relative z-10 mx-auto flex w-full min-w-0 max-w-full items-center gap-2 px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:gap-3 sm:px-6">
         <button
           type="button"
-          className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-foreground"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-foreground"
           aria-expanded={menuOpen}
           aria-controls="site-nav-drawer"
           aria-haspopup="dialog"
@@ -695,40 +697,37 @@ export function SiteHeader() {
         >
           {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
         </button>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            <HelpWrap
-              help={{
-                title: "Synchro",
-                body: "Retour à l’accueil : page Tirage, archives FDJ filtrables et export CSV.",
-              }}
-              className="shrink-0"
-            >
-              <Link
-                href="/tirage"
-                className="shrink-0 text-xs font-medium tracking-[0.2em] text-primary uppercase"
-              >
-                Synchro
-              </Link>
-            </HelpWrap>
-            <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-              <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
-                <CaptureButton />
-                <HelpModeToggle />
-                <GlossaryButton />
-              </div>
-              <div className="relative z-20 flex shrink-0 items-center gap-2">
-                <StartupStatus />
-                <QuitButton />
-              </div>
-            </div>
-          </div>
-          <p
-            aria-current="page"
-            className="min-w-0 truncate text-sm font-medium text-foreground"
+        <HelpWrap
+          help={{
+            title: "Synchro",
+            body: "Retour à l’accueil : page Tirage, archives FDJ filtrables et export CSV.",
+          }}
+          className="shrink-0"
+        >
+          <Link
+            href="/tirage"
+            className="shrink-0 text-xs font-medium tracking-[0.2em] text-primary uppercase"
           >
-            {current.label}
-          </p>
+            Synchro
+          </Link>
+        </HelpWrap>
+        <span className="hidden h-4 w-px shrink-0 bg-border sm:block" aria-hidden />
+        <p
+          aria-current="page"
+          className="min-w-0 max-w-[8.5rem] truncate text-sm font-medium text-foreground sm:max-w-[14rem]"
+        >
+          {current.label}
+        </p>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+          <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+            <CaptureButton />
+            <HelpModeToggle />
+            <GlossaryButton />
+          </div>
+          <div className="relative z-20 flex shrink-0 items-center gap-2">
+            <StartupStatus />
+            <QuitButton />
+          </div>
         </div>
       </div>
       {portalReady && menuOpen
