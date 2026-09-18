@@ -1450,7 +1450,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           const atStart = touches.find((touch) => touch.index === sketch.start.index)
           prefer = atStart?.type ?? "any"
         } else if (sketch.mid) {
-          const atMid = touches.find((touch) => touch.index === sketch.mid.index)
+          const midTouch = sketch.mid
+          const atMid = touches.find((touch) => touch.index === midTouch.index)
           prefer = atMid?.type ?? "any"
         }
       } else {
