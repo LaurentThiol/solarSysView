@@ -27,7 +27,7 @@ const DRAW_HELP = {
 3. Les autres figures : deux clics. Près de la courbe, l’aimant accroche le tirage le plus proche. Un pivot de swing est seulement étiqueté (aimant · pivot) : il n’avale plus le voisin.
 4. Alt (⌥ Option) lâche l’aimant à l’arrivée : l’abscisse reste un tirage, l’ordonnée suit le curseur. Le gabarit d’école reste pour ETE, tasse, diamant ; sur les rails on dessine deux droites, la hauteur et l’objectif, pas le zigzag. Case Médiane : parallèle à mi-distance. Canal haussier / baissier = pente des bornes, pas une seconde classe.
 
-La fenêtre flottante affiche date, indice, valeur et aimant. Capture : rails, hauteur, objectif et touches partent dans le JSON. Ce n’est pas un signal de jeu.`,
+Le bandeau Coordonnées, sous cette barre, affiche date, indice, valeur et aimant — pas par-dessus la courbe. Tu peux le détacher et le glisser hors du graphique. Capture : rails, hauteur, objectif et touches partent dans le JSON. Ce n’est pas un signal de jeu.`,
 }
 
 export function SketchToolbar({

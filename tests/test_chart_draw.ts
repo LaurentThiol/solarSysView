@@ -5,6 +5,7 @@ import {
   compactSketch,
   drawingSummaryLines,
 } from "../src/lib/chart-draw/compact"
+import { clampHudPosition } from "../src/lib/chart-draw/hud"
 import {
   DEFAULT_MAGNET_RADIUS_PX,
   canFreePlaceArrival,
@@ -639,4 +640,37 @@ test("capture payload keeps figure, anchors and geometric reading", () => {
   assert.ok(lines[0].includes("Double creux"))
   assert.ok(lines[0].includes("2026-04-01"))
   assert.ok(lines.some((line) => line.includes("Lecture géométrique")))
+})
+
+test("detached HUD stays inside the viewport and never follows a cursor", () => {
+  const inside = clampHudPosition({
+    x: 40,
+    y: 80,
+    width: 200,
+    height: 120,
+    viewW: 800,
+    viewH: 600,
+  })
+  assert.deepEqual(inside, { x: 40, y: 80 })
+  const overflow = clampHudPosition({
+    x: 900,
+    y: 700,
+    width: 200,
+    height: 120,
+    viewW: 800,
+    viewH: 600,
+    pad: 8,
+  })
+  assert.equal(overflow.x, 800 - 200 - 8)
+  assert.equal(overflow.y, 600 - 120 - 8)
+  const negative = clampHudPosition({
+    x: -40,
+    y: -10,
+    width: 200,
+    height: 120,
+    viewW: 800,
+    viewH: 600,
+    pad: 8,
+  })
+  assert.deepEqual(negative, { x: 8, y: 8 })
 })

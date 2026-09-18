@@ -1546,7 +1546,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       </CardHeader>
       <CardContent>
         {draw ? (
-          <div className="mb-3">
+          <div className="mb-3 flex flex-col gap-2">
             <SketchToolbar
               drawing={draw.drawing}
               figure={draw.figure}
@@ -1597,6 +1597,20 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               onClear={draw.clearSketches}
               onRemove={draw.removeSketch}
             />
+            {draw.drawing ? (
+              <CoordHud
+                live={draw.live}
+                start={hudStart}
+                mid={draftMid}
+                end={hudEnd}
+                rails={isRailFigure(draw.figure)}
+                figureLabel={channelLabel(draw.figure, draftBand)}
+                seriesLabel={chartConfig[targetKey].label}
+                reading={draftReading}
+                drawCount={series.length}
+                hint={hint}
+              />
+            ) : null}
           </div>
         ) : null}
         {series.length === 0 ? (
@@ -2120,20 +2134,6 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                 />
               </ComposedChart>
             </ChartContainer>
-            {draw?.drawing ? (
-              <CoordHud
-                live={draw.live}
-                start={hudStart}
-                mid={draftMid}
-                end={hudEnd}
-                rails={isRailFigure(draw.figure)}
-                figureLabel={channelLabel(draw.figure, draftBand)}
-                seriesLabel={chartConfig[targetKey].label}
-                reading={draftReading}
-                drawCount={series.length}
-                hint={hint}
-              />
-            ) : null}
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
               {smaPeriod > 0 ? (
                 <>

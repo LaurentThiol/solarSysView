@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { Pin, PinOff } from "lucide-react"
+import { PanelTop, PictureInPicture2 } from "lucide-react"
 
 import { formatDrawDate } from "@/lib/draws"
-import type { ChartAnchor, LiveCursor, SketchReading } from "@/lib/chart-draw"
+import { clampHudPosition, type ChartAnchor, type LiveCursor, type SketchReading } from "@/lib/chart-draw"
 import { cn } from "@/lib/utils"
 
 function formatValue(value: number) {
@@ -75,8 +75,10 @@ export function CoordHud({
   hint?: string | null
 }) {
   const [mounted, setMounted] = useState(false)
-  const [pinned, setPinned] = useState(false)
+  const [detached, setDetached] = useState(false)
   const [dragged, setDragged] = useState<{ x: number; y: number } | null>(null)
+  const [size, setSize] = useState({ width: 288, height: 200 })
+  const boxRef = useRef<HTMLElement | null>(null)
   const dragRef = useRef<{ dx: number; dy: number } | null>(null)
 
   useEffect(() => {
@@ -86,12 +88,19 @@ export function CoordHud({
   }, [])
 
   useEffect(() => {
+    if (!detached) return
     function onMove(event: PointerEvent) {
       if (!dragRef.current) return
-      setDragged({
-        x: event.clientX - dragRef.current.dx,
-        y: event.clientY - dragRef.current.dy,
-      })
+      setDragged(
+        clampHudPosition({
+          x: event.clientX - dragRef.current.dx,
+          y: event.clientY - dragRef.current.dy,
+          width: size.width,
+          height: size.height,
+          viewW: window.innerWidth,
+          viewH: window.innerHeight,
+        })
+      )
     }
     function onUp() {
       dragRef.current = null
@@ -102,95 +111,123 @@ export function CoordHud({
       window.removeEventListener("pointermove", onMove)
       window.removeEventListener("pointerup", onUp)
     }
-  }, [])
+  }, [detached, size.height, size.width])
 
-  if (!mounted) return null
-
-  const follow = !pinned && !dragged && live
-  const hudW = 256
-  const hudH = 220
-  const gap = 18
-  const followBox = follow
-    ? {
-        left:
-          live.clientX - gap - hudW >= 8
-            ? live.clientX - gap - hudW
-            : Math.min(window.innerWidth - hudW - 8, live.clientX + gap),
-        top:
-          live.clientY - gap - hudH >= 8
-            ? live.clientY - gap - hudH
-            : Math.min(window.innerHeight - hudH - 8, live.clientY + gap),
-      }
-    : null
-  const left = dragged
-    ? dragged.x
-    : followBox
-      ? Math.max(8, followBox.left)
-      : window.innerWidth - 288
-  const top = dragged
-    ? dragged.y
-    : followBox
-      ? Math.max(8, followBox.top)
-      : 96
+  useEffect(() => {
+    if (!detached || !boxRef.current) return
+    const box = boxRef.current.getBoundingClientRect()
+    setSize({ width: box.width, height: box.height })
+  }, [detached, live, start, mid, end, reading, hint])
 
   const point = live
+  const parked = dragged
+    ? clampHudPosition({
+        x: dragged.x,
+        y: dragged.y,
+        width: size.width,
+        height: size.height,
+        viewW: typeof window === "undefined" ? 1280 : window.innerWidth,
+        viewH: typeof window === "undefined" ? 800 : window.innerHeight,
+      })
+    : null
+  const floatStyle =
+    detached && parked ? { left: parked.x, top: parked.y } : undefined
 
-  return createPortal(
+  function detach() {
+    const box = boxRef.current?.getBoundingClientRect()
+    const next = clampHudPosition({
+      x: box?.left ?? 16,
+      y: box?.top ?? 96,
+      width: box?.width ?? size.width,
+      height: box?.height ?? size.height,
+      viewW: window.innerWidth,
+      viewH: window.innerHeight,
+    })
+    if (box) setSize({ width: box.width, height: box.height })
+    setDragged(next)
+    setDetached(true)
+  }
+
+  function redock() {
+    dragRef.current = null
+    setDragged(null)
+    setDetached(false)
+  }
+
+  const panel = (
     <aside
+      ref={boxRef}
       data-capture-ui
+      data-coord-hud={detached ? "float" : "docked"}
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed z-40 w-64 rounded-xl border border-border bg-card/95 p-3 text-xs shadow-2xl backdrop-blur-sm"
-      style={{ left, top }}
+      className={cn(
+        "text-xs",
+        detached
+          ? "fixed z-40 w-72 rounded-xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur-sm"
+          : "rounded-lg border border-border bg-muted/30 px-3 py-2"
+      )}
+      style={floatStyle}
     >
       <div
-        className="pointer-events-auto mb-2 flex cursor-grab items-center justify-between gap-2 active:cursor-grabbing"
-        onPointerDown={(event) => {
-          const box = (event.currentTarget.parentElement as HTMLElement).getBoundingClientRect()
-          dragRef.current = { dx: event.clientX - box.left, dy: event.clientY - box.top }
-          setDragged({ x: box.left, y: box.top })
-        }}
+        className={cn(
+          "mb-1.5 flex items-start justify-between gap-2",
+          detached && "cursor-grab active:cursor-grabbing"
+        )}
+        onPointerDown={
+          detached
+            ? (event) => {
+                const box = (event.currentTarget.parentElement as HTMLElement).getBoundingClientRect()
+                dragRef.current = { dx: event.clientX - box.left, dy: event.clientY - box.top }
+                setDragged({ x: box.left, y: box.top })
+              }
+            : undefined
+        }
       >
-        <p className="font-medium tracking-tight">Coordonnées</p>
+        <p>
+          <span className="font-medium tracking-tight">Coordonnées</span>
+          <span className="text-muted-foreground">
+            {" "}
+            · {figureLabel} · {seriesLabel}
+          </span>
+        </p>
         <button
           type="button"
           className="rounded-md border border-border p-1 text-muted-foreground hover:text-foreground"
-          title={pinned ? "Suivre le curseur" : "Épingler"}
+          title={detached ? "Réancrer au-dessus du graphique" : "Détacher et glisser hors du graphique"}
+          aria-label={detached ? "Réancrer les coordonnées" : "Détacher les coordonnées"}
+          aria-pressed={detached}
           onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => {
-            setPinned((current) => !current)
-            setDragged(null)
-          }}
+          onClick={() => (detached ? redock() : detach())}
         >
-          {pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
+          {detached ? <PanelTop className="size-3.5" /> : <PictureInPicture2 className="size-3.5" />}
         </button>
       </div>
-      <p className="text-muted-foreground">
-        {figureLabel} · {seriesLabel}
-      </p>
+      {hint ? <p className="mb-1 text-[11px] leading-4 text-amber-200">{hint}</p> : null}
       {point ? (
-        <div className="mt-2 space-y-0.5 font-mono tabular-nums">
-          <p className="font-sans font-medium">{formatDrawDate(point.date)}</p>
-          <p>
-            tirage {point.index + 1}/{drawCount || "—"}
-          </p>
-          <p>valeur {formatValue(point.actual)}</p>
-          <p
+        <p className="font-mono tabular-nums">
+          <span className="font-sans font-medium">{formatDrawDate(point.date)}</span>
+          <span className="text-muted-foreground">
+            {" "}
+            · tirage {point.index + 1}/{drawCount || "—"} · valeur {formatValue(point.actual)}
+          </span>
+          <span
             className={cn(
               "font-sans",
               point.snapped ? "text-emerald-300" : "text-amber-200"
             )}
           >
-            {magnetLabel(point)}
+            {" "}
+            · {magnetLabel(point)}
             {point.distancePx != null
               ? ` · ${point.distancePx.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} px`
               : ""}
-          </p>
-        </div>
+          </span>
+        </p>
       ) : (
-        <p className="mt-2 text-muted-foreground">Survole la courbe pour lire un point.</p>
+        <p className="text-muted-foreground">Survole la courbe pour lire un point.</p>
       )}
-      <div className="mt-2 space-y-0.5 border-t border-border pt-2">
+      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
         <AnchorRow label={rails ? "Borne 1" : "Départ"} anchor={start} total={drawCount} />
         {rails ? <AnchorRow label="Borne 1 · 2" anchor={mid ?? null} total={drawCount} /> : null}
         <AnchorRow
@@ -200,13 +237,14 @@ export function CoordHud({
         />
       </div>
       {reading ? (
-        <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
+        <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
           Détecteur : {reading.label} ({reading.confidence.toFixed(2)}). Aide à
           dessiner, pas une prédiction.
         </p>
       ) : null}
-      {hint ? <p className="mt-2 text-[11px] leading-4 text-amber-200">{hint}</p> : null}
-    </aside>,
-    document.body
+    </aside>
   )
+
+  if (detached && mounted) return createPortal(panel, document.body)
+  return panel
 }
