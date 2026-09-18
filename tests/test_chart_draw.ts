@@ -16,6 +16,7 @@ import {
 } from "../src/lib/chart-draw/magnet"
 import {
   buildSketchPoints,
+  buildSketchGeometry,
   fitTemplateToWindow,
   remapSketch,
   sampleTemplate,
@@ -27,9 +28,16 @@ import {
   sketchDataKey,
   type ChartSketch,
 } from "../src/lib/chart-draw/types"
-import { catalog } from "../src/lib/chartisme/catalog"
+import { catalog, canonicalFigure, isChannelFigure } from "../src/lib/chartisme/catalog"
 import { curveKind, curveSparkSeries } from "../src/lib/chartisme/curve-shapes"
-import { sparklinePoints, sparkValues, synthCurve, templateFigures } from "../src/lib/chartisme/sketch-shapes"
+import {
+  sparkGuides,
+  sparkShowsCurve,
+  sparklinePoints,
+  sparkValues,
+  synthCurve,
+  templateFigures,
+} from "../src/lib/chartisme/sketch-shapes"
 
 test("magnet snaps to a nearby swing pivot, not the neighbouring sample", () => {
   const values = [1, 2, 10, 2, 1, 2, 9, 2, 1]
@@ -117,19 +125,20 @@ test("libre drawing is a straight line between the two anchors", () => {
   const trough = Math.min(...overlay.map((point) => point.actual))
   assert.equal(peak, Math.max(...values))
   assert.equal(trough, Math.min(...values))
+  assert.ok(synthCurve("canal").length > 8)
   assert.ok(synthCurve("tunnel_droit").length > 8)
 })
 
-test("the chartist table lists tunnel droit among 18 figures with a template", () => {
+test("the chartist table lists canal among 18 figures with a template", () => {
   const rows = catalog()
   assert.equal(rows.length, 18)
-  assert.ok(rows.some((row) => row.figure === "tunnel_droit" && row.label === "Tunnel droit"))
+  assert.ok(rows.some((row) => row.figure === "canal" && row.label === "Canal"))
   const templates = templateFigures()
-  assert.ok(templates.includes("tunnel_droit"))
+  assert.ok(templates.includes("canal"))
   for (const row of rows) {
     assert.ok(templates.includes(row.figure), row.figure)
   }
-  const spark = sparklinePoints(sparkValues("tunnel_droit"), 48, 20)
+  const spark = sparklinePoints(sparkValues("canal"), 48, 20)
   assert.ok(spark.includes(","))
   const free = sparklinePoints(sparkValues("free"), 48, 20)
   const [start, end] = free.split(" ")
@@ -137,6 +146,60 @@ test("the chartist table lists tunnel droit among 18 figures with a template", (
   const [, y0] = start.split(",").map(Number)
   const [, y1] = end.split(",").map(Number)
   assert.ok(y0 > y1)
+})
+
+test("canal thumbnail is two parallel rails, not a freehand squiggle", () => {
+  const guides = sparkGuides("canal")
+  assert.ok(guides)
+  assert.equal(guides.upper.length, guides.lower.length)
+  assert.ok(guides.upper.length > 8)
+  const riseU = guides.upper[guides.upper.length - 1] - guides.upper[0]
+  const riseL = guides.lower[guides.lower.length - 1] - guides.lower[0]
+  assert.ok(Math.abs(riseU - riseL) < 1e-9)
+  assert.ok(guides.upper[0] > guides.lower[0])
+  assert.equal(sparkShowsCurve("canal"), false)
+  assert.equal(sparkShowsCurve("rectangle"), true)
+  assert.ok(sparkGuides("rectangle"))
+  assert.equal(canonicalFigure("tunnel_droit"), "canal")
+  assert.equal(isChannelFigure("tunnel_droit"), true)
+})
+
+test("placing a canal draws two parallel rails around the actual series", () => {
+  const values = [10, 12, 11, 14, 13, 16, 15, 18, 17, 20, 19, 22]
+  const dates = values.map((_, i) => `2026-05-${String(i + 1).padStart(2, "0")}`)
+  const geo = buildSketchGeometry({
+    figure: "canal",
+    values,
+    dates,
+    from: 0,
+    to: values.length - 1,
+  })
+  assert.ok(geo.band)
+  const { upper, lower } = geo.band
+  assert.equal(upper.length, values.length)
+  assert.equal(lower.length, values.length)
+  const riseU = upper[upper.length - 1].actual - upper[0].actual
+  const riseL = lower[lower.length - 1].actual - lower[0].actual
+  assert.ok(Math.abs(riseU - riseL) < 1e-6)
+  for (let i = 0; i < values.length; i += 1) {
+    assert.ok(values[i] <= upper[i].actual + 1e-9, `upper rail covers sample ${i}`)
+    assert.ok(values[i] >= lower[i].actual - 1e-9, `lower rail covers sample ${i}`)
+  }
+  const midRise = geo.points[geo.points.length - 1].actual - geo.points[0].actual
+  const step = (geo.points[1].actual - geo.points[0].actual)
+  for (let i = 1; i < geo.points.length; i += 1) {
+    assert.ok(Math.abs(geo.points[i].actual - geo.points[0].actual - step * i) < 1e-6)
+  }
+  assert.ok(midRise > 0)
+  const legacy = buildSketchGeometry({
+    figure: "tunnel_droit",
+    values,
+    dates,
+    from: 0,
+    to: values.length - 1,
+  })
+  assert.ok(legacy.band)
+  assert.equal(legacy.band.upper.length, values.length)
 })
 
 test("each curve type has a schematic sparkline", () => {

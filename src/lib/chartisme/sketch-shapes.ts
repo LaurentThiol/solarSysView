@@ -7,6 +7,8 @@
  * bloc pour demander « où trouve-t-on ça dans l'archive ? ».
  */
 
+import { canonicalFigure } from "./catalog"
+
 const COUNT = 60
 const BASE = 100
 
@@ -169,6 +171,30 @@ function cupHandle(): number[] {
   return tail(body, 1, depth, 6)
 }
 
+/** Une borne linéaire, pour dessiner les rails du gabarit (canal, triangle…). */
+function rail(slope: number, height: number, which: "upper" | "lower"): number[] {
+  const top0 = BASE + height / 2
+  const bot0 = BASE - height / 2
+  const origin = which === "upper" ? top0 : bot0
+  const out: number[] = []
+  for (let i = 0; i < COUNT; i += 1) {
+    const t = i / Math.max(1, COUNT - 1)
+    out.push(origin + slope * t * height)
+  }
+  return out
+}
+
+const BOUND_GUIDES: Record<string, { up: number; low: number; height: number }> = {
+  wedge_rising: { up: 0.7, low: 1.45, height: 30 },
+  wedge_falling: { up: -1.45, low: -0.7, height: 30 },
+  triangle_sym: { up: -0.68, low: 0.68, height: 34 },
+  triangle_asc: { up: 0, low: 0.7, height: 30 },
+  triangle_desc: { up: -0.7, low: 0, height: 30 },
+  rectangle: { up: 0, low: 0, height: 28 },
+  canal: { up: 0.85, low: 0.85, height: 28 },
+  broadening_top: { up: 1.25, low: -1.25, height: 18 },
+}
+
 const TEMPLATES: Record<string, () => number[]> = {
   ete: () => ete(false),
   ete_inv: () => ete(true),
@@ -182,7 +208,7 @@ const TEMPLATES: Record<string, () => number[]> = {
   triangle_asc: () => bounded(0, 0.7, 30, 5, 1),
   triangle_desc: () => bounded(-0.7, 0, 30, 5, -1),
   rectangle: () => bounded(0, 0, 28, 6, 1),
-  tunnel_droit: () => bounded(0.85, 0.85, 28, 6, 1),
+  canal: () => bounded(0.85, 0.85, 28, 6, 1),
   broadening_top: () => bounded(1.25, -1.25, 18, 6, -1),
   diamond,
   flag: () => flagLike(false),
@@ -191,7 +217,8 @@ const TEMPLATES: Record<string, () => number[]> = {
 }
 
 export function synthCurve(figure: string): number[] {
-  return TEMPLATES[figure]?.() ?? []
+  const id = canonicalFigure(figure)
+  return TEMPLATES[id]?.() ?? TEMPLATES[figure]?.() ?? []
 }
 
 export function templateFigures(): string[] {
@@ -202,6 +229,23 @@ export function templateFigures(): string[] {
 export function sparkValues(figure: string): number[] {
   if (figure === "free") return [0, 1]
   return synthCurve(figure)
+}
+
+/** Rails d'école (bornes haute et basse) pour les figures à deux droites. */
+export function sparkGuides(figure: string): { upper: number[]; lower: number[] } | null {
+  const id = canonicalFigure(figure)
+  const spec = BOUND_GUIDES[id]
+  if (!spec) return null
+  return {
+    upper: rail(spec.up, spec.height, "upper"),
+    lower: rail(spec.low, spec.height, "lower"),
+  }
+}
+
+/** Le canal se lit par ses deux rails ; les autres gardent le zigzag d'école. */
+export function sparkShowsCurve(figure: string) {
+  const id = canonicalFigure(figure)
+  return id !== "canal"
 }
 
 /** Points SVG d'un gabarit, Y vers le haut. */

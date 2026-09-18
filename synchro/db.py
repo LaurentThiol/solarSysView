@@ -1093,6 +1093,18 @@ def get_morpho_caption(draw_date: str) -> dict[str, Any] | None:
 # --- Chartisme ---------------------------------------------------------------
 
 
+def _figure_filter(where: list[str], params: dict[str, Any], figure: str) -> None:
+    from synchro.chartisme.catalog import figure_match_ids
+
+    ids = list(figure_match_ids(figure))
+    if len(ids) == 1:
+        where.append("figure = %(figure)s")
+        params["figure"] = ids[0]
+    else:
+        where.append("figure = ANY(%(figures)s)")
+        params["figures"] = ids
+
+
 def list_chartisme_labels(
     curve_id: str | None = None,
     figure: str | None = None,
@@ -1105,8 +1117,7 @@ def list_chartisme_labels(
         where.append("curve_id = %(curve_id)s")
         params["curve_id"] = curve_id
     if figure:
-        where.append("figure = %(figure)s")
-        params["figure"] = figure
+        _figure_filter(where, params, figure)
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY updated_at DESC LIMIT %(limit)s"
@@ -1308,8 +1319,7 @@ def list_chartisme_figures(
         where.append("curve_id = %(curve_id)s")
         params["curve_id"] = curve_id
     if figure:
-        where.append("figure = %(figure)s")
-        params["figure"] = figure
+        _figure_filter(where, params, figure)
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY to_date DESC NULLS LAST, confidence DESC LIMIT %(limit)s"

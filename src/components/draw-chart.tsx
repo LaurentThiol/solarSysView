@@ -45,7 +45,8 @@ import {
 } from "@/lib/draw-overlays"
 import {
   DRAFT_KEY,
-  buildSketchPoints,
+  buildSketchGeometry,
+  channelLabel,
   extremaIndices,
   isMagneted,
   nearestSample,
@@ -54,8 +55,8 @@ import {
   readTooltipIndex,
   readWindow,
   remapSketch,
+  resolveSketchBand,
   sketchDataKey,
-  sketchFigureLabel,
   snapIndexToExtrema,
   windowTooShort,
   type AxisScales,
@@ -359,6 +360,32 @@ function plottedOf(
   if (key === "relNumbers") return relativeToRange(actual, ranges.numbers)
   if (key === "relStars") return relativeToRange(actual, ranges.stars)
   return actual
+}
+
+function writeBandFields(
+  extra: Record<string, number | null>,
+  prefix: string,
+  date: string,
+  upperAt: Map<string, number>,
+  lowerAt: Map<string, number>,
+  seriesKey: SeriesKey,
+  ranges: { numbers: ValueRange; stars: ValueRange }
+) {
+  const u = upperAt.get(date)
+  const l = lowerAt.get(date)
+  if (u == null || l == null) {
+    extra[`${prefix}_upper`] = null
+    extra[`${prefix}_lower`] = null
+    extra[`${prefix}_base`] = null
+    extra[`${prefix}_span`] = null
+    return
+  }
+  const up = plottedOf(seriesKey, u, ranges)
+  const lo = plottedOf(seriesKey, l, ranges)
+  extra[`${prefix}_upper`] = up
+  extra[`${prefix}_lower`] = lo
+  extra[`${prefix}_base`] = lo
+  extra[`${prefix}_span`] = up - lo
 }
 
 type ChartPointerState = MouseHandlerDataParam
@@ -840,10 +867,10 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   const draftLive = draw?.live ?? null
   const draftFigure = draw?.figure ?? "ete"
   const drawing = Boolean(draw?.drawing)
-  const draftPoints = useMemo(() => {
-    if (!drawing || !draftStart || !draftLive) return []
+  const draftGeometry = useMemo(() => {
+    if (!drawing || !draftStart || !draftLive) return null
     const values = seriesValuesOf(series, targetKey)
-    return buildSketchPoints({
+    return buildSketchGeometry({
       figure: draftFigure,
       values,
       dates,
@@ -851,6 +878,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       to: draftLive.index,
     })
   }, [drawing, draftStart, draftLive, draftFigure, series, dates, targetKey])
+  const draftPoints = draftGeometry?.points ?? []
+  const draftBand = draftGeometry?.band
 
   const lastSketch = visibleSketches[0] ?? null
   const hudStart = draftStart ?? lastSketch?.start ?? null
@@ -865,28 +894,57 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   }, [draftStart, draftLive, series, dates, targetKey, lastSketch])
 
   const plotData = useMemo(() => {
-    if (!visibleSketches.length && !draftPoints.length) return chartData
-    const bySketch = visibleSketches.map((sketch) => ({
-      key: sketchDataKey(sketch.id),
-      seriesKey: sketch.seriesKey as SeriesKey,
-      at: new Map(sketch.points.map((point) => [point.date, point.actual])),
-    }))
+    if (!visibleSketches.length && !draftPoints.length && !draftBand) return chartData
+    const seriesByKey = (key: SeriesKey) => seriesValuesOf(series, key)
+    const bySketch = visibleSketches.map((sketch) => {
+      const seriesKey = sketch.seriesKey as SeriesKey
+      const values = seriesByKey(seriesKey)
+      const band = resolveSketchBand(sketch, values, dates)
+      return {
+        key: sketchDataKey(sketch.id),
+        seriesKey,
+        at: new Map(sketch.points.map((point) => [point.date, point.actual])),
+        band,
+        upperAt: band ? new Map(band.upper.map((point) => [point.date, point.actual])) : null,
+        lowerAt: band ? new Map(band.lower.map((point) => [point.date, point.actual])) : null,
+      }
+    })
     const draftAt = new Map(draftPoints.map((point) => [point.date, point.actual]))
+    const draftUpperAt = draftBand
+      ? new Map(draftBand.upper.map((point) => [point.date, point.actual]))
+      : null
+    const draftLowerAt = draftBand
+      ? new Map(draftBand.lower.map((point) => [point.date, point.actual]))
+      : null
     return chartData.map((point) => {
       const extra: Record<string, number | null> = {}
+      const date = String(point.date)
       for (const sketch of bySketch) {
-        const actual = sketch.at.get(String(point.date))
-        extra[sketch.key] =
-          actual == null ? null : plottedOf(sketch.seriesKey, actual, ranges)
+        if (sketch.upperAt && sketch.lowerAt) {
+          writeBandFields(
+            extra,
+            sketch.key,
+            date,
+            sketch.upperAt,
+            sketch.lowerAt,
+            sketch.seriesKey,
+            ranges
+          )
+        } else {
+          const actual = sketch.at.get(date)
+          extra[sketch.key] =
+            actual == null ? null : plottedOf(sketch.seriesKey, actual, ranges)
+        }
       }
-      if (draftPoints.length) {
-        const actual = draftAt.get(String(point.date))
-        extra[DRAFT_KEY] =
-          actual == null ? null : plottedOf(targetKey, actual, ranges)
+      if (draftUpperAt && draftLowerAt) {
+        writeBandFields(extra, DRAFT_KEY, date, draftUpperAt, draftLowerAt, targetKey, ranges)
+      } else if (draftPoints.length) {
+        const actual = draftAt.get(date)
+        extra[DRAFT_KEY] = actual == null ? null : plottedOf(targetKey, actual, ranges)
       }
       return { ...point, ...extra }
     })
-  }, [chartData, visibleSketches, draftPoints, ranges, targetKey])
+  }, [chartData, visibleSketches, draftPoints, draftBand, ranges, targetKey, series, dates])
 
   const setChartMeta = draw?.setChartMeta
   const visibleKeyList = visibleKeys.join(",")
@@ -1038,6 +1096,13 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       snapped: live.snapped,
       kind: live.kind,
     }
+    const geo = buildSketchGeometry({
+      figure: current.figure,
+      values,
+      dates,
+      from: start.index,
+      to: end.index,
+    })
     current.addSketch({
       id: newSketchId(),
       host: current.host,
@@ -1046,13 +1111,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       seriesLabel: chartConfig[targetKey].label,
       start,
       end,
-      points: buildSketchPoints({
-        figure: current.figure,
-        values,
-        dates,
-        from: start.index,
-        to: end.index,
-      }),
+      points: geo.points,
+      band: geo.band,
       reading: readWindow(values, dates, start.index, end.index),
       createdAt: new Date().toISOString(),
     })
@@ -1420,24 +1480,146 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       </Fragment>
                     ))
                   : null}
-                {visibleSketches.map((sketch) => (
-                  <Line
-                    key={sketch.id}
-                    dataKey={sketchDataKey(sketch.id)}
-                    yAxisId={plotAxisId(sketch.seriesKey as SeriesKey, splitRank1)}
-                    type="monotone"
-                    stroke="var(--chart-4)"
-                    strokeWidth={2}
-                    strokeDasharray="6 3"
-                    dot={false}
-                    connectNulls
-                    legendType="none"
-                    tooltipType="none"
-                    isAnimationActive={false}
-                    name={sketch.seriesLabel}
-                  />
-                ))}
-                {draftPoints.length > 0 ? (
+                {visibleSketches.map((sketch) => {
+                  const seriesKey = sketch.seriesKey as SeriesKey
+                  const axisId = plotAxisId(seriesKey, splitRank1)
+                  const values = seriesValuesOf(series, seriesKey)
+                  const band = resolveSketchBand(sketch, values, dates)
+                  if (band) {
+                    const prefix = sketchDataKey(sketch.id)
+                    return (
+                      <Fragment key={sketch.id}>
+                        <Area
+                          type="linear"
+                          dataKey={`${prefix}_base`}
+                          yAxisId={axisId}
+                          stackId={`canal-${sketch.id}`}
+                          fill="transparent"
+                          stroke="none"
+                          legendType="none"
+                          tooltipType="none"
+                          connectNulls
+                          isAnimationActive={false}
+                        />
+                        <Area
+                          type="linear"
+                          dataKey={`${prefix}_span`}
+                          yAxisId={axisId}
+                          stackId={`canal-${sketch.id}`}
+                          fill="var(--chart-4)"
+                          fillOpacity={0.14}
+                          stroke="none"
+                          legendType="none"
+                          tooltipType="none"
+                          connectNulls
+                          isAnimationActive={false}
+                        />
+                        <Line
+                          dataKey={`${prefix}_upper`}
+                          yAxisId={axisId}
+                          type="linear"
+                          stroke="var(--chart-4)"
+                          strokeWidth={1.6}
+                          strokeDasharray="5 3"
+                          dot={false}
+                          connectNulls
+                          legendType="none"
+                          tooltipType="none"
+                          isAnimationActive={false}
+                          name={`${channelLabel(sketch.figure, band)} +`}
+                        />
+                        <Line
+                          dataKey={`${prefix}_lower`}
+                          yAxisId={axisId}
+                          type="linear"
+                          stroke="var(--chart-4)"
+                          strokeWidth={1.6}
+                          strokeDasharray="5 3"
+                          dot={false}
+                          connectNulls
+                          legendType="none"
+                          tooltipType="none"
+                          isAnimationActive={false}
+                          name={`${channelLabel(sketch.figure, band)} −`}
+                        />
+                      </Fragment>
+                    )
+                  }
+                  return (
+                    <Line
+                      key={sketch.id}
+                      dataKey={sketchDataKey(sketch.id)}
+                      yAxisId={axisId}
+                      type="monotone"
+                      stroke="var(--chart-4)"
+                      strokeWidth={2}
+                      strokeDasharray="6 3"
+                      dot={false}
+                      connectNulls
+                      legendType="none"
+                      tooltipType="none"
+                      isAnimationActive={false}
+                      name={sketch.seriesLabel}
+                    />
+                  )
+                })}
+                {draftBand ? (
+                  <Fragment>
+                    <Area
+                      type="linear"
+                      dataKey={`${DRAFT_KEY}_base`}
+                      yAxisId={plotAxisId(targetKey, splitRank1)}
+                      stackId="canal-draft"
+                      fill="transparent"
+                      stroke="none"
+                      legendType="none"
+                      tooltipType="none"
+                      connectNulls
+                      isAnimationActive={false}
+                    />
+                    <Area
+                      type="linear"
+                      dataKey={`${DRAFT_KEY}_span`}
+                      yAxisId={plotAxisId(targetKey, splitRank1)}
+                      stackId="canal-draft"
+                      fill="var(--chart-4)"
+                      fillOpacity={0.1}
+                      stroke="none"
+                      legendType="none"
+                      tooltipType="none"
+                      connectNulls
+                      isAnimationActive={false}
+                    />
+                    <Line
+                      dataKey={`${DRAFT_KEY}_upper`}
+                      yAxisId={plotAxisId(targetKey, splitRank1)}
+                      type="linear"
+                      stroke="var(--chart-4)"
+                      strokeWidth={1.6}
+                      strokeDasharray="2 3"
+                      strokeOpacity={0.9}
+                      dot={false}
+                      connectNulls
+                      legendType="none"
+                      tooltipType="none"
+                      isAnimationActive={false}
+                    />
+                    <Line
+                      dataKey={`${DRAFT_KEY}_lower`}
+                      yAxisId={plotAxisId(targetKey, splitRank1)}
+                      type="linear"
+                      stroke="var(--chart-4)"
+                      strokeWidth={1.6}
+                      strokeDasharray="2 3"
+                      strokeOpacity={0.9}
+                      dot={false}
+                      connectNulls
+                      legendType="none"
+                      tooltipType="none"
+                      isAnimationActive={false}
+                    />
+                  </Fragment>
+                ) : draftPoints.length > 0 ? (
                   <Line
                     dataKey={DRAFT_KEY}
                     yAxisId={plotAxisId(targetKey, splitRank1)}
@@ -1535,7 +1717,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                 live={draw.live}
                 start={hudStart}
                 end={hudEnd}
-                figureLabel={sketchFigureLabel(draw.figure)}
+                figureLabel={channelLabel(draw.figure, draftBand)}
                 seriesLabel={chartConfig[targetKey].label}
                 reading={draftReading}
                 drawCount={series.length}

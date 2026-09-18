@@ -6,6 +6,7 @@ import {
   type RuleAction,
   type RuleState,
 } from "./rules"
+import { canonicalFigure } from "./catalog"
 
 export const RULES_KEY = "synchro.chartisme.rules.v1"
 export const FIRINGS_KEY = "synchro.chartisme.firings.v1"
@@ -100,7 +101,10 @@ export function readLastFiring(): StoredFiring | null {
 }
 
 export function loadLabels(): StoredLabel[] {
-  return readJson<StoredLabel[]>(LABELS_KEY, [])
+  return readJson<StoredLabel[]>(LABELS_KEY, []).map((label) => ({
+    ...label,
+    figure: canonicalFigure(label.figure),
+  }))
 }
 
 export function saveLabels(labels: StoredLabel[]) {

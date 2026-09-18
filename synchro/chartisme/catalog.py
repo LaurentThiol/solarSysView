@@ -23,7 +23,7 @@ FIGURE_IDS = (
     "cup_handle",
     "diamond",
     "broadening_top",
-    "tunnel_droit",
+    "canal",
     "none",
 )
 
@@ -45,7 +45,7 @@ FIGURE_LABELS: dict[str, str] = {
     "cup_handle": "Tasse avec anse",
     "diamond": "Diamant",
     "broadening_top": "Broadening top",
-    "tunnel_droit": "Tunnel droit",
+    "canal": "Canal",
     "none": "Aucune figure",
 }
 
@@ -68,7 +68,7 @@ FIGURE_KINDS: dict[str, str] = {
     "cup_handle": "reversal_up",
     "diamond": "reversal_down",
     "broadening_top": "reversal_down",
-    "tunnel_droit": "continuation",
+    "canal": "continuation",
     "none": "range",
 }
 
@@ -90,7 +90,7 @@ FIGURE_SIGNALS: dict[str, str] = {
     "cup_handle": "Cassure de la lèvre",
     "diamond": "Cassure d'une des bornes",
     "broadening_top": "Cassure du dernier creux",
-    "tunnel_droit": "Cassure d'une des bornes du tunnel",
+    "canal": "Cassure d'une des bornes du canal",
     "none": "—",
 }
 
@@ -112,7 +112,7 @@ FIGURE_TARGETS: dict[str, str] = {
     "cup_handle": "Profondeur de la tasse reportée",
     "diamond": "Hauteur reportée",
     "broadening_top": "Hauteur reportée",
-    "tunnel_droit": "Hauteur du tunnel reportée",
+    "canal": "Hauteur du canal reportée",
     "none": "—",
 }
 
@@ -179,36 +179,68 @@ FLIP_MAP: dict[str, str] = {
     "diamond": "diamond",
     "cup_handle": "cup_handle",
     "broadening_top": "broadening_top",
-    "tunnel_droit": "tunnel_droit",
+    "canal": "canal",
     "none": "none",
 }
 
 # Classes apprises par les modèles (l'ordre fixe l'index des logits).
 MODEL_CLASSES = FIGURE_IDS
 
+# Ancien identifiant → nom actuel. L'index des logits ne bouge pas.
+LEGACY_FIGURE_IDS = {
+    "tunnel_droit": "canal",
+}
+
+
+def canonical_figure(figure_id: str) -> str:
+    return LEGACY_FIGURE_IDS.get(figure_id, figure_id)
+
+
+def is_channel_figure(figure_id: str) -> bool:
+    """Canal à bornes parallèles : l'ancien nom « tunnel droit » reste compris."""
+    return canonical_figure(figure_id) == "canal"
+
+
+def is_catalog_figure(figure_id: str) -> bool:
+    name = canonical_figure(figure_id)
+    return name in FIGURE_IDS and name != "none"
+
+
+def figure_match_ids(figure_id: str) -> tuple[str, ...]:
+    """Noms à interroger ensemble (actuel + hérités) pour une lecture ou un filtre."""
+    canon = canonical_figure(figure_id)
+    out: list[str] = [canon]
+    for legacy, current in LEGACY_FIGURE_IDS.items():
+        if current == canon and legacy not in out:
+            out.append(legacy)
+    if figure_id and figure_id not in out:
+        out.insert(0, figure_id)
+    return tuple(out)
+
 
 def label_of(figure_id: str) -> str:
-    return FIGURE_LABELS.get(figure_id, figure_id)
+    return FIGURE_LABELS.get(canonical_figure(figure_id), figure_id)
 
 
 def kind_of(figure_id: str) -> str:
-    return FIGURE_KINDS.get(figure_id, "range")
+    return FIGURE_KINDS.get(canonical_figure(figure_id), "range")
 
 
 def signal_of(figure_id: str) -> str:
-    return FIGURE_SIGNALS.get(figure_id, "—")
+    return FIGURE_SIGNALS.get(canonical_figure(figure_id), "—")
 
 
 def target_basis(figure_id: str) -> str:
-    return FIGURE_TARGETS.get(figure_id, "—")
+    return FIGURE_TARGETS.get(canonical_figure(figure_id), "—")
 
 
 def flip_of(figure_id: str) -> str:
-    return FLIP_MAP.get(figure_id, figure_id)
+    return FLIP_MAP.get(canonical_figure(figure_id), figure_id)
 
 
 def class_index(figure_id: str) -> int:
-    return MODEL_CLASSES.index(figure_id) if figure_id in MODEL_CLASSES else MODEL_CLASSES.index("none")
+    name = canonical_figure(figure_id)
+    return MODEL_CLASSES.index(name) if name in MODEL_CLASSES else MODEL_CLASSES.index("none")
 
 
 def class_at(index: int) -> str:
@@ -218,8 +250,10 @@ def class_at(index: int) -> str:
 
 
 def describe(figure_id: str) -> dict[str, str]:
+    fid = canonical_figure(figure_id)
+    name = fid if fid in FIGURE_LABELS else figure_id
     return {
-        "figure": figure_id,
+        "figure": name,
         "label": label_of(figure_id),
         "kind": kind_of(figure_id),
         "signal": signal_of(figure_id),

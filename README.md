@@ -106,7 +106,7 @@ Lecture **Profils 3D** ou **Plan**. Marqueurs **boule** (défaut à 20/50) ou **
 
 ## Chartisme (`/chartisme`)
 
-Les **18 figures chartistes** de la table de référence (tête & épaules et son inverse, doubles / triples sommets et creux, biseaux, triangles, rectangle, tunnel droit, drapeau / fanion, tasse avec anse, diamant, broadening top) cherchées sur les courbes du logiciel : somme, écart, pairs, retard et sorties de chaque boule, retard et sorties de chaque étoile — 142 courbes exportées de l’archive.
+Les **18 figures chartistes** de la table de référence (tête & épaules et son inverse, doubles / triples sommets et creux, biseaux, triangles, rectangle, canal, drapeau / fanion, tasse avec anse, diamant, broadening top) cherchées sur les courbes du logiciel : somme, écart, pairs, retard et sorties de chaque boule, retard et sorties de chaque étoile — 142 courbes exportées de l’archive.
 
 Parmi elles, les **cinq numéros du tirage suivis séparément** — `n1` à `n5` — et les **deux étoiles**, `e1` et `e2`, les mêmes séries que l’onglet Évolution. Ce sont des *statistiques d’ordre* : `n1` est le plus petit numéro du tirage, `n5` le plus grand, jamais la première ou la dernière boule sortie — l’ordre de sortie n’est pas publié. Séparées exprès : chacune a son régime, `n1` vivant contre le plancher 1 et `n5` contre le plafond 50, si bien qu’une même cassure n’y dit pas la même chose. L’espace de règles peut donc viser `n1` sans viser `n5`.
 

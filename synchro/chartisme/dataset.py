@@ -18,7 +18,7 @@ from __future__ import annotations
 import random
 from typing import Any, Iterable, Sequence
 
-from synchro.chartisme.catalog import FIGURE_IDS
+from synchro.chartisme.catalog import FIGURE_IDS, canonical_figure
 from synchro.chartisme.graph import build_graph
 from synchro.chartisme.pivots import swing_pivots
 from synchro.chartisme.scan import windows_for_training
@@ -51,7 +51,7 @@ def make_sample_row(
         return None
     act = _clean(activity or [])
     row = {
-        "figure": figure,
+        "figure": canonical_figure(figure),
         "values": resample_values(cleaned, length),
         "activity": resample_values(act, length) if len(act) >= 2 else [],
         "source": source,

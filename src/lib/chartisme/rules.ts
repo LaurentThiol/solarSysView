@@ -1,4 +1,4 @@
-import { FIGURE_IDS, labelOf, type FigureId, type FigureKind } from "./catalog"
+import { FIGURE_IDS, canonicalFigure, labelOf, type FigureId, type FigureKind } from "./catalog"
 import type { FigureHit } from "./figures"
 
 export const ACTION_TYPES = ["tag", "alert", "note", "hypothesize", "watch"] as const
@@ -130,8 +130,9 @@ function cleanList(raw: unknown, allowed?: ReadonlyArray<string>): string[] {
   const allow = allowed ? new Set<string>(allowed) : null
   const out: string[] = []
   for (const item of items) {
-    const text = String(item ?? "").trim()
+    let text = String(item ?? "").trim()
     if (!text) continue
+    if (allow) text = canonicalFigure(text)
     if (allow && !allow.has(text)) continue
     if (!out.includes(text)) out.push(text)
   }
@@ -171,7 +172,10 @@ export function normalizeCondition(raw?: Partial<RuleCondition> | null): RuleCon
     min_activity_ratio: optionalFloat(src.min_activity_ratio),
     alongside: oneOf(src.alongside, ALONGSIDE_MODES, "any"),
     alongside_curve: String(src.alongside_curve ?? "").trim() || null,
-    alongside_figure: String(src.alongside_figure ?? "").trim() || null,
+    alongside_figure: (() => {
+      const raw = String(src.alongside_figure ?? "").trim()
+      return raw ? canonicalFigure(raw) : null
+    })(),
     alongside_direction: oneOf(src.alongside_direction, DIRECTIONS, "any"),
     alongside_within: Math.max(0, Math.trunc(optionalFloat(src.alongside_within) ?? 0)),
   }
@@ -228,7 +232,7 @@ function alongsideMatches(cond: RuleCondition, state: RuleState): AlongsideFigur
   return (state.alongside ?? []).filter((other) => {
     if (other.curve_id === here) return false
     if (cond.alongside_curve && other.curve_id !== cond.alongside_curve) return false
-    if (cond.alongside_figure && other.figure !== cond.alongside_figure) return false
+    if (cond.alongside_figure && canonicalFigure(other.figure) !== cond.alongside_figure) return false
     if (cond.alongside_direction !== "any" && other.direction !== cond.alongside_direction) {
       return false
     }
@@ -244,7 +248,7 @@ function alongsideMatches(cond: RuleCondition, state: RuleState): AlongsideFigur
  */
 export function matchCondition(condition: RuleCondition, state: RuleState): boolean {
   const cond = normalizeCondition(condition)
-  const figure = String(state.figure ?? "")
+  const figure = canonicalFigure(String(state.figure ?? ""))
   const figures = new Set(figure ? [figure] : [])
   for (const wanted of cond.figures) {
     if (!figures.has(wanted)) return false

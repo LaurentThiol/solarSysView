@@ -19,7 +19,7 @@ export const FIGURE_IDS = [
   "cup_handle",
   "diamond",
   "broadening_top",
-  "tunnel_droit",
+  "canal",
   "none",
 ] as const
 
@@ -46,7 +46,7 @@ export const FIGURE_LABELS: Record<FigureId, string> = {
   cup_handle: "Tasse avec anse",
   diamond: "Diamant",
   broadening_top: "Broadening top",
-  tunnel_droit: "Tunnel droit",
+  canal: "Canal",
   none: "Aucune figure",
 }
 
@@ -68,7 +68,7 @@ export const FIGURE_KINDS: Record<FigureId, FigureKind> = {
   cup_handle: "reversal_up",
   diamond: "reversal_down",
   broadening_top: "reversal_down",
-  tunnel_droit: "continuation",
+  canal: "continuation",
   none: "range",
 }
 
@@ -90,7 +90,7 @@ export const FIGURE_SIGNALS: Record<FigureId, string> = {
   cup_handle: "Cassure de la lèvre",
   diamond: "Cassure d'une des bornes",
   broadening_top: "Cassure du dernier creux",
-  tunnel_droit: "Cassure d'une des bornes du tunnel",
+  canal: "Cassure d'une des bornes du canal",
   none: "—",
 }
 
@@ -112,7 +112,7 @@ export const FIGURE_TARGETS: Record<FigureId, string> = {
   cup_handle: "Profondeur de la tasse reportée",
   diamond: "Hauteur reportée",
   broadening_top: "Hauteur reportée",
-  tunnel_droit: "Hauteur du tunnel reportée",
+  canal: "Hauteur du canal reportée",
   none: "—",
 }
 
@@ -181,12 +181,42 @@ export const FLIP_MAP: Record<FigureId, FigureId> = {
   diamond: "diamond",
   cup_handle: "cup_handle",
   broadening_top: "broadening_top",
-  tunnel_droit: "tunnel_droit",
+  canal: "canal",
   none: "none",
 }
 
 // Classes apprises par les modèles (l'ordre fixe l'index des logits).
 export const MODEL_CLASSES = FIGURE_IDS
+
+/** Ancien identifiant → nom actuel. L'index des logits ne bouge pas. */
+export const LEGACY_FIGURE_IDS: Record<string, FigureId> = {
+  tunnel_droit: "canal",
+}
+
+export function canonicalFigure(figureId: string): string {
+  return LEGACY_FIGURE_IDS[figureId] ?? figureId
+}
+
+export function isCatalogFigure(figureId: string) {
+  const id = canonicalFigure(figureId)
+  return (FIGURE_IDS as readonly string[]).includes(id) && id !== "none"
+}
+
+/** Canal à bornes parallèles : l'ancien nom « tunnel droit » reste compris. */
+export function isChannelFigure(figureId: string) {
+  return canonicalFigure(figureId) === "canal"
+}
+
+/** Noms à interroger ensemble (actuel + hérités) pour une lecture ou un filtre. */
+export function figureMatchIds(figureId: string): string[] {
+  const canon = canonicalFigure(figureId)
+  const out = [canon]
+  for (const [legacy, current] of Object.entries(LEGACY_FIGURE_IDS)) {
+    if (current === canon && !out.includes(legacy)) out.push(legacy)
+  }
+  if (figureId && !out.includes(figureId)) out.unshift(figureId)
+  return out
+}
 
 export type FigureDescription = {
   figure: string
@@ -197,27 +227,33 @@ export type FigureDescription = {
 }
 
 export function labelOf(figureId: string) {
-  return FIGURE_LABELS[figureId as FigureId] ?? figureId
+  const id = canonicalFigure(figureId)
+  return FIGURE_LABELS[id as FigureId] ?? figureId
 }
 
 export function kindOf(figureId: string): FigureKind {
-  return FIGURE_KINDS[figureId as FigureId] ?? "range"
+  const id = canonicalFigure(figureId)
+  return FIGURE_KINDS[id as FigureId] ?? "range"
 }
 
 export function signalOf(figureId: string) {
-  return FIGURE_SIGNALS[figureId as FigureId] ?? "—"
+  const id = canonicalFigure(figureId)
+  return FIGURE_SIGNALS[id as FigureId] ?? "—"
 }
 
 export function targetBasis(figureId: string) {
-  return FIGURE_TARGETS[figureId as FigureId] ?? "—"
+  const id = canonicalFigure(figureId)
+  return FIGURE_TARGETS[id as FigureId] ?? "—"
 }
 
 export function flipOf(figureId: string) {
-  return FLIP_MAP[figureId as FigureId] ?? figureId
+  const id = canonicalFigure(figureId)
+  return FLIP_MAP[id as FigureId] ?? figureId
 }
 
 export function classIndex(figureId: string) {
-  const index = MODEL_CLASSES.indexOf(figureId as FigureId)
+  const id = canonicalFigure(figureId)
+  const index = MODEL_CLASSES.indexOf(id as FigureId)
   return index >= 0 ? index : MODEL_CLASSES.indexOf("none")
 }
 
@@ -227,8 +263,11 @@ export function classAt(index: number): FigureId {
 }
 
 export function describe(figureId: string): FigureDescription {
+  const id = FIGURE_LABELS[canonicalFigure(figureId) as FigureId]
+    ? canonicalFigure(figureId)
+    : figureId
   return {
-    figure: figureId,
+    figure: id,
     label: labelOf(figureId),
     kind: kindOf(figureId),
     signal: signalOf(figureId),

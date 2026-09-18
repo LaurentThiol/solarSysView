@@ -538,10 +538,10 @@ def _classify_bounds(
         return None
     if up_flat and low_flat:
         return "rectangle", "any"
-    # Bornes parallèles et inclinées : tunnel droit (canal à largeur constante).
+    # Bornes parallèles et inclinées : canal à largeur constante (pas un rectangle plat).
     parallel = abs(up - low) <= max(2 * flat, 0.3 * (abs(up) + abs(low)) / 2)
     if parallel:
-        return "tunnel_droit", "any"
+        return "canal", "any"
     return None
 
 
@@ -557,7 +557,7 @@ def _pivot_groups(pivots: list[dict[str, Any]], sizes: Sequence[int] = (6, 5, 4)
 
 
 def detect_bounds(ctx: Context) -> list[dict[str, Any]]:
-    """Figures à deux bornes : biseaux, triangles, rectangle, tunnel droit, broadening top.
+    """Figures à deux bornes : biseaux, triangles, rectangle, canal, broadening top.
 
     Les bornes sont ajustées sur un groupe de pivots *clos*, et la cassure est
     cherchée après son dernier pivot : la jambe de sortie ne contamine donc pas
@@ -949,7 +949,7 @@ SPECIFICITY: dict[str, int] = {
     "broadening_top": 3,
     "double_top": 2,
     "double_bottom": 2,
-    "tunnel_droit": 2,
+    "canal": 2,
     "rectangle": 1,
     "none": 0,
 }

@@ -19,6 +19,7 @@ import {
   FIGURE_IDS,
   PIVOT_ROLES,
   PIVOT_ROLE_LABELS,
+  isCatalogFigure,
   labelOf,
   type PivotRole,
 } from "@/lib/chartisme/catalog"
@@ -153,7 +154,7 @@ export function LabelAtelier({
 
   async function save() {
     if (!curve || !window || !effectiveFigure) return
-    const isFree = !FIGURE_IDS.includes(effectiveFigure as (typeof FIGURE_IDS)[number])
+    const isFree = !isCatalogFigure(effectiveFigure)
     if (isFree && !classes.includes(effectiveFigure)) {
       const next = [...classes, effectiveFigure]
       setClasses(next)
@@ -296,7 +297,7 @@ export function LabelAtelier({
                     <span className="flex flex-1 text-left">
                       {figure === FREE_CLASS ? (
                         "+ nouvelle classe libre…"
-                      ) : FIGURE_IDS.includes(figure as (typeof FIGURE_IDS)[number]) ? (
+                      ) : isCatalogFigure(figure) ? (
                         <FigureName figure={figure} label={labelOf(figure)} />
                       ) : (
                         `${figure} (classe libre)`
@@ -306,7 +307,7 @@ export function LabelAtelier({
                   <SelectContent className="min-w-56">
                     {allClasses.map((id) => (
                       <SelectItem key={id} value={id}>
-                        {FIGURE_IDS.includes(id as (typeof FIGURE_IDS)[number]) ? (
+                        {isCatalogFigure(id) ? (
                           <FigureName figure={id} label={labelOf(id)} />
                         ) : (
                           `${id} (classe libre)`

@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
-from synchro.chartisme.catalog import FIGURE_IDS
+from synchro.chartisme.catalog import FIGURE_IDS, canonical_figure
 from synchro.chartisme.export import CHARTISME_DIR
 from synchro.chartisme.figures import detect_figures
 from synchro.chartisme.retrieval import build_index, classify_by_neighbours
@@ -475,7 +475,7 @@ def load(name: str, *, directory: Path | None = None) -> Any | None:
         return None
     payload = torch.load(path, map_location="cpu", weights_only=False)
     config = payload.get("config") or {}
-    classes = config.get("classes") or list(FIGURE_IDS)
+    classes = [canonical_figure(c) for c in (config.get("classes") or list(FIGURE_IDS))]
     # L'architecture est relue du fichier, pas des constantes du module : des
     # poids entraînés avec une autre profondeur doivent rester chargeables, et
     # une valeur par défaut qui bouge ne doit pas les rendre illisibles.

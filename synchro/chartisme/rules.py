@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import Any, Sequence
 from uuid import uuid4
 
-from synchro.chartisme.catalog import FIGURE_IDS, label_of
+from synchro.chartisme.catalog import FIGURE_IDS, canonical_figure, label_of
 
 ACTION_TYPES = ("tag", "alert", "note", "hypothesize", "watch")
 BREAKOUT_STATES = ("any", "confirmed", "fake", "pending")
@@ -39,7 +39,7 @@ def _clean_list(raw: Any, allowed: Sequence[str] | None = None) -> list[str]:
     items = raw if isinstance(raw, (list, tuple)) else []
     out: list[str] = []
     for item in items:
-        text = str(item).strip()
+        text = canonical_figure(str(item).strip()) if allowed is not None else str(item).strip()
         if not text or (allowed is not None and text not in allowed):
             continue
         if text not in out:
@@ -87,7 +87,7 @@ def normalize_condition(raw: dict[str, Any] | None) -> dict[str, Any]:
         "min_activity_ratio": _optional_float(src.get("min_activity_ratio")),
         "alongside": _one_of(src.get("alongside"), ALONGSIDE_MODES, "any"),
         "alongside_curve": (str(src.get("alongside_curve") or "").strip() or None),
-        "alongside_figure": (str(src.get("alongside_figure") or "").strip() or None),
+        "alongside_figure": (canonical_figure(str(src.get("alongside_figure") or "").strip()) or None),
         "alongside_direction": _one_of(src.get("alongside_direction"), DIRECTIONS, "any"),
         # Tolérance en tirages autour du chevauchement : 0 exige que les deux
         # fenêtres se croisent. Un cycle transitoire ne frappe pas toutes les
@@ -136,7 +136,7 @@ def match_condition(condition: dict[str, Any], state: dict[str, Any]) -> bool:
     fond, jour de tirage.
     """
     cond = normalize_condition(condition)
-    figure = str(state.get("figure") or "")
+    figure = canonical_figure(str(state.get("figure") or ""))
     figures = {figure} if figure else set()
     for wanted in cond["figures"]:
         if wanted not in figures:
@@ -199,7 +199,7 @@ def _alongside_matches(cond: dict[str, Any], state: dict[str, Any]) -> list[dict
             continue
         if cond["alongside_curve"] and str(other.get("curve_id") or "") != cond["alongside_curve"]:
             continue
-        if cond["alongside_figure"] and str(other.get("figure") or "") != cond["alongside_figure"]:
+        if cond["alongside_figure"] and canonical_figure(str(other.get("figure") or "")) != cond["alongside_figure"]:
             continue
         if (
             cond["alongside_direction"] != "any"

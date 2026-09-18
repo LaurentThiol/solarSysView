@@ -15,7 +15,7 @@ import math
 import random
 from typing import Any, Callable, Sequence
 
-from synchro.chartisme.catalog import FIGURE_IDS, flip_of
+from synchro.chartisme.catalog import FIGURE_IDS, canonical_figure, flip_of
 from synchro.chartisme.svgpath import resample_values
 
 DEFAULT_LENGTH = 60
@@ -215,7 +215,7 @@ def _rectangle(rng: random.Random, count: int) -> list[float]:
     )
 
 
-def _tunnel_droit(rng: random.Random, count: int) -> list[float]:
+def _canal(rng: random.Random, count: int) -> list[float]:
     """Canal à bornes parallèles, inclinées : ce n'est pas un rectangle plat."""
     h = rng.uniform(20.0, 36.0)
     slope = rng.uniform(0.55, 1.2) * (1 if rng.random() < 0.5 else -1)
@@ -325,7 +325,7 @@ GENERATORS: dict[str, Callable[[random.Random, int], list[float]]] = {
     "triangle_asc": _triangle_asc,
     "triangle_desc": _triangle_desc,
     "rectangle": _rectangle,
-    "tunnel_droit": _tunnel_droit,
+    "canal": _canal,
     "flag": lambda rng, n: _flag_like(rng, n, pennant=False),
     "pennant": lambda rng, n: _flag_like(rng, n, pennant=True),
     "cup_handle": _cup_handle,
@@ -426,6 +426,7 @@ def make_sample(
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Une fenêtre synthétique étiquetée, avec son activité."""
+    figure = canonical_figure(figure)
     generator = GENERATORS.get(figure)
     if generator is None:
         raise ValueError(f"Figure inconnue: {figure}")

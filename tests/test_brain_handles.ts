@@ -48,8 +48,12 @@ test("handles parse @rsi, @sum.rsi, @delay:7.rsi, @ete alias, citation", () => {
 
   const tunnel = parseHandle("@tunnel")
   assert.equal(tunnel.error, null)
-  assert.equal(tunnel.entry?.id, "chartisme/tunnel_droit")
-  assert.equal(catalogEntry("chartisme/tunnel_droit")?.label, "Tunnel droit")
+  assert.equal(tunnel.entry?.id, "chartisme/canal")
+  const canal = parseHandle("@canal")
+  assert.equal(canal.error, null)
+  assert.equal(canal.entry?.id, "chartisme/canal")
+  assert.equal(catalogEntry("chartisme/tunnel_droit")?.label, "Canal")
+  assert.equal(catalogEntry("chartisme/canal")?.label, "Canal")
 
   const cited = parseHandle("@rsi#1842")
   assert.equal(cited.readingId, 1842)

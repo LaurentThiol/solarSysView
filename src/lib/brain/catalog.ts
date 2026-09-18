@@ -1,6 +1,6 @@
 import { specialistCatalogEntry, specialistEntries } from "@/lib/brain/specialists"
 import { VARIABLE_LABELS, VARIABLE_NAMES, type VariableName } from "@/lib/analysis"
-import { FIGURE_IDS, FIGURE_LABELS, type FigureId } from "@/lib/chartisme/catalog"
+import { FIGURE_IDS, FIGURE_LABELS, canonicalFigure, type FigureId } from "@/lib/chartisme/catalog"
 import { MOTIF_IDS, MOTIF_LABELS } from "@/lib/morpho/lexicon"
 
 export type BrainLab = "analyse" | "chartisme" | "harmo" | "morpho" | "combinaisons" | "specialist"
@@ -226,7 +226,7 @@ const FIGURE_ALIASES: Partial<Record<FigureId, string[]>> = {
   double_bottom: ["db"],
   triple_top: ["tt"],
   triple_bottom: ["tb"],
-  tunnel_droit: ["canal", "channel", "tunel", "tunnel"],
+  canal: ["channel", "tunel", "tunnel", "tunnel_droit"],
 }
 
 function chartismeFigures(): CatalogEntry[] {
@@ -381,7 +381,13 @@ export const BRAIN_LAB_LABELS: Record<BrainLab, string> = {
 const BY_ID = new Map(BRAIN_CATALOG.map((entry) => [entry.id, entry]))
 
 export function catalogEntry(id: string): CatalogEntry | undefined {
-  return BY_ID.get(id) ?? specialistCatalogEntry(id)
+  const hit = BY_ID.get(id) ?? specialistCatalogEntry(id)
+  if (hit) return hit
+  if (id.startsWith("chartisme/")) {
+    const figure = canonicalFigure(id.slice("chartisme/".length))
+    return BY_ID.get(`chartisme/${figure}`)
+  }
+  return undefined
 }
 
 export function catalogByHandle(handle: string, activeLab?: BrainLab | null): CatalogEntry[] {

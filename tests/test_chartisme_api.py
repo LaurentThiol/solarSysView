@@ -82,7 +82,7 @@ def test_catalog_serves_the_reference_table() -> None:
     assert body["ok"] is True
     ids = {row["figure"] for row in body["figures"]}
     assert len(body["figures"]) == 18
-    assert {"ete", "ete_inv", "diamond", "broadening_top", "tunnel_droit"} <= ids
+    assert {"ete", "ete_inv", "diamond", "broadening_top", "canal"} <= ids
     assert "none" not in ids
     for row in body["figures"]:
         assert row["label"] and row["kind"] and row["signal"] and row["target"]

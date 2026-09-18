@@ -215,16 +215,17 @@ def test_min_confidence_filters() -> None:
     assert all(hit["confidence"] >= 0.9 for hit in strict)
 
 
-def test_tunnel_droit_has_parallel_bounds() -> None:
-    """Le canal incliné n'est plus un trou : rectangle reste plat, tunnel a une pente."""
-    values, activity = _clean("tunnel_droit", seed=1)
+def test_canal_has_parallel_bounds() -> None:
+    """Le canal incliné n'est plus un trou : rectangle reste plat, canal a une pente."""
+    values, activity = _clean("canal", seed=1)
     hits = detect_figures(values, activity=activity, min_confidence=0.0)
     names = [hit["figure"] for hit in hits]
-    assert "tunnel_droit" in names[:3]
-    hit = next(hit for hit in hits if hit["figure"] == "tunnel_droit")
+    assert "canal" in names[:3]
+    hit = next(hit for hit in hits if hit["figure"] == "canal")
     roles = {guide["role"] for guide in hit["guides"]}
     assert {"upper", "lower"} <= roles
     assert hit["kind"] == "continuation"
+    assert hit["label"] == "Canal"
 
 
 def test_dedupe_keeps_one_reading_per_figure_and_zone() -> None:

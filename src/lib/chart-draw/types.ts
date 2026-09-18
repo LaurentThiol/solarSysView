@@ -30,6 +30,12 @@ export type SketchPoint = {
   actual: number
 }
 
+/** Deux rails parallèles autour de la série : le dessin d'un canal. */
+export type SketchBand = {
+  upper: SketchPoint[]
+  lower: SketchPoint[]
+}
+
 export type SketchReading = {
   figure: string
   label: string
@@ -45,6 +51,7 @@ export type ChartSketch = {
   start: ChartAnchor
   end: ChartAnchor
   points: SketchPoint[]
+  band?: SketchBand
   reading: SketchReading | null
   createdAt: string
 }
@@ -84,6 +91,17 @@ export const DRAFT_KEY = "drawDraft"
 
 export function sketchDataKey(id: string) {
   return `${SKETCH_KEY_PREFIX}${id}`
+}
+
+export function sketchBandKey(
+  id: string,
+  rail: "upper" | "lower" | "base" | "span"
+) {
+  return `${SKETCH_KEY_PREFIX}${id}_${rail}`
+}
+
+export function draftBandKey(rail: "upper" | "lower" | "base" | "span") {
+  return `${DRAFT_KEY}_${rail}`
 }
 
 export function isSketchDataKey(key: string) {

@@ -1,3 +1,5 @@
+import { canonicalFigure } from "../chartisme/catalog"
+
 import { CHART_DRAW_HOSTS, type ChartSketch } from "./types"
 
 export const SKETCHES_KEY = "synchro.chart-draw.v1"
@@ -34,7 +36,10 @@ function isSketch(row: unknown): row is ChartSketch {
 export function loadSketches(): ChartSketch[] {
   const raw = readJson<unknown[]>(SKETCHES_KEY, [])
   if (!Array.isArray(raw)) return []
-  return raw.filter(isSketch)
+  return raw.filter(isSketch).map((sketch) => ({
+    ...sketch,
+    figure: canonicalFigure(sketch.figure),
+  }))
 }
 
 export function saveSketches(sketches: ChartSketch[]) {

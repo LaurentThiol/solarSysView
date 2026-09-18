@@ -11,6 +11,7 @@ from synchro.chartisme.catalog import (
     PIVOT_ROLES,
     PIVOT_ROLE_LABELS,
     catalog,
+    canonical_figure,
     class_at,
     class_index,
     describe,
@@ -26,7 +27,8 @@ def test_every_figure_has_a_full_row() -> None:
     """18 figures plus `none`, chacune avec type, signal et objectif."""
     assert len(FIGURE_IDS) == 19
     assert "none" in FIGURE_IDS
-    assert "tunnel_droit" in FIGURE_IDS
+    assert "canal" in FIGURE_IDS
+    assert "tunnel_droit" not in FIGURE_IDS
     for figure in FIGURE_IDS:
         assert FIGURE_LABELS[figure]
         assert FIGURE_KINDS[figure]
@@ -52,6 +54,7 @@ def test_table_matches_the_reference() -> None:
     assert kind_of("pennant") == "continuation"
     assert kind_of("cup_handle") == "reversal_up"
     assert kind_of("broadening_top") == "reversal_down"
+    assert kind_of("canal") == "continuation"
     assert kind_of("tunnel_droit") == "continuation"
 
     assert "cou" in signal_of("ete")
@@ -71,7 +74,8 @@ def test_flip_map_is_an_involution() -> None:
     assert flip_of("triangle_asc") == "triangle_desc"
     # Un rectangle retourné reste un rectangle.
     assert flip_of("rectangle") == "rectangle"
-    assert flip_of("tunnel_droit") == "tunnel_droit"
+    assert flip_of("canal") == "canal"
+    assert flip_of("tunnel_droit") == "canal"
     assert flip_of("none") == "none"
 
 
@@ -121,6 +125,15 @@ def test_catalog_lists_the_eighteen_figures() -> None:
     rows = catalog()
     assert len(rows) == 18
     assert {row["figure"] for row in rows} == set(FIGURE_IDS) - {"none"}
-    assert any(row["figure"] == "tunnel_droit" and row["label"] == "Tunnel droit" for row in rows)
+    assert any(row["figure"] == "canal" and row["label"] == "Canal" for row in rows)
     for row in rows:
         assert set(row) == {"figure", "label", "kind", "signal", "target"}
+
+
+def test_legacy_tunnel_droit_maps_to_canal() -> None:
+    """L'ancien nom reste compris : même index de logits, libellé Canal."""
+    assert canonical_figure("tunnel_droit") == "canal"
+    assert label_of("tunnel_droit") == "Canal"
+    assert class_index("tunnel_droit") == class_index("canal")
+    assert describe("tunnel_droit")["figure"] == "canal"
+    assert describe("tunnel_droit")["label"] == "Canal"
