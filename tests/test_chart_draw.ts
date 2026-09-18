@@ -7,12 +7,17 @@ import {
 } from "../src/lib/chart-draw/compact"
 import {
   DEFAULT_MAGNET_RADIUS_PX,
+  canFreePlaceArrival,
   extremaIndices,
+  invertLinear,
+  isDemagnetizeModifier,
   isMagneted,
   nearestSample,
+  nearestSampleByX,
   pixelDistance,
   readTooltipIndex,
   snapIndexToExtrema,
+  valueFromPixelY,
 } from "../src/lib/chart-draw/magnet"
 import {
   buildSketchPoints,
@@ -72,6 +77,48 @@ test("magnet radius is inclusive, missing pixels count as snapped", () => {
   assert.equal(pixelDistance({ x: 0, y: 0 }, { x: 3, y: 4 }), 5)
 })
 
+test("Alt demagnetizes only the free-segment arrival", () => {
+  assert.equal(isDemagnetizeModifier({ altKey: true }), true)
+  assert.equal(isDemagnetizeModifier({ altKey: false }), false)
+  assert.equal(isDemagnetizeModifier({}), false)
+  assert.equal(canFreePlaceArrival("free", true, true), true)
+  assert.equal(canFreePlaceArrival("free", false, true), false)
+  assert.equal(canFreePlaceArrival("ete", true, true), false)
+  assert.equal(canFreePlaceArrival("canal", true, true), false)
+  assert.equal(canFreePlaceArrival("free", true, false), false)
+})
+
+test("off-curve placement keeps the bar under the cursor, not the 2D magnet", () => {
+  const samples = [
+    { index: 0, px: 0, py: 80 },
+    { index: 4, px: 40, py: 10 },
+    { index: 9, px: 90, py: 80 },
+  ]
+  const magnet = nearestSample(samples, { x: 50, y: 12 })
+  assert.equal(magnet?.index, 4)
+  const byX = nearestSampleByX(samples, 50)
+  assert.equal(byX?.index, 4)
+  const above = nearestSampleByX(samples, 88)
+  assert.equal(above?.index, 9)
+  const twoD = nearestSample(samples, { x: 88, y: 12 })
+  assert.equal(twoD?.index, 4)
+})
+
+test("linear Y invert reads a value above the series and extrapolates", () => {
+  const at = (value: number) => 100 - value
+  assert.equal(invertLinear(at, 50, 0, 100), 50)
+  assert.equal(invertLinear(at, 0, 0, 100), 100)
+  assert.equal(invertLinear(at, 120, 0, 100), -20)
+  const samples = [
+    { index: 0, px: 0, py: 80 },
+    { index: 1, px: 10, py: 20 },
+  ]
+  assert.equal(valueFromPixelY(samples, [10, 40], 80), 10)
+  assert.equal(valueFromPixelY(samples, [10, 40], 20), 40)
+  assert.equal(valueFromPixelY(samples, [10, 40], 50), 25)
+  assert.equal(valueFromPixelY(samples, [10, 40], -10), 55)
+})
+
 test("tooltip index accepts Recharts number or numeric string", () => {
   assert.equal(readTooltipIndex(4), 4)
   assert.equal(readTooltipIndex("12"), 12)
@@ -128,6 +175,51 @@ test("libre drawing is a straight line between the two anchors", () => {
   assert.equal(trough, Math.min(...values))
   assert.ok(synthCurve("canal").length > 8)
   assert.ok(synthCurve("tunnel_droit").length > 8)
+})
+
+test("a free arrival can sit off the series while the start stays on it", () => {
+  const values = [5, 6, 7, 8, 9, 10, 11, 12, 11, 10]
+  const dates = values.map((_, i) => `2026-02-${String(i + 1).padStart(2, "0")}`)
+  const off = buildSketchPoints({
+    figure: FREE_FIGURE,
+    values,
+    dates,
+    from: 1,
+    to: 8,
+    fromActual: 6,
+    toActual: 40,
+  })
+  assert.equal(off[0].actual, 6)
+  assert.equal(off[off.length - 1].actual, 40)
+  for (let i = 0; i < off.length; i += 1) {
+    const expected = 6 + (40 - 6) * (i / 7)
+    assert.ok(Math.abs(off[i].actual - expected) < 1e-9)
+  }
+  const reversed = buildSketchPoints({
+    figure: FREE_FIGURE,
+    values,
+    dates,
+    from: 8,
+    to: 1,
+    fromActual: 40,
+    toActual: 6,
+  })
+  assert.deepEqual(
+    reversed.map((point) => point.actual),
+    off.map((point) => point.actual)
+  )
+  const canal = buildSketchGeometry({
+    figure: "canal",
+    values,
+    dates,
+    from: 0,
+    to: values.length - 1,
+    fromActual: 6,
+    toActual: 40,
+  })
+  assert.ok(canal.band)
+  const lastUpper = canal.band?.upper.at(-1)?.actual
+  assert.notEqual(lastUpper, 40)
 })
 
 test("the chartist table lists canal among 18 figures with a template", () => {

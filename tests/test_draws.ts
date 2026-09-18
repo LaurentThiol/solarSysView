@@ -6,11 +6,13 @@ import {
   formatJackpot,
   formatRank1Step,
   formatWinnerTotals,
+  fromRelativeRange,
   meanPrizeByRank,
   parsePrizeTiers,
   prizeAtRank,
   rank1WinnerStep,
   rankWinnersTotal,
+  relativeToRange,
   toCsv,
   toDrawSeries,
   totalWinners,
@@ -124,4 +126,14 @@ test("rank1WinnerStep is 0 with a jackpot winner and +1 on a rollover", () => {
     series.map((point) => point.rank1),
     [1, 0, null]
   )
+})
+
+test("relative range is reversible for off-curve Y on the combined chart", () => {
+  const range = { min: 15, max: 240 }
+  assert.equal(relativeToRange(15, range), 0)
+  assert.equal(relativeToRange(240, range), 100)
+  assert.equal(fromRelativeRange(0, range), 15)
+  assert.equal(fromRelativeRange(100, range), 240)
+  const mid = relativeToRange(127.5, range)
+  assert.ok(Math.abs(fromRelativeRange(mid, range) - 127.5) < 1e-12)
 })

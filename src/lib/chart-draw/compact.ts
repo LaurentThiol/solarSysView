@@ -71,6 +71,7 @@ export function compactLive(live: LiveCursor | null) {
     index: live.index,
     actual: roundish(live.actual),
     snapped: live.snapped,
+    offCurve: live.offCurve,
     kind: live.kind,
     distancePx: roundish(live.distancePx, 1),
     seriesKey: live.seriesKey,

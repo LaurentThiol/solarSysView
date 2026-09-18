@@ -14,7 +14,7 @@ export default function EvolutionPage() {
   return (
     <PageShell
       title="Évolution"
-      subtitle="Courbe, dessin libre chartiste (aimant + gabarit), pair/impair, forme de la grille, fréquences et retards. Accès admin, comme les services."
+      subtitle="Courbe, dessin libre chartiste (aimant, Alt pour l’arrivée hors courbe), pair/impair, forme de la grille, fréquences et retards. Accès admin, comme les services."
     >
       <EvolutionPanel />
     </PageShell>

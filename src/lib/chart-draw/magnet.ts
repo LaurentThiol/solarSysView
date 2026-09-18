@@ -1,6 +1,6 @@
 import { swingPivots } from "../chartisme/pivots"
 
-import { type MagnetKind } from "./types"
+import { FREE_FIGURE, type MagnetKind } from "./types"
 
 export const DEFAULT_MAGNET_RADIUS_PX = 28
 export const MAGNET_EXTREMA_BARS = 2
@@ -23,6 +23,20 @@ export function pixelDistance(from: PixelPoint | null | undefined, to: PixelPoin
 export function isMagneted(distancePx: number | null, radiusPx = DEFAULT_MAGNET_RADIUS_PX) {
   if (distancePx == null) return true
   return distancePx <= radiusPx
+}
+
+/** Alt / Option : lâcher l’aimant. Pas Ctrl (clic droit macOS, raccourcis navigateur). */
+export function isDemagnetizeModifier(event: { altKey?: boolean }): boolean {
+  return Boolean(event.altKey)
+}
+
+/** Seulement l’arrivée d’un segment libre : le départ reste un ancrage réel. */
+export function canFreePlaceArrival(
+  figure: string,
+  hasStart: boolean,
+  demagnetize: boolean
+) {
+  return demagnetize && hasStart && (figure === FREE_FIGURE || figure === "free")
 }
 
 /** Indices des pivots de swing : sommets et creux chartistes, pas tous les dents. */
@@ -77,6 +91,62 @@ export function nearestSample(
   return { index: best.index, distance: bestD }
 }
 
+/** Barre sous le curseur : l’abscisse reste un tirage, même hors courbe. */
+export function nearestSampleByX(
+  samples: PixelSample[],
+  pointerX: number
+): { index: number; distanceX: number } | null {
+  if (!samples.length || !Number.isFinite(pointerX)) return null
+  let best = samples[0]
+  let bestD = Math.abs(pointerX - best.px)
+  for (let i = 1; i < samples.length; i += 1) {
+    const dist = Math.abs(pointerX - samples[i].px)
+    if (dist < bestD) {
+      best = samples[i]
+      bestD = dist
+    }
+  }
+  return { index: best.index, distanceX: bestD }
+}
+
+/**
+ * Inverse une échelle linéaire : `at(lo)` et `at(hi)` sont les pixels des bornes.
+ * Extrapolé si `pixel` sort de l’intervalle (clic au-dessus / en dessous de la série).
+ */
+export function invertLinear(
+  at: (value: number) => number,
+  pixel: number,
+  lo: number,
+  hi: number
+): number | null {
+  if (![pixel, lo, hi].every(Number.isFinite)) return null
+  const yLo = at(lo)
+  const yHi = at(hi)
+  if (![yLo, yHi].every(Number.isFinite)) return null
+  if (Math.abs(yHi - yLo) < 1e-9) return (lo + hi) / 2
+  return lo + ((pixel - yLo) / (yHi - yLo)) * (hi - lo)
+}
+
+/** Relit Y depuis deux échantillons d’échelle linéaire (pixels du même espace). */
+export function valueFromPixelY(
+  samples: PixelSample[],
+  valuesAtIndex: number[],
+  pixelY: number
+): number | null {
+  if (!samples.length || !Number.isFinite(pixelY)) return null
+  let minS = samples[0]
+  let maxS = samples[0]
+  for (const sample of samples) {
+    if (sample.py < minS.py) minS = sample
+    if (sample.py > maxS.py) maxS = sample
+  }
+  const ya = valuesAtIndex[minS.index]
+  const yb = valuesAtIndex[maxS.index]
+  if (![ya, yb].every(Number.isFinite)) return null
+  if (Math.abs(maxS.py - minS.py) < 1e-6) return ya
+  return ya + ((pixelY - minS.py) / (maxS.py - minS.py)) * (yb - ya)
+}
+
 export function readTooltipIndex(raw: unknown): number | null {
   if (typeof raw === "number" && Number.isInteger(raw) && raw >= 0) return raw
   if (typeof raw === "string" && /^\d+$/.test(raw)) return Number(raw)
@@ -86,6 +156,7 @@ export function readTooltipIndex(raw: unknown): number | null {
 export type AxisScales = {
   x: ((value: unknown) => number) | null
   y: ((value: unknown) => number) | null
+  invertY?: ((pixel: number) => number) | null
 }
 
 /** Recharts passe encore xAxisMap / yAxisMap à `Customized` ; on ne s'y fie pas trop. */

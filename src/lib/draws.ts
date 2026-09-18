@@ -697,6 +697,12 @@ export function relativeToRange(value: number, range: ValueRange): number {
   return ((value - range.min) / span) * 100
 }
 
+export function fromRelativeRange(pct: number, range: ValueRange): number {
+  const span = range.max - range.min
+  if (span <= 0) return range.min
+  return range.min + (pct / 100) * span
+}
+
 export function rangeFromValues(values: number[]): ValueRange | null {
   if (values.length === 0) return null
   const min = Math.min(...values)

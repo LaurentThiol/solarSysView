@@ -80,14 +80,21 @@ export function straightSegment(
   values: number[],
   dates: string[],
   from: number,
-  to: number
+  to: number,
+  actuals?: { from?: number; to?: number }
 ): SketchPoint[] {
   const i0 = Math.min(from, to)
   const i1 = Math.max(from, to)
   if (i0 < 0 || i1 >= values.length || i1 < i0) return []
-  // Même droite quel que soit l’ordre des clics : Y gauche → Y droite.
-  const y0 = values[i0]
-  const y1 = values[i1]
+  const fromActual = actuals?.from ?? values[from]
+  const toActual = actuals?.to ?? values[to]
+  const yAt = (index: number) => {
+    if (index === from && Number.isFinite(fromActual)) return fromActual
+    if (index === to && Number.isFinite(toActual)) return toActual
+    return values[index]
+  }
+  const y0 = yAt(i0)
+  const y1 = yAt(i1)
   const span = i1 - i0
   const points: SketchPoint[] = []
   for (let i = i0; i <= i1; i += 1) {
@@ -197,12 +204,18 @@ export function buildSketchGeometry(options: {
   dates: string[]
   from: number
   to: number
+  fromActual?: number
+  toActual?: number
 }): SketchGeometry {
-  const { figure, values, dates, from, to } = options
+  const { figure, values, dates, from, to, fromActual, toActual } = options
   if (isChannelFigure(figure)) return fitChannelBand(values, dates, from, to)
-  if (figure === FREE_FIGURE) return { points: straightSegment(values, dates, from, to) }
+  const actuals =
+    fromActual != null || toActual != null ? { from: fromActual, to: toActual } : undefined
+  if (figure === FREE_FIGURE) {
+    return { points: straightSegment(values, dates, from, to, actuals) }
+  }
   const template = synthCurve(figure)
-  if (!template.length) return { points: straightSegment(values, dates, from, to) }
+  if (!template.length) return { points: straightSegment(values, dates, from, to, actuals) }
   return { points: fitTemplateToWindow(template, values, dates, from, to) }
 }
 
@@ -212,6 +225,8 @@ export function buildSketchPoints(options: {
   dates: string[]
   from: number
   to: number
+  fromActual?: number
+  toActual?: number
 }): SketchPoint[] {
   return buildSketchGeometry(options).points
 }

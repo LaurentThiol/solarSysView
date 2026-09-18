@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react"
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import {
   Area,
   CartesianGrid,
@@ -45,11 +45,16 @@ import {
 } from "@/lib/draw-overlays"
 import {
   DRAFT_KEY,
+  FREE_FIGURE,
   buildSketchGeometry,
+  canFreePlaceArrival,
   channelLabel,
   extremaIndices,
+  invertLinear,
+  isDemagnetizeModifier,
   isMagneted,
   nearestSample,
+  nearestSampleByX,
   newSketchId,
   pixelDistance,
   readTooltipIndex,
@@ -58,6 +63,7 @@ import {
   resolveSketchBand,
   sketchDataKey,
   snapIndexToExtrema,
+  valueFromPixelY,
   windowTooShort,
   type AxisScales,
   type ChartAnchor,
@@ -72,6 +78,7 @@ import {
   formatDrawDate,
   formatRank1Step,
   formatShortDate,
+  fromRelativeRange,
   pearsonCorrelation,
   rangeFromValues,
   relativeToRange,
@@ -362,6 +369,16 @@ function plottedOf(
   return actual
 }
 
+function actualFromPlotted(
+  key: SeriesKey,
+  plotted: number,
+  ranges: { numbers: ValueRange; stars: ValueRange }
+) {
+  if (key === "relNumbers") return fromRelativeRange(plotted, ranges.numbers)
+  if (key === "relStars") return fromRelativeRange(plotted, ranges.stars)
+  return plotted
+}
+
 /** Les échelles relatives sont bornées 0–100 : un rail hors domaine disparaît. */
 function clampPlotted(key: SeriesKey, value: number) {
   if (key === "relNumbers" || key === "relStars") {
@@ -392,7 +409,14 @@ function writeBandFields(
 
 type ChartPointerState = MouseHandlerDataParam
 
-function pointerPixel(state: ChartPointerState, event?: MouseEvent<SVGGraphicsElement>) {
+type PointerLike = {
+  clientX: number
+  clientY: number
+  currentTarget: EventTarget | null
+  altKey?: boolean
+}
+
+function pointerPixel(state: ChartPointerState, event?: PointerLike) {
   if (event) return { x: event.clientX, y: event.clientY }
   const at = state.activeCoordinate
   if (at && Number.isFinite(at.x) && Number.isFinite(at.y)) {
@@ -401,10 +425,12 @@ function pointerPixel(state: ChartPointerState, event?: MouseEvent<SVGGraphicsEl
   return null
 }
 
-function chartSvg(event: MouseEvent<SVGGraphicsElement>): SVGSVGElement | null {
+function chartSvg(event: PointerLike): SVGSVGElement | null {
   const node = event.currentTarget
   if (node instanceof SVGSVGElement) return node
-  return node.ownerSVGElement ?? node.querySelector("svg")
+  if (node instanceof SVGElement) return node.ownerSVGElement
+  if (node instanceof Element) return node.querySelector("svg")
+  return null
 }
 
 function svgToClient(svg: SVGSVGElement, x: number, y: number) {
@@ -416,6 +442,37 @@ function svgToClient(svg: SVGSVGElement, x: number, y: number) {
   pt.y = y
   const screen = pt.matrixTransform(ctm)
   return { x: screen.x, y: screen.y }
+}
+
+function clientToSvg(svg: SVGSVGElement, clientX: number, clientY: number) {
+  if (typeof svg.createSVGPoint !== "function") return { x: clientX, y: clientY }
+  const ctm = svg.getScreenCTM()
+  if (!ctm) return { x: clientX, y: clientY }
+  const pt = svg.createSVGPoint()
+  pt.x = clientX
+  pt.y = clientY
+  const local = pt.matrixTransform(ctm.inverse())
+  return { x: local.x, y: local.y }
+}
+
+function scaleInvertY(
+  yScale: ((value: number) => number | undefined) | null | undefined,
+  pixel: number
+): number | null {
+  if (!yScale) return null
+  const scale = yScale as unknown as {
+    invert?: (n: number) => unknown
+    domain?: () => unknown[]
+  }
+  if (typeof scale.invert === "function") {
+    const value = Number(scale.invert(pixel))
+    if (Number.isFinite(value)) return value
+  }
+  const domain = typeof scale.domain === "function" ? scale.domain() : null
+  const lo = domain && Number.isFinite(Number(domain[0])) ? Number(domain[0]) : null
+  const hi = domain && Number.isFinite(Number(domain[1])) ? Number(domain[1]) : null
+  if (lo == null || hi == null) return null
+  return invertLinear((value) => yScale(value) ?? Number.NaN, pixel, lo, hi)
 }
 
 function MagnetHalo({
@@ -435,6 +492,7 @@ function MagnetHalo({
     onScales({
       x: xScale ? (value) => xScale(value, { position: "middle" }) ?? Number.NaN : null,
       y: yScale ? (value) => yScale(value) ?? Number.NaN : null,
+      invertY: yScale ? (pixel) => scaleInvertY(yScale, pixel) ?? Number.NaN : null,
     })
   }, [xScale, yScale, onScales])
   if (!live || plotted == null || !xScale || !yScale) return null
@@ -679,16 +737,62 @@ function SeriesTooltip({
   )
 }
 
+function placementHint(options: {
+  live: LiveCursor | null
+  figure: string
+  startIndex: number | null
+}) {
+  const { live, figure, startIndex } = options
+  if (!live) return "Survole la courbe."
+  const hasStart = startIndex != null
+  const free = figure === FREE_FIGURE || figure === "free"
+  if (live.offCurve) {
+    if (
+      startIndex != null &&
+      live.index !== startIndex &&
+      windowTooShort(startIndex, live.index)
+    ) {
+      return "Au moins 8 tirages entre départ et arrivée."
+    }
+    return "Arrivée hors courbe — clique pour poser."
+  }
+  if (!live.snapped) {
+    if (hasStart && free) return "Approche la courbe, ou Alt (⌥) pour poser hors courbe."
+    return "Approche la courbe pour ancrer le point."
+  }
+  if (
+    startIndex != null &&
+    live.index !== startIndex &&
+    windowTooShort(startIndex, live.index)
+  ) {
+    return "Au moins 8 tirages entre départ et arrivée."
+  }
+  if (hasStart) {
+    return free ? "Clique l’arrivée. Alt (⌥) : hors courbe." : "Clique l’arrivée."
+  }
+  return "Clique le départ."
+}
+
 export function DrawChart({ draws }: { draws: Draw[] }) {
   const draw = useChartDrawOptional()
   const drawRef = useRef(draw)
   useLayoutEffect(() => {
     drawRef.current = draw
   })
-  const scalesRef = useRef<AxisScales>({ x: null, y: null })
+  const scalesRef = useRef<AxisScales>({ x: null, y: null, invertY: null })
   const onScales = useCallback((scales: AxisScales) => {
     scalesRef.current = scales
   }, [])
+  const lastPointerRef = useRef<{ state: ChartPointerState; event: PointerLike } | null>(null)
+  const pointerLogicRef = useRef<{
+    liveFromPointer: (
+      state: ChartPointerState,
+      event: PointerLike,
+      demagnetizeOverride?: boolean
+    ) => LiveCursor | null
+    publishLive: (live: LiveCursor | null) => void
+  } | null>(null)
+  const [altHeld, setAltHeld] = useState(false)
   const [mode, setMode] = useState<DrawChartMode>("sumBoth")
   const [scale, setScale] = useState<RelativeScale>("theory")
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({})
@@ -878,6 +982,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       dates,
       from: draftStart.index,
       to: draftLive.index,
+      fromActual: draftStart.actual,
+      toActual: draftLive.actual,
     })
   }, [drawing, draftStart, draftLive, draftFigure, series, dates, targetKey])
   const draftPoints = draftGeometry?.points ?? []
@@ -964,24 +1070,73 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   }, [setChartMeta, mode, combined, scale, showSma, showBb, smaPeriod, visibleKeyList])
 
   useEffect(() => {
-    if (!draw?.drawing) return
-    function onKey(event: KeyboardEvent) {
-      if (event.key !== "Escape") return
-      const current = drawRef.current
-      if (current?.draft?.start) current.cancelDraft()
-      else current?.setDrawing(false)
+    if (!draw?.drawing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAltHeld(false)
+      lastPointerRef.current = null
+      return
     }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    function replay(demagnetize: boolean) {
+      const snap = lastPointerRef.current
+      const logic = pointerLogicRef.current
+      if (!snap || !logic) return
+      logic.publishLive(logic.liveFromPointer(snap.state, snap.event, demagnetize))
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        const current = drawRef.current
+        if (current?.draft?.start) current.cancelDraft()
+        else current?.setDrawing(false)
+        return
+      }
+      if (event.key === "Alt" || event.key === "AltGraph") {
+        const current = drawRef.current
+        if (current?.figure === FREE_FIGURE && current.draft?.start) {
+          event.preventDefault()
+        }
+        setAltHeld(true)
+        replay(true)
+      }
+    }
+    function onKeyUp(event: KeyboardEvent) {
+      if (event.key !== "Alt" && event.key !== "AltGraph") return
+      setAltHeld(false)
+      replay(false)
+    }
+    function onBlur() {
+      setAltHeld(false)
+      replay(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    window.addEventListener("keyup", onKeyUp)
+    window.addEventListener("blur", onBlur)
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      window.removeEventListener("keyup", onKeyUp)
+      window.removeEventListener("blur", onBlur)
+    }
   }, [draw?.drawing])
 
   function seriesValues(key: SeriesKey) {
     return seriesValuesOf(series, key)
   }
 
+  function rememberPointer(state: ChartPointerState, event: PointerLike) {
+    lastPointerRef.current = {
+      state,
+      event: {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        currentTarget: event.currentTarget,
+        altKey: event.altKey,
+      },
+    }
+  }
+
   function liveFromPointer(
     state: ChartPointerState,
-    event: MouseEvent<SVGGraphicsElement>
+    event: PointerLike,
+    demagnetizeOverride?: boolean
   ): LiveCursor | null {
     if (!series.length) return null
     const values = seriesValues(targetKey)
@@ -994,13 +1149,29 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           return { index: sample.index, px: client.x, py: client.y }
         })
       : rawSamples
+    const current = drawRef.current
+    const demagnetize =
+      demagnetizeOverride ?? (isDemagnetizeModifier(event) || altHeld)
+    const offCurve = canFreePlaceArrival(
+      current?.figure ?? "",
+      Boolean(current?.draft?.start),
+      demagnetize
+    )
     let index: number | null = null
     let distance: number | null = null
     if (pointer && samples.length) {
-      const near = nearestSample(samples, pointer)
+      const near = offCurve
+        ? nearestSampleByX(samples, pointer.x)
+        : nearestSample(samples, pointer)
       if (near) {
         index = near.index
-        distance = near.distance
+        if ("distance" in near) distance = near.distance
+        else {
+          const at = samples.find((item) => item.index === near.index)
+          distance = at
+            ? Math.hypot(pointer.x - at.px, pointer.y - at.py)
+            : near.distanceX
+        }
       }
     }
     if (index == null) {
@@ -1013,6 +1184,41 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       }
     }
     if (index == null || index < 0 || index >= series.length) return null
+    if (offCurve) {
+      const svgLocal = svg && pointer ? clientToSvg(svg, pointer.x, pointer.y) : null
+      let plotted: number | null = null
+      if (svgLocal) {
+        const inverted = scalesRef.current.invertY?.(svgLocal.y)
+        if (inverted != null && Number.isFinite(inverted)) plotted = inverted
+        if (plotted == null && rawSamples.length) {
+          const plottedValues = values.map((value) => plottedOf(targetKey, value, ranges))
+          plotted = valueFromPixelY(rawSamples, plottedValues, svgLocal.y)
+        }
+      }
+      const actual =
+        plotted != null && Number.isFinite(plotted)
+          ? actualFromPlotted(targetKey, plotted, ranges)
+          : null
+      if (actual != null && Number.isFinite(actual)) {
+        const sample = samples.find((item) => item.index === index)
+        if (sample && pointer) {
+          distance = Math.hypot(pointer.x - sample.px, pointer.y - sample.py)
+        }
+        return {
+          index,
+          date: series[index].date,
+          seriesKey: targetKey,
+          seriesLabel: chartConfig[targetKey].label,
+          actual,
+          snapped: false,
+          offCurve: true,
+          kind: "free",
+          distancePx: distance,
+          clientX: event.clientX,
+          clientY: event.clientY,
+        }
+      }
+    }
     const snapped = isMagneted(distance)
     const magnet = snapped
       ? snapIndexToExtrema(index, extremaIndices(values))
@@ -1027,6 +1233,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       seriesLabel: chartConfig[targetKey].label,
       actual: values[chosen],
       snapped,
+      offCurve: false,
       kind: snapped ? magnet.kind : "free",
       distancePx: distance,
       clientX: event.clientX,
@@ -1034,40 +1241,55 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     }
   }
 
-  function onChartMove(state: ChartPointerState, event: MouseEvent<SVGGraphicsElement>) {
+  function publishLive(live: LiveCursor | null) {
     const current = drawRef.current
     if (!current?.drawing) return
-    const live = liveFromPointer(state, event)
     current.setLive(live)
+    setHint(
+      placementHint({
+        live,
+        figure: current.figure,
+        startIndex: current.draft?.start?.index ?? null,
+      })
+    )
+  }
+
+  useLayoutEffect(() => {
+    pointerLogicRef.current = { liveFromPointer, publishLive }
+  })
+
+  function onChartMove(state: ChartPointerState, event: PointerLike) {
+    const current = drawRef.current
+    if (!current?.drawing) return
+    rememberPointer(state, event)
+    publishLive(liveFromPointer(state, event))
+  }
+
+  function onChartClick(state: ChartPointerState, event: PointerLike) {
+    const current = drawRef.current
+    if (!current?.drawing) return
+    rememberPointer(state, event)
+    const live = liveFromPointer(state, event)
     if (!live) {
       setHint("Survole la courbe.")
       return
     }
-    if (!live.snapped) {
-      setHint("Approche la courbe pour ancrer le point.")
-      return
-    }
-    if (
-      current.draft?.start &&
-      live.index !== current.draft.start.index &&
-      windowTooShort(current.draft.start.index, live.index)
-    ) {
-      setHint("Au moins 8 tirages entre départ et arrivée.")
-      return
-    }
-    setHint(current.draft?.start ? "Clique l’arrivée." : "Clique le départ.")
-  }
-
-  function onChartClick(state: ChartPointerState, event: MouseEvent<SVGGraphicsElement>) {
-    const current = drawRef.current
-    if (!current?.drawing) return
-    const live = liveFromPointer(state, event)
-    if (!live?.snapped) {
-      setHint("Approche la courbe pour ancrer le point.")
+    if (!live.snapped && !live.offCurve) {
+      setHint(
+        placementHint({
+          live,
+          figure: current.figure,
+          startIndex: current.draft?.start?.index ?? null,
+        })
+      )
       return
     }
     const start = current.draft?.start
     if (!start) {
+      if (!live.snapped) {
+        setHint("Approche la courbe pour ancrer le point.")
+        return
+      }
       const anchor: ChartAnchor = {
         index: live.index,
         date: live.date,
@@ -1082,7 +1304,11 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
         seriesLabel: chartConfig[targetKey].label,
         start: anchor,
       })
-      setHint("Clique l’arrivée.")
+      setHint(
+        current.figure === FREE_FIGURE
+          ? "Clique l’arrivée. Alt (⌥) : hors courbe."
+          : "Clique l’arrivée."
+      )
       return
     }
     if (windowTooShort(start.index, live.index)) {
@@ -1104,6 +1330,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       dates,
       from: start.index,
       to: end.index,
+      fromActual: start.actual,
+      toActual: end.actual,
     })
     current.addSketch({
       id: newSketchId(),
@@ -1302,6 +1530,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                   onChartClick(state, event)
                 }}
                 onMouseLeave={() => {
+                  lastPointerRef.current = null
                   if (draw?.drawing) draw.setLive(null)
                 }}
               >

@@ -15,9 +15,10 @@ function formatValue(value: number) {
   })
 }
 
-function magnetLabel(kind: LiveCursor["kind"], snapped: boolean) {
-  if (!snapped) return "libre — approche la courbe"
-  if (kind === "extrema") return "aimant · pivot"
+function magnetLabel(point: LiveCursor) {
+  if (point.offCurve) return "hors courbe · Alt"
+  if (!point.snapped) return "libre — approche la courbe"
+  if (point.kind === "extrema") return "aimant · pivot"
   return "aimant · tirage"
 }
 
@@ -44,6 +45,7 @@ function AnchorRow({
       <span className="text-muted-foreground">
         {" "}
         · {anchor.index + 1}/{total} · {formatValue(anchor.actual)}
+        {anchor.snapped ? "" : " · hors courbe"}
       </span>
     </p>
   )
@@ -160,7 +162,7 @@ export function CoordHud({
               point.snapped ? "text-emerald-300" : "text-amber-200"
             )}
           >
-            {magnetLabel(point.kind, point.snapped)}
+            {magnetLabel(point)}
             {point.distancePx != null
               ? ` · ${point.distancePx.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} px`
               : ""}
