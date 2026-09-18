@@ -245,6 +245,21 @@ export function CoordHud({
     </aside>
   )
 
-  if (detached && mounted) return createPortal(panel, document.body)
+  if (detached && mounted) {
+    return (
+      <>
+        <div
+          aria-hidden
+          data-capture-ui
+          data-coord-hud-slot
+          className="flex items-center rounded-lg border border-dashed border-border/70 px-3 py-2 text-xs text-muted-foreground"
+          style={{ minHeight: size.height }}
+        >
+          Carte détachée — glisse-la hors du graphique, ou réancre-la.
+        </div>
+        {createPortal(panel, document.body)}
+      </>
+    )
+  }
   return panel
 }

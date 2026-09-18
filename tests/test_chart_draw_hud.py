@@ -16,6 +16,8 @@ def test_coord_hud_is_docked_above_the_chart() -> None:
     assert "live.clientX" not in hud
     assert "live.clientY" not in hud
     assert "clampHudPosition" in hud
+    assert "Carte détachée" in hud
+    assert "data-coord-hud-slot" in hud
     assert chart.index("<CoordHud") < chart.index("<ChartContainer")
     assert "bandeau Coordonnées" in toolbar
     assert "fenêtre flottante" not in toolbar
