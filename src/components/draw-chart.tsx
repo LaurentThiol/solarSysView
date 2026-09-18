@@ -82,6 +82,11 @@ import {
   type SketchHandleSample,
 } from "@/lib/chart-draw"
 import { isRailFigure } from "@/lib/chartisme/catalog"
+import {
+  appendRank1Key,
+  chartYDomain,
+  splitRank1Axis,
+} from "@/lib/draw-chart-rank"
 import { cn } from "@/lib/utils"
 import {
   NUMBER_SUM_RANGE,
@@ -172,7 +177,7 @@ const TITLE_HELP: Record<DrawChartMode, HelpCopy> = {
   },
   sumNumbers: {
     title: "Évolution dans le temps",
-    body: "Chaque point est un tirage. Sur 20 ou 50 tirages la courbe se lit mieux. SMA et Bollinger (optionnels) décrivent la somme ; ce n’est pas un signal de jeu.",
+    body: "Chaque point est un tirage. Sur 20 ou 50 tirages la courbe se lit mieux. SMA et Bollinger (optionnels) décrivent la somme ; ce n’est pas un signal de jeu.\n\nLa ligne « 1er rang » (si l’archive a les gagnants) se lit sur l’axe de droite : 0 s’il y a au moins un gagnant du jackpot, +1 sinon (report). Maj+clic l’isole sur 0–1.",
   },
   eachNumber: {
     title: "n1 à n5 — statistiques d’ordre",
@@ -213,7 +218,7 @@ const SERIES_HELP: Record<SeriesKey, HelpCopy> = {
   },
   sumNumbers: {
     title: "Somme",
-    body: "Somme des 5 boules du tirage (typiquement 80–180). Cliquez la pastille pour masquer la courbe.",
+    body: "Somme des 5 boules du tirage (typiquement 80–180). Cliquez la pastille pour masquer. Maj+clic : cette courbe seule.",
   },
   n1: {
     title: "n1 — plus petit numéro",
@@ -258,7 +263,7 @@ const SERIES_SELECT_HELP: HelpCopy = {
   wide: true,
   body: `Sommes superposées (échelle relative 0–100 %), somme des 5 numéros, chacune des 5 boules, somme des 2 étoiles, ou chaque étoile. L’axe Y s’adapte (0–100 %, 1–50 ou 1–12).
 
-« Chaque numéro » trace n1 à n5 : les 5 boules triées du plus petit au plus grand, pas l’ordre de sortie — plus la ligne 1er rang (0 = gagnant, +1 = pas gagnant) quand l’archive la porte. « Chaque étoile » fait de même pour e1 < e2. SMA et Bollinger s’appliquent à chaque courbe visible.`,
+« Chaque numéro » trace n1 à n5 : les 5 boules triées du plus petit au plus grand, pas l’ordre de sortie. « Somme des numéros » et « Chaque numéro » superposent la ligne 1er rang (0 = gagnant, +1 = pas gagnant) quand l’archive la porte. « Chaque étoile » fait de même pour e1 < e2. SMA et Bollinger s’appliquent à chaque courbe visible.`,
 }
 
 const SUMMARY_HELP: HelpCopy = {
@@ -284,14 +289,7 @@ function yDomain(
   mode: DrawChartMode,
   visibleKeys: SeriesKey[]
 ): [number, number] | [number, "auto"] {
-  if (mode === "sumBoth") return [0, 100]
-  if (mode === "eachNumber") {
-    if (visibleKeys.length === 1 && visibleKeys[0] === "rank1") return [0, 1]
-    return [1, 50]
-  }
-  if (mode === "eachStar") return [1, 12]
-  if (mode === "sumStars") return [3, "auto"]
-  return [15, "auto"]
+  return chartYDomain(mode, visibleKeys)
 }
 
 function yDomainLocked(mode: DrawChartMode, visibleKeys: SeriesKey[]) {
@@ -299,19 +297,10 @@ function yDomainLocked(mode: DrawChartMode, visibleKeys: SeriesKey[]) {
 }
 
 function chartKeys(mode: DrawChartMode, series: DrawSeriesPoint[]): SeriesKey[] {
-  const keys = MODE_KEYS[mode]
-  if (mode !== "eachNumber") return keys
-  if (series.some((point) => typeof point.rank1 === "number")) {
-    return [...keys, "rank1"]
-  }
-  return keys
-}
-
-function splitRank1Axis(mode: DrawChartMode, visibleKeys: SeriesKey[]) {
-  return (
-    mode === "eachNumber" &&
-    visibleKeys.includes("rank1") &&
-    visibleKeys.some((key) => key !== "rank1")
+  return appendRank1Key(
+    mode,
+    MODE_KEYS[mode],
+    series.some((point) => typeof point.rank1 === "number")
   )
 }
 
@@ -1836,7 +1825,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     return `var(--color-${key})`
   }
 
-  const useCustomTooltip = combined || showSma || showBb || rankMode
+  const useCustomTooltip =
+    combined || showSma || showBb || rankMode || keys.includes("rank1")
 
   return (
     <Card>
