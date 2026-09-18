@@ -16,6 +16,10 @@ export type IaStreamEvent =
       provider: IaProviderId
       requested: string
       imageOmitted: boolean
+      promptTokens?: number | null
+      completionTokens?: number | null
+      estimated?: boolean
+      latencyMs?: number | null
     }
   | { type: "error"; error: string }
 

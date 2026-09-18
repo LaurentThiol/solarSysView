@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 
 import { HelpTip, WithHelp } from "@/components/help"
+import { AdminLlmCard } from "@/components/admin-llm-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -614,6 +615,8 @@ export function AdminPanel() {
           ) : null}
         </CardContent>
       </Card>
+
+      <AdminLlmCard />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {data.services.map((service) => {

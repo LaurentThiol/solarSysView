@@ -245,6 +245,18 @@ class BrainNoteIn(BaseModel):
     author: str = "user"
 
 
+class LlmUsageIn(BaseModel):
+    surface: str = "ia"
+    provider: str = "local"
+    model: str | None = None
+    ok: bool = False
+    error: str | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    estimated: bool = False
+    latency_ms: int | None = None
+
+
 class BrainRetrieveIn(BaseModel):
     text: str
     k: int = Field(default=8, ge=1, le=20)
@@ -1126,6 +1138,24 @@ def create_app() -> FastAPI:
         from synchro import brain as brain_mod
 
         return {"ok": True, "ollama": brain_mod.ping_ollama()}
+
+    @app.get("/api/llm/usage")
+    def llm_usage() -> dict[str, Any]:
+        from synchro.llm_usage import dashboard
+
+        return dashboard()
+
+    @app.post("/api/llm/usage")
+    def create_llm_usage(payload: LlmUsageIn) -> dict[str, Any]:
+        from synchro.llm_usage import record_usage
+
+        return record_usage(payload.model_dump())
+
+    @app.post("/api/llm/ping")
+    def llm_ping() -> dict[str, Any]:
+        from synchro.llm_usage import ping_generate
+
+        return ping_generate()
 
     @app.get("/api/brain/readings")
     def brain_readings(

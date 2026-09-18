@@ -43,7 +43,12 @@ test("native Ollama payload uses /api/chat with num_ctx and no think by default"
     }
     if (url.includes("/api/chat") && init?.method === "POST") {
       posts.push({ url, body: JSON.parse(String(init.body || "{}")) as Record<string, unknown> })
-      return jsonResponse({ message: { content: "lu" } })
+      return jsonResponse({
+        message: { content: "lu" },
+        prompt_eval_count: 11,
+        eval_count: 2,
+        total_duration: 2_000_000_000,
+      })
     }
     return missing()
   }, () =>
@@ -54,7 +59,13 @@ test("native Ollama payload uses /api/chat with num_ctx and no think by default"
     })
   )
   assert.equal(result.ok, true)
-  if (result.ok) assert.equal(result.text, "lu")
+  if (result.ok) {
+    assert.equal(result.text, "lu")
+    assert.equal(result.promptTokens, 11)
+    assert.equal(result.completionTokens, 2)
+    assert.equal(result.estimated, false)
+    assert.equal(result.latencyMs, 2000)
+  }
   assert.equal(posts.length, 1)
   assert.match(posts[0].url, /\/api\/chat$/)
   assert.doesNotMatch(posts[0].url, /\/v1\//)
@@ -149,7 +160,7 @@ test("native stream reads NDJSON content and ignores thinking", async () => {
         start(controller) {
           const enc = new TextEncoder()
           controller.enqueue(enc.encode('{"message":{"content":"bon","thinking":"secret"}}\n'))
-          controller.enqueue(enc.encode('{"message":{"content":"jour"},"done":true}\n'))
+          controller.enqueue(enc.encode('{"message":{"content":"jour"},"done":true,"prompt_eval_count":4,"eval_count":2}\n'))
           controller.close()
         },
       })
@@ -169,6 +180,10 @@ test("native stream reads NDJSON content and ignores thinking", async () => {
     )
   )
   assert.equal(result.ok, true)
-  if (result.ok) assert.equal(result.text, "bonjour")
+  if (result.ok) {
+    assert.equal(result.text, "bonjour")
+    assert.equal(result.promptTokens, 4)
+    assert.equal(result.completionTokens, 2)
+  }
   assert.ok(!chunks.join("").includes("secret"))
 })

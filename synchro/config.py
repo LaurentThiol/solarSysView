@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     admin_password: str | None = None
     ollama_host: str = "http://127.0.0.1:11434"
     local_llm_base_url: str | None = None
+    local_llm_model: str | None = None
     # Rejoue le cycle chartisme dès qu'un tirage entre en base. Coûteux — un
     # balayage complet de l'archive — donc désactivé par défaut.
     chartisme_auto_export: bool = False

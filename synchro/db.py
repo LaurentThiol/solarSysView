@@ -266,6 +266,22 @@ CREATE TABLE IF NOT EXISTS brain_specialists (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS brain_specialists_updated ON brain_specialists (updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS llm_usage (
+    id                  BIGSERIAL PRIMARY KEY,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    surface             TEXT NOT NULL,
+    provider            TEXT NOT NULL,
+    model               TEXT NOT NULL DEFAULT '',
+    ok                  BOOLEAN NOT NULL,
+    error               TEXT,
+    prompt_tokens       INTEGER,
+    completion_tokens   INTEGER,
+    estimated           BOOLEAN NOT NULL DEFAULT FALSE,
+    latency_ms          INTEGER
+);
+CREATE INDEX IF NOT EXISTS llm_usage_created ON llm_usage (created_at DESC);
+CREATE INDEX IF NOT EXISTS llm_usage_surface_provider ON llm_usage (surface, provider, created_at DESC);
 """
 
 _pool: ConnectionPool | None = None
@@ -1598,5 +1614,78 @@ def delete_brain_specialist(slug: str) -> bool:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM brain_specialists WHERE slug = %s", (slug,))
             deleted = cur.rowcount > 0
+        conn.commit()
+        return deleted
+
+
+def _llm_usage_created_at(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value.strip():
+        text = value.strip().replace("Z", "+00:00")
+        try:
+            return datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    return None
+
+
+def insert_llm_usage(payload: dict[str, Any]) -> dict[str, Any]:
+    created = _llm_usage_created_at(payload.get("created_at"))
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO llm_usage (
+                    created_at, surface, provider, model, ok, error,
+                    prompt_tokens, completion_tokens, estimated, latency_ms
+                ) VALUES (
+                    COALESCE(%(created_at)s, now()), %(surface)s, %(provider)s, %(model)s,
+                    %(ok)s, %(error)s, %(prompt_tokens)s, %(completion_tokens)s,
+                    %(estimated)s, %(latency_ms)s
+                )
+                RETURNING *
+                """,
+                {
+                    "created_at": created,
+                    "surface": payload.get("surface") or "ia",
+                    "provider": payload.get("provider") or "local",
+                    "model": payload.get("model") or "",
+                    "ok": bool(payload.get("ok")),
+                    "error": payload.get("error"),
+                    "prompt_tokens": payload.get("prompt_tokens"),
+                    "completion_tokens": payload.get("completion_tokens"),
+                    "estimated": bool(payload.get("estimated")),
+                    "latency_ms": payload.get("latency_ms"),
+                },
+            )
+            row = dict(cur.fetchone())
+        conn.commit()
+        return row
+
+
+def list_llm_usage(days: int = 30, limit: int = 2000) -> list[dict[str, Any]]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM llm_usage
+                 WHERE created_at >= now() - (%s * interval '1 day')
+              ORDER BY created_at DESC
+                 LIMIT %s
+                """,
+                (max(1, int(days)), max(1, int(limit))),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+
+def prune_llm_usage(days: int = 30) -> int:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM llm_usage WHERE created_at < now() - (%s * interval '1 day')",
+                (max(1, int(days)),),
+            )
+            deleted = cur.rowcount
         conn.commit()
         return deleted

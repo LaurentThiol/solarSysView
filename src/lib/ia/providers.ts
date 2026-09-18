@@ -35,6 +35,7 @@ import {
 import { localGenParams, localPackBudget, ollamaNumCtx } from "@/lib/ia/local-options"
 import { llmFetch } from "@/lib/ia/loopback-fetch"
 import { IA_SYSTEM_PROMPT } from "@/lib/ia/prompt"
+import { usageFromPayload, type IaTokenUsage } from "@/lib/ia/usage"
 import {
   geminiDeltaText,
   ollamaDeltaText,
@@ -68,6 +69,10 @@ export type IaCompleteOk = {
   provider: IaProviderId
   requested: string
   imageOmitted: boolean
+  promptTokens: number | null
+  completionTokens: number | null
+  estimated: boolean
+  latencyMs: number | null
 }
 
 export type IaCompleteErr = { ok: false; error: string }
@@ -398,9 +403,35 @@ function requestSignal(external?: AbortSignal, timeoutMs = CLOUD_CHAT_TIMEOUT_MS
   return timeout
 }
 
-type OnceOk = { ok: true; text: string }
+type OnceOk = { ok: true; text: string; usage?: IaTokenUsage }
 type OnceErr = { ok: false; error: string; retry: boolean }
 type OnceResult = OnceOk | OnceErr
+
+function onceOk(text: string, payload: unknown, started: number): OnceOk {
+  return { ok: true, text, usage: usageFromPayload(payload, text, started) }
+}
+
+function toCompleteOk(input: {
+  text: string
+  model: string
+  provider: IaProviderId
+  requested: string
+  imageOmitted: boolean
+  usage?: IaTokenUsage
+}): IaCompleteOk {
+  return {
+    ok: true,
+    text: input.text,
+    model: input.model,
+    provider: input.provider,
+    requested: input.requested,
+    imageOmitted: input.imageOmitted,
+    promptTokens: input.usage?.promptTokens ?? null,
+    completionTokens: input.usage?.completionTokens ?? null,
+    estimated: Boolean(input.usage?.estimated),
+    latencyMs: input.usage?.latencyMs ?? null,
+  }
+}
 
 async function generateGeminiOnce(
   model: string,
@@ -410,6 +441,7 @@ async function generateGeminiOnce(
   signal?: AbortSignal
 ): Promise<OnceResult> {
   const packed = withOptionalImage(snapshot, model, "google")
+  const started = Date.now()
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
     {
@@ -443,7 +475,7 @@ async function generateGeminiOnce(
       retry: true,
     }
   }
-  return { ok: true, text: text.trim() }
+  return onceOk(text.trim(), data, started)
 }
 
 async function streamGeminiOnce(
@@ -455,6 +487,7 @@ async function streamGeminiOnce(
   signal?: AbortSignal
 ): Promise<OnceResult> {
   const packed = withOptionalImage(snapshot, model, "google")
+  const started = Date.now()
   const body = JSON.stringify({
     systemInstruction: { parts: [{ text: systemText() }] },
     contents: geminiContents(messages, packed.snapshot),
@@ -481,10 +514,12 @@ async function streamGeminiOnce(
     }
   }
   let text = ""
+  let lastPayload: unknown = null
   try {
     await readSseJson(
       response,
       (payload) => {
+        lastPayload = payload
         const chunk = geminiDeltaText(payload)
         if (!chunk) return
         text += chunk
@@ -494,11 +529,11 @@ async function streamGeminiOnce(
     )
   } catch (error) {
     if (signal?.aborted) throw error
-    if (text.trim()) return { ok: true, text: text.trim() }
+    if (text.trim()) return onceOk(text.trim(), lastPayload, started)
     return generateGeminiOnce(model, messages, snapshot, key, signal)
   }
   if (!text.trim()) return generateGeminiOnce(model, messages, snapshot, key, signal)
-  return { ok: true, text: text.trim() }
+  return onceOk(text.trim(), lastPayload, started)
 }
 
 async function completeGemini(
@@ -514,14 +549,14 @@ async function completeGemini(
     const packed = withOptionalImage(snapshot, model, "google")
     const result = await generateGeminiOnce(model, messages, snapshot, key, signal)
     if (result.ok) {
-      return {
-        ok: true,
+      return toCompleteOk({
         text: result.text,
         model,
         provider: "google",
         requested,
         imageOmitted: packed.imageOmitted,
-      }
+        usage: result.usage,
+      })
     }
     lastError = result.error
     if (!result.retry) return { ok: false, error: lastError }
@@ -583,7 +618,10 @@ function openaiPayload(
     body.max_tokens = params.predict
     if (params.topP != null) body.top_p = params.topP
   }
-  if (stream) body.stream = true
+  if (stream) {
+    body.stream = true
+    if (!opts?.local) body.stream_options = { include_usage: true }
+  }
   return body
 }
 
@@ -601,6 +639,7 @@ async function generateOpenAIOnce(
   const label = endpoint?.label ?? "OpenAI"
   const local = Boolean(endpoint)
   const timeoutMs = local ? LOCAL_CHAT_TIMEOUT_MS : CLOUD_CHAT_TIMEOUT_MS
+  const started = Date.now()
   const response = await llmFetch(
     url,
     {
@@ -630,7 +669,7 @@ async function generateOpenAIOnce(
   if (!text) {
     return { ok: false, error: data.error?.message || "réponse vide", retry: true }
   }
-  return { ok: true, text }
+  return onceOk(text, data, started)
 }
 
 async function streamOpenAIOnce(
@@ -648,6 +687,7 @@ async function streamOpenAIOnce(
   const label = endpoint?.label ?? "OpenAI"
   const local = Boolean(endpoint)
   const timeoutMs = local ? LOCAL_CHAT_TIMEOUT_MS : CLOUD_CHAT_TIMEOUT_MS
+  const started = Date.now()
   const response = await llmFetch(
     url,
     {
@@ -673,10 +713,12 @@ async function streamOpenAIOnce(
     }
   }
   let text = ""
+  let lastPayload: unknown = null
   try {
     await readSseJson(
       response,
       (payload) => {
+        lastPayload = payload
         const chunk = openaiDeltaText(payload)
         if (!chunk) return
         text += chunk
@@ -686,11 +728,11 @@ async function streamOpenAIOnce(
     )
   } catch (error) {
     if (signal?.aborted) throw error
-    if (text.trim()) return { ok: true, text: text.trim() }
+    if (text.trim()) return onceOk(text.trim(), lastPayload, started)
     return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint, deepen)
   }
   if (!text.trim()) return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint, deepen)
-  return { ok: true, text: text.trim() }
+  return onceOk(text.trim(), lastPayload, started)
 }
 
 async function completeOpenAI(
@@ -706,14 +748,14 @@ async function completeOpenAI(
     const packed = withOptionalImage(snapshot, model, "openai")
     const result = await generateOpenAIOnce(model, messages, snapshot, key, signal)
     if (result.ok) {
-      return {
-        ok: true,
+      return toCompleteOk({
         text: result.text,
         model,
         provider: "openai",
         requested,
         imageOmitted: packed.imageOmitted,
-      }
+        usage: result.usage,
+      })
     }
     lastError = result.error
     if (!result.retry) return { ok: false, error: lastError }
@@ -774,6 +816,7 @@ async function generateOllamaOnce(
   deepen = false
 ): Promise<OnceResult> {
   const url = localNativeChatUrl(host)
+  const started = Date.now()
   const response = await llmFetch(
     url,
     {
@@ -802,7 +845,7 @@ async function generateOllamaOnce(
   if (!text) {
     return { ok: false, error: "réponse vide", retry: true }
   }
-  return { ok: true, text }
+  return onceOk(text, payload, started)
 }
 
 async function streamOllamaOnce(
@@ -815,6 +858,7 @@ async function streamOllamaOnce(
   deepen = false
 ): Promise<OnceResult> {
   const url = localNativeChatUrl(host)
+  const started = Date.now()
   const response = await llmFetch(
     url,
     {
@@ -837,10 +881,12 @@ async function streamOllamaOnce(
     }
   }
   let text = ""
+  let lastPayload: unknown = null
   try {
     await readNdjson(
       response,
       (payload) => {
+        lastPayload = payload
         const chunk = ollamaDeltaText(payload)
         if (!chunk) return
         text += chunk
@@ -850,11 +896,11 @@ async function streamOllamaOnce(
     )
   } catch (error) {
     if (signal?.aborted) throw error
-    if (text.trim()) return { ok: true, text: text.trim() }
+    if (text.trim()) return onceOk(text.trim(), lastPayload, started)
     return generateOllamaOnce(host, model, messages, snapshot, signal, deepen)
   }
   if (!text.trim()) return generateOllamaOnce(host, model, messages, snapshot, signal, deepen)
-  return { ok: true, text: text.trim() }
+  return onceOk(text.trim(), lastPayload, started)
 }
 
 export async function completeIa(options: {
@@ -905,14 +951,14 @@ async function completeLocal(
           ? await generateOllamaOnce(base, model, messages, snapshot, signal, deepen)
           : await generateOpenAIOnce(model, messages, snapshot, "local", signal, endpoint, deepen)
         if (result.ok) {
-          return {
-            ok: true,
+          return toCompleteOk({
             text: result.text,
             model,
             provider: "local",
             requested,
             imageOmitted: packed.imageOmitted,
-          }
+            usage: result.usage,
+          })
         }
         lastError = result.error
         if (!result.retry) return { ok: false, error: lastError }
@@ -1011,6 +1057,14 @@ export async function streamIa(
                     deepen
                   )
           if (result.ok) {
+            const complete = toCompleteOk({
+              text: result.text,
+              model,
+              provider: options.provider,
+              requested,
+              imageOmitted: packed.imageOmitted,
+              usage: result.usage,
+            })
             if (!emitted) {
               onEvent({
                 type: "meta",
@@ -1023,20 +1077,17 @@ export async function streamIa(
             }
             onEvent({
               type: "done",
-              text: result.text,
-              model,
-              provider: options.provider,
-              requested,
-              imageOmitted: packed.imageOmitted,
+              text: complete.text,
+              model: complete.model,
+              provider: complete.provider,
+              requested: complete.requested,
+              imageOmitted: complete.imageOmitted,
+              promptTokens: complete.promptTokens,
+              completionTokens: complete.completionTokens,
+              estimated: complete.estimated,
+              latencyMs: complete.latencyMs,
             })
-            return {
-              ok: true,
-              text: result.text,
-              model,
-              provider: options.provider,
-              requested,
-              imageOmitted: packed.imageOmitted,
-            }
+            return complete
           }
           lastError = result.error
           if (emitted || !result.retry) {

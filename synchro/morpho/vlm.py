@@ -771,6 +771,35 @@ def _point(png: bytes, target: str) -> list[dict[str, Any]]:
     return list(raw or [])
 
 
+def _morpho_provider() -> str:
+    name = str((_backend or {}).get("name") or "")
+    return "ollama" if name == "ollama" else "hf"
+
+
+def _record_morpho(*, ok: bool, error: str | None = None, latency_ms: int | None = None, text: str = "") -> None:
+    if _backend is None:
+        return
+    try:
+        from synchro.llm_usage import estimate_tokens, record_usage
+
+        estimated = bool(text)
+        record_usage(
+            {
+                "surface": "morpho",
+                "provider": _morpho_provider(),
+                "model": str(_backend.get("model_id") or ""),
+                "ok": ok,
+                "error": error,
+                "prompt_tokens": None,
+                "completion_tokens": estimate_tokens(text) if estimated and ok else None,
+                "estimated": estimated and ok,
+                "latency_ms": latency_ms,
+            }
+        )
+    except Exception:
+        pass
+
+
 def analyze(
     numbers: list[int],
     stars: list[int],
@@ -796,25 +825,32 @@ def analyze(
     if _backend is not None:
         backend_name = _backend["name"]
         used_vlm = True
-        fact_line = "; ".join(facts)
-        for key, pattern, question in _QUERY_SPECS:
-            answer = _ask(blob, question)
-            parsed = parse_label(answer, pattern)
-            if parsed:
-                queries[key] = parsed
-        residual = _ask(
-            blob,
-            "One sentence. Describe only the geometric arrangement of filled dots. "
-            f"Do not invent objects. Do not contradict these facts: {fact_line}.",
-        ).strip()
-        points = _point(blob, "filled circle")
-        predicted_numbers = project_points(points, kind="number")
-        predicted_stars = project_points(points, kind="star")
-        if predicted_numbers or predicted_stars:
-            score = 0.75 * grounding_score(predicted_numbers, numbers) + 0.25 * grounding_score(
-                predicted_stars, stars
-            )
-            score = round(score, 4)
+        started = time.perf_counter()
+        try:
+            fact_line = "; ".join(facts)
+            for key, pattern, question in _QUERY_SPECS:
+                answer = _ask(blob, question)
+                parsed = parse_label(answer, pattern)
+                if parsed:
+                    queries[key] = parsed
+            residual = _ask(
+                blob,
+                "One sentence. Describe only the geometric arrangement of filled dots. "
+                f"Do not invent objects. Do not contradict these facts: {fact_line}.",
+            ).strip()
+            points = _point(blob, "filled circle")
+            predicted_numbers = project_points(points, kind="number")
+            predicted_stars = project_points(points, kind="star")
+            if predicted_numbers or predicted_stars:
+                score = 0.75 * grounding_score(predicted_numbers, numbers) + 0.25 * grounding_score(
+                    predicted_stars, stars
+                )
+                score = round(score, 4)
+            bits = [residual or ""] + [str(value) for value in queries.values()]
+            _record_morpho(ok=True, latency_ms=round((time.perf_counter() - started) * 1000), text=" ".join(bits))
+        except Exception as exc:
+            _record_morpho(ok=False, error=str(exc), latency_ms=round((time.perf_counter() - started) * 1000))
+            raise
 
     allow_residual = residual_ok and (score is None or score >= GROUNDING_THRESHOLD)
     caption = caption_from_facts(facts, residual if allow_residual else None)
@@ -845,12 +881,22 @@ def sequence_query(draws: list[tuple[list[int], list[int]]]) -> dict[str, Any]:
     png = montage_png(draws)
     if _backend is None:
         return {"ok": True, "loaded": False, "drift": None, "cluster_move": None}
-    drift = _ask(png, "One sentence: what spatial change occurs from left to right among the filled dots?")
-    move = parse_label(
-        _ask(png, "Reply with exactly one of: left, right, up, down, none. Does the cluster migrate?"),
-        "left|right|up|down|none",
-    )
-    return {"ok": True, "loaded": True, "drift": drift, "cluster_move": move}
+    started = time.perf_counter()
+    try:
+        drift = _ask(png, "One sentence: what spatial change occurs from left to right among the filled dots?")
+        move = parse_label(
+            _ask(png, "Reply with exactly one of: left, right, up, down, none. Does the cluster migrate?"),
+            "left|right|up|down|none",
+        )
+        _record_morpho(
+            ok=True,
+            latency_ms=round((time.perf_counter() - started) * 1000),
+            text=f"{drift or ''} {move or ''}",
+        )
+        return {"ok": True, "loaded": True, "drift": drift, "cluster_move": move}
+    except Exception as exc:
+        _record_morpho(ok=False, error=str(exc), latency_ms=round((time.perf_counter() - started) * 1000))
+        raise
 
 
 def contrastive_query(
@@ -862,11 +908,21 @@ def contrastive_query(
     png = side_by_side_png(a, b)
     if _backend is None:
         return {"ok": True, "loaded": False, "difference": None}
-    difference = _ask(
-        png,
-        "One sentence: what is the morphological difference between the left glyph and the right glyph?",
-    )
-    return {"ok": True, "loaded": True, "difference": difference}
+    started = time.perf_counter()
+    try:
+        difference = _ask(
+            png,
+            "One sentence: what is the morphological difference between the left glyph and the right glyph?",
+        )
+        _record_morpho(
+            ok=True,
+            latency_ms=round((time.perf_counter() - started) * 1000),
+            text=str(difference or ""),
+        )
+        return {"ok": True, "loaded": True, "difference": difference}
+    except Exception as exc:
+        _record_morpho(ok=False, error=str(exc), latency_ms=round((time.perf_counter() - started) * 1000))
+        raise
 
 
 def draft_rule(state: dict[str, Any]) -> dict[str, Any]:

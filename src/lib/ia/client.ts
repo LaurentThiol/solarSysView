@@ -1,6 +1,7 @@
 import { consumeSse, type IaStreamEvent } from "@/lib/ia/sse"
 import type { IaChatMessage, IaProviderId } from "@/lib/ia/models"
 import type { IaSnapshotPayload } from "@/lib/ia/providers"
+import type { LlmUsageSurface } from "@/lib/ia/record-usage"
 
 export async function streamIaChat(
   body: {
@@ -10,6 +11,7 @@ export async function streamIaChat(
     snapshot?: IaSnapshotPayload | null
     systemPrompt?: string | null
     deepen?: boolean
+    surface?: LlmUsageSurface
   },
   handlers: {
     onEvent: (event: IaStreamEvent) => void

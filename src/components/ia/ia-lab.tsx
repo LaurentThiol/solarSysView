@@ -285,6 +285,7 @@ export function IaLab() {
               messages: requestMessages,
               snapshot: pack ? snapshotPayload(pack) : null,
               deepen: providerId === "local" ? Boolean(options.deepen) : false,
+              surface: "ia",
             },
             {
               signal: abort.signal,

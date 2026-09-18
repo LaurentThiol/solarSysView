@@ -439,6 +439,7 @@ export function BrainLab() {
             snapshot,
             systemPrompt: BRAIN_SYSTEM_PROMPT,
             deepen: nextProvider === "local" ? deepen : false,
+            surface: "brain",
           },
           {
             signal: controller.signal,
@@ -589,6 +590,7 @@ export function BrainLab() {
                 ],
                 snapshot,
                 systemPrompt: BRAIN_SYSTEM_PROMPT,
+                surface: "brain",
               },
               {
                 onEvent: (event) => {

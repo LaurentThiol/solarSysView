@@ -262,7 +262,7 @@ Catalog nommé des indicateurs (`@rsi`, `@sum.rsi`, `@ete`, `@fft`), **spéciali
 
 ## Admin (`/admin`)
 
-Page locale pour les consoles et les secrets (Neon, Google, OpenAI, Brave Search). Les valeurs sont lues/écrites dans `.env` — **jamais commitées**. Révélation / copie, test de connexion, mise à jour GitHub (`git fetch` / `git pull --ff-only`, équivalent `./launch update`), synchro FDJ.
+Page locale pour les consoles et les secrets (Neon, Google, OpenAI, Brave Search). Les valeurs sont lues/écrites dans `.env` — **jamais commitées**. Révélation / copie, test de connexion, **suivi LLM** (Ollama / Llama, Brain, IA, Morpho VLM, embeddings : santé live, ping generate d’un jeton, appels et jetons 24 h), mise à jour GitHub (`git fetch` / `git pull --ff-only`, équivalent `./launch update`), synchro FDJ.
 
 En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, définissez `ADMIN_PASSWORD`. Sur Netlify, les secrets se configurent dans les variables d’environnement du site.
 

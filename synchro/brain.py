@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -144,6 +145,7 @@ def ping_ollama_tags(timeout: float = 0.8) -> dict[str, Any]:
 def embed_text(text: str, model: str = DEFAULT_EMBED_MODEL, timeout: float = 20) -> dict[str, Any]:
     body = json.dumps({"model": model, "prompt": text}).encode("utf-8")
     last_error = "injoignable"
+    started = time.perf_counter()
     for base in llm_bases():
         try:
             with _open(
@@ -157,9 +159,44 @@ def embed_text(text: str, model: str = DEFAULT_EMBED_MODEL, timeout: float = 20)
             last_error = str(exc)
             continue
         vector = payload.get("embedding")
+        latency_ms = round((time.perf_counter() - started) * 1000)
         if isinstance(vector, list) and vector:
+            prompt_tokens = payload.get("prompt_eval_count")
+            estimated = not isinstance(prompt_tokens, (int, float))
+            try:
+                from synchro.llm_usage import estimate_tokens, record_usage
+
+                record_usage(
+                    {
+                        "surface": "embed",
+                        "provider": "local",
+                        "model": model,
+                        "ok": True,
+                        "prompt_tokens": estimate_tokens(text) if estimated else int(prompt_tokens),
+                        "completion_tokens": 0,
+                        "estimated": estimated,
+                        "latency_ms": latency_ms,
+                    }
+                )
+            except Exception:
+                pass
             return {"ok": True, "embedding": [float(v) for v in vector], "model": model}
         last_error = "embedding vide"
+    try:
+        from synchro.llm_usage import record_usage
+
+        record_usage(
+            {
+                "surface": "embed",
+                "provider": "local",
+                "model": model,
+                "ok": False,
+                "error": last_error,
+                "latency_ms": round((time.perf_counter() - started) * 1000),
+            }
+        )
+    except Exception:
+        pass
     return {"ok": False, "error": last_error, "model": model}
 
 

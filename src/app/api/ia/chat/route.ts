@@ -2,11 +2,13 @@ import { NextResponse } from "next/server"
 
 import { isAuthenticated } from "@/lib/admin-auth"
 import { isNetlify } from "@/lib/api-base"
+import { chatSurface, recordLlmUsage, type LlmUsageSurface } from "@/lib/ia/record-usage"
 import {
   completeIa,
   iaStatus,
   streamIa,
   type IaChatMessage,
+  type IaCompleteOk,
   type IaProviderId,
   type IaSnapshotPayload,
 } from "@/lib/ia/providers"
@@ -24,6 +26,7 @@ type Body = {
   stream?: boolean
   systemPrompt?: string | null
   deepen?: boolean
+  surface?: LlmUsageSurface
 }
 
 type ChatRequest = {
@@ -34,6 +37,7 @@ type ChatRequest = {
   stream: boolean
   systemPrompt?: string | null
   deepen?: boolean
+  surface: LlmUsageSurface
 }
 
 function cleanedMessages(messages: IaChatMessage[]) {
@@ -82,11 +86,16 @@ async function resolveChat(request: Request): Promise<{ error: NextResponse } | 
     }
   }
   if (provider === "local" && !status.local) {
+    const error = "LLM local injoignable (Ollama). Pas de bascule cloud."
+    void recordLlmUsage({
+      surface: chatSurface(body.snapshot?.lab, body.surface),
+      provider: "local",
+      model: body.model,
+      ok: false,
+      error,
+    })
     return {
-      error: NextResponse.json(
-        { ok: false, error: "LLM local injoignable (Ollama). Pas de bascule cloud." },
-        { status: 400 }
-      ),
+      error: NextResponse.json({ ok: false, error }, { status: 400 }),
     }
   }
   const messages = Array.isArray(body.messages) ? body.messages.slice(-40) : []
@@ -115,13 +124,52 @@ async function resolveChat(request: Request): Promise<{ error: NextResponse } | 
     stream: Boolean(body.stream),
     systemPrompt: typeof body.systemPrompt === "string" ? body.systemPrompt : null,
     deepen: Boolean(body.deepen),
+    surface: chatSurface(body.snapshot?.lab, body.surface),
+  }
+}
+
+function usageFromResult(result: IaCompleteOk | { ok: false; error: string }) {
+  if (!result.ok) {
+    return {
+      promptTokens: null as number | null,
+      completionTokens: null as number | null,
+      estimated: false,
+      latencyMs: null as number | null,
+      error: result.error,
+    }
+  }
+  return {
+    promptTokens: result.promptTokens,
+    completionTokens: result.completionTokens,
+    estimated: result.estimated,
+    latencyMs: result.latencyMs,
+    error: null as string | null,
   }
 }
 
 export async function POST(request: Request) {
   const parsed = await resolveChat(request)
   if ("error" in parsed) return parsed.error
-  const { provider, model, messages, snapshot, stream, systemPrompt, deepen } = parsed
+  const { provider, model, messages, snapshot, stream, systemPrompt, deepen, surface } = parsed
+
+  const remember = async (
+    result: IaCompleteOk | { ok: false; error: string },
+    usedModel?: string | null
+  ) => {
+    if (request.signal.aborted) return
+    const usage = usageFromResult(result)
+    await recordLlmUsage({
+      surface,
+      provider,
+      model: result.ok ? result.model : usedModel || model,
+      ok: result.ok,
+      error: usage.error,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      estimated: usage.estimated,
+      latencyMs: usage.latencyMs,
+    })
+  }
 
   if (!stream) {
     try {
@@ -134,6 +182,7 @@ export async function POST(request: Request) {
         deepen,
         signal: request.signal,
       })
+      await remember(result)
       if (!result.ok) {
         return NextResponse.json({ ok: false, error: result.error }, { status: 502 })
       }
@@ -144,15 +193,18 @@ export async function POST(request: Request) {
         provider: result.provider,
         requested: result.requested,
         imageOmitted: result.imageOmitted,
+        promptTokens: result.promptTokens,
+        completionTokens: result.completionTokens,
+        estimated: result.estimated,
+        latencyMs: result.latencyMs,
       })
     } catch (error) {
       if (request.signal.aborted) {
         return NextResponse.json({ ok: false, error: "interrompu" }, { status: 400 })
       }
-      return NextResponse.json(
-        { ok: false, error: error instanceof Error ? error.message : "échec IA" },
-        { status: 502 }
-      )
+      const message = error instanceof Error ? error.message : "échec IA"
+      await remember({ ok: false, error: message })
+      return NextResponse.json({ ok: false, error: message }, { status: 502 })
     }
   }
 
@@ -163,16 +215,16 @@ export async function POST(request: Request) {
         controller.enqueue(encoder.encode(encodeSse(event)))
       }
       try {
-        await streamIa(
+        const result = await streamIa(
           { provider, model, messages, snapshot, systemPrompt, deepen, signal: request.signal },
           send
         )
+        await remember(result)
       } catch (error) {
         if (!request.signal.aborted) {
-          send({
-            type: "error",
-            error: error instanceof Error ? error.message : "échec IA",
-          })
+          const message = error instanceof Error ? error.message : "échec IA"
+          send({ type: "error", error: message })
+          await remember({ ok: false, error: message })
         }
       } finally {
         try {
