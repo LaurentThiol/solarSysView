@@ -381,13 +381,7 @@ function writeBandFields(
 ) {
   const u = upperAt.get(date)
   const l = lowerAt.get(date)
-  if (u == null || l == null) {
-    extra[`${prefix}_upper`] = null
-    extra[`${prefix}_lower`] = null
-    extra[`${prefix}_base`] = null
-    extra[`${prefix}_span`] = null
-    return
-  }
+  if (u == null || l == null) return
   const up = clampPlotted(seriesKey, plottedOf(seriesKey, u, ranges))
   const lo = clampPlotted(seriesKey, plottedOf(seriesKey, l, ranges))
   extra[`${prefix}_upper`] = up
@@ -1506,7 +1500,6 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                           stroke="none"
                           legendType="none"
                           tooltipType="none"
-                          connectNulls
                           isAnimationActive={false}
                         />
                         <Area
@@ -1519,7 +1512,6 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                           stroke="none"
                           legendType="none"
                           tooltipType="none"
-                          connectNulls
                           isAnimationActive={false}
                         />
                         <Line
@@ -1580,7 +1572,6 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       stroke="none"
                       legendType="none"
                       tooltipType="none"
-                      connectNulls
                       isAnimationActive={false}
                     />
                     <Area
@@ -1593,7 +1584,6 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       stroke="none"
                       legendType="none"
                       tooltipType="none"
-                      connectNulls
                       isAnimationActive={false}
                     />
                     <Line
