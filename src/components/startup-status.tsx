@@ -596,7 +596,7 @@ function FamilyLinks({
           {family.items.map((entry) => {
             const current = isNavItemActive(pathname, entry.href)
             return (
-              <WithHelp key={entry.href} help={entry.help} className="w-full">
+              <HelpWrap key={entry.href} help={entry.help} className="w-full">
                 <Link
                   href={entry.href}
                   aria-current={current ? "page" : undefined}
@@ -609,7 +609,7 @@ function FamilyLinks({
                 >
                   {entry.label}
                 </Link>
-              </WithHelp>
+              </HelpWrap>
             )
           })}
         </div>
