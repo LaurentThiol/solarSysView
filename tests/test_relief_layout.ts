@@ -35,6 +35,11 @@ import {
   profilePaintKey,
   ranksOf,
   rankTimeLinks,
+  rankTimePatches,
+  rankTimePatchAlpha,
+  rankTimePatchShade,
+  pointInQuad,
+  mixRgb,
 } from "../src/lib/relief/profiles"
 
 function draw(i: number): Draw {
@@ -277,6 +282,73 @@ test("rank-time links join the same order statistic across consecutive draws", (
     assert.ok(link.bz > link.az)
     assert.equal(link.toIndex, link.fromIndex + 1)
   }
+})
+
+test("rank-time patches fill the four bands between consecutive draws", () => {
+  const layout = layoutDraws(draws(8), { mode: "temps", height: "valeur", fusion: 0.4, stars: false })
+  const map = buildProfiles(layout)
+  const patches = rankTimePatches(map)
+  assert.equal(patches.length, 7 * 4)
+  const first = patches[0]
+  assert.equal(first.band, 0)
+  assert.equal(first.fromIndex, 0)
+  assert.equal(first.toIndex, 1)
+  assert.equal(first.a.x, 0)
+  assert.equal(first.b.x, 1)
+  assert.equal(first.c.x, 1)
+  assert.equal(first.d.x, 0)
+  assert.ok(first.c.z > first.a.z)
+  assert.equal(first.a.y, map.profiles[0].points[0].y)
+  assert.equal(first.b.y, map.profiles[0].points[1].y)
+  const bands = new Set(patches.map((p) => p.band))
+  assert.deepEqual([...bands].sort(), [0, 1, 2, 3])
+})
+
+test("hex rank-time patches still follow consecutive draw indices", () => {
+  const layout = layoutDraws(draws(12), { mode: "hex", height: "valeur", fusion: 0.4, stars: false })
+  const map = buildProfiles(layout)
+  const patches = rankTimePatches(map)
+  assert.equal(patches.length, 11 * 4)
+  for (const patch of patches) {
+    assert.equal(patch.toIndex, patch.fromIndex + 1)
+  }
+})
+
+test("rank-time fill alpha rises on hover and falls on dense samples", () => {
+  const quiet = rankTimePatchAlpha(20, 18, 19, null)
+  const hot = rankTimePatchAlpha(20, 18, 19, 19)
+  const dense = rankTimePatchAlpha(200, 198, 199, null)
+  assert.ok(hot > quiet)
+  assert.ok(dense < quiet)
+  assert.ok(hot <= 0.4)
+  assert.ok(quiet > 0.05)
+})
+
+test("flat time patch faces the light from above", () => {
+  const shade = rankTimePatchShade({
+    band: 0,
+    fromIndex: 0,
+    toIndex: 1,
+    a: { x: 0, y: 1, z: 0 },
+    b: { x: 1, y: 1, z: 0 },
+    c: { x: 1, y: 1, z: 1 },
+    d: { x: 0, y: 1, z: 1 },
+  })
+  assert.ok(shade > 0.85, `shade ${shade}`)
+  assert.ok(shade <= 1)
+})
+
+test("pointInQuad hits the interior of a screen quad", () => {
+  const quad = {
+    a: { x: 0, y: 0 },
+    b: { x: 10, y: 0 },
+    c: { x: 10, y: 8 },
+    d: { x: 0, y: 8 },
+  }
+  assert.equal(pointInQuad(5, 4, quad.a, quad.b, quad.c, quad.d), true)
+  assert.equal(pointInQuad(20, 4, quad.a, quad.b, quad.c, quad.d), false)
+  const mixed = mixRgb([0, 0, 0], [10, 20, 40], 0.5)
+  assert.deepEqual(mixed, [5, 10, 20])
 })
 
 function gapZ(map: ReturnType<typeof buildProfiles>) {

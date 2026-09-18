@@ -57,6 +57,7 @@ export function ReliefLab() {
   const [stars, setStars] = useState(false)
   const [labels, setLabels] = useState(true)
   const [rankTime, setRankTime] = useState(false)
+  const [rankFill, setRankFill] = useState(false)
   const [stems, setStems] = useState(true)
   const [autoRotate, setAutoRotate] = useState(false)
   const [camera, setCamera] = useState<Camera>(() => homeCamera("scene", 20))
@@ -104,6 +105,7 @@ export function ReliefLab() {
       yScale,
       stars,
       rankTime,
+      rankFill,
       stems,
       marker,
       maxH: bounds.maxY * yScale,
@@ -131,6 +133,7 @@ export function ReliefLab() {
                 labels={labels}
                 stars={stars}
                 rankTime={rankTime}
+                rankFill={rankFill}
                 stems={stems}
                 marker={marker}
                 home={homeCamera(style, chronological.length || sample)}
@@ -145,7 +148,8 @@ export function ReliefLab() {
         points sont les statistiques d’ordre <span className="text-foreground">n1→n5</span>{" "}
         (plus petite boule → plus grande), pas l’ordre de sortie. La hauteur est
         la valeur 1–50. Un calque optionnel relie les mêmes rangs dans le temps
-        (comme Évolution). Le glyphe 5×10 reste l’onglet Morpho.
+        (comme Évolution) ; on peut remplir les facettes entre rangs voisins.
+        Le glyphe 5×10 reste l’onglet Morpho.
       </p>
 
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
@@ -312,10 +316,31 @@ export function ReliefLab() {
             <OverlayToggle
               label="Rangs dans le temps"
               on={rankTime}
-              onClick={() => setRankTime((v) => !v)}
+              onClick={() => {
+                setRankTime((on) => {
+                  const next = !on
+                  if (!next) setRankFill(false)
+                  return next
+                })
+              }}
               help={{
                 title: "Rangs dans le temps",
-                body: "Calque optionnel : relie n1 d’un tirage à n1 du suivant, et ainsi de suite jusqu’à n5. C’est le tracé d’Évolution, posé sur la carte. Ce n’est pas une prédiction.",
+                body: "Calque optionnel : relie n1 d’un tirage à n1 du suivant, et ainsi de suite jusqu’à n5. C’est le tracé d’Évolution, posé sur la carte. Ce n’est pas une prédiction. « Surfaces » remplit les facettes ainsi créées.",
+              }}
+            />
+            <OverlayToggle
+              label="Surfaces"
+              on={rankTime && rankFill}
+              onClick={() => {
+                setRankFill((on) => {
+                  const next = !on
+                  if (next) setRankTime(true)
+                  return next
+                })
+              }}
+              help={{
+                title: "Surfaces",
+                body: "Remplit les facettes entre rangs voisins d’un tirage au suivant (n1–n2, n2–n3…). Translucide, un peu plus opaque sur le récent et au survol. Active aussi « Rangs dans le temps ». Ce n’est pas une prédiction.",
               }}
             />
             <OverlayToggle

@@ -281,3 +281,128 @@ export function rankTimeLinks(map: ProfileMap): RankTimeLink[] {
   }
   return links
 }
+
+export type WorldPt = { x: number; y: number; z: number }
+
+/** Facette entre deux rangs voisins, d’un tirage au suivant. */
+export type RankTimePatch = {
+  band: RankIndex
+  fromIndex: number
+  toIndex: number
+  a: WorldPt
+  b: WorldPt
+  c: WorldPt
+  d: WorldPt
+}
+
+function asWorld(p: ProfilePoint): WorldPt {
+  return { x: p.x, y: p.y, z: p.z }
+}
+
+/**
+ * Peau n1–n2, n2–n3, n3–n4, n4–n5 le long du temps.
+ * Ce sont les surfaces fermées par les traits de profil et le calque rangs.
+ */
+export function rankTimePatches(map: ProfileMap): RankTimePatch[] {
+  const sorted = [...map.profiles].sort((a, b) => a.drawIndex - b.drawIndex)
+  const patches: RankTimePatch[] = []
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const from = sorted[i]
+    const to = sorted[i + 1]
+    for (let r = 0; r < 4; r++) {
+      const a = from.points[r]
+      const b = from.points[r + 1]
+      const c = to.points[r + 1]
+      const d = to.points[r]
+      if (!a || !b || !c || !d) continue
+      patches.push({
+        band: r as RankIndex,
+        fromIndex: from.drawIndex,
+        toIndex: to.drawIndex,
+        a: asWorld(a),
+        b: asWorld(b),
+        c: asWorld(c),
+        d: asWorld(d),
+      })
+    }
+  }
+  return patches
+}
+
+export function mixRgb(
+  a: [number, number, number],
+  b: [number, number, number],
+  t = 0.5
+): [number, number, number] {
+  const u = clamp01(t)
+  return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u]
+}
+
+/** Lambert sommaire : les crêtes se lisent sans changer la teinte de rang. */
+export function rankTimePatchShade(patch: RankTimePatch) {
+  const { a, b, d } = patch
+  const ux = d.x - a.x
+  const uy = d.y - a.y
+  const uz = d.z - a.z
+  const vx = b.x - a.x
+  const vy = b.y - a.y
+  const vz = b.z - a.z
+  const nx = uy * vz - uz * vy
+  const ny = uz * vx - ux * vz
+  const nz = ux * vy - uy * vx
+  const n = Math.hypot(nx, ny, nz) || 1
+  const lit = Math.max(0, (nx * -0.45 + ny * 1 + nz * 0.32) / n)
+  return 0.62 + 0.38 * lit
+}
+
+/** Alpha du remplissage : plus dense = plus transparent ; survol = plus opaque. */
+export function rankTimePatchAlpha(
+  count: number,
+  fromIndex: number,
+  toIndex: number,
+  hoverOwner: number | null
+) {
+  const hot = hoverOwner === fromIndex || hoverOwner === toIndex
+  const rec = count <= 1 ? 1 : (fromIndex + toIndex) / 2 / Math.max(1, count - 1)
+  const base = count >= 100 ? 0.07 : count >= 50 ? 0.12 : 0.2
+  if (hot) return Math.min(0.4, base * 2.15 + 0.1)
+  return base * (0.48 + rec * 0.62)
+}
+
+export type QuadPt = { x: number; y: number }
+
+function pointInTriangle(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number
+) {
+  const v0x = cx - ax
+  const v0y = cy - ay
+  const v1x = bx - ax
+  const v1y = by - ay
+  const v2x = px - ax
+  const v2y = py - ay
+  const dot00 = v0x * v0x + v0y * v0y
+  const dot01 = v0x * v1x + v0y * v1y
+  const dot02 = v0x * v2x + v0y * v2y
+  const dot11 = v1x * v1x + v1y * v1y
+  const dot12 = v1x * v2x + v1y * v2y
+  const den = dot00 * dot11 - dot01 * dot01
+  if (Math.abs(den) < 1e-12) return false
+  const u = (dot11 * dot02 - dot01 * dot12) / den
+  const v = (dot00 * dot12 - dot01 * dot02) / den
+  return u >= -1e-6 && v >= -1e-6 && u + v <= 1 + 1e-6
+}
+
+/** Hit-test écran d’une facette projetée (deux triangles). */
+export function pointInQuad(px: number, py: number, a: QuadPt, b: QuadPt, c: QuadPt, d: QuadPt) {
+  return (
+    pointInTriangle(px, py, a.x, a.y, b.x, b.y, c.x, c.y) ||
+    pointInTriangle(px, py, a.x, a.y, c.x, c.y, d.x, d.y)
+  )
+}

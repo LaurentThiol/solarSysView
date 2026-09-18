@@ -9,9 +9,14 @@ import {
   RANK_RGB,
   STAR_RGB,
   distToSegment,
+  mixRgb,
+  pointInQuad,
   profileFitBounds,
   profilePaintKey,
   rankTimeLinks,
+  rankTimePatchAlpha,
+  rankTimePatches,
+  rankTimePatchShade,
   rgbCssOf,
   type DrawProfile,
   type ProfileMap,
@@ -48,6 +53,14 @@ type Seg = {
   by: number
 }
 
+type PatchHit = {
+  owner: number
+  a: { x: number; y: number }
+  b: { x: number; y: number }
+  c: { x: number; y: number }
+  d: { x: number; y: number }
+}
+
 type Drag =
   | { kind: "orbit"; x: number; y: number; yaw: number; pitch: number }
   | { kind: "pan"; x: number; y: number; panX: number; panY: number }
@@ -60,6 +73,7 @@ type Scene = {
   labels: boolean
   stars: boolean
   rankTime: boolean
+  rankFill: boolean
   stems: boolean
   marker: MarkerStyle
 }
@@ -76,6 +90,7 @@ export function ReliefCanvas({
   labels,
   stars,
   rankTime,
+  rankFill,
   stems,
   marker,
   home,
@@ -91,6 +106,7 @@ export function ReliefCanvas({
   labels: boolean
   stars: boolean
   rankTime: boolean
+  rankFill: boolean
   stems: boolean
   marker: MarkerStyle
   home: Camera
@@ -101,6 +117,7 @@ export function ReliefCanvas({
   const dragRef = useRef<Drag | null>(null)
   const hitsRef = useRef<Hit[]>([])
   const segsRef = useRef<Seg[]>([])
+  const patchesRef = useRef<PatchHit[]>([])
   const [hint, setHint] = useState<Hover>(null)
   const sceneRef = useRef<Scene>({
     map,
@@ -110,6 +127,7 @@ export function ReliefCanvas({
     labels,
     stars,
     rankTime,
+    rankFill,
     stems,
     marker,
   })
@@ -120,8 +138,19 @@ export function ReliefCanvas({
   }, [camera])
 
   useEffect(() => {
-    sceneRef.current = { map, style, yScale, hoverOwner, labels, stars, rankTime, stems, marker }
-  }, [hoverOwner, labels, map, marker, rankTime, stars, stems, style, yScale])
+    sceneRef.current = {
+      map,
+      style,
+      yScale,
+      hoverOwner,
+      labels,
+      stars,
+      rankTime,
+      rankFill,
+      stems,
+      marker,
+    }
+  }, [hoverOwner, labels, map, marker, rankFill, rankTime, stars, stems, style, yScale])
 
   useEffect(() => {
     if (!autoRotate) return
@@ -148,6 +177,7 @@ export function ReliefCanvas({
         sceneRef.current,
         hitsRef,
         segsRef,
+        patchesRef,
         lastKeyRef
       )
       frame = window.requestAnimationFrame(loop)
@@ -202,6 +232,15 @@ export function ReliefCanvas({
       if (d < 10 && d < dist) {
         dist = d
         best = { owner: seg.owner, x, y }
+      }
+    }
+    if (!best) {
+      for (let i = patchesRef.current.length - 1; i >= 0; i--) {
+        const patch = patchesRef.current[i]
+        if (pointInQuad(x, y, patch.a, patch.b, patch.c, patch.d)) {
+          best = { owner: patch.owner, x, y }
+          break
+        }
       }
     }
     return best
@@ -309,6 +348,7 @@ export function ReliefCanvas({
           Un trait = un tirage · {marker === "point" ? "points" : "boules"} n1→n5 ·
           hauteur = 1–50
           {rankTime ? " · calque rangs dans le temps" : ""}
+          {rankTime && rankFill ? " · surfaces" : ""}
           <span className="text-white/45"> · Maj+glisser pour déplacer</span>
         </p>
         {hint ? <p className="tabular-nums">tirage #{hint.owner + 1}</p> : null}
@@ -340,6 +380,7 @@ function paintScene(
   scene: Scene,
   hitsRef: { current: Hit[] },
   segsRef: { current: Seg[] },
+  patchesRef: { current: PatchHit[] },
   lastKeyRef: { current: string }
 ) {
   if (!canvas) return
@@ -352,7 +393,7 @@ function paintScene(
   const dpr = Math.min(2, typeof window === "undefined" ? 1 : window.devicePixelRatio || 1)
   const bw = Math.max(1, Math.round(cssW * dpr))
   const bh = Math.max(1, Math.round(cssH * dpr))
-  const { map, style, yScale, hoverOwner, labels, stars, rankTime, stems, marker } = scene
+  const { map, style, yScale, hoverOwner, labels, stars, rankTime, rankFill, stems, marker } = scene
   const key = [
     cssW,
     cssH,
@@ -370,6 +411,7 @@ function paintScene(
     labels ? 1 : 0,
     stars ? 1 : 0,
     rankTime ? 1 : 0,
+    rankFill ? 1 : 0,
     stems ? 1 : 0,
     marker,
   ].join("|")
@@ -391,6 +433,9 @@ function paintScene(
     ctx.clearRect(0, 0, cssW, cssH)
     drawBackdrop(ctx, cssW, cssH)
     if (!map || map.profiles.length === 0) {
+      hitsRef.current = []
+      segsRef.current = []
+      patchesRef.current = []
       canvas.dataset.relief = `${cssW}x${cssH}`
       return
     }
@@ -434,7 +479,11 @@ function paintScene(
 
     const hits: Hit[] = []
     const segs: Seg[] = []
+    const patchHits: PatchHit[] = []
     const labelAll = labels && map.profiles.length <= 20
+    if (rankTime && rankFill) {
+      paintRankTimeFill(ctx, map, proj, hoverOwner, patchHits)
+    }
     if (rankTime) {
       paintRankTime(ctx, map, proj, hoverOwner, segs)
     }
@@ -444,6 +493,7 @@ function paintScene(
     }
     hitsRef.current = hits
     segsRef.current = segs
+    patchesRef.current = patchHits
     canvas.dataset.relief = `${cssW}x${cssH}`
   } catch {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -504,6 +554,53 @@ function paintAxes(
     ctx.textAlign = "right"
     ctx.textBaseline = "middle"
     ctx.fillText(String(n), a.x - 6, a.y)
+  }
+}
+
+function paintRankTimeFill(
+  ctx: CanvasRenderingContext2D,
+  map: ProfileMap,
+  proj: (x: number, y: number, z: number) => { x: number; y: number; depth: number },
+  hoverOwner: number | null,
+  patchHits: PatchHit[]
+) {
+  const count = map.profiles.length
+  const items = rankTimePatches(map).map((patch) => {
+    const a = proj(patch.a.x, patch.a.y, patch.a.z)
+    const b = proj(patch.b.x, patch.b.y, patch.b.z)
+    const c = proj(patch.c.x, patch.c.y, patch.c.z)
+    const d = proj(patch.d.x, patch.d.y, patch.d.z)
+    return {
+      patch,
+      a,
+      b,
+      c,
+      d,
+      depth: (a.depth + b.depth + c.depth + d.depth) / 4,
+    }
+  })
+  items.sort((left, right) => right.depth - left.depth)
+  for (const item of items) {
+    const { patch, a, b, c, d } = item
+    const alpha = rankTimePatchAlpha(count, patch.fromIndex, patch.toIndex, hoverOwner)
+    const shade = rankTimePatchShade(patch)
+    const mixed = mixRgb(RANK_RGB[patch.band], RANK_RGB[Math.min(4, patch.band + 1)], 0.46)
+    const rgb: [number, number, number] = [mixed[0] * shade, mixed[1] * shade, mixed[2] * shade]
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.lineTo(c.x, c.y)
+    ctx.lineTo(d.x, d.y)
+    ctx.closePath()
+    ctx.fillStyle = rgbCssOf(rgb, alpha)
+    ctx.fill()
+    patchHits.push({
+      owner: patch.toIndex,
+      a: { x: a.x, y: a.y },
+      b: { x: b.x, y: b.y },
+      c: { x: c.x, y: c.y },
+      d: { x: d.x, y: d.y },
+    })
   }
 }
 

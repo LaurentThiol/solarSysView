@@ -77,7 +77,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Relief",
         help: {
           title: "Relief",
-          body: "Une ligne n1→n5 par tirage. Boule ou point. Zoom plus serré à 100/200. Calque rangs dans le temps. Tiges masquables. Le glyphe 5×10 reste Morpho.",
+          body: "Une ligne n1→n5 par tirage. Boule ou point. Zoom plus serré à 100/200. Calque rangs dans le temps, surfaces optionnelles. Tiges masquables. Le glyphe 5×10 reste Morpho.",
         },
       },
       {

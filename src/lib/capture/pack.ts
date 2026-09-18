@@ -372,6 +372,7 @@ export function packRelief(input: {
   yScale: number
   stars: boolean
   rankTime?: boolean
+  rankFill?: boolean
   stems?: boolean
   marker?: string
   maxH: number
@@ -381,7 +382,9 @@ export function packRelief(input: {
     `Relief · profils n1→n5 · ${input.style} · ${input.offset}`,
     `${input.drawn} tirages (échantillon ${input.sample}) · ${input.from ?? "?"} → ${input.to ?? "?"}`,
     `Hauteur = ${input.height} · écart ${input.fusion.toFixed(2)} · max ${roundish(input.maxH, 2)}`,
-    `Marqueur : ${input.marker ?? "boule"} · calque rangs dans le temps : ${input.rankTime ? "oui" : "non"} · tiges : ${input.stems === false ? "off" : "on"}`,
+    `Marqueur : ${input.marker ?? "boule"} · calque rangs dans le temps : ${input.rankTime ? "oui" : "non"}${
+      input.rankTime && input.rankFill ? " · surfaces" : ""
+    } · tiges : ${input.stems === false ? "off" : "on"}`,
     `Décalage recommandé pour cette taille : ${input.recommended}`,
   ]
   return {
@@ -406,6 +409,7 @@ export function packRelief(input: {
       yScale: roundish(input.yScale, 3),
       stars: input.stars,
       rankTime: input.rankTime ?? false,
+      rankFill: Boolean(input.rankTime && input.rankFill),
       stems: input.stems !== false,
       marker: input.marker ?? "boule",
       maxH: roundish(input.maxH, 3),

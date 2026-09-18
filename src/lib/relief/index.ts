@@ -87,6 +87,11 @@ export {
   profileTimeStep,
   ranksOf,
   rankTimeLinks,
+  rankTimePatches,
+  rankTimePatchAlpha,
+  rankTimePatchShade,
+  mixRgb,
+  pointInQuad,
   rgbCssOf,
   starsOf,
   valueHeight,
@@ -94,6 +99,7 @@ export {
   type ProfileMap,
   type ProfilePoint,
   type RankTimeLink,
+  type RankTimePatch,
   type StarPoint,
 } from "./profiles"
 export {
