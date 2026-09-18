@@ -103,15 +103,30 @@ export function CoordHud({
   if (!mounted) return null
 
   const follow = !pinned && !dragged && live
+  const hudW = 256
+  const hudH = 220
+  const gap = 18
+  const followBox = follow
+    ? {
+        left:
+          live.clientX - gap - hudW >= 8
+            ? live.clientX - gap - hudW
+            : Math.min(window.innerWidth - hudW - 8, live.clientX + gap),
+        top:
+          live.clientY - gap - hudH >= 8
+            ? live.clientY - gap - hudH
+            : Math.min(window.innerHeight - hudH - 8, live.clientY + gap),
+      }
+    : null
   const left = dragged
     ? dragged.x
-    : follow
-      ? Math.min(window.innerWidth - 280, Math.max(8, live.clientX + 18))
+    : followBox
+      ? Math.max(8, followBox.left)
       : window.innerWidth - 288
   const top = dragged
     ? dragged.y
-    : follow
-      ? Math.min(window.innerHeight - 220, Math.max(8, live.clientY + 18))
+    : followBox
+      ? Math.max(8, followBox.top)
       : 96
 
   const point = live
@@ -121,11 +136,11 @@ export function CoordHud({
       data-capture-ui
       role="status"
       aria-live="polite"
-      className="fixed z-40 w-64 rounded-xl border border-border bg-card/95 p-3 text-xs shadow-2xl backdrop-blur-sm"
+      className="pointer-events-none fixed z-40 w-64 rounded-xl border border-border bg-card/95 p-3 text-xs shadow-2xl backdrop-blur-sm"
       style={{ left, top }}
     >
       <div
-        className="mb-2 flex cursor-grab items-center justify-between gap-2 active:cursor-grabbing"
+        className="pointer-events-auto mb-2 flex cursor-grab items-center justify-between gap-2 active:cursor-grabbing"
         onPointerDown={(event) => {
           const box = (event.currentTarget.parentElement as HTMLElement).getBoundingClientRect()
           dragRef.current = { dx: event.clientX - box.left, dy: event.clientY - box.top }

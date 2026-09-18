@@ -53,7 +53,8 @@ import {
   invertLinear,
   isDemagnetizeModifier,
   isMagneted,
-  nearestSample,
+  magnetKindAt,
+  magnetOnCurve,
   nearestSampleByX,
   newSketchId,
   pixelDistance,
@@ -62,7 +63,6 @@ import {
   remapSketch,
   resolveSketchBand,
   sketchDataKey,
-  snapIndexToExtrema,
   valueFromPixelY,
   windowTooShort,
   type AxisScales,
@@ -1157,20 +1157,26 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       Boolean(current?.draft?.start),
       demagnetize
     )
+    const extrema = extremaIndices(values)
     let index: number | null = null
     let distance: number | null = null
+    let curveKind: LiveCursor["kind"] | null = null
     if (pointer && samples.length) {
-      const near = offCurve
-        ? nearestSampleByX(samples, pointer.x)
-        : nearestSample(samples, pointer)
-      if (near) {
-        index = near.index
-        if ("distance" in near) distance = near.distance
-        else {
+      if (offCurve) {
+        const near = nearestSampleByX(samples, pointer.x)
+        if (near) {
+          index = near.index
           const at = samples.find((item) => item.index === near.index)
           distance = at
             ? Math.hypot(pointer.x - at.px, pointer.y - at.py)
             : near.distanceX
+        }
+      } else {
+        const hit = magnetOnCurve(samples, pointer, extrema)
+        if (hit) {
+          index = hit.index
+          distance = hit.distance
+          curveKind = hit.kind
         }
       }
     }
@@ -1220,21 +1226,20 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       }
     }
     const snapped = isMagneted(distance)
-    const magnet = snapped
-      ? snapIndexToExtrema(index, extremaIndices(values))
-      : { index, kind: "sample" as const }
-    const chosen = magnet.index
-    const sample = samples.find((item) => item.index === chosen)
+    const kind = snapped
+      ? (curveKind && curveKind !== "free" ? curveKind : magnetKindAt(index, extrema))
+      : "free"
+    const sample = samples.find((item) => item.index === index)
     if (sample && pointer) distance = Math.hypot(pointer.x - sample.px, pointer.y - sample.py)
     return {
-      index: chosen,
-      date: series[chosen].date,
+      index,
+      date: series[index].date,
       seriesKey: targetKey,
       seriesLabel: chartConfig[targetKey].label,
-      actual: values[chosen],
+      actual: values[index],
       snapped,
       offCurve: false,
-      kind: snapped ? magnet.kind : "free",
+      kind,
       distancePx: distance,
       clientX: event.clientX,
       clientY: event.clientY,

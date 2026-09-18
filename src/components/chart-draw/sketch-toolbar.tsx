@@ -23,7 +23,7 @@ const DRAW_HELP = {
   body: `Pose une figure de la table (ou un segment libre) sur la courbe d’évolution.
 
 1. Choisis la figure et la série visée.
-2. Clique un départ : près de la courbe, l’aimant accroche le tirage le plus proche, et un pivot de swing s’il est tout près.
+2. Clique un départ : près de la courbe, l’aimant accroche le tirage le plus proche. Un pivot de swing est seulement étiqueté (aimant · pivot) : il n’avale plus le voisin, chaque point de la courbe d’origine reste sélectionnable.
 3. Clique l’arrivée, même règle. Sur un segment libre, Alt (⌥ Option) lâche l’aimant : l’abscisse reste un tirage, l’ordonnée suit le curseur — pour poser hors courbe.
 4. Le gabarit est étiré sur cette fenêtre (le segment libre est une droite). Le canal pose deux droites parallèles autour de la série — une au-dessus, une en dessous — plutôt qu’un zigzag d’école. Les coordonnées vivent dans l’espace des données : un changement de période les recale par date.
 

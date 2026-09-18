@@ -12,6 +12,8 @@ import {
   invertLinear,
   isDemagnetizeModifier,
   isMagneted,
+  magnetKindAt,
+  magnetOnCurve,
   nearestSample,
   nearestSampleByX,
   pixelDistance,
@@ -45,16 +47,38 @@ import {
   templateFigures,
 } from "../src/lib/chartisme/sketch-shapes"
 
-test("magnet snaps to a nearby swing pivot, not the neighbouring sample", () => {
+test("magnet labels a swing pivot without stealing the neighbouring sample", () => {
   const values = [1, 2, 10, 2, 1, 2, 9, 2, 1]
   const extrema = extremaIndices(values)
   assert.ok(extrema.length > 0)
-  const snapped = snapIndexToExtrema(3, extrema)
-  assert.ok(extrema.includes(snapped.index))
-  assert.equal(snapped.kind, "extrema")
+  const onPeak = snapIndexToExtrema(2, extrema)
+  assert.ok(extrema.includes(onPeak.index))
+  assert.equal(onPeak.kind, "extrema")
+  const neighbor = snapIndexToExtrema(3, extrema)
+  assert.equal(neighbor.index, 3)
+  assert.equal(neighbor.kind, "sample")
   const far = snapIndexToExtrema(0, [20])
   assert.equal(far.index, 0)
   assert.equal(far.kind, "sample")
+})
+
+test("pixel magnet keeps every original sample selectable next to a swing pivot", () => {
+  const values = [120, 155, 130, 80, 132, 115, 136, 188]
+  const extrema = extremaIndices(values)
+  assert.ok(extrema.includes(5), "the valley at 115 is a swing pivot")
+  const samples = values.map((value, index) => ({
+    index,
+    px: index * 50,
+    py: 200 - value,
+  }))
+  const onValley = magnetOnCurve(samples, { x: 250, y: 85 }, extrema)
+  assert.equal(onValley?.index, 5)
+  assert.equal(onValley?.kind, "extrema")
+  const onRightNeighbor = magnetOnCurve(samples, { x: 300, y: 64 }, extrema)
+  assert.equal(onRightNeighbor?.index, 6)
+  assert.equal(onRightNeighbor?.kind, magnetKindAt(6, extrema))
+  assert.notEqual(onRightNeighbor?.index, 5)
+  assert.equal(onRightNeighbor?.snapped, true)
 })
 
 test("pixel magnet picks the nearest sample in 2D", () => {

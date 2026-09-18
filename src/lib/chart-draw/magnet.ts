@@ -3,7 +3,6 @@ import { swingPivots } from "../chartisme/pivots"
 import { FREE_FIGURE, type MagnetKind } from "./types"
 
 export const DEFAULT_MAGNET_RADIUS_PX = 28
-export const MAGNET_EXTREMA_BARS = 2
 
 export type PixelPoint = { x: number; y: number }
 
@@ -44,32 +43,45 @@ export function extremaIndices(values: number[]): number[] {
   return swingPivots(values).map((pivot) => pivot.index)
 }
 
+/** Pivot si ce tirage en est un, sinon simple échantillon. */
+export function magnetKindAt(index: number, extrema: number[]): MagnetKind {
+  return extrema.includes(index) ? "extrema" : "sample"
+}
+
 /**
- * Si un pivot de swing est à moins de `maxBars` du curseur, on l'accroche :
- * une tête d'ETE se pose sur le sommet, pas sur le tirage voisin.
+ * Étiquette un tirage déjà choisi. Le voisin d’un pivot reste ce voisin :
+ * l’aimant 2D a déjà pris le plus proche, on n’avale plus les dents de la
+ * courbe d’origine (tous les dessins libres : canal, ETE, segment, etc.).
  */
 export function snapIndexToExtrema(
   pointerIndex: number,
-  extrema: number[],
-  maxBars = MAGNET_EXTREMA_BARS
+  extrema: number[]
 ): { index: number; kind: MagnetKind } {
   if (!Number.isFinite(pointerIndex) || extrema.length === 0) {
     return { index: pointerIndex, kind: "sample" }
   }
-  let best = pointerIndex
-  let bestDist = maxBars + 1
-  for (const extra of extrema) {
-    const dist = Math.abs(extra - pointerIndex)
-    if (dist < bestDist) {
-      best = extra
-      bestDist = dist
-    }
+  return { index: pointerIndex, kind: magnetKindAt(pointerIndex, extrema) }
+}
+
+/**
+ * Aimant courbe : le tirage le plus proche en pixels gagne toujours.
+ * Un pivot n’est qu’une étiquette, pas un aimant qui avale le voisin.
+ */
+export function magnetOnCurve(
+  samples: PixelSample[],
+  pointer: PixelPoint,
+  extrema: number[],
+  radiusPx = DEFAULT_MAGNET_RADIUS_PX
+): { index: number; distance: number; snapped: boolean; kind: MagnetKind } | null {
+  const near = nearestSample(samples, pointer)
+  if (!near) return null
+  const snapped = isMagneted(near.distance, radiusPx)
+  return {
+    index: near.index,
+    distance: near.distance,
+    snapped,
+    kind: snapped ? magnetKindAt(near.index, extrema) : "free",
   }
-  if (bestDist <= maxBars && best !== pointerIndex) {
-    return { index: best, kind: "extrema" }
-  }
-  if (bestDist === 0) return { index: best, kind: "extrema" }
-  return { index: pointerIndex, kind: "sample" }
 }
 
 /** Plus proche échantillon en pixels — vrai aimant 2D, pas seulement l'abscisse. */
