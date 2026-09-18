@@ -30,6 +30,7 @@ export const TAB_LABELS: Record<string, string> = {
   hasard: "Hasard",
   bayes: "Bayésien",
   dependence: "Dépendance",
+  jumeaux: "Jumeaux",
   proba: "Probabilités",
   memo: "Mémo",
   solutions: "Solutions",
@@ -93,5 +94,9 @@ export const GLOSSARY: { term: string; text: string }[] = [
   {
     term: "Formule actuelle (12 ★)",
     text: "Tirages depuis le pool d’étoiles 1–12 (2016). « Tout l’historique » mélange aussi les anciennes formules (1–9 puis 1–11).",
+  },
+  {
+    term: "Jumeaux",
+    text: "Onglet Analyse : portrait d’un tirage dans l’espace des variables (somme, étendue, parité…) et voisins en cosinus de z-scores. Ressemblance d’archive, pas un pronostic.",
   },
 ]

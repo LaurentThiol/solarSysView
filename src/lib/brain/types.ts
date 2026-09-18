@@ -91,7 +91,7 @@ export type WalkerState = {
   cloudLots: boolean
 }
 
-export type WorkingKind = "pin" | "current" | "lot" | "memory" | "shortlist"
+export type WorkingKind = "pin" | "current" | "lot" | "memory" | "shortlist" | "analog"
 
 export type WorkingObject = {
   kind: WorkingKind

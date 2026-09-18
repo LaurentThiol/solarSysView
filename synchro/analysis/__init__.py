@@ -10,12 +10,15 @@ from synchro.analysis.lab import lab_report
 from synchro.analysis.montecarlo import montecarlo_report
 from synchro.analysis.ta import atr, bollinger, ema, indicators, macd, rsi, sma
 from synchro.analysis.tech import tech_pack
+from synchro.analysis.fingerprints import FINGERPRINT_AXES, analogs_report
 from synchro.analysis.variables import VARIABLE_NAMES, series
 from synchro.analysis.windowing import compare_windows, resolve_window, rolling_profile
 from synchro.analysis.windows import heikin_ashi, ohlc_blocks, rolling_stats
 
 __all__ = [
+    "FINGERPRINT_AXES",
     "VARIABLE_NAMES",
+    "analogs_report",
     "atr",
     "ball_board",
     "bayes_report",

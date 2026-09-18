@@ -14,6 +14,7 @@ export type ParsedHandle = {
   n: number | null
   curveId: string | null
   readingId: number | null
+  drawDate: string | null
   entry: CatalogEntry | null
   ambiguous: CatalogEntry[]
   error: string | null
@@ -29,7 +30,7 @@ export type HandleContext = {
 
 const HANDLE_TOKEN = String.raw`[a-zA-Z][\w-]*`
 const HANDLE_RE = new RegExp(
-  `^@(?:(${HANDLE_TOKEN})\\.)?(${HANDLE_TOKEN})(?::(\\d{1,2}))?(?:\\.(${HANDLE_TOKEN}))?(?:@(${HANDLE_TOKEN}(?::\\d{1,2})?))?(?:#(\\d+))?$`
+  `^@(?:(${HANDLE_TOKEN})\\.)?(${HANDLE_TOKEN})(?::(\\d{1,2}))?(?:\\.(${HANDLE_TOKEN}))?(?:@(${HANDLE_TOKEN}(?::\\d{1,2})?))?(?:#(\\d{4}-\\d{2}-\\d{2}|\\d+))?$`
 )
 
 const LABS = new Set<BrainLab>(["analyse", "chartisme", "harmo", "morpho", "combinaisons", "specialist"])
@@ -60,6 +61,7 @@ export function parseHandle(raw: string, ctx: HandleContext = {}): ParsedHandle 
     n: null,
     curveId: ctx.curveId ?? null,
     readingId: null,
+    drawDate: null,
     entry: null,
     ambiguous: [],
     error: "handle vide",
@@ -73,7 +75,9 @@ export function parseHandle(raw: string, ctx: HandleContext = {}): ParsedHandle 
   const nFromFirst = parseN(match[3])
   const second = match[4]
   const curveToken = match[5] ?? null
-  const readingId = match[6] ? Number.parseInt(match[6], 10) : null
+  const citation = match[6] ?? null
+  const drawDate = citation && /^\d{4}-\d{2}-\d{2}$/.test(citation) ? citation : null
+  const readingId = citation && !drawDate ? Number.parseInt(citation, 10) : null
   const prefixLab = asLab(prefix)
   const prefixVar = asVariable(prefix)
   const lab: BrainLab | null = prefixLab
@@ -113,6 +117,7 @@ export function parseHandle(raw: string, ctx: HandleContext = {}): ParsedHandle 
       n,
       curveId,
       readingId,
+      drawDate,
       entry: null,
       ambiguous,
       error: hint,
@@ -126,6 +131,7 @@ export function parseHandle(raw: string, ctx: HandleContext = {}): ParsedHandle 
     n,
     curveId,
     readingId,
+    drawDate,
     entry,
     ambiguous: [],
     error: null,

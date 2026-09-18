@@ -25,6 +25,22 @@ import { deepLinkFor } from "../src/lib/brain/deep-links"
 import { lectureFromWorkingSet } from "../src/lib/brain/lecture"
 import type { WorkingObject } from "../src/lib/brain/types"
 
+test("@analogs is a catalog handle and cites a draw date", () => {
+  const raw = parseHandle("@analogs")
+  assert.equal(raw.error, null)
+  assert.equal(raw.entry?.id, "analyse/analogs")
+  assert.equal(raw.entry?.kind, "analog")
+  const twin = parseHandle("@analogs#2019-03-12")
+  assert.equal(twin.error, null)
+  assert.equal(twin.drawDate, "2019-03-12")
+  assert.equal(twin.readingId, null)
+  const cited = parseHandle("@rsi#1842")
+  assert.equal(cited.readingId, 1842)
+  assert.equal(cited.drawDate, null)
+  const link = deepLinkFor({ entry: raw.entry! })
+  assert.match(link.href, /tab=jumeaux/)
+})
+
 test("handles parse @rsi, @sum.rsi, @delay:7.rsi, @ete alias, citation", () => {
   const rsi = parseHandle("@rsi")
   assert.equal(rsi.error, null)

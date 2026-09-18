@@ -100,6 +100,12 @@ import {
   writeWatchlist,
   type BrainReading,
 } from "@/lib/brain/journal"
+import {
+  analogAxesFromObjects,
+  analogWorkingObjects,
+  retrieveAnalogs,
+  wantsAnalogs,
+} from "@/lib/brain/analogs"
 import { BRAIN_SYSTEM_PROMPT } from "@/lib/brain/prompt"
 import { resolveEntry, windowMetaFrom } from "@/lib/brain/resolve"
 import {
@@ -400,8 +406,24 @@ export function BrainLab() {
         score: item.score,
       }))
       const objects = extra.length ? extra : fiches
+      const analogQuery = parsed.find((item) => item.entry?.kind === "analog" && item.drawDate)?.drawDate
+      const analogObjects =
+        wantsAnalogs(objects, question) || analogQuery
+          ? analogWorkingObjects(
+              await retrieveAnalogs({
+                date: analogQuery ?? resolved.work.at(-1)?.date,
+                axes: analogAxesFromObjects(objects),
+                k: 8,
+                era,
+                from: resolved.fromDate,
+                to: resolved.toDate,
+                draws: resolved.work,
+              })
+            )
+          : []
       const snapshot = packWorkingSet([
         ...objects,
+        ...analogObjects.filter((item) => !objects.some((obj) => obj.id === item.id || obj.handle === item.handle)),
         ...memoryObjects.filter((item) => !objects.some((obj) => item.handle.startsWith(obj.handle))),
       ])
       const useCloud = escalate
@@ -469,7 +491,7 @@ export function BrainLab() {
         setBusy(false)
       }
     },
-    [deepen, escalate, fiches, handleCtx, messages, model, pinEntry, status]
+    [deepen, escalate, era, fiches, handleCtx, messages, model, pinEntry, resolved, status]
   )
 
   const sendDraft = useCallback(() => {

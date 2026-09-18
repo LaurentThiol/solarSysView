@@ -21,6 +21,7 @@ import type { CatalogEntry } from "@/lib/brain/catalog"
 import { inferSpecialist, specialistByHandle } from "@/lib/brain/specialists"
 import type { BrainFiche, ResolveContext } from "@/lib/brain/types"
 import { flagFiche } from "@/lib/brain/flag"
+import { buildFingerprintIndex, DEFAULT_TWIN_K } from "@/lib/fingerprints"
 
 function lastRounded(values: Array<number | null | undefined>, digits = 4) {
   return roundish(lastFinite(values), digits)
@@ -82,6 +83,24 @@ function resolveAnalyse(ctx: ResolveContext, entry: CatalogEntry): BrainFiche {
   const base = ficheBase(entry, ctx, variable, n)
   if (!ctx.work.length) {
     return finish({ ...base, last: {}, error: "fenêtre vide" })
+  }
+  if (entry.kind === "analog") {
+    const index = buildFingerprintIndex(ctx.work, { k: DEFAULT_TWIN_K })
+    const top = index.neighbors[0]
+    return finish({
+      ...base,
+      last: {
+        query: index.query?.date ?? null,
+        k: index.neighbors.length,
+        axes: index.axes.join(", "),
+        top: top?.date ?? null,
+        score: top?.score ?? null,
+        grid: index.query ? `${index.query.numbers.join(" ")} + ${index.query.stars.join(" ")}` : null,
+      },
+      summary: top
+        ? `Jumeaux · query ${index.query?.date ?? "—"} · top ${top.date} score ${top.score} · ${ctx.window.banner}`
+        : `Jumeaux · aucun voisin · ${ctx.window.banner}`,
+    })
   }
   const { pack, work, macdPack } = techFor(ctx, variable, n)
   const lastValue = lastRounded(work.values)

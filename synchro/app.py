@@ -31,6 +31,7 @@ from synchro.analysis.lab import lab_report
 from synchro.analysis.montecarlo import montecarlo_report
 from synchro.analysis.ta import indicators
 from synchro.analysis.tech import tech_pack
+from synchro.analysis.fingerprints import analogs_report
 from synchro.analysis.variables import VARIABLE_NAMES, series
 from synchro.analysis.windowing import resolve_window
 from synchro.analysis.windows import heikin_ashi, ohlc_blocks, rolling_stats
@@ -262,6 +263,17 @@ class BrainRetrieveIn(BaseModel):
     k: int = Field(default=8, ge=1, le=20)
     cloud: bool = False
     model: str | None = None
+
+
+class BrainAnalogsIn(BaseModel):
+    date: str | None = None
+    numbers: list[int] | None = None
+    stars: list[int] | None = None
+    axes: list[str] | None = None
+    k: int = Field(default=8, ge=1, le=20)
+    era: str = "current"
+    from_date: str | None = None
+    to_date: str | None = None
 
 
 class BrainSpecialistIn(BaseModel):
@@ -1218,6 +1230,35 @@ def create_app() -> FastAPI:
             raise HTTPException(503, str(exc)) from exc
         items = brain_mod.retrieve(embedded["embedding"], rows, k=payload.k)
         return {"ok": True, "model": embedded["model"], "items": [_json(db.serialize_row(item, drop=())) for item in items]}
+
+    @app.post("/api/brain/analogs")
+    def brain_analogs(payload: BrainAnalogsIn) -> dict[str, Any]:
+        draws, source = _specialist_draws(payload.era)
+        start = date.fromisoformat(payload.from_date[:10]) if payload.from_date else None
+        end = date.fromisoformat(payload.to_date[:10]) if payload.to_date else None
+        if start or end:
+            filtered: list[dict[str, Any]] = []
+            for draw in draws:
+                raw = draw.get("draw_date") or draw.get("date")
+                if raw is None:
+                    continue
+                day = as_date(raw)
+                if start and day < start:
+                    continue
+                if end and day > end:
+                    continue
+                filtered.append(draw)
+            draws = filtered
+        report = analogs_report(
+            draws,
+            query_date=payload.date,
+            numbers=payload.numbers,
+            stars=payload.stars,
+            axes=payload.axes,
+            k=payload.k,
+        )
+        report["source"] = source
+        return _json(report)
 
     def _specialist_draws(era: str = "current") -> tuple[list[dict[str, Any]], str]:
         if db.database_configured():

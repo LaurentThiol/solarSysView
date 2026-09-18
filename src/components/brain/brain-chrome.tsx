@@ -18,6 +18,7 @@ export const BRAIN_FAMILY_LABELS: Record<string, string> = {
   motif: "Motifs",
   grille: "Grille",
   specialiste: "Spécialistes",
+  jumeaux: "Jumeaux",
 }
 
 export const KIND_LABELS: Record<WorkingKind, string> = {
@@ -26,6 +27,7 @@ export const KIND_LABELS: Record<WorkingKind, string> = {
   lot: "lot",
   memory: "souvenir",
   shortlist: "sélection",
+  analog: "jumeau",
 }
 
 export const JOB_STATUS_LABELS: Record<WalkerJobStatus, string> = {
@@ -67,6 +69,7 @@ export const KIND_TONE: Record<WorkingKind, string> = {
   current: "border-chart-2/45 bg-chart-2/12",
   lot: "border-chart-4/45 bg-chart-4/12",
   shortlist: "border-chart-3/45 bg-chart-3/12",
+  analog: "border-chart-1/45 bg-chart-1/12",
 }
 
 export function familyLabel(family: string) {

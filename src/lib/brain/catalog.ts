@@ -5,7 +5,7 @@ import { MOTIF_IDS, MOTIF_LABELS } from "@/lib/morpho/lexicon"
 
 export type BrainLab = "analyse" | "chartisme" | "harmo" | "morpho" | "combinaisons" | "specialist"
 
-export type CatalogKind = "indicator" | "variable" | "figure" | "spectrum" | "motif" | "grid" | "specialist"
+export type CatalogKind = "indicator" | "variable" | "figure" | "spectrum" | "motif" | "grid" | "specialist" | "analog"
 
 export type CatalogEntry = {
   id: string
@@ -204,6 +204,24 @@ function analyseIndicators(): CatalogEntry[] {
   }))
 }
 
+function analyseAnalogs(): CatalogEntry[] {
+  return [
+    {
+      id: "analyse/analogs",
+      handle: "analogs",
+      aliases: ["jumeaux", "twins", "analog"],
+      lab: "analyse",
+      family: "jumeaux",
+      kind: "analog",
+      label: "Jumeaux",
+      units: "cosinus · z-score",
+      reading:
+        "Tirages proches dans l’espace des variables Analyse (somme, étendue, parité…). Ressemblance d’archive, pas un pronostic.",
+      defaults: { variable: "sum" },
+    },
+  ]
+}
+
 function analyseVariables(): CatalogEntry[] {
   return VARIABLE_NAMES.map((name) => ({
     id: `analyse/var/${name}`,
@@ -362,6 +380,7 @@ function combinaisonsEntries(): CatalogEntry[] {
 
 export const BRAIN_CATALOG: CatalogEntry[] = [
   ...analyseIndicators(),
+  ...analyseAnalogs(),
   ...analyseVariables(),
   ...chartismeFigures(),
   ...harmoEntries(),

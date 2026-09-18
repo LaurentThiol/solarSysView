@@ -49,6 +49,7 @@ export function lectureFromWorkingSet(objects: WorkingObject[], meta: LectureMet
 
   const byLab = new Map<string, WorkingObject[]>()
   for (const item of inPrompt) {
+    if (item.kind === "analog") continue
     const lab = item.fiche?.lab ?? "autre"
     const list = byLab.get(lab) ?? []
     list.push(item)
@@ -67,6 +68,15 @@ export function lectureFromWorkingSet(objects: WorkingObject[], meta: LectureMet
     )
   } else {
     lines.push("Aucune fiche flaggée sur cette fenêtre.")
+  }
+
+  const analogs = inPrompt.filter((item) => item.kind === "analog")
+  if (analogs.length) {
+    lines.push("")
+    lines.push("Jumeaux (ressemblance d’archive, pas un pronostic) :")
+    for (const item of analogs) {
+      lines.push(`- ${lineFor(item)}`)
+    }
   }
 
   const specialists = inPrompt.filter((item) => item.fiche?.lab === "specialist")

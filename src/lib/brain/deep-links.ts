@@ -21,6 +21,10 @@ export function deepLinkFor(input: {
   params.set("preset", preset)
   if (input.periodX) params.set("x", String(input.periodX))
   if (input.entry.lab === "analyse") {
+    if (input.entry.kind === "analog") {
+      params.set("tab", "jumeaux")
+      return { href: `/analyse?${params}`, lab: "analyse" }
+    }
     params.set("variable", variable)
     if (input.n != null) params.set("n", String(input.n))
     return { href: `/analyse?${params}`, lab: "analyse" }

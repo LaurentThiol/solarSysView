@@ -16,6 +16,7 @@ import {
   InferencePanel,
   ProbaPanel,
 } from "@/components/analysis/stats-panels"
+import { TwinsPanel } from "@/components/analysis/twins-panel"
 import { SystemPanel } from "@/components/analysis/system-panel"
 import { TrendPanel } from "@/components/analysis/trend-panel"
 import { ViewPanel } from "@/components/analysis/view-panel"
@@ -179,6 +180,14 @@ const DRAW_TABS = [
     help: {
       title: "Dépendance",
       body: "Lift des paires, backtest « 5 plus chauds » et nuage somme × étendue. Toujours sous l’hypothèse d’indépendance.",
+    },
+  },
+  {
+    id: "jumeaux",
+    label: "Jumeaux",
+    help: {
+      title: "Jumeaux",
+      body: "Portrait multi-axes d’un tirage (variables Analyse hors delay/hit) et voisins en cosinus de z-scores. Les couleurs sont des écarts à la moyenne de la fenêtre, pas une prédiction.",
     },
   },
   {
@@ -658,6 +667,7 @@ export function AnalysisLab() {
       ) : null}
       {tab === "bayes" ? <BayesPanel draws={work} /> : null}
       {tab === "dependence" ? <DependencePanel draws={work} windowSize={windowSize} /> : null}
+      {tab === "jumeaux" ? <TwinsPanel draws={work} /> : null}
       {tab === "proba" ? <ProbaPanel /> : null}
       {tab === "memo" ? <MemoPanel /> : null}
       </PillTabPanel>

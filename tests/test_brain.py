@@ -214,6 +214,31 @@ def test_brain_cloud_embed_rejected() -> None:
     assert response.status_code == 400
 
 
+def test_brain_analogs_returns_neighbors() -> None:
+    from datetime import date
+
+    draws = [
+        {"draw_date": date(2026, 1, 1), "numbers": [1, 2, 3, 4, 5], "stars": [1, 2], "star_pool": 12},
+        {"draw_date": date(2026, 1, 2), "numbers": [1, 2, 3, 4, 6], "stars": [1, 2], "star_pool": 12},
+        {"draw_date": date(2026, 1, 3), "numbers": [1, 2, 3, 4, 5], "stars": [8, 9], "star_pool": 12},
+    ]
+    with (
+        patch("synchro.db.database_configured", return_value=True),
+        patch("synchro.db.all_draws", return_value=draws),
+    ):
+        with _client() as client:
+            response = client.post(
+                "/api/brain/analogs",
+                json={"date": "2026-01-01", "axes": ["sum", "parity", "spread"], "k": 2, "era": "current"},
+            )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["items"][0]["date"] == "2026-01-03"
+    assert body["items"][0]["score"] == 1.0
+    assert body["query"]["date"] == "2026-01-01"
+
+
 def test_brain_retrieve_skips_when_ollama_down() -> None:
     with patch("synchro.brain.embed_text", return_value={"ok": False, "error": "down"}):
         with _client() as client:
@@ -237,6 +262,20 @@ def test_brain_mascot_is_a_two_lobe_drawing() -> None:
     assert 'mood === "talk"' in src
     assert "M30 30c-9 1-16 10-16 20" not in src
     assert "clipPath" in src
+
+
+def test_analogs_handle_is_wired_to_jumeaux() -> None:
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    catalog = (root / "src/lib/brain/catalog.ts").read_text(encoding="utf-8")
+    prompt = (root / "src/lib/brain/prompt.ts").read_text(encoding="utf-8")
+    lab = (root / "src/components/brain/brain-lab.tsx").read_text(encoding="utf-8")
+    assert 'handle: "analogs"' in catalog
+    assert 'kind: "analog"' in catalog
+    assert "@analogs" in prompt
+    assert "retrieveAnalogs" in lab
+    assert "analogWorkingObjects" in lab
 
 
 def test_brain_and_ia_prompts_allow_forecast_as_hypothesis() -> None:

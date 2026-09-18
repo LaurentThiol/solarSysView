@@ -7,7 +7,9 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
         ? "RSI et MACD se contredisent-ils sur les derniers tirages de la fenêtre ?"
         : tab === "tendance"
           ? "ADX / Supertrend : tendance établie ou régime de range ?"
-          : null
+          : tab === "jumeaux"
+            ? "Sur quels axes les jumeaux collent-ils, et que disent les deltas ? Ce n’est pas P(prochain tirage)."
+            : null
     return [
       extra,
       "Explique ce que montrent les derniers indicateurs (RSI, MACD, ADX) sur cette fenêtre.",
