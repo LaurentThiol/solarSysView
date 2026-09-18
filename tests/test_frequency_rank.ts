@@ -60,6 +60,18 @@ test("overdue ranks by delay descending and drops a hot on-time star", () => {
   }
 })
 
+test("overdue skips values already listed as hottest", () => {
+  const ranked = overdue(
+    [item(5, 14, 8), item(3, 6, 23), item(7, 8, 20)],
+    6,
+    { minDelay: 6, exclude: [5] }
+  )
+  assert.deepEqual(
+    ranked.map((row) => row.value),
+    [3, 7]
+  )
+})
+
 test("expected delays are the geometric waits 10 and 6", () => {
   assert.equal(expectedNumberDelay(), 10)
   assert.equal(expectedStarDelay(), 6)

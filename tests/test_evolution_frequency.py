@@ -32,9 +32,11 @@ def test_evolution_tables_use_lookback_and_thresholds() -> None:
     assert "numberFrequencyTable(filtered, archive)" in panel
     assert "starFrequencyTable(filtered, 12, archive)" in panel
     assert "hottest(numberBoard, 10, { minCount: expectedN })" in panel
-    assert "overdue(numberBoard, 10, { minDelay: expectedNDelay })" in panel
+    assert "minDelay: expectedNDelay" in panel
+    assert "exclude: hotNumbers.map((item) => item.value)" in panel
     assert "hottest(starBoard, 6, { minCount: expectedS })" in panel
-    assert "overdue(starBoard, 6, { minDelay: expectedSDelay })" in panel
+    assert "minDelay: expectedSDelay" in panel
+    assert "exclude: hotStars.map((item) => item.value)" in panel
 
     card = (ROOT / "src/components/frequency-card.tsx").read_text(encoding="utf-8")
     assert "<table" in card

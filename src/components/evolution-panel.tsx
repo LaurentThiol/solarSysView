@@ -107,16 +107,24 @@ function EvolutionContent() {
     [numberBoard, expectedN]
   )
   const lateNumbers = useMemo(
-    () => overdue(numberBoard, 10, { minDelay: expectedNDelay }),
-    [numberBoard, expectedNDelay]
+    () =>
+      overdue(numberBoard, 10, {
+        minDelay: expectedNDelay,
+        exclude: hotNumbers.map((item) => item.value),
+      }),
+    [numberBoard, expectedNDelay, hotNumbers]
   )
   const hotStars = useMemo(
     () => hottest(starBoard, 6, { minCount: expectedS }),
     [starBoard, expectedS]
   )
   const lateStars = useMemo(
-    () => overdue(starBoard, 6, { minDelay: expectedSDelay }),
-    [starBoard, expectedSDelay]
+    () =>
+      overdue(starBoard, 6, {
+        minDelay: expectedSDelay,
+        exclude: hotStars.map((item) => item.value),
+      }),
+    [starBoard, expectedSDelay, hotStars]
   )
   const coverage = numberCoverage(filtered)
   const sumStats = useMemo(() => {
@@ -302,7 +310,7 @@ function EvolutionContent() {
           noneLabel={`Aucun numéro au-delà du retard attendu (${expectedNDelay} tirages).`}
           help={{
             title: "Numéros en retard",
-            body: "Tableau décroissant du retard (tirages depuis la dernière sortie), mesuré à la fin de la fenêtre sur tout l’historique connu — pas seulement les 20 ou 50 derniers. Seuls les retards plus longs que l’attente géométrique (10 tirages) sont listés. Un retard n’augmente pas la chance au tirage suivant.",
+            body: "Tableau décroissant du retard (tirages depuis la dernière sortie), mesuré à la fin de la fenêtre sur tout l’historique connu — pas seulement les 20 ou 50 derniers. Seuls les retards plus longs que l’attente géométrique (10 tirages) sont listés, hors boules déjà classées « plus sorties ». Un retard n’augmente pas la chance au tirage suivant.",
           }}
         />
         <FrequencyCard
@@ -327,7 +335,7 @@ function EvolutionContent() {
           noneLabel={`Aucune étoile au-delà du retard attendu (${expectedSDelay} tirages).`}
           help={{
             title: "Étoiles en retard",
-            body: "Tableau décroissant du retard des étoiles, avec le même regard historique que les numéros. Seuls les retards plus longs que l’attente (6 tirages sur 12 ★) sont listés. Descriptif, pas un signal jouable.",
+            body: "Tableau décroissant du retard des étoiles, avec le même regard historique que les numéros. Seuls les retards plus longs que l’attente (6 tirages sur 12 ★) sont listés, hors étoiles déjà classées « plus sorties ». Descriptif, pas un signal jouable.",
           }}
         />
       </section>

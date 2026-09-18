@@ -33,11 +33,16 @@ export function hottest(
 export function overdue(
   items: FrequencyItem[],
   n: number,
-  options?: { minDelay?: number }
+  options?: { minDelay?: number; exclude?: number[] }
 ) {
   const minDelay = options?.minDelay
+  const excluded = new Set(options?.exclude ?? [])
   return [...items]
-    .filter((item) => minDelay == null || item.delayDraws > minDelay)
+    .filter(
+      (item) =>
+        (minDelay == null || item.delayDraws > minDelay) &&
+        !excluded.has(item.value)
+    )
     .sort(
       (a, b) =>
         b.delayDraws - a.delayDraws || a.count - b.count || a.value - b.value
