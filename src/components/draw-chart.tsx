@@ -362,6 +362,14 @@ function plottedOf(
   return actual
 }
 
+/** Les échelles relatives sont bornées 0–100 : un rail hors domaine disparaît. */
+function clampPlotted(key: SeriesKey, value: number) {
+  if (key === "relNumbers" || key === "relStars") {
+    return Math.min(100, Math.max(0, value))
+  }
+  return value
+}
+
 function writeBandFields(
   extra: Record<string, number | null>,
   prefix: string,
@@ -380,12 +388,12 @@ function writeBandFields(
     extra[`${prefix}_span`] = null
     return
   }
-  const up = plottedOf(seriesKey, u, ranges)
-  const lo = plottedOf(seriesKey, l, ranges)
+  const up = clampPlotted(seriesKey, plottedOf(seriesKey, u, ranges))
+  const lo = clampPlotted(seriesKey, plottedOf(seriesKey, l, ranges))
   extra[`${prefix}_upper`] = up
   extra[`${prefix}_lower`] = lo
   extra[`${prefix}_base`] = lo
-  extra[`${prefix}_span`] = up - lo
+  extra[`${prefix}_span`] = Math.max(0, up - lo)
 }
 
 type ChartPointerState = MouseHandlerDataParam
@@ -1506,8 +1514,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                           dataKey={`${prefix}_span`}
                           yAxisId={axisId}
                           stackId={`canal-${sketch.id}`}
-                          fill="var(--chart-4)"
-                          fillOpacity={0.14}
+                          fill="var(--chart-5)"
+                          fillOpacity={0.16}
                           stroke="none"
                           legendType="none"
                           tooltipType="none"
@@ -1518,9 +1526,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                           dataKey={`${prefix}_upper`}
                           yAxisId={axisId}
                           type="linear"
-                          stroke="var(--chart-4)"
-                          strokeWidth={1.6}
-                          strokeDasharray="5 3"
+                          stroke="var(--chart-5)"
+                          strokeWidth={2}
                           dot={false}
                           connectNulls
                           legendType="none"
@@ -1532,9 +1539,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                           dataKey={`${prefix}_lower`}
                           yAxisId={axisId}
                           type="linear"
-                          stroke="var(--chart-4)"
-                          strokeWidth={1.6}
-                          strokeDasharray="5 3"
+                          stroke="var(--chart-5)"
+                          strokeWidth={2}
                           dot={false}
                           connectNulls
                           legendType="none"
@@ -1582,7 +1588,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       dataKey={`${DRAFT_KEY}_span`}
                       yAxisId={plotAxisId(targetKey, splitRank1)}
                       stackId="canal-draft"
-                      fill="var(--chart-4)"
+                      fill="var(--chart-5)"
                       fillOpacity={0.1}
                       stroke="none"
                       legendType="none"
@@ -1594,9 +1600,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       dataKey={`${DRAFT_KEY}_upper`}
                       yAxisId={plotAxisId(targetKey, splitRank1)}
                       type="linear"
-                      stroke="var(--chart-4)"
-                      strokeWidth={1.6}
-                      strokeDasharray="2 3"
+                      stroke="var(--chart-5)"
+                      strokeWidth={2}
                       strokeOpacity={0.9}
                       dot={false}
                       connectNulls
@@ -1608,9 +1613,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       dataKey={`${DRAFT_KEY}_lower`}
                       yAxisId={plotAxisId(targetKey, splitRank1)}
                       type="linear"
-                      stroke="var(--chart-4)"
-                      strokeWidth={1.6}
-                      strokeDasharray="2 3"
+                      stroke="var(--chart-5)"
+                      strokeWidth={2}
                       strokeOpacity={0.9}
                       dot={false}
                       connectNulls

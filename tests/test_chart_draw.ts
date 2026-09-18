@@ -33,6 +33,7 @@ import { curveKind, curveSparkSeries } from "../src/lib/chartisme/curve-shapes"
 import {
   sparkGuides,
   sparkShowsCurve,
+  sparkSolidGuides,
   sparklinePoints,
   sparkValues,
   synthCurve,
@@ -157,7 +158,9 @@ test("canal thumbnail is two parallel rails, not a freehand squiggle", () => {
   const riseL = guides.lower[guides.lower.length - 1] - guides.lower[0]
   assert.ok(Math.abs(riseU - riseL) < 1e-9)
   assert.ok(guides.upper[0] > guides.lower[0])
-  assert.equal(sparkShowsCurve("canal"), false)
+  assert.equal(sparkSolidGuides("canal"), true)
+  assert.equal(sparkSolidGuides("rectangle"), false)
+  assert.equal(sparkShowsCurve("canal"), true)
   assert.equal(sparkShowsCurve("rectangle"), true)
   assert.ok(sparkGuides("rectangle"))
   assert.equal(canonicalFigure("tunnel_droit"), "canal")

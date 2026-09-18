@@ -1,6 +1,12 @@
 "use client"
 
-import { sparkGuides, sparkShowsCurve, sparkValues, sparklinePoints } from "@/lib/chartisme/sketch-shapes"
+import {
+  sparkGuides,
+  sparkShowsCurve,
+  sparkSolidGuides,
+  sparkValues,
+  sparklinePoints,
+} from "@/lib/chartisme/sketch-shapes"
 import { cn } from "@/lib/utils"
 
 const WIDTH = 48
@@ -38,7 +44,7 @@ export function FigureThumb({
   const capU = ends(upperPts)
   const capL = ends(lowerPts)
   if (!curvePts && !upperPts) return null
-  const railsOnly = Boolean(guides) && !showCurve
+  const railsOnly = sparkSolidGuides(figure)
   return (
     <svg
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -83,7 +89,7 @@ export function FigureThumb({
           fill="none"
           stroke="currentColor"
           strokeWidth={1.4}
-          strokeOpacity={guides ? 0.72 : 1}
+          strokeOpacity={guides ? (railsOnly ? 0.4 : 0.72) : 1}
           strokeLinejoin="round"
           strokeLinecap="round"
         />

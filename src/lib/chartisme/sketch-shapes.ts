@@ -242,10 +242,15 @@ export function sparkGuides(figure: string): { upper: number[]; lower: number[] 
   }
 }
 
-/** Le canal se lit par ses deux rails ; les autres gardent le zigzag d'école. */
+/** Rails pleins (canal) plutôt que pointillés derrière le zigzag. */
+export function sparkSolidGuides(figure: string) {
+  return canonicalFigure(figure) === "canal"
+}
+
+/** Le canal montre aussi une courbe faible entre les deux rails. */
 export function sparkShowsCurve(figure: string) {
-  const id = canonicalFigure(figure)
-  return id !== "canal"
+  void figure
+  return true
 }
 
 /** Points SVG d'un gabarit, Y vers le haut. */
