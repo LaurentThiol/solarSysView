@@ -63,7 +63,7 @@ export type LiveCursor = {
   seriesLabel: string
   actual: number
   snapped: boolean
-  /** Arrivée du segment libre posée hors courbe (Alt / Option). */
+  /** Arrivée posée hors courbe (Alt / Option). */
   offCurve: boolean
   kind: MagnetKind
   distancePx: number | null

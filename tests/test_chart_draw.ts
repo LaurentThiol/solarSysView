@@ -101,15 +101,14 @@ test("magnet radius is inclusive, missing pixels count as snapped", () => {
   assert.equal(pixelDistance({ x: 0, y: 0 }, { x: 3, y: 4 }), 5)
 })
 
-test("Alt demagnetizes only the free-segment arrival", () => {
+test("Alt demagnetizes the arrival of any free-draw figure", () => {
   assert.equal(isDemagnetizeModifier({ altKey: true }), true)
   assert.equal(isDemagnetizeModifier({ altKey: false }), false)
   assert.equal(isDemagnetizeModifier({}), false)
-  assert.equal(canFreePlaceArrival("free", true, true), true)
-  assert.equal(canFreePlaceArrival("free", false, true), false)
-  assert.equal(canFreePlaceArrival("ete", true, true), false)
-  assert.equal(canFreePlaceArrival("canal", true, true), false)
-  assert.equal(canFreePlaceArrival("free", true, false), false)
+  assert.equal(canFreePlaceArrival(true, true), true)
+  assert.equal(canFreePlaceArrival(false, true), false)
+  assert.equal(canFreePlaceArrival(true, false), false)
+  assert.equal(canFreePlaceArrival(false, false), false)
 })
 
 test("off-curve placement keeps the bar under the cursor, not the 2D magnet", () => {
@@ -232,18 +231,77 @@ test("a free arrival can sit off the series while the start stays on it", () => 
     reversed.map((point) => point.actual),
     off.map((point) => point.actual)
   )
+  const snappedCanal = buildSketchGeometry({
+    figure: "canal",
+    values,
+    dates,
+    from: 0,
+    to: values.length - 1,
+  })
+  assert.ok(snappedCanal.band)
+  const lastSnappedUpper = snappedCanal.band?.upper.at(-1)?.actual
+  assert.notEqual(lastSnappedUpper, 40)
+
+  const overlay = buildSketchPoints({
+    figure: "double_top",
+    values,
+    dates,
+    from: 0,
+    to: values.length - 1,
+  })
+  const snappedOverlay = buildSketchPoints({
+    figure: "double_top",
+    values,
+    dates,
+    from: 0,
+    to: values.length - 1,
+    fromActual: values[0],
+    toActual: values[values.length - 1],
+  })
+  assert.deepEqual(
+    snappedOverlay.map((point) => point.actual),
+    overlay.map((point) => point.actual)
+  )
+  const tilted = buildSketchPoints({
+    figure: "double_top",
+    values,
+    dates,
+    from: 0,
+    to: values.length - 1,
+    fromActual: values[0],
+    toActual: 40,
+  })
+  assert.equal(tilted[0].actual, overlay[0].actual)
+  assert.equal(tilted[tilted.length - 1].actual, 40)
+
   const canal = buildSketchGeometry({
     figure: "canal",
     values,
     dates,
     from: 0,
     to: values.length - 1,
-    fromActual: 6,
+    fromActual: values[0],
     toActual: 40,
   })
   assert.ok(canal.band)
   const lastUpper = canal.band?.upper.at(-1)?.actual
-  assert.notEqual(lastUpper, 40)
+  assert.ok(lastUpper != null)
+  assert.ok(Math.abs(lastUpper - 40) < 1e-9)
+  const lastLower = canal.band?.lower.at(-1)?.actual
+  assert.ok(lastLower != null && lastLower < lastUpper)
+
+  const below = buildSketchGeometry({
+    figure: "canal",
+    values,
+    dates,
+    from: 0,
+    to: values.length - 1,
+    fromActual: values[0],
+    toActual: -10,
+  })
+  const lastBelow = below.band?.lower.at(-1)?.actual
+  assert.ok(lastBelow != null)
+  assert.ok(Math.abs(lastBelow - -10) < 1e-9)
 })
 
 test("the chartist table lists canal among 18 figures with a template", () => {

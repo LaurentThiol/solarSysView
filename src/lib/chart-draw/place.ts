@@ -29,16 +29,55 @@ export function sampleTemplate(template: number[], u: number) {
   return template[lo] * (1 - frac) + template[hi] * frac
 }
 
+function isCustomAnchor(index: number, actual: number | undefined, values: number[]) {
+  if (actual == null || !Number.isFinite(actual)) return false
+  const series = values[index]
+  if (!Number.isFinite(series)) return true
+  return Math.abs(actual - series) > 1e-6
+}
+
+/**
+ * Recale un tracé pour qu’il passe par une ancre hors courbe, sans casser
+ * la forme déjà calée sur la série : offset linéaire du départ vers l’arrivée.
+ */
+export function warpSketchToAnchors(
+  points: SketchPoint[],
+  from: number,
+  to: number,
+  actuals: { from?: number; to?: number } | undefined,
+  values: number[]
+): SketchPoint[] {
+  if (!points.length || !actuals) return points
+  const fromCustom = isCustomAnchor(from, actuals.from, values)
+  const toCustom = isCustomAnchor(to, actuals.to, values)
+  if (!fromCustom && !toCustom) return points
+  const bFrom = points.find((point) => point.index === from)?.actual
+  const bTo = points.find((point) => point.index === to)?.actual
+  if (bFrom == null || bTo == null) return points
+  const wFrom = fromCustom && actuals.from != null ? actuals.from : bFrom
+  const wTo = toCustom && actuals.to != null ? actuals.to : bTo
+  const span = to - from
+  return points.map((point) => {
+    const u = span === 0 ? 0 : (point.index - from) / span
+    return {
+      ...point,
+      actual: point.actual + (1 - u) * (wFrom - bFrom) + u * (wTo - bTo),
+    }
+  })
+}
+
 /**
  * Pose le gabarit dans la fenêtre [from, to] : le temps vient des ancres,
  * l'amplitude épouse min/max de la série réelle pour coller au tracé.
+ * Une ancre hors courbe incline le gabarit jusqu’au clic, sans le recoller.
  */
 export function fitTemplateToWindow(
   template: number[],
   values: number[],
   dates: string[],
   from: number,
-  to: number
+  to: number,
+  actuals?: { from?: number; to?: number }
 ): SketchPoint[] {
   const i0 = Math.min(from, to)
   const i1 = Math.max(from, to)
@@ -72,7 +111,7 @@ export function fitTemplateToWindow(
       actual,
     })
   }
-  return points
+  return warpSketchToAnchors(points, from, to, actuals, values)
 }
 
 /** Droite entre les deux ancres : le temps vient des tirages, Y interpolé. */
@@ -146,7 +185,8 @@ export function fitChannelBand(
   values: number[],
   dates: string[],
   from: number,
-  to: number
+  to: number,
+  actuals?: { from?: number; to?: number }
 ): SketchGeometry {
   const i0 = Math.min(from, to)
   const i1 = Math.max(from, to)
@@ -165,8 +205,19 @@ export function fitChannelBand(
   }
   const span = Math.max(...slice) - Math.min(...slice)
   const pad = Math.max(span * 0.03, Math.abs(slice[0] ?? 0) * 0.008, 0.35)
-  const above = Math.max(maxRes, 0) + pad
-  const below = Math.min(minRes, 0) - pad
+  let above = Math.max(maxRes, 0) + pad
+  let below = Math.min(minRes, 0) - pad
+  const clickResiduals: number[] = []
+  if (isCustomAnchor(from, actuals?.from, values) && actuals?.from != null) {
+    clickResiduals.push(actuals.from - (intercept + slope * (from - i0)))
+  }
+  if (isCustomAnchor(to, actuals?.to, values) && actuals?.to != null) {
+    clickResiduals.push(actuals.to - (intercept + slope * (to - i0)))
+  }
+  for (const res of clickResiduals) {
+    if (res > 0) above = Math.max(above, res)
+    if (res < 0) below = Math.min(below, res)
+  }
   const points: SketchPoint[] = []
   const upper: SketchPoint[] = []
   const lower: SketchPoint[] = []
@@ -208,15 +259,15 @@ export function buildSketchGeometry(options: {
   toActual?: number
 }): SketchGeometry {
   const { figure, values, dates, from, to, fromActual, toActual } = options
-  if (isChannelFigure(figure)) return fitChannelBand(values, dates, from, to)
   const actuals =
     fromActual != null || toActual != null ? { from: fromActual, to: toActual } : undefined
+  if (isChannelFigure(figure)) return fitChannelBand(values, dates, from, to, actuals)
   if (figure === FREE_FIGURE) {
     return { points: straightSegment(values, dates, from, to, actuals) }
   }
   const template = synthCurve(figure)
   if (!template.length) return { points: straightSegment(values, dates, from, to, actuals) }
-  return { points: fitTemplateToWindow(template, values, dates, from, to) }
+  return { points: fitTemplateToWindow(template, values, dates, from, to, actuals) }
 }
 
 export function buildSketchPoints(options: {
@@ -240,7 +291,10 @@ export function resolveSketchBand(
     return sketch.band
   }
   if (!isChannelFigure(sketch.figure)) return undefined
-  return fitChannelBand(values, dates, sketch.start.index, sketch.end.index).band
+  return fitChannelBand(values, dates, sketch.start.index, sketch.end.index, {
+    from: sketch.start.actual,
+    to: sketch.end.actual,
+  }).band
 }
 
 function remapPoints(points: SketchPoint[], dates: string[]): SketchPoint[] {

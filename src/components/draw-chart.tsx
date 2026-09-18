@@ -45,7 +45,6 @@ import {
 } from "@/lib/draw-overlays"
 import {
   DRAFT_KEY,
-  FREE_FIGURE,
   buildSketchGeometry,
   canFreePlaceArrival,
   channelLabel,
@@ -739,13 +738,11 @@ function SeriesTooltip({
 
 function placementHint(options: {
   live: LiveCursor | null
-  figure: string
   startIndex: number | null
 }) {
-  const { live, figure, startIndex } = options
+  const { live, startIndex } = options
   if (!live) return "Survole la courbe."
   const hasStart = startIndex != null
-  const free = figure === FREE_FIGURE || figure === "free"
   if (live.offCurve) {
     if (
       startIndex != null &&
@@ -757,7 +754,7 @@ function placementHint(options: {
     return "Arrivée hors courbe — clique pour poser."
   }
   if (!live.snapped) {
-    if (hasStart && free) return "Approche la courbe, ou Alt (⌥) pour poser hors courbe."
+    if (hasStart) return "Approche la courbe, ou Alt (⌥) pour poser hors courbe."
     return "Approche la courbe pour ancrer le point."
   }
   if (
@@ -767,9 +764,7 @@ function placementHint(options: {
   ) {
     return "Au moins 8 tirages entre départ et arrivée."
   }
-  if (hasStart) {
-    return free ? "Clique l’arrivée. Alt (⌥) : hors courbe." : "Clique l’arrivée."
-  }
+  if (hasStart) return "Clique l’arrivée. Alt (⌥) : hors courbe."
   return "Clique le départ."
 }
 
@@ -1091,7 +1086,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       }
       if (event.key === "Alt" || event.key === "AltGraph") {
         const current = drawRef.current
-        if (current?.figure === FREE_FIGURE && current.draft?.start) {
+        if (current?.draft?.start) {
           event.preventDefault()
         }
         setAltHeld(true)
@@ -1153,7 +1148,6 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     const demagnetize =
       demagnetizeOverride ?? (isDemagnetizeModifier(event) || altHeld)
     const offCurve = canFreePlaceArrival(
-      current?.figure ?? "",
       Boolean(current?.draft?.start),
       demagnetize
     )
@@ -1253,7 +1247,6 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     setHint(
       placementHint({
         live,
-        figure: current.figure,
         startIndex: current.draft?.start?.index ?? null,
       })
     )
@@ -1283,7 +1276,6 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       setHint(
         placementHint({
           live,
-          figure: current.figure,
           startIndex: current.draft?.start?.index ?? null,
         })
       )
@@ -1309,11 +1301,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
         seriesLabel: chartConfig[targetKey].label,
         start: anchor,
       })
-      setHint(
-        current.figure === FREE_FIGURE
-          ? "Clique l’arrivée. Alt (⌥) : hors courbe."
-          : "Clique l’arrivée."
-      )
+      setHint("Clique l’arrivée. Alt (⌥) : hors courbe.")
       return
     }
     if (windowTooShort(start.index, live.index)) {

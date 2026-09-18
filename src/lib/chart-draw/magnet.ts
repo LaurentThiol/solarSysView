@@ -1,6 +1,6 @@
 import { swingPivots } from "../chartisme/pivots"
 
-import { FREE_FIGURE, type MagnetKind } from "./types"
+import { type MagnetKind } from "./types"
 
 export const DEFAULT_MAGNET_RADIUS_PX = 28
 
@@ -29,13 +29,9 @@ export function isDemagnetizeModifier(event: { altKey?: boolean }): boolean {
   return Boolean(event.altKey)
 }
 
-/** Seulement l’arrivée d’un segment libre : le départ reste un ancrage réel. */
-export function canFreePlaceArrival(
-  figure: string,
-  hasStart: boolean,
-  demagnetize: boolean
-) {
-  return demagnetize && hasStart && (figure === FREE_FIGURE || figure === "free")
+/** Arrivée de n’importe quelle figure : le départ reste un ancrage réel. */
+export function canFreePlaceArrival(hasStart: boolean, demagnetize: boolean) {
+  return demagnetize && hasStart
 }
 
 /** Indices des pivots de swing : sommets et creux chartistes, pas tous les dents. */

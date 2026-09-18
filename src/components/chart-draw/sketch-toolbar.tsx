@@ -24,7 +24,7 @@ const DRAW_HELP = {
 
 1. Choisis la figure et la série visée.
 2. Clique un départ : près de la courbe, l’aimant accroche le tirage le plus proche. Un pivot de swing est seulement étiqueté (aimant · pivot) : il n’avale plus le voisin, chaque point de la courbe d’origine reste sélectionnable.
-3. Clique l’arrivée, même règle. Sur un segment libre, Alt (⌥ Option) lâche l’aimant : l’abscisse reste un tirage, l’ordonnée suit le curseur — pour poser hors courbe.
+3. Clique l’arrivée, même règle. Alt (⌥ Option) lâche l’aimant : l’abscisse reste un tirage, l’ordonnée suit le curseur — pour poser hors courbe (segment, gabarit ou canal).
 4. Le gabarit est étiré sur cette fenêtre (le segment libre est une droite). Le canal pose deux droites parallèles autour de la série — une au-dessus, une en dessous — plutôt qu’un zigzag d’école. Les coordonnées vivent dans l’espace des données : un changement de période les recale par date.
 
 La fenêtre flottante affiche date, indice, valeur et aimant. Capture : le tracé est dans le visuel, les ancres partent dans le JSON pour l’IA. Ce n’est pas un signal de jeu.`,
@@ -89,7 +89,7 @@ export function SketchToolbar({
               label="Figure"
               help={{
                 title: "Figure chartiste",
-                body: "Les 18 formes de la table, ou un segment libre : une droite entre les deux ancres. L’arrivée du segment libre se démagnétise avec Alt (⌥) pour poser hors courbe. Le canal n’est pas une courbe : ce sont deux rails parallèles qui encadrent la série.",
+                body: "Les 18 formes de la table, ou un segment libre : une droite entre les deux ancres. Alt (⌥) démagnétise l’arrivée de n’importe quelle figure pour poser hors courbe. Le canal n’est pas une courbe : ce sont deux rails parallèles qui encadrent la série ; un clic hors courbe élargit le rail jusqu’au curseur.",
               }}
             >
               <Select value={figure} onValueChange={(value) => value && onFigure(value)}>
