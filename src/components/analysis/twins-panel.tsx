@@ -22,6 +22,25 @@ import { cn } from "@/lib/utils"
 
 const STAR_AXES = new Set<FingerprintAxis>(["star_sum", "e1", "e2"])
 
+function radarAxisLabel(axis: FingerprintAxis): string {
+  switch (axis) {
+    case "high_low":
+      return "h/l"
+    case "consecutive":
+      return "cons"
+    case "centroid":
+      return "cent"
+    case "star_sum":
+      return "s★"
+    case "spread":
+      return "spr"
+    case "parity":
+      return "par"
+    default:
+      return axis
+  }
+}
+
 function gridLabel(numbers: number[], stars: number[]) {
   return `${numbers.join(" · ")} + ${stars.join(" · ")}`
 }
@@ -35,10 +54,10 @@ function RadarPortrait({
   query: FingerprintRow | null
   neighbor: FingerprintRow | null
 }) {
-  const size = 280
+  const size = 340
   const cx = size / 2
   const cy = size / 2
-  const maxR = 104
+  const maxR = 118
   const n = axes.length
   if (!n || !query) {
     return <p className="text-sm text-muted-foreground">Choisissez un tirage dans la heatmap.</p>
@@ -76,7 +95,7 @@ function RadarPortrait({
       ))}
       {axes.map((axis, i) => {
         const [x, y] = point(i, 3)
-        const [lx, ly] = point(i, 3.55)
+        const [lx, ly] = point(i, i % 2 === 0 ? 3.42 : 3.82)
         return (
           <g key={axis}>
             <line x1={cx} y1={cy} x2={x} y2={y} stroke="var(--border)" />
@@ -86,9 +105,9 @@ function RadarPortrait({
               textAnchor="middle"
               dominantBaseline="middle"
               className="fill-muted-foreground"
-              fontSize={10}
+              fontSize={n > 12 ? 9 : 10}
             >
-              {axis}
+              {radarAxisLabel(axis)}
             </text>
           </g>
         )
