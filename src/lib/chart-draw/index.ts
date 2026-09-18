@@ -1,6 +1,7 @@
 export * from "./types"
 export * from "./magnet"
 export * from "./place"
+export * from "./move"
 export * from "./reading"
 export * from "./compact"
 export * from "./store"

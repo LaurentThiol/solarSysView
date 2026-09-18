@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -8,6 +9,7 @@ import {
 import { clampHudPosition } from "../src/lib/chart-draw/hud"
 import {
   DEFAULT_MAGNET_RADIUS_PX,
+  canFreeMoveHandle,
   canFreePlaceArrival,
   extremaIndices,
   invertLinear,
@@ -19,12 +21,18 @@ import {
   nearestSample,
   swingTouches,
   nearestSampleByX,
+  nearestSketchHandle,
   pixelDistance,
   readTooltipIndex,
   snapIndexToExtrema,
   valueFromPixelY,
 } from "../src/lib/chart-draw/magnet"
 import { readWindow } from "../src/lib/chart-draw/reading"
+import {
+  liveToAnchor,
+  moveSketchHandle,
+  sketchWithMovedHandle,
+} from "../src/lib/chart-draw/move"
 import {
   buildSketchPoints,
   buildSketchGeometry,
@@ -138,6 +146,35 @@ test("Alt demagnetizes the arrival of any free-draw figure", () => {
   assert.equal(canFreePlaceArrival(false, true), false)
   assert.equal(canFreePlaceArrival(true, false), false)
   assert.equal(canFreePlaceArrival(false, false), false)
+  assert.equal(canFreeMoveHandle("end", true), true)
+  assert.equal(canFreeMoveHandle("start", true), false)
+  assert.equal(canFreeMoveHandle("mid", true), false)
+  assert.equal(canFreeMoveHandle("end", false), false)
+})
+
+test("nearest sketch handle stays within the magnet radius", () => {
+  const handles = [
+    { sketchId: "a", handle: "start" as const, px: 10, py: 10 },
+    { sketchId: "a", handle: "mid" as const, px: 50, py: 20 },
+    { sketchId: "a", handle: "end" as const, px: 90, py: 40 },
+    { sketchId: "b", handle: "end" as const, px: 40, py: 12 },
+  ]
+  const hitMid = nearestSketchHandle(handles, { x: 51, y: 19 })
+  assert.equal(hitMid?.sketchId, "a")
+  assert.equal(hitMid?.handle, "mid")
+  const hitEnd = nearestSketchHandle(handles, { x: 88, y: 42 })
+  assert.equal(hitEnd?.sketchId, "a")
+  assert.equal(hitEnd?.handle, "end")
+  const hitOther = nearestSketchHandle(handles, { x: 38, y: 10 })
+  assert.equal(hitOther?.sketchId, "b")
+  assert.equal(hitOther?.handle, "end")
+  assert.equal(nearestSketchHandle(handles, { x: 200, y: 200 }), null)
+  const isolated = [{ sketchId: "c", handle: "start" as const, px: 0, py: 0 }]
+  assert.ok(nearestSketchHandle(isolated, { x: DEFAULT_MAGNET_RADIUS_PX, y: 0 }))
+  assert.equal(
+    nearestSketchHandle(isolated, { x: DEFAULT_MAGNET_RADIUS_PX + 0.2, y: 0 }),
+    null
+  )
 })
 
 test("off-curve placement keeps the bar under the cursor, not the 2D magnet", () => {
@@ -552,6 +589,232 @@ test("each curve type has a schematic sparkline", () => {
 test("a window shorter than 8 bars is rejected", () => {
   assert.equal(windowTooShort(0, 6), true)
   assert.equal(windowTooShort(0, 7), false)
+})
+
+test("evolution chart wires handle pickup and rebuild", () => {
+  const chart = readFileSync(new URL("../src/components/draw-chart.tsx", import.meta.url), "utf8")
+  const help = readFileSync(
+    new URL("../src/components/chart-draw/sketch-toolbar.tsx", import.meta.url),
+    "utf8"
+  )
+  assert.match(chart, /moveSketchHandle/)
+  assert.match(chart, /nearestSketchHandle/)
+  assert.match(chart, /beginMove/)
+  assert.match(chart, /commitMove/)
+  assert.match(chart, /handle === "mid"/)
+  assert.match(help, /reprendre/)
+})
+
+test("moving a free-handle rebuilds the straight segment", () => {
+  const values = [5, 6, 7, 8, 9, 10, 11, 12, 11, 10]
+  const dates = values.map((_, i) => `2026-02-${String(i + 1).padStart(2, "0")}`)
+  const sketch: ChartSketch = {
+    id: "move-1",
+    host: "evolution",
+    figure: FREE_FIGURE,
+    seriesKey: "sumNumbers",
+    seriesLabel: "Somme",
+    start: {
+      index: 1,
+      date: dates[1],
+      seriesKey: "sumNumbers",
+      actual: 6,
+      snapped: true,
+      kind: "sample",
+    },
+    end: {
+      index: 8,
+      date: dates[8],
+      seriesKey: "sumNumbers",
+      actual: 40,
+      snapped: false,
+      kind: "free",
+    },
+    points: buildSketchPoints({
+      figure: FREE_FIGURE,
+      values,
+      dates,
+      from: 1,
+      to: 8,
+      fromActual: 6,
+      toActual: 40,
+    }),
+    reading: null,
+    createdAt: "2026-02-10T00:00:00.000Z",
+  }
+  const movedEnd = moveSketchHandle(
+    sketch,
+    "end",
+    liveToAnchor({
+      index: 9,
+      date: dates[9],
+      seriesKey: "n1",
+      actual: 22,
+      snapped: true,
+      kind: "sample",
+    }),
+    values,
+    dates
+  )
+  assert.ok(movedEnd)
+  assert.equal(movedEnd.id, "move-1")
+  assert.equal(movedEnd.start.index, 1)
+  assert.equal(movedEnd.start.actual, 6)
+  assert.equal(movedEnd.end.index, 9)
+  assert.equal(movedEnd.end.actual, 22)
+  assert.equal(movedEnd.end.seriesKey, "sumNumbers")
+  assert.equal(movedEnd.points[0].actual, 6)
+  assert.equal(movedEnd.points.at(-1)?.actual, 22)
+  const expected = 6 + (22 - 6) * (3 / 8)
+  assert.ok(Math.abs(movedEnd.points[3].actual - expected) < 1e-9)
+
+  const movedStart = sketchWithMovedHandle(
+    sketch,
+    "start",
+    {
+      index: 0,
+      date: dates[0],
+      seriesKey: "sumNumbers",
+      actual: 5,
+      snapped: true,
+      kind: "sample",
+    },
+    values,
+    dates
+  )
+  assert.equal(movedStart.start.index, 0)
+  assert.equal(movedStart.end.actual, 40)
+  assert.equal(movedStart.points.at(-1)?.actual, 40)
+
+  assert.equal(
+    moveSketchHandle(
+      sketch,
+      "end",
+      {
+        index: 3,
+        date: dates[3],
+        seriesKey: "sumNumbers",
+        actual: 8,
+        snapped: true,
+        kind: "sample",
+      },
+      values,
+      dates
+    ),
+    null
+  )
+})
+
+test("moving a rail handle rebuilds parallels through the opposite contact", () => {
+  const values = [10, 12, 11, 14, 13, 16, 15, 18, 17, 20, 19, 22]
+  const dates = values.map((_, i) => `2026-09-${String(i + 1).padStart(2, "0")}`)
+  const geo = buildSketchGeometry({
+    figure: "canal",
+    values,
+    dates,
+    from: 1,
+    to: 8,
+    fromActual: 12,
+    toActual: 17,
+    via: 4,
+    viaActual: 4,
+  })
+  const sketch: ChartSketch = {
+    id: "rail-move",
+    host: "evolution",
+    figure: "canal",
+    seriesKey: "sumNumbers",
+    seriesLabel: "Somme",
+    start: {
+      index: 1,
+      date: dates[1],
+      seriesKey: "sumNumbers",
+      actual: 12,
+      snapped: true,
+      kind: "extrema",
+    },
+    mid: {
+      index: 8,
+      date: dates[8],
+      seriesKey: "sumNumbers",
+      actual: 17,
+      snapped: true,
+      kind: "extrema",
+    },
+    end: {
+      index: 4,
+      date: dates[4],
+      seriesKey: "sumNumbers",
+      actual: 4,
+      snapped: true,
+      kind: "extrema",
+    },
+    points: geo.points,
+    band: geo.band,
+    reading: null,
+    createdAt: "2026-09-18T00:00:00.000Z",
+  }
+  const movedEnd = moveSketchHandle(
+    sketch,
+    "end",
+    liveToAnchor({
+      index: 5,
+      date: dates[5],
+      seriesKey: "n1",
+      actual: 3,
+      snapped: true,
+      kind: "extrema",
+    }),
+    values,
+    dates
+  )
+  assert.ok(movedEnd)
+  assert.equal(movedEnd.start.index, 1)
+  assert.equal(movedEnd.mid?.index, 8)
+  assert.equal(movedEnd.end.index, 5)
+  assert.equal(movedEnd.end.actual, 3)
+  assert.equal(movedEnd.end.seriesKey, "sumNumbers")
+  const atVia =
+    movedEnd.band?.lower.find((point) => point.index === 5)?.actual ??
+    movedEnd.band?.upper.find((point) => point.index === 5)?.actual
+  assert.ok(atVia != null)
+  assert.ok(Math.abs((atVia ?? 0) - 3) < 1e-6)
+
+  const movedMid = moveSketchHandle(
+    sketch,
+    "mid",
+    {
+      index: 9,
+      date: dates[9],
+      seriesKey: "sumNumbers",
+      actual: 20,
+      snapped: true,
+      kind: "sample",
+    },
+    values,
+    dates
+  )
+  assert.ok(movedMid)
+  assert.equal(movedMid.mid?.index, 9)
+  assert.equal(movedMid.end.index, 4)
+
+  assert.equal(
+    moveSketchHandle(
+      sketch,
+      "start",
+      {
+        index: 7,
+        date: dates[7],
+        seriesKey: "sumNumbers",
+        actual: 18,
+        snapped: true,
+        kind: "sample",
+      },
+      values,
+      dates
+    ),
+    null
+  )
 })
 
 test("remap keeps a sketch whose dates still exist after a longer window", () => {

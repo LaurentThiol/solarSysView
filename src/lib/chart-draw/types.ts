@@ -15,6 +15,9 @@ export const FREE_FIGURE = "free"
 
 export type MagnetKind = "sample" | "extrema" | "free"
 
+/** Ancre déjà posée qu’on peut reprendre : départ, second point de borne, ou arrivée. */
+export type SketchHandle = "start" | "mid" | "end"
+
 export type ChartAnchor = {
   index: number
   date: string

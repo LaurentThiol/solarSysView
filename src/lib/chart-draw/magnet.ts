@@ -1,6 +1,6 @@
 import { swingPivots, type SwingPivot } from "../chartisme/pivots"
 
-import { type MagnetKind } from "./types"
+import { type MagnetKind, type SketchHandle } from "./types"
 
 export type TouchKind = "H" | "L"
 
@@ -31,9 +31,42 @@ export function isDemagnetizeModifier(event: { altKey?: boolean }): boolean {
   return Boolean(event.altKey)
 }
 
+/** Arrivée déjà posée : Alt lâche l’aimant. Départ et mid restent ancrés. */
+export function canFreeMoveHandle(handle: SketchHandle, demagnetize: boolean) {
+  return demagnetize && handle === "end"
+}
+
 /** Arrivée de n’importe quelle figure : le départ reste un ancrage réel. */
 export function canFreePlaceArrival(hasStart: boolean, demagnetize: boolean) {
-  return demagnetize && hasStart
+  return hasStart && canFreeMoveHandle("end", demagnetize)
+}
+
+export type SketchHandleSample = {
+  sketchId: string
+  handle: SketchHandle
+  px: number
+  py: number
+}
+
+/** Plus proche ancre déjà posée, dans le rayon d’aimant. */
+export function nearestSketchHandle(
+  handles: SketchHandleSample[],
+  pointer: PixelPoint,
+  radiusPx = DEFAULT_MAGNET_RADIUS_PX
+): { sketchId: string; handle: SketchHandle; distance: number } | null {
+  if (!handles.length) return null
+  let best = handles[0]
+  let bestD = Math.hypot(pointer.x - best.px, pointer.y - best.py)
+  for (let i = 1; i < handles.length; i += 1) {
+    const handle = handles[i]
+    const dist = Math.hypot(pointer.x - handle.px, pointer.y - handle.py)
+    if (dist < bestD) {
+      best = handle
+      bestD = dist
+    }
+  }
+  if (!isMagneted(bestD, radiusPx)) return null
+  return { sketchId: best.sketchId, handle: best.handle, distance: bestD }
 }
 
 /** Indices des pivots de swing : sommets et creux chartistes, pas tous les dents. */
