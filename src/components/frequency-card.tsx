@@ -13,19 +13,15 @@ function formatExpected(value: number) {
   })
 }
 
-function delayLabel(delay: number) {
-  if (delay <= 0) return "dernier tirage"
-  if (delay === 1) return "retard 1"
-  return `retard ${delay}`
-}
-
 export function FrequencyCard({
   title,
   items,
   empty,
   star = false,
   expected,
+  expectedHint,
   showDelay = false,
+  noneLabel,
   help,
 }: {
   title: string
@@ -33,9 +29,12 @@ export function FrequencyCard({
   empty: boolean
   star?: boolean
   expected?: number
+  expectedHint?: string
   showDelay?: boolean
+  noneLabel?: string
   help: HelpCopy
 }) {
+  const label = star ? "Étoile" : "Numéro"
   return (
     <Card>
       <CardHeader>
@@ -43,9 +42,10 @@ export function FrequencyCard({
           {star ? <Sparkles className="size-4 text-[oklch(0.82_0.12_85)]" /> : null}
           <TitleHelp help={help}>{title}</TitleHelp>
         </CardTitle>
-        {expected != null && !empty ? (
+        {!empty && (expectedHint || expected != null) ? (
           <CardDescription>
-            Attendu {formatExpected(expected)}× / {star ? "étoile" : "boule"}
+            {expectedHint ??
+              `Attendu ${formatExpected(expected!)}× / ${star ? "étoile" : "boule"}`}
           </CardDescription>
         ) : null}
       </CardHeader>
@@ -54,21 +54,49 @@ export function FrequencyCard({
           <p className="text-sm text-muted-foreground">
             Aucune statistique : affinez le filtre.
           </p>
+        ) : items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {noneLabel ?? "Aucun élément au-dessus du seuil."}
+          </p>
         ) : (
-          <ol className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {items.map((item) => (
-              <li
-                key={`${star ? "s" : "n"}-${item.value}`}
-                className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
-              >
-                <span className="font-medium tabular-nums">{item.value}</span>
-                <span className="text-right text-xs text-muted-foreground tabular-nums">
-                  {item.count}×
-                  {showDelay ? ` · ${delayLabel(item.delayDraws)}` : ""}
-                </span>
-              </li>
-            ))}
-          </ol>
+          <table className="w-full text-sm">
+            <caption className="sr-only">
+              {title}, rangé par ordre décroissant
+            </caption>
+            <thead>
+              <tr className="text-left text-xs text-muted-foreground">
+                <th className="w-6 py-1 pr-2 font-normal">#</th>
+                <th className="py-1 pr-2 font-normal">{label}</th>
+                {showDelay ? (
+                  <th className="py-1 pr-2 text-right font-normal">Retard</th>
+                ) : null}
+                <th className="py-1 text-right font-normal">Sorties</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, index) => (
+                <tr
+                  key={`${star ? "s" : "n"}-${item.value}`}
+                  className="border-t border-border"
+                >
+                  <td className="py-1.5 pr-2 text-xs text-muted-foreground tabular-nums">
+                    {index + 1}
+                  </td>
+                  <td className="py-1.5 pr-2 font-medium tabular-nums">
+                    {item.value}
+                  </td>
+                  {showDelay ? (
+                    <td className="py-1.5 pr-2 text-right text-muted-foreground tabular-nums">
+                      {item.delayDraws}
+                    </td>
+                  ) : null}
+                  <td className="py-1.5 text-right text-muted-foreground tabular-nums">
+                    {item.count}×
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </CardContent>
     </Card>

@@ -24,7 +24,9 @@ import { packEvolution } from "@/lib/capture/pack"
 import {
   DRAWS,
   archiveSummary,
+  expectedNumberDelay,
   expectedNumberHits,
+  expectedStarDelay,
   expectedStarHits,
   hottest,
   mergeDraws,
@@ -88,14 +90,34 @@ function EvolutionContent() {
     return scoped.filter((draw) => monthOf(draw.date) === activeMonth)
   }, [archive, period, activeMonth])
 
-  const numberBoard = useMemo(() => numberFrequencyTable(filtered), [filtered])
-  const starBoard = useMemo(() => starFrequencyTable(filtered), [filtered])
-  const hotNumbers = useMemo(() => hottest(numberBoard, 10), [numberBoard])
-  const lateNumbers = useMemo(() => overdue(numberBoard, 10), [numberBoard])
-  const hotStars = useMemo(() => hottest(starBoard, 6), [starBoard])
-  const lateStars = useMemo(() => overdue(starBoard, 6), [starBoard])
+  const numberBoard = useMemo(
+    () => numberFrequencyTable(filtered, archive),
+    [filtered, archive]
+  )
+  const starBoard = useMemo(
+    () => starFrequencyTable(filtered, 12, archive),
+    [filtered, archive]
+  )
   const expectedN = expectedNumberHits(filtered.length)
   const expectedS = expectedStarHits(filtered.length)
+  const expectedNDelay = expectedNumberDelay()
+  const expectedSDelay = expectedStarDelay()
+  const hotNumbers = useMemo(
+    () => hottest(numberBoard, 10, { minCount: expectedN }),
+    [numberBoard, expectedN]
+  )
+  const lateNumbers = useMemo(
+    () => overdue(numberBoard, 10, { minDelay: expectedNDelay }),
+    [numberBoard, expectedNDelay]
+  )
+  const hotStars = useMemo(
+    () => hottest(starBoard, 6, { minCount: expectedS }),
+    [starBoard, expectedS]
+  )
+  const lateStars = useMemo(
+    () => overdue(starBoard, 6, { minDelay: expectedSDelay }),
+    [starBoard, expectedSDelay]
+  )
   const coverage = numberCoverage(filtered)
   const sumStats = useMemo(() => {
     const series = toDrawSeries(filtered)
@@ -265,20 +287,22 @@ function EvolutionContent() {
           items={hotNumbers}
           empty={filtered.length === 0}
           expected={expectedN}
+          noneLabel={`Aucune boule au-dessus de l’attendu (${formatStat(expectedN)}×).`}
           help={{
             title: "Numéros les plus sortis",
-            body: "Classement des boules 1–50 les plus fréquentes dans la fenêtre. Comparez au nombre attendu (2× sur 20 tirages, 5× sur 50). Fréquence observée, pas une prédiction.",
+            body: "Tableau décroissant des boules 1–50 sorties plus souvent que l’attendu dans la fenêtre (2× sur 20 tirages, 5× sur 50). À fréquence égale, la plus récemment vue est devant. Fréquence observée, pas une prédiction.",
           }}
         />
         <FrequencyCard
           title="Numéros en retard"
           items={lateNumbers}
           empty={filtered.length === 0}
-          expected={expectedN}
+          expectedHint={`Retard attendu ${expectedNDelay} tirages`}
           showDelay
+          noneLabel={`Aucun numéro au-delà du retard attendu (${expectedNDelay} tirages).`}
           help={{
             title: "Numéros en retard",
-            body: "Plus longtemps absents dans la fenêtre (en nombre de tirages). Un retard n’augmente pas la chance au tirage suivant.",
+            body: "Tableau décroissant du retard (tirages depuis la dernière sortie), mesuré à la fin de la fenêtre sur tout l’historique connu — pas seulement les 20 ou 50 derniers. Seuls les retards plus longs que l’attente géométrique (10 tirages) sont listés. Un retard n’augmente pas la chance au tirage suivant.",
           }}
         />
         <FrequencyCard
@@ -287,9 +311,10 @@ function EvolutionContent() {
           empty={filtered.length === 0}
           star
           expected={expectedS}
+          noneLabel={`Aucune étoile au-dessus de l’attendu (${formatStat(expectedS)}×).`}
           help={{
             title: "Étoiles les plus sorties",
-            body: "Classement des étoiles 1–12 les plus fréquentes. Attendu ≈ 3,3× sur 20 tirages, ≈ 8,3× sur 50.",
+            body: "Tableau décroissant des étoiles 1–12 sorties plus souvent que l’attendu (≈ 3,3× sur 20 tirages, ≈ 8,3× sur 50). Une étoile à 6× n’apparaît pas aussi « en retard ».",
           }}
         />
         <FrequencyCard
@@ -297,11 +322,12 @@ function EvolutionContent() {
           items={lateStars}
           empty={filtered.length === 0}
           star
-          expected={expectedS}
+          expectedHint={`Retard attendu ${expectedSDelay} tirages`}
           showDelay
+          noneLabel={`Aucune étoile au-delà du retard attendu (${expectedSDelay} tirages).`}
           help={{
             title: "Étoiles en retard",
-            body: "Étoiles les plus longtemps absentes dans la fenêtre. Même lecture que les numéros : descriptif, pas un signal jouable.",
+            body: "Tableau décroissant du retard des étoiles, avec le même regard historique que les numéros. Seuls les retards plus longs que l’attente (6 tirages sur 12 ★) sont listés. Descriptif, pas un signal jouable.",
           }}
         />
       </section>

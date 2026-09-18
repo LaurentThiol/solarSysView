@@ -6,6 +6,21 @@ import {
   decadePeak,
   spreadOf,
 } from "@/lib/grid-shape"
+import {
+  expectedNumberDelay,
+  expectedStarDelay,
+  hottest,
+  overdue,
+  type FrequencyItem,
+} from "@/lib/frequency-rank"
+
+export {
+  expectedNumberDelay,
+  expectedStarDelay,
+  hottest,
+  overdue,
+  type FrequencyItem,
+}
 
 export type PrizeTier = {
   rank: number
@@ -349,31 +364,36 @@ export function takeLastDraws(draws: Draw[], n: number) {
     .slice(0, Math.max(0, n))
 }
 
-export type FrequencyItem = {
-  value: number
-  count: number
-  lastSeen: string | null
-  delayDraws: number
-}
-
 function frequencyTable(
   draws: Draw[],
   pool: number,
-  pick: (draw: Draw) => number[]
+  pick: (draw: Draw) => number[],
+  history?: Draw[]
 ): FrequencyItem[] {
   const ordered = [...draws].sort((a, b) => a.date.localeCompare(b.date))
   const counts = Array(pool + 1).fill(0)
-  const lastIndex: Array<number | null> = Array(pool + 1).fill(null)
-  const lastDate: Array<string | null> = Array(pool + 1).fill(null)
-  for (let i = 0; i < ordered.length; i += 1) {
-    for (const value of pick(ordered[i])) {
+  for (const draw of ordered) {
+    for (const value of pick(draw)) {
       if (value < 1 || value > pool) continue
       counts[value] += 1
-      lastIndex[value] = i
-      lastDate[value] = ordered[i].date
     }
   }
-  const n = ordered.length
+
+  const asOf = ordered[ordered.length - 1]?.date
+  const lookback = [...(history ?? draws)]
+    .filter((draw) => !asOf || draw.date <= asOf)
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const lastIndex: Array<number | null> = Array(pool + 1).fill(null)
+  const lastDate: Array<string | null> = Array(pool + 1).fill(null)
+  for (let i = 0; i < lookback.length; i += 1) {
+    for (const value of pick(lookback[i])) {
+      if (value < 1 || value > pool) continue
+      lastIndex[value] = i
+      lastDate[value] = lookback[i].date
+    }
+  }
+
+  const n = lookback.length
   return Array.from({ length: pool }, (_, i) => {
     const value = i + 1
     const seenAt = lastIndex[value]
@@ -386,12 +406,16 @@ function frequencyTable(
   })
 }
 
-export function numberFrequencyTable(draws: Draw[]) {
-  return frequencyTable(draws, 50, (draw) => draw.numbers)
+export function numberFrequencyTable(draws: Draw[], history?: Draw[]) {
+  return frequencyTable(draws, 50, (draw) => draw.numbers, history)
 }
 
-export function starFrequencyTable(draws: Draw[], pool = 12) {
-  return frequencyTable(draws, pool, (draw) => draw.stars)
+export function starFrequencyTable(
+  draws: Draw[],
+  pool = 12,
+  history?: Draw[]
+) {
+  return frequencyTable(draws, pool, (draw) => draw.stars, history)
 }
 
 export function expectedNumberHits(drawCount: number) {
@@ -400,18 +424,6 @@ export function expectedNumberHits(drawCount: number) {
 
 export function expectedStarHits(drawCount: number, pool = 12) {
   return pool > 0 ? drawCount * (2 / pool) : 0
-}
-
-export function hottest(items: FrequencyItem[], n: number) {
-  return [...items]
-    .sort((a, b) => b.count - a.count || a.value - b.value)
-    .slice(0, n)
-}
-
-export function overdue(items: FrequencyItem[], n: number) {
-  return [...items]
-    .sort((a, b) => b.delayDraws - a.delayDraws || a.value - b.value)
-    .slice(0, n)
 }
 
 export function numberCoverage(draws: Draw[]) {

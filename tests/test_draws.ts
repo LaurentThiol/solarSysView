@@ -8,11 +8,13 @@ import {
   formatWinnerTotals,
   fromRelativeRange,
   meanPrizeByRank,
+  numberFrequencyTable,
   parsePrizeTiers,
   prizeAtRank,
   rank1WinnerStep,
   rankWinnersTotal,
   relativeToRange,
+  starFrequencyTable,
   toCsv,
   toDrawSeries,
   totalWinners,
@@ -126,6 +128,42 @@ test("rank1WinnerStep is 0 with a jackpot winner and +1 on a rollover", () => {
     series.map((point) => point.rank1),
     [1, 0, null]
   )
+})
+
+function draw(date: string, numbers: number[], stars: number[]): Draw {
+  return {
+    id: Number(date.replaceAll("-", "")),
+    date,
+    weekday: "mardi",
+    numbers,
+    stars,
+  }
+}
+
+test("frequency lookback counts the window and dates delay from history", () => {
+  const history = [
+    draw("2026-01-02", [7, 8, 9, 10, 11], [1, 2]),
+    draw("2026-01-06", [12, 13, 14, 15, 16], [3, 4]),
+    draw("2026-01-09", [17, 18, 19, 20, 21], [5, 6]),
+    draw("2026-01-13", [1, 2, 3, 4, 5], [1, 2]),
+    draw("2026-01-16", [22, 23, 24, 25, 26], [7, 8]),
+  ]
+  const window = history.slice(3)
+  const numbers = numberFrequencyTable(window, history)
+  const seven = numbers.find((row) => row.value === 7)
+  const one = numbers.find((row) => row.value === 1)
+  assert.equal(seven?.count, 0)
+  assert.equal(seven?.delayDraws, 4)
+  assert.equal(one?.count, 1)
+  assert.equal(one?.delayDraws, 1)
+
+  const stars = starFrequencyTable(window, 12, history)
+  const starOne = stars.find((row) => row.value === 1)
+  const starThree = stars.find((row) => row.value === 3)
+  assert.equal(starOne?.count, 1)
+  assert.equal(starOne?.delayDraws, 1)
+  assert.equal(starThree?.count, 0)
+  assert.equal(starThree?.delayDraws, 3)
 })
 
 test("relative range is reversible for off-curve Y on the combined chart", () => {
