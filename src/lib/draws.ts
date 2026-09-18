@@ -126,14 +126,41 @@ export function formatWinnerTotals(
   return `${formatCount(fr)} FR · ${formatCount(eu)} EU`
 }
 
+export function prizeTierAtRank(
+  draw: Pick<Draw, "prizes"> | null | undefined,
+  rank: number | null | undefined
+): PrizeTier | null {
+  if (rank == null || !draw?.prizes?.length) return null
+  return draw.prizes.find((item) => item.rank === rank) ?? null
+}
+
 export function prizeAtRank(
   draw: Pick<Draw, "prizes"> | null | undefined,
   rank: number | null | undefined
 ): number | null {
-  if (rank == null || !draw?.prizes?.length) return null
-  const tier = draw.prizes.find((item) => item.rank === rank)
+  const tier = prizeTierAtRank(draw, rank)
   if (!tier || tier.prize == null || !Number.isFinite(tier.prize)) return null
   return tier.prize
+}
+
+/**
+ * Pas de la ligne « gagnant 1er rang » : 0 s’il y a au moins un gagnant
+ * du jackpot (total Europe, France comprise), +1 sinon (report).
+ */
+export function rank1WinnerStep(
+  draw: Pick<Draw, "prizes"> | null | undefined
+): number | null {
+  const tier = prizeTierAtRank(draw, 1)
+  if (!tier) return null
+  const winners =
+    tier.winners_total ?? rankWinnersTotal(tier.winners_fr, tier.winners_eu)
+  if (winners == null || !Number.isFinite(winners)) return null
+  return winners > 0 ? 0 : 1
+}
+
+export function formatRank1Step(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—"
+  return value === 0 ? "0 · gagnant" : "+1 · pas gagnant"
 }
 
 export function formatEuro(value: number | null | undefined): string {
@@ -500,6 +527,8 @@ export type DrawSeriesPoint = {
   parityStars: number
   starSpread: number
   starConsecutive: number
+  /** 0 = gagnant rang 1, 1 = pas de gagnant. `null` si l’archive n’a pas le rang. */
+  rank1: number | null
 }
 
 export function toDrawSeries(draws: Draw[]): DrawSeriesPoint[] {
@@ -542,6 +571,7 @@ export function toDrawSeries(draws: Draw[]): DrawSeriesPoint[] {
         parityStars: starsParity.score,
         starSpread: spreadOf(stars),
         starConsecutive: consecutiveCount(stars),
+        rank1: rank1WinnerStep(draw),
       }
     })
 }

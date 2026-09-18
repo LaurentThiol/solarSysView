@@ -71,6 +71,7 @@ const SERIES: Record<string, () => number[][]> = {
   e2: () => [wander(8.8, 1.7, 0.2)],
   star_delay: () => [saw(5)],
   star_hit: () => [pulses(5)],
+  rank1: () => [sample((_, i) => (i % 4 === 0 ? 0 : 1))],
   eachNumber: () => [
     wander(7, 3, 0),
     wander(16, 3.2, 0.05),
@@ -99,6 +100,7 @@ const BOX: Record<string, { min: number; max: number }> = {
   star_delay: { min: 0, max: 8 },
   hit: { min: 0, max: 1 },
   star_hit: { min: 0, max: 1 },
+  rank1: { min: 0, max: 1 },
   parity: { min: 0, max: 5 },
   consecutive: { min: 0, max: 3 },
   high_low: { min: 0, max: 5 },

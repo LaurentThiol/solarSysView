@@ -69,12 +69,14 @@ import {
   STAR_SUM_RANGE,
   type Draw,
   formatDrawDate,
+  formatRank1Step,
   formatShortDate,
   pearsonCorrelation,
   rangeFromValues,
   relativeToRange,
   summarizeValues,
   toDrawSeries,
+  type DrawSeriesPoint,
   type ValueRange,
 } from "@/lib/draws"
 
@@ -112,6 +114,7 @@ const chartConfig = {
   relStars: { label: "Somme étoiles", color: "var(--chart-2)" },
   e1: { label: "e1", color: "var(--chart-1)" },
   e2: { label: "e2", color: "var(--chart-2)" },
+  rank1: { label: "1er rang", color: "oklch(0.68 0.18 25)" },
   sma: { label: "SMA", color: "var(--chart-2)" },
   bbUpper: { label: "Bollinger +", color: "var(--chart-5)" },
   bbLower: { label: "Bollinger −", color: "var(--chart-5)" },
@@ -129,6 +132,7 @@ type SeriesKey =
   | "relStars"
   | "e1"
   | "e2"
+  | "rank1"
 
 type ChartPoint = ReturnType<typeof toDrawSeries>[number] &
   Record<string, number | string | null>
@@ -158,6 +162,8 @@ const TITLE_HELP: Record<DrawChartMode, HelpCopy> = {
 n1 = plus petit, n2 = 2ᵉ plus petit, n3 = médian, n4 = 2ᵉ plus grand, n5 = plus grand. Exemple : {12, 41, 7, 28, 19} → n1 = 7, n2 = 12, n3 = 19, n4 = 28, n5 = 41.
 
 Chaque point est un tirage, en ordre chronologique. L’axe Y va de 1 à 50.
+
+La ligne « 1er rang » (si l’archive a les gagnants) se lit sur l’axe de droite : 0 s’il y a au moins un gagnant du jackpot, +1 sinon (report). Maj+clic l’isole sur 0–1.
 
 SMA et Bollinger sont optionnels, une courbe à la fois (la série visible). Maj+clic sur un n l’isole pour lire sa bande. Lissage descriptif, pas une prédiction.
 
@@ -221,6 +227,10 @@ const SERIES_HELP: Record<SeriesKey, HelpCopy> = {
     title: "e2 — plus grande étoile",
     body: "Plus grande des 2 étoiles, après tri croissant — pas la dernière étoile sortie.\n\nCliquez pour afficher ou masquer. Maj+clic : e2 seule.",
   },
+  rank1: {
+    title: "Gagnant 1er rang",
+    body: "0 s’il y a au moins un gagnant du jackpot (rang 1, total Europe, France comprise). +1 s’il n’y en a aucun (report). Cliquez pour masquer. Maj+clic : cette courbe seule (échelle 0–1).",
+  },
 }
 
 const SERIES_SELECT_HELP: HelpCopy = {
@@ -228,7 +238,7 @@ const SERIES_SELECT_HELP: HelpCopy = {
   wide: true,
   body: `Sommes superposées (échelle relative 0–100 %), somme des 5 numéros, chacune des 5 boules, somme des 2 étoiles, ou chaque étoile. L’axe Y s’adapte (0–100 %, 1–50 ou 1–12).
 
-« Chaque numéro » trace n1 à n5 : les 5 boules triées du plus petit au plus grand, pas l’ordre de sortie. « Chaque étoile » fait de même pour e1 < e2. SMA et Bollinger s’appliquent à chaque courbe visible.`,
+« Chaque numéro » trace n1 à n5 : les 5 boules triées du plus petit au plus grand, pas l’ordre de sortie — plus la ligne 1er rang (0 = gagnant, +1 = pas gagnant) quand l’archive la porte. « Chaque étoile » fait de même pour e1 < e2. SMA et Bollinger s’appliquent à chaque courbe visible.`,
 }
 
 const SUMMARY_HELP: HelpCopy = {
@@ -250,16 +260,50 @@ function isRankMode(mode: DrawChartMode) {
   return mode === "eachNumber" || mode === "eachStar"
 }
 
-function yDomain(mode: DrawChartMode): [number, number] | [number, "auto"] {
+function yDomain(
+  mode: DrawChartMode,
+  visibleKeys: SeriesKey[]
+): [number, number] | [number, "auto"] {
   if (mode === "sumBoth") return [0, 100]
-  if (mode === "eachNumber") return [1, 50]
+  if (mode === "eachNumber") {
+    if (visibleKeys.length === 1 && visibleKeys[0] === "rank1") return [0, 1]
+    return [1, 50]
+  }
   if (mode === "eachStar") return [1, 12]
   if (mode === "sumStars") return [3, "auto"]
   return [15, "auto"]
 }
 
-function yDomainLocked(mode: DrawChartMode) {
-  return typeof yDomain(mode)[1] === "number"
+function yDomainLocked(mode: DrawChartMode, visibleKeys: SeriesKey[]) {
+  return typeof yDomain(mode, visibleKeys)[1] === "number"
+}
+
+function chartKeys(mode: DrawChartMode, series: DrawSeriesPoint[]): SeriesKey[] {
+  const keys = MODE_KEYS[mode]
+  if (mode !== "eachNumber") return keys
+  if (series.some((point) => typeof point.rank1 === "number")) {
+    return [...keys, "rank1"]
+  }
+  return keys
+}
+
+function splitRank1Axis(mode: DrawChartMode, visibleKeys: SeriesKey[]) {
+  return (
+    mode === "eachNumber" &&
+    visibleKeys.includes("rank1") &&
+    visibleKeys.some((key) => key !== "rank1")
+  )
+}
+
+function plotAxisId(key: SeriesKey, split: boolean): string | number {
+  return split && key === "rank1" ? "rank1" : 0
+}
+
+function seriesValuesOf(series: DrawSeriesPoint[], key: SeriesKey) {
+  return series.map((point) => {
+    const value = point[sourceKey(key)]
+    return typeof value === "number" ? value : Number.NaN
+  })
 }
 
 function formatStat(value: number) {
@@ -289,9 +333,7 @@ function resolveRange(
   return theory
 }
 
-function sourceKey(
-  key: SeriesKey
-): "sumNumbers" | "sumStars" | "n1" | "n2" | "n3" | "n4" | "n5" | "e1" | "e2" {
+function sourceKey(key: SeriesKey): keyof DrawSeriesPoint {
   if (key === "relNumbers") return "sumNumbers"
   if (key === "relStars") return "sumStars"
   return key
@@ -351,13 +393,15 @@ function MagnetHalo({
   live,
   plotted,
   onScales,
+  yAxisId,
 }: {
   live: LiveCursor | null
   plotted: number | null
   onScales: (scales: AxisScales) => void
+  yAxisId?: string | number
 }) {
   const xScale = useXAxisScale()
-  const yScale = useYAxisScale()
+  const yScale = useYAxisScale(yAxisId)
   useLayoutEffect(() => {
     onScales({
       x: xScale ? (value) => xScale(value, { position: "middle" }) ?? Number.NaN : null,
@@ -571,7 +615,11 @@ function SeriesTooltip({
                     {chartConfig[key].label}
                   </span>
                   <span className="font-mono font-medium tabular-nums">
-                    {typeof value === "number" ? formatStat(value) : "—"}
+                    {typeof value !== "number"
+                      ? "—"
+                      : key === "rank1"
+                        ? formatRank1Step(value)
+                        : formatStat(value)}
                   </span>
                 </div>
                 {showSma ? (
@@ -621,11 +669,15 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   const [hint, setHint] = useState<string | null>(null)
 
   const series = useMemo(() => toDrawSeries(draws), [draws])
-  const keys = MODE_KEYS[mode]
-  const visibleKeys = keys.filter((key) => !hidden[key])
+  const keys = useMemo(() => chartKeys(mode, series), [mode, series])
+  const visibleKeys = useMemo(
+    () => keys.filter((key) => !hidden[key]),
+    [keys, hidden]
+  )
   const combined = mode === "sumBoth"
   const smaPeriod = overlayPeriodFor(series.length)
   const rankMode = isRankMode(mode)
+  const splitRank1 = splitRank1Axis(mode, visibleKeys)
 
   const overlayPacks = useMemo(() => {
     const packs: Partial<
@@ -634,6 +686,13 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     if (!smaPeriod) return packs
     for (const key of keys) {
       const values = series.map((point) => point[sourceKey(key)])
+      if (
+        !values.every(
+          (value): value is number => typeof value === "number" && Number.isFinite(value)
+        )
+      ) {
+        continue
+      }
       packs[key] = { abs: overlayBands(values, smaPeriod), values }
     }
     return packs
@@ -709,7 +768,13 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     }
     for (const key of visibleKeys) {
       if (key === "relNumbers" || key === "relStars") continue
-      const stats = summarizeValues(series.map((point) => point[key]))
+      const stats = summarizeValues(
+        series
+          .map((point) => point[key])
+          .filter(
+            (value): value is number => typeof value === "number" && Number.isFinite(value)
+          )
+      )
       if (stats) items.push({ key, label: chartConfig[key].label, ...stats })
     }
     return items
@@ -777,7 +842,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   const drawing = Boolean(draw?.drawing)
   const draftPoints = useMemo(() => {
     if (!drawing || !draftStart || !draftLive) return []
-    const values = series.map((point) => point[sourceKey(targetKey)])
+    const values = seriesValuesOf(series, targetKey)
     return buildSketchPoints({
       figure: draftFigure,
       values,
@@ -793,7 +858,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   const draftReading = useMemo(() => {
     if (draftStart && draftLive && draftLive.index !== draftStart.index) {
       if (windowTooShort(draftStart.index, draftLive.index)) return null
-      const values = series.map((point) => point[sourceKey(targetKey)])
+      const values = seriesValuesOf(series, targetKey)
       return readWindow(values, dates, draftStart.index, draftLive.index)
     }
     return lastSketch?.reading ?? null
@@ -851,7 +916,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   }, [draw?.drawing])
 
   function seriesValues(key: SeriesKey) {
-    return series.map((point) => point[sourceKey(key)])
+    return seriesValuesOf(series, key)
   }
 
   function liveFromPointer(
@@ -1157,10 +1222,15 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               )}
             >
               <ComposedChart
-                key={`${mode}-${combined ? scale : "abs"}`}
+                key={`${mode}-${combined ? scale : "abs"}-${splitRank1 ? "split" : "one"}`}
                 accessibilityLayer
                 data={plotData}
-                margin={{ left: 4, right: 8, top: combined ? 16 : 8, bottom: 4 }}
+                margin={{
+                  left: 4,
+                  right: splitRank1 ? 36 : 8,
+                  top: combined ? 16 : 8,
+                  bottom: 4,
+                }}
                 onMouseMove={(state, event) => {
                   if (!draw?.drawing) return
                   onChartMove(state, event)
@@ -1183,14 +1253,27 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                   tickFormatter={formatShortDate}
                 />
                 <YAxis
-                  domain={yDomain(mode)}
+                  domain={yDomain(mode, visibleKeys)}
                   width={combined ? 42 : 36}
                   tickLine={false}
                   axisLine={false}
                   allowDecimals={false}
-                  allowDataOverflow={yDomainLocked(mode)}
+                  allowDataOverflow={yDomainLocked(mode, visibleKeys)}
                   tickFormatter={combined ? (value) => `${value}%` : undefined}
                 />
+                {splitRank1 ? (
+                  <YAxis
+                    yAxisId="rank1"
+                    orientation="right"
+                    domain={[0, 1]}
+                    width={32}
+                    ticks={[0, 1]}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                    tickFormatter={(value) => (value === 0 ? "0" : "+1")}
+                  />
+                ) : null}
                 {combined && scale === "theory" ? (
                   <ReferenceLine
                     y={50}
@@ -1229,6 +1312,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                           type="monotone"
                           dataKey={overlayField(key, "bbBase")}
                           stackId={`bb-${key}`}
+                          yAxisId={plotAxisId(key, splitRank1)}
                           fill="transparent"
                           stroke="none"
                           legendType="none"
@@ -1240,6 +1324,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                           type="monotone"
                           dataKey={overlayField(key, "bbSpan")}
                           stackId={`bb-${key}`}
+                          yAxisId={plotAxisId(key, splitRank1)}
                           fill={overlayStroke(key, "bb")}
                           fillOpacity={0.14}
                           stroke="none"
@@ -1255,11 +1340,20 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                   <Line
                     key={key}
                     dataKey={key}
-                    type="monotone"
+                    yAxisId={plotAxisId(key, splitRank1)}
+                    type={key === "rank1" ? "stepAfter" : "monotone"}
                     stroke={`var(--color-${key})`}
-                    strokeWidth={2}
+                    strokeWidth={key === "rank1" ? 1.75 : 2}
+                    strokeDasharray={key === "rank1" ? "4 3" : undefined}
                     hide={Boolean(hidden[key])}
-                    dot={series.length > 24 ? { r: 2 } : { r: 3 }}
+                    connectNulls={false}
+                    dot={
+                      key === "rank1"
+                        ? { r: 3 }
+                        : series.length > 24
+                          ? { r: 2 }
+                          : { r: 3 }
+                    }
                     activeDot={{ r: 4 }}
                   />
                 ))}
@@ -1268,6 +1362,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       <Line
                         key={`sma-${key}`}
                         dataKey={overlayField(key, "sma")}
+                        yAxisId={plotAxisId(key, splitRank1)}
                         type="monotone"
                         stroke={overlayStroke(key, "sma")}
                         strokeWidth={2}
@@ -1284,6 +1379,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       <Fragment key={`bb-${key}`}>
                         <Line
                           dataKey={overlayField(key, "bbUpper")}
+                          yAxisId={plotAxisId(key, splitRank1)}
                           type="monotone"
                           stroke={overlayStroke(key, "bb")}
                           strokeWidth={1.25}
@@ -1296,6 +1392,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                         />
                         <Line
                           dataKey={overlayField(key, "bbLower")}
+                          yAxisId={plotAxisId(key, splitRank1)}
                           type="monotone"
                           stroke={overlayStroke(key, "bb")}
                           strokeWidth={1.25}
@@ -1309,6 +1406,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                         {!showSma ? (
                           <Line
                             dataKey={overlayField(key, "sma")}
+                            yAxisId={plotAxisId(key, splitRank1)}
                             type="monotone"
                             stroke={overlayStroke(key, "sma")}
                             strokeWidth={1.5}
@@ -1326,6 +1424,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                   <Line
                     key={sketch.id}
                     dataKey={sketchDataKey(sketch.id)}
+                    yAxisId={plotAxisId(sketch.seriesKey as SeriesKey, splitRank1)}
                     type="monotone"
                     stroke="var(--chart-4)"
                     strokeWidth={2}
@@ -1341,6 +1440,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                 {draftPoints.length > 0 ? (
                   <Line
                     dataKey={DRAFT_KEY}
+                    yAxisId={plotAxisId(targetKey, splitRank1)}
                     type="monotone"
                     stroke="var(--chart-4)"
                     strokeWidth={2}
@@ -1368,6 +1468,10 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                         draw.draft.start.actual,
                         ranges
                       )}
+                      yAxisId={plotAxisId(
+                        draw.draft.start.seriesKey as SeriesKey,
+                        splitRank1
+                      )}
                       r={5}
                       fill="var(--chart-4)"
                       stroke="var(--background)"
@@ -1385,6 +1489,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     <ReferenceDot
                       x={draw.live.date}
                       y={plottedOf(targetKey, draw.live.actual, ranges)}
+                      yAxisId={plotAxisId(targetKey, splitRank1)}
                       r={4}
                       fill={draw.live.snapped ? "var(--chart-4)" : "transparent"}
                       stroke="var(--chart-4)"
@@ -1396,6 +1501,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     <ReferenceDot
                       x={sketch.start.date}
                       y={plottedOf(sketch.seriesKey as SeriesKey, sketch.start.actual, ranges)}
+                      yAxisId={plotAxisId(sketch.seriesKey as SeriesKey, splitRank1)}
                       r={4}
                       fill="var(--chart-4)"
                       stroke="var(--background)"
@@ -1403,6 +1509,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     <ReferenceDot
                       x={sketch.end.date}
                       y={plottedOf(sketch.seriesKey as SeriesKey, sketch.end.actual, ranges)}
+                      yAxisId={plotAxisId(sketch.seriesKey as SeriesKey, splitRank1)}
                       r={4}
                       fill="var(--chart-4)"
                       stroke="var(--background)"
@@ -1417,6 +1524,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       : null
                   }
                   onScales={onScales}
+                  yAxisId={
+                    splitRank1 && targetKey === "rank1" ? "rank1" : undefined
+                  }
                 />
               </ComposedChart>
             </ChartContainer>
@@ -1509,6 +1619,12 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
             {rankMode && (showSma || showBb) && visibleKeys.length > 2 ? (
               <p className="mt-2 text-center text-xs text-muted-foreground">
                 Maj+clic sur un n pour n’afficher que sa SMA / bande.
+              </p>
+            ) : null}
+            {splitRank1 ? (
+              <p className="mt-3 text-center text-xs text-muted-foreground">
+                Axe droit : 1er rang · 0 = gagnant du jackpot · +1 = pas de gagnant
+                (report).
               </p>
             ) : null}
             {combined ? (

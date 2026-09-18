@@ -4,12 +4,15 @@ import test from "node:test"
 import {
   formatEuro,
   formatJackpot,
+  formatRank1Step,
   formatWinnerTotals,
   meanPrizeByRank,
   parsePrizeTiers,
   prizeAtRank,
+  rank1WinnerStep,
   rankWinnersTotal,
   toCsv,
+  toDrawSeries,
   totalWinners,
   type Draw,
 } from "../src/lib/draws"
@@ -92,5 +95,33 @@ test("totalWinners sums ranks and does not add FR to EU", () => {
       winners_total_eu: 1334600,
     }),
     { fr: 324137, eu: 1334600 }
+  )
+})
+
+test("rank1WinnerStep is 0 with a jackpot winner and +1 on a rollover", () => {
+  assert.equal(rank1WinnerStep(sample), 1)
+  assert.equal(formatRank1Step(1), "+1 · pas gagnant")
+  assert.equal(
+    rank1WinnerStep({
+      ...sample,
+      prizes: [{ rank: 1, winners_fr: 0, winners_eu: 2, prize: 17_000_000 }],
+    }),
+    0
+  )
+  assert.equal(formatRank1Step(0), "0 · gagnant")
+  assert.equal(rank1WinnerStep({ ...sample, prizes: undefined }), null)
+  const series = toDrawSeries([
+    sample,
+    {
+      ...sample,
+      id: 26071,
+      date: "2026-09-04",
+      prizes: [{ rank: 1, winners_fr: 1, winners_eu: 1, prize: 50_000_000 }],
+    },
+    { ...sample, id: 26072, date: "2026-09-08", prizes: undefined },
+  ])
+  assert.deepEqual(
+    series.map((point) => point.rank1),
+    [1, 0, null]
   )
 })

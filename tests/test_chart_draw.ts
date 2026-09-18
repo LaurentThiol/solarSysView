@@ -163,6 +163,7 @@ test("each curve type has a schematic sparkline", () => {
     "e2",
     "star_delay",
     "star_hit",
+    "rank1",
     "eachNumber",
     "eachStar",
     "sumBoth",
@@ -180,6 +181,7 @@ test("each curve type has a schematic sparkline", () => {
   const delay = curveSparkSeries("delay:12")[0]
   assert.ok(delay.some((value, index) => index > 0 && value < delay[index - 1]))
   assert.deepEqual([...new Set(curveSparkSeries("hit").flat())].sort(), [0, 1])
+  assert.deepEqual([...new Set(curveSparkSeries("rank1").flat())].sort(), [0, 1])
   const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length
   assert.ok(mean(curveSparkSeries("n1")[0]) < mean(curveSparkSeries("n5")[0]))
   assert.equal(curveSparkSeries("eachNumber").length, 5)
