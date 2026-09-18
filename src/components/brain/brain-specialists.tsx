@@ -45,10 +45,18 @@ import {
   type SpecialistRecord,
   type SpecialistTask,
 } from "@/lib/brain/specialists"
-import { beatsChanceCount, formatSkill, skillOf } from "@/lib/brain/specialist-view"
+import { beatsChanceCount, formatSkill, skillOf, specialistFeatureHelp, specialistFeaturesHelp } from "@/lib/brain/specialist-view"
 import { cn } from "@/lib/utils"
 
 const DEFAULT_INDICATORS = [...DEMO_SPECIALIST.indicators]
+
+const FEATURE_FAMILY_LABELS: Record<string, string> = {
+  lags: "Lags",
+  momentum: "Momentum",
+  volatilite: "Volatilité",
+  moyennes: "Moyennes",
+  tendance: "Tendance",
+}
 
 const HELP = {
   title: {
@@ -74,10 +82,6 @@ const HELP = {
   horizon: {
     title: "Horizon",
     body: "valeur = le prochain point (t+1). Δ = son évolution. Les deux restent une série nommée, pas une 5+2.",
-  },
-  features: {
-    title: "Indicateurs",
-    body: "Entrées du réseau, calculées jusqu’au tirage t. Pas de fuite du futur. Au moins un indicateur.",
   },
   instructions: {
     title: "Instructions",
@@ -572,33 +576,42 @@ export function BrainSpecialists({
             >
               <p className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-medium">
                 Indicateurs (features causales jusqu’à t)
-                <HelpTip {...HELP.features} />
+                <HelpTip {...specialistFeaturesHelp(features)} />
               </p>
               <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card/30 p-2">
                 {grouped.map((group) => (
-                  <div key={group.family} className="flex flex-wrap gap-1.5">
-                    {group.items.map((feature) => {
-                      const on = picked.includes(feature.id)
-                      return (
-                        <button
-                          key={feature.id}
-                          type="button"
-                          className={cn(
-                            "rounded-full border px-2 py-0.5 text-[11px]",
-                            on
-                              ? "border-primary/50 bg-primary/15 text-foreground"
-                              : "border-border text-muted-foreground"
-                          )}
-                          onClick={() =>
-                            setPicked((prev) =>
-                              on ? prev.filter((id) => id !== feature.id) : [...prev, feature.id]
-                            )
-                          }
-                        >
-                          {feature.label}
-                        </button>
-                      )
-                    })}
+                  <div key={group.family} className="flex flex-col gap-1">
+                    <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                      {FEATURE_FAMILY_LABELS[group.family] ?? group.family}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {group.items.map((feature) => {
+                        const on = picked.includes(feature.id)
+                        const help = specialistFeatureHelp(feature)
+                        return (
+                          <span key={feature.id} className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              title={help.body}
+                              className={cn(
+                                "rounded-full border px-2 py-0.5 text-[11px]",
+                                on
+                                  ? "border-primary/50 bg-primary/15 text-foreground"
+                                  : "border-border text-muted-foreground"
+                              )}
+                              onClick={() =>
+                                setPicked((prev) =>
+                                  on ? prev.filter((id) => id !== feature.id) : [...prev, feature.id]
+                                )
+                              }
+                            >
+                              {feature.label}
+                            </button>
+                            <HelpTip {...help} />
+                          </span>
+                        )
+                      })}
+                    </div>
                   </div>
                 ))}
               </div>

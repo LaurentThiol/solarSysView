@@ -9,10 +9,14 @@ import {
   skillBar,
   skillOf,
   skillWindows,
+  SPECIALIST_FEATURE_READINGS,
+  specialistFeatureHelp,
+  specialistFeaturesHelp,
+  specialistIndicatorHelpItems,
   targetGlyph,
   verdictKind,
   verdictTone,
-} from "../src/lib/brain/specialist-view"
+} from "../src/lib/brain/specialist-view.ts"
 
 test("skillBar is bipolar around zero and clamps at the display scale", () => {
   const empty = skillBar(null)
@@ -100,6 +104,36 @@ test("formatSkill keeps a signed French minus", () => {
   assert.equal(formatSkill(0), "0")
   assert.equal(formatSkill(0.1234), "+0.123")
   assert.equal(formatSkill(-0.04), "−0.04")
+})
+
+test("specialist indicator help lists a reading for every feature", () => {
+  const ids = Object.keys(SPECIALIST_FEATURE_READINGS)
+  assert.ok(ids.length >= 14)
+  const features = ids.map((id) => ({
+    id,
+    label: id === "rsi" ? "RSI 14" : id === "lag1" ? "Lag 1 (dernière valeur)" : id === "bollinger" ? "Bollinger %B" : id,
+    period: 14,
+    reading: SPECIALIST_FEATURE_READINGS[id],
+  }))
+  for (const feature of features) {
+    const help = specialistFeatureHelp(feature)
+    assert.equal(help.title, feature.label)
+    assert.ok(help.body.length > 12, feature.id)
+    assert.doesNotMatch(help.body, /signal de tirage/)
+  }
+  const sheet = specialistFeaturesHelp(features)
+  assert.equal(sheet.title, "Indicateurs")
+  assert.equal(sheet.wide, true)
+  assert.equal(sheet.items.length, features.length)
+  assert.ok(sheet.items.some((item) => item.label.includes("RSI") && /70/.test(item.text)))
+  assert.ok(sheet.items.some((item) => item.label.includes("Lag 1") && /tirage t/.test(item.text)))
+  assert.ok(sheet.items.some((item) => item.label.includes("Bollinger") && /%B/.test(item.text)))
+
+  const items = specialistIndicatorHelpItems(["rsi", "inconnu"], features)
+  assert.equal(items[0]?.label, "RSI 14")
+  assert.match(items[0]?.text ?? "", /Force relative/)
+  assert.equal(items[1]?.label, "inconnu")
+  assert.match(items[1]?.text ?? "", /causal/)
 })
 
 test("targetGlyph maps series names without inventing personas", () => {

@@ -48,6 +48,22 @@ def test_legacy_pere_impair_folder_is_renamed(tmp_path: Path) -> None:
     assert config["handle"] == "specialist.paire-impair"
 
 
+def test_feature_catalog_includes_readings() -> None:
+    from synchro.brain_specialists.features import FEATURES, FEATURE_IDS
+
+    assert list(FEATURES) == list(FEATURE_IDS) or set(FEATURES) == set(FEATURE_IDS)
+    for name in FEATURE_IDS:
+        reading = FEATURES[name].get("reading")
+        assert isinstance(reading, str) and reading.strip(), name
+    assert "70" in FEATURES["rsi"]["reading"]
+    assert "%B" in FEATURES["bollinger"]["reading"]
+    catalog = (
+        Path(__file__).resolve().parents[1] / "src/lib/brain/specialist-view.ts"
+    ).read_text(encoding="utf-8")
+    for name in FEATURE_IDS:
+        assert FEATURES[name]["reading"] in catalog, name
+
+
 def test_unknown_indicator_is_rejected() -> None:
     try:
         validate_indicators(["rsi", "not-a-feature"])
@@ -230,8 +246,11 @@ def test_specialist_api_train_list_infer_delete(tmp_path: Path, monkeypatch) -> 
 
         features = client.get("/api/brain/specialists/features")
         assert features.status_code == 200
-        ids = [item["id"] for item in features.json()["items"]]
+        catalog = features.json()["items"]
+        ids = [item["id"] for item in catalog]
         assert "rsi" in ids and "lag1" in ids
+        rsi = next(item for item in catalog if item["id"] == "rsi")
+        assert "reading" in rsi and "70" in rsi["reading"]
 
         deleted = client.delete("/api/brain/specialists/paire-impair")
         assert deleted.status_code == 200

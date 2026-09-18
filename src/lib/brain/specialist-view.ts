@@ -1,5 +1,29 @@
 /** Display helpers for the Spécialistes roster. No API calls. */
 
+export const SPECIALIST_FEATURE_READINGS: Record<string, string> = {
+  lag1: "Valeur de la série au tirage t — le point le plus récent. Entrée causale, pas le futur.",
+  lag2: "Valeur au tirage t−1. Mémoire courte, toujours limitée à t.",
+  lag3: "Valeur au tirage t−2. Troisième retard, toujours limité à t.",
+  rsi: "Force relative sur 14 tirages de la série cible. Zones 70 / 30 : régime, pas un signal de jeu.",
+  macd: "Ligne MACD : écart des EMA 12 et 26. Décrit la pente récente de la série.",
+  macd_hist: "Histogramme MACD : écart ligne − signal (9). Accélération de la pente, pas une prédiction.",
+  bollinger: "Position dans les bandes SMA ± 2σ sur 20 (%B). 0 = bande basse, 1 = bande haute. Un extrême n’est pas un signal de jeu.",
+  sma: "Moyenne simple des 20 derniers points de la série cible.",
+  ema: "Moyenne exponentielle sur 20 : les tirages récents pèsent plus.",
+  atr: "Moyenne des |Δ| sur 14 (ATR close-only). Mesure l’agitation de la série, pas un volume de marché.",
+  stoch: "Position dans la fourchette des 14 derniers points (0–100). Zones 80 / 20.",
+  cci: "Écart à la moyenne typique sur 20. Extrêmes ±100 / ±200.",
+  zscore: "(valeur − moyenne) / σ sur 20 tirages. Distance à la moyenne récente de la série.",
+  slope: "Pente de régression linéaire sur 10 tirages. Tendance locale, pas le prochain point.",
+}
+
+type FeatureHelpInput = {
+  id: string
+  label: string
+  period?: number
+  reading?: string
+}
+
 export const SKILL_SCALE = 0.3
 export const SKILL_EPS = 0.02
 export const SKILL_WINDOWS = ["20", "50", "100"] as const
@@ -145,6 +169,48 @@ export function formatForecast(forecast?: ForecastSource | null): FormattedForec
   if (valueLabel !== "—" && sigmaLabel) summary = `${valueLabel} ${sigmaLabel}`
   if (abstain) summary = valueLabel === "—" ? "s’abstient" : `${summary} · s’abstient`
   return { valueLabel, sigmaLabel, summary, confidencePct, abstain, proba }
+}
+
+export function specialistFeatureReading(
+  feature: Pick<FeatureHelpInput, "id" | "period" | "reading">
+): string {
+  const fromFeature = feature.reading?.trim()
+  if (fromFeature) return fromFeature
+  const catalog = SPECIALIST_FEATURE_READINGS[feature.id]?.trim()
+  if (catalog) return catalog
+  return feature.period != null
+    ? `Feature causale jusqu’à t (période ${feature.period}).`
+    : "Feature causale jusqu’à t."
+}
+
+export function specialistFeatureHelp(feature: FeatureHelpInput) {
+  return {
+    title: feature.label,
+    body: specialistFeatureReading(feature),
+  }
+}
+
+export function specialistFeaturesHelp(features: FeatureHelpInput[]) {
+  return {
+    title: "Indicateurs",
+    body: "Entrées du réseau, calculées jusqu’au tirage t. Pas de fuite du futur. Au moins un indicateur. Chaque pastille a sa fiche : lags, momentum, volatilité, moyennes, tendance.",
+    wide: true as const,
+    items: features.map((feature) => ({
+      label: feature.label,
+      text: specialistFeatureReading(feature),
+    })),
+  }
+}
+
+export function specialistIndicatorHelpItems(ids: string[], catalog: FeatureHelpInput[]) {
+  const byId = new Map(catalog.map((feature) => [feature.id, feature]))
+  return ids.map((id) => {
+    const feature = byId.get(id)
+    return {
+      label: feature?.label ?? id,
+      text: feature ? specialistFeatureReading(feature) : "Indicateur causal jusqu’à t.",
+    }
+  })
 }
 
 export function targetGlyph(target: string): TargetGlyphKind {

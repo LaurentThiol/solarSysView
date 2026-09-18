@@ -26,20 +26,90 @@ FEATURE_IDS = (
 )
 
 FEATURES = {
-    "lag1": {"label": "Lag 1 (dernière valeur)", "family": "lags", "period": 1},
-    "lag2": {"label": "Lag 2", "family": "lags", "period": 2},
-    "lag3": {"label": "Lag 3", "family": "lags", "period": 3},
-    "rsi": {"label": "RSI 14", "family": "momentum", "period": 14},
-    "macd": {"label": "MACD ligne", "family": "momentum", "period": 26},
-    "macd_hist": {"label": "MACD histogramme", "family": "momentum", "period": 35},
-    "bollinger": {"label": "Bollinger %B", "family": "volatilite", "period": 20},
-    "sma": {"label": "SMA 20", "family": "moyennes", "period": 20},
-    "ema": {"label": "EMA 20", "family": "moyennes", "period": 20},
-    "atr": {"label": "Étendue moyenne |Δ|", "family": "volatilite", "period": 14},
-    "stoch": {"label": "Stochastique %K", "family": "momentum", "period": 14},
-    "cci": {"label": "CCI", "family": "momentum", "period": 20},
-    "zscore": {"label": "Z-score 20", "family": "volatilite", "period": 20},
-    "slope": {"label": "Pente 10", "family": "tendance", "period": 10},
+    "lag1": {
+        "label": "Lag 1 (dernière valeur)",
+        "family": "lags",
+        "period": 1,
+        "reading": "Valeur de la série au tirage t — le point le plus récent. Entrée causale, pas le futur.",
+    },
+    "lag2": {
+        "label": "Lag 2",
+        "family": "lags",
+        "period": 2,
+        "reading": "Valeur au tirage t−1. Mémoire courte, toujours limitée à t.",
+    },
+    "lag3": {
+        "label": "Lag 3",
+        "family": "lags",
+        "period": 3,
+        "reading": "Valeur au tirage t−2. Troisième retard, toujours limité à t.",
+    },
+    "rsi": {
+        "label": "RSI 14",
+        "family": "momentum",
+        "period": 14,
+        "reading": "Force relative sur 14 tirages de la série cible. Zones 70 / 30 : régime, pas un signal de jeu.",
+    },
+    "macd": {
+        "label": "MACD ligne",
+        "family": "momentum",
+        "period": 26,
+        "reading": "Ligne MACD : écart des EMA 12 et 26. Décrit la pente récente de la série.",
+    },
+    "macd_hist": {
+        "label": "MACD histogramme",
+        "family": "momentum",
+        "period": 35,
+        "reading": "Histogramme MACD : écart ligne − signal (9). Accélération de la pente, pas une prédiction.",
+    },
+    "bollinger": {
+        "label": "Bollinger %B",
+        "family": "volatilite",
+        "period": 20,
+        "reading": "Position dans les bandes SMA ± 2σ sur 20 (%B). 0 = bande basse, 1 = bande haute. Un extrême n’est pas un signal de jeu.",
+    },
+    "sma": {
+        "label": "SMA 20",
+        "family": "moyennes",
+        "period": 20,
+        "reading": "Moyenne simple des 20 derniers points de la série cible.",
+    },
+    "ema": {
+        "label": "EMA 20",
+        "family": "moyennes",
+        "period": 20,
+        "reading": "Moyenne exponentielle sur 20 : les tirages récents pèsent plus.",
+    },
+    "atr": {
+        "label": "Étendue moyenne |Δ|",
+        "family": "volatilite",
+        "period": 14,
+        "reading": "Moyenne des |Δ| sur 14 (ATR close-only). Mesure l’agitation de la série, pas un volume de marché.",
+    },
+    "stoch": {
+        "label": "Stochastique %K",
+        "family": "momentum",
+        "period": 14,
+        "reading": "Position dans la fourchette des 14 derniers points (0–100). Zones 80 / 20.",
+    },
+    "cci": {
+        "label": "CCI",
+        "family": "momentum",
+        "period": 20,
+        "reading": "Écart à la moyenne typique sur 20. Extrêmes ±100 / ±200.",
+    },
+    "zscore": {
+        "label": "Z-score 20",
+        "family": "volatilite",
+        "period": 20,
+        "reading": "(valeur − moyenne) / σ sur 20 tirages. Distance à la moyenne récente de la série.",
+    },
+    "slope": {
+        "label": "Pente 10",
+        "family": "tendance",
+        "period": 10,
+        "reading": "Pente de régression linéaire sur 10 tirages. Tendance locale, pas le prochain point.",
+    },
 }
 
 

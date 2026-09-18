@@ -64,7 +64,7 @@ export const DEMO_SPECIALIST_STEPS = [
     hint: "Features causales jusqu’à t",
     target: "spec-features",
     title: "Indicateurs",
-    body: "Entrées du réseau, calculées jusqu’au tirage t — pas de fuite du futur. Lags, RSI, MACD, Bollinger… La démo reprend le jeu par défaut.",
+    body: "Entrées du réseau, calculées jusqu’au tirage t — pas de fuite du futur. L’aide de chaque pastille décrit l’indicateur (lags, RSI, MACD, Bollinger…). La démo reprend le jeu par défaut.",
   },
   {
     id: "instructions",

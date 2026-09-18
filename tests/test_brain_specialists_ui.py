@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -10,11 +11,33 @@ def test_specialists_panel_is_a_roster_with_atelier() -> None:
     assert "export function skillBar" in view
     assert "verdictTone" in view
     assert "targetGlyph" in view
+    assert "specialistFeaturesHelp" in view
+    assert "specialistFeatureHelp" in view
     assert "SpecialistCard" in panel
     assert "Nouvel atelier" in panel
     assert "data-specialist-roster" in panel
     assert "data-specialist-atelier" in panel
+    assert "specialistFeaturesHelp(features)" in panel
+    assert "specialistFeatureHelp(feature)" in panel
     assert "Score vs hasard" in card
     assert "s’abstient" in card
     assert "Épingler" in card
     assert "Réinférer" in card
+    assert "specialistIndicatorHelpItems" in card
+    assert "HelpTip" in card
+
+
+def test_specialist_indicator_help_node() -> None:
+    script = ROOT / "tests" / "test_brain_specialists_view.ts"
+    result = subprocess.run(
+        [
+            "node",
+            "--experimental-strip-types",
+            "--test",
+            str(script),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

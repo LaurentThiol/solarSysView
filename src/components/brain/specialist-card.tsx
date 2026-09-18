@@ -2,13 +2,16 @@
 
 import { Loader2, Pin, RefreshCw, Trash2 } from "lucide-react"
 
+import { HelpTip } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { VARIABLE_LABELS } from "@/lib/analysis"
-import { formatSpecialistHandle, type SpecialistRecord } from "@/lib/brain/specialists"
+import { formatSpecialistHandle, specialistFeatures, type SpecialistRecord } from "@/lib/brain/specialists"
 import {
   formatForecast,
   skillWindows,
+  specialistFeatureReading,
+  specialistIndicatorHelpItems,
   targetGlyph,
   verdictTone,
   type TargetGlyphKind,
@@ -205,15 +208,28 @@ export function SpecialistCard({
       <ForecastPanel record={record} />
 
       {record.indicators?.length ? (
-        <div className="flex flex-wrap gap-1">
-          {record.indicators.slice(0, 6).map((id) => (
-            <span key={id} className="rounded-full border border-border/70 px-1.5 py-px text-[10px] text-muted-foreground">
-              {id}
-            </span>
-          ))}
+        <div className="flex flex-wrap items-center gap-1">
+          {record.indicators.slice(0, 6).map((id) => {
+            const feature = specialistFeatures().find((item) => item.id === id)
+            return (
+              <span
+                key={id}
+                className="rounded-full border border-border/70 px-1.5 py-px text-[10px] text-muted-foreground"
+                title={feature ? specialistFeatureReading(feature) : undefined}
+              >
+                {feature?.label ?? id}
+              </span>
+            )
+          })}
           {record.indicators.length > 6 ? (
             <span className="text-[10px] text-muted-foreground">+{record.indicators.length - 6}</span>
           ) : null}
+          <HelpTip
+            title="Indicateurs"
+            body="Features causales utilisées par ce réseau, calculées jusqu’au tirage t."
+            items={specialistIndicatorHelpItems(record.indicators, specialistFeatures())}
+            wide
+          />
         </div>
       ) : null}
 

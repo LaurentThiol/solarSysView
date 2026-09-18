@@ -37,4 +37,6 @@ test("user-facing copy vouvoie and drops fenêtre d’étude", () => {
   assert.doesNotMatch(chartisme, /élargis la/)
   assert.match(specialists, /non\s+enregistré/)
   assert.doesNotMatch(specialists, /sauvé/)
+  assert.match(specialists, /specialistFeaturesHelp/)
+  assert.match(specialists, /specialistFeatureHelp/)
 })
