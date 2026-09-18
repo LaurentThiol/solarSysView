@@ -133,7 +133,7 @@ const HELP = {
   },
   intensityCount: {
     title: "Horloge · totaux",
-    body: "Chaque boule est une horloge (comme l’installation d’une app). Elle se remplit selon le nombre de sorties dans la fenêtre, plein = plus sorti. L’anneau or = pair, bleu = impair. Le trait marque l’attendu. Cela ne change pas la sélection, seulement le rendu.",
+    body: "Chaque boule est une horloge : 6 h = l’attendu, plein = 2× l’attendu. Au-delà du tour, l’anneau passe au rouge (surchauffe). L’anneau or = pair, bleu = impair. Cela ne change pas la sélection, seulement le rendu.",
   },
   intensityDelay: {
     title: "Horloge · retards",
@@ -1159,9 +1159,7 @@ export function CombinaisonsPanel() {
             />
           </div>
           <HeatClockLegend
-            fillLabel={
-              intensity === "count" ? "moins sorti → plus sorti" : "retard court → long"
-            }
+            fillLabel={intensity === "count" ? undefined : "retard court → long"}
             showExpected={intensity === "count"}
           />
           <div>

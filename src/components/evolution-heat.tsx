@@ -61,7 +61,7 @@ export function EvolutionHeat({
             <TitleHelp
               help={{
                 title: "Grille 1–50",
-                body: "Chaque boule est une horloge (comme l’installation d’une app) : elle se remplit depuis midi selon le nombre de sorties, plein = plus sorti de la fenêtre. L’anneau or = pair, bleu = impair. Le trait marque l’attendu (≈ 2× sur 20 tirages). Beaucoup d’horloges restent peu remplies : c’est normal.",
+                body: "Chaque boule est une horloge : 6 h = l’attendu, plein = 2× l’attendu. Au-delà du tour, l’anneau passe au rouge (surchauffe). Or = pair, bleu = impair. Le trait marque 6 h. Beaucoup d’horloges restent sous 6 h : c’est normal.",
               }}
             >
               Grille 1–50
@@ -89,7 +89,7 @@ export function EvolutionHeat({
             <TitleHelp
               help={{
                 title: "Étoiles 1–12",
-                body: "Même horloge que la grille 1–50, sur le pool actuel de 12 étoiles. Attendu ≈ 3,3× sur 20 tirages, ≈ 8,3× sur 50.",
+                body: "Même horloge que la grille 1–50 (6 h = attendu, plein = 2×, rouge = surchauffe), sur le pool actuel de 12 étoiles. Attendu ≈ 3,3× sur 20 tirages, ≈ 8,3× sur 50.",
               }}
             >
               Étoiles 1–12

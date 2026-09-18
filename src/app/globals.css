@@ -171,6 +171,7 @@
 .heat-clock {
   --heat-clock-pie: color-mix(in srgb, var(--foreground) 88%, transparent);
   --heat-clock-well: color-mix(in srgb, var(--foreground) 9%, var(--card));
+  --heat-clock-hot: color-mix(in srgb, var(--destructive) 82%, white);
   --heat-clock-inset: 21%;
 }
 

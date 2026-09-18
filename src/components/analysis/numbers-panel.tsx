@@ -121,15 +121,15 @@ export function NumbersPanel({
             <TitleHelp
               help={{
                 title: "Grille 1–50",
-                body: "Cliquez un numéro pour le détail (sorties, retard, IC). Chaque boule est une horloge : elle se remplit depuis midi selon le nombre de sorties, plein = plus sorti. L’anneau or = pair, bleu = impair. Le trait marque l’attendu. Les filtres Tous / Pairs / Impairs n’effacent pas la grille, ils atténuent l’autre camp.",
+                body: "Cliquez un numéro pour le détail (sorties, retard, IC). Horloge : 6 h = l’attendu, plein = 2× l’attendu, rouge = surchauffe (au-delà du tour). L’anneau or = pair, bleu = impair. Les filtres Tous / Pairs / Impairs n’effacent pas la grille, ils atténuent l’autre camp.",
               }}
             >
               Grille 1–50
             </TitleHelp>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Cliquez un numéro pour le détail. Horloge = sorties (plein = plus sorti). Anneau
-            or = pair, bleu = impair.
+            Cliquez un numéro pour le détail. 6 h = attendu, plein = 2×, rouge = surchauffe.
+            Anneau or = pair, bleu = impair.
           </p>
           <div className="flex flex-wrap gap-2">
             {FILTERS.map((item) => (
