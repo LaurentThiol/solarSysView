@@ -21,6 +21,7 @@ test("five nav families cover every lab", () => {
   assert.match(headerSrc, /QuitButton/)
   assert.doesNotMatch(headerSrc, /aria-label="Familles"/)
   assert.match(headerSrc, /aria-label="Sections"/)
+  assert.doesNotMatch(headerSrc, /Aller à/)
   assert.match(headerSrc, /createPortal/)
   assert.match(headerSrc, /site-nav-drawer/)
   assert.match(headerSrc, /current\.label/)

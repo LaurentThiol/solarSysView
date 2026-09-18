@@ -44,4 +44,5 @@ def test_nav_items_are_grouped_in_the_drawer() -> None:
     assert "current.label" in header
     assert 'aria-current="page"' in header
     assert "Échap ou g" not in STARTUP
+    assert "Aller à" not in header
     assert "pl-4" in nav

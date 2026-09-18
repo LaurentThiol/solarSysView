@@ -16,6 +16,7 @@ def test_nav_groups_and_glossary_exist() -> None:
     assert "QuitButton" in header
     assert 'aria-label="Familles"' not in header
     assert 'aria-label="Sections"' in header
+    assert "Aller à" not in header
     assert "family.home" not in header
     assert "group.items.map" not in header.split("export function SiteHeader", 1)[1]
     assert "current.label" in header

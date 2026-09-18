@@ -749,11 +749,6 @@ export function SiteHeader() {
                 aria-label="Sections"
                 className="relative flex h-full w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-auto border-r border-border bg-background shadow-2xl"
               >
-                <div className="sticky top-0 z-10 border-b border-border bg-background/95 px-3 py-2">
-                  <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                    Aller à
-                  </p>
-                </div>
                 <div className="p-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
                   <FamilyLinks pathname={pathname} onNavigate={() => setMenuOpen(false)} />
                 </div>
