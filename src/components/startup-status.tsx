@@ -587,28 +587,29 @@ function FamilyLinks({
   onNavigate?: () => void
 }) {
   return (
-    <nav className="flex flex-col gap-4" aria-label="Familles">
-      {NAV_GROUPS.map((group) => (
-        <div key={group.id} className="flex flex-col gap-1">
+    <nav className="flex flex-col gap-4" aria-label="Sections">
+      {NAV_GROUPS.map((family) => (
+        <div key={family.id} className="flex flex-col gap-1">
           <p className="px-3 pb-1 text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-            {group.label}
+            {family.label}
           </p>
-          {group.items.map((entry) => {
+          {family.items.map((entry) => {
             const current = isNavItemActive(pathname, entry.href)
             return (
-              <Link
-                key={entry.href}
-                href={entry.href}
-                aria-current={current ? "page" : undefined}
-                onClick={onNavigate}
-                className={`rounded-md px-3 py-2 text-sm ${
-                  current
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                }`}
-              >
-                {entry.label}
-              </Link>
+              <WithHelp key={entry.href} help={entry.help} className="w-full">
+                <Link
+                  href={entry.href}
+                  aria-current={current ? "page" : undefined}
+                  onClick={onNavigate}
+                  className={`block rounded-md px-3 py-2 text-sm ${
+                    current
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  }`}
+                >
+                  {entry.label}
+                </Link>
+              </WithHelp>
             )
           })}
         </div>
@@ -728,22 +729,22 @@ export function SiteHeader() {
         </div>
         <nav
           className="flex min-w-0 items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:thin]"
-          aria-label={group.label}
+          aria-label="Familles"
         >
-          {group.items.map((item) => {
-            const active = isNavItemActive(pathname, item.href)
+          {NAV_GROUPS.map((family) => {
+            const active = family.id === group.id
             return (
-              <HelpWrap key={item.href} help={item.help}>
+              <HelpWrap key={family.id} help={family.help}>
                 <Link
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
+                  href={family.home}
+                  aria-current={active ? "true" : undefined}
                   className={`inline-flex min-h-8 shrink-0 items-center rounded-full border px-3 py-1 text-xs whitespace-nowrap focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none ${
                     active
                       ? "border-primary bg-primary/15 text-foreground"
                       : "border-border text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {item.label}
+                  {family.label}
                 </Link>
               </HelpWrap>
             )
@@ -766,7 +767,7 @@ export function SiteHeader() {
               <aside
                 role="dialog"
                 aria-modal="true"
-                aria-label="Familles"
+                aria-label="Sections"
                 className="relative flex h-full w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-auto border-r border-border bg-background shadow-2xl"
               >
                 <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-background/95 px-3 py-2">

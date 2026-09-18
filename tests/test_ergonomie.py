@@ -15,6 +15,9 @@ def test_nav_groups_and_glossary_exist() -> None:
     assert "Santé" in header
     assert "QuitButton" in header
     assert 'aria-label="Familles"' in header
+    assert 'aria-label="Sections"' in header
+    assert "family.home" in header
+    assert "group.items.map" not in header.split("export function SiteHeader", 1)[1]
     assert "createPortal" in header
     assert "site-nav-drawer" in header
     assert "PageShell" in (ROOT / "src/components/page-shell.tsx").read_text(encoding="utf-8")

@@ -20,9 +20,16 @@ test("five nav families cover every lab", () => {
   assert.match(headerSrc, /GlossaryButton/)
   assert.match(headerSrc, /QuitButton/)
   assert.match(headerSrc, /aria-label="Familles"/)
+  assert.match(headerSrc, /aria-label="Sections"/)
   assert.match(headerSrc, /createPortal/)
   assert.match(headerSrc, /site-nav-drawer/)
   assert.match(headerSrc, /current\.label/)
+  assert.match(headerSrc, /family\.home/)
+  assert.match(headerSrc, /family\.items\.map/)
+  const headerFn = headerSrc.slice(headerSrc.indexOf("export function SiteHeader"))
+  assert.doesNotMatch(headerFn, /group\.items\.map/)
+  const evolutionHrefs = [...navSrc.matchAll(/href: "\/evolution"/g)]
+  assert.equal(evolutionHrefs.length, 1)
 })
 
 test("Brain stays exact-match so Spécialistes is its own item", () => {

@@ -181,6 +181,10 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   },
 ] as const
 
+export function allNavItems(): NavItem[] {
+  return NAV_GROUPS.flatMap((family) => [...family.items])
+}
+
 export function isNavItemActive(pathname: string, href: string) {
   if (href === "/brain") return pathname === "/brain"
   return pathname === href || pathname.startsWith(`${href}/`)
