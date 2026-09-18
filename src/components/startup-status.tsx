@@ -10,7 +10,7 @@ import { CaptureButton } from "@/components/capture"
 import { GlossaryButton, HelpModeToggle, HelpWrap, WithHelp } from "@/components/help"
 import { StatusPill, worstStatusTone, type StatusTone } from "@/components/status-pill"
 import { Button } from "@/components/ui/button"
-import { isNavItemActive, navGroupForPath, pageTitleForPath, NAV_GROUPS } from "@/lib/nav"
+import { isNavItemActive, pageTitleForPath, NAV_GROUPS } from "@/lib/nav"
 import { isLocalHost } from "@/lib/api-base"
 import { formatSyncStamp } from "@/lib/draws"
 import { localLlmOffMessage } from "@/lib/ia/local-url"
@@ -620,7 +620,6 @@ function FamilyLinks({
 
 export function SiteHeader() {
   const pathname = usePathname()
-  const group = navGroupForPath(pathname)
   const current = { label: pageTitleForPath(pathname) }
   const headerRef = useRef<HTMLElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -683,73 +682,54 @@ export function SiteHeader() {
       ref={headerRef}
       className="sticky top-0 z-50 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur"
     >
-      <div className="relative z-10 mx-auto flex w-full min-w-0 max-w-full flex-col gap-2 px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:px-6">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-foreground"
-            aria-expanded={menuOpen}
-            aria-controls="site-nav-drawer"
-            aria-haspopup="dialog"
-            aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
-            title="Menu des sections — raccourci « g »"
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
-          </button>
-          <HelpWrap
-            help={{
-              title: "Synchro",
-              body: "Retour à l’accueil : page Tirage, archives FDJ filtrables et export CSV.",
-            }}
-            className="shrink-0"
-          >
-            <Link
-              href="/tirage"
-              className="shrink-0 text-xs font-medium tracking-[0.2em] text-primary uppercase"
+      <div className="relative z-10 mx-auto flex w-full min-w-0 max-w-full items-start gap-2 px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:gap-3 sm:px-6">
+        <button
+          type="button"
+          className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-foreground"
+          aria-expanded={menuOpen}
+          aria-controls="site-nav-drawer"
+          aria-haspopup="dialog"
+          aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+          title="Menu des sections — raccourci « g »"
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+        </button>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <HelpWrap
+              help={{
+                title: "Synchro",
+                body: "Retour à l’accueil : page Tirage, archives FDJ filtrables et export CSV.",
+              }}
+              className="shrink-0"
             >
-              Synchro
-            </Link>
-          </HelpWrap>
-          <span className="hidden h-4 w-px shrink-0 bg-border sm:block" aria-hidden />
-          <span className="max-w-[8.5rem] truncate text-sm font-medium text-foreground sm:max-w-[14rem]">
-            {current.label}
-          </span>
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-            <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
-              <CaptureButton />
-              <HelpModeToggle />
-              <GlossaryButton />
-            </div>
-            <div className="relative z-20 flex shrink-0 items-center gap-2">
-              <StartupStatus />
-              <QuitButton />
+              <Link
+                href="/tirage"
+                className="shrink-0 text-xs font-medium tracking-[0.2em] text-primary uppercase"
+              >
+                Synchro
+              </Link>
+            </HelpWrap>
+            <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+              <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+                <CaptureButton />
+                <HelpModeToggle />
+                <GlossaryButton />
+              </div>
+              <div className="relative z-20 flex shrink-0 items-center gap-2">
+                <StartupStatus />
+                <QuitButton />
+              </div>
             </div>
           </div>
+          <p
+            aria-current="page"
+            className="min-w-0 truncate text-sm font-medium text-foreground"
+          >
+            {current.label}
+          </p>
         </div>
-        <nav
-          className="flex min-w-0 items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:thin]"
-          aria-label="Familles"
-        >
-          {NAV_GROUPS.map((family) => {
-            const active = family.id === group.id
-            return (
-              <HelpWrap key={family.id} help={family.help}>
-                <Link
-                  href={family.home}
-                  aria-current={active ? "true" : undefined}
-                  className={`inline-flex min-h-8 shrink-0 items-center rounded-full border px-3 py-1 text-xs whitespace-nowrap focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none ${
-                    active
-                      ? "border-primary bg-primary/15 text-foreground"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {family.label}
-                </Link>
-              </HelpWrap>
-            )
-          })}
-        </nav>
       </div>
       {portalReady && menuOpen
         ? createPortal(

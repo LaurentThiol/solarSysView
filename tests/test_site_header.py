@@ -38,7 +38,8 @@ def test_nav_items_are_grouped_in_the_drawer() -> None:
     assert "family.items.map" in nav
     assert 'aria-label="Sections"' in nav
     assert "group.items.map" not in header
-    assert "family.label" in header
-    assert 'aria-label="Familles"' in header
-    assert header.count('href={family.home}') == 1
-    assert "Évolution" not in header.split("<nav", 1)[1].split("</nav>", 1)[0]
+    assert "family.home" not in header
+    assert 'aria-label="Familles"' not in header
+    assert "NAV_GROUPS.map" not in header
+    assert "current.label" in header
+    assert 'aria-current="page"' in header

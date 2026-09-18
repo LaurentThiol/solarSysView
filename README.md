@@ -43,7 +43,7 @@ Sur macOS, un double-clic sur `Synchro.command` à la racine du dépôt lance au
 
 Options : `--skip-install`, `--force-install`, `--no-open`. Ports : `SYNCHRO_BACKEND_PORT` (sinon `PORT` du `.env`, 8000) et `SYNCHRO_FRONTEND_PORT` (43147). L'API ne se recharge que si `synchro/` change, pas l'UI. Logs : `.run/` (`./launch logs -f` depuis un autre terminal).
 
-Dans l’UI, le bandeau affiche les cinq familles : **Archive**, **Lecture**, **Grilles**, **Assistants** et **Système**. Les pages (Tirage, Évolution, Analyse…) s’ouvrent depuis le **menu burger** (raccourci **g** hors champ de saisie) ; le nom de la page et les pastilles **Santé** / Aide / Glossaire restent visibles. Une pastille **Santé** (clic pour le détail API / Neon / GitHub / LLM) refait les contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface.
+Dans l’UI, les pages s’ouvrent depuis le **menu burger** (raccourci **g** hors champ de saisie), groupées en **Archive**, **Lecture**, **Grilles**, **Assistants** et **Système**. Le bandeau garde le burger, **Synchro**, le nom de la page courante en dessous, et les pastilles **Santé** / Aide / Glossaire. Une pastille **Santé** (clic pour le détail API / Neon / GitHub / LLM) refait les contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface.
 
 ## Tirage (`/tirage`)
 
@@ -268,7 +268,7 @@ En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, défini
 
 ## Interface web (Next.js)
 
-App Next.js : bandeau des cinq familles, pages dans le menu burger (raccourci **g**) — **Archive** (Tirage `/tirage`, Évolution `/evolution`), **Lecture** (Analyse `/analyse`, Morpho `/morpho`, Relief `/relief`, Chartisme `/chartisme`, Harmo `/harmo`), **Grilles** (Combinaisons `/combinaisons`, Jeux `/jeux`), **Assistants** (Brain `/brain`, Spécialistes `/brain/specialistes`, IA `/ia`) et **Système** (Admin `/admin`). Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
+App Next.js : menu burger (raccourci **g**), pages groupées — **Archive** (Tirage `/tirage`, Évolution `/evolution`), **Lecture** (Analyse `/analyse`, Morpho `/morpho`, Relief `/relief`, Chartisme `/chartisme`, Harmo `/harmo`), **Grilles** (Combinaisons `/combinaisons`, Jeux `/jeux`), **Assistants** (Brain `/brain`, Spécialistes `/brain/specialistes`, IA `/ia`) et **Système** (Admin `/admin`). Le nom de la page courante reste sous le bandeau. Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install
