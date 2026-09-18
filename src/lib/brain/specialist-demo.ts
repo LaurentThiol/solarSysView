@@ -13,7 +13,7 @@ export const DEMO_SPECIALIST = {
 }
 
 export const DEMO_SPECIALIST_NOTE =
-  "Démo Spécialistes : formulaire Paire impair, skill vs hasard, épinglage s’il existe. Pas d’entraînement lancé tout seul."
+  "Démo Spécialistes : formulaire Paire impair, score vs hasard, épinglage s’il existe. Pas d’entraînement lancé tout seul."
 
 const PENDING_PINS_KEY = "synchro.brain.pending-pins"
 
@@ -24,7 +24,7 @@ export const DEMO_SPECIALIST_STEPS = [
     hint: "Un réseau, une série nommée",
     target: "specialists",
     title: "Spécialistes",
-    body: "Un petit réseau par question : parité, somme, étendue… Il forecast t+1 de cette série, avec σ et un skill. Ce n’est jamais une grille 5+2.",
+    body: "Un petit réseau par question : parité, somme, étendue… Il prévoit t+1 de cette série, avec σ et un score vs hasard. Ce n’est jamais une grille 5+2.",
   },
   {
     id: "name",
@@ -32,7 +32,7 @@ export const DEMO_SPECIALIST_STEPS = [
     hint: "Devient @specialist.paire-impair",
     target: "spec-name",
     title: "Nom",
-    body: "Le libellé devient le handle. « Paire impair » → @specialist.paire-impair, sauvé dans .brain/specialists/ pour réemploi.",
+    body: "Le libellé devient le handle. « Paire impair » → @specialist.paire-impair, enregistré dans .brain/specialists/ pour réemploi.",
   },
   {
     id: "target",
@@ -77,10 +77,10 @@ export const DEMO_SPECIALIST_STEPS = [
   {
     id: "force",
     label: "Hasard",
-    hint: "Skill ≤ 0 = ne bat pas le nul",
+    hint: "Score ≤ 0 = ne bat pas le nul",
     target: "spec-force",
-    title: "Sauver même si skill ≤ 0",
-    body: "Le skill dit s’il bat le modèle nul (hasard / persist). ≤ 0 : on ne sauve pas, sauf si tu forces. Un skill plat n’autorise pas une 5+2.",
+    title: "Enregistrer même si score ≤ 0",
+    body: "Le score vs hasard dit s’il bat le modèle nul (hasard / persist). ≤ 0 : on n’enregistre pas, sauf si vous forcez. Un score plat n’autorise pas une 5+2.",
   },
   {
     id: "train",
@@ -92,11 +92,11 @@ export const DEMO_SPECIALIST_STEPS = [
   },
   {
     id: "saved",
-    label: "Sauvés",
-    hint: "Réinférer un forecast t+1",
+    label: "Enregistrés",
+    hint: "Réinférer une prévision t+1",
     target: "spec-saved",
-    title: "Sauvés",
-    body: "Les réseaux déjà écrits. Réinférer calcule un nouveau t+1. Skill 20/50/100 et le verdict vs le hasard restent collés à la fiche.",
+    title: "Enregistrés",
+    body: "Les réseaux déjà écrits. Réinférer calcule un nouveau t+1. Score 20/50/100 et le verdict vs le hasard restent collés à la fiche.",
   },
   {
     id: "pin",
@@ -104,7 +104,7 @@ export const DEMO_SPECIALIST_STEPS = [
     hint: "Brain ne voit que la table",
     target: "spec-pin",
     title: "Épingler",
-    body: "Pose @specialist.* sur la table de Brain. S’il n’est pas épinglé, Brain ne le cite pas. La démo épingle le premier sauvé, s’il y en a un.",
+    body: "Pose @specialist.* sur la table de Brain. S’il n’est pas épinglé, Brain ne le cite pas. La démo épingle le premier enregistré, s’il y en a un.",
   },
 ] as const
 

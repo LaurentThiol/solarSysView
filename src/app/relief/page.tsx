@@ -11,7 +11,11 @@ export const metadata: Metadata = {
 
 export default function ReliefPage() {
   return (
-    <PageShell title="Relief · n1→n5" compact>
+    <PageShell
+      title="Relief"
+      subtitle="Une ligne n1→n5 par tirage. Hauteur = valeur 1–50. Le glyphe 5×10 reste Morpho."
+      compact
+    >
       <ReliefLab />
     </PageShell>
   )

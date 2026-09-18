@@ -430,7 +430,7 @@ def test_curve_canvas_draws_context_as_past() -> None:
     lab = (root / "src/components/chartisme/chartisme-lab.tsx").read_text(encoding="utf-8")
     window = (root / "src/lib/chartisme/window.ts").read_text(encoding="utf-8")
     assert "contextBandLabel" in canvas
-    assert "étude" in canvas
+    assert "fenêtre" in canvas
     assert "polylinePoints(values, 0, splitAt" in canvas
     assert "dates[splitAt]" in canvas
     assert "index < splitAt ? 0.16 : 0.45" in canvas

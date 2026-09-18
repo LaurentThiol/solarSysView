@@ -66,7 +66,7 @@ const ACTION_LABELS: Record<ActionType, string> = {
 const BREAKOUT_LABELS: Record<BreakoutState, string> = {
   any: "toute cassure",
   confirmed: "cassure confirmée",
-  fake: "fake breakout",
+  fake: "fausse cassure",
   pending: "en formation",
 }
 
@@ -253,7 +253,7 @@ export function RulesPanel({
       </CardHeader>
       <CardContent className="space-y-5">
         <p className="text-xs text-muted-foreground">
-          C’est ici que se construit la démarche : tu écris ce que tu observes,
+          C’est ici que se construit la démarche : vous écrivez ce que vous observez,
           le journal accumule les déclenchements et le rétro-test mesure si la
           règle bat le hasard. Rien n’est appliqué automatiquement à une grille.
         </p>
@@ -362,7 +362,7 @@ export function RulesPanel({
               label="Cassure"
               help={{
                 title: "Cassure",
-                body: "La règle d'or : une cassure n'est validée que si l'activité dépasse sa moyenne mobile 20 et si la clôture confirme. Sinon c'est un fake breakout — et une règle sur les fakes est tout aussi instructive.",
+                body: "La règle d'or : une cassure n'est validée que si l'activité dépasse sa moyenne mobile 20 et si la clôture confirme. Sinon c'est une fausse cassure (fake breakout) — et une règle sur les fausses cassures est tout aussi instructive.",
               }}
             >
               <Select

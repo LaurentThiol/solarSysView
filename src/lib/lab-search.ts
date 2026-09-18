@@ -27,3 +27,8 @@ export function asPositiveInt(value: string | null, min: number, max: number): n
   const n = Number.parseInt(value, 10)
   return Number.isFinite(n) && n >= min && n <= max ? n : null
 }
+
+export function asOneOf<T extends string>(value: string | null, ids: readonly T[]): T | null {
+  if (!value) return null
+  return (ids as readonly string[]).includes(value) ? (value as T) : null
+}

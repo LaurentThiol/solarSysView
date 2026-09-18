@@ -121,15 +121,15 @@ export function BrainDemoBar({
       title="Démo des fonctions"
       help={{
         title: "Démo Brain",
-        body: "Parcourt vraiment l’onglet : fenêtre, épingles (@rsi, @ete, @fft, @cluster, @score), table, lecture sans modèle, suivi, mini-balayage, carnet. Un pop-up t’arrête après chaque phase : Suivant ou Annuler. Les chiffres viennent des tirages chargés. Ollama n’est pas requis.",
+        body: "Parcourt vraiment l’onglet : fenêtre, épingles (@rsi, @ete, @fft, @cluster, @score), table, lecture sans modèle, suivi, mini-balayage, carnet. Un pop-up vous arrête après chaque phase : Suivant ou Annuler. Les chiffres viennent des tirages chargés. Ollama n’est pas requis.",
       }}
       steps={DEMO_STEPS}
       step={step}
       running={running}
       done={done}
       waiting={waiting}
-      idleHint="Un handle par lab, lecture réelle, sans Ollama. Tu avances à ton rythme."
-      doneHint="Terminée : la table, le carnet et le balayage restent sous tes yeux."
+      idleHint="Un handle par lab, lecture réelle, sans Ollama. Vous avancez à votre rythme."
+      doneHint="Terminée : la table, le carnet et le balayage restent sous vos yeux."
       onStart={onStart}
       onStop={onStop}
     />

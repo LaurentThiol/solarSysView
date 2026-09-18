@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Camera } from "lucide-react"
 
+import { StatusPill } from "@/components/status-pill"
 import { HelpWrap } from "@/components/help"
 import { useCapture } from "@/components/capture/capture-provider"
 import { suggestionsFor } from "@/lib/capture/suggestions"
@@ -13,27 +14,26 @@ export function CaptureButton() {
   return (
     <HelpWrap
       help={{
-        title: "Capture de lecture",
+        title: "Capture",
         body: "Enregistre le graphique visible et les données de la fenêtre (série, indicateurs, figures, pics). Envoie le pack à l’onglet IA ou exporte un PDF. Raccourci « c » hors champ de saisie. Désactivé sur Admin (secrets).",
       }}
     >
-      <button
-        type="button"
+      <StatusPill
+        tone={open || capturing ? "info" : "off"}
+        dot={false}
         aria-pressed={open}
         aria-busy={capturing}
-        aria-label="Capturer la lecture à l’écran"
-        title="Capture de lecture — visuel + données. Raccourci « c »."
+        aria-label="Capturer la fenêtre à l’écran"
+        title="Capture — visuel + données. Raccourci « c »."
         disabled={capturing}
         onClick={() => void startCapture()}
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium tracking-wide ${
-          open || capturing
-            ? "border-sky-400/50 bg-sky-400/15 text-sky-100"
-            : "border-border bg-muted/40 text-muted-foreground"
-        }`}
-      >
-        <Camera className="size-3.5" />
-        <span className="hidden sm:inline">Capture</span>
-      </button>
+        label={
+          <span className="inline-flex items-center gap-1.5">
+            <Camera className="size-3.5" />
+            <span className="hidden sm:inline">Capture</span>
+          </span>
+        }
+      />
     </HelpWrap>
   )
 }
@@ -61,7 +61,7 @@ export function CaptureDrawer() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id="capture-title" className="text-sm font-semibold tracking-tight">
-              Capture de lecture
+              Capture
             </h2>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               Zone visible et graphique à l’écran, plus les données de la
@@ -81,7 +81,7 @@ export function CaptureDrawer() {
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
         {blocked ? (
-          <p className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
+          <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs leading-5 text-warn">
             {blocked.reason}
           </p>
         ) : draft ? (
@@ -131,7 +131,7 @@ function CaptureForm({
         ))}
       </ul>
       <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-        Qu’est-ce que tu ne comprends pas ?
+        Qu’est-ce que vous ne comprenez pas ?
         <textarea
           value={question}
           onChange={(event) => setQuestion(event.target.value)}

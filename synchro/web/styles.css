@@ -42,6 +42,16 @@ body { min-height: 100vh; }
 .badge.live { color: var(--ok); border-color: #245c44; }
 .badge.snapshot { color: var(--gold); }
 
+.fallback-note {
+  margin: 0 24px 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 .tabs {
   display: flex;
   gap: 6px;

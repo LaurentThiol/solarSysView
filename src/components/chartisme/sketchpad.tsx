@@ -86,7 +86,7 @@ export function Sketchpad({
     } catch {
       // on retombe sur la recherche locale
     }
-    // Fenêtres de 60 tirages, ou la courbe entière si la fenêtre d'étude est
+    // Fenêtres de 60 tirages, ou la courbe entière si la fenêtre de travail est
     // plus courte : sinon l'index sort vide et la recherche semble muette.
     const size = curve ? Math.min(60, curve.values.length) : 0
     if (curve && size >= MIN_WINDOW) {
@@ -127,7 +127,7 @@ export function Sketchpad({
           <TitleHelp
             help={{
               title: "Bloc-croquis",
-              body: "Dessine la forme que tu cherches, l'outil remonte les fenêtres de l'archive qui lui ressemblent. L'appariement temporel élastique compare des formes, pas des niveaux ni des durées : il fonctionne dès le premier croquis, sans aucun poids appris.",
+              body: "Dessinez la forme que vous cherchez, l'outil remonte les fenêtres de l'archive qui lui ressemblent. L'appariement temporel élastique compare des formes, pas des niveaux ni des durées : il fonctionne dès le premier croquis, sans aucun poids appris.",
             }}
           >
             Bloc-croquis · recherche par ressemblance
@@ -181,7 +181,7 @@ export function Sketchpad({
             label="Charger une figure de la table"
             help={{
               title: "Gabarit",
-                body: "Plutôt que de dessiner, pose le gabarit théorique d'une des 18 figures puis lance la recherche : tu vois immédiatement à quoi la forme ressemble dans l'archive réelle.",
+              body: "Plutôt que de dessiner, posez le gabarit théorique d'une des 18 figures puis lancez la recherche : vous voyez immédiatement à quoi la forme ressemble dans l'archive réelle.",
             }}
           >
             <Select value="" onValueChange={(v) => v && loadShape(v)}>

@@ -83,7 +83,7 @@ export function CurveCanvas({
   /** Clic sur une marque du bandeau : la lecture correspondante, ou la suivante si plusieurs se superposent. */
   onHitSelect?: (index: number) => void
   showActivity?: boolean
-  /** Tirages de tête calculés mais hors fenêtre d'étude — tracés en retrait. */
+  /** Tirages de tête calculés mais hors fenêtre de travail — tracés en retrait. */
   contextCount?: number
   label?: string
 }) {
@@ -288,7 +288,7 @@ export function CurveCanvas({
               y={PAD + 10}
               className="fill-muted-foreground text-[9px]"
             >
-              étude
+              fenêtre
             </text>
           </g>
         ) : null}
@@ -471,7 +471,7 @@ export function CurveCanvas({
                   : "fill-[var(--chart-5)]"
               )}
             >
-              {hit.breakout.confirmed ? "cassure confirmée" : "fake breakout"}
+              {hit.breakout.confirmed ? "cassure confirmée" : "fausse cassure"}
             </text>
           </g>
         ) : null}

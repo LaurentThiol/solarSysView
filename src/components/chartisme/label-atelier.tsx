@@ -52,7 +52,7 @@ export function LabelAtelier({
   curve: Curve | null
   selection: CurveSelection | null
   onSelect: (selection: CurveSelection | null) => void
-  /** Tirages de tête hors fenêtre d'étude : on n'y propose rien à étiqueter. */
+  /** Tirages de tête hors fenêtre de travail : on n'y propose rien à étiqueter. */
   contextCount?: number
 }) {
   const [figure, setFigure] = useState<string>("ete")
@@ -114,7 +114,7 @@ export function LabelAtelier({
 
   // Apprentissage actif : les fenêtres où le détecteur hésite le plus sont
   // celles où une étiquette humaine rapporte le plus. La taille suit la courbe :
-  // sur une fenêtre d'étude courte, 60 tirages ne rentrent pas et la liste
+  // sur une fenêtre de travail courte, 60 tirages ne rentrent pas et la liste
   // resterait vide sans qu'on sache pourquoi.
   const uncertain = useMemo(() => {
     if (!curve) return []
@@ -209,7 +209,7 @@ export function LabelAtelier({
           <TitleHelp
             help={{
               title: "Atelier d’étiquetage",
-              body: "Sélectionne une portion de la courbe au pinceau, nomme la forme que tu y vois, puis place les rôles de pivots — tête, épaule gauche, ligne de cou. C'est ainsi qu'on apprend à l'outil des formes que la table de référence ne nomme pas.",
+              body: "Sélectionnez une portion de la courbe au pinceau, nommez la forme que vous y voyez, puis placez les rôles de pivots — tête, épaule gauche, ligne de cou. C'est ainsi qu'on apprend à l'outil des formes que la table de référence ne nomme pas.",
             }}
           >
             Atelier d’étiquetage
@@ -272,7 +272,7 @@ export function LabelAtelier({
               )}
               {neighbourGuess?.figure ? (
                 <Badge variant="secondary">
-                  tes étiquettes : {labelOf(neighbourGuess.figure)} (
+                  vos étiquettes : {labelOf(neighbourGuess.figure)} (
                   {neighbourGuess.confidence.toFixed(2)})
                 </Badge>
               ) : null}
@@ -288,7 +288,7 @@ export function LabelAtelier({
                 label="Classe"
                 help={{
                   title: "Classe",
-                  body: "Les 18 figures de la table, plus tes propres classes. Une classe libre est stockée à part : elle sert la recherche par ressemblance et le regroupement, sans polluer les détecteurs géométriques.",
+                  body: "Les 18 figures de la table, plus vos propres classes. Une classe libre est stockée à part : elle sert la recherche par ressemblance et le regroupement, sans polluer les détecteurs géométriques.",
                 }}
               >
                 <Select value={figure} onValueChange={(v) => setFigure(v ?? figure)}>
@@ -323,7 +323,7 @@ export function LabelAtelier({
                   label="Nom de la classe"
                   help={{
                     title: "Classe libre",
-                    body: "Donne un nom à la forme que tu vois et qui n'existe pas dans la table. Elle rejoint le vocabulaire de l'atelier et devient cherchable.",
+                    body: "Donnez un nom à la forme que vous voyez et qui n'existe pas dans la table. Elle rejoint le vocabulaire de l'atelier et devient cherchable.",
                   }}
                 >
                   <Input

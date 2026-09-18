@@ -210,7 +210,7 @@ export function ReliefCanvas({
   return (
     <div
       ref={wrapRef}
-      className="relative h-full min-h-0 w-full overflow-hidden rounded-lg bg-[#12182a]"
+      className="relative h-full min-h-0 w-full overflow-hidden rounded-lg bg-canvas"
     >
       <canvas
         ref={canvasRef}
@@ -676,9 +676,9 @@ function paintProfile(
 
 function drawBackdrop(ctx: CanvasRenderingContext2D, w: number, h: number) {
   const g = ctx.createLinearGradient(0, 0, 0, h)
-  g.addColorStop(0, "#1a2440")
-  g.addColorStop(0.55, "#141b30")
-  g.addColorStop(1, "#0e1322")
+  g.addColorStop(0, "oklch(0.22 0.04 260)")
+  g.addColorStop(0.55, "oklch(0.18 0.04 260)")
+  g.addColorStop(1, "oklch(0.14 0.04 260)")
   ctx.fillStyle = g
   ctx.fillRect(0, 0, w, h)
 }

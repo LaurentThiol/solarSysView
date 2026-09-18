@@ -141,7 +141,7 @@ const HELP = {
   },
   consign: {
     title: "Consigner",
-    body: "Envoie cette grille dans histoJeux pour le prochain tirage encore ouvert, avec le spec (somme, décennies, forcés…). Le rang se calcule après synchro FDJ.",
+    body: "Envoie cette grille dans le journal pour le prochain tirage encore ouvert, avec le spec (somme, décennies, forcés…). Le rang se calcule après synchro FDJ.",
   },
 } satisfies Record<string, HelpCopy>
 
@@ -292,7 +292,7 @@ function ChanceGrid({
               className={cn(
                 "flex size-7 items-center justify-center rounded-full text-xs font-semibold tabular-nums sm:size-8",
                 kind === "stars"
-                  ? "bg-[oklch(0.78_0.14_75)] text-[oklch(0.18_0.04_260)]"
+                  ? "bg-star text-primary-foreground"
                   : "bg-primary text-primary-foreground",
                 role === "excluded" && "bg-muted text-muted-foreground"
               )}
@@ -616,7 +616,7 @@ export function JeuxPanel() {
       return
     }
     setConsignNote(
-      `Consigné pour le ${formatPlayDate(playDate)}. Voir histoJeux.`
+      `Consigné pour le ${formatPlayDate(playDate)}. Voir le journal.`
     )
   }
 
@@ -1084,13 +1084,13 @@ export function JeuxPanel() {
             Univers : {formatCount(TOTAL_GRIDS)} grilles. Part restante :{" "}
             {formatPct(game.fraction, 4)}. Masse {formatMass(game.mass)} (poids des
             chances). Cliquez une grille pour l’envoyer au composeur, ou
-            consignez-la dans histoJeux.
+            consignez-la dans le journal.
           </Disclaimer>
           {consignNote ? (
             <p className="text-sm text-muted-foreground">
               {consignNote}{" "}
               <Link className="underline underline-offset-2 hover:text-foreground" href="/jeux?tab=histoJeux">
-                Ouvrir histoJeux
+                Ouvrir le journal
               </Link>
             </p>
           ) : null}

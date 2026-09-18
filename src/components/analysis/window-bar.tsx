@@ -61,7 +61,7 @@ export function WindowBar({
           }}
         >
           <Select value={preset} onValueChange={(v) => onPreset(v as WindowPreset)}>
-            <SelectTrigger className="w-full sm:w-64" aria-label="Fenêtre">
+            <SelectTrigger className="w-full sm:w-64" aria-label="Fenêtre de travail">
               <span className="flex flex-1 text-left">{WINDOW_PRESET_LABELS[preset]}</span>
             </SelectTrigger>
             <SelectContent>

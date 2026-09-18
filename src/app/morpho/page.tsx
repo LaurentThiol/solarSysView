@@ -12,8 +12,8 @@ export const metadata: Metadata = {
 export default function MorphoPage() {
   return (
     <PageShell
-      title="Morpho · formes"
-      description="Grille 5×10, lexique géométrique, kNN visuel, VLM local (Ollama / Moondream), règles QUAND/ALORS, P(forme suivante | contexte) vs uniforme."
+      title="Morpho"
+      subtitle="Grille 5×10, lexique géométrique, kNN visuel, VLM local (Ollama / Moondream), règles QUAND/ALORS, P(forme suivante | contexte) vs uniforme."
     >
       <MorphoLab />
     </PageShell>

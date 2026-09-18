@@ -22,7 +22,7 @@ test("context band copy lives next to the window rule", () => {
 
 test("the canvas splits the curve at the study boundary", () => {
   assert.match(canvasSrc, /contextBandLabel/)
-  assert.match(canvasSrc, />\s*étude\s*</)
+  assert.match(canvasSrc, />\s*fenêtre\s*</)
   assert.match(canvasSrc, /polylinePoints\(values, 0, splitAt/)
   assert.match(canvasSrc, /index < splitAt \? 0\.16 : 0\.45/)
   assert.match(canvasSrc, /dates\[splitAt\]/)

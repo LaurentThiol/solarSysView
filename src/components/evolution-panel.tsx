@@ -13,6 +13,7 @@ import { EvolutionParity } from "@/components/evolution-parity"
 import { EvolutionShape } from "@/components/evolution-shape"
 import { FrequencyCard } from "@/components/frequency-card"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
+import { PillTabs } from "@/components/ui/pill-tabs"
 import {
   Select,
   SelectContent,
@@ -37,15 +38,16 @@ import {
   takeLastDraws,
   toDrawSeries,
 } from "@/lib/draws"
+import { WINDOW_PRESET_LABELS } from "@/lib/analysis-window"
+import { ERA_LABELS } from "@/lib/copy"
 import { useDraws, type DrawWindow } from "@/lib/use-draws"
-import { cn } from "@/lib/utils"
 
 const PERIODS: { id: DrawWindow; label: string }[] = [
-  { id: "last_20", label: "20 tirages" },
-  { id: "last_50", label: "50 tirages" },
-  { id: "year", label: "Année en cours" },
-  { id: "current", label: "Formule actuelle" },
-  { id: "all", label: "Tout l’historique" },
+  { id: "last_20", label: WINDOW_PRESET_LABELS.last_20 },
+  { id: "last_50", label: WINDOW_PRESET_LABELS.last_50 },
+  { id: "year", label: WINDOW_PRESET_LABELS.year },
+  { id: "current", label: ERA_LABELS.current },
+  { id: "all", label: ERA_LABELS.all },
 ]
 
 function isLastWindow(period: DrawWindow) {
@@ -141,30 +143,19 @@ function EvolutionContent() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex w-full flex-col gap-1 sm:flex-1">
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            Fenêtre
+            Fenêtre de travail
             <HelpTip
-              title="Fenêtre"
-              body="20 ou 50 derniers tirages (tous calendriers), année civile, formule à 12 étoiles depuis 2016, ou tout l’historique. 20/50 se lisent mieux sur la courbe ; l’année et la formule donnent le bruit de fond."
+              title="Fenêtre de travail"
+              body="20 ou 50 derniers tirages (tous calendriers), année civile, formule actuelle (12 ★), ou tout l’historique. 20/50 se lisent mieux sur la courbe ; l’année et la formule donnent le bruit de fond."
             />
           </span>
-          <nav className="flex flex-wrap gap-2" aria-label="Fenêtre">
-            {PERIODS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                aria-pressed={period === item.id}
-                onClick={() => setPeriod(item.id)}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs",
-                  period === item.id
-                    ? "border-primary bg-primary/15 text-foreground"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
+          <PillTabs
+            label="Fenêtre de travail"
+            mode="chips"
+            value={period}
+            onValueChange={setPeriod}
+            items={PERIODS}
+          />
         </div>
         {lastWindow ? null : (
           <LabelHelp

@@ -9,10 +9,10 @@ import { ACTIVITY_PERIOD } from "./figures"
 import { MIN_WINDOW } from "./scan"
 
 /**
- * Fenêtre d'étude du chartisme : la zone regardée, et le contexte devant elle.
+ * Fenêtre de travail du chartisme : la zone regardée, et le contexte devant elle.
  *
  * Deux longueurs se ressemblent et ne veulent pas dire la même chose. La
- * **fenêtre d'étude** dit quels tirages t'intéressent — les 20 derniers, l'année,
+ * **fenêtre de travail** dit quels tirages vous intéressent — les 20 derniers, l'année,
  * tout. L'**échelle** dit sur combien de tirages une figure a le droit de se
  * dérouler. Chercher une tête & épaules de 120 tirages dans une fenêtre de 20
  * n'a pas de sens ; l'inverse — une figure de 20 tirages lue sur toute l'archive
@@ -72,7 +72,7 @@ export const MAX_AUTO_SCALES = 3
 export const CONTEXT_MIN = ACTIVITY_PERIOD
 
 /**
- * Fenêtre d'étude la plus courte qui ait un sens.
+ * Fenêtre de travail la plus courte qui ait un sens.
  *
  * C'est la longueur du plus petit balayage : sous ce seuil, aucune figure ne
  * tient entièrement dans la fenêtre. Les deux nombres se confondent parce
@@ -171,7 +171,7 @@ export type StudyWindow<T extends { date: string }> = {
 }
 
 /**
- * Fenêtre d'étude, contexte compris.
+ * Fenêtre de travail, contexte compris.
  *
  * Deux passes : la longueur de la fenêtre décide des échelles, qui décident du
  * contexte à réclamer. Une seule passe aurait à choisir un contexte avant de
@@ -247,7 +247,7 @@ export function scaleFitNote(
 ): string | null {
   if (scales.some((size) => size <= curveLength)) return null
   const shortest = Math.min(...scales)
-  return `Échelle ${shortest} : rien n'a été balayé. Il faut ${shortest} tirages consécutifs et la courbe n'en compte que ${curveLength}, contexte inclus. Repasse en « auto » ou choisis une échelle plus courte.`
+  return `Échelle ${shortest} : rien n'a été balayé. Il faut ${shortest} tirages consécutifs et la courbe n'en compte que ${curveLength}, contexte inclus. Passez en « auto » ou choisissez une échelle plus courte.`
 }
 
 /**

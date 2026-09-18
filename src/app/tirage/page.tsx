@@ -11,7 +11,10 @@ export const metadata: Metadata = {
 
 export default function TiragePage() {
   return (
-    <PageShell title="Tirage · archives">
+    <PageShell
+      title="Tirage"
+      subtitle="Archives EuroMillions, filtrables par mois et par numéros, avec export CSV."
+    >
       <DrawsExplorer />
     </PageShell>
   )

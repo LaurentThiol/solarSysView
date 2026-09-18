@@ -60,7 +60,7 @@ export function FiguresPanel({ tech }: { tech: Tech }) {
           )}
           <Disclaimer>
             Confirmation « volume &gt; SMA20 » transposée en activité (true range × count). Une cassure
-            sans ça reste un fake breakout possible — et un tirage n’a pas de volume de marché.
+            sans ça reste une fausse cassure possible — et un tirage n’a pas de volume de marché.
           </Disclaimer>
         </CardContent>
       </Card>

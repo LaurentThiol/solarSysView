@@ -106,7 +106,7 @@ export function BacktestPanel({
    * échelle à l'autre, d'où la table plutôt qu'un nombre.
    */
   bar?: { minConfidence: number; byScale: Readonly<Record<number, number | null>> | null }
-  /** Fenêtre d'étude — le rétro-test s'y borne par défaut. */
+  /** Fenêtre de travail — le rétro-test s'y borne par défaut. */
   studyWindow?: { fromDate: string | null; toDate: string | null; drawCount: number }
   /** Tirages de contexte réclamés devant elle par les échelles. */
   contextCount?: number
@@ -221,7 +221,7 @@ export function BacktestPanel({
           le voir écrit vaut mieux que l’ignorer.
         </p>
         <p className="text-xs text-muted-foreground">
-          La mesure se borne par défaut à la fenêtre d’étude, aux mêmes échelles
+          La mesure se borne par défaut à la fenêtre de travail, aux mêmes échelles
           que le tracé. Elle y perd de la puissance : moins de cassures réglées,
           donc un intervalle de Wilson plus large, et le rapport l’affiche au
           lieu de l’acheter en élargissant la fenêtre. Toute l’archive répond à
@@ -237,7 +237,7 @@ export function BacktestPanel({
               onChange={(event) => setBounded(event.target.checked)}
               disabled={!studyWindow?.fromDate}
             />
-            Borner à la fenêtre d’étude
+            Borner à la fenêtre de travail
           </label>
           <HelpTip
             title="Borner à la fenêtre"

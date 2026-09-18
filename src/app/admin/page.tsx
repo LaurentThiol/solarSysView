@@ -12,15 +12,14 @@ export const metadata: Metadata = {
 export default function AdminPage() {
   return (
     <PageShell
-      title="Admin · services"
-      description={
+      title="Admin"
+      subtitle={
         <>
           Liens des consoles, mots de passe et tests de connexion. Les secrets restent dans{" "}
           <code>.env</code> (jamais commités). En production Netlify, utilisez les variables
           d’environnement du site.
         </>
       }
-      footer={false}
     >
       <AdminPanel />
     </PageShell>

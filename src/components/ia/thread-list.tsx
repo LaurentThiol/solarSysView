@@ -90,14 +90,14 @@ export function IaThreadList({
         Captures
         <HelpTip
           title="Historique"
-          body="Les lectures restent dans ce navigateur. Tu peux les renommer, les épingler (elles ne tombent pas de la liste), les exporter (Markdown, JSON, PDF) ou les supprimer. Un JSON réimporte le fil, y compris sur une autre machine."
+          body="Les conversations restent dans ce navigateur. Vous pouvez les renommer, les épingler (elles ne tombent pas de la liste), les exporter (Markdown, JSON, PDF) ou les supprimer. Un JSON réimporte le fil, y compris sur une autre machine."
           items={[
             {
               label: "Plafond",
               text: "Huit lectures non épinglées. Les épinglées s’ajoutent par-dessus.",
             },
             {
-              label: "Export",
+              label: "Exporter",
               text: "Markdown pour relire, JSON pour sauvegarder / réimporter. Le PDF du fil inclut la conversation.",
             },
           ]}

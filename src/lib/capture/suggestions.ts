@@ -17,7 +17,7 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   }
   if (lab === "chartisme") {
     return [
-      "Cette figure est-elle complète ? Que disent cassure, fake breakout et taux de base ?",
+      "Cette figure est-elle complète ? Que disent cassure, fausse cassure et taux de base ?",
       "Compare la confiance géométrique au taux de base mesuré sur cette échelle.",
       "Que signifie l’objectif projeté, et dans quels cas il ne s’applique pas ?",
     ]
@@ -78,11 +78,11 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   if (lab === "brain") {
     return [
       "Lis les fiches du working set (@rsi, @adx, @specialist.*) : que décrivent-elles, et quel pronostic d’évolution (hypothèse) portent-elles ?",
-      "Cite le forecast d’un spécialiste s’il est sur la table (σ, skill 20/50/100). Un forecast de série nommée n’est pas une grille 5+2 : une 5+2, si tu en proposes une, est une hypothèse séparée.",
+      "Cite la prévision d’un spécialiste s’il est sur la table (σ, score vs hasard 20/50/100). Une prévision de série nommée n’est pas une grille 5+2 : une 5+2, si vous en proposez une, est une hypothèse séparée.",
       "Démo : @rsi, @ete, @fft, @cluster et @score sont-ils sur la table, et que disent-ils sur cette fenêtre ?",
-      "Démo Spécialistes : le formulaire Paire impair est-il cohérent (cible parité, features causales, consignes, skill vs hasard) ?",
+      "Démo Spécialistes : le formulaire Paire impair est-il cohérent (cible parité, features causales, consignes, score vs hasard) ?",
       "Quels handles du catalog manquent encore sur le plateau pour répondre ?",
-      "Les souvenirs rappelés sont des lectures passées. Sers-t’en pour un pronostic d’hypothèse, sans les prendre pour une série déjà prédite.",
+      "Les souvenirs rappelés sont des lectures passées. Servez-vous-en pour un pronostic d’hypothèse, sans les prendre pour une série déjà prédite.",
     ]
   }
   return [

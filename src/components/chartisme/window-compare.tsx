@@ -85,7 +85,7 @@ export function WindowCompare({
             archive : la fenêtre étudiée touche le début des tirages chargés. Une
             tranche plus courte ne servirait à rien ici — le nombre de figures
             croît avec le nombre de tirages, et l’écart ne dirait que cela.
-            Raccourcis la fenêtre ou élargis l’archive.
+            Raccourcissez la fenêtre ou élargissez l’archive.
           </p>
         ) : (
           <>

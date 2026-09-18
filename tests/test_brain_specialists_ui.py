@@ -14,7 +14,7 @@ def test_specialists_panel_is_a_roster_with_atelier() -> None:
     assert "Nouvel atelier" in panel
     assert "data-specialist-roster" in panel
     assert "data-specialist-atelier" in panel
-    assert "Skill vs hasard" in card
+    assert "Score vs hasard" in card
     assert "s’abstient" in card
     assert "Épingler" in card
     assert "Réinférer" in card

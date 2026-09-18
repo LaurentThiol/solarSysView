@@ -96,9 +96,9 @@ type TestResult = { ok: boolean; detail: string }
 
 function StatusDot({ ok, configured }: { ok: boolean; configured: boolean }) {
   const tone = ok
-    ? "bg-emerald-400"
+    ? "bg-ok"
     : configured
-      ? "bg-red-400"
+      ? "bg-err"
       : "bg-muted-foreground/50"
   return <span className={`inline-block size-2 rounded-full ${tone}`} />
 }
@@ -183,7 +183,7 @@ function SecretRow({
           </Button>
         </WithHelp>
       </div>
-      {copied ? <p className="text-xs text-emerald-300">Copié</p> : null}
+      {copied ? <p className="text-xs text-ok">Copié</p> : null}
     </div>
   )
 }
@@ -343,7 +343,7 @@ export function AdminPanel() {
   }
 
   if (error && !data) {
-    return <p className="text-sm text-red-300">{error}</p>
+    return <p className="text-sm text-err">{error}</p>
   }
 
   if (!data) {
@@ -390,7 +390,7 @@ export function AdminPanel() {
               Entrer
             </Button>
           </WithHelp>
-          {error ? <p className="text-sm text-red-300">{error}</p> : null}
+          {error ? <p className="text-sm text-err">{error}</p> : null}
         </CardContent>
       </Card>
     )
@@ -412,9 +412,9 @@ export function AdminPanel() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      {error ? <p className="text-sm text-red-300">{error}</p> : null}
+      {error ? <p className="text-sm text-err">{error}</p> : null}
       {!data.writable ? (
-        <p className="text-sm text-amber-200">
+        <p className="text-sm text-warn">
           Déploiement Netlify : les secrets se lisent depuis les variables d’environnement du
           site. L’écriture dans <code>.env</code> n’est pas persistante.
         </p>
@@ -486,10 +486,10 @@ export function AdminPanel() {
             <strong
               className={
                 github.status === "up_to_date"
-                  ? "text-emerald-300"
+                  ? "text-ok"
                   : github.status === "behind"
-                    ? "text-amber-200"
-                    : "text-red-300"
+                    ? "text-warn"
+                    : "text-err"
               }
             >
               {gitLabel}
@@ -596,7 +596,7 @@ export function AdminPanel() {
             </strong>
           </p>
           {data.stale ? (
-            <p className="sm:col-span-3 text-sm text-amber-200">
+            <p className="sm:col-span-3 text-sm text-warn">
               En retard
               {data.expected_draw_date
                 ? ` — tirage attendu ${data.expected_draw_date}`
@@ -606,11 +606,11 @@ export function AdminPanel() {
             </p>
           ) : null}
           {typeof tests.neon === "object" ? (
-            <p className={`sm:col-span-3 text-sm ${tests.neon.ok ? "text-emerald-300" : "text-red-300"}`}>
+            <p className={`sm:col-span-3 text-sm ${tests.neon.ok ? "text-ok" : "text-err"}`}>
               {tests.neon.detail}
             </p>
           ) : data.neon.error ? (
-            <p className="sm:col-span-3 text-sm text-red-300">{data.neon.error}</p>
+            <p className="sm:col-span-3 text-sm text-err">{data.neon.error}</p>
           ) : null}
         </CardContent>
       </Card>
@@ -758,11 +758,11 @@ export function AdminPanel() {
                   ) : null}
                 </div>
                 {typeof testResult === "object" ? (
-                  <p className={`text-sm ${testResult.ok ? "text-emerald-300" : "text-red-300"}`}>
+                  <p className={`text-sm ${testResult.ok ? "text-ok" : "text-err"}`}>
                     {testResult.detail}
                   </p>
                 ) : service.configured ? (
-                  <p className="text-xs text-emerald-300">Enregistré et conservé : {service.hint}</p>
+                  <p className="text-xs text-ok">Enregistré et conservé : {service.hint}</p>
                 ) : (
                   <p className="text-xs text-muted-foreground">
                     Non enregistré — collez la valeur, puis Enregistrer.

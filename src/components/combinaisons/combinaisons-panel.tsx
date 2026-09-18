@@ -261,7 +261,7 @@ const HELP = {
   },
   label: {
     title: "Libellé",
-    body: "Nom enregistré avec la grille (Neon si l’API répond, sinon session de cet onglet). Les lignes déjà sauvées se renomment ensuite.",
+    body: "Nom enregistré avec la grille (Neon si l’API répond, sinon session de cet onglet). Les lignes déjà enregistrées se renomment ensuite.",
   },
   save: {
     title: "Enregistrer",
@@ -269,19 +269,15 @@ const HELP = {
   },
   consign: {
     title: "Consigner",
-    body: "Copie la grille dans histoJeux pour le tirage visé (mardi/vendredi). Après synchro FDJ, le rang s’affiche. Distinct de Enregistrer, qui garde un modèle.",
+    body: "Copie la grille dans le journal pour le tirage visé (mardi/vendredi). Après synchro FDJ, le rang s’affiche. Distinct de Enregistrer, qui garde un modèle.",
   },
   consignBatch: {
     title: "Consigner les propositions",
-    body: "Envoie la salve actuelle (jusqu’à 20) dans histoJeux, même date de tirage. Utile pour rejouer une salve entière et relire les rangs plus tard.",
+    body: "Envoie la salve actuelle (jusqu’à 20) dans le journal, même date de tirage. Utile pour rejouer une salve entière et relire les rangs plus tard.",
   },
   playDate: {
     title: "Tirage visé",
     body: "Date du tirage pour lequel on consigne. Défaut : prochain mardi/vendredi encore ouvert (avant 20h45 Paris).",
-  },
-  rename: {
-    title: "Renommer",
-    body: "Change le libellé du modèle, sans toucher aux boules.",
   },
   rename: {
     title: "Renommer",
@@ -1023,7 +1019,7 @@ export function CombinaisonsPanel() {
       return
     }
     setConsignNote(
-      `Consigné dans histoJeux pour le ${formatPlayDate(playDate)}${result.source === "session" ? " (session)" : ""}.`
+      `Consigné dans le journal pour le ${formatPlayDate(playDate)}${result.source === "session" ? " (session)" : ""}.`
     )
   }
 
@@ -1509,7 +1505,7 @@ export function CombinaisonsPanel() {
             <p className="text-sm text-muted-foreground">
               {consignNote}{" "}
               <Link className="underline underline-offset-2 hover:text-foreground" href="/jeux?tab=histoJeux">
-                Ouvrir histoJeux
+                Ouvrir le journal
               </Link>
             </p>
           ) : null}

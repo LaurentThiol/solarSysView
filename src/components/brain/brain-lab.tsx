@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import Link from "next/link"
 import {
   BookOpen,
   Cloud,
@@ -918,14 +919,14 @@ export function BrainLab() {
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
           <BrainMascot mood={mascotMood} size="lg" />
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium tracking-[0.18em] text-primary uppercase">Laboratoire de lecture</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Brain</h1>
+            <p className="text-[11px] font-medium tracking-[0.18em] text-primary uppercase">Assistants</p>
+            <p className="mt-1 text-xl font-semibold tracking-tight">Table de lecture</p>
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-              Épingle un nom — <span className="text-foreground">@rsi</span>,{" "}
+              Épinglez un nom — <span className="text-foreground">@rsi</span>,{" "}
               <span className="text-foreground">@ete</span>,{" "}
               <span className="text-foreground">@specialist.paire-impair</span>{" "}
-              — puis pose une question. Les spécialistes forecast une série
-              nommée. Brain décrit la fenêtre, puis peut pronostiquer
+              — puis posez une question. Les spécialistes publient une prévision
+              de série nommée. Brain décrit la fenêtre, puis peut pronostiquer
               (hypothèse, pas une certitude).
             </p>
             <ol className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -938,7 +939,7 @@ export function BrainLab() {
             <StatusDot
               ok={localOn}
               label={localOn ? `Ollama ${status?.localHost ?? "allumé"}` : status ? "Ollama éteint" : "Ollama…"}
-              hint="Brain discute d’abord en local. Le cloud n’intervient que si tu le demandes."
+              hint="Brain discute d’abord en local. Le cloud n’intervient que si vous le demandez."
             />
             {cloudReady ? (
               <StatusDot
@@ -950,6 +951,12 @@ export function BrainLab() {
               {pins.length ? `${pins.length} fiche${pins.length > 1 ? "s" : ""} sur la table` : "Table vide"}
               {watch.length ? ` · ${watch.length} suivi${watch.length > 1 ? "s" : ""}` : ""}
             </p>
+            <Link
+              href="/brain/specialistes"
+              className="inline-flex h-7 items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] hover:bg-muted"
+            >
+              Spécialistes
+            </Link>
           </div>
         </div>
       </section>
@@ -1072,7 +1079,7 @@ export function BrainLab() {
               Discussion
               <HelpTip
                 title="Discussion"
-                body="Brain ne lit que les fiches sur la table, plus quelques souvenirs. Tape @ pour coller un nom. Ollama par défaut ; le cloud seulement si tu coches « ce tour »."
+                body="Brain ne lit que les fiches sur la table, plus quelques souvenirs. Tapez @ pour coller un nom. Ollama par défaut ; le cloud seulement si vous cochez « ce tour »."
               />
             </CardTitle>
             <CardDescription>Pose une question comme à un collègue. Les @ collent les fiches toutes seules.</CardDescription>
@@ -1127,7 +1134,7 @@ export function BrainLab() {
                   <p className="max-w-sm text-xs leading-5 text-muted-foreground">
                     {localOn
                       ? "Épingle un indicateur à droite, clique une question, ou lance la démo."
-                      : "Ollama est éteint : lance la démo ou « Lire la table » — les chiffres sont calculés ici. Le cloud seulement si tu coches « ce tour »."}
+                      : "Ollama est éteint : lancez la démo ou « Lire la table » — les chiffres sont calculés ici. Le cloud seulement si vous cochez « ce tour »."}
                   </p>
                   <div className="flex w-full max-w-md flex-col gap-1.5">
                     {STARTER_QUESTIONS.map((question) => (
@@ -1248,7 +1255,7 @@ export function BrainLab() {
                   body="C’est exactement ce que Brain reçoit. Une fiche épinglée, un souvenir, un lot : s’il n’est pas ici, Brain ne le voit pas."
                 />
               </CardTitle>
-              <CardDescription>Brain ne lit que ces fiches. Clique une pastille pour la retirer.</CardDescription>
+              <CardDescription>Brain ne lit que ces fiches. Cliquez une pastille pour la retirer.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-2 text-sm">
               {pins.length ? (
@@ -1271,7 +1278,7 @@ export function BrainLab() {
               ) : null}
               {board.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border px-3 py-4 text-xs leading-5 text-muted-foreground">
-                  Table vide. Clique un nom dans la bibliothèque, ou un kit ci-dessous : Brain aura enfin quelque chose à lire.
+                  Table vide. Cliquez un nom dans la bibliothèque, ou un kit ci-dessous : Brain aura enfin quelque chose à lire.
                 </p>
               ) : (
                 board.map((item) => {
@@ -1334,7 +1341,7 @@ export function BrainLab() {
                   body="Noms stables. Un clic épingle. Un kit pose tout un petit plateau. L’étoile suit les chiffres, sans LLM."
                 />
               </CardTitle>
-              <CardDescription>Clique un nom pour l’épingler. L’étoile le suit à chaque synchro.</CardDescription>
+              <CardDescription>Cliquez un nom pour l’épingler. L’étoile le suit à chaque synchro.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <div className="flex flex-wrap gap-1">
@@ -1426,7 +1433,7 @@ export function BrainLab() {
                   </div>
                 ))}
                 {catalog.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Aucun nom ne correspond. Essaie rsi, ete, fft…</p>
+                  <p className="text-xs text-muted-foreground">Aucun nom ne correspond. Essayez rsi, ete, fft…</p>
                 ) : null}
               </div>
             </CardContent>
@@ -1460,7 +1467,7 @@ export function BrainLab() {
                   body="Sur bouton seulement : Brain parcourt la bibliothèque ou les 142 courbes, note les fiches à relire, puis peut commenter ces lots. Rien ne part tout seul."
                 />
               </CardTitle>
-              <CardDescription>Lecture automatique, uniquement quand tu lances. Pause et arrêt à tout moment.</CardDescription>
+              <CardDescription>Lecture automatique, uniquement quand vous lancez. Pause et arrêt à tout moment.</CardDescription>
             </div>
             <Button size="sm" variant="ghost" className="shrink-0" onClick={() => setScanOpen((value) => !value)}>
               {scanOpen || walker ? "Replier" : "Ouvrir"}

@@ -12,8 +12,8 @@ export const metadata: Metadata = {
 export default function CombinaisonsPage() {
   return (
     <PageShell
-      title="Combinaisons · EuroMillions"
-      description="Composez une grille 5+2, ou demandez des propositions. Enregistrer garde un modèle ; Consigner l’envoie dans histoJeux pour un tirage donné. Le score affiché est une proba de gain (loi officielle + taux empirique), pas un pronostic."
+      title="Combinaisons"
+      subtitle="Composez une grille 5+2, ou demandez des propositions. Enregistrer garde un modèle ; Consigner l’envoie dans le journal pour un tirage donné. Le score affiché est une proba de gain (loi officielle + taux empirique), pas un pronostic."
     >
       <CombinaisonsPanel />
     </PageShell>

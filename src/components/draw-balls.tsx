@@ -14,9 +14,9 @@ function Ball({
       className={cn(
         "inline-flex size-8 items-center justify-center rounded-full text-xs font-semibold tabular-nums sm:size-9 sm:text-sm",
         variant === "number" &&
-          "bg-primary text-primary-foreground shadow-[0_0_0_1px_oklch(0.82_0.12_85/0.35)]",
+          "bg-primary text-primary-foreground shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary),transparent_65%)]",
         variant === "star" &&
-          "bg-[oklch(0.78_0.14_75)] text-[oklch(0.18_0.04_260)] shadow-[0_0_0_1px_oklch(0.9_0.12_85/0.45)]",
+          "bg-star text-primary-foreground shadow-[0_0_0_1px_color-mix(in_oklch,var(--star),white_35%)]",
         highlight && "ring-2 ring-white ring-offset-2 ring-offset-background"
       )}
     >

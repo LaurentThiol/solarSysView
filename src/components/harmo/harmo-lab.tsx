@@ -10,9 +10,9 @@ import { TestsPanel } from "@/components/harmo/tests-panel"
 import { TfPanel } from "@/components/harmo/tf-panel"
 import { WindowBar } from "@/components/analysis/window-bar"
 import { CurveName } from "@/components/chartisme/curve-thumb"
-import { TabScroller } from "@/components/tab-scroller"
 import { useRegisterCapture } from "@/components/capture"
-import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
+import { LabelHelp, TitleHelp } from "@/components/help"
+import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -49,6 +49,8 @@ import {
   asWindowPreset,
   readLabSearch,
 } from "@/lib/lab-search"
+import { ERA_LABELS } from "@/lib/copy"
+import { useLabTab } from "@/lib/use-lab-tab"
 import { useDraws } from "@/lib/use-draws"
 
 const TABS = [
@@ -103,11 +105,12 @@ const TABS = [
 ] as const
 
 type TabId = (typeof TABS)[number]["id"]
+const HARMO_TAB_IDS = TABS.map((item) => item.id) as TabId[]
 
 export function HarmoLab() {
   const [era, setEra] = useState<"current" | "all">("current")
   const { draws, source, loading: drawsLoading } = useDraws(era)
-  const [tab, setTab] = useState<TabId>("melange")
+  const [tab, setTab] = useLabTab(HARMO_TAB_IDS, "melange")
   const [variable, setVariable] = useState<VariableName>("sum")
   const [ball, setBall] = useState(7)
   const [star, setStar] = useState(1)
@@ -130,8 +133,6 @@ export function HarmoLab() {
     if (nextVariable) setVariable(nextVariable)
     const nextPreset = asWindowPreset(params.get("preset"))
     if (nextPreset) setPreset(nextPreset)
-    const tabId = params.get("tab")
-    if (tabId && TABS.some((item) => item.id === tabId)) setTab(tabId as TabId)
     const n = asPositiveInt(params.get("n"), 1, 50)
     if (n != null) {
       const target = nextVariable ?? "sum"
@@ -369,12 +370,12 @@ export function HarmoLab() {
             <Select value={era} onValueChange={(v) => v && setEra(v as "current" | "all")}>
               <SelectTrigger className="w-full sm:w-56" aria-label="Ère">
                 <span className="flex flex-1 text-left">
-                  {era === "all" ? "Archive : tout l’historique" : "Archive : formule actuelle (12 ★)"}
+                  {era === "all" ? `Archive : ${ERA_LABELS.all}` : `Archive : ${ERA_LABELS.current}`}
                 </span>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="current">Archive : formule actuelle (12 ★)</SelectItem>
-                <SelectItem value="all">Archive : tout l’historique</SelectItem>
+                <SelectItem value="current">Archive : {ERA_LABELS.current}</SelectItem>
+                <SelectItem value="all">Archive : {ERA_LABELS.all}</SelectItem>
               </SelectContent>
             </Select>
           </LabelHelp>
@@ -479,27 +480,11 @@ export function HarmoLab() {
         </div>
       </div>
 
-      <TabScroller label="Harmo">
-        {TABS.map((item) => (
-          <span key={item.id} className="inline-flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setTab(item.id)}
-              className={`rounded-full border px-3 py-1 text-xs ${
-                tab === item.id
-                  ? "border-primary bg-primary/15 text-foreground"
-                  : "border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {item.label}
-            </button>
-            <HelpTip {...(item.help as HelpCopy)} />
-          </span>
-        ))}
-      </TabScroller>
+      <PillTabs idPrefix="harmo" label="Harmo" value={tab} onValueChange={setTab} items={TABS} />
 
+      <PillTabPanel idPrefix="harmo" tab={tab}>
       {tab === "tf" ? (
-        <div>
+        <div className="mb-3">
           <Button
             type="button"
             variant={showSst ? "secondary" : "outline"}
@@ -519,6 +504,7 @@ export function HarmoLab() {
       {tab === "acoustique" ? <AcousticPanel data={payload} loading={loading} /> : null}
       {tab === "tf" ? <TfPanel data={payload} loading={loading} showSst={showSst} /> : null}
       {tab === "tests" ? <TestsPanel data={payload} loading={loading} onRun={() => void loadNull()} /> : null}
+      </PillTabPanel>
     </div>
   )
 }

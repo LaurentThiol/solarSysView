@@ -25,7 +25,7 @@ export function HarmoNotes({ notes }: { notes?: HarmoNote[] }) {
           key={note.id}
           className={`rounded-lg border px-3 py-2 text-xs leading-5 ${
             note.level === "warn"
-              ? "border-amber-500/40 bg-amber-500/10 text-amber-100"
+              ? "border-warn/40 bg-warn/10 text-warn"
               : "border-border bg-muted/40 text-muted-foreground"
           }`}
         >
@@ -158,7 +158,7 @@ export function ApiState({
   }
   if (error) {
     return (
-      <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+      <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">
         {error}. Harmo tourne sur l’API Python (scipy). Vérifiez que l’API locale
         répond, ou élargissez la fenêtre (≥ 16 tirages).
       </p>

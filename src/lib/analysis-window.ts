@@ -34,7 +34,7 @@ export const WINDOW_PRESET_LABELS: Record<WindowPreset, string> = {
   months_12: "12 mois",
   year: "Année civile",
   formula: "Formule actuelle (12 ★)",
-  all: "Tout l’historique chargé",
+  all: "Tout l’historique",
   custom: "Personnalisé",
 }
 

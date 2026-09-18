@@ -2,6 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STARTUP = (ROOT / "src/components/startup-status.tsx").read_text(encoding="utf-8")
+NAV = (ROOT / "src/lib/nav.ts").read_text(encoding="utf-8")
 
 
 def test_site_header_uses_a_burger_menu_everywhere() -> None:
@@ -13,16 +14,19 @@ def test_site_header_uses_a_burger_menu_everywhere() -> None:
     assert "<StartupStatus />" in header
     assert "<QuitButton />" in header
     assert "<CaptureButton />" in header
+    assert "<GlossaryButton />" in header
     assert "current.label" in header
 
 
 def test_nav_items_are_grouped_in_the_drawer() -> None:
-    assert 'group: "Archives"' in STARTUP
-    assert 'group: "Laboratoires"' in STARTUP
-    assert 'group: "Assistants"' in STARTUP
-    assert 'group: "Système"' in STARTUP
-    assert 'NAV_GROUP_ORDER = ["Archives", "Laboratoires", "Assistants", "Système"]' in STARTUP
-    assert "/brain/specialistes" in STARTUP
-    nav = STARTUP.split("function NavLinks", 1)[1].split("export function SiteHeader", 1)[0]
+    assert 'id: "archive"' in NAV
+    assert 'id: "lecture"' in NAV
+    assert 'id: "grilles"' in NAV
+    assert 'id: "assistants"' in NAV
+    assert 'id: "systeme"' in NAV
+    assert "NAV_GROUPS" in STARTUP
+    assert "/brain/specialistes" in NAV
+    nav = STARTUP.split("function FamilyLinks", 1)[1].split("export function SiteHeader", 1)[0]
     assert "whitespace-nowrap text-xs" not in nav
-    assert "NAV_GROUP_ORDER.map" in nav
+    assert "NAV_GROUPS.map" in nav
+    assert 'aria-label="Familles"' in nav

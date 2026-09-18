@@ -27,7 +27,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Synchro — Archives EuroMillions",
   description:
-    "Tous les tirages EuroMillions 2026, filtrables par mois et par numéros, avec export CSV.",
+    "Archives EuroMillions FDJ : tirages filtrables, laboratoires d’analyse et outils de grilles, avec export CSV.",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "32x32" },
@@ -49,6 +49,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
+        <a
+          href="#contenu"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-3 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:text-foreground"
+        >
+          Aller au contenu
+        </a>
         <HelpModeProvider>
           <CaptureProvider>
             <SiteHeader />

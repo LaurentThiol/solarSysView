@@ -21,10 +21,10 @@ import { TrendPanel } from "@/components/analysis/trend-panel"
 import { ViewPanel } from "@/components/analysis/view-panel"
 import { VolatilityPanel } from "@/components/analysis/volatility-panel"
 import { useRegisterCapture } from "@/components/capture"
-import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
-import { TabScroller } from "@/components/tab-scroller"
+import { LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
 import { WindowBar } from "@/components/analysis/window-bar"
 import { CurveName } from "@/components/chartisme/curve-thumb"
+import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -61,6 +61,8 @@ import {
   asWindowPreset,
   readLabSearch,
 } from "@/lib/lab-search"
+import { ERA_LABELS } from "@/lib/copy"
+import { useLabTab } from "@/lib/use-lab-tab"
 import { useDraws } from "@/lib/use-draws"
 
 const TECH_TABS = [
@@ -184,7 +186,7 @@ const DRAW_TABS = [
     label: "Probabilités",
     help: {
       title: "Probabilités",
-      body: "Rangs officiels 5/50 + 2/12. Indépendant de la fenêtre temporelle (139 838 160 grilles).",
+      body: "Rangs officiels 5/50 + 2/12. Indépendant de la fenêtre de travail (139 838 160 grilles).",
     },
   },
   {
@@ -225,44 +227,12 @@ const MEASURE_BAR_HELP: HelpCopy = {
 }
 
 type TabId = (typeof TECH_TABS)[number]["id"] | (typeof DRAW_TABS)[number]["id"]
-
-function TabRow({
-  items,
-  tab,
-  setTab,
-  label,
-}: {
-  items: readonly { id: string; label: string; help: HelpCopy }[]
-  tab: string
-  setTab: (id: TabId) => void
-  label: string
-}) {
-  return (
-    <TabScroller label={label}>
-      {items.map((item) => (
-        <span key={item.id} className="inline-flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setTab(item.id as TabId)}
-            className={`rounded-full border px-3 py-1 text-xs ${
-              tab === item.id
-                ? "border-primary bg-primary/15 text-foreground"
-                : "border-border text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {item.label}
-          </button>
-          <HelpTip {...item.help} />
-        </span>
-      ))}
-    </TabScroller>
-  )
-}
+const ANALYSE_TAB_IDS = [...TECH_TABS, ...DRAW_TABS].map((item) => item.id) as TabId[]
 
 export function AnalysisLab() {
   const [era, setEra] = useState<"current" | "all">("current")
   const { draws, source, loading } = useDraws(era)
-  const [tab, setTab] = useState<TabId>("vue")
+  const [tab, setTab] = useLabTab(ANALYSE_TAB_IDS, "vue")
   const [variable, setVariable] = useState<VariableName>("sum")
   const [windowSize, setWindowSize] = useState(20)
   const [ball, setBall] = useState(7)
@@ -458,12 +428,12 @@ export function AnalysisLab() {
           <Select value={era} onValueChange={(v) => setEra(v as "current" | "all")}>
             <SelectTrigger className="w-full sm:w-56" aria-label="Ère">
               <span className="flex flex-1 text-left">
-                {era === "all" ? "Archive : tout l’historique" : "Archive : formule actuelle (12 ★)"}
+                {era === "all" ? `Archive : ${ERA_LABELS.all}` : `Archive : ${ERA_LABELS.current}`}
               </span>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="current">Archive : formule actuelle (12 ★)</SelectItem>
-              <SelectItem value="all">Archive : tout l’historique</SelectItem>
+              <SelectItem value="current">Archive : {ERA_LABELS.current}</SelectItem>
+              <SelectItem value="all">Archive : {ERA_LABELS.all}</SelectItem>
             </SelectContent>
           </Select>
         </LabelHelp>
@@ -573,9 +543,18 @@ export function AnalysisLab() {
         </div>
       </div>
 
-      <TabRow items={TECH_TABS} tab={tab} setTab={setTab} label="Analyse technique" />
-      <TabRow items={DRAW_TABS} tab={tab} setTab={setTab} label="Tirage" />
+      <PillTabs
+        idPrefix="analyse"
+        label="Analyse"
+        value={tab}
+        onValueChange={setTab}
+        groups={[
+          { label: "Technique", items: TECH_TABS },
+          { label: "Tirage", items: DRAW_TABS },
+        ]}
+      />
 
+      <PillTabPanel idPrefix="analyse" tab={tab}>
       {tab === "vue" ? (
         <ViewPanel
           work={work}
@@ -674,6 +653,7 @@ export function AnalysisLab() {
       {tab === "dependence" ? <DependencePanel draws={work} windowSize={windowSize} /> : null}
       {tab === "proba" ? <ProbaPanel /> : null}
       {tab === "memo" ? <MemoPanel /> : null}
+      </PillTabPanel>
     </div>
   )
 }

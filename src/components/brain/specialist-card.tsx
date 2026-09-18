@@ -86,8 +86,8 @@ export function SpecialistGlyph({ kind, className }: { kind: TargetGlyphKind; cl
 function SkillMeters({ record }: { record: SpecialistRecord }) {
   const rows = skillWindows(record)
   return (
-    <div className="flex flex-col gap-1.5" aria-label="Skill vs hasard, fenêtres 20 50 100">
-      <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">Skill vs hasard</p>
+    <div className="flex flex-col gap-1.5" aria-label="Score vs hasard, fenêtres 20 50 100">
+        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">Score vs hasard</p>
       {rows.map((row) => (
         <div key={row.key} className="grid grid-cols-[1.6rem_1fr_2.6rem] items-center gap-1.5">
           <span className="text-[10px] text-muted-foreground">{row.key}</span>
@@ -124,7 +124,7 @@ function ForecastPanel({ record }: { record: SpecialistRecord }) {
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">Forecast t+1</p>
+        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">Prévision t+1</p>
         {view.abstain ? (
           <span className="rounded-full border border-border px-1.5 py-px text-[10px] text-muted-foreground">s’abstient</span>
         ) : null}

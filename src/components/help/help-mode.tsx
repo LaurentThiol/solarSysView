@@ -11,6 +11,8 @@ import {
   type ReactNode,
 } from "react"
 
+import { StatusPill } from "@/components/status-pill"
+
 const STORAGE_KEY = "synchro-help-mode"
 
 const listeners = new Set<() => void>()
@@ -105,22 +107,21 @@ export function useHelpMode() {
 export function HelpModeToggle() {
   const { enabled, setEnabled } = useHelpMode()
   return (
-    <button
-      type="button"
+    <StatusPill
+      tone={enabled ? "warn" : "off"}
+      dot={false}
       aria-pressed={enabled}
       aria-label="Afficher ou masquer l’aide contextuelle"
-      title="Aide : points d’exclamation sur les champs et boutons. Raccourci « ? »."
+      title="Aide : points d’exclamation sur les champs et boutons. Le Glossaire (à côté) fige le vocabulaire. Raccourci « ? »."
       onClick={() => setEnabled(!enabled)}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium tracking-wide ${
-        enabled
-          ? "border-amber-400/50 bg-amber-400/15 text-amber-200"
-          : "border-border bg-muted/40 text-muted-foreground"
-      }`}
-    >
-      <span className="inline-flex size-3.5 items-center justify-center rounded-full border border-current text-[9px] font-bold leading-none">
-        !
-      </span>
-      <span className="hidden sm:inline">Aide</span>
-    </button>
+      label={
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-flex size-3.5 items-center justify-center rounded-full border border-current text-[9px] font-bold leading-none">
+            !
+          </span>
+          <span className="hidden sm:inline">Aide</span>
+        </span>
+      }
+    />
   )
 }

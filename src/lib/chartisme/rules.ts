@@ -376,7 +376,7 @@ export function evaluateAll(
 
 function breakoutLabel(state: string) {
   if (state === "confirmed") return "cassure confirmée"
-  if (state === "fake") return "fake breakout"
+  if (state === "fake") return "fausse cassure"
   if (state === "pending") return "en formation"
   return "toute cassure"
 }

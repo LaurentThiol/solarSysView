@@ -140,8 +140,8 @@ export function HelpTip({
         ref={btnRef}
         type="button"
         className={cn(
-          "inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-amber-400/70 bg-amber-400/20 text-[10px] font-bold leading-none text-amber-100 transition-colors hover:bg-amber-400/35 focus-visible:ring-2 focus-visible:ring-amber-300/60 focus-visible:outline-none",
-          open && "bg-amber-400/45 ring-2 ring-amber-300/40",
+          "inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-warn/70 bg-warn/20 text-[10px] font-bold leading-none text-warn transition-colors hover:bg-warn/35 focus-visible:ring-2 focus-visible:ring-warn/60 focus-visible:outline-none",
+          open && "bg-warn/45 ring-2 ring-warn/40",
           className
         )}
         aria-label={`Aide : ${title}`}
@@ -172,7 +172,7 @@ export function HelpTip({
                 width: coords.width,
                 maxHeight: coords.maxHeight,
               }}
-              className="fixed z-[200] overflow-auto rounded-lg border border-amber-400/35 bg-popover p-3 text-popover-foreground shadow-xl ring-1 ring-amber-400/20"
+              className="fixed z-[200] overflow-auto rounded-lg border border-warn/35 bg-popover p-3 text-popover-foreground shadow-xl ring-1 ring-warn/20"
             >
               <p className="text-sm font-medium text-foreground">{title}</p>
               <HelpBody body={body} />
@@ -253,6 +253,10 @@ export function HelpWrap({
   children: ReactNode
   className?: string
 }) {
+  const { enabled } = useHelpMode()
+  if (!enabled) {
+    return <span className={className}>{children}</span>
+  }
   return (
     <span className={cn("relative inline-flex pr-2.5 pt-1", className)}>
       {children}

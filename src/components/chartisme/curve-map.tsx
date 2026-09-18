@@ -111,7 +111,7 @@ export function CurveMap({
   const [progress, setProgress] = useState<number | null>(null)
   const [onlyCarrying, setOnlyCarrying] = useState(false)
   // `null` suit la plus longue échelle balayée plutôt que d'en figer une : la
-  // fenêtre d'étude peut changer d'échelles sous la carte.
+  // fenêtre de travail peut changer d'échelles sous la carte.
   const [chosen, setChosen] = useState<number | null>(null)
   const cancelled = useRef(false)
 
@@ -274,7 +274,7 @@ export function CurveMap({
 
         {!length ? (
           <p className="text-sm text-muted-foreground">
-            Aucune échelle balayée : rien à mesurer. Élargis la fenêtre d’étude.
+            Aucune échelle balayée : rien à mesurer. Élargissez la fenêtre de travail.
           </p>
         ) : null}
 

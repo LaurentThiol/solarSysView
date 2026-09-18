@@ -1,13 +1,43 @@
 import type { ReactNode } from "react"
 
+import { FDJ_ARCHIVE_URL } from "@/lib/copy"
 import { cn } from "@/lib/utils"
 
-const FDJ_HREF =
-  "https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique"
+export function PageNote({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <p
+      className={cn(
+        "mt-3 max-w-2xl rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground",
+        className
+      )}
+    >
+      {children}
+    </p>
+  )
+}
+
+export function FdjFooter() {
+  return (
+    <footer className="border-t border-border">
+      <p className="mx-auto max-w-6xl px-4 py-6 text-xs text-muted-foreground sm:px-6">
+        Archives FDJ :{" "}
+        <a
+          className="underline underline-offset-2 hover:text-foreground"
+          href={FDJ_ARCHIVE_URL}
+        >
+          fdj.fr
+        </a>
+        .
+      </p>
+    </footer>
+  )
+}
 
 export function PageShell({
   title,
+  subtitle,
   description,
+  note,
   notice,
   children,
   footer = true,
@@ -15,26 +45,25 @@ export function PageShell({
   className,
 }: {
   title?: ReactNode
+  subtitle?: ReactNode
   description?: ReactNode
+  note?: ReactNode
   notice?: ReactNode
   children: ReactNode
   footer?: boolean
   compact?: boolean
   className?: string
 }) {
-  const hasIntro = title != null || description != null || notice != null
+  const intro = subtitle ?? description
+  const aside = note ?? notice
+  const hasIntro = title != null || intro != null || aside != null
   return (
-    <div
-      className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip",
-        className
-      )}
-    >
+    <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip", className)}>
       {hasIntro ? (
         <div
           className={cn(
             "mx-auto w-full min-w-0 max-w-6xl px-4 sm:px-6",
-            compact ? "py-3" : "py-6 sm:py-8"
+            compact ? "pt-3 pb-0" : "pt-6 sm:pt-8 pb-0"
           )}
         >
           {title != null ? (
@@ -47,40 +76,22 @@ export function PageShell({
               {title}
             </h1>
           ) : null}
-          {description != null ? (
-            <div className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              {description}
-            </div>
+          {intro != null ? (
+            <div className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{intro}</div>
           ) : null}
-          {notice != null ? (
-            <div className="mt-3 max-w-2xl rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
-              {notice}
-            </div>
-          ) : null}
+          {aside != null ? <PageNote>{aside}</PageNote> : null}
         </div>
       ) : null}
       <main
+        id="contenu"
         className={cn(
           "mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 pb-12 sm:px-6",
-          !hasIntro && "pt-6"
+          hasIntro ? "pt-6" : "pt-6"
         )}
       >
         {children}
       </main>
-      {footer ? (
-        <footer className="border-t border-border">
-          <p className="mx-auto max-w-6xl px-4 py-6 text-xs text-muted-foreground sm:px-6">
-            Archives FDJ :{" "}
-            <a
-              className="underline underline-offset-2 hover:text-foreground"
-              href={FDJ_HREF}
-            >
-              fdj.fr
-            </a>
-            .
-          </p>
-        </footer>
-      ) : null}
+      {footer ? <FdjFooter /> : null}
     </div>
   )
 }

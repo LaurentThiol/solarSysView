@@ -17,6 +17,7 @@ import { anticipateLocal } from "@/lib/morpho/anticipation"
 import { clipStatus, cosine, embedGlyph, loadClip } from "@/lib/morpho/clip"
 import { analyzeDraw, neighborsOf, type Portrait } from "@/lib/morpho/geometry"
 import { MOTIF_IDS, labelOf } from "@/lib/morpho/lexicon"
+import { ERA_LABELS } from "@/lib/copy"
 import {
   draftRuleFromState,
   normalizeRule,
@@ -355,12 +356,12 @@ export function MorphoLab() {
           <Select value={era} onValueChange={(v) => setEra(v as "current" | "all")}>
             <SelectTrigger className="w-full sm:w-56" aria-label="Ère">
               <span className="flex flex-1 text-left">
-                {era === "all" ? "Tout l’historique" : "Formule actuelle (12 ★)"}
+                {era === "all" ? ERA_LABELS.all : ERA_LABELS.current}
               </span>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="current">Formule actuelle (12 ★)</SelectItem>
-              <SelectItem value="all">Tout l’historique</SelectItem>
+              <SelectItem value="current">{ERA_LABELS.current}</SelectItem>
+              <SelectItem value="all">{ERA_LABELS.all}</SelectItem>
             </SelectContent>
           </Select>
         </LabelHelp>

@@ -65,8 +65,8 @@ import { cn } from "@/lib/utils"
 
 const HELP = {
   banner: {
-    title: "histoJeux",
-    body: "Journal des grilles réellement jouées, une date de tirage (mardi/vendredi) par ligne. Après synchro FDJ, le rang et les correspondances se calculent tout seuls. Ce n’est pas un pronostic : chaque tirage reste indépendant.",
+    title: "Journal",
+    body: "Journal (histoJeux) des grilles réellement jouées, une date de tirage (mardi/vendredi) par ligne. Après synchro FDJ, le rang et les correspondances se calculent tout seuls. Ce n’est pas un pronostic : chaque tirage reste indépendant.",
   },
   playDate: {
     title: "Tirage visé",
@@ -159,7 +159,7 @@ function MiniPicker({
             className={cn(
               "flex size-7 items-center justify-center rounded-full text-xs font-semibold tabular-nums sm:size-8",
               starSet.has(value)
-                ? "bg-[oklch(0.78_0.14_75)] text-[oklch(0.18_0.04_260)]"
+                ? "bg-star text-primary-foreground"
                 : "bg-muted text-muted-foreground hover:text-foreground"
             )}
           >
@@ -458,7 +458,7 @@ export function HistoJeuxPanel() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-        <TitleHelp help={HELP.banner}>histoJeux</TitleHelp> consigne les grilles
+        <TitleHelp help={HELP.banner}>Journal</TitleHelp> consigne les grilles
         jouées pour un tirage donné, puis relit le résultat officiel. Mes grilles
         (Combinaisons) reste la bibliothèque de modèles.
       </p>

@@ -104,7 +104,7 @@ const BAR_MODES: Array<{ value: BarMode; label: string }> = [
 ]
 
 const VIEW_MODES: Array<{ value: ViewMode; label: string }> = [
-  { value: "all", label: "Toutes les lectures — le badge dit la rareté" },
+  { value: "all", label: "Toutes les figures — le badge dit la rareté" },
   { value: "rare", label: "Seulement les rares — l’ancien filtre" },
 ]
 
@@ -175,7 +175,7 @@ export function ChartismeLab() {
 
   const specs = useMemo(() => curveSpecs(), [])
 
-  // La fenêtre d'étude découpe la zone lue ; le contexte qui la précède reste
+  // La fenêtre de travail découpe la zone lue ; le contexte qui la précède reste
   // calculé pour que `delay`, l'activité et la MM20 ne repartent pas de zéro au
   // premier tirage découpé.
   const study = useMemo(() => {
@@ -566,9 +566,9 @@ export function ChartismeLab() {
             </LabelHelp>
 
             <LabelHelp
-              label="Fenêtre d’étude"
+              label="Fenêtre de travail"
               help={{
-                title: "Fenêtre d’étude",
+                title: "Fenêtre de travail",
                 body: "La zone de tirages qu'on regarde — les 20, 50, 100 derniers, une durée, l'année, tout. Les tirages qui précèdent restent calculés en contexte (le retard d'une boule et la MM20 de la règle d'or ne repartent pas de zéro au premier tirage découpé), mais aucune figure entièrement contenue dans ce contexte n'est listée.",
               }}
             >
@@ -582,7 +582,7 @@ export function ChartismeLab() {
                   setLastN("")
                 }}
               >
-                <SelectTrigger className="w-full" aria-label="Fenêtre d’étude">
+                <SelectTrigger className="w-full" aria-label="Fenêtre de travail">
                   <span className="flex flex-1 text-left">
                     {STUDY_PRESET_LABELS[preset]}
                   </span>
@@ -621,7 +621,7 @@ export function ChartismeLab() {
               label="Échelle"
               help={{
                 title: "Échelle de la fenêtre",
-                body: `Longueur des figures cherchées, distincte de la fenêtre d'étude. Une tête-épaules sur 30 tirages et un range sur 120 ne se lisent pas à la même échelle. « Auto » déduit trois échelles de la fenêtre — sa longueur, sa moitié, son quart — bornées en bas par ${MIN_STUDY_DRAWS} tirages, la plus courte figure détectable, et en haut par ${MAX_CYCLE}, au-delà desquels une figure ne décrit plus un cycle mais la longueur d'archive dont on dispose. Une seule lecture est gardée par zone, les autres passent en alternatives. Forcer une échelle plus longue que la fenêtre répond à une autre question : quelle figure longue s'achève ici.`,
+                body: `Longueur des figures cherchées, distincte de la fenêtre de travail. Une tête-épaules sur 30 tirages et un range sur 120 ne se lisent pas à la même échelle. « Auto » déduit trois échelles de la fenêtre — sa longueur, sa moitié, son quart — bornées en bas par ${MIN_STUDY_DRAWS} tirages, la plus courte figure détectable, et en haut par ${MAX_CYCLE}, au-delà desquels une figure ne décrit plus un cycle mais la longueur d'archive dont on dispose. Une seule détection est gardée par zone, les autres passent en alternatives. Forcer une échelle plus longue que la fenêtre répond à une autre question : quelle figure longue s'achève ici.`,
               }}
             >
               <Select
@@ -647,7 +647,7 @@ export function ChartismeLab() {
               label="Seuil de sélection"
               help={{
                 title: "Seuil de sélection",
-                body: `Deux façons de dire quelle lecture est distinctive. « Confiance » pose un nombre : la qualité de l'ajustement géométrique. « Rareté visée » le cherche : on donne la part de fenêtres de bruit qu'on accepte, et chaque figure reçoit le seuil qui l'obtient sur cette courbe — un double creux rare n'est plus jugé au même nombre que les triangles, plus bavards. Ce seuil badge les lectures, il ne les efface plus : l'affichage « Toutes les lectures » montre ce que les détecteurs voient, « Seulement les rares » retrouve l'ancien filtre. Quand aucun seuil lisible n'atteint la cible — au-delà de ${MAX_THRESHOLD.toFixed(
+                body: `Deux façons de dire quelle figure est distinctive. « Confiance » pose un nombre : la qualité de l'ajustement géométrique. « Rareté visée » le cherche : on donne la part de fenêtres de bruit qu'on accepte, et chaque figure reçoit le seuil qui l'obtient sur cette courbe — un double creux rare n'est plus jugé au même nombre que les triangles, plus bavards. Ce seuil badge les figures, il ne les efface plus : l'affichage « Toutes les figures » montre ce que les détecteurs voient, « Seulement les rares » retrouve l'ancien filtre. Quand aucun seuil lisible n'atteint la cible — au-delà de ${MAX_THRESHOLD.toFixed(
                   2
                 )} — la figure n'est jamais rare, mais elle reste visible en lecture complète.`,
               }}
@@ -673,7 +673,7 @@ export function ChartismeLab() {
                 label={`Taux de base visé · ${Math.round(targetRate * 100)} %`}
                 help={{
                   title: "Taux de base visé",
-                  body: "La part des fenêtres de bruit qu'on accepte, figure par figure. À 20 %, une lecture « rare » est de celles que le hasard ne produit que dans une fenêtre sur cinq — pour ce motif, sur cette courbe, à cette échelle. Le bruit est fait des mêmes tirages remis dans un ordre quelconque. Ce curseur ne vide plus le tracé : il change le badge. Pour ne garder que les rares, passe l'affichage sur « Seulement les rares ».",
+                  body: "La part des fenêtres de bruit qu'on accepte, figure par figure. À 20 %, une figure « rare » est de celles que le hasard ne produit que dans une fenêtre sur cinq — pour ce motif, sur cette courbe, à cette échelle. Le bruit est fait des mêmes tirages remis dans un ordre quelconque. Ce curseur ne vide plus le tracé : il change le badge. Pour ne garder que les rares, passez l'affichage sur « Seulement les rares ».",
                 }}
               >
                 <Input
@@ -707,15 +707,15 @@ export function ChartismeLab() {
             <LabelHelp
               label="Affichage"
               help={{
-                title: "Affichage des lectures",
-                body: "Les détecteurs voient souvent des formes que le hasard produit aussi. « Toutes les lectures » les montre, le badge dit lesquelles sont distinctives à la rareté visée — c'est ce qui empêche le tracé de rester vide quand on monte le taux d'acceptation. « Seulement les rares » est l'ancien filtre, qui ne gardait que les lectures au-dessus du seuil et laissait croire que rien n'avait été vu.",
+                title: "Affichage des figures",
+                body: "Les détecteurs voient souvent des formes que le hasard produit aussi. « Toutes les figures » les montre, le badge dit lesquelles sont distinctives à la rareté visée — c’est ce qui empêche le tracé de rester vide quand on monte le taux d'acceptation. « Seulement les rares » est l'ancien filtre, qui ne gardait que les détections au-dessus du seuil et laissait croire que rien n'avait été vu.",
               }}
             >
               <Select
                 value={viewMode}
                 onValueChange={(value) => setViewMode((value as ViewMode) ?? "all")}
               >
-                <SelectTrigger className="w-full" aria-label="Affichage des lectures">
+                <SelectTrigger className="w-full" aria-label="Affichage des figures">
                   <span className="flex flex-1 text-left">
                     {VIEW_MODES.find((mode) => mode.value === viewMode)?.label}
                   </span>
@@ -769,8 +769,8 @@ export function ChartismeLab() {
           ) : null}
           {!loading && !curve ? (
             <p className="text-sm text-muted-foreground">
-              Aucun tirage dans cette fenêtre — élargis la fenêtre d’étude ou
-              change d’archive.
+              Aucun tirage dans cette fenêtre — élargissez la fenêtre de travail ou
+              changez d’archive.
             </p>
           ) : null}
 
@@ -783,7 +783,7 @@ export function ChartismeLab() {
                   <span>· {study.contextCount} en contexte</span>
                 ) : null}
                 <span>
-                  · {hits.length} lecture{hits.length > 1 ? "s" : ""}
+                  · {hits.length} figure{hits.length > 1 ? "s" : ""}
                   {viewMode === "rare" ? " rare" : ""}
                   {hits.length > 1 && viewMode === "rare" ? "s" : ""}
                 </span>
@@ -806,7 +806,7 @@ export function ChartismeLab() {
                       className="cursor-pointer gap-1 hover:bg-muted"
                       title={
                         count > 1
-                          ? `${count} lectures ${label} — clic pour parcourir`
+                          ? `${count} figures ${label} — clic pour parcourir`
                           : `Sélectionner ${label}`
                       }
                       onClick={() => {
@@ -884,7 +884,7 @@ export function ChartismeLab() {
                         <Badge variant={outcomeVariant(hit)}>{outcomeLabel(hit)}</Badge>
                         {hit.breakout ? (
                           <Badge variant={hit.breakout.confirmed ? "default" : "destructive"}>
-                            {hit.breakout.confirmed ? "cassure confirmée" : "fake breakout"}
+                            {hit.breakout.confirmed ? "cassure confirmée" : "fausse cassure"}
                             {` · activité ${hit.breakout.activity_ratio.toFixed(2)}× MM20`}
                           </Badge>
                         ) : (
@@ -906,7 +906,7 @@ export function ChartismeLab() {
                       </p>
                       {hit.alternatives?.length ? (
                         <p className="mt-1 text-muted-foreground">
-                          Autres lectures de la zone :{" "}
+                          Autres figures de la zone :{" "}
                           {hit.alternatives
                             .map((alt) => `${alt.label} (${alt.confidence.toFixed(2)})`)
                             .join(", ")}
@@ -919,7 +919,7 @@ export function ChartismeLab() {
                 ) : fitNote ? null : annotatedHits.length && viewMode === "rare" ? (
                   <div className="space-y-2 text-sm text-muted-foreground">
                     <p>
-                      {annotatedHits.length} lecture
+                      {annotatedHits.length} figure
                       {annotatedHits.length > 1 ? "s" : ""} géométrique
                       {annotatedHits.length > 1 ? "s" : ""}, aucune assez rare à{" "}
                       {barMode === "rarity"
@@ -929,13 +929,13 @@ export function ChartismeLab() {
                       filtre ne garde que ce que le hasard produit peu.
                     </p>
                     <Button size="sm" variant="outline" onClick={() => setViewMode("all")}>
-                      Voir les {annotatedHits.length} lectures
+                      Voir les {annotatedHits.length} figures
                     </Button>
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Aucune forme géométrique dans cette fenêtre. Change d’échelle
-                    ou élargis la fenêtre d’étude.
+                    Aucune forme géométrique dans cette fenêtre. Changez d’échelle
+                    ou élargissez la fenêtre de travail.
                   </p>
                 )}
               </div>

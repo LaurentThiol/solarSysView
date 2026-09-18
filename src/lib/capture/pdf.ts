@@ -1,4 +1,5 @@
 import { labLabel, type DiagnosticSnapshot } from "@/lib/capture/snapshot"
+import { tabLabel } from "@/lib/copy"
 import { threadFileSlug, type IaThread } from "@/lib/ia/threads"
 import { providerLabel } from "@/lib/ia/models"
 import { groupIaTurns } from "@/lib/ia/turns"
@@ -13,7 +14,7 @@ function escapeHtml(value: string) {
 
 function metaRows(snapshot: DiagnosticSnapshot) {
   const rows: Array<[string, string]> = [
-    ["Laboratoire", `${labLabel(snapshot.lab)}${snapshot.tab ? ` · ${snapshot.tab}` : ""}`],
+    ["Section", `${labLabel(snapshot.lab)}${tabLabel(snapshot.tab) ? ` · ${tabLabel(snapshot.tab)}` : ""}`],
     ["Route", snapshot.route],
     ["Capturé", snapshot.capturedAt],
     ["Git", snapshot.gitSha || "—"],

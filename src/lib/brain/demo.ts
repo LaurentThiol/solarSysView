@@ -41,7 +41,7 @@ export const DEMO_STEPS = [
     hint: "Un handle par lab + un spécialiste s’il existe",
     target: "library",
     title: "Les noms sur la table",
-    body: "Un handle par lab : @rsi, @ete, @fft, @cluster, @score, plus un spécialiste s’il est déjà sauvé. Sans épingle, Brain n’a rien à lire. L’étoile, c’est le suivi — on y vient juste après.",
+    body: "Un handle par lab : @rsi, @ete, @fft, @cluster, @score, plus un spécialiste s’il est déjà enregistré. Sans épingle, Brain n’a rien à lire. L’étoile, c’est le suivi — on y vient juste après.",
   },
   {
     id: "table",

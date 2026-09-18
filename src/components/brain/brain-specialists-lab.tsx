@@ -10,6 +10,7 @@ import { useRegisterCapture } from "@/components/capture"
 import { Badge } from "@/components/ui/badge"
 import type { CatalogEntry } from "@/lib/brain/catalog"
 import { INDEPENDENCE_DISCLAIMER } from "@/lib/capture/snapshot"
+import { ERA_LABELS } from "@/lib/copy"
 import { useDraws } from "@/lib/use-draws"
 
 export function BrainSpecialistsLab() {
@@ -51,13 +52,13 @@ export function BrainSpecialistsLab() {
           <BrainMascot mood="idle" size="lg" />
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-medium tracking-[0.18em] text-primary uppercase">Brain</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Spécialistes</h1>
+            <p className="mt-1 text-xl font-semibold tracking-tight">Atelier des réseaux</p>
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-              Un réseau, une série nommée (parité, somme…). Forecast t+1, skill vs le hasard. Jamais une grille 5+2.
-              Un pop-up t’arrête après chaque champ : Suivant ou Annuler. Sans lancer l’entraînement.
+              Un réseau, une série nommée (parité, somme…). Prévision t+1, score vs le hasard. Jamais une grille 5+2.
+              Un pop-up vous arrête après chaque champ : Suivant ou Annuler. Sans lancer l’entraînement.
             </p>
             <ol className="mt-3 flex flex-wrap gap-2 text-xs">
-              <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">1. Nomme la question</li>
+              <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">1. Nommez la question</li>
               <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">2. Entraîne</li>
               <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">3. Épingle pour Brain</li>
             </ol>
@@ -75,8 +76,8 @@ export function BrainSpecialistsLab() {
                 value={era}
                 onChange={(event) => setEra(event.target.value as "current" | "all")}
               >
-                <option value="current">formule actuelle</option>
-                <option value="all">tout</option>
+                <option value="current">{ERA_LABELS.current}</option>
+                <option value="all">{ERA_LABELS.all}</option>
               </select>
             </label>
             <Link

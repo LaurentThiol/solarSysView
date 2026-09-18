@@ -53,15 +53,15 @@ const DEFAULT_INDICATORS = [...DEMO_SPECIALIST.indicators]
 const HELP = {
   title: {
     title: "Spécialistes",
-    body: "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté sur les 20/50/100 derniers. Le skill dit s’il bat le hasard. Jamais une grille 5+2.",
+    body: "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté sur les 20/50/100 derniers. Le score vs hasard dit s’il bat le hasard. Jamais une grille 5+2.",
   },
   name: {
     title: "Nom",
-    body: "Libellé humain. Il devient le handle @specialist.paire-impair, sauvé dans .brain/specialists/.",
+    body: "Libellé humain. Il devient le handle @specialist.paire-impair, enregistré dans .brain/specialists/.",
   },
   target: {
     title: "Cible",
-    body: "Série à forecast : parité (0–5 pairs), somme, étendue… Pas une grille. Le réseau ne voit que cette question.",
+    body: "Série à prévoir : parité (0–5 pairs), somme, étendue… Pas une grille. Le réseau ne voit que cette question.",
   },
   task: {
     title: "Forme",
@@ -84,16 +84,16 @@ const HELP = {
     body: "Consignes collées à Brain : comment lire ce spécialiste, quand s’abstenir. Obligatoire.",
   },
   force: {
-    title: "Sauver même si skill ≤ 0",
-    body: "Par défaut on ne sauve pas un réseau qui ne bat pas le hasard. Coche seulement pour inspecter un échec.",
+    title: "Enregistrer même si score ≤ 0",
+    body: "Par défaut on n’enregistre pas un réseau qui ne bat pas le hasard. Cochez seulement pour inspecter un échec.",
   },
   train: {
     title: "Entraîner",
-    body: "Ère formule, score sur 20 / 50 / 100. CPU, une minute tout au plus. N’écrit que si le skill est > 0, sauf force.",
+    body: "Ère formule, score sur 20 / 50 / 100. CPU, une minute tout au plus. N’écrit que si le score vs hasard est > 0, sauf force.",
   },
   saved: {
-    title: "Sauvés",
-    body: "Réseaux déjà écrits. Réinférer = nouveau forecast t+1. Épingler = Brain le voit. Supprimer retire le dossier.",
+    title: "Enregistrés",
+    body: "Réseaux déjà écrits. Réinférer = nouvelle prévision t+1. Épingler = Brain le voit. Supprimer retire le dossier.",
   },
   pin: {
     title: "Épingler",
@@ -101,7 +101,7 @@ const HELP = {
   },
   infer: {
     title: "Réinférer",
-    body: "Recalcule le forecast t+1 sur l’ère affichée, sans réentraîner.",
+    body: "Recalcule la prévision t+1 sur l’ère affichée, sans réentraîner.",
   },
 }
 
@@ -389,7 +389,7 @@ export function BrainSpecialists({
               ) : null}
             </CardTitle>
             <CardDescription>
-              Un réseau, une question. Roster d’abord : skill, verdict, forecast. L’atelier entraîne un nouveau
+              Un réseau, une question. Roster d’abord : score vs hasard, verdict, prévision. L’atelier entraîne un nouveau
               spécialiste.{" "}
               {dedicated ? (
                 <Link className="text-primary underline-offset-2 hover:underline" href="/brain">
@@ -418,7 +418,7 @@ export function BrainSpecialists({
           title="Démo Spécialistes"
           help={{
             title: "Démo Spécialistes",
-            body: `${DEMO_SPECIALIST_NOTE} Un pop-up t’arrête après chaque étape : Suivant ou Annuler. Ollama n’est pas requis.`,
+            body: `${DEMO_SPECIALIST_NOTE} Un pop-up vous arrête après chaque étape : Suivant ou Annuler. Ollama n’est pas requis.`,
           }}
           steps={DEMO_SPECIALIST_STEPS}
           step={demoStep}
@@ -426,7 +426,7 @@ export function BrainSpecialists({
           done={demoDone}
           waiting={demoWaiting}
           idleHint="Formulaire Paire impair, pop-up Suivant/Annuler, épinglage s’il existe. Sans entraîner."
-          doneHint="Terminée : le formulaire, les sauvés et l’épingle restent sous tes yeux."
+          doneHint="Terminée : le formulaire, les enregistrés et l’épingle restent sous vos yeux."
           onStart={() => void runDemo()}
           onStop={stopDemo}
           startLabel="Lancer la démo"
@@ -438,7 +438,7 @@ export function BrainSpecialists({
           className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["saved"], demoWaiting))}
         >
           <p className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-medium">
-            Sauvés
+            Enregistrés
             <HelpTip {...HELP.saved} />
           </p>
           {items.length === 0 ? (
@@ -627,7 +627,7 @@ export function BrainSpecialists({
             >
               <input type="checkbox" checked={force} onChange={(event) => setForce(event.target.checked)} />
               <span className="inline-flex items-center gap-1">
-                Sauver même si le skill ≤ 0 (ne bat pas le hasard)
+                Enregistrer même si le score vs hasard ≤ 0
                 <HelpTip {...HELP.force} />
               </span>
             </label>
@@ -661,8 +661,8 @@ export function BrainSpecialists({
         {last && !last.saved ? (
           <div className="rounded-xl border border-primary/30 bg-primary/8 px-3 py-2 text-xs">
             <p className="font-medium">
-              @{last.handle} · skill {formatSkill(last.skill ?? skillOf(last, "50"))} · {last.verdict ?? "—"} · non
-              sauvé
+              @{last.handle} · score vs hasard {formatSkill(last.skill ?? skillOf(last, "50"))} · {last.verdict ?? "—"} · non
+              enregistré
             </p>
             <p className="mt-1 text-muted-foreground">
               20 : {formatSkill(skillOf(last, "20"))} · 50 : {formatSkill(skillOf(last, "50"))} · 100 :{" "}

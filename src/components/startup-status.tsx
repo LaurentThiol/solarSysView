@@ -2,13 +2,15 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { LogOut, Menu, X } from "lucide-react"
 
 import { CaptureButton } from "@/components/capture"
-import { HelpModeToggle, HelpWrap, WithHelp } from "@/components/help"
+import { GlossaryButton, HelpModeToggle, HelpWrap, WithHelp } from "@/components/help"
+import { StatusPill, worstStatusTone, type StatusTone } from "@/components/status-pill"
 import { Button } from "@/components/ui/button"
+import { isNavItemActive, navGroupForPath, pageTitleForPath, NAV_GROUPS } from "@/lib/nav"
 import { isLocalHost } from "@/lib/api-base"
 import { formatSyncStamp } from "@/lib/draws"
 import { localLlmOffMessage } from "@/lib/ia/local-url"
@@ -47,301 +49,61 @@ type StartupPayload = {
   quitAvailable?: boolean
 }
 
-type Tone = "ok" | "warn" | "err" | "off" | "load"
+type Tone = StatusTone
 
-function Pill({
-  label,
-  detail,
+function HealthCluster({
   tone,
-  onClick,
-  title,
+  children,
 }: {
-  label: string
-  detail?: string
-  tone: Tone
-  onClick: () => void
-  title?: string
+  tone: StatusTone
+  children: ReactNode
 }) {
-  const tones: Record<Tone, string> = {
-    ok: "border-emerald-500/40 bg-emerald-500/15 text-emerald-200",
-    warn: "border-amber-400/40 bg-amber-400/15 text-amber-200",
-    err: "border-red-500/40 bg-red-500/15 text-red-200",
-    off: "border-border bg-muted/40 text-muted-foreground",
-    load: "border-border bg-muted/20 text-muted-foreground",
-  }
-  const dots: Record<Tone, string> = {
-    ok: "bg-emerald-400",
-    warn: "bg-amber-400",
-    err: "bg-red-400",
-    off: "bg-muted-foreground/50",
-    load: "bg-muted-foreground/40 animate-pulse",
-  }
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title || "Retester"}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium tracking-wide ${tones[tone]}`}
-    >
-      <span className={`size-1.5 rounded-full ${dots[tone]}`} />
-      <span>{label}</span>
-      {detail ? (
-        <span className="hidden font-normal opacity-80 sm:inline">{detail}</span>
-      ) : null}
-    </button>
-  )
-}
-
-export function StartupStatus() {
-  const router = useRouter()
-  const pathname = usePathname()
-  const [data, setData] = useState<StartupPayload | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [localApp, setLocalApp] = useState(false)
-  const [ensuring, setEnsuring] = useState(false)
-  const inFlight = useRef(false)
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    setLocalApp(isLocalHost(window.location.hostname))
-  }, [])
-
-  const refresh = useCallback(async (opts?: { git?: boolean; silent?: boolean }) => {
-    if (inFlight.current) return
-    inFlight.current = true
-    try {
-      const query = opts?.git ? "?refresh=1" : ""
-      const response = await fetch(`/api/startup${query}`, { cache: "no-store" })
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-      setData((await response.json()) as StartupPayload)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "échec")
-      if (!opts?.silent) setData(null)
-    } finally {
-      inFlight.current = false
-      setLoading(false)
+    if (!open) return
+    const onDown = (event: MouseEvent) => {
+      if (!box.current?.contains(event.target as Node)) setOpen(false)
     }
-  }, [])
-
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      void refresh()
-    }, 0)
-    const neonId = window.setInterval(() => {
-      void refresh({ silent: true })
-    }, 20_000)
-    const gitId = window.setInterval(() => {
-      void refresh({ git: true, silent: true })
-    }, 300_000)
-    const onFocus = () => {
-      void refresh({ silent: true })
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false)
     }
-    window.addEventListener("focus", onFocus)
+    document.addEventListener("mousedown", onDown)
+    window.addEventListener("keydown", onKey)
     return () => {
-      window.clearTimeout(t)
-      window.clearInterval(neonId)
-      window.clearInterval(gitId)
-      window.removeEventListener("focus", onFocus)
+      document.removeEventListener("mousedown", onDown)
+      window.removeEventListener("keydown", onKey)
     }
-  }, [refresh])
+  }, [open])
 
-  const onNeon = useCallback(async () => {
-    if (ensuring) return
-    const stale = Boolean(data?.stale)
-    if (localApp && stale) {
-      setEnsuring(true)
-      try {
-        await fetch("/api/sync/ensure", { method: "POST", cache: "no-store" })
-        window.dispatchEvent(new Event("synchro:sync-ensure"))
-      } catch {
-        // le rattrapage peut échouer si FDJ/Neon sont lents
-      } finally {
-        setEnsuring(false)
-      }
-    }
-    await refresh({ silent: true })
-  }, [data?.stale, ensuring, localApp, refresh])
-
-  if (loading && !data) {
-    return (
-      <div className="flex flex-nowrap items-center gap-2">
-          <HelpWrap
-            help={{
-              title: "API",
-              body: "Cliquez pour retester l’API. Vert = backend joignable et tirages chargés.",
-            }}
-          >
-            <Pill label="API" tone="load" onClick={() => void refresh()} />
-          </HelpWrap>
-          <HelpWrap
-            help={{
-              title: "Neon",
-              body: "Cliquez pour retester PostgreSQL Neon. En local, si les tirages sont en retard, un clic lance aussi le rattrapage.",
-            }}
-          >
-            <Pill label="Neon" tone="load" onClick={() => void refresh()} />
-          </HelpWrap>
-          <HelpWrap
-            help={{
-              title: "GitHub",
-              body: "Compare le clone local à origin. Si une mise à jour est disponible, ouvre Admin.",
-            }}
-          >
-            <Pill
-              label="GitHub"
-              tone="load"
-              onClick={() => void refresh({ git: true })}
-            />
-          </HelpWrap>
-        </div>
-    )
-  }
-
-  if (error || !data) {
-    return (
-      <div className="flex flex-nowrap items-center gap-2">
-          <HelpWrap
-            help={{
-              title: "Statut",
-              body: "L’API de statut est injoignable. Cliquez pour réessayer.",
-            }}
-          >
-            <Pill
-              label="Statut"
-              detail={error || "injoignable"}
-              tone="err"
-              onClick={() => void refresh()}
-            />
-          </HelpWrap>
-      </div>
-    )
-  }
-
-  const apiTone: Tone = data.backend.ok ? "ok" : "err"
-  const apiDetail = data.backend.ok
-    ? data.draws != null
-      ? `${data.draws} tirages`
-      : "vivante"
-    : data.backend.error || "arrêtée"
-
-  const neonOk = Boolean(data.neon.ok || data.neon.connected)
-  const maj = formatSyncStamp(data.last_sync?.finished_at)
-  let neonTone: Tone = "off"
-  let neonDetail = "non configuré"
-  if (neonOk && data.neon.waking) {
-    neonTone = "warn"
-    neonDetail = ensuring ? "rattrapage…" : "réveil"
-  } else if (neonOk && data.stale) {
-    neonTone = "warn"
-    neonDetail = ensuring ? "rattrapage…" : maj ? `en retard · ${maj}` : "en retard"
-  } else if (neonOk) {
-    neonTone = "ok"
-    neonDetail = maj
-      ? `MAJ ${maj}`
-      : data.neon.latency_ms != null
-        ? `${data.neon.latency_ms} ms`
-        : data.latest?.draw_date || "en ligne"
-  } else if (data.neon.configured) {
-    neonTone = "err"
-    neonDetail = "hors ligne"
-  }
-
-  const neonTitle = [
-    neonOk ? "Neon en ligne" : data.neon.error || "Neon",
-    data.neon.host ? data.neon.host : null,
-    data.latest?.draw_date ? `dernier tirage ${data.latest.draw_date}` : null,
-    data.neon.latency_ms != null ? `${data.neon.latency_ms} ms` : null,
-    data.stale && data.expected_draw_date
-      ? `attendu ${data.expected_draw_date}`
-      : null,
-    localApp && data.stale
-      ? "cliquer pour rattraper les tirages"
-      : "cliquer pour retester",
-  ]
-    .filter(Boolean)
-    .join(" · ")
-
-  let gitTone: Tone = "off"
-  let gitDetail = "inconnu"
-  const git = data.git
-  if (git.ok) {
-    if (git.status === "behind" || (git.behind ?? 0) > 0) {
-      gitTone = "warn"
-      gitDetail =
-        (git.behind ?? 0) > 0
-          ? `${git.behind} à tirer`
-          : "mise à jour"
-    } else if (git.status === "ahead" || git.status === "diverged") {
-      gitTone = "warn"
-      gitDetail = git.status === "ahead" ? "commits locaux" : "divergé"
-    } else if (git.dirty) {
-      gitTone = "warn"
-      gitDetail = "modifs locales"
-    } else if (git.status === "unavailable") {
-      gitTone = "off"
-      gitDetail = "hors ligne"
-    } else {
-      gitTone = "ok"
-      gitDetail = `${git.current_short || git.sha || "ok"}${git.branch ? ` · ${git.branch}` : ""}`
-    }
-  }
-
-  const onGithub = () => {
-    void refresh({ git: true })
-    const behind = git.status === "behind" || git.status === "diverged" || (git.behind ?? 0) > 0
-    if (behind && pathname !== "/admin") {
-      router.push("/admin#github")
-    }
-  }
+  const detail =
+    tone === "ok"
+      ? "ok"
+      : tone === "warn"
+        ? "attention"
+        : tone === "err"
+          ? "erreur"
+          : tone === "load"
+            ? "…"
+            : undefined
 
   return (
-    <div className="flex flex-nowrap items-center gap-2">
-      <HelpWrap
-        help={{
-          title: "API",
-          body: "Cliquez pour retester l’API. Vert = backend joignable. Le détail indique le nombre de tirages chargés.",
-        }}
-      >
-        <Pill
-          label="API"
-          detail={apiDetail}
-          tone={apiTone}
-          onClick={() => void refresh()}
-        />
-      </HelpWrap>
-      <HelpWrap
-        help={{
-          title: "Neon",
-          body: `${neonTitle}. En local, un clic sur un indicateur « en retard » rattrape les tirages FDJ.`,
-        }}
-      >
-        <Pill
-          label="Neon"
-          detail={neonDetail}
-          tone={neonTone}
-          title={neonTitle}
-          onClick={() => void onNeon()}
-        />
-      </HelpWrap>
-      <HelpWrap
-        help={{
-          title: "GitHub",
-          body: "Compare le clone à origin (retest au focus et toutes les 5 min). En retard : cliquez pour ouvrir Admin et tirer la mise à jour.",
-        }}
-      >
-        <Pill
-          label="GitHub"
-          detail={gitDetail}
-          tone={gitTone}
-          title="Contrôler origin (Admin si une mise à jour est disponible)"
-          onClick={onGithub}
-        />
-      </HelpWrap>
-      <MorphoFiringPill />
-      <LocalLlmPill />
+    <div className="relative shrink-0" ref={box}>
+      <StatusPill
+        label="Santé"
+        detail={detail}
+        tone={tone}
+        aria-expanded={open}
+        aria-haspopup="true"
+        title="API, Neon, GitHub, LLM local — cliquer pour le détail"
+        onClick={() => setOpen((value) => !value)}
+      />
+      {open ? (
+        <div className="absolute right-0 top-full z-30 mt-2 flex min-w-52 flex-col items-stretch gap-2 rounded-xl border border-border bg-card p-2 shadow-lg">
+          {children}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -431,6 +193,262 @@ export function QuitButton() {
   )
 }
 
+export function StartupStatus() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const [data, setData] = useState<StartupPayload | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [localApp, setLocalApp] = useState(false)
+  const [ensuring, setEnsuring] = useState(false)
+  const inFlight = useRef(false)
+
+  useEffect(() => {
+    setLocalApp(isLocalHost(window.location.hostname))
+  }, [])
+
+  const refresh = useCallback(async (opts?: { git?: boolean; silent?: boolean }) => {
+    if (inFlight.current) return
+    inFlight.current = true
+    try {
+      const query = opts?.git ? "?refresh=1" : ""
+      const response = await fetch(`/api/startup${query}`, { cache: "no-store" })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      setData((await response.json()) as StartupPayload)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "échec")
+      if (!opts?.silent) setData(null)
+    } finally {
+      inFlight.current = false
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void refresh()
+    }, 0)
+    const neonId = window.setInterval(() => {
+      void refresh({ silent: true })
+    }, 20_000)
+    const gitId = window.setInterval(() => {
+      void refresh({ git: true, silent: true })
+    }, 300_000)
+    const onFocus = () => {
+      void refresh({ silent: true })
+    }
+    window.addEventListener("focus", onFocus)
+    return () => {
+      window.clearTimeout(t)
+      window.clearInterval(neonId)
+      window.clearInterval(gitId)
+      window.removeEventListener("focus", onFocus)
+    }
+  }, [refresh])
+
+  const onNeon = useCallback(async () => {
+    if (ensuring) return
+    const stale = Boolean(data?.stale)
+    if (localApp && stale) {
+      setEnsuring(true)
+      try {
+        await fetch("/api/sync/ensure", { method: "POST", cache: "no-store" })
+        window.dispatchEvent(new Event("synchro:sync-ensure"))
+      } catch {
+        // le rattrapage peut échouer si FDJ/Neon sont lents
+      } finally {
+        setEnsuring(false)
+      }
+    }
+    await refresh({ silent: true })
+  }, [data?.stale, ensuring, localApp, refresh])
+
+  if (loading && !data) {
+    return (
+      <HealthCluster tone="load">
+        <HelpWrap
+          help={{
+            title: "API",
+            body: "Cliquez pour retester l’API. Vert = backend joignable et tirages chargés.",
+          }}
+        >
+          <StatusPill label="API" tone="load" onClick={() => void refresh()} />
+        </HelpWrap>
+        <HelpWrap
+          help={{
+            title: "Neon",
+            body: "Cliquez pour retester PostgreSQL Neon. En local, si les tirages sont en retard, un clic lance aussi le rattrapage.",
+          }}
+        >
+          <StatusPill label="Neon" tone="load" onClick={() => void refresh()} />
+        </HelpWrap>
+        <HelpWrap
+          help={{
+            title: "GitHub",
+            body: "Compare le clone local à origin. Si une mise à jour est disponible, ouvre Admin.",
+          }}
+        >
+          <StatusPill
+            label="GitHub"
+            tone="load"
+            onClick={() => void refresh({ git: true })}
+          />
+        </HelpWrap>
+      </HealthCluster>
+    )
+  }
+
+  if (error || !data) {
+    return (
+      <HealthCluster tone="err">
+        <HelpWrap
+          help={{
+            title: "Statut",
+            body: "L’API de statut est injoignable. Cliquez pour réessayer.",
+          }}
+        >
+          <StatusPill
+            label="Statut"
+            detail={error || "injoignable"}
+            tone="err"
+            onClick={() => void refresh()}
+          />
+        </HelpWrap>
+      </HealthCluster>
+    )
+  }
+
+  const apiTone: Tone = data.backend.ok ? "ok" : "err"
+  const apiDetail = data.backend.ok
+    ? data.draws != null
+      ? `${data.draws} tirages`
+      : "vivante"
+    : data.backend.error || "arrêtée"
+
+  const neonOk = Boolean(data.neon.ok || data.neon.connected)
+  const maj = formatSyncStamp(data.last_sync?.finished_at)
+  let neonTone: Tone = "off"
+  let neonDetail = "non configuré"
+  if (neonOk && data.neon.waking) {
+    neonTone = "warn"
+    neonDetail = ensuring ? "rattrapage…" : "réveil"
+  } else if (neonOk && data.stale) {
+    neonTone = "warn"
+    neonDetail = ensuring ? "rattrapage…" : maj ? `en retard · ${maj}` : "en retard"
+  } else if (neonOk) {
+    neonTone = "ok"
+    neonDetail = maj
+      ? `MAJ ${maj}`
+      : data.neon.latency_ms != null
+        ? `${data.neon.latency_ms} ms`
+        : data.latest?.draw_date || "en ligne"
+  } else if (data.neon.configured) {
+    neonTone = "err"
+    neonDetail = "hors ligne"
+  }
+
+  const neonTitle = [
+    neonOk ? "Neon en ligne" : data.neon.error || "Neon",
+    data.neon.host ? data.neon.host : null,
+    data.latest?.draw_date ? `dernier tirage ${data.latest.draw_date}` : null,
+    data.neon.latency_ms != null ? `${data.neon.latency_ms} ms` : null,
+    data.stale && data.expected_draw_date
+      ? `attendu ${data.expected_draw_date}`
+      : null,
+    localApp && data.stale
+      ? "cliquer pour rattraper les tirages"
+      : "cliquer pour retester",
+  ]
+    .filter(Boolean)
+    .join(" · ")
+
+  let gitTone: Tone = "off"
+  let gitDetail = "inconnu"
+  const git = data.git
+  if (git.ok) {
+    if (git.status === "behind" || (git.behind ?? 0) > 0) {
+      gitTone = "warn"
+      gitDetail =
+        (git.behind ?? 0) > 0
+          ? `${git.behind} à tirer`
+          : "mise à jour"
+    } else if (git.status === "ahead" || git.status === "diverged") {
+      gitTone = "warn"
+      gitDetail = git.status === "ahead" ? "commits locaux" : "divergé"
+    } else if (git.dirty) {
+      gitTone = "warn"
+      gitDetail = "modifs locales"
+    } else if (git.status === "unavailable") {
+      gitTone = "off"
+      gitDetail = "hors ligne"
+    } else {
+      gitTone = "ok"
+      gitDetail = `${git.current_short || git.sha || "ok"}${git.branch ? ` · ${git.branch}` : ""}`
+    }
+  }
+
+  const onGithub = () => {
+    void refresh({ git: true })
+    const behind = git.status === "behind" || git.status === "diverged" || (git.behind ?? 0) > 0
+    if (behind && pathname !== "/admin") {
+      router.push("/admin#github")
+    }
+  }
+
+  const clusterTone = worstStatusTone([apiTone, neonTone, gitTone])
+
+  return (
+    <HealthCluster tone={clusterTone}>
+      <HelpWrap
+        help={{
+          title: "API",
+          body: "Cliquez pour retester l’API. Vert = backend joignable. Le détail indique le nombre de tirages chargés.",
+        }}
+      >
+        <StatusPill
+          label="API"
+          detail={apiDetail}
+          tone={apiTone}
+          onClick={() => void refresh()}
+        />
+      </HelpWrap>
+      <HelpWrap
+        help={{
+          title: "Neon",
+          body: `${neonTitle}. En local, un clic sur un indicateur « en retard » rattrape les tirages FDJ.`,
+        }}
+      >
+        <StatusPill
+          label="Neon"
+          detail={neonDetail}
+          tone={neonTone}
+          title={neonTitle}
+          onClick={() => void onNeon()}
+        />
+      </HelpWrap>
+      <HelpWrap
+        help={{
+          title: "GitHub",
+          body: "Compare le clone à origin (retest au focus et toutes les 5 min). En retard : cliquez pour ouvrir Admin et tirer la mise à jour.",
+        }}
+      >
+        <StatusPill
+          label="GitHub"
+          detail={gitDetail}
+          tone={gitTone}
+          title="Contrôler origin (Admin si une mise à jour est disponible)"
+          onClick={onGithub}
+        />
+      </HelpWrap>
+      <MorphoFiringPill />
+      <LocalLlmPill />
+    </HealthCluster>
+  )
+}
+
 function MorphoFiringPill() {
   const router = useRouter()
   const [firing, setFiring] = useState<StoredFiring | null>(() =>
@@ -452,7 +470,7 @@ function MorphoFiringPill() {
         body: `La règle « ${firing.name} » s’est déclenchée${firing.draw_date ? ` sur le tirage ${firing.draw_date}` : ""}. Cliquez pour ouvrir Morpho.`,
       }}
     >
-      <Pill
+      <StatusPill
         label="Morpho"
         detail={firing.name}
         tone="warn"
@@ -532,7 +550,7 @@ function LocalLlmPill() {
         body: "Ollama doit tourner sur cette machine (app Ollama ou « ollama serve »). Brain l’utilise par défaut. Un 404 Ollama ne bascule jamais sur Gemini / OpenAI. Sur Netlify la pastille reste éteinte.",
       }}
     >
-      <Pill
+      <StatusPill
         label="LLM local"
         detail={local === "ok" ? detail : "off"}
         tone={local === "load" ? "load" : local === "ok" ? "ok" : "off"}
@@ -549,141 +567,6 @@ function LocalLlmPill() {
   )
 }
 
-const NAV_GROUP_ORDER = ["Archives", "Laboratoires", "Assistants", "Système"] as const
-
-const NAV_ITEMS = [
-  {
-    href: "/tirage",
-    label: "Tirage",
-    group: "Archives",
-    help: {
-      title: "Tirage",
-      body: "Archives EuroMillions : filtrer par mois ou par numéros, puis exporter en CSV.",
-    },
-  },
-  {
-    href: "/evolution",
-    label: "Évolution",
-    group: "Archives",
-    help: {
-      title: "Évolution",
-      body: "Courbes dans le temps, suivi pair/impair, forme de la grille (décennies, étendue, consécutifs), classements. Accès protégé par mot de passe admin.",
-    },
-  },
-  {
-    href: "/analyse",
-    label: "Analyse",
-    group: "Laboratoires",
-    help: {
-      title: "Analyse",
-      body: "Laboratoire : indicateurs, numéros, hasard, probabilités. Tous les onglets lisent la même fenêtre de tirages.",
-    },
-  },
-  {
-    href: "/combinaisons",
-    label: "Combinaisons",
-    group: "Laboratoires",
-    help: {
-      title: "Combinaisons",
-      body: "Composer, proposer et comparer des grilles EuroMillions. Retards et totaux pour choisir ; score = proba de gain (loi officielle + rétro-test), pas un pronostic.",
-    },
-  },
-  {
-    href: "/jeux",
-    label: "Jeux",
-    group: "Laboratoires",
-    help: {
-      title: "Jeux",
-      body: "Solutions : compteur combinatoire (somme, parité, forme, chances). histoJeux : journal Neon des grilles jouées, relues contre le tirage FDJ, test binomial vs 7,71 %. Ce n’est pas un pronostic.",
-    },
-  },
-  {
-    href: "/morpho",
-    label: "Morpho",
-    group: "Laboratoires",
-    help: {
-      title: "Morpho",
-      body: "Glyphes 5×10, lexique de formes, voisins visuels CLIP, VLM local (Ollama moondream ou Moondream2), règles QUAND/ALORS et anticipation.",
-    },
-  },
-  {
-    href: "/relief",
-    label: "Relief",
-    group: "Laboratoires",
-    help: {
-      title: "Relief",
-      body: "Une ligne n1→n5 par tirage. Boule ou point. Zoom plus serré à 100/200. Calque rangs dans le temps. Tiges masquables. Le glyphe 5×10 reste Morpho.",
-    },
-  },
-  {
-    href: "/chartisme",
-    label: "Chartisme",
-    group: "Laboratoires",
-    help: {
-      title: "Chartisme",
-      body: "Figures chartistes sur les courbes du logiciel : détection, annotation dessinée, atelier d'étiquetage, règles descriptives et rétro-test contre le hasard. Ne touche pas aux grilles.",
-    },
-  },
-  {
-    href: "/harmo",
-    label: "Harmo",
-    group: "Laboratoires",
-    help: {
-      title: "Harmo",
-      body: "Étude harmonique des séries de tirages : mélange réseau / mécanique / acoustique, FFT, STFT, Hilbert. Unités en cycles/tirage, pas des hertz. Décrit le tracé, pas le prochain tirage.",
-    },
-  },
-  {
-    href: "/brain",
-    label: "Brain",
-    group: "Assistants",
-    help: {
-      title: "Brain",
-      body: "Épingle des noms (@rsi, @ete…) : Brain ne lit que ce qui est sur la table. Discussion en local (Ollama). Gemini / OpenAI seulement si tu le demandes. L’onglet IA reste la lecture de captures.",
-    },
-  },
-  {
-    href: "/brain/specialistes",
-    label: "Spécialistes",
-    group: "Assistants",
-    help: {
-      title: "Spécialistes",
-      body: "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté 20/50/100. Jamais une grille 5+2. Démo guidée : Suivant ou Annuler.",
-    },
-  },
-  {
-    href: "/ia",
-    label: "IA",
-    group: "Assistants",
-    help: {
-      title: "IA",
-      body: "Lecture d’une capture : visuel du laboratoire plus les données de la fenêtre. Gemini ou OpenAI, puis le modèle. Historique local : renommer, épingler, exporter (Markdown / JSON / PDF) ou supprimer. Décrit l’archive, puis peut pronostiquer (hypothèse, pas une certitude).",
-    },
-  },
-  {
-    href: "/admin",
-    label: "Admin",
-    group: "Système",
-    help: {
-      title: "Admin",
-      body: "Secrets Neon / API, tests de connexion, mises à jour GitHub et synchro FDJ → Postgres.",
-    },
-  },
-] as const
-
-function navItemActive(pathname: string, href: string) {
-  if (href === "/brain") return pathname === "/brain"
-  return pathname === href || pathname.startsWith(`${href}/`)
-}
-
-function currentNavItem(pathname: string) {
-  let best: (typeof NAV_ITEMS)[number] | undefined
-  for (const item of NAV_ITEMS) {
-    if (!navItemActive(pathname, item.href)) continue
-    if (!best || item.href.length > best.href.length) best = item
-  }
-  return best
-}
 
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -696,7 +579,7 @@ function isTypingTarget(target: EventTarget | null) {
   )
 }
 
-function NavLinks({
+function FamilyLinks({
   pathname,
   onNavigate,
 }: {
@@ -704,49 +587,44 @@ function NavLinks({
   onNavigate?: () => void
 }) {
   return (
-    <nav className="flex flex-col gap-4" aria-label="Sections">
-      {NAV_GROUP_ORDER.map((group) => {
-        const items = NAV_ITEMS.filter((item) => item.group === group)
-        return (
-          <div key={group}>
-            <p className="px-3 pb-1 text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-              {group}
-            </p>
-            <div className="flex flex-col gap-0.5">
-              {items.map((item) => {
-                const active = navItemActive(pathname, item.href)
-                return (
-                  <WithHelp key={item.href} help={item.help} className="w-full">
-                    <Link
-                      href={item.href}
-                      aria-current={active ? "page" : undefined}
-                      onClick={onNavigate}
-                      className={`block rounded-md px-3 py-2 text-sm ${
-                        active
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  </WithHelp>
-                )
-              })}
-            </div>
-          </div>
-        )
-      })}
+    <nav className="flex flex-col gap-4" aria-label="Familles">
+      {NAV_GROUPS.map((group) => (
+        <div key={group.id} className="flex flex-col gap-1">
+          <p className="px-3 pb-1 text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+            {group.label}
+          </p>
+          {group.items.map((entry) => {
+            const current = isNavItemActive(pathname, entry.href)
+            return (
+              <Link
+                key={entry.href}
+                href={entry.href}
+                aria-current={current ? "page" : undefined}
+                onClick={onNavigate}
+                className={`rounded-md px-3 py-2 text-sm ${
+                  current
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                }`}
+              >
+                {entry.label}
+              </Link>
+            )
+          })}
+        </div>
+      ))}
     </nav>
   )
 }
 
 export function SiteHeader() {
   const pathname = usePathname()
+  const group = navGroupForPath(pathname)
+  const current = { label: pageTitleForPath(pathname) }
   const headerRef = useRef<HTMLElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [portalReady, setPortalReady] = useState(false)
   const [headerH, setHeaderH] = useState(52)
-  const current = currentNavItem(pathname)
 
   useEffect(() => {
     setPortalReady(true)
@@ -802,10 +680,10 @@ export function SiteHeader() {
   return (
     <header
       ref={headerRef}
-      className="sticky top-0 z-50 overflow-x-clip border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur"
+      className="sticky top-0 z-50 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur"
     >
-      <div className="relative z-10 mx-auto flex w-full min-w-0 max-w-full items-center gap-2 overflow-x-clip px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:gap-3 sm:px-6">
-        <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
+      <div className="relative z-10 mx-auto flex w-full min-w-0 max-w-full flex-col gap-2 px-[max(1rem,env(safe-area-inset-left))] py-3 pr-[max(1rem,env(safe-area-inset-right))] sm:px-6">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <button
             type="button"
             className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-foreground"
@@ -832,25 +710,45 @@ export function SiteHeader() {
               Synchro
             </Link>
           </HelpWrap>
-          {current ? (
-            <>
-              <span className="hidden h-4 w-px shrink-0 bg-border sm:block" aria-hidden />
-              <span className="max-w-[8.5rem] truncate text-sm font-medium text-foreground sm:max-w-[14rem]">
-                {current.label}
-              </span>
-            </>
-          ) : null}
-        </div>
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-          <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
-            <CaptureButton />
-            <HelpModeToggle />
-            <StartupStatus />
-          </div>
-          <div className="relative z-20 shrink-0">
-            <QuitButton />
+          <span className="hidden h-4 w-px shrink-0 bg-border sm:block" aria-hidden />
+          <span className="max-w-[8.5rem] truncate text-sm font-medium text-foreground sm:max-w-[14rem]">
+            {current.label}
+          </span>
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+            <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+              <CaptureButton />
+              <HelpModeToggle />
+              <GlossaryButton />
+            </div>
+            <div className="relative z-20 flex shrink-0 items-center gap-2">
+              <StartupStatus />
+              <QuitButton />
+            </div>
           </div>
         </div>
+        <nav
+          className="flex min-w-0 items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:thin]"
+          aria-label={group.label}
+        >
+          {group.items.map((item) => {
+            const active = isNavItemActive(pathname, item.href)
+            return (
+              <HelpWrap key={item.href} help={item.help}>
+                <Link
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`inline-flex min-h-8 shrink-0 items-center rounded-full border px-3 py-1 text-xs whitespace-nowrap focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none ${
+                    active
+                      ? "border-primary bg-primary/15 text-foreground"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              </HelpWrap>
+            )
+          })}
+        </nav>
       </div>
       {portalReady && menuOpen
         ? createPortal(
@@ -868,7 +766,7 @@ export function SiteHeader() {
               <aside
                 role="dialog"
                 aria-modal="true"
-                aria-label="Sections"
+                aria-label="Familles"
                 className="relative flex h-full w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-auto border-r border-border bg-background shadow-2xl"
               >
                 <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-background/95 px-3 py-2">
@@ -878,7 +776,7 @@ export function SiteHeader() {
                   <span className="text-[10px] text-muted-foreground">Échap ou g</span>
                 </div>
                 <div className="p-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-                  <NavLinks pathname={pathname} onNavigate={() => setMenuOpen(false)} />
+                  <FamilyLinks pathname={pathname} onNavigate={() => setMenuOpen(false)} />
                 </div>
               </aside>
             </div>,

@@ -59,7 +59,7 @@ export function Spectrogram({
         const xs = ridge.times ?? []
         const ys = ridge.freqs ?? []
         if (xs.length < 2) continue
-        ctx.strokeStyle = ridge.kind === "grid" ? "#f8fafc" : "#fbbf24"
+        ctx.strokeStyle = ridge.kind === "grid" ? "oklch(0.96 0.01 90)" : "oklch(0.82 0.12 85)"
         ctx.beginPath()
         for (let i = 0; i < xs.length; i++) {
           const px = ((xs[i] - t0) / (t1 - t0 || 1)) * (nT - 1)

@@ -29,7 +29,7 @@ export function ProbaPanel() {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">
-          139 838 160 grilles possibles. Hypergéométrique, indépendant de la fenêtre temporelle.
+          139 838 160 grilles possibles. Hypergéométrique, indépendant de la fenêtre de travail.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

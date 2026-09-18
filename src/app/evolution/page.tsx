@@ -13,9 +13,8 @@ export const metadata: Metadata = {
 export default function EvolutionPage() {
   return (
     <PageShell
-      title="Évolution · statistiques"
-      description="Courbe, dessin libre chartiste (aimant + gabarit), suivi pair/impair, forme de la grille (décennies, étendue, consécutifs), 20 ou 50 derniers tirages, fréquences et retards. Accès admin, comme les services."
-      footer={false}
+      title="Évolution"
+      subtitle="Courbe, dessin libre chartiste (aimant + gabarit), pair/impair, forme de la grille, fréquences et retards. Accès admin, comme les services."
     >
       <EvolutionPanel />
     </PageShell>

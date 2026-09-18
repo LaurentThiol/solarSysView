@@ -12,17 +12,9 @@ export const metadata: Metadata = {
 export default function ChartismePage() {
   return (
     <PageShell
-      title="Chartisme · figures"
-      description={
-        <>
-          Les 18 figures de la table de référence sur les courbes exportées du
-          logiciel : épaules, biseaux, triangles, drapeaux, tasse avec anse,
-          tunnel droit.
-          Cassure validée seulement si l’activité dépasse sa moyenne mobile 20 et
-          si la clôture confirme — sinon c’est un <em>fake breakout</em>.
-        </>
-      }
-      notice="Les tirages sont indépendants. Une figure sur une courbe de retards ou de sorties est une propriété du tracé, pas une prédiction. Cet onglet ne touche pas aux grilles : il décrit, et le rétro-test mesure l’écart entre la figure et le hasard."
+      title="Chartisme"
+      subtitle="Les 18 figures de la table de référence sur les courbes exportées du logiciel : épaules, biseaux, triangles, drapeaux, tasse avec anse, tunnel droit. Une cassure n’est validée que si l’activité dépasse sa moyenne mobile 20 et si la clôture confirme — sinon c’est une fausse cassure."
+      note="Les tirages sont indépendants. Une figure sur une courbe de retards ou de sorties est une propriété du tracé, pas une prédiction. Cet onglet ne touche pas aux grilles : il décrit, et le rétro-test mesure l’écart entre la figure et le hasard."
     >
       <ChartismeLab />
     </PageShell>
