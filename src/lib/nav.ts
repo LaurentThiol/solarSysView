@@ -61,7 +61,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Analyse",
         help: {
           title: "Analyse",
-          body: "Indicateurs, numéros, hasard, probabilités. Tous les onglets lisent la même fenêtre de travail.",
+          body: "Indicateurs, numéros, hasard, Jumeaux (empreintes + démo guidée), probabilités. Tous les onglets lisent la même fenêtre de travail.",
         },
       },
       {

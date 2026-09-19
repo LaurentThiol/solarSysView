@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import { TwinsDemoBar, TwinsDemoPopup } from "@/components/analysis/twins-demo"
 import { TitleHelp } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatDrawDate, formatShortDate } from "@/lib/draws"
@@ -18,7 +19,26 @@ import {
   type FingerprintAxis,
   type FingerprintRow,
 } from "@/lib/fingerprints"
+import {
+  DEMO_MASK_AXES,
+  TWINS_DEMO_ALL_AXES,
+  demoTwinPreview,
+  scrollTwinsDemoTarget,
+  twinsDemoStepOf,
+  twinsDemoWantsStart,
+  type TwinsDemoStepId,
+} from "@/lib/twins-demo"
 import { cn } from "@/lib/utils"
+
+function demoHighlight(step: TwinsDemoStepId | null, ids: TwinsDemoStepId[], elevate = false) {
+  return step && ids.includes(step)
+    ? cn("ring-2 ring-primary/80 ring-offset-2 ring-offset-background", elevate && "relative z-[70]")
+    : ""
+}
+
+function waitMs(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+}
 
 const STAR_AXES = new Set<FingerprintAxis>(["star_sum", "e1", "e2"])
 
@@ -135,6 +155,13 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
   const [axes, setAxes] = useState<FingerprintAxis[]>(() => [...FINGERPRINT_AXES])
   const [queryDate, setQueryDate] = useState<string | null>(null)
   const [overlayDate, setOverlayDate] = useState<string | null>(null)
+  const [demoStep, setDemoStep] = useState<TwinsDemoStepId | null>(null)
+  const [demoRunning, setDemoRunning] = useState(false)
+  const [demoDone, setDemoDone] = useState(false)
+  const [demoWaiting, setDemoWaiting] = useState(false)
+  const demoAutoRef = useRef(false)
+  const demoStopRef = useRef(false)
+  const demoGateRef = useRef<{ resolve: (ok: boolean) => void } | null>(null)
 
   const index = useMemo(
     () =>
@@ -174,13 +201,123 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
     })
   }
 
+  const finishDemoGate = useCallback((ok: boolean) => {
+    const gate = demoGateRef.current
+    demoGateRef.current = null
+    setDemoWaiting(false)
+    gate?.resolve(ok)
+  }, [])
+
+  const stopDemo = useCallback(() => {
+    demoStopRef.current = true
+    setDemoRunning(false)
+    setDemoDone(true)
+    finishDemoGate(false)
+  }, [finishDemoGate])
+
+  const nextDemoStep = useCallback(() => {
+    finishDemoGate(true)
+  }, [finishDemoGate])
+
+  const runDemo = useCallback(async () => {
+    if (demoRunning || !draws.length) return
+    demoAutoRef.current = true
+    demoStopRef.current = false
+    setDemoRunning(true)
+    setDemoDone(false)
+    setDemoWaiting(false)
+    setAxes([...TWINS_DEMO_ALL_AXES])
+    setQueryDate(null)
+    setOverlayDate(null)
+
+    const preview = demoTwinPreview(draws)
+
+    const begin = (step: TwinsDemoStepId) => {
+      setDemoStep(step)
+      setDemoWaiting(false)
+      scrollTwinsDemoTarget(twinsDemoStepOf(step).target)
+    }
+
+    const ask = async (step: TwinsDemoStepId) => {
+      if (demoStopRef.current) return false
+      setDemoStep(step)
+      scrollTwinsDemoTarget(twinsDemoStepOf(step).target)
+      await waitMs(380)
+      if (demoStopRef.current) return false
+      setDemoWaiting(true)
+      const ok = await new Promise<boolean>((resolve) => {
+        demoGateRef.current = { resolve }
+      })
+      return ok && !demoStopRef.current
+    }
+
+    try {
+      begin("window")
+      if (!(await ask("window"))) return
+
+      begin("axes")
+      setAxes([...TWINS_DEMO_ALL_AXES])
+      if (!(await ask("axes"))) return
+
+      begin("mask")
+      setAxes([...DEMO_MASK_AXES])
+      setOverlayDate(null)
+      if (!(await ask("mask"))) return
+
+      begin("heatmap")
+      if (preview.query?.date) setQueryDate(preview.query.date)
+      setOverlayDate(null)
+      if (!(await ask("heatmap"))) return
+
+      begin("twins")
+      setOverlayDate(preview.neighbors[0]?.date ?? null)
+      if (!(await ask("twins"))) return
+
+      begin("analogs")
+      if (!(await ask("analogs"))) return
+    } finally {
+      setDemoWaiting(false)
+      setDemoRunning(false)
+      setDemoDone(true)
+      if (!demoStopRef.current) setDemoStep("analogs")
+    }
+  }, [demoRunning, draws])
+
+  useEffect(() => {
+    if (demoAutoRef.current || !draws.length) return
+    if (typeof window === "undefined" || !twinsDemoWantsStart(window.location.search)) return
+    const timer = window.setTimeout(() => {
+      if (demoAutoRef.current) return
+      demoAutoRef.current = true
+      void runDemo()
+    }, 80)
+    return () => window.clearTimeout(timer)
+  }, [draws.length, runDemo])
+
   if (!draws.length) {
     return <p className="text-sm text-muted-foreground">Fenêtre vide : aucun portrait à indexer.</p>
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <Card>
+      <TwinsDemoBar
+        step={demoStep}
+        running={demoRunning}
+        done={demoDone}
+        waiting={demoWaiting}
+        onStart={() => void runDemo()}
+        onStop={stopDemo}
+      />
+      <TwinsDemoPopup
+        step={demoStep}
+        open={demoRunning && demoWaiting}
+        onNext={nextDemoStep}
+        onCancel={stopDemo}
+      />
+      <Card
+        data-demo="twins-axes"
+        className={demoHighlight(demoStep, ["axes", "mask"], demoWaiting)}
+      >
         <CardHeader>
           <CardTitle>
             <TitleHelp
@@ -201,6 +338,17 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
               onClick={() => setAxes([...FINGERPRINT_AXES])}
             >
               Tous
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-border px-2 py-1 text-xs"
+              onClick={() => {
+                setAxes([...DEMO_MASK_AXES])
+                setOverlayDate(null)
+              }}
+              title="Croiser seulement somme, étendue et parité"
+            >
+              Somme · étendue · parité
             </button>
             {FINGERPRINT_AXES.map((axis) => {
               const on = axes.includes(axis)
@@ -232,7 +380,10 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(16rem,0.8fr)]">
-        <Card>
+        <Card
+          data-demo="twins-heatmap"
+          className={demoHighlight(demoStep, ["heatmap"], demoWaiting)}
+        >
           <CardHeader>
             <CardTitle>
               <TitleHelp
@@ -312,7 +463,10 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card
+          data-demo="twins-radar"
+          className={demoHighlight(demoStep, ["analogs"], demoWaiting)}
+        >
           <CardHeader>
             <CardTitle>
               <TitleHelp
@@ -347,7 +501,10 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
         </Card>
       </div>
 
-      <Card>
+      <Card
+        data-demo="twins-list"
+        className={demoHighlight(demoStep, ["twins"], demoWaiting)}
+      >
         <CardHeader>
           <CardTitle>
             <TitleHelp

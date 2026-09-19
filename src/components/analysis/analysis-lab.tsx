@@ -17,6 +17,7 @@ import {
   ProbaPanel,
 } from "@/components/analysis/stats-panels"
 import { TwinsPanel } from "@/components/analysis/twins-panel"
+import { twinsDemoWantsStart } from "@/lib/twins-demo"
 import { SystemPanel } from "@/components/analysis/system-panel"
 import { TrendPanel } from "@/components/analysis/trend-panel"
 import { ViewPanel } from "@/components/analysis/view-panel"
@@ -187,7 +188,7 @@ const DRAW_TABS = [
     label: "Jumeaux",
     help: {
       title: "Jumeaux",
-      body: "Portrait multi-axes d’un tirage (variables Analyse hors delay/hit) et voisins en cosinus de z-scores. Les couleurs sont des écarts à la moyenne de la fenêtre, pas une prédiction.",
+      body: "Portrait multi-axes d’un tirage (variables Analyse hors delay/hit) et voisins en cosinus de z-scores. Les couleurs sont des écarts à la moyenne de la fenêtre, pas une prédiction. Démo guidée : bouton « Lancer la démo » ou /analyse?tab=jumeaux&demo=1 — pop-up Suivant / Annuler.",
     },
   },
   {
@@ -274,6 +275,9 @@ export function AnalysisLab() {
       if (variableNeedsStar(target)) setStar(Math.min(12, n))
       else setBall(n)
     }
+    if (twinsDemoWantsStart(params.toString())) setTab("jumeaux")
+    // Une seule lecture de l’URL au montage (variable, preset, démo).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- volontairement once
   }, [])
 
   const archive = useMemo(
@@ -399,6 +403,7 @@ export function AnalysisLab() {
         indicateurs décrivent la série observée, pas le prochain tirage.
       </p>
 
+      <div data-demo="twins-window">
       <WindowBar
         window={{ ...resolved, work, drawCount: work.length }}
         preset={preset}
@@ -421,6 +426,7 @@ export function AnalysisLab() {
         onWarmup={setWarmup}
         onCompare={setCompareOn}
       />
+      </div>
 
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
         <p className="text-sm font-medium text-foreground">

@@ -101,6 +101,6 @@ export const GLOSSARY: { term: string; text: string }[] = [
   },
   {
     term: "Jumeaux",
-    text: "Onglet Analyse : portrait d’un tirage dans l’espace des variables (somme, étendue, parité…) et voisins en cosinus de z-scores. Ressemblance d’archive, pas un pronostic.",
+    text: "Onglet Analyse : portrait d’un tirage dans l’espace des variables (somme, étendue, parité…) et voisins en cosinus de z-scores. Démo guidée (bouton ou /analyse?tab=jumeaux&demo=1), pop-up Suivant / Annuler. Ressemblance d’archive, pas un pronostic.",
   },
 ]

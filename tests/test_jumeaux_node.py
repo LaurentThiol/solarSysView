@@ -22,3 +22,7 @@ def test_fingerprints_node() -> None:
 
 def test_twins_tab_node() -> None:
     _run("test_twins_tab.ts")
+
+
+def test_twins_demo_node() -> None:
+    _run("test_twins_demo.ts")
