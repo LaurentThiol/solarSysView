@@ -34,6 +34,7 @@ def test_evolution_gains_block_is_wired() -> None:
     assert "Somme n°" in gains
     assert "Hors FR" in gains
     assert "On n’additionne pas FR et EU" in gains
+    assert "Cette archive n’a que le rang 1" in gains
     assert "winnersOutsideFrance" in lib
     assert "toGainsChart" in lib
     assert "numbersSum" in lib

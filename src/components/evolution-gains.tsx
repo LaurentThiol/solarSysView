@@ -369,6 +369,11 @@ export function EvolutionGains({ draws }: { draws: Draw[] }) {
     return `var(--color-${key})`
   }
 
+  const sparseRanks = useMemo(
+    () => draws.every((draw) => !(draw.prizes ?? []).some((tier) => tier.rank > 1)),
+    [draws]
+  )
+
   const leftDomain: [number, number | "auto"] =
     visible.length === 1 && visible[0] === "sumNumbers"
       ? [NUMBER_SUM_RANGE.min, "auto"]
@@ -461,7 +466,7 @@ export function EvolutionGains({ draws }: { draws: Draw[] }) {
                 />
                 <YAxis
                   domain={leftDomain}
-                  width={view === "winners" ? 44 : 48}
+                  width={view === "winners" ? 44 : 56}
                   tickLine={false}
                   axisLine={false}
                   allowDecimals={view !== "winners"}
@@ -586,6 +591,12 @@ export function EvolutionGains({ draws }: { draws: Draw[] }) {
                 {view === "winners"
                   ? ". EU comprend la France ; Hors FR = EU − FR."
                   : "."}
+              </p>
+            ) : null}
+            {sparseRanks && view !== "jackpot" ? (
+              <p className="mt-1 text-center text-xs text-muted-foreground">
+                Cette archive n’a que le rang 1 : les totaux 13 rangs se
+                réduisent au jackpot. Neon porte l’échelle complète.
               </p>
             ) : null}
             <ul className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-center text-xs tabular-nums text-muted-foreground">
