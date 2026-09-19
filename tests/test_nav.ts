@@ -18,6 +18,7 @@ test("five nav families cover every lab", () => {
   assert.match(headerSrc, /NAV_GROUPS/)
   assert.match(headerSrc, /HealthCluster/)
   assert.match(headerSrc, /GlossaryButton/)
+  assert.match(headerSrc, /AddressButton/)
   assert.match(headerSrc, /QuitButton/)
   assert.doesNotMatch(headerSrc, /aria-label="Familles"/)
   assert.match(headerSrc, /aria-label="Sections"/)

@@ -33,6 +33,7 @@ test("glossary and fausse cassure", () => {
   assert.match(copySrc, /term: "Période X"/)
   assert.match(copySrc, /term: "Warmup"/)
   assert.match(copySrc, /term: "Probabilités officielles"/)
+  assert.match(copySrc, /adresse: "Adresse"/)
   assert.match(copySrc, /export function filterGlossary/)
   assert.match(copySrc, /export function groupedGlossary/)
   assert.match(labSearchSrc, /export function asOneOf/)

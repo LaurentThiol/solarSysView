@@ -33,6 +33,7 @@ export const TAB_LABELS: Record<string, string> = {
   jumeaux: "Jumeaux",
   proba: "Probabilités",
   memo: "Mémo",
+  adresse: "Adresse",
   solutions: "Solutions",
   histoJeux: JEUX_JOURNAL_LABEL,
   melange: "Mélange",

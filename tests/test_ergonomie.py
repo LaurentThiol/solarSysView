@@ -12,6 +12,7 @@ def test_nav_groups_and_glossary_exist() -> None:
     assert "/brain/specialistes" in nav
     assert "Fenêtre de travail" in copy
     assert "GlossaryButton" in header
+    assert "AddressButton" in header
     assert "Santé" in header
     assert "QuitButton" in header
     assert 'aria-label="Familles"' not in header

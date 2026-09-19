@@ -18,7 +18,7 @@ test("Analyse groups Probabilités and Mémo under Glossaire", () => {
   const drawBlock = labSrc.slice(labSrc.indexOf("const DRAW_TABS"), labSrc.indexOf("const GLOSSARY_TABS"))
   const glossBlock = labSrc.slice(
     labSrc.indexOf("const GLOSSARY_TABS"),
-    labSrc.indexOf("const MEASURE_BAR_HELP")
+    labSrc.indexOf("const ADDRESS_TABS")
   )
   assert.match(labSrc, /label: "Glossaire"/)
   assert.doesNotMatch(drawBlock, /id: "proba"/)
@@ -26,6 +26,8 @@ test("Analyse groups Probabilités and Mémo under Glossaire", () => {
   assert.match(glossBlock, /id: "proba"/)
   assert.match(glossBlock, /id: "memo"/)
   assert.match(labSrc, /\.\.\.GLOSSARY_TABS/)
+  assert.match(labSrc, /label: "Adresse"/)
+  assert.match(labSrc, /\.\.\.ADDRESS_TABS/)
 })
 
 test("global glossary is grouped and searchable without accents", () => {

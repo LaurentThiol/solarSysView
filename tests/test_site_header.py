@@ -16,6 +16,7 @@ def test_site_header_uses_a_burger_menu_everywhere() -> None:
     assert "<QuitButton />" in header
     assert "<CaptureButton />" in header
     assert "<GlossaryButton />" in header
+    assert "<AddressButton />" in header
     assert "current.label" in header
 
 

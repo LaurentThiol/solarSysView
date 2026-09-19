@@ -7,7 +7,7 @@ import { createPortal } from "react-dom"
 import { LogOut, Menu, X } from "lucide-react"
 
 import { CaptureButton } from "@/components/capture"
-import { GlossaryButton, HelpModeToggle, HelpWrap, WithHelp } from "@/components/help"
+import { AddressButton, GlossaryButton, HelpModeToggle, HelpWrap, WithHelp } from "@/components/help"
 import { StatusPill, worstStatusTone, type StatusTone } from "@/components/status-pill"
 import { Button } from "@/components/ui/button"
 import { isNavItemActive, pageTitleForPath, NAV_GROUPS } from "@/lib/nav"
@@ -723,6 +723,7 @@ export function SiteHeader() {
             <CaptureButton />
             <HelpModeToggle />
             <GlossaryButton />
+            <AddressButton />
           </div>
           <div className="relative z-20 flex shrink-0 items-center gap-2">
             <StartupStatus />
