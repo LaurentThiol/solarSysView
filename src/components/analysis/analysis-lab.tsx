@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 
 import { AveragesPanel } from "@/components/analysis/averages-panel"
 import { FiguresPanel } from "@/components/analysis/figures-panel"
@@ -63,7 +64,6 @@ import {
   asWindowPreset,
   readLabSearch,
 } from "@/lib/lab-search"
-import type { FingerprintAxis } from "@/lib/fingerprints"
 import { readTwinsSearch } from "@/lib/twins-url"
 import { ERA_LABELS } from "@/lib/copy"
 import { useLabTab } from "@/lib/use-lab-tab"
@@ -262,12 +262,8 @@ export function AnalysisLab() {
     n_sim?: number
   } | null>(null)
   const [mcError, setMcError] = useState<string | null>(null)
-  const [initialQuery, setInitialQuery] = useState<string | null>(() =>
-    typeof window === "undefined" ? null : readTwinsSearch(window.location.search).queryDate
-  )
-  const [initialAxes, setInitialAxes] = useState<FingerprintAxis[] | null>(() =>
-    typeof window === "undefined" ? null : readTwinsSearch(window.location.search).axes
-  )
+  const searchParams = useSearchParams()
+  const twinsFromUrl = useMemo(() => readTwinsSearch(searchParams.toString()), [searchParams])
 
   useEffect(() => {
     const params = readLabSearch()
@@ -283,13 +279,7 @@ export function AnalysisLab() {
       if (variableNeedsStar(target)) setStar(Math.min(12, n))
       else setBall(n)
     }
-    const twins = readTwinsSearch(params.toString())
-    if (twins.queryDate) {
-      setInitialQuery(twins.queryDate)
-      setTab("jumeaux")
-    }
-    if (twins.axes) setInitialAxes(twins.axes)
-    if (twinsDemoWantsStart(params.toString())) setTab("jumeaux")
+    if (twinsFromUrl.queryDate || twinsDemoWantsStart(params.toString())) setTab("jumeaux")
     // Une seule lecture de l’URL au montage (variable, preset, query, démo).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- volontairement once
   }, [])
@@ -688,7 +678,11 @@ export function AnalysisLab() {
       {tab === "bayes" ? <BayesPanel draws={work} /> : null}
       {tab === "dependence" ? <DependencePanel draws={work} windowSize={windowSize} /> : null}
       {tab === "jumeaux" ? (
-        <TwinsPanel draws={work} initialQuery={initialQuery} initialAxes={initialAxes} />
+        <TwinsPanel
+          draws={work}
+          initialQuery={twinsFromUrl.queryDate}
+          initialAxes={twinsFromUrl.axes}
+        />
       ) : null}
       {tab === "proba" ? <ProbaPanel /> : null}
       {tab === "memo" ? <MemoPanel /> : null}

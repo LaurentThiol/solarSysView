@@ -9,7 +9,9 @@ const panelSrc = readFileSync(new URL("../src/components/analysis/twins-panel.ts
 test("Analyse exposes the Jumeaux tab at /analyse?tab=jumeaux", () => {
   assert.match(labSrc, /id: "jumeaux"/)
   assert.match(labSrc, /label: "Jumeaux"/)
-  assert.match(labSrc, /<TwinsPanel draws=\{work\}/)
+  assert.match(labSrc, /<TwinsPanel/)
+  assert.match(labSrc, /draws=\{work\}/)
+  assert.match(labSrc, /twinsFromUrl/)
   assert.match(copySrc, /jumeaux: "Jumeaux"/)
 })
 

@@ -149,8 +149,8 @@ test("Jumeaux panel exposes Épingler beside the neighbor overlay", () => {
   assert.match(panelSrc, /hors fenêtre/)
   assert.match(panelSrc, /applyTwinsSearch/)
   assert.match(labSrc, /readTwinsSearch/)
-  assert.match(labSrc, /initialQuery=\{initialQuery\}/)
-  assert.match(labSrc, /readTwinsSearch\(window\.location\.search\)/)
+  assert.match(labSrc, /initialQuery=\{twinsFromUrl\.queryDate\}/)
+  assert.match(labSrc, /useSearchParams/)
   assert.match(panelSrc, /if \(initialAxes\?\.length\) setAxes/)
 })
 
@@ -161,6 +161,7 @@ test("Brain consumes pending analogs, merges the pack, and prefills the focus", 
   assert.match(brainSrc, /lis @analogs#\$\{pending\.focusDate\}/)
   assert.match(brainSrc, /retrieveAnalogs/)
   assert.match(brainSrc, /analogRetrieveHint/)
+  assert.match(brainSrc, /last: \{ \.\.\.item\.fiche\.last, query: pending\.queryDate \}/)
   const pin: WorkingObject = {
     kind: "pin",
     id: "analyse/analogs",

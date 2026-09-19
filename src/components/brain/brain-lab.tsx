@@ -374,7 +374,11 @@ export function BrainLab() {
         return {
           ...item,
           summary: `Query ${pending.queryDate} hors fenêtre`,
-          fiche: { ...item.fiche, error: `Query ${pending.queryDate} hors fenêtre` },
+          fiche: {
+            ...item.fiche,
+            error: `Query ${pending.queryDate} hors fenêtre`,
+            last: { ...item.fiche.last, query: pending.queryDate },
+          },
         }
       })
       setAnalogPack(objects)
