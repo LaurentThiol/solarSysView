@@ -276,6 +276,9 @@ def test_analogs_handle_is_wired_to_jumeaux() -> None:
     assert "@analogs" in prompt
     assert "retrieveAnalogs" in lab
     assert "analogWorkingObjects" in lab
+    assert "takePendingAnalogs" in lab
+    assert "mergeAnalogPack" in lab
+    assert "lis @analogs#" in lab
 
 
 def test_brain_and_ia_prompts_allow_forecast_as_hypothesis() -> None:

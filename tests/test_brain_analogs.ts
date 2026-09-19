@@ -3,11 +3,13 @@ import test from "node:test"
 
 import {
   analogAxesFromObjects,
+  analogRetrieveHint,
   analogWorkingObjects,
+  mergeAnalogPack,
   wantsAnalogs,
-} from "../src/lib/brain/analogs"
-import { buildFingerprintIndex } from "../src/lib/fingerprints"
-import type { WorkingObject } from "../src/lib/brain/types"
+} from "../src/lib/brain/analogs.ts"
+import { buildFingerprintIndex } from "../src/lib/fingerprints.ts"
+import type { WorkingObject } from "../src/lib/brain/types.ts"
 import { lectureFromWorkingSet } from "../src/lib/brain/lecture"
 import { BRAIN_SYSTEM_PROMPT } from "../src/lib/brain/prompt"
 
@@ -68,4 +70,16 @@ test("analog working objects carry params and deltas for the LLM", () => {
   assert.match(lecture, /Jumeaux/)
   assert.match(lecture, /@analogs#2026-01-03/)
   assert.match(BRAIN_SYSTEM_PROMPT, /@analogs/)
+  const pin: WorkingObject = {
+    kind: "pin",
+    id: "analyse/analogs",
+    handle: "@analogs",
+    label: "Jumeaux",
+    inPrompt: true,
+    summary: "pin",
+  }
+  const merged = mergeAnalogPack([pin], objects)
+  assert.equal(merged[0]?.kind, "analog")
+  assert.equal(analogRetrieveHint(merged).date, "2026-01-01")
+  assert.equal(analogRetrieveHint([pin]).date, undefined)
 })

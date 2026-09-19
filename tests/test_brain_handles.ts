@@ -39,6 +39,8 @@ test("@analogs is a catalog handle and cites a draw date", () => {
   assert.equal(cited.drawDate, null)
   const link = deepLinkFor({ entry: raw.entry! })
   assert.match(link.href, /tab=jumeaux/)
+  const withQuery = deepLinkFor({ entry: raw.entry!, queryDate: "2026-08-25" })
+  assert.match(withQuery.href, /query=2026-08-25/)
 })
 
 test("handles parse @rsi, @sum.rsi, @delay:7.rsi, @ete alias, citation", () => {

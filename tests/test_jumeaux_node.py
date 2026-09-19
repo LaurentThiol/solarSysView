@@ -26,3 +26,7 @@ def test_twins_tab_node() -> None:
 
 def test_twins_demo_node() -> None:
     _run("test_twins_demo.ts")
+
+
+def test_twins_url_node() -> None:
+    _run("test_twins_url.ts")

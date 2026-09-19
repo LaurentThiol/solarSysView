@@ -2,6 +2,8 @@ import { VARIABLE_NAMES, type VariableName } from "@/lib/analysis"
 import { WINDOW_PRESETS, type WindowPreset } from "@/lib/analysis-window"
 import { STUDY_PRESETS, type StudyPreset } from "@/lib/chartisme/window"
 
+export { asDrawDate } from "@/lib/draw-date"
+
 export function readLabSearch(): URLSearchParams {
   if (typeof window === "undefined") return new URLSearchParams()
   return new URLSearchParams(window.location.search)

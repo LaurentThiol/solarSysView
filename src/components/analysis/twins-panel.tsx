@@ -1,10 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { usePathname, useRouter } from "next/navigation"
 
 import { TwinsDemoBar, TwinsDemoPopup } from "@/components/analysis/twins-demo"
 import { TitleHelp } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { queuePendingAnalogs } from "@/lib/brain/pending-analogs"
+import { queueBrainPin } from "@/lib/brain/specialist-demo"
 import { formatDrawDate, formatShortDate } from "@/lib/draws"
 import type { FingerprintDraw } from "@/lib/fingerprints"
 import {
@@ -28,6 +31,7 @@ import {
   twinsDemoWantsStart,
   type TwinsDemoStepId,
 } from "@/lib/twins-demo"
+import { applyTwinsSearch } from "@/lib/twins-url"
 import { cn } from "@/lib/utils"
 
 function demoHighlight(step: TwinsDemoStepId | null, ids: TwinsDemoStepId[], elevate = false) {
@@ -151,9 +155,22 @@ function RadarPortrait({
   )
 }
 
-export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
-  const [axes, setAxes] = useState<FingerprintAxis[]>(() => [...FINGERPRINT_AXES])
-  const [queryDate, setQueryDate] = useState<string | null>(null)
+export function TwinsPanel({
+  draws,
+  initialQuery = null,
+  initialAxes = null,
+}: {
+  draws: FingerprintDraw[]
+  initialQuery?: string | null
+  initialAxes?: FingerprintAxis[] | null
+}) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const [axes, setAxes] = useState<FingerprintAxis[]>(() =>
+    initialAxes?.length ? parseFingerprintAxes(initialAxes) : [...FINGERPRINT_AXES]
+  )
+  const [queryDate, setQueryDate] = useState<string | null>(initialQuery)
+  const [queryMissing, setQueryMissing] = useState(false)
   const [overlayDate, setOverlayDate] = useState<string | null>(null)
   const [demoStep, setDemoStep] = useState<TwinsDemoStepId | null>(null)
   const [demoRunning, setDemoRunning] = useState(false)
@@ -179,6 +196,16 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
   }, [index.query?.date, queryDate])
 
   useEffect(() => {
+    if (!initialQuery || !draws.length) return
+    if (draws.some((draw) => draw.date === initialQuery)) {
+      setQueryMissing(false)
+      setQueryDate(initialQuery)
+      return
+    }
+    setQueryMissing(true)
+  }, [draws, initialQuery])
+
+  useEffect(() => {
     if (overlayDate && !index.neighbors.some((row) => row.date === overlayDate)) {
       setOverlayDate(null)
     }
@@ -191,14 +218,44 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
 
   const neighborDates = useMemo(() => new Set(index.neighbors.map((row) => row.date)), [index.neighbors])
 
+  const writeTwinsUrl = useCallback(
+    (nextQuery: string | null, nextAxes: FingerprintAxis[]) => {
+      if (typeof window === "undefined") return
+      const query = applyTwinsSearch(window.location.search, {
+        queryDate: nextQuery,
+        axes: nextAxes,
+      })
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+    },
+    [pathname, router]
+  )
+
+  function selectQuery(date: string) {
+    setQueryDate(date)
+    setOverlayDate(null)
+    setQueryMissing(false)
+    writeTwinsUrl(date, axes)
+  }
+
+  function applyAxes(next: FingerprintAxis[]) {
+    setAxes(next)
+    writeTwinsUrl(queryDate ?? index.query?.date ?? null, next)
+  }
+
   function toggleAxis(axis: FingerprintAxis) {
-    setAxes((current) => {
-      if (current.includes(axis)) {
-        const next = current.filter((item) => item !== axis)
-        return next.length ? next : current
-      }
-      return parseFingerprintAxes([...current, axis])
-    })
+    const next = axes.includes(axis)
+      ? axes.filter((item) => item !== axis)
+      : parseFingerprintAxes([...axes, axis])
+    if (!next.length) return
+    applyAxes(next)
+  }
+
+  function pinNeighbor(focusDate: string) {
+    const query = index.query?.date
+    if (!query) return
+    queuePendingAnalogs({ queryDate: query, focusDate, axes })
+    queueBrainPin("analyse/analogs")
+    router.push("/brain")
   }
 
   const finishDemoGate = useCallback((ok: boolean) => {
@@ -335,7 +392,7 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
             <button
               type="button"
               className="rounded-md border border-border px-2 py-1 text-xs"
-              onClick={() => setAxes([...FINGERPRINT_AXES])}
+              onClick={() => applyAxes([...FINGERPRINT_AXES])}
             >
               Tous
             </button>
@@ -343,7 +400,7 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
               type="button"
               className="rounded-md border border-border px-2 py-1 text-xs"
               onClick={() => {
-                setAxes([...DEMO_MASK_AXES])
+                applyAxes([...DEMO_MASK_AXES])
                 setOverlayDate(null)
               }}
               title="Croiser seulement somme, étendue et parité"
@@ -375,6 +432,11 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
           <p className="text-xs text-muted-foreground">
             {axes.length} axe{axes.length > 1 ? "s" : ""} · query{" "}
             {index.query ? formatDrawDate(index.query.date) : "—"}. Les tirages sont indépendants.
+            {queryMissing && initialQuery ? (
+              <span className="ml-1 text-destructive">
+                {initialQuery} hors fenêtre — dernier tirage de la fenêtre.
+              </span>
+            ) : null}
           </p>
         </CardContent>
       </Card>
@@ -418,10 +480,7 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
                         <th className="sticky left-0 bg-card p-0 font-normal">
                           <button
                             type="button"
-                            onClick={() => {
-                              setQueryDate(row.date)
-                              setOverlayDate(null)
-                            }}
+                            onClick={() => selectQuery(row.date)}
                             title={`Indexer le ${formatDrawDate(row.date)}`}
                             className={cn(
                               "w-full px-2 py-1 text-left tabular-nums",
@@ -439,10 +498,7 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
                             <td key={`${row.date}-${axis}`} className="p-0">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setQueryDate(row.date)
-                                  setOverlayDate(null)
-                                }}
+                                onClick={() => selectQuery(row.date)}
                                 title={`${row.date} · ${axis} z=${z.toFixed(2)} brut=${raw ?? "—"}`}
                                 style={{ background: zFill(z) }}
                                 className={cn(
@@ -523,13 +579,13 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
               {index.neighbors.map((row) => {
                 const active = overlayDate === row.date
                 return (
-                  <li key={row.date}>
+                  <li key={row.date} className="flex items-stretch gap-2">
                     <button
                       type="button"
                       onClick={() => setOverlayDate(row.date)}
                       title={`Comparer au ${formatDrawDate(row.date)}`}
                       className={cn(
-                        "flex w-full flex-col gap-1 rounded-md border px-3 py-2 text-left",
+                        "flex min-w-0 flex-1 flex-col gap-1 rounded-md border px-3 py-2 text-left",
                         active ? "border-chart-5/60 bg-chart-5/10" : "border-border"
                       )}
                     >
@@ -559,6 +615,18 @@ export function TwinsPanel({ draws }: { draws: FingerprintDraw[] }) {
                           )
                         })}
                       </span>
+                    </button>
+                    <button
+                      type="button"
+                      data-action="pin-analog"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        pinNeighbor(row.date)
+                      }}
+                      title={`Épingler ${formatDrawDate(row.date)} dans Brain (query ${index.query?.date ?? "—"})`}
+                      className="shrink-0 self-center rounded-md border border-border px-2 py-1 text-xs"
+                    >
+                      Épingler
                     </button>
                   </li>
                 )

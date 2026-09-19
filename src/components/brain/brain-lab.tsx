@@ -102,10 +102,13 @@ import {
 } from "@/lib/brain/journal"
 import {
   analogAxesFromObjects,
+  analogRetrieveHint,
   analogWorkingObjects,
+  mergeAnalogPack,
   retrieveAnalogs,
   wantsAnalogs,
 } from "@/lib/brain/analogs"
+import { takePendingAnalogs } from "@/lib/brain/pending-analogs"
 import { BRAIN_SYSTEM_PROMPT } from "@/lib/brain/prompt"
 import { resolveEntry, windowMetaFrom } from "@/lib/brain/resolve"
 import {
@@ -226,6 +229,8 @@ export function BrainLab() {
   const demoStopRef = useRef(false)
   const demoAutoRef = useRef(false)
   const demoGateRef = useRef<{ resolve: (ok: boolean) => void } | null>(null)
+  const [analogPack, setAnalogPack] = useState<WorkingObject[]>([])
+  const pendingAnalogsRef = useRef(false)
 
   const archive = useMemo(
     () => [...draws].sort((a, b) => a.date.localeCompare(b.date)),
@@ -345,6 +350,43 @@ export function BrainLab() {
     if (pinned) clearPendingBrainPins()
   }, [pinEntry, specialists])
 
+  useEffect(() => {
+    if (pendingAnalogsRef.current || loading) return
+    const pending = takePendingAnalogs()
+    pendingAnalogsRef.current = true
+    if (!pending) return
+    const entry = catalogEntry("analyse/analogs")
+    if (entry) pinEntry(entry)
+    void (async () => {
+      const result = await retrieveAnalogs({
+        date: pending.queryDate,
+        axes: pending.axes,
+        k: 8,
+        era,
+        from: resolved.fromDate,
+        to: resolved.toDate,
+        draws: resolved.work,
+      })
+      const inWindow = resolved.work.some((draw) => draw.date === pending.queryDate)
+      const objects = analogWorkingObjects(result).map((item) => {
+        if (item.id !== "analyse/analogs" || !item.fiche) return item
+        if (inWindow && result.query?.date === pending.queryDate) return item
+        return {
+          ...item,
+          summary: `Query ${pending.queryDate} hors fenêtre`,
+          fiche: { ...item.fiche, error: `Query ${pending.queryDate} hors fenêtre` },
+        }
+      })
+      setAnalogPack(objects)
+      setDraft(`lis @analogs#${pending.focusDate}`)
+    })()
+  }, [era, loading, pinEntry, resolved.fromDate, resolved.toDate, resolved.work])
+
+  useEffect(() => {
+    if (pins.some((item) => item.id === "analyse/analogs")) return
+    if (analogPack.length) setAnalogPack([])
+  }, [analogPack.length, pins])
+
   const pinPack = useCallback(
     (handles: string[]) => {
       for (const handle of handles) {
@@ -369,9 +411,10 @@ export function BrainLab() {
         fiche,
       })
     }
-    setFiches(objects)
-    return objects
-  }, [pins, ctxBase])
+    const merged = mergeAnalogPack(objects, analogPack)
+    setFiches(merged)
+    return merged
+  }, [analogPack, pins, ctxBase])
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -406,13 +449,16 @@ export function BrainLab() {
         score: item.score,
       }))
       const objects = extra.length ? extra : fiches
-      const analogQuery = parsed.find((item) => item.entry?.kind === "analog" && item.drawDate)?.drawDate
+      const citedAnalog = parsed.find((item) => item.entry?.kind === "analog" && item.drawDate)?.drawDate
+      const fromTable = analogRetrieveHint(objects)
+      const analogQuery = fromTable.date ?? citedAnalog
+      const analogAxes = fromTable.axes?.length ? fromTable.axes : analogAxesFromObjects(objects)
       const analogObjects =
         wantsAnalogs(objects, question) || analogQuery
           ? analogWorkingObjects(
               await retrieveAnalogs({
                 date: analogQuery ?? resolved.work.at(-1)?.date,
-                axes: analogAxesFromObjects(objects),
+                axes: analogAxes,
                 k: 8,
                 era,
                 from: resolved.fromDate,
@@ -1315,6 +1361,8 @@ export function BrainLab() {
                         periodX: item.fiche.params.periodX,
                         preset,
                         curveId: item.fiche.params.curveId,
+                        queryDate: typeof item.fiche.last.query === "string" ? item.fiche.last.query : null,
+                        axes: typeof item.fiche.last.axes === "string" ? item.fiche.last.axes : null,
                       }).href
                     : null
                   return (

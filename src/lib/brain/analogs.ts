@@ -1,4 +1,4 @@
-import type { WorkingObject } from "@/lib/brain/types"
+import type { WorkingObject } from "./types.ts"
 import {
   DEFAULT_TWIN_K,
   FINGERPRINT_AXES,
@@ -9,7 +9,7 @@ import {
   type FingerprintAxis,
   type FingerprintDraw,
   type TwinHit,
-} from "@/lib/fingerprints"
+} from "../fingerprints.ts"
 
 export type AnalogQuery = {
   date?: string | null
@@ -117,6 +117,26 @@ export function wantsAnalogs(objects: WorkingObject[], question = ""): boolean {
     }
     return item.fiche?.lab === "analyse" && isFingerprintAxis(item.fiche.handle)
   })
+}
+
+export function analogRetrieveHint(objects: WorkingObject[]): { date?: string; axes?: string[] } {
+  const pack = objects.find((item) => item.kind === "analog" && item.id === "analyse/analogs")
+  const query = pack?.fiche?.last.query
+  const axesRaw = pack?.fiche?.last.axes
+  const date = typeof query === "string" && query ? query : undefined
+  const axes =
+    typeof axesRaw === "string"
+      ? axesRaw.split(",").map((item) => item.trim()).filter(Boolean)
+      : undefined
+  return { date, axes }
+}
+
+export function mergeAnalogPack(objects: WorkingObject[], pack: WorkingObject[]): WorkingObject[] {
+  if (!pack.length) return objects
+  const ids = new Set(pack.map((item) => item.id))
+  const handles = new Set(pack.map((item) => item.handle))
+  const kept = objects.filter((item) => !ids.has(item.id) && !handles.has(item.handle))
+  return [...pack, ...kept]
 }
 
 export function analogWorkingObjects(result: AnalogsResult): WorkingObject[] {

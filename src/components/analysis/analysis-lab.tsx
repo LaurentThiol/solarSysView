@@ -63,6 +63,8 @@ import {
   asWindowPreset,
   readLabSearch,
 } from "@/lib/lab-search"
+import type { FingerprintAxis } from "@/lib/fingerprints"
+import { readTwinsSearch } from "@/lib/twins-url"
 import { ERA_LABELS } from "@/lib/copy"
 import { useLabTab } from "@/lib/use-lab-tab"
 import { useDraws } from "@/lib/use-draws"
@@ -260,6 +262,8 @@ export function AnalysisLab() {
     n_sim?: number
   } | null>(null)
   const [mcError, setMcError] = useState<string | null>(null)
+  const [initialQuery, setInitialQuery] = useState<string | null>(null)
+  const [initialAxes, setInitialAxes] = useState<FingerprintAxis[] | null>(null)
 
   useEffect(() => {
     const params = readLabSearch()
@@ -275,8 +279,14 @@ export function AnalysisLab() {
       if (variableNeedsStar(target)) setStar(Math.min(12, n))
       else setBall(n)
     }
+    const twins = readTwinsSearch(params.toString())
+    if (twins.queryDate) {
+      setInitialQuery(twins.queryDate)
+      setTab("jumeaux")
+    }
+    if (twins.axes) setInitialAxes(twins.axes)
     if (twinsDemoWantsStart(params.toString())) setTab("jumeaux")
-    // Une seule lecture de l’URL au montage (variable, preset, démo).
+    // Une seule lecture de l’URL au montage (variable, preset, query, démo).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- volontairement once
   }, [])
 
@@ -673,7 +683,9 @@ export function AnalysisLab() {
       ) : null}
       {tab === "bayes" ? <BayesPanel draws={work} /> : null}
       {tab === "dependence" ? <DependencePanel draws={work} windowSize={windowSize} /> : null}
-      {tab === "jumeaux" ? <TwinsPanel draws={work} /> : null}
+      {tab === "jumeaux" ? (
+        <TwinsPanel draws={work} initialQuery={initialQuery} initialAxes={initialAxes} />
+      ) : null}
       {tab === "proba" ? <ProbaPanel /> : null}
       {tab === "memo" ? <MemoPanel /> : null}
       </PillTabPanel>

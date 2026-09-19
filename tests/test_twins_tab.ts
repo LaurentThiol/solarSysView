@@ -21,4 +21,6 @@ test("Jumeaux panel is the fingerprint index, not a Morpho or PCA view", () => {
   assert.doesNotMatch(panelSrc, /PCA|t-SNE|CLIP/)
   assert.match(panelSrc, /pas une prédiction/)
   assert.match(panelSrc, /TwinsDemoBar/)
+  assert.match(panelSrc, /Épingler/)
+  assert.match(panelSrc, /initialQuery/)
 })

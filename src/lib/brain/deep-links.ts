@@ -1,6 +1,7 @@
 import type { WindowPreset } from "@/lib/analysis-window"
 import type { VariableName } from "@/lib/analysis"
 import type { CatalogEntry } from "@/lib/brain/catalog"
+import { applyTwinsSearch } from "../twins-url.ts"
 
 export type DeepLinkTarget = {
   href: string
@@ -14,6 +15,8 @@ export function deepLinkFor(input: {
   periodX?: number
   preset?: WindowPreset
   curveId?: string | null
+  queryDate?: string | null
+  axes?: string | string[] | null
 }): DeepLinkTarget {
   const preset = input.preset ?? "last_100"
   const variable = input.variable ?? input.entry.defaults.variable ?? "sum"
@@ -22,8 +25,16 @@ export function deepLinkFor(input: {
   if (input.periodX) params.set("x", String(input.periodX))
   if (input.entry.lab === "analyse") {
     if (input.entry.kind === "analog") {
-      params.set("tab", "jumeaux")
-      return { href: `/analyse?${params}`, lab: "analyse" }
+      const axes = Array.isArray(input.axes)
+        ? input.axes
+        : typeof input.axes === "string"
+          ? input.axes.split(",").map((item) => item.trim()).filter(Boolean)
+          : null
+      const query = applyTwinsSearch(params.toString(), {
+        queryDate: input.queryDate ?? null,
+        axes,
+      })
+      return { href: `/analyse?${query}`, lab: "analyse" }
     }
     params.set("variable", variable)
     if (input.n != null) params.set("n", String(input.n))
