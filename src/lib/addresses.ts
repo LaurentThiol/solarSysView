@@ -479,5 +479,8 @@ export function addressMatchesLocation(
   for (const [key, value] of url.searchParams) {
     if ((current.get(key) ?? "") !== value) return false
   }
+  if (url.searchParams.size === 0 && current.has("tab") && entry.kind === "page") {
+    return false
+  }
   return true
 }
