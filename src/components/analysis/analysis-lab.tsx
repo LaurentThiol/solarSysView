@@ -193,12 +193,15 @@ const DRAW_TABS = [
       body: "Portrait multi-axes d’un tirage (variables Analyse hors delay/hit) et voisins en cosinus de z-scores. Les couleurs sont des écarts à la moyenne de la fenêtre, pas une prédiction. Démo guidée : bouton « Lancer la démo » ou /analyse?tab=jumeaux&demo=1 — pop-up Suivant / Annuler.",
     },
   },
+] as const
+
+const GLOSSARY_TABS = [
   {
     id: "proba",
     label: "Probabilités",
     help: {
       title: "Probabilités",
-      body: "Rangs officiels 5/50 + 2/12. Indépendant de la fenêtre de travail (139 838 160 grilles).",
+      body: "Référence officielle 5/50 + 2/12 (139 838 160 grilles). Ce n’est pas une lecture de la fenêtre : même loi pour toute grille valide.",
     },
   },
   {
@@ -206,7 +209,7 @@ const DRAW_TABS = [
     label: "Mémo",
     help: {
       title: "Mémo",
-      body: "Aide-mémoire des périodes d’indicateurs et des biais (sur-optimisation, look-ahead, indépendance des tirages).",
+      body: "Périodes d’indicateurs groupées comme les onglets Technique, plus les biais (look-ahead, sur-optimisation, indépendance). Le vocabulaire figé de tout Synchro reste dans le bouton Glossaire du bandeau.",
     },
   },
 ] as const
@@ -238,8 +241,11 @@ const MEASURE_BAR_HELP: HelpCopy = {
   ],
 }
 
-type TabId = (typeof TECH_TABS)[number]["id"] | (typeof DRAW_TABS)[number]["id"]
-const ANALYSE_TAB_IDS = [...TECH_TABS, ...DRAW_TABS].map((item) => item.id) as TabId[]
+type TabId =
+  | (typeof TECH_TABS)[number]["id"]
+  | (typeof DRAW_TABS)[number]["id"]
+  | (typeof GLOSSARY_TABS)[number]["id"]
+const ANALYSE_TAB_IDS = [...TECH_TABS, ...DRAW_TABS, ...GLOSSARY_TABS].map((item) => item.id) as TabId[]
 
 export function AnalysisLab() {
   const [era, setEra] = useState<"current" | "all">("current")
@@ -570,6 +576,7 @@ export function AnalysisLab() {
         groups={[
           { label: "Technique", items: TECH_TABS },
           { label: "Tirage", items: DRAW_TABS },
+          { label: "Glossaire", items: GLOSSARY_TABS },
         ]}
       />
 

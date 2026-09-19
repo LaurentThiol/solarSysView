@@ -1,15 +1,18 @@
 "use client"
 
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { BookOpen } from "lucide-react"
 
 import { StatusPill } from "@/components/status-pill"
-import { GLOSSARY } from "@/lib/copy"
+import { Input } from "@/components/ui/input"
+import { filterGlossary, groupedGlossary } from "@/lib/copy"
 
 export function GlossaryButton() {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
   const titleId = useId()
+  const searchId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -23,8 +26,11 @@ export function GlossaryButton() {
 
   useEffect(() => {
     if (!open) return
-    panelRef.current?.querySelector("button")?.focus()
+    setQuery("")
+    panelRef.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus()
   }, [open])
+
+  const groups = useMemo(() => groupedGlossary(filterGlossary(query)), [query])
 
   return (
     <>
@@ -57,7 +63,7 @@ export function GlossaryButton() {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
-                className="relative z-10 max-h-[min(32rem,85vh)] w-full max-w-lg overflow-auto rounded-t-2xl border border-border bg-card p-4 shadow-2xl sm:rounded-2xl"
+                className="relative z-10 max-h-[min(36rem,85vh)] w-full max-w-xl overflow-auto rounded-t-2xl border border-border bg-card p-4 shadow-2xl sm:rounded-2xl"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -65,7 +71,9 @@ export function GlossaryButton() {
                       Glossaire
                     </h2>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Termes figés pour tout Synchro. L’interface vouvoie.
+                      Termes figés pour tout Synchro. L’interface vouvoie. Les tables
+                      longues (rangs officiels, périodes d’indicateurs) sont dans Analyse
+                      · Glossaire.
                     </p>
                   </div>
                   <button
@@ -76,14 +84,43 @@ export function GlossaryButton() {
                     Fermer
                   </button>
                 </div>
-                <dl className="mt-4 flex flex-col gap-3">
-                  {GLOSSARY.map((entry) => (
-                    <div key={entry.term}>
-                      <dt className="text-xs font-medium text-foreground">{entry.term}</dt>
-                      <dd className="mt-0.5 text-xs leading-5 text-muted-foreground">{entry.text}</dd>
-                    </div>
-                  ))}
-                </dl>
+                <label className="mt-3 block text-xs text-muted-foreground" htmlFor={searchId}>
+                  Rechercher
+                  <Input
+                    id={searchId}
+                    type="search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Fenêtre, warmup, rang…"
+                    aria-label="Rechercher dans le glossaire"
+                    className="mt-1"
+                  />
+                </label>
+                {groups.length === 0 ? (
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    Aucun terme ne correspond à « {query.trim()} ».
+                  </p>
+                ) : (
+                  <div className="mt-4 flex flex-col gap-4">
+                    {groups.map((group) => (
+                      <section key={group.id} aria-label={group.label}>
+                        <h3 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                          {group.label}
+                        </h3>
+                        <dl className="mt-2 flex flex-col gap-3">
+                          {group.entries.map((entry) => (
+                            <div key={entry.term}>
+                              <dt className="text-xs font-medium text-foreground">{entry.term}</dt>
+                              <dd className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                                {entry.text}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </section>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>,
             document.body

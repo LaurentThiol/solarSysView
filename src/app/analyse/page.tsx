@@ -14,7 +14,7 @@ export default function AnalysePage() {
   return (
     <PageShell
       title="Analyse"
-      subtitle="Indicateurs, numéros et tests vs hasard sur la même fenêtre de travail. X est la période des indicateurs, distincte de la plage calendaire."
+      subtitle="Indicateurs, numéros et tests vs hasard sur la même fenêtre de travail. X est la période des indicateurs, distincte de la plage calendaire. Probabilités et Mémo sont dans Glossaire."
     >
       <Suspense fallback={<p className="text-sm text-muted-foreground">Chargement…</p>}>
         <AnalysisLab />

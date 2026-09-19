@@ -20,16 +20,31 @@ import {
 } from "@/lib/analysis"
 import { type Draw, formatDrawDate } from "@/lib/draws"
 
+function formatOfficialPct(value: number) {
+  return `${(value * 100).toLocaleString("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} %`
+}
+
 export function ProbaPanel() {
   const ranks = rankProbabilities(12)
+  const pWin = ranks.filter((row) => row.rank != null).reduce((sum, row) => sum + row.p, 0)
   return (
     <Card>
       <CardHeader>
         <CardTitle>Probabilités exactes (5/50 + 2/12)</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <p className="text-sm text-muted-foreground">
-          139 838 160 grilles possibles. Hypergéométrique, indépendant de la fenêtre de travail.
+        <p className="text-sm leading-6 text-muted-foreground">
+          Référence officielle, pas une lecture de la fenêtre : 139 838 160 grilles,
+          loi hypergéométrique. {formatOfficialPct(pWin)} d’obtenir au moins un rang —
+          identique pour toute grille 5+2, et la même H0 que Combinaisons et le journal
+          Jeux. Les périodes d’indicateurs sont dans{" "}
+          <Link href="/analyse?tab=memo" className="underline underline-offset-2">
+            Mémo
+          </Link>
+          .
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
