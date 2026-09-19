@@ -692,11 +692,11 @@ export function EvolutionGains({
   return (
     <Card>
       <CardHeader className="gap-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3">
           <CardTitle className="text-base font-medium">
             <TitleHelp help={TITLE_HELP}>Évolution dans le temps · gains</TitleHelp>
           </CardTitle>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
             <div className="flex flex-col gap-1">
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 Lecture
