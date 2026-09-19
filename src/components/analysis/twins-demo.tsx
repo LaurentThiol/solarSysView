@@ -30,7 +30,7 @@ export function TwinsDemoBar({
       running={running}
       done={done}
       waiting={waiting}
-      idleHint="Six étapes, chiffres réels, pop-up Suivant / Annuler. Vous avancez à votre rythme."
+      idleHint="Pop-up Suivant / Annuler. Chiffres réels, à votre rythme."
       doneHint="Terminée : le masque, la query et le voisin restent sous vos yeux."
       startLabel="Lancer la démo"
       replayLabel="Rejouer"

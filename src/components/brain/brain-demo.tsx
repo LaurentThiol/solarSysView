@@ -51,7 +51,7 @@ export function DemoTourBar({
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-sm font-medium">{title}</p>
         <HelpTip {...help} />
-        <span className="text-[11px] text-muted-foreground">
+        <span className="min-w-0 flex-1 text-[11px] text-muted-foreground">
           {running
             ? waiting && current
               ? `${current.label} — lis le pop-up, puis Suivant.`
@@ -62,7 +62,7 @@ export function DemoTourBar({
               ? doneHint
               : idleHint}
         </span>
-        <div className="ml-auto flex gap-1.5">
+        <div className="ml-auto flex shrink-0 gap-1.5">
           {running ? (
             <Button size="sm" variant="outline" onClick={onStop}>
               <StopCircle />
