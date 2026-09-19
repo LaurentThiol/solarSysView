@@ -1037,14 +1037,39 @@ export function EvolutionGains({
                 <span className="inline-flex items-center gap-1">
                   <button
                     type="button"
+                    data-action="gains-log-scale"
                     aria-pressed={logScale}
-                    title="Échelle logarithmique des totaux"
+                    aria-label={
+                      logScale
+                        ? "Échelle logarithmique activée"
+                        : "Échelle logarithmique désactivée"
+                    }
+                    title={
+                      logScale
+                        ? "Échelle log activée — cliquer pour l’échelle linéaire"
+                        : "Échelle log désactivée — cliquer pour l’échelle logarithmique"
+                    }
                     onClick={() => changeLog(!logScale)}
                     className={cn(
-                      "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs transition-opacity hover:bg-muted",
-                      !logScale && "opacity-40"
+                      "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                      logScale
+                        ? "border-ok/70 bg-ok/20 text-ok hover:bg-ok/30"
+                        : "border-err/70 bg-err/20 text-err hover:bg-err/30"
                     )}
                   >
+                    <span
+                      aria-hidden
+                      className="grid size-3 shrink-0 place-items-center rounded-full bg-black/35 ring-1 ring-black/50"
+                    >
+                      <span
+                        className={cn(
+                          "size-2 rounded-full",
+                          logScale
+                            ? "bg-ok shadow-[0_0_7px_var(--ok)]"
+                            : "bg-err shadow-[0_0_7px_var(--err)]"
+                        )}
+                      />
+                    </span>
                     log
                   </button>
                   <HelpTip {...LOG_HELP} />

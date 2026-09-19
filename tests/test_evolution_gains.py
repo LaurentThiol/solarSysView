@@ -40,6 +40,11 @@ def test_evolution_gains_block_is_wired() -> None:
     assert "Longueur report" in gains
     assert "Empilée" in gains
     assert "échelle log" in gains.lower() or "Échelle log" in gains
+    assert 'data-action="gains-log-scale"' in gains
+    assert "Échelle logarithmique activée" in gains
+    assert "Échelle logarithmique désactivée" in gains
+    assert "bg-ok" in gains
+    assert "bg-err" in gains
     assert 'aria-label="Jour des tirages"' in gains
     assert "winnersOutsideFrance" in lib
     assert "toGainsChart" in lib
