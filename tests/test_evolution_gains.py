@@ -29,16 +29,27 @@ def test_evolution_gains_block_is_wired() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert 'from "@/components/evolution-gains"' in panel
-    assert "<EvolutionGains draws={filtered} />" in panel
+    assert "draws={filtered}" in panel
+    assert "history={archive}" in panel
+    assert 'host="gains"' in panel
     assert "Évolution dans le temps · gains" in gains
     assert "Somme n°" in gains
     assert "Hors FR" in gains
     assert "On n’additionne pas FR et EU" in gains
     assert "Cette archive n’a que le rang 1" in gains
+    assert "Longueur report" in gains
+    assert "Empilée" in gains
+    assert "échelle log" in gains.lower() or "Échelle log" in gains
+    assert 'aria-label="Jour des tirages"' in gains
     assert "winnersOutsideFrance" in lib
     assert "toGainsChart" in lib
     assert "numbersSum" in lib
     gains_lib = (ROOT / "src/lib/gains.ts").read_text(encoding="utf-8")
     assert "winnersEu - winnersFr" in gains_lib
+    assert "reportLengthsFromSteps" in gains_lib
+    assert "échelle log" in readme
+    assert "mardi / vendredi" in readme
+    assert "longueur de report" in readme
+    assert "masse empilée" in readme
     assert "on n’additionne pas FR + EU" in readme
     assert "somme des 5 numéros" in readme

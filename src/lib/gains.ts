@@ -104,3 +104,78 @@ export function prizeMass(
   if (!Number.isFinite(winners) || !Number.isFinite(prize)) return null
   return winners * prize
 }
+
+export const PRIZE_RANKS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const
+
+export type GainsWeekday = "all" | "mardi" | "vendredi"
+
+export function normalizeDrawWeekday(
+  value: string | null | undefined
+): "mardi" | "vendredi" | null {
+  const day = String(value ?? "").toLowerCase()
+  if (day === "mardi" || day === "vendredi") return day
+  return null
+}
+
+export function filterDrawsByWeekday<T extends { weekday?: string }>(
+  draws: T[],
+  weekday: GainsWeekday
+): T[] {
+  if (weekday === "all") return draws
+  return draws.filter((draw) => normalizeDrawWeekday(draw.weekday) === weekday)
+}
+
+export function weekdayMean(
+  values: Array<{ weekday?: string; value: number | null | undefined }>,
+  weekday: "mardi" | "vendredi"
+): number | null {
+  const picked = finiteNumbers(
+    values
+      .filter((item) => normalizeDrawWeekday(item.weekday) === weekday)
+      .map((item) => item.value)
+  )
+  if (!picked.length) return null
+  return picked.reduce((sum, value) => sum + value, 0) / picked.length
+}
+
+/** Clé plate Recharts pour la masse EU d’un rang (R1 = jackpot). */
+export function massRankKey(rank: number): string {
+  return `massR${rank}`
+}
+
+/** 0 et les négatifs n’ont pas de place sur une échelle log. */
+export function logPlotValue(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value) || value <= 0) return null
+  return value
+}
+
+export function logDomain(
+  values: Array<number | null | undefined>
+): [number, number] | null {
+  const positives = finiteNumbers(values).filter((value) => value > 0)
+  if (!positives.length) return null
+  const min = Math.min(...positives)
+  const max = Math.max(...positives)
+  const floor = min >= 1 ? Math.max(1, min / 2) : min / 2
+  return [floor, max]
+}
+
+/**
+ * Longueur de report : nombre de tirages consécutifs sans gagnant du jackpot.
+ * `steps` est chronologique : 1 = report, 0 = gagnant, null = inconnu.
+ * Un inconnu n’allonge ni ne casse la série (le compteur reste).
+ */
+export function reportLengthsFromSteps(
+  steps: Array<number | null | undefined>
+): Array<number | null> {
+  let streak = 0
+  return steps.map((step) => {
+    if (step == null || !Number.isFinite(step)) return null
+    if (step > 0) {
+      streak += 1
+      return streak
+    }
+    streak = 0
+    return 0
+  })
+}

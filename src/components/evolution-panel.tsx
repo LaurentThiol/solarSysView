@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { ChartDrawProvider, useChartDraw } from "@/components/chart-draw/chart-draw-context"
 import { HelpTip, LabelHelp } from "@/components/help"
@@ -22,6 +22,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select"
 import { packEvolution } from "@/lib/capture/pack"
+import type { ChartSketch } from "@/lib/chart-draw"
 import {
   DRAWS,
   archiveSummary,
@@ -54,6 +55,18 @@ const PERIODS: { id: DrawWindow; label: string }[] = [
   { id: "all", label: ERA_LABELS.all },
 ]
 
+function GainsSketchBridge({
+  onSketches,
+}: {
+  onSketches: (sketches: ChartSketch[]) => void
+}) {
+  const { sketches } = useChartDraw()
+  useEffect(() => {
+    onSketches(sketches)
+  }, [sketches, onSketches])
+  return null
+}
+
 function isLastWindow(period: DrawWindow) {
   return period === "last_20" || period === "last_50"
 }
@@ -67,6 +80,7 @@ function EvolutionContent() {
   const [month, setMonth] = useState("all")
   const { draws, source, loading } = useDraws(period)
   const { sketches, chartMeta } = useChartDraw()
+  const [gainsSketches, setGainsSketches] = useState<ChartSketch[]>([])
   const lastWindow = isLastWindow(period)
   const archive = useMemo(() => {
     if (period === "year_n1") {
@@ -159,7 +173,7 @@ function EvolutionContent() {
       from: bounds.from,
       to: bounds.to,
       drawCount: filtered.length,
-      sketches,
+      sketches: [...sketches, ...gainsSketches],
       chartMeta,
     })
   )
@@ -290,7 +304,10 @@ function EvolutionContent() {
 
       <DrawChart draws={filtered} />
 
-      <EvolutionGains draws={filtered} />
+      <ChartDrawProvider host="gains">
+        <GainsSketchBridge onSketches={setGainsSketches} />
+        <EvolutionGains draws={filtered} history={archive} />
+      </ChartDrawProvider>
 
       <EvolutionParity draws={filtered} />
 
@@ -359,8 +376,9 @@ function EvolutionContent() {
 
       <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
         Chaque tirage est indépendant. Les fréquences, la SMA, les bandes de
-        Bollinger, le cumul pair/impair et les totaux de gagnants décrivent la
-        fenêtre choisie, elles ne prédisent pas le prochain tirage.
+        Bollinger, le cumul pair/impair, les totaux de gagnants, la longueur de
+        report et la masse empilée décrivent la fenêtre choisie, elles ne
+        prédisent pas le prochain tirage.
       </p>
     </div>
   )

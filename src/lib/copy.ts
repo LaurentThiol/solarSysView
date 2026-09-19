@@ -105,6 +105,10 @@ export const GLOSSARY: { term: string; text: string }[] = [
   },
   {
     term: "Gagnants EU",
-    text: "Colonne FDJ « en Europe » : tous les pays participants, France comprise. On n’additionne pas FR et EU. Hors FR = EU − FR. Visible dans Tirage et dans Évolution · gains.",
+    text: "Colonne FDJ « en Europe » : tous les pays participants, France comprise. On n’additionne pas FR et EU. Hors FR = EU − FR. Visible dans Tirage et dans Évolution · gains. Mardi et vendredi n’ont pas les mêmes mises : le filtre jour les sépare.",
+  },
+  {
+    term: "Longueur de report",
+    text: "Nombre de tirages consécutifs sans gagnant du jackpot. 0 le soir où quelqu’un gagne. Distinct du 0/+1 des boules, qui dit seulement s’il y a report.",
   },
 ]

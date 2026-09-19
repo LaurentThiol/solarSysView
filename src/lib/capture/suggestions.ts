@@ -33,7 +33,7 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   }
   if (lab === "evolution") {
     return [
-      "Résume la courbe affichée : niveau, pente récente, SMA / Bollinger s’ils sont visibles, gains FR/EU s’ils sont à l’écran, pair/impair, forme (étendue, consécutifs, décennies).",
+      "Résume la courbe affichée : niveau, pente récente, SMA / Bollinger s’ils sont visibles, gains FR/EU (log, mardi/vendredi, longueur de report, masse empilée) s’ils sont à l’écran, pair/impair, forme (étendue, consécutifs, décennies).",
       "S’il y a une annotation chartiste : colle-t-elle à la courbe, ou est-ce une projection ? Compare au départ, à l’arrivée et à la lecture géométrique jointe.",
       "Ces extrêmes de retard ou de fréquence sont-ils remarquables sous l’hypothèse d’indépendance ?",
     ]

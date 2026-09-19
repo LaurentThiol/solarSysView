@@ -14,8 +14,11 @@ import {
   type FrequencyItem,
 } from "@/lib/frequency-rank"
 import {
+  massRankKey,
   numbersSum,
+  PRIZE_RANKS,
   prizeMass,
+  reportLengthsFromSteps,
   shareFrPercent,
   winnersOutsideFrance,
 } from "@/lib/gains"
@@ -29,15 +32,24 @@ export {
 }
 
 export {
+  filterDrawsByWeekday,
   finiteNumbers,
   formatCompactCount,
   formatCompactEuro,
   isPrizeRank,
+  logDomain,
+  logPlotValue,
+  massRankKey,
+  normalizeDrawWeekday,
   numbersSum,
   pairedFinite,
+  PRIZE_RANKS,
   prizeMass,
+  reportLengthsFromSteps,
   shareFrPercent,
+  weekdayMean,
   winnersOutsideFrance,
+  type GainsWeekday,
 } from "@/lib/gains"
 
 export type PrizeTier = {
@@ -305,36 +317,83 @@ export function payoutMass(
 export type GainsChartPoint = {
   date: string
   id: number
+  weekday: string
   sumNumbers: number
   winnersFr: number | null
   winnersEu: number | null
   winnersExFr: number | null
+  winnersR1: number | null
+  winnersR13: number | null
   shareFr: number | null
   jackpot: number | null
+  prizeR13: number | null
   massFr: number | null
   massEu: number | null
+  massR1: number | null
+  massR13: number | null
+  rank1: number | null
+  reportLength: number | null
+} & Record<string, number | string | null>
+
+export function payoutMassAtRank(
+  draw: Pick<Draw, "prizes">,
+  rank: number,
+  side: "fr" | "eu" = "eu"
+): number | null {
+  const tier = prizeTierAtRank(draw, rank)
+  if (!tier || tier.prize == null || !Number.isFinite(tier.prize)) return null
+  if (side === "fr") return prizeMass(tier.winners_fr, tier.prize)
+  const eu = rankWinnersTotal(tier.winners_fr, tier.winners_eu)
+  return prizeMass(eu, tier.prize)
+}
+
+export function reportLengthByDate(
+  history: Array<Pick<Draw, "date" | "prizes">>
+): Map<string, number | null> {
+  const newest = new Map<string, Pick<Draw, "date" | "prizes">>()
+  for (const draw of history) newest.set(draw.date, draw)
+  const ordered = [...newest.values()].sort((a, b) => a.date.localeCompare(b.date))
+  const lengths = reportLengthsFromSteps(ordered.map((draw) => rank1WinnerStep(draw)))
+  return new Map(ordered.map((draw, index) => [draw.date, lengths[index] ?? null]))
 }
 
 export function toGainsChart(
   draws: Draw[],
-  scope: GainsScope = "totals"
+  scope: GainsScope = "totals",
+  history: Array<Pick<Draw, "date" | "prizes">> = draws
 ): GainsChartPoint[] {
+  const reports = reportLengthByDate(history.length ? history : draws)
   return [...draws]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((draw) => {
       const winners = winnersForScope(draw, scope)
       const mass = payoutMass(draw, scope)
+      const rank1 = winnersForScope(draw, 1)
+      const rank13 = winnersForScope(draw, 13)
+      const masses: Record<string, number | null> = {}
+      for (const rank of PRIZE_RANKS) {
+        masses[massRankKey(rank)] = payoutMassAtRank(draw, rank, "eu")
+      }
       return {
         date: draw.date,
         id: draw.id,
+        weekday: draw.weekday,
         sumNumbers: numbersSum(draw.numbers),
         winnersFr: winners.fr,
         winnersEu: winners.eu,
         winnersExFr: winners.exFr,
+        winnersR1: rank1.eu,
+        winnersR13: rank13.eu,
         shareFr: shareFrPercent(winners.fr, winners.eu),
         jackpot: jackpotAmount(draw),
+        prizeR13: prizeAtRank(draw, 13),
         massFr: mass.fr,
         massEu: mass.eu,
+        massR1: masses.massR1 ?? null,
+        massR13: masses.massR13 ?? null,
+        rank1: rank1WinnerStep(draw),
+        reportLength: reports.get(draw.date) ?? null,
+        ...masses,
       }
     })
 }

@@ -2,13 +2,19 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  filterDrawsByWeekday,
   formatCompactCount,
   formatCompactEuro,
   isPrizeRank,
+  logDomain,
+  logPlotValue,
+  massRankKey,
   numbersSum,
   pairedFinite,
   prizeMass,
+  reportLengthsFromSteps,
   shareFrPercent,
+  weekdayMean,
   winnersOutsideFrance,
 } from "../src/lib/gains.ts"
 
@@ -35,6 +41,39 @@ test("number sum and prize mass stay arithmetic", () => {
     xs: [15, 20],
     ys: [80, 90],
   })
+})
+
+test("report length counts consecutive rollovers then resets", () => {
+  assert.deepEqual(reportLengthsFromSteps([1, 1, 1, 0, 1, null, 1]), [
+    1,
+    2,
+    3,
+    0,
+    1,
+    null,
+    2,
+  ])
+  assert.deepEqual(reportLengthsFromSteps([0, 0]), [0, 0])
+})
+
+test("log scale drops zeros and keeps a positive domain", () => {
+  assert.equal(logPlotValue(0), null)
+  assert.equal(logPlotValue(4.2), 4.2)
+  assert.deepEqual(logDomain([0, 5, 50_000_000]), [2.5, 50_000_000])
+  assert.equal(logDomain([0, 0]), null)
+})
+
+test("weekday filter and means keep mardi and vendredi apart", () => {
+  const rows = [
+    { weekday: "mardi", value: 10 },
+    { weekday: "vendredi", value: 30 },
+    { weekday: "mardi", value: 20 },
+  ]
+  assert.equal(filterDrawsByWeekday(rows, "mardi").length, 2)
+  assert.equal(filterDrawsByWeekday(rows, "vendredi").length, 1)
+  assert.equal(weekdayMean(rows, "mardi"), 15)
+  assert.equal(weekdayMean(rows, "vendredi"), 30)
+  assert.equal(massRankKey(13), "massR13")
 })
 
 test("compact axis labels switch to k and M", () => {
