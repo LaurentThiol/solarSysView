@@ -31,6 +31,8 @@ def test_evolution_tables_use_lookback_and_thresholds() -> None:
     panel = (ROOT / "src/components/evolution-panel.tsx").read_text(encoding="utf-8")
     assert "numberFrequencyTable(filtered, archive)" in panel
     assert "starFrequencyTable(filtered, 12, archive)" in panel
+    assert 'id: "year_n1"' in panel
+    assert "WINDOW_PRESET_LABELS.year_n1" in panel
     assert "hottest(numberBoard, 10, { minCount: expectedN })" in panel
     assert "minDelay: expectedNDelay" in panel
     assert "exclude: hotNumbers.map((item) => item.value)" in panel

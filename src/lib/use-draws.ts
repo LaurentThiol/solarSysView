@@ -2,11 +2,16 @@
 
 import { useEffect, useState } from "react"
 
+import {
+  PREV_CALENDAR_YEAR_PARAM,
+  filterCalendarYear,
+  newestCalendarYear,
+} from "@/lib/analysis-window"
 import { DRAWS, takeLastDraws, type Draw } from "@/lib/draws"
 
 export type DrawSource = "json" | "neon"
 export type DrawEra = "current" | "all" | "year"
-export type DrawWindow = DrawEra | "last_20" | "last_50"
+export type DrawWindow = DrawEra | "last_20" | "last_50" | "year_n1"
 
 type DrawPayload = {
   ok?: boolean
@@ -33,15 +38,23 @@ function loadDraws(query: string): Promise<DrawPayload | null> {
   return promise
 }
 
+function previousCalendarYearDraws(pool: Draw[]) {
+  const reference = newestCalendarYear(DRAWS) ?? newestCalendarYear(pool)
+  if (reference == null) return []
+  return filterCalendarYear(pool, reference - 1)
+}
+
 function seedDraws(window: DrawWindow, current: Draw[]) {
   const pool = current.length > 0 ? current : DRAWS
   if (window === "last_20") return takeLastDraws(pool, 20)
   if (window === "last_50") return takeLastDraws(pool, 50)
+  if (window === "year_n1") return previousCalendarYearDraws(pool)
   return pool
 }
 
-function queryFor(window: DrawWindow) {
+export function drawsQueryFor(window: DrawWindow) {
   if (window === "year") return ""
+  if (window === "year_n1") return `?year=${PREV_CALENDAR_YEAR_PARAM}`
   if (window === "last_20") return "?last=20"
   if (window === "last_50") return "?last=50"
   return `?era=${window}`
@@ -56,7 +69,7 @@ export function useDraws(window: DrawWindow = "year") {
     let cancelled = false
     void (async () => {
       try {
-        const payload = await loadDraws(queryFor(window))
+        const payload = await loadDraws(drawsQueryFor(window))
         if (cancelled) return
         if (!payload?.ok || !payload.items?.length) {
           setDraws(seedDraws(window, DRAWS))
@@ -66,7 +79,8 @@ export function useDraws(window: DrawWindow = "year") {
         const items = [...payload.items].sort((a, b) =>
           b.date.localeCompare(a.date)
         )
-        setDraws(seedDraws(window, items))
+        // The API already scoped n-1; do not re-filter against the current-year JSON snapshot.
+        setDraws(window === "year_n1" ? items : seedDraws(window, items))
         setSource("neon")
       } catch {
         if (!cancelled) {

@@ -12,6 +12,7 @@ test("canonical window and era labels", () => {
   assert.match(copySrc, /current: "Formule actuelle \(12 ★\)"/)
   assert.match(copySrc, /all: "Tout l’historique"/)
   assert.match(windowSrc, /year: "Année civile"/)
+  assert.match(windowSrc, /year_n1: "Année n-1"/)
   assert.match(windowSrc, /all: "Tout l’historique"/)
   assert.doesNotMatch(windowSrc, /Tout l’historique chargé/)
 })
@@ -25,6 +26,8 @@ test("journal tab keeps histoJeux as id and Journal as label", () => {
 
 test("glossary and fausse cassure", () => {
   assert.match(copySrc, /BREAKOUT_FAKE_LABEL = "fausse cassure"/)
+  assert.match(copySrc, /term: "Année civile"/)
+  assert.match(copySrc, /term: "Année n-1"/)
   assert.match(copySrc, /term: "Fenêtre de travail"/)
   assert.match(copySrc, /term: "Enregistrer"/)
   assert.match(labSearchSrc, /export function asOneOf/)

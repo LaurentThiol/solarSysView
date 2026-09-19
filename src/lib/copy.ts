@@ -53,7 +53,7 @@ export function tabLabel(tab: string | null | undefined): string | null {
 export const GLOSSARY: { term: string; text: string }[] = [
   {
     term: "Fenêtre de travail",
-    text: "Jeu de tirages lu par les laboratoires. Les presets (20/50/100 tirages, année civile, formule actuelle…) sont les mêmes partout. En Chartisme, l’échelle (longueur d’une figure) est distincte : elle ne change pas la fenêtre.",
+    text: "Jeu de tirages lu par les laboratoires. Les presets (20/50/100 tirages, année civile, année n-1, formule actuelle…) sont les mêmes partout. En Chartisme, l’échelle (longueur d’une figure) est distincte : elle ne change pas la fenêtre.",
   },
   {
     term: "Enregistrer",
@@ -90,6 +90,10 @@ export const GLOSSARY: { term: string; text: string }[] = [
   {
     term: "Année civile",
     text: "Preset de fenêtre : du 1er janvier à aujourd’hui (ou à la fin de l’archive chargée).",
+  },
+  {
+    term: "Année n-1",
+    text: "Preset de fenêtre : l’année civile qui précède celle du dernier tirage, du 1er janvier au 31 décembre.",
   },
   {
     term: "Formule actuelle (12 ★)",

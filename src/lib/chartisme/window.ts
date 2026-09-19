@@ -36,6 +36,7 @@ export const STUDY_PRESETS = [
   "months_6",
   "months_12",
   "year",
+  "year_n1",
   "formula",
   "all",
 ] as const satisfies ReadonlyArray<WindowPreset>

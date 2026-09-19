@@ -40,7 +40,7 @@ import {
   takeLastDraws,
   toDrawSeries,
 } from "@/lib/draws"
-import { WINDOW_PRESET_LABELS } from "@/lib/analysis-window"
+import { WINDOW_PRESET_LABELS, filterCalendarYear, newestCalendarYear } from "@/lib/analysis-window"
 import { ERA_LABELS } from "@/lib/copy"
 import { useDraws, type DrawWindow } from "@/lib/use-draws"
 
@@ -48,6 +48,7 @@ const PERIODS: { id: DrawWindow; label: string }[] = [
   { id: "last_20", label: WINDOW_PRESET_LABELS.last_20 },
   { id: "last_50", label: WINDOW_PRESET_LABELS.last_50 },
   { id: "year", label: WINDOW_PRESET_LABELS.year },
+  { id: "year_n1", label: WINDOW_PRESET_LABELS.year_n1 },
   { id: "current", label: ERA_LABELS.current },
   { id: "all", label: ERA_LABELS.all },
 ]
@@ -66,7 +67,12 @@ function EvolutionContent() {
   const { draws, source, loading } = useDraws(period)
   const { sketches, chartMeta } = useChartDraw()
   const lastWindow = isLastWindow(period)
-  const archive = useMemo(() => mergeDraws(draws, DRAWS), [draws])
+  const archive = useMemo(() => {
+    if (period === "year_n1") {
+      return [...draws].sort((a, b) => b.date.localeCompare(a.date))
+    }
+    return mergeDraws(draws, DRAWS)
+  }, [draws, period])
   const monthOptions = useMemo(() => monthsPresent(archive), [archive])
   const activeMonth = useMemo(() => {
     if (lastWindow) return "all"
@@ -81,10 +87,8 @@ function EvolutionContent() {
     if (period === "last_20") scoped = takeLastDraws(archive, 20)
     else if (period === "last_50") scoped = takeLastDraws(archive, 50)
     else if (period === "year") {
-      const year = archive[0]?.date.slice(0, 4)
-      scoped = year
-        ? archive.filter((draw) => draw.date.startsWith(year))
-        : archive
+      const year = newestCalendarYear(archive)
+      scoped = year != null ? filterCalendarYear(archive, year) : archive
     }
     if (activeMonth === "all") return scoped
     return scoped.filter((draw) => monthOf(draw.date) === activeMonth)
@@ -176,7 +180,7 @@ function EvolutionContent() {
             Fenêtre de travail
             <HelpTip
               title="Fenêtre de travail"
-              body="20 ou 50 derniers tirages (tous calendriers), année civile, formule actuelle (12 ★), ou tout l’historique. 20/50 se lisent mieux sur la courbe ; l’année et la formule donnent le bruit de fond."
+              body="20 ou 50 derniers tirages (tous calendriers), année civile, année n-1, formule actuelle (12 ★), ou tout l’historique. 20/50 se lisent mieux sur la courbe ; l’année et la formule donnent le bruit de fond."
             />
           </span>
           <PillTabs

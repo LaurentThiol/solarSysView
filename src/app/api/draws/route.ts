@@ -76,9 +76,44 @@ function parseLastN(raw: string | null) {
   return n
 }
 
+function parseYearQuery(raw: string | null): number | "n-1" | null {
+  if (!raw) return null
+  if (raw === "n-1" || raw === "prev") return "n-1"
+  if (!/^\d{4}$/.test(raw)) return null
+  const year = Number.parseInt(raw, 10)
+  if (year < 2004 || year > 2100) return null
+  return year
+}
+
+function calendarYearOf(date: string): number | null {
+  if (date.length < 4) return null
+  const year = Number.parseInt(date.slice(0, 4), 10)
+  return Number.isFinite(year) ? year : null
+}
+
 async function fetchLast(base: string, lastN: number) {
   const response = await fetch(
     `${base}/api/draws?limit=${lastN}&offset=0`,
+    { cache: "no-store", signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) }
+  )
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const body = (await response.json()) as { items?: NeonDraw[] }
+  return (body.items || []).map(toUi).filter((d) => d.date)
+}
+
+async function fetchLatestYear(base: string): Promise<number | null> {
+  const latestRes = await fetch(`${base}/api/draws/latest`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+  })
+  if (!latestRes.ok) return null
+  const latest = (await latestRes.json()) as NeonDraw
+  return calendarYearOf(String(latest.draw_date || "").slice(0, 10))
+}
+
+async function fetchYear(base: string, year: number) {
+  const response = await fetch(
+    `${base}/api/draws?limit=500&offset=0&year=${year}`,
     { cache: "no-store", signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) }
   )
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -91,11 +126,12 @@ export async function GET(request: NextRequest) {
   const eraParam = request.nextUrl.searchParams.get("era")
   const era = eraParam === "all" || eraParam === "current" ? eraParam : null
   const lastN = parseLastN(request.nextUrl.searchParams.get("last"))
+  const yearQuery = parseYearQuery(request.nextUrl.searchParams.get("year"))
   if (!url) {
     return NextResponse.json({
       ok: false,
       items: [],
-      year: null,
+      year: yearQuery === "n-1" ? null : yearQuery,
       source: "json",
       era,
       last: lastN,
@@ -124,28 +160,17 @@ export async function GET(request: NextRequest) {
         source: "neon",
       })
     }
-    const latestRes = await fetch(`${url}/api/draws/latest`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
-    })
-    if (!latestRes.ok) {
+    const latestYear = await fetchLatestYear(url)
+    const year =
+      yearQuery === "n-1"
+        ? latestYear != null
+          ? latestYear - 1
+          : null
+        : yearQuery ?? latestYear
+    if (year == null || year < 2004) {
       return NextResponse.json({ ok: false, items: [], year: null, source: "json" })
     }
-    const latest = (await latestRes.json()) as NeonDraw
-    const date = String(latest.draw_date || "").slice(0, 10)
-    const year = date.length >= 4 ? Number.parseInt(date.slice(0, 4), 10) : null
-    const drawsRes = await fetch(
-      `${url}/api/draws?limit=500&offset=0${year ? `&year=${year}` : ""}`,
-      {
-        cache: "no-store",
-        signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
-      }
-    )
-    if (!drawsRes.ok) {
-      return NextResponse.json({ ok: false, items: [], year, source: "json" })
-    }
-    const payload = (await drawsRes.json()) as { items?: NeonDraw[] }
-    const items = (payload.items || []).map(toUi)
+    const items = await fetchYear(url, year)
     return NextResponse.json({
       ok: items.length > 0,
       items,

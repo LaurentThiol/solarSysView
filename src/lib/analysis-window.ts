@@ -17,12 +17,16 @@ export const WINDOW_PRESETS = [
   "months_6",
   "months_12",
   "year",
+  "year_n1",
   "formula",
   "all",
   "custom",
 ] as const
 
 export type WindowPreset = (typeof WINDOW_PRESETS)[number]
+
+/** Query value for « année n-1 » relative to the latest loaded draw. */
+export const PREV_CALENDAR_YEAR_PARAM = "n-1"
 
 export const WINDOW_PRESET_LABELS: Record<WindowPreset, string> = {
   last_20: "20 derniers tirages",
@@ -33,6 +37,7 @@ export const WINDOW_PRESET_LABELS: Record<WindowPreset, string> = {
   months_6: "6 mois",
   months_12: "12 mois",
   year: "Année civile",
+  year_n1: "Année n-1",
   formula: "Formule actuelle (12 ★)",
   all: "Tout l’historique",
   custom: "Personnalisé",
@@ -106,6 +111,28 @@ export function sliceSeries<T>(values: T[], warmupCount: number) {
   return values.slice(Math.max(0, warmupCount))
 }
 
+export function calendarYearOf(date: string): number | null {
+  if (date.length < 4) return null
+  const year = Number.parseInt(date.slice(0, 4), 10)
+  return Number.isFinite(year) ? year : null
+}
+
+export function newestCalendarYear(draws: { date: string }[]): number | null {
+  let newest: string | null = null
+  for (const draw of draws) {
+    if (!newest || draw.date > newest) newest = draw.date
+  }
+  return newest ? calendarYearOf(newest) : null
+}
+
+export function filterCalendarYear<T extends { date: string }>(
+  draws: T[],
+  year: number
+): T[] {
+  const prefix = String(year)
+  return draws.filter((draw) => draw.date.startsWith(prefix))
+}
+
 export function resolveWindow<T extends { date: string; star_pool?: number }>(
   draws: T[],
   spec: WindowSpec
@@ -141,6 +168,11 @@ export function resolveWindow<T extends { date: string; star_pool?: number }>(
   } else if (preset === "year") {
     const start = spec.fromDate ?? `${end.slice(0, 4)}-01-01`
     work = work.filter((d) => d.date >= start)
+  } else if (preset === "year_n1") {
+    const year = (calendarYearOf(end) ?? 0) - 1
+    const start = spec.fromDate ?? `${year}-01-01`
+    const cap = `${year}-12-31`
+    work = work.filter((d) => d.date >= start && d.date <= cap)
   } else if (preset === "formula") {
     work = work.filter((d) => (starPool(d) ?? 12) >= 12)
     if (spec.fromDate) work = work.filter((d) => d.date >= spec.fromDate!)
