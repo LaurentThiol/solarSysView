@@ -196,6 +196,10 @@ export function TwinsPanel({
   }, [index.query?.date, queryDate])
 
   useEffect(() => {
+    if (initialAxes?.length) setAxes(parseFingerprintAxes(initialAxes))
+  }, [initialAxes])
+
+  useEffect(() => {
     if (!initialQuery || !draws.length) return
     if (draws.some((draw) => draw.date === initialQuery)) {
       setQueryMissing(false)

@@ -262,8 +262,12 @@ export function AnalysisLab() {
     n_sim?: number
   } | null>(null)
   const [mcError, setMcError] = useState<string | null>(null)
-  const [initialQuery, setInitialQuery] = useState<string | null>(null)
-  const [initialAxes, setInitialAxes] = useState<FingerprintAxis[] | null>(null)
+  const [initialQuery, setInitialQuery] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : readTwinsSearch(window.location.search).queryDate
+  )
+  const [initialAxes, setInitialAxes] = useState<FingerprintAxis[] | null>(() =>
+    typeof window === "undefined" ? null : readTwinsSearch(window.location.search).axes
+  )
 
   useEffect(() => {
     const params = readLabSearch()

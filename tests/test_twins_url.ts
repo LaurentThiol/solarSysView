@@ -150,6 +150,8 @@ test("Jumeaux panel exposes Épingler beside the neighbor overlay", () => {
   assert.match(panelSrc, /applyTwinsSearch/)
   assert.match(labSrc, /readTwinsSearch/)
   assert.match(labSrc, /initialQuery=\{initialQuery\}/)
+  assert.match(labSrc, /readTwinsSearch\(window\.location\.search\)/)
+  assert.match(panelSrc, /if \(initialAxes\?\.length\) setAxes/)
 })
 
 test("Brain consumes pending analogs, merges the pack, and prefills the focus", () => {
