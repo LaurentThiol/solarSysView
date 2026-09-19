@@ -582,8 +582,10 @@ export function EvolutionGains({ draws }: { draws: Draw[] }) {
             </div>
             {splitSum ? (
               <p className="mt-2 text-center text-xs text-muted-foreground">
-                Axe droit : somme des 5 numéros (15–240). EU comprend la France ;
-                Hors FR = EU − FR.
+                Axe droit : somme des 5 numéros (15–240)
+                {view === "winners"
+                  ? ". EU comprend la France ; Hors FR = EU − FR."
+                  : "."}
               </p>
             ) : null}
             <ul className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-center text-xs tabular-nums text-muted-foreground">
