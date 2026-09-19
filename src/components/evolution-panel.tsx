@@ -8,6 +8,7 @@ import { AdminGate } from "@/components/admin-gate"
 import { useRegisterCapture } from "@/components/capture"
 import { DrawChart } from "@/components/draw-chart"
 import { EvolutionDraws } from "@/components/evolution-draws"
+import { EvolutionGains } from "@/components/evolution-gains"
 import { EvolutionHeat } from "@/components/evolution-heat"
 import { EvolutionParity } from "@/components/evolution-parity"
 import { EvolutionShape } from "@/components/evolution-shape"
@@ -289,6 +290,8 @@ function EvolutionContent() {
 
       <DrawChart draws={filtered} />
 
+      <EvolutionGains draws={filtered} />
+
       <EvolutionParity draws={filtered} />
 
       <EvolutionShape draws={filtered} />
@@ -356,8 +359,8 @@ function EvolutionContent() {
 
       <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
         Chaque tirage est indépendant. Les fréquences, la SMA, les bandes de
-        Bollinger et le cumul pair/impair décrivent la fenêtre choisie, elles
-        ne prédisent pas le prochain tirage.
+        Bollinger, le cumul pair/impair et les totaux de gagnants décrivent la
+        fenêtre choisie, elles ne prédisent pas le prochain tirage.
       </p>
     </div>
   )

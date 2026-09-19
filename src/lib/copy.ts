@@ -103,4 +103,8 @@ export const GLOSSARY: { term: string; text: string }[] = [
     term: "Jumeaux",
     text: "Onglet Analyse : portrait d’un tirage dans l’espace des variables (somme, étendue, parité…) et voisins en cosinus de z-scores. Démo guidée (bouton ou /analyse?tab=jumeaux&demo=1), pop-up Suivant / Annuler. Ressemblance d’archive, pas un pronostic.",
   },
+  {
+    term: "Gagnants EU",
+    text: "Colonne FDJ « en Europe » : tous les pays participants, France comprise. On n’additionne pas FR et EU. Hors FR = EU − FR. Visible dans Tirage et dans Évolution · gains.",
+  },
 ]

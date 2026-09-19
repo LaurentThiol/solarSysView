@@ -13,6 +13,12 @@ import {
   overdue,
   type FrequencyItem,
 } from "@/lib/frequency-rank"
+import {
+  numbersSum,
+  prizeMass,
+  shareFrPercent,
+  winnersOutsideFrance,
+} from "@/lib/gains"
 
 export {
   expectedNumberDelay,
@@ -21,6 +27,18 @@ export {
   overdue,
   type FrequencyItem,
 }
+
+export {
+  finiteNumbers,
+  formatCompactCount,
+  formatCompactEuro,
+  isPrizeRank,
+  numbersSum,
+  pairedFinite,
+  prizeMass,
+  shareFrPercent,
+  winnersOutsideFrance,
+} from "@/lib/gains"
 
 export type PrizeTier = {
   rank: number
@@ -214,6 +232,111 @@ export function meanPrizeByRank(
     out.set(rank, slot.n > 0 ? slot.total / slot.n : null)
   }
   return out
+}
+
+export type GainsScope = "totals" | number
+
+export function winnersForScope(
+  draw: Pick<Draw, "prizes" | "winners_total_fr" | "winners_total_eu">,
+  scope: GainsScope
+): { fr: number | null; eu: number | null; exFr: number | null } {
+  if (scope === "totals") {
+    const totals = totalWinners(draw)
+    return {
+      fr: totals.fr,
+      eu: totals.eu,
+      exFr: winnersOutsideFrance(totals.fr, totals.eu),
+    }
+  }
+  const tier = prizeTierAtRank(draw, scope)
+  if (!tier) return { fr: null, eu: null, exFr: null }
+  const eu = rankWinnersTotal(tier.winners_fr, tier.winners_eu)
+  return {
+    fr: tier.winners_fr,
+    eu,
+    exFr: winnersOutsideFrance(tier.winners_fr, eu),
+  }
+}
+
+export function jackpotAmount(
+  draw: Pick<Draw, "prizes"> | null | undefined
+): number | null {
+  const tier = prizeTierAtRank(draw, 1)
+  if (!tier || tier.prize == null || !Number.isFinite(tier.prize)) return null
+  return tier.prize
+}
+
+export function payoutMass(
+  draw: Pick<Draw, "prizes">,
+  scope: GainsScope
+): { fr: number | null; eu: number | null } {
+  if (scope === "totals") {
+    let fr = 0
+    let eu = 0
+    let hasFr = false
+    let hasEu = false
+    for (const tier of draw.prizes ?? []) {
+      if (tier.prize == null || !Number.isFinite(tier.prize)) continue
+      const frMass = prizeMass(tier.winners_fr, tier.prize)
+      if (frMass != null) {
+        fr += frMass
+        hasFr = true
+      }
+      const winnersEu = rankWinnersTotal(tier.winners_fr, tier.winners_eu)
+      const euMass = prizeMass(winnersEu, tier.prize)
+      if (euMass != null) {
+        eu += euMass
+        hasEu = true
+      }
+    }
+    return { fr: hasFr ? fr : null, eu: hasEu ? eu : null }
+  }
+  const tier = prizeTierAtRank(draw, scope)
+  if (!tier || tier.prize == null || !Number.isFinite(tier.prize)) {
+    return { fr: null, eu: null }
+  }
+  const eu = rankWinnersTotal(tier.winners_fr, tier.winners_eu)
+  return {
+    fr: prizeMass(tier.winners_fr, tier.prize),
+    eu: prizeMass(eu, tier.prize),
+  }
+}
+
+export type GainsChartPoint = {
+  date: string
+  id: number
+  sumNumbers: number
+  winnersFr: number | null
+  winnersEu: number | null
+  winnersExFr: number | null
+  shareFr: number | null
+  jackpot: number | null
+  massFr: number | null
+  massEu: number | null
+}
+
+export function toGainsChart(
+  draws: Draw[],
+  scope: GainsScope = "totals"
+): GainsChartPoint[] {
+  return [...draws]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((draw) => {
+      const winners = winnersForScope(draw, scope)
+      const mass = payoutMass(draw, scope)
+      return {
+        date: draw.date,
+        id: draw.id,
+        sumNumbers: numbersSum(draw.numbers),
+        winnersFr: winners.fr,
+        winnersEu: winners.eu,
+        winnersExFr: winners.exFr,
+        shareFr: shareFrPercent(winners.fr, winners.eu),
+        jackpot: jackpotAmount(draw),
+        massFr: mass.fr,
+        massEu: mass.eu,
+      }
+    })
 }
 
 export const DRAWS: Draw[] = [...rawDraws].sort((a, b) =>
