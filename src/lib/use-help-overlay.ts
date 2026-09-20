@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import {
@@ -13,12 +13,17 @@ import {
 } from "@/lib/help-overlay"
 
 export function useHelpOverlay() {
+  const [mounted, setMounted] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const search = searchParams.toString()
   const glossary = asGlossarySection(searchParams.get("glossaire"))
   const adresse = isAddressQuery(searchParams.get("adresse")) && !glossary
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     const next = rewriteLegacyHelpSearch(search)
@@ -57,5 +62,5 @@ export function useHelpOverlay() {
     replace({ glossary: null, adresse: false })
   }, [replace])
 
-  return { glossary, adresse, setGlossary, setAdresse, close }
+  return { glossary, adresse, setGlossary, setAdresse, close, mounted }
 }

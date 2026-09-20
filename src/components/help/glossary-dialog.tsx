@@ -87,7 +87,7 @@ function GlossaryVocab({ query }: { query: string }) {
 }
 
 function GlossaryButtonInner() {
-  const { glossary, setGlossary, close } = useHelpOverlay()
+  const { glossary, setGlossary, close, mounted } = useHelpOverlay()
   const open = glossary != null
   const section: GlossarySection = glossary ?? "vocab"
   const [query, setQuery] = useState("")
@@ -128,7 +128,7 @@ function GlossaryButtonInner() {
         open={open}
         onClick={() => (open ? close() : setGlossary(lastGlossarySection()))}
       />
-      {open && typeof document !== "undefined"
+      {open && mounted && typeof document !== "undefined"
         ? createPortal(
             <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center">
               <button

@@ -36,7 +36,7 @@ function AddressPill({
 }
 
 function AddressButtonInner() {
-  const { adresse, setAdresse, close } = useHelpOverlay()
+  const { adresse, setAdresse, close, mounted } = useHelpOverlay()
   const open = adresse
   const titleId = useId()
   const searchId = useId()
@@ -66,7 +66,7 @@ function AddressButtonInner() {
   return (
     <>
       <AddressPill open={open} onClick={() => setAdresse(!open)} />
-      {open && typeof document !== "undefined"
+      {open && mounted && typeof document !== "undefined"
         ? createPortal(
             <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center">
               <button
