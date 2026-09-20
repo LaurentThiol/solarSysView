@@ -24,4 +24,9 @@ def test_nav_groups_and_glossary_exist() -> None:
     assert "createPortal" in header
     assert "site-nav-drawer" in header
     assert "PageShell" in (ROOT / "src/components/page-shell.tsx").read_text(encoding="utf-8")
-    assert "PillTabs" in (ROOT / "src/components/ui/pill-tabs.tsx").read_text(encoding="utf-8")
+    pills = (ROOT / "src/components/ui/pill-tabs.tsx").read_text(encoding="utf-8")
+    assert "PillTabs" in pills
+    assert "compact" in pills
+    assert "SITE_HEADER_SLOT_ID" in header
+    slot = (ROOT / "src/components/site-header-slot.tsx").read_text(encoding="utf-8")
+    assert 'SITE_HEADER_SLOT_ID = "site-header-slot"' in slot

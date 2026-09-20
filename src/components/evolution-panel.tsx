@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react"
 
 import { ChartDrawProvider, useChartDraw } from "@/components/chart-draw/chart-draw-context"
-import { HelpTip, LabelHelp } from "@/components/help"
+import { HelpTip } from "@/components/help"
 import { AdminGate } from "@/components/admin-gate"
+import { SiteHeaderSlot } from "@/components/site-header-slot"
 import { useRegisterCapture } from "@/components/capture"
 import { DrawChart } from "@/components/draw-chart"
 import { EvolutionDraws } from "@/components/evolution-draws"
@@ -67,8 +68,92 @@ function GainsSketchBridge({
   return null
 }
 
+const WINDOW_HELP = {
+  title: "Fenêtre de travail",
+  body: "20 ou 50 derniers tirages (tous calendriers), année civile, année n-1, formule actuelle (12 ★), ou tout l’historique. 20/50 se lisent mieux sur la courbe ; l’année et la formule donnent le bruit de fond. La barre reste sous le bandeau pour changer de plage sans remonter.",
+} as const
+
+const MONTH_HELP = {
+  title: "Mois",
+  body: "Affine la courbe et les fréquences à un mois civil. Masqué sur 20/50 tirages : ces fenêtres sont déjà bornées.",
+} as const
+
 function isLastWindow(period: DrawWindow) {
   return period === "last_20" || period === "last_50"
+}
+
+function EvolutionWindowBar({
+  period,
+  onPeriod,
+  lastWindow,
+  month,
+  onMonth,
+  monthOptions,
+  drawCount,
+}: {
+  period: DrawWindow
+  onPeriod: (id: DrawWindow) => void
+  lastWindow: boolean
+  month: string
+  onMonth: (value: string) => void
+  monthOptions: { value: string; label: string }[]
+  drawCount: number
+}) {
+  return (
+    <SiteHeaderSlot>
+      <div
+        data-evolution-window
+        className="border-t border-border/80"
+        role="region"
+        aria-label="Fenêtre de travail"
+      >
+        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-[max(1rem,env(safe-area-inset-left))] py-2 pr-[max(1rem,env(safe-area-inset-right))] sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+              <span className="hidden sm:inline">Fenêtre de travail</span>
+              <span className="sm:hidden">Fenêtre</span>
+              <HelpTip {...WINDOW_HELP} />
+            </span>
+            <PillTabs
+              label="Fenêtre de travail"
+              mode="chips"
+              compact
+              value={period}
+              onValueChange={onPeriod}
+              items={PERIODS}
+              className="min-w-0 flex-1"
+            />
+          </div>
+          {lastWindow ? null : (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:inline-flex">
+                Mois
+                <HelpTip {...MONTH_HELP} />
+              </span>
+              <Select value={month} onValueChange={(value) => onMonth(String(value))}>
+                <SelectTrigger size="sm" className="w-[9.5rem] sm:w-44" aria-label="Mois">
+                  <span className="flex flex-1 text-left">
+                    {monthOptions.find((item) => item.value === month)?.label ??
+                      "Tous les mois"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {monthOptions.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <p className="hidden shrink-0 text-xs tabular-nums text-muted-foreground lg:block">
+            {drawCount} tirage{drawCount > 1 ? "s" : ""}
+          </p>
+        </div>
+      </div>
+    </SiteHeaderSlot>
+  )
 }
 
 function formatStat(value: number, digits = 1) {
@@ -178,60 +263,34 @@ function EvolutionContent() {
     })
   )
 
+  const windowBar = (
+    <EvolutionWindowBar
+      period={period}
+      onPeriod={setPeriod}
+      lastWindow={lastWindow}
+      month={activeMonth}
+      onMonth={setMonth}
+      monthOptions={monthOptions}
+      drawCount={filtered.length}
+    />
+  )
+
   if (loading && draws.length === 0) {
-    return <p className="text-sm text-muted-foreground">Chargement des tirages…</p>
+    return (
+      <>
+        {windowBar}
+        <p className="text-sm text-muted-foreground">Chargement des tirages…</p>
+      </>
+    )
   }
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      {windowBar}
       <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
         {archiveSummary(filtered)} Source{" "}
         {source === "neon" ? "Neon" : "fichier local"}.
       </p>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="flex w-full flex-col gap-1 sm:flex-1">
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            Fenêtre de travail
-            <HelpTip
-              title="Fenêtre de travail"
-              body="20 ou 50 derniers tirages (tous calendriers), année civile, année n-1, formule actuelle (12 ★), ou tout l’historique. 20/50 se lisent mieux sur la courbe ; l’année et la formule donnent le bruit de fond."
-            />
-          </span>
-          <PillTabs
-            label="Fenêtre de travail"
-            mode="chips"
-            value={period}
-            onValueChange={setPeriod}
-            items={PERIODS}
-          />
-        </div>
-        {lastWindow ? null : (
-          <LabelHelp
-            label="Mois"
-            help={{
-              title: "Mois",
-              body: "Affine la courbe et les fréquences à un mois civil. Masqué sur 20/50 tirages : ces fenêtres sont déjà bornées.",
-            }}
-          >
-            <Select value={activeMonth} onValueChange={(value) => setMonth(String(value))}>
-              <SelectTrigger className="w-full sm:w-52" aria-label="Mois">
-                <span className="flex flex-1 text-left">
-                  {monthOptions.find((item) => item.value === activeMonth)?.label ??
-                    "Tous les mois"}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                {monthOptions.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </LabelHelp>
-        )}
-      </div>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

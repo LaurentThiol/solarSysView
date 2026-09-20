@@ -25,6 +25,8 @@ test("five nav families cover every lab", () => {
   assert.doesNotMatch(headerSrc, /Aller à/)
   assert.match(headerSrc, /createPortal/)
   assert.match(headerSrc, /site-nav-drawer/)
+  assert.match(headerSrc, /SITE_HEADER_SLOT_ID/)
+  assert.match(headerSrc, /--site-header-height/)
   assert.match(headerSrc, /current\.label/)
   assert.match(headerSrc, /aria-current="page"/)
   assert.match(headerSrc, /family\.items\.map/)

@@ -18,6 +18,8 @@ def test_site_header_uses_a_burger_menu_everywhere() -> None:
     assert "<GlossaryButton />" in header
     assert "<AddressButton />" in header
     assert "current.label" in header
+    assert "SITE_HEADER_SLOT_ID" in header
+    assert "--site-header-height" in header
 
 
 def test_nav_items_are_grouped_in_the_drawer() -> None:

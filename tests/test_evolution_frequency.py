@@ -37,6 +37,9 @@ def test_evolution_tables_use_lookback_and_thresholds() -> None:
     assert "minDelay: expectedNDelay" in panel
     assert "exclude: hotNumbers.map((item) => item.value)" in panel
     assert "hottest(starBoard, 6, { minCount: expectedS })" in panel
+    assert "SiteHeaderSlot" in panel
+    assert "data-evolution-window" in panel
+    assert "compact" in panel
     assert "minDelay: expectedSDelay" in panel
     assert "exclude: hotStars.map((item) => item.value)" in panel
 

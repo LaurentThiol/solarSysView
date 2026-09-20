@@ -8,6 +8,7 @@ import { LogOut, Menu, X } from "lucide-react"
 
 import { CaptureButton } from "@/components/capture"
 import { AddressButton, GlossaryButton, HelpModeToggle, HelpWrap, WithHelp } from "@/components/help"
+import { SITE_HEADER_SLOT_ID } from "@/components/site-header-slot"
 import { StatusPill, worstStatusTone, type StatusTone } from "@/components/status-pill"
 import { Button } from "@/components/ui/button"
 import { isNavItemActive, pageTitleForPath, NAV_GROUPS } from "@/lib/nav"
@@ -639,11 +640,18 @@ export function SiteHeader() {
   useLayoutEffect(() => {
     const el = headerRef.current
     if (!el) return
-    const update = () => setHeaderH(Math.round(el.getBoundingClientRect().height))
+    const update = () => {
+      const height = Math.round(el.getBoundingClientRect().height)
+      setHeaderH(height)
+      document.documentElement.style.setProperty("--site-header-height", `${height}px`)
+    }
     update()
     const observer = new ResizeObserver(update)
     observer.observe(el)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      document.documentElement.style.removeProperty("--site-header-height")
+    }
   }, [])
 
   useEffect(() => {
@@ -731,6 +739,7 @@ export function SiteHeader() {
           </div>
         </div>
       </div>
+      <div id={SITE_HEADER_SLOT_ID} />
       {portalReady && menuOpen
         ? createPortal(
             <div

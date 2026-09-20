@@ -39,6 +39,7 @@ export function PillTabs<T extends string>({
   items,
   groups,
   mode = "tabs",
+  compact = false,
   idPrefix,
   className,
 }: {
@@ -48,6 +49,8 @@ export function PillTabs<T extends string>({
   items?: readonly PillTabItem<T>[]
   groups?: readonly PillTabGroup<T>[]
   mode?: "tabs" | "chips"
+  /** Une seule ligne, défilement horizontal — pour un bandeau fixe. */
+  compact?: boolean
   idPrefix?: string
   className?: string
 }) {
@@ -119,18 +122,23 @@ export function PillTabs<T extends string>({
   )
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
+    <div className={cn("flex flex-col gap-2", compact && "min-w-0", className)}>
       {rows.map((row, rowIndex) => {
         const start = starts[rowIndex]
         return (
-          <div key={row.key} className="flex flex-col gap-1.5">
+          <div key={row.key} className={cn("flex flex-col gap-1.5", compact && "min-w-0")}>
             {row.caption ? (
               <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
                 {row.caption}
               </p>
             ) : null}
             <nav
-              className="-mx-4 flex flex-nowrap gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:thin] sm:mx-0 sm:flex-wrap sm:px-0"
+              className={cn(
+                "flex gap-2 [scrollbar-width:thin]",
+                compact
+                  ? "min-w-0 flex-nowrap overflow-x-auto"
+                  : "-mx-4 flex-nowrap overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0"
+              )}
               aria-label={row.caption ? `${label} · ${row.caption}` : label}
               role={isTabs ? "tablist" : "group"}
             >
