@@ -111,7 +111,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Probabilités officielles",
     group: "analyse",
-    text: "Table des 13 rangs FDJ pour une grille 5/50 + 2/12 (139 838 160 grilles). Identique pour toute grille valide, indépendante de la fenêtre. P(au moins un rang) ≈ 7,71 %. Tables : Analyse · Glossaire · Probabilités.",
+    text: "Table des 13 rangs FDJ pour une grille 5/50 + 2/12 (139 838 160 grilles). Identique pour toute grille valide, indépendante de la fenêtre. P(au moins un rang) ≈ 7,71 %. Tables : Glossaire du bandeau · Probabilités (?glossaire=proba).",
   },
   {
     term: "Hypergéométrique",
@@ -126,7 +126,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Look-ahead",
     group: "analyse",
-    text: "Biais qui utilise une information pas encore connue au moment du signal (ex. Chikou / Ichimoku projeté). Ce n’est pas un signal temps réel. Détail : Analyse · Glossaire · Mémo.",
+    text: "Biais qui utilise une information pas encore connue au moment du signal (ex. Chikou / Ichimoku projeté). Ce n’est pas un signal temps réel. Détail : Glossaire du bandeau · Mémo (?glossaire=memo).",
   },
   {
     term: "Jumeaux",

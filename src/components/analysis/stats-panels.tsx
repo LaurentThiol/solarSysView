@@ -36,12 +36,14 @@ export function ProbaPanel() {
         <CardTitle>Probabilités exactes (5/50 + 2/12)</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        <p className="sticky top-0 z-10 -mx-1 mb-1 rounded-md bg-card/95 px-1 py-1 text-sm font-medium text-foreground">
+          139 838 160 grilles · P(au moins un rang) {formatOfficialPct(pWin)}
+        </p>
         <p className="text-sm leading-6 text-muted-foreground">
-          Référence officielle, pas une lecture de la fenêtre : 139 838 160 grilles,
-          loi hypergéométrique. {formatOfficialPct(pWin)} d’obtenir au moins un rang —
+          Référence officielle, pas une lecture de la fenêtre : loi hypergéométrique,
           identique pour toute grille 5+2, et la même H0 que Combinaisons et le journal
           Jeux. Les périodes d’indicateurs sont dans{" "}
-          <Link href="/analyse?tab=memo" className="underline underline-offset-2">
+          <Link href="?glossaire=memo" scroll={false} className="underline underline-offset-2">
             Mémo
           </Link>
           .

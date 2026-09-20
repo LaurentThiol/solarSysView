@@ -136,21 +136,6 @@ const ANALYSE_TABS: { id: string; label: string; text: string; params?: string }
     text: "Portrait multi-axes et voisins en cosinus de z-scores. Ressemblance d’archive, pas un pronostic.",
     params: "query=YYYY-MM-DD, axes=sum,spread,…",
   },
-  {
-    id: "proba",
-    label: "Probabilités",
-    text: "Table officielle 5/50 + 2/12 (139 838 160 grilles). Indépendante de la fenêtre.",
-  },
-  {
-    id: "memo",
-    label: "Mémo",
-    text: "Périodes d’indicateurs et biais (look-ahead, sur-optimisation, indépendance).",
-  },
-  {
-    id: "adresse",
-    label: "Adresse",
-    text: "Cet annuaire : pages, onglets, API et raccourcis, avec recherche et filtres.",
-  },
 ]
 
 const HARMO_TABS: { id: string; label: string; text: string }[] = [
@@ -227,10 +212,42 @@ function apiEntry(
   }
 }
 
+const OVERLAYS: AddressEntry[] = [
+  tabEntry(
+    "?glossaire=vocab",
+    "Glossaire · Vocabulaire",
+    "Termes figés pour tout Synchro. Même pastille que le bandeau (raccourci « l »).",
+    "systeme",
+    "glossaire=vocab|proba|memo"
+  ),
+  tabEntry(
+    "?glossaire=proba",
+    "Glossaire · Probabilités",
+    "Table officielle 5/50 + 2/12 (139 838 160 grilles). Indépendante de la fenêtre.",
+    "lecture",
+    "glossaire=proba"
+  ),
+  tabEntry(
+    "?glossaire=memo",
+    "Glossaire · Mémo",
+    "Périodes d’indicateurs et biais (look-ahead, sur-optimisation, indépendance).",
+    "lecture",
+    "glossaire=memo"
+  ),
+  tabEntry(
+    "?adresse=1",
+    "Adresse",
+    "Cet annuaire : pages, onglets, overlays du bandeau, API et raccourcis.",
+    "systeme",
+    "adresse=1|true|oui"
+  ),
+]
+
 const TABS: AddressEntry[] = [
   ...ANALYSE_TABS.map((tab) =>
     tabEntry(`/analyse?tab=${tab.id}`, `Analyse · ${tab.label}`, tab.text, "lecture", tab.params)
   ),
+  ...OVERLAYS,
   tabEntry("/jeux?tab=solutions", "Jeux · Solutions", "Décompte exact des grilles 5+2 sous contraintes. Ce n’est pas un pronostic.", "grilles"),
   tabEntry(
     `/jeux?tab=${JEUX_JOURNAL_TAB}`,
@@ -398,6 +415,15 @@ const SHORTCUTS: AddressEntry[] = [
     action: "none",
   },
   {
+    id: "raccourci:l",
+    href: "l",
+    label: "Glossaire",
+    text: "Ouvre ou ferme le glossaire du bandeau (Vocabulaire, Probabilités, Mémo).",
+    kind: "raccourci",
+    group: "raccourcis",
+    action: "none",
+  },
+  {
     id: "raccourci:a",
     href: "a",
     label: "Adresse",
@@ -473,13 +499,14 @@ export function addressMatchesLocation(
   search: string
 ) {
   if (entry.action !== "navigate") return false
+  const overlayHref = entry.href.startsWith("?")
   const url = new URL(entry.href, "https://synchro.local")
-  if (url.pathname !== pathname) return false
+  if (!overlayHref && url.pathname !== pathname) return false
   const current = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
   for (const [key, value] of url.searchParams) {
     if ((current.get(key) ?? "") !== value) return false
   }
-  if (url.searchParams.size === 0 && current.has("tab") && entry.kind === "page") {
+  if (!overlayHref && url.searchParams.size === 0 && current.has("tab") && entry.kind === "page") {
     return false
   }
   return true

@@ -61,7 +61,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Analyse",
         help: {
           title: "Analyse",
-          body: "Indicateurs, numéros, hasard, Jumeaux (empreintes + démo guidée). Glossaire : probabilités officielles et mémo. Adresse : pages, onglets et API. Tous les onglets lisent la même fenêtre de travail.",
+          body: "Indicateurs, numéros, hasard, Jumeaux (empreintes + démo guidée). Probabilités et mémo sont dans le Glossaire du bandeau ; l’annuaire des chemins est dans Adresse. Tous les onglets lisent la même fenêtre de travail.",
         },
       },
       {

@@ -14,20 +14,31 @@ const labSrc = readFileSync(new URL("../src/components/analysis/analysis-lab.tsx
 const dialogSrc = readFileSync(new URL("../src/components/help/glossary-dialog.tsx", import.meta.url), "utf8")
 const memoSrc = readFileSync(new URL("../src/components/analysis/memo-panel.tsx", import.meta.url), "utf8")
 
-test("Analyse groups Probabilités and Mémo under Glossaire", () => {
-  const drawBlock = labSrc.slice(labSrc.indexOf("const DRAW_TABS"), labSrc.indexOf("const GLOSSARY_TABS"))
-  const glossBlock = labSrc.slice(
-    labSrc.indexOf("const GLOSSARY_TABS"),
-    labSrc.indexOf("const ADDRESS_TABS")
-  )
-  assert.match(labSrc, /label: "Glossaire"/)
-  assert.doesNotMatch(drawBlock, /id: "proba"/)
-  assert.doesNotMatch(drawBlock, /id: "memo"/)
-  assert.match(glossBlock, /id: "proba"/)
-  assert.match(glossBlock, /id: "memo"/)
-  assert.match(labSrc, /\.\.\.GLOSSARY_TABS/)
-  assert.match(labSrc, /label: "Adresse"/)
-  assert.match(labSrc, /\.\.\.ADDRESS_TABS/)
+test("Analyse no longer hosts Glossaire or Adresse tab groups", () => {
+  assert.doesNotMatch(labSrc, /GLOSSARY_TABS/)
+  assert.doesNotMatch(labSrc, /ADDRESS_TABS/)
+  assert.doesNotMatch(labSrc, /id: "proba"/)
+  assert.doesNotMatch(labSrc, /id: "memo"/)
+  assert.doesNotMatch(labSrc, /id: "adresse"/)
+  assert.doesNotMatch(labSrc, /<ProbaPanel/)
+  assert.doesNotMatch(labSrc, /<MemoPanel/)
+  assert.doesNotMatch(labSrc, /<AddressPanel/)
+  assert.match(labSrc, /label: "Technique"/)
+  assert.match(labSrc, /label: "Tirage"/)
+})
+
+test("banner glossary is a Vocabulaire / Probabilités / Mémo menu", () => {
+  assert.match(dialogSrc, /GLOSSARY_SECTION_LABELS/)
+  assert.match(dialogSrc, /id: "vocab"/)
+  assert.match(dialogSrc, /id: "proba"/)
+  assert.match(dialogSrc, /id: "memo"/)
+  assert.match(dialogSrc, /<ProbaPanel/)
+  assert.match(dialogSrc, /<MemoPanel/)
+  assert.match(dialogSrc, /filterGlossary/)
+  assert.match(dialogSrc, /groupedGlossary/)
+  assert.match(dialogSrc, /Rechercher dans le glossaire/)
+  assert.match(dialogSrc, /event\.key !== "l"/)
+  assert.doesNotMatch(dialogSrc, /Analyse\s+· Glossaire/)
 })
 
 test("global glossary is grouped and searchable without accents", () => {
@@ -43,17 +54,11 @@ test("global glossary is grouped and searchable without accents", () => {
   assert.equal(filterGlossary("zzzz-inconnu").length, 0)
 })
 
-test("glossary dialog searches and points to Analyse · Glossaire", () => {
-  assert.match(dialogSrc, /filterGlossary/)
-  assert.match(dialogSrc, /groupedGlossary/)
-  assert.match(dialogSrc, /Rechercher dans le glossaire/)
-  assert.match(dialogSrc, /Analyse\s+· Glossaire/)
-})
-
-test("Mémo reuses glossary terms and groups indicators like Technique", () => {
+test("Mémo reuses glossary terms and links to overlay sections", () => {
   assert.match(memoSrc, /VOCAB_TERMS/)
   assert.match(memoSrc, /Tendance/)
   assert.match(memoSrc, /Momentum/)
   assert.match(memoSrc, /Volatilité/)
-  assert.match(memoSrc, /href="\/analyse\?tab=proba"/)
+  assert.match(memoSrc, /href="\?glossaire=proba"/)
+  assert.match(memoSrc, /href="\?glossaire=vocab"/)
 })

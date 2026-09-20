@@ -15,6 +15,7 @@ import {
   type AddressEntry,
   type AddressKind,
 } from "@/lib/addresses"
+import { applyHelpOverlaySearch, readHelpOverlay } from "@/lib/help-overlay"
 import { cn } from "@/lib/utils"
 
 const KIND_FILTERS: { id: AddressKind | "all"; label: string }[] = [
@@ -52,22 +53,37 @@ function CopyAddress({ entry }: { entry: AddressEntry }) {
   )
 }
 
+function overlayNavigateHref(entry: AddressEntry, pathname: string, search: string) {
+  if (!entry.href.startsWith("?")) return entry.href
+  const overlay = readHelpOverlay(entry.href)
+  const next = applyHelpOverlaySearch(search, {
+    glossary: overlay.glossary,
+    adresse: overlay.adresse,
+  })
+  return next ? `${pathname}?${next}` : pathname
+}
+
 function AddressHref({
   entry,
   current,
+  pathname,
+  search,
 }: {
   entry: AddressEntry
   current: boolean
+  pathname: string
+  search: string
 }) {
   const className = cn(
     "font-mono text-[11px] break-all",
     current ? "text-foreground" : "text-muted-foreground"
   )
   const label = entry.method ? `${entry.method} ${entry.href}` : entry.href
+  const href = overlayNavigateHref(entry, pathname, search)
 
   if (entry.action === "navigate") {
     return (
-      <Link href={entry.href} className={cn(className, "underline-offset-2 hover:underline hover:text-foreground")}>
+      <Link href={href} scroll={false} className={cn(className, "underline-offset-2 hover:underline hover:text-foreground")}>
         {label}
       </Link>
     )
@@ -178,7 +194,12 @@ function AddressCatalogBody({
                             ) : null}
                           </p>
                           <p className="mt-0.5">
-                            <AddressHref entry={entry} current={current} />
+                            <AddressHref
+                              entry={entry}
+                              current={current}
+                              pathname={pathname}
+                              search={search}
+                            />
                           </p>
                         </div>
                         <CopyAddress entry={entry} />

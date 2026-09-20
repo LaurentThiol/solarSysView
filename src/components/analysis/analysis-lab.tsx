@@ -3,12 +3,10 @@
 import { useMemo, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 
-import { AddressPanel } from "@/components/analysis/address-panel"
 import { AveragesPanel } from "@/components/analysis/averages-panel"
 import { FiguresPanel } from "@/components/analysis/figures-panel"
 import { FlowPanel } from "@/components/analysis/flow-panel"
 import { LevelsPanel } from "@/components/analysis/levels-panel"
-import { MemoPanel } from "@/components/analysis/memo-panel"
 import { MomentumPanel } from "@/components/analysis/momentum-panel"
 import { NumbersPanel } from "@/components/analysis/numbers-panel"
 import { ParityPanel } from "@/components/analysis/parity-panel"
@@ -16,7 +14,6 @@ import {
   BayesPanel,
   DependencePanel,
   InferencePanel,
-  ProbaPanel,
 } from "@/components/analysis/stats-panels"
 import { TwinsPanel } from "@/components/analysis/twins-panel"
 import { twinsDemoWantsStart } from "@/lib/twins-demo"
@@ -196,36 +193,6 @@ const DRAW_TABS = [
   },
 ] as const
 
-const GLOSSARY_TABS = [
-  {
-    id: "proba",
-    label: "Probabilités",
-    help: {
-      title: "Probabilités",
-      body: "Référence officielle 5/50 + 2/12 (139 838 160 grilles). Ce n’est pas une lecture de la fenêtre : même loi pour toute grille valide.",
-    },
-  },
-  {
-    id: "memo",
-    label: "Mémo",
-    help: {
-      title: "Mémo",
-      body: "Périodes d’indicateurs groupées comme les onglets Technique, plus les biais (look-ahead, sur-optimisation, indépendance). Le vocabulaire figé de tout Synchro reste dans le bouton Glossaire du bandeau.",
-    },
-  },
-] as const
-
-const ADDRESS_TABS = [
-  {
-    id: "adresse",
-    label: "Adresse",
-    help: {
-      title: "Adresse",
-      body: "Annuaire des pages, onglets (?tab=), fonctions API et raccourcis. Recherche sans accents, filtres, copie. Même catalogue que la pastille Adresse du bandeau (raccourci « a »).",
-    },
-  },
-] as const
-
 const MEASURE_BAR_HELP: HelpCopy = {
   title: "Bandeau de mesure",
   body: "Il ne choisit pas quels tirages forment la fenêtre (c’est la barre Fenêtre de travail, plus haut) : il dit ce qu’on mesure sur cette fenêtre, et éventuellement quels tirages on garde. Tous les onglets d’analyse lisent ce même jeu.",
@@ -253,14 +220,8 @@ const MEASURE_BAR_HELP: HelpCopy = {
   ],
 }
 
-type TabId =
-  | (typeof TECH_TABS)[number]["id"]
-  | (typeof DRAW_TABS)[number]["id"]
-  | (typeof GLOSSARY_TABS)[number]["id"]
-  | (typeof ADDRESS_TABS)[number]["id"]
-const ANALYSE_TAB_IDS = [...TECH_TABS, ...DRAW_TABS, ...GLOSSARY_TABS, ...ADDRESS_TABS].map(
-  (item) => item.id
-) as TabId[]
+type TabId = (typeof TECH_TABS)[number]["id"] | (typeof DRAW_TABS)[number]["id"]
+const ANALYSE_TAB_IDS = [...TECH_TABS, ...DRAW_TABS].map((item) => item.id) as TabId[]
 
 export function AnalysisLab() {
   const [era, setEra] = useState<"current" | "all">("current")
@@ -591,8 +552,6 @@ export function AnalysisLab() {
         groups={[
           { label: "Technique", items: TECH_TABS },
           { label: "Tirage", items: DRAW_TABS },
-          { label: "Glossaire", items: GLOSSARY_TABS },
-          { label: "Adresse", items: ADDRESS_TABS },
         ]}
       />
 
@@ -707,9 +666,6 @@ export function AnalysisLab() {
           initialAxes={twinsFromUrl.axes}
         />
       ) : null}
-      {tab === "proba" ? <ProbaPanel /> : null}
-      {tab === "memo" ? <MemoPanel /> : null}
-      {tab === "adresse" ? <AddressPanel /> : null}
       </PillTabPanel>
     </div>
   )

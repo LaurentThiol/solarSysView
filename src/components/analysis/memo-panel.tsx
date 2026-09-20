@@ -84,9 +84,12 @@ export function MemoPanel() {
     <div className="flex flex-col gap-4">
       <p className="text-sm leading-6 text-muted-foreground">
         Aide-mémoire des périodes utilisées par les onglets Technique, plus les biais à
-        ne pas oublier. Le vocabulaire figé de tout Synchro est dans le bouton{" "}
-        <strong>Glossaire</strong> du bandeau. Les rangs officiels sont dans{" "}
-        <Link href="/analyse?tab=proba" className="underline underline-offset-2">
+        ne pas oublier. Le vocabulaire complet est dans{" "}
+        <Link href="?glossaire=vocab" scroll={false} className="underline underline-offset-2">
+          Vocabulaire
+        </Link>
+        . Les rangs officiels sont dans{" "}
+        <Link href="?glossaire=proba" scroll={false} className="underline underline-offset-2">
           Probabilités
         </Link>
         .
