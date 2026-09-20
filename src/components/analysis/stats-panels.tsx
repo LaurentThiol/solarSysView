@@ -212,18 +212,36 @@ export function DependencePanel({ draws, windowSize }: { draws: Draw[]; windowSi
           <CardTitle>Paires à plus fort lift (fenêtre)</CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="grid gap-1 sm:grid-cols-2">
-            {pairs.map((row) => (
-              <li key={`${row.a}-${row.b}`} className="flex justify-between text-sm">
-                <span className="tabular-nums">
-                  {row.a} · {row.b}
-                </span>
-                <span className="text-muted-foreground tabular-nums">
-                  {row.count}× · lift {formatStat(row.lift)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          {pairs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Aucune paire dans la fenêtre.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full max-w-md text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground">
+                    <th className="py-1 pr-6 font-medium">Paire</th>
+                    <th className="py-1 pr-6 font-medium">Fois</th>
+                    <th className="py-1 text-right font-medium">Lift</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pairs.map((row) => (
+                    <tr key={`${row.a}-${row.b}`} className="border-t border-border">
+                      <td className="py-1.5 pr-6 tabular-nums whitespace-nowrap">
+                        {row.a} · {row.b}
+                      </td>
+                      <td className="py-1.5 pr-6 tabular-nums whitespace-nowrap">
+                        {row.count}×
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums whitespace-nowrap">
+                        {formatStat(row.lift)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
       <Card>
