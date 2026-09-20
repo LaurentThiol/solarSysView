@@ -1,13 +1,27 @@
 "use client"
 
+import { useMemo, useState } from "react"
 import Link from "next/link"
-import { Bar, BarChart, CartesianGrid, Scatter, ScatterChart, XAxis, YAxis } from "recharts"
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Label,
+  Legend,
+  ReferenceLine,
+  Scatter,
+  ScatterChart,
+  XAxis,
+  YAxis,
+  ZAxis,
+} from "recharts"
 
 import { TitleHelp, WithHelp } from "@/components/help"
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  Disclaimer,
   formatStat,
 } from "@/components/analysis/shared"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,7 +32,17 @@ import {
   pairLift,
   rankProbabilities,
 } from "@/lib/analysis"
-import { type Draw, formatDrawDate } from "@/lib/draws"
+import { type Draw, formatDrawDate, formatShortDate } from "@/lib/draws"
+import {
+  NUMBER_SPREAD_AXIS,
+  NUMBER_SUM_AXIS,
+  cellsByWeekday,
+  domainContains,
+  sumSpreadCloud,
+  sumSpreadDomains,
+  type SumSpreadCell,
+  type SumSpreadScale,
+} from "@/lib/sum-spread"
 
 function formatOfficialPct(value: number) {
   return `${(value * 100).toLocaleString("fr-FR", {
@@ -197,14 +221,220 @@ export function BayesPanel({ draws }: { draws: Draw[] }) {
   )
 }
 
+function ScaleChip({
+  label,
+  pressed,
+  onClick,
+}: {
+  label: string
+  pressed: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={`rounded-md border px-2 py-1 text-xs ${
+        pressed
+          ? "border-primary bg-primary/15 text-foreground"
+          : "border-border text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
+function SumSpreadTooltip({ payload }: { payload?: ReadonlyArray<{ payload?: SumSpreadCell }> }) {
+  const row = payload?.[0]?.payload
+  if (!row) return null
+  const shown = row.dates.slice(-4)
+  const extra = row.dates.length - shown.length
+  return (
+    <div className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
+      <div className="font-medium tabular-nums">
+        somme {row.sum} · étendue {row.spread}
+      </div>
+      <div className="text-muted-foreground">
+        {row.count} tirage{row.count > 1 ? "s" : ""}
+        {row.weekday ? ` · ${row.weekday}` : ""}
+      </div>
+      <ul className="mt-1 flex flex-col gap-0.5">
+        {shown.map((date) => (
+          <li key={date}>
+            <Link href={`/analyse?tab=jumeaux&query=${date}`} className="underline">
+              {formatDrawDate(date)}
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {extra > 0 ? <div className="text-muted-foreground">+{extra} plus ancien{extra > 1 ? "s" : ""}</div> : null}
+    </div>
+  )
+}
+
+function SumSpreadCloudCard({ draws }: { draws: Draw[] }) {
+  const [scale, setScale] = useState<SumSpreadScale>("universe")
+  const cloud = useMemo(() => sumSpreadCloud(draws), [draws])
+  const domains = useMemo(() => sumSpreadDomains(cloud.cells, scale), [cloud.cells, scale])
+  const series = useMemo(() => cellsByWeekday(cloud.cells), [cloud.cells])
+  const showMean = domainContains(domains.x, NUMBER_SUM_AXIS.mean)
+  return (
+    <Card>
+      <CardHeader className="gap-3">
+        <CardTitle>
+          <TitleHelp
+            help={{
+              title: "Nuage somme × étendue",
+              body: "Abscisse (X) : somme des 5 numéros, 15 (1+2+3+4+5) à 240 (46+…+50), moyenne théorique 128. Ordonnée (Y) : étendue n5 − n1, 4 à 49. Un même couple (somme, étendue) empile les tirages : la taille du point est le compte. Mardi et vendredi sont séparés. La ligne verticale est la moyenne théorique de la somme. Lecture d’archive, pas un pronostic.",
+              items: [
+                {
+                  label: "Univers",
+                  text: "Cadre fixe 15–240 × 4–49 : la fenêtre se place dans l’espace possible.",
+                },
+                {
+                  label: "Fenêtre",
+                  text: "Zoom sur les valeurs observées, toujours borné par ces extrema théoriques.",
+                },
+              ],
+            }}
+          >
+            Nuage somme × étendue
+          </TitleHelp>
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Abscisse : somme des 5 numéros ({NUMBER_SUM_AXIS.min}–{NUMBER_SUM_AXIS.max}, moyenne{" "}
+          {NUMBER_SUM_AXIS.mean}). Ordonnée : étendue n5 − n1 ({NUMBER_SPREAD_AXIS.min}–
+          {NUMBER_SPREAD_AXIS.max}).
+        </p>
+        <div className="flex flex-wrap gap-1">
+          <ScaleChip
+            label="Univers 15–240"
+            pressed={scale === "universe"}
+            onClick={() => setScale("universe")}
+          />
+          <ScaleChip
+            label="Cadrer la fenêtre"
+            pressed={scale === "window"}
+            onClick={() => setScale("window")}
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {cloud.drawCount === 0 ? (
+          <p className="text-sm text-muted-foreground">Aucun tirage dans la fenêtre.</p>
+        ) : (
+          <>
+            <ChartContainer
+              config={{
+                mardi: { label: "Mardi", color: "var(--chart-2)" },
+                vendredi: { label: "Vendredi", color: "var(--chart-4)" },
+                other: { label: "Autre", color: "var(--chart-3)" },
+                last: { label: "Dernier", color: "var(--chart-1)" },
+              }}
+              className="h-[280px] w-full"
+            >
+              <ScatterChart margin={{ top: 8, right: 12, bottom: 28, left: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  type="number"
+                  dataKey="sum"
+                  name="Somme"
+                  domain={domains.x}
+                  allowDecimals={false}
+                  tickLine={false}
+                  axisLine={false}
+                >
+                  <Label value="Somme" position="insideBottom" offset={-18} />
+                </XAxis>
+                <YAxis
+                  type="number"
+                  dataKey="spread"
+                  name="Étendue"
+                  domain={domains.y}
+                  allowDecimals={false}
+                  tickLine={false}
+                  axisLine={false}
+                  width={48}
+                >
+                  <Label value="Étendue" angle={-90} position="insideLeft" />
+                </YAxis>
+                <ZAxis type="number" dataKey="count" range={[36, 160]} />
+                {showMean ? (
+                  <ReferenceLine
+                    x={NUMBER_SUM_AXIS.mean}
+                    stroke="var(--muted-foreground)"
+                    strokeDasharray="4 4"
+                  />
+                ) : null}
+                <ChartTooltip
+                  content={({ payload }) => (
+                    <SumSpreadTooltip
+                      payload={payload as ReadonlyArray<{ payload?: SumSpreadCell }> | undefined}
+                    />
+                  )}
+                />
+                <Legend verticalAlign="top" height={22} />
+                {series.mardi.length ? (
+                  <Scatter name="Mardi" data={series.mardi} fill="var(--color-mardi)" />
+                ) : null}
+                {series.vendredi.length ? (
+                  <Scatter name="Vendredi" data={series.vendredi} fill="var(--color-vendredi)" />
+                ) : null}
+                {series.other.length ? (
+                  <Scatter name="Autre" data={series.other} fill="var(--color-other)" />
+                ) : null}
+                {cloud.last ? (
+                  <Scatter
+                    name="Dernier"
+                    data={[cloud.last]}
+                    fill="none"
+                    legendType="none"
+                    shape={(props) => {
+                      const cx = Number(props.cx)
+                      const cy = Number(props.cy)
+                      if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null
+                      return (
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={7}
+                          fill="none"
+                          stroke="var(--color-last)"
+                          strokeWidth={2}
+                        />
+                      )
+                    }}
+                  />
+                ) : null}
+              </ScatterChart>
+            </ChartContainer>
+            <p className="mt-2 text-xs tabular-nums text-muted-foreground">
+              {cloud.drawCount} tirage{cloud.drawCount > 1 ? "s" : ""} · {cloud.cells.length} cellule
+              {cloud.cells.length > 1 ? "s" : ""}
+              {cloud.meanSum != null && cloud.meanSpread != null
+                ? ` · moyenne fenêtre Σ ${formatStat(cloud.meanSum, 1)} · étendue ${formatStat(cloud.meanSpread, 1)}`
+                : ""}
+              {cloud.last
+                ? ` · dernier ${formatShortDate(cloud.last.lastDate)} : Σ ${cloud.last.sum} · étendue ${cloud.last.spread}`
+                : ""}
+            </p>
+            <Disclaimer>
+              Graduations numériques : X = somme, Y = étendue — pas l’ordre des tirages. L’univers
+              15–240 × 4–49 est l’espace combinatoire ; cadrer la fenêtre zoom sans sortir de ces
+              bornes. H0 = indépendance uniforme.
+            </Disclaimer>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function DependencePanel({ draws, windowSize }: { draws: Draw[]; windowSize: number }) {
   const pairs = pairLift(draws)
   const backtest = hotBacktest(draws, windowSize)
-  const scatter = draws.map((d) => ({
-    sum: d.numbers.reduce((a, b) => a + b, 0),
-    spread: Math.max(...d.numbers) - Math.min(...d.numbers),
-    date: d.date,
-  }))
   return (
     <div className="flex flex-col gap-4">
       <Card>
@@ -253,38 +483,7 @@ export function DependencePanel({ draws, windowSize }: { draws: Draw[]; windowSi
           moyenne (attendu sous uniforme : {formatStat(backtest.expected)}).
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Nuage somme × étendue</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ChartContainer
-            config={{ spread: { label: "Étendue", color: "var(--chart-2)" } }}
-            className="h-[240px] w-full"
-          >
-            <ScatterChart>
-              <CartesianGrid />
-              <XAxis dataKey="sum" name="somme" tickLine={false} />
-              <YAxis dataKey="spread" name="étendue" tickLine={false} width={36} />
-              <ChartTooltip
-                content={({ payload }) => {
-                  const row = payload?.[0]?.payload as { date?: string; sum?: number } | undefined
-                  if (!row?.date) return null
-                  return (
-                    <div className="rounded-md border border-border bg-card px-2 py-1 text-xs">
-                      <Link href="/tirage" className="underline">
-                        {formatDrawDate(row.date)}
-                      </Link>
-                      <div>somme {row.sum}</div>
-                    </div>
-                  )
-                }}
-              />
-              <Scatter data={scatter} fill="var(--chart-2)" />
-            </ScatterChart>
-          </ChartContainer>
-        </CardContent>
-      </Card>
+      <SumSpreadCloudCard draws={draws} />
     </div>
   )
 }

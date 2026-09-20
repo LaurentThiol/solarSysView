@@ -180,7 +180,7 @@ const DRAW_TABS = [
     label: "Dépendance",
     help: {
       title: "Dépendance",
-      body: "Lift des paires, backtest « 5 plus chauds » et nuage somme × étendue. Toujours sous l’hypothèse d’indépendance.",
+      body: "Lift des paires, backtest « 5 plus chauds » et nuage somme (abscisse) × étendue (ordonnée). Toujours sous l’hypothèse d’indépendance.",
     },
   },
   {

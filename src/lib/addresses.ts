@@ -128,7 +128,7 @@ const ANALYSE_TABS: { id: string; label: string; text: string; params?: string }
   {
     id: "dependence",
     label: "Dépendance",
-    text: "Lift des paires, backtest « 5 plus chauds », nuage somme × étendue.",
+    text: "Lift des paires, backtest « 5 plus chauds », nuage somme (X) × étendue (Y).",
   },
   {
     id: "jumeaux",
@@ -313,7 +313,7 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/analysis/inference", "GET", "Hasard / χ²", "Adéquation et intervalles de Wilson sur la fenêtre.", "lecture"),
   apiEntry("/api/analysis/montecarlo", "GET", "Monte-Carlo", "Records de fréquence et de retard sous tirages uniformes.", "lecture", "from_date, to_date, n, seed, era"),
   apiEntry("/api/analysis/bayes", "GET", "Bayésien", "Prédictive beta-binomiale par boule.", "lecture"),
-  apiEntry("/api/analysis/dependence", "GET", "Dépendance", "Lift des paires et nuage somme × étendue.", "lecture"),
+  apiEntry("/api/analysis/dependence", "GET", "Dépendance", "Lift des paires et nuage somme (X) × étendue (Y).", "lecture"),
   apiEntry("/api/analysis/numbers", "GET", "Numéros", "Sorties, retards et IC Wilson pour la grille 1–50.", "lecture"),
   apiEntry("/api/analysis/lab", "GET", "Laboratoire complet", "Rapport groupé du labo Analyse (plus long à calculer).", "lecture"),
   apiEntry("/api/harmo/status", "GET", "Harmo · statut", "Dépendances Python (PyWavelets, ssqueezepy, librosa).", "lecture"),
