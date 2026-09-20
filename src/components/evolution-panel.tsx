@@ -47,13 +47,13 @@ import { WINDOW_PRESET_LABELS, filterCalendarYear, newestCalendarYear } from "@/
 import { ERA_LABELS } from "@/lib/copy"
 import { useDraws, type DrawWindow } from "@/lib/use-draws"
 
-const PERIODS: { id: DrawWindow; label: string }[] = [
-  { id: "last_20", label: WINDOW_PRESET_LABELS.last_20 },
-  { id: "last_50", label: WINDOW_PRESET_LABELS.last_50 },
-  { id: "year", label: WINDOW_PRESET_LABELS.year },
-  { id: "year_n1", label: WINDOW_PRESET_LABELS.year_n1 },
-  { id: "current", label: ERA_LABELS.current },
-  { id: "all", label: ERA_LABELS.all },
+const PERIODS: { id: DrawWindow; label: string; full: string }[] = [
+  { id: "last_20", label: "20 derniers", full: WINDOW_PRESET_LABELS.last_20 },
+  { id: "last_50", label: "50 derniers", full: WINDOW_PRESET_LABELS.last_50 },
+  { id: "year", label: WINDOW_PRESET_LABELS.year, full: WINDOW_PRESET_LABELS.year },
+  { id: "year_n1", label: WINDOW_PRESET_LABELS.year_n1, full: WINDOW_PRESET_LABELS.year_n1 },
+  { id: "current", label: "Formule actuelle", full: ERA_LABELS.current },
+  { id: "all", label: "Tout", full: ERA_LABELS.all },
 ]
 
 function GainsSketchBridge({
@@ -107,11 +107,10 @@ function EvolutionWindowBar({
         role="region"
         aria-label="Fenêtre de travail"
       >
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-[max(1rem,env(safe-area-inset-left))] py-2 pr-[max(1rem,env(safe-area-inset-right))] sm:px-6">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-[max(1rem,env(safe-area-inset-left))] py-2 pr-[max(1rem,env(safe-area-inset-right))] sm:flex-row sm:items-center sm:gap-3 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-              <span className="hidden sm:inline">Fenêtre de travail</span>
-              <span className="sm:hidden">Fenêtre</span>
+              Fenêtre
               <HelpTip {...WINDOW_HELP} />
             </span>
             <PillTabs
@@ -124,32 +123,38 @@ function EvolutionWindowBar({
               className="min-w-0 flex-1"
             />
           </div>
-          {lastWindow ? null : (
-            <div className="flex shrink-0 items-center gap-1.5">
-              <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:inline-flex">
-                Mois
-                <HelpTip {...MONTH_HELP} />
-              </span>
-              <Select value={month} onValueChange={(value) => onMonth(String(value))}>
-                <SelectTrigger size="sm" className="w-[9.5rem] sm:w-44" aria-label="Mois">
-                  <span className="flex flex-1 text-left">
-                    {monthOptions.find((item) => item.value === month)?.label ??
-                      "Tous les mois"}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {monthOptions.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {lastWindow ? (
+            <p className="hidden shrink-0 text-xs tabular-nums text-muted-foreground lg:block">
+              {drawCount} tirage{drawCount > 1 ? "s" : ""}
+            </p>
+          ) : (
+            <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  Mois
+                  <HelpTip {...MONTH_HELP} />
+                </span>
+                <Select value={month} onValueChange={(value) => onMonth(String(value))}>
+                  <SelectTrigger size="sm" className="w-[9.5rem] sm:w-44" aria-label="Mois">
+                    <span className="flex flex-1 text-left">
+                      {monthOptions.find((item) => item.value === month)?.label ??
+                        "Tous les mois"}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {monthOptions.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs tabular-nums text-muted-foreground">
+                {drawCount} tirage{drawCount > 1 ? "s" : ""}
+              </p>
             </div>
           )}
-          <p className="hidden shrink-0 text-xs tabular-nums text-muted-foreground lg:block">
-            {drawCount} tirage{drawCount > 1 ? "s" : ""}
-          </p>
         </div>
       </div>
     </SiteHeaderSlot>
@@ -242,7 +247,7 @@ function EvolutionContent() {
     }
   }, [filtered])
 
-  const periodLabel = PERIODS.find((item) => item.id === period)?.label ?? period
+  const periodLabel = PERIODS.find((item) => item.id === period)?.full ?? period
   const bounds = useMemo(() => {
     if (!filtered.length) return { from: null as string | null, to: null as string | null }
     const dates = filtered.map((draw) => draw.date).sort((a, b) => a.localeCompare(b))

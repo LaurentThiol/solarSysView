@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useRef, type KeyboardEvent } from "react"
+import { useEffect, useId, useRef, type KeyboardEvent } from "react"
 
 import { HelpTip, type HelpCopy } from "@/components/help"
 import { cn } from "@/lib/utils"
@@ -59,6 +59,11 @@ export function PillTabs<T extends string>({
   const flat = flatten(items, groups)
   const buttonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const isTabs = mode === "tabs"
+
+  useEffect(() => {
+    if (!compact) return
+    buttonRefs.current[value]?.scrollIntoView({ inline: "nearest", block: "nearest" })
+  }, [compact, value])
 
   function focusAndSelect(id: T) {
     onValueChange(id)

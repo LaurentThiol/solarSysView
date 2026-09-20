@@ -17,6 +17,8 @@ def test_evolution_window_pins_under_the_banner() -> None:
     assert 'aria-label="Fenêtre de travail"' in panel
     assert "EvolutionWindowBar" in panel
     assert "sous le bandeau" in panel
+    assert 'label: "20 derniers"' in panel
+    assert "full: WINDOW_PRESET_LABELS.last_20" in panel
     assert "SITE_HEADER_SLOT_ID" in header
     assert "--site-header-height" in header
     assert 'SITE_HEADER_SLOT_ID = "site-header-slot"' in slot
