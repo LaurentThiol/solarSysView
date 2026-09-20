@@ -8,7 +8,6 @@ import { AdminGate } from "@/components/admin-gate"
 import { SiteHeaderSlot } from "@/components/site-header-slot"
 import { useRegisterCapture } from "@/components/capture"
 import { DrawChart } from "@/components/draw-chart"
-import { EvolutionDraws } from "@/components/evolution-draws"
 import { EvolutionGains } from "@/components/evolution-gains"
 import { EvolutionHeat } from "@/components/evolution-heat"
 import { EvolutionParity } from "@/components/evolution-parity"
@@ -435,8 +434,6 @@ function EvolutionContent() {
         expectedNumbers={expectedN}
         expectedStars={expectedS}
       />
-
-      {lastWindow ? <EvolutionDraws draws={filtered} /> : null}
 
       <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
         Chaque tirage est indépendant. Les fréquences, la SMA, les bandes de

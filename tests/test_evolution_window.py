@@ -25,3 +25,6 @@ def test_evolution_window_pins_under_the_banner() -> None:
     assert "createPortal" in slot
     assert "compact?: boolean" in pills
     assert "sous le bandeau" in readme
+    assert "EvolutionDraws" not in panel
+    assert "Tirages de la fenêtre" not in panel
+    assert not (ROOT / "src/components/evolution-draws.tsx").exists()
