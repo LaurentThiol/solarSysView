@@ -11,8 +11,12 @@ export const CHART_DRAW_HOSTS = [
 
 export type ChartDrawHost = (typeof CHART_DRAW_HOSTS)[number]
 
-/** Segment réel entre deux ancres, sans gabarit de la table. */
+/** Segment réel entre deux ancres, sans gabarit de la table. Un clic de plus pose la parallèle. */
 export const FREE_FIGURE = "free"
+
+export function isFreeFigure(figure: string) {
+  return figure === FREE_FIGURE || figure === "free"
+}
 
 export type MagnetKind = "sample" | "extrema" | "free"
 
@@ -88,6 +92,8 @@ export type DraftPlacement = {
   seriesLabel: string
   start: ChartAnchor | null
   mid: ChartAnchor | null
+  /** Segment libre déjà posé : le prochain clic trace la parallèle sur ce croquis. */
+  parallelOf?: string | null
 }
 
 export type EvolutionChartMeta = {

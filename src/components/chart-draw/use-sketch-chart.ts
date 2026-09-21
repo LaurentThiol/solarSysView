@@ -12,14 +12,21 @@ import {
 import { isRailFigure } from "@/lib/chartisme/catalog"
 import {
   DRAFT_KEY,
+  FREE_PARALLEL_DONE_HINT,
+  FREE_PARALLEL_HINT,
+  FREE_PARALLEL_TOO_CLOSE_HINT,
+  FREE_SEGMENT_KEPT_HINT,
   anchorsAfterMove,
   buildSketchGeometry,
   canFreeMoveHandle,
-  canFreePlaceArrival,
+  cursorReleasesMagnet,
+  drawingStartHint,
   extremaIndices,
   invertLinear,
   isDemagnetizeModifier,
+  isFreeFigure,
   isMagneted,
+  isParallelContact,
   liveToAnchor,
   magnetKindAt,
   magnetOnCurve,
@@ -30,6 +37,7 @@ import {
   newSketchId,
   pixelDistance,
   placementHint,
+  previewGeometry,
   readTooltipIndex,
   readWindow,
   remapSketch,
@@ -40,6 +48,7 @@ import {
   swingTouches,
   valueFromPixelY,
   windowTooShort,
+  anchorsToGeometry,
   type AxisScales,
   type ChartAnchor,
   type ChartSketch,
@@ -259,35 +268,38 @@ export function useSketchChart<K extends string>({
     return visibleSketches.map((item) => (item.id === preview.id ? preview : item))
   }, [visibleSketches, moving, movingSketch, draftLive, seriesValues, dates])
 
+  const parallelOf = draw?.draft?.parallelOf ?? null
   const draftGeometry = useMemo(() => {
-    if (!drawing || moving || !draftStart || !draftLive) return null
+    if (!drawing || moving || !draftStart) return null
     const values = seriesValues(targetKey)
-    if (draftMid && isRailFigure(draftFigure)) {
-      return buildSketchGeometry({
-        figure: draftFigure,
-        values,
-        dates,
-        from: draftStart.index,
-        to: draftMid.index,
-        fromActual: draftStart.actual,
-        toActual: draftMid.actual,
-        via: draftLive.index,
-        viaActual: draftLive.actual,
-      })
-    }
-    return buildSketchGeometry({
+    return previewGeometry({
       figure: draftFigure,
       values,
       dates,
-      from: draftStart.index,
-      to: draftLive.index,
-      fromActual: draftStart.actual,
-      toActual: draftLive.actual,
+      start: draftStart,
+      mid: draftMid,
+      live: draftLive,
+      parallel: Boolean(parallelOf),
     })
-  }, [drawing, moving, draftStart, draftMid, draftLive, draftFigure, seriesValues, dates, targetKey])
+  }, [
+    drawing,
+    moving,
+    draftStart,
+    draftMid,
+    draftLive,
+    draftFigure,
+    seriesValues,
+    dates,
+    targetKey,
+    parallelOf,
+  ])
 
   const draftPoints = draftGeometry?.points ?? []
   const draftBand = draftGeometry?.band
+  const paintedSketches = useMemo(() => {
+    if (!parallelOf) return displaySketches
+    return displaySketches.filter((sketch) => sketch.id !== parallelOf)
+  }, [displaySketches, parallelOf])
   const previewBand = movingSketch
     ? displaySketches.find((item) => item.id === movingSketch.id)?.band
     : draftBand
@@ -307,7 +319,9 @@ export function useSketchChart<K extends string>({
           ? liveToAnchor(draftLive)
           : movingSketch.mid ?? null
         : movingSketch.mid ?? null
-      : draftMid
+      : draftStart
+        ? draftMid
+        : lastSketch?.mid ?? null
   const hudEnd =
     moving && movingSketch
       ? moving.handle === "end"
@@ -332,15 +346,20 @@ export function useSketchChart<K extends string>({
       return readWindow(values, dates, left, right, previewBand)
     }
     if (draftStart && draftLive && draftLive.index !== draftStart.index) {
-      if (windowTooShort(draftStart.index, draftLive.index)) return null
+      const indexes = [draftStart.index, draftLive.index]
+      if (draftMid) indexes.push(draftMid.index)
+      const left = Math.min(...indexes)
+      const right = Math.max(...indexes)
+      if (windowTooShort(left, right)) return null
       const values = seriesValues(targetKey)
-      return readWindow(values, dates, draftStart.index, draftLive.index, draftBand)
+      return readWindow(values, dates, left, right, draftBand)
     }
     return lastSketch?.reading ?? null
   }, [
     moving,
     movingSketch,
     draftStart,
+    draftMid,
     draftLive,
     draftBand,
     previewBand,
@@ -352,8 +371,8 @@ export function useSketchChart<K extends string>({
 
   const mergeSketchFields = useCallback(
     (chartData: SketchablePoint[]) => {
-      if (!displaySketches.length && !draftPoints.length && !draftBand) return chartData
-      const bySketch = displaySketches.map((sketch) => {
+      if (!paintedSketches.length && !draftPoints.length && !draftBand) return chartData
+      const bySketch = paintedSketches.map((sketch) => {
         const values = seriesValues(sketch.seriesKey as K)
         const band = resolveSketchBand(sketch, values, dates)
         return {
@@ -399,7 +418,7 @@ export function useSketchChart<K extends string>({
         return { ...point, ...extra }
       })
     },
-    [displaySketches, draftPoints, draftBand, seriesValues, dates, draw?.showMedian]
+    [paintedSketches, draftPoints, draftBand, seriesValues, dates, draw?.showMedian]
   )
 
   useEffect(() => {
@@ -420,6 +439,11 @@ export function useSketchChart<K extends string>({
         if (movingRef.current) {
           pointerLogicRef.current?.clearMove()
           setHint("Déplacement annulé. Clique un point pour le reprendre, ou un départ.")
+          return
+        }
+        if (current?.draft?.parallelOf) {
+          current.cancelDraft()
+          setHint(FREE_SEGMENT_KEPT_HINT)
           return
         }
         if (current?.draft?.start) current.cancelDraft()
@@ -581,9 +605,17 @@ export function useSketchChart<K extends string>({
     const current = drawRef.current
     const demagnetize = demagnetizeOverride ?? (isDemagnetizeModifier(event) || altHeld)
     const figure = sketch?.figure ?? current?.figure ?? ""
-    const offCurve = move
-      ? canFreeMoveHandle(move.handle, demagnetize)
-      : canFreePlaceArrival(Boolean(current?.draft?.start), demagnetize)
+    const offCurve = cursorReleasesMagnet({
+      movingHandle: move?.handle ?? null,
+      hasStart: Boolean(current?.draft?.start),
+      demagnetize,
+      parallelContact: isParallelContact({
+        figure: sketch?.figure ?? current?.figure,
+        hasMid: Boolean(move ? sketch?.mid : current?.draft?.mid),
+        parallelOf: move ? null : current?.draft?.parallelOf,
+        movingHandle: move?.handle ?? null,
+      }),
+    })
     const extrema = extremaIndices(values)
     const touches = swingTouches(values)
     const rails = isRailFigure(figure)
@@ -717,6 +749,10 @@ export function useSketchChart<K extends string>({
         startIndex: current.draft?.start?.index ?? null,
         midIndex: current.draft?.mid?.index ?? null,
         rails: isRailFigure(sketch?.figure ?? current.figure),
+        free: isFreeFigure(sketch?.figure ?? current.figure),
+        parallel:
+          Boolean(current.draft?.parallelOf) ||
+          Boolean(move?.handle === "end" && sketch && isFreeFigure(sketch.figure) && sketch.mid),
         moving: move?.handle ?? null,
         hoverHandle: hoveredHandle?.handle ?? null,
         shortWindow,
@@ -750,6 +786,8 @@ export function useSketchChart<K extends string>({
           startIndex: current.draft?.start?.index ?? null,
           midIndex: current.draft?.mid?.index ?? null,
           rails: isRailFigure(sketch.figure),
+          free: isFreeFigure(sketch.figure),
+          parallel: move.handle === "end" && isFreeFigure(sketch.figure) && Boolean(sketch.mid),
           moving: move.handle,
         })
       )
@@ -849,6 +887,8 @@ export function useSketchChart<K extends string>({
           startIndex: current.draft?.start?.index ?? null,
           midIndex: current.draft?.mid?.index ?? null,
           rails: isRailFigure(current.figure),
+          free: isFreeFigure(current.figure),
+          parallel: Boolean(current.draft?.parallelOf),
         })
       )
       return
@@ -879,8 +919,51 @@ export function useSketchChart<K extends string>({
       setHint(
         rails
           ? "Clique le second point de la borne."
-          : "Clique l’arrivée. Alt (⌥) : hors courbe."
+          : isFreeFigure(current.figure)
+            ? "Clique l’arrivée. Le clic suivant pose la parallèle. Alt (⌥) : hors courbe."
+            : "Clique l’arrivée. Alt (⌥) : hors courbe."
       )
+      return
+    }
+    const parallelDraft = current.draft
+    if (parallelDraft?.parallelOf && start && mid && isFreeFigure(current.figure)) {
+      const end = makeAnchor()
+      const left = Math.min(start.index, mid.index, end.index)
+      const right = Math.max(start.index, mid.index, end.index)
+      if (windowTooShort(left, right)) {
+        setHint("Au moins 8 tirages pour refermer la figure.")
+        return
+      }
+      const values = seriesValues(start.seriesKey as K)
+      const geo = anchorsToGeometry({
+        figure: current.figure,
+        values,
+        dates,
+        start,
+        mid,
+        end,
+      })
+      if (!geo.band) {
+        setHint(FREE_PARALLEL_TOO_CLOSE_HINT)
+        return
+      }
+      const previous = current.sketches.find((item) => item.id === parallelDraft.parallelOf)
+      current.addSketch({
+        id: parallelDraft.parallelOf,
+        host: previous?.host ?? current.host,
+        figure: current.figure,
+        seriesKey: start.seriesKey,
+        seriesLabel: parallelDraft.seriesLabel,
+        start,
+        mid,
+        end,
+        points: geo.points,
+        band: geo.band,
+        showMedian: current.showMedian,
+        reading: readWindow(values, dates, left, right, geo.band),
+        createdAt: previous?.createdAt ?? new Date().toISOString(),
+      })
+      setHint(FREE_PARALLEL_DONE_HINT)
       return
     }
     if (rails && !mid) {
@@ -917,8 +1000,9 @@ export function useSketchChart<K extends string>({
       via: rails ? end.index : undefined,
       viaActual: rails ? end.actual : undefined,
     })
-    current.addSketch({
-      id: newSketchId(),
+    const sketchId = newSketchId()
+    const placed = {
+      id: sketchId,
       host: current.host,
       figure: current.figure,
       seriesKey: targetKey,
@@ -931,7 +1015,20 @@ export function useSketchChart<K extends string>({
       showMedian: current.showMedian,
       reading: readWindow(values, dates, left, right, geo.band),
       createdAt: new Date().toISOString(),
-    })
+    }
+    if (isFreeFigure(current.figure) && !mid) {
+      current.addSketch(placed, {
+        figure: current.figure,
+        seriesKey: targetKey,
+        seriesLabel: seriesLabel(targetKey),
+        start,
+        mid: end,
+        parallelOf: sketchId,
+      })
+      setHint(FREE_PARALLEL_HINT)
+      return
+    }
+    current.addSketch(placed)
     setHint("Annotation posée. Clique un nouveau départ, ou un point pour le reprendre.")
   }
 
@@ -955,11 +1052,7 @@ export function useSketchChart<K extends string>({
         start: null,
         mid: null,
       })
-      setHint(
-        isRailFigure(draw.figure)
-          ? "Clique le premier point de la borne, ou un point déjà posé."
-          : "Clique le départ, ou un point déjà posé pour le reprendre."
-      )
+      setHint(drawingStartHint(draw.figure))
     } else {
       setHint(null)
     }
@@ -973,7 +1066,7 @@ export function useSketchChart<K extends string>({
     setHint,
     moving,
     hoveredHandle,
-    displaySketches,
+    displaySketches: paintedSketches,
     draftPoints,
     draftBand,
     previewBand,

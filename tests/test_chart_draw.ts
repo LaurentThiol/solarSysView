@@ -11,6 +11,7 @@ import {
   DEFAULT_MAGNET_RADIUS_PX,
   canFreeMoveHandle,
   canFreePlaceArrival,
+  cursorReleasesMagnet,
   extremaIndices,
   invertLinear,
   isDemagnetizeModifier,
@@ -34,13 +35,16 @@ import {
   sketchWithMovedHandle,
 } from "../src/lib/chart-draw/move"
 import {
+  anchorsToGeometry,
   buildSketchPoints,
   buildSketchGeometry,
+  channelLabel,
   fitTemplateToWindow,
   remapSketch,
   sampleTemplate,
   windowTooShort,
 } from "../src/lib/chart-draw/place"
+import { FREE_PARALLEL_HINT, placementHint } from "../src/lib/chart-draw/placement-hint"
 import {
   FREE_FIGURE,
   isSketchDataKey,
@@ -264,6 +268,165 @@ test("libre drawing is a straight line between the two anchors", () => {
   assert.equal(trough, Math.min(...values))
   assert.ok(synthCurve("canal").length > 8)
   assert.ok(synthCurve("tunnel_droit").length > 8)
+})
+
+test("a free third click lays a line parallel to the segment", () => {
+  const values = [10, 12, 11, 14, 13, 16, 15, 18, 17, 20, 19, 22]
+  const dates = values.map((_, i) => `2026-08-${String(i + 1).padStart(2, "0")}`)
+  const geo = buildSketchGeometry({
+    figure: FREE_FIGURE,
+    values,
+    dates,
+    from: 1,
+    to: 8,
+    fromActual: 30,
+    toActual: 16,
+    via: 4,
+    viaActual: 4,
+  })
+  assert.ok(geo.band)
+  const { upper, lower } = geo.band
+  assert.equal(upper.length, lower.length)
+  assert.ok(upper.length >= 8)
+  const rise = (points: { index: number; actual: number }[]) =>
+    (points[points.length - 1].actual - points[0].actual) /
+    (points[points.length - 1].index - points[0].index)
+  assert.ok(Math.abs(rise(upper) - rise(lower)) < 1e-9)
+  const onRail = (index: number, actual: number) => {
+    const hi = upper.find((point) => point.index === index)?.actual
+    const lo = lower.find((point) => point.index === index)?.actual
+    assert.ok(hi != null && lo != null)
+    assert.ok(Math.abs(hi - actual) < 1e-6 || Math.abs(lo - actual) < 1e-6)
+  }
+  onRail(1, 30)
+  onRail(8, 16)
+  onRail(4, 4)
+  assert.equal(channelLabel(FREE_FIGURE, geo.band), "Parallèles")
+  assert.equal(channelLabel(FREE_FIGURE), "Segment libre")
+  const collapsed = buildSketchGeometry({
+    figure: FREE_FIGURE,
+    values,
+    dates,
+    from: 1,
+    to: 8,
+    fromActual: 30,
+    toActual: 16,
+    via: 4,
+    viaActual: 30 + ((16 - 30) * (4 - 1)) / (8 - 1),
+  })
+  assert.equal(collapsed.band, undefined)
+  assert.equal(collapsed.points[0].actual, 30)
+  assert.equal(collapsed.points.at(-1)?.actual, 16)
+
+  const sketch: ChartSketch = {
+    id: "par-1",
+    host: "evolution",
+    figure: FREE_FIGURE,
+    seriesKey: "sumNumbers",
+    seriesLabel: "Somme",
+    start: {
+      index: 1,
+      date: dates[1],
+      seriesKey: "sumNumbers",
+      actual: 30,
+      snapped: true,
+      kind: "sample",
+    },
+    mid: {
+      index: 8,
+      date: dates[8],
+      seriesKey: "sumNumbers",
+      actual: 16,
+      snapped: true,
+      kind: "sample",
+    },
+    end: {
+      index: 4,
+      date: dates[4],
+      seriesKey: "sumNumbers",
+      actual: 4,
+      snapped: false,
+      kind: "free",
+    },
+    points: geo.points,
+    band: geo.band,
+    reading: null,
+    createdAt: "2026-08-12T00:00:00.000Z",
+  }
+  const moved = moveSketchHandle(
+    sketch,
+    "end",
+    liveToAnchor({
+      index: 6,
+      date: dates[6],
+      seriesKey: "sumNumbers",
+      actual: 40,
+      snapped: false,
+      kind: "free",
+    }),
+    values,
+    dates
+  )
+  assert.ok(moved?.band)
+  const movedRise = (points: { index: number; actual: number }[]) =>
+    (points[points.length - 1].actual - points[0].actual) /
+    (points[points.length - 1].index - points[0].index)
+  assert.ok(Math.abs(movedRise(moved.band.upper) - movedRise(moved.band.lower)) < 1e-9)
+  const contact = moved.band.upper.find((point) => point.index === 6)?.actual
+  const other = moved.band.lower.find((point) => point.index === 6)?.actual
+  assert.ok(contact != null && other != null)
+  assert.ok(Math.abs(contact - 40) < 1e-6 || Math.abs(other - 40) < 1e-6)
+  const kept = anchorsToGeometry({
+    figure: FREE_FIGURE,
+    values,
+    dates,
+    start: moved.start,
+    mid: moved.mid,
+    end: moved.end,
+  })
+  const keptHi = kept.band?.upper.find((point) => point.index === 1)?.actual
+  const keptLo = kept.band?.lower.find((point) => point.index === 1)?.actual
+  assert.ok(keptHi != null && keptLo != null)
+  assert.ok(Math.abs(keptHi - 30) < 1e-6 || Math.abs(keptLo - 30) < 1e-6)
+  const keptHiEnd = kept.band?.upper.find((point) => point.index === 8)?.actual
+  const keptLoEnd = kept.band?.lower.find((point) => point.index === 8)?.actual
+  assert.ok(keptHiEnd != null && keptLoEnd != null)
+  assert.ok(Math.abs(keptHiEnd - 16) < 1e-6 || Math.abs(keptLoEnd - 16) < 1e-6)
+  assert.equal(cursorReleasesMagnet({
+    movingHandle: null,
+    hasStart: true,
+    demagnetize: false,
+    parallelContact: true,
+  }), true)
+  assert.equal(cursorReleasesMagnet({
+    movingHandle: "end",
+    hasStart: true,
+    demagnetize: false,
+    parallelContact: false,
+  }), false)
+  const live = {
+    index: 6,
+    date: dates[6],
+    seriesKey: "sumNumbers",
+    seriesLabel: "Somme",
+    actual: 40,
+    snapped: false,
+    offCurve: true,
+    kind: "free" as const,
+    distancePx: 12,
+    clientX: 0,
+    clientY: 0,
+  }
+  assert.equal(
+    placementHint({
+      live,
+      startIndex: 1,
+      midIndex: 8,
+      free: true,
+      parallel: true,
+    }),
+    FREE_PARALLEL_HINT
+  )
 })
 
 test("a free arrival can sit off the series while the start stays on it", () => {

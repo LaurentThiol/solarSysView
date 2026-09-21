@@ -12,7 +12,12 @@ function rewrite(specifier) {
 
 function withTs(specifier) {
   if (HAS_EXT.test(specifier)) return []
-  return [`${specifier}.ts`, `${specifier}.tsx`]
+  return [
+    `${specifier}.ts`,
+    `${specifier}.tsx`,
+    `${specifier}/index.ts`,
+    `${specifier}/index.tsx`,
+  ]
 }
 
 export async function resolve(specifier, context, nextResolve) {

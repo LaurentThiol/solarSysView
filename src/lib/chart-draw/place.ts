@@ -5,11 +5,20 @@ import {
   labelOf,
   slopeBiasLabel,
 } from "../chartisme/catalog"
-import { constructRails, projectRailTarget } from "../chartisme/rails"
+import {
+  constructRails,
+  lineAt,
+  lineThrough,
+  lineThroughSlope,
+  projectRailTarget,
+  sampleRails,
+  slopeBiasOf,
+  type Line,
+} from "../chartisme/rails"
 import { synthCurve } from "../chartisme/sketch-shapes"
 
 import {
-  FREE_FIGURE,
+  isFreeFigure,
   type ChartSketch,
   type SketchBand,
   type SketchPoint,
@@ -267,8 +276,140 @@ export function channelTilt(band: SketchBand | undefined): "up" | "down" | "flat
   return rise > 0 ? "up" : "down"
 }
 
+function higherFirst(left: Line, right: Line, at: number): [Line, Line] {
+  return lineAt(left, at) >= lineAt(right, at) ? [left, right] : [right, left]
+}
+
+/**
+ * Segment libre à trois points : la droite A–B, puis la parallèle qui passe par C.
+ * Si C est sur A–B, on garde le segment seul.
+ */
+export function fitFreeParallel(
+  values: number[],
+  dates: string[],
+  from: number,
+  to: number,
+  via: number,
+  actuals: { from: number; to: number; via: number }
+): SketchGeometry {
+  const segment = () => ({
+    points: straightSegment(values, dates, from, to, { from: actuals.from, to: actuals.to }),
+  })
+  if (![actuals.from, actuals.to, actuals.via].every(Number.isFinite)) return segment()
+  const first = lineThrough(
+    { index: from, price: actuals.from },
+    { index: to, price: actuals.to }
+  )
+  if (!first) return segment()
+  const second = lineThroughSlope({ index: via, price: actuals.via }, first[0])
+  const i0 = Math.min(from, to, via)
+  const i1 = Math.max(from, to, via)
+  if (i0 < 0 || i1 >= dates.length || i1 <= i0) return segment()
+  const [upper, lower] = higherFirst(first, second, i0)
+  const height = lineAt(upper, i0) - lineAt(lower, i0)
+  const scale = Math.max(Math.abs(actuals.from), Math.abs(actuals.to), Math.abs(actuals.via), 1)
+  if (!(height > scale * 1e-4)) return segment()
+  const samples = sampleRails(upper, lower, dates, i0, i1)
+  const points: SketchPoint[] = []
+  for (let index = i0; index <= i1; index += 1) {
+    points.push({
+      index,
+      date: dates[index] ?? "",
+      actual: lineAt(first, index),
+    })
+  }
+  return {
+    points,
+    band: {
+      upper: samples.upper,
+      lower: samples.lower,
+      median: samples.median,
+      height,
+      slopeBias: slopeBiasOf(upper, lower, i0, i1),
+    },
+  }
+}
+
+export function anchorsToGeometry(options: {
+  figure: string
+  values: number[]
+  dates: string[]
+  start: { index: number; actual: number }
+  end: { index: number; actual: number }
+  mid?: { index: number; actual: number } | null
+}): SketchGeometry {
+  const rails = isRailFigure(options.figure)
+  const useMid = options.mid != null && (rails || isFreeFigure(options.figure))
+  const far = useMid && options.mid ? options.mid : options.end
+  const via = rails || useMid ? options.end : null
+  return buildSketchGeometry({
+    figure: options.figure,
+    values: options.values,
+    dates: options.dates,
+    from: options.start.index,
+    to: far.index,
+    fromActual: options.start.actual,
+    toActual: far.actual,
+    via: via ? via.index : undefined,
+    viaActual: via ? via.actual : undefined,
+  })
+}
+
+/** Aperçu sous le curseur : segment, rails, ou parallèle en attente du troisième clic. */
+export function previewGeometry(options: {
+  figure: string
+  values: number[]
+  dates: string[]
+  start: { index: number; actual: number }
+  mid?: { index: number; actual: number } | null
+  live?: { index: number; actual: number } | null
+  parallel?: boolean
+}): SketchGeometry | null {
+  const { figure, values, dates, start, mid, live, parallel } = options
+  if (parallel && mid && !live) {
+    return buildSketchGeometry({
+      figure,
+      values,
+      dates,
+      from: start.index,
+      to: mid.index,
+      fromActual: start.actual,
+      toActual: mid.actual,
+    })
+  }
+  if (!live) return null
+  if (mid && (isRailFigure(figure) || parallel)) {
+    return anchorsToGeometry({ figure, values, dates, start, mid, end: live })
+  }
+  return buildSketchGeometry({
+    figure,
+    values,
+    dates,
+    from: start.index,
+    to: live.index,
+    fromActual: start.actual,
+    toActual: live.actual,
+  })
+}
+
+/** Contact de la parallèle : pose du troisième clic, ou reprise de cette ancre. */
+export function isParallelContact(options: {
+  figure?: string | null
+  hasMid: boolean
+  parallelOf?: string | null
+  movingHandle?: "start" | "mid" | "end" | null
+}) {
+  if (options.parallelOf && !options.movingHandle) return true
+  return (
+    options.movingHandle === "end" && isFreeFigure(options.figure ?? "") && options.hasMid
+  )
+}
+
 export function channelLabel(figure: string, band?: SketchBand): string {
-  if (figure === FREE_FIGURE || figure === "free") return "Segment libre"
+  if (isFreeFigure(figure)) {
+    if (band && band.upper.length >= 2 && band.lower.length >= 2) return "Parallèles"
+    return "Segment libre"
+  }
   if (isChannelFigure(figure)) {
     return slopeBiasLabel(figure, band?.slopeBias ?? channelTilt(band) ?? undefined)
   }
@@ -327,7 +468,15 @@ export function buildSketchGeometry(options: {
     }
     if (isChannelFigure(figure)) return fitChannelBand(values, dates, from, to, actuals)
   }
-  if (figure === FREE_FIGURE) {
+  if (isFreeFigure(figure)) {
+    if (via != null && Number.isFinite(via)) {
+      const parallel = fitFreeParallel(values, dates, from, to, via, {
+        from: fromActual ?? values[from],
+        to: toActual ?? values[to],
+        via: viaActual ?? values[via],
+      })
+      if (parallel.band) return parallel
+    }
     return { points: straightSegment(values, dates, from, to, actuals) }
   }
   const template = synthCurve(figure)
@@ -357,17 +506,16 @@ export function resolveSketchBand(
   if (sketch.band && sketch.band.upper.length >= 2 && sketch.band.lower.length >= 2) {
     return sketch.band
   }
-  if (!isRailFigure(sketch.figure)) return undefined
-  return buildSketchGeometry({
+  const rebuild =
+    isRailFigure(sketch.figure) || (isFreeFigure(sketch.figure) && sketch.mid != null)
+  if (!rebuild) return undefined
+  return anchorsToGeometry({
     figure: sketch.figure,
     values,
     dates,
-    from: sketch.start.index,
-    to: sketch.end.index,
-    fromActual: sketch.start.actual,
-    toActual: sketch.end.actual,
-    via: sketch.mid?.index,
-    viaActual: sketch.mid?.actual,
+    start: sketch.start,
+    end: sketch.end,
+    mid: sketch.mid,
   }).band
 }
 

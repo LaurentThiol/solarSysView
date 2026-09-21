@@ -24,7 +24,7 @@ const DRAW_HELP = {
 
 1. Choisis la figure et la série visée.
 2. Figures à rails (rectangle, canal, triangles, biseaux, broadening) : trois clics. Les deux premiers ferment la première borne ; le troisième pose le contact opposé — parallèle pour le canal / rectangle, contrainte de figure pour les triangles. L’aimant privilégie les pivots de touche (H pour la borne haute, L pour la basse).
-3. Les autres figures : deux clics. Près de la courbe, l’aimant accroche le tirage le plus proche. Un pivot de swing est seulement étiqueté (aimant · pivot) : il n’avale plus le voisin.
+3. Segment libre : deux clics pour la droite. Le clic suivant pose une seconde droite, parallèle à la première — l’ordonnée suit le curseur. Échap ou Annuler garde le segment seul. Les autres figures : deux clics. Près de la courbe, l’aimant accroche le tirage le plus proche. Un pivot de swing est seulement étiqueté (aimant · pivot) : il n’avale plus le voisin.
 4. Alt (⌥ Option) lâche l’aimant à l’arrivée : l’abscisse reste un tirage, l’ordonnée suit le curseur. Le gabarit d’école reste pour ETE, tasse, diamant ; sur les rails on dessine deux droites, la hauteur et l’objectif, pas le zigzag. Case Médiane : parallèle à mi-distance. Canal haussier / baissier = pente des bornes, pas une seconde classe.
 5. Un trait déjà posé : clique ou glisse un rond (départ, second point de borne, ou arrivée) pour le reprendre, puis reclique pour le reposer. Même aimant ; Alt sur l’arrivée seulement. Échap ou Annuler rend le point à sa place.
 
@@ -67,6 +67,7 @@ export function SketchToolbar({
   const figureLabel =
     figure === FREE_FIGURE ? "Segment libre" : labelOf(figure)
   const rails = isRailFigure(figure)
+  const offerMedian = rails || figure === FREE_FIGURE
   const visible = sketches.filter((sketch) => remapSketch(sketch, dates))
 
   return (
@@ -95,7 +96,7 @@ export function SketchToolbar({
               label="Figure"
               help={{
                 title: "Figure chartiste",
-                body: "Les 18 formes de la table, ou un segment libre. Rectangle, canal, triangles et biseaux se posent en trois clics (une borne, puis le contact opposé). Alt (⌥) démagnétise l’arrivée pour poser hors courbe. Après pose, un clic ou un glisser sur un rond reprend ce point. Le canal n’est pas une courbe : deux rails autour de la série. Haussier / baissier = pente des bornes, une seule classe.",
+                body: "Les 18 formes de la table, ou un segment libre. Le segment se pose en deux clics ; le suivant trace la droite parallèle (Échap garde le segment seul). Rectangle, canal, triangles et biseaux se posent en trois clics (une borne, puis le contact opposé). Alt (⌥) démagnétise l’arrivée pour poser hors courbe. Après pose, un clic ou un glisser sur un rond reprend ce point. Le canal n’est pas une courbe : deux rails autour de la série. Haussier / baissier = pente des bornes, une seule classe.",
               }}
             >
               <Select value={figure} onValueChange={(value) => value && onFigure(value)}>
@@ -145,7 +146,7 @@ export function SketchToolbar({
                 </Select>
               </LabelHelp>
             ) : null}
-            {rails && onShowMedian ? (
+            {offerMedian && onShowMedian ? (
               <button
                 type="button"
                 aria-pressed={showMedian}
@@ -180,7 +181,9 @@ export function SketchToolbar({
               <Badge variant="outline" className="gap-1 pr-1">
                 <FigureThumb figure={sketch.figure} />
                 {sketch.figure === FREE_FIGURE
-                  ? "Libre"
+                  ? sketch.band
+                    ? "Parallèles"
+                    : "Libre"
                   : channelLabel(sketch.figure, sketch.band)}
                 <span className="text-muted-foreground">· {sketch.seriesLabel}</span>
                 <button

@@ -1,6 +1,4 @@
-import { isRailFigure } from "../chartisme/catalog"
-
-import { buildSketchGeometry, windowTooShort } from "./place"
+import { anchorsToGeometry, windowTooShort } from "./place"
 import type { ChartAnchor, ChartSketch, SketchHandle, SketchReading } from "./types"
 
 export function anchorsAfterMove(
@@ -36,18 +34,14 @@ function geometryOptions(
   values: number[],
   dates: string[]
 ) {
-  const rails = isRailFigure(sketch.figure)
-  return {
+  return anchorsToGeometry({
     figure: sketch.figure,
     values,
     dates,
-    from: start.index,
-    to: rails && mid ? mid.index : end.index,
-    fromActual: start.actual,
-    toActual: rails && mid ? mid.actual : end.actual,
-    via: rails ? end.index : undefined,
-    viaActual: rails ? end.actual : undefined,
-  }
+    start,
+    end,
+    mid,
+  })
 }
 
 /** Recalcule le gabarit après le déplacement d’une ancre (même trop court). */
@@ -60,7 +54,7 @@ export function sketchWithMovedHandle(
   reading?: SketchReading | null
 ): ChartSketch {
   const { start, mid, end } = anchorsAfterMove(sketch, handle, next)
-  const geo = buildSketchGeometry(geometryOptions(sketch, start, end, mid, values, dates))
+  const geo = geometryOptions(sketch, start, end, mid, values, dates)
   return {
     ...sketch,
     start,

@@ -22,7 +22,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select"
 import { isRailFigure } from "@/lib/chartisme/catalog"
-import { channelLabel } from "@/lib/chart-draw"
+import { FREE_SEGMENT_KEPT_HINT, channelLabel, drawingStartHint } from "@/lib/chart-draw"
 import {
   overlayBands,
   overlayField,
@@ -789,9 +789,9 @@ export function EvolutionGains({
                 sketch.draw?.cancelDraft()
                 sketch.clearMove()
                 sketch.setHint(
-                  isRailFigure(sketch.draw?.figure ?? "")
-                    ? "Clique le premier point de la borne, ou un point déjà posé."
-                    : "Clique le départ, ou un point déjà posé pour le reprendre."
+                  sketch.draw?.draft?.parallelOf
+                    ? FREE_SEGMENT_KEPT_HINT
+                    : drawingStartHint(sketch.draw?.figure ?? "")
                 )
               }}
               onCancel={() => {
@@ -803,7 +803,9 @@ export function EvolutionGains({
                   )
                   return
                 }
+                const pendingParallel = Boolean(sketch.draw?.draft?.parallelOf)
                 sketch.draw?.cancelDraft()
+                if (pendingParallel) sketch.setHint(FREE_SEGMENT_KEPT_HINT)
               }}
               onClear={() => {
                 sketch.clearMove()
@@ -820,7 +822,9 @@ export function EvolutionGains({
                 start={sketch.hudStart}
                 mid={sketch.hudMid}
                 end={sketch.hudEnd}
-                rails={isRailFigure(sketch.draw.figure)}
+                rails={
+                  isRailFigure(sketch.draw.figure) || Boolean(sketch.draw.draft?.parallelOf)
+                }
                 figureLabel={channelLabel(sketch.draw.figure, sketch.previewBand)}
                 seriesLabel={seriesLabelOf(targetKey)}
                 reading={sketch.draftReading}

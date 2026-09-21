@@ -35,7 +35,7 @@ type ChartDrawContextValue = {
   setLive: (live: LiveCursor | null) => void
   setChartMeta: (meta: EvolutionChartMeta | null) => void
   setShowMedian: (value: boolean) => void
-  addSketch: (sketch: ChartSketch) => void
+  addSketch: (sketch: ChartSketch, nextDraft?: DraftPlacement) => void
   removeSketch: (id: string) => void
   clearSketches: () => void
   cancelDraft: () => void
@@ -74,23 +74,39 @@ export function ChartDrawProvider({
 
   const setFigure = useCallback((next: string) => {
     setFigureState(next)
-    setDraft((current) => (current ? { ...current, figure: next } : current))
+    setDraft((current) => {
+      if (!current) return current
+      if (current.parallelOf) {
+        return {
+          figure: next,
+          seriesKey: current.seriesKey,
+          seriesLabel: current.seriesLabel,
+          start: null,
+          mid: null,
+          parallelOf: null,
+        }
+      }
+      return { ...current, figure: next }
+    })
   }, [])
 
   const addSketch = useCallback(
-    (sketch: ChartSketch) => {
+    (sketch: ChartSketch, nextDraft?: DraftPlacement) => {
       setSketches((current) => {
         const next = [sketch, ...current.filter((item) => item.id !== sketch.id)]
         persistHostSketches(host, next)
         return next
       })
-      setDraft({
-        figure: sketch.figure,
-        seriesKey: sketch.seriesKey,
-        seriesLabel: sketch.seriesLabel,
-        start: null,
-        mid: null,
-      })
+      setDraft(
+        nextDraft ?? {
+          figure: sketch.figure,
+          seriesKey: sketch.seriesKey,
+          seriesLabel: sketch.seriesLabel,
+          start: null,
+          mid: null,
+          parallelOf: null,
+        }
+      )
     },
     [host]
   )
@@ -113,13 +129,21 @@ export function ChartDrawProvider({
   }, [host])
 
   const cancelDraft = useCallback(() => {
-    setDraft((current) =>
-      current?.mid
-        ? { ...current, mid: null }
-        : current
-          ? { ...current, start: null, mid: null }
-          : current
-    )
+    setDraft((current) => {
+      if (!current) return current
+      if (current.parallelOf) {
+        return {
+          figure: current.figure,
+          seriesKey: current.seriesKey,
+          seriesLabel: current.seriesLabel,
+          start: null,
+          mid: null,
+          parallelOf: null,
+        }
+      }
+      if (current.mid) return { ...current, mid: null }
+      return { ...current, start: null, mid: null }
+    })
     setLive(null)
   }, [])
 

@@ -2,10 +2,9 @@ import { downsampleSeries, roundish } from "../capture/snapshot"
 import { isChannelFigure } from "../chartisme/catalog"
 
 import { channelLabel } from "./place"
-import { FREE_FIGURE, type ChartSketch, type DraftPlacement, type LiveCursor } from "./types"
+import { type ChartSketch, type DraftPlacement, type LiveCursor } from "./types"
 
 function figureLabel(figure: string, band?: ChartSketch["band"]) {
-  if (figure === FREE_FIGURE || figure === "free") return "Segment libre"
   return channelLabel(figure, band)
 }
 

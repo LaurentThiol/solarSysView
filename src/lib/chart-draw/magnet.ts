@@ -41,6 +41,21 @@ export function canFreePlaceArrival(hasStart: boolean, demagnetize: boolean) {
   return hasStart && canFreeMoveHandle("end", demagnetize)
 }
 
+/**
+ * La parallèle libre se cale en ordonnée sur le curseur : elle ne passe
+ * presque jamais par un tirage. Même geste pour la reposer.
+ */
+export function cursorReleasesMagnet(options: {
+  movingHandle: SketchHandle | null
+  hasStart: boolean
+  demagnetize: boolean
+  parallelContact: boolean
+}) {
+  if (options.parallelContact) return true
+  if (options.movingHandle) return canFreeMoveHandle(options.movingHandle, options.demagnetize)
+  return canFreePlaceArrival(options.hasStart, options.demagnetize)
+}
+
 export type SketchHandleSample = {
   sketchId: string
   handle: SketchHandle

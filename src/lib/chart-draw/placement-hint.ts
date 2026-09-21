@@ -1,16 +1,41 @@
+import { isRailFigure } from "../chartisme/catalog"
+
 import { windowTooShort } from "./place"
-import type { LiveCursor, SketchHandle } from "./types"
+import { isFreeFigure, type LiveCursor, type SketchHandle } from "./types"
+
+export const FREE_PARALLEL_HINT =
+  "Clique pour poser la droite parallèle. Échap garde le segment seul."
+
+export const FREE_SEGMENT_KEPT_HINT =
+  "Segment conservé. Clique un nouveau départ, ou un point pour le reprendre."
+
+export const FREE_PARALLEL_DONE_HINT =
+  "Parallèles posées. Clique un nouveau départ, ou un point pour le reprendre."
+
+export const FREE_PARALLEL_TOO_CLOSE_HINT =
+  "Écarte le curseur de la première droite pour poser la parallèle."
+
+export function drawingStartHint(figure: string) {
+  if (isRailFigure(figure)) return "Clique le premier point de la borne, ou un point déjà posé."
+  if (isFreeFigure(figure)) {
+    return "Clique le départ. Le clic d’après le segment pose la parallèle."
+  }
+  return "Clique le départ, ou un point déjà posé pour le reprendre."
+}
 
 export function placementHint(options: {
   live: LiveCursor | null
   startIndex: number | null
   midIndex?: number | null
   rails?: boolean
+  free?: boolean
+  parallel?: boolean
   moving?: SketchHandle | null
   hoverHandle?: SketchHandle | null
   shortWindow?: boolean
 }) {
-  const { live, startIndex, midIndex, rails, moving, hoverHandle, shortWindow } = options
+  const { live, startIndex, midIndex, rails, free, parallel, moving, hoverHandle, shortWindow } =
+    options
   const hasStart = startIndex != null
   const hasMid = midIndex != null
   if (moving === "start") {
@@ -30,6 +55,11 @@ export function placementHint(options: {
     return "Clique pour reposer le second point de la borne."
   }
   if (moving === "end") {
+    if (parallel) {
+      if (!live) return "Reprise de la parallèle — survole le graphique."
+      if (shortWindow) return "Au moins 8 tirages pour refermer la figure."
+      return "Clique pour reposer la parallèle. L’ordonnée suit le curseur."
+    }
     if (!live) {
       return rails
         ? "Reprise du contact opposé — survole la courbe."
@@ -48,6 +78,7 @@ export function placementHint(options: {
     return "Clique ou glisse ce point pour le déplacer."
   }
   if (!live) return "Survole la courbe."
+  if (parallel && hasStart && hasMid) return FREE_PARALLEL_HINT
   if (live.offCurve) {
     if (
       startIndex != null &&
@@ -72,6 +103,9 @@ export function placementHint(options: {
   }
   if (rails && hasStart && !hasMid) return "Clique le second point de la borne."
   if (rails && hasMid) return "Clique le contact opposé — le parallèle (ou la seconde borne)."
+  if (hasStart && free) {
+    return "Clique l’arrivée. Le clic suivant pose la parallèle. Alt (⌥) : hors courbe."
+  }
   if (hasStart) return "Clique l’arrivée. Alt (⌥) : hors courbe."
   return rails
     ? "Clique le premier point de la borne, ou un point déjà posé."

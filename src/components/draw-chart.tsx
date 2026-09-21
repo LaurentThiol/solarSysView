@@ -45,11 +45,17 @@ import {
 } from "@/lib/draw-overlays"
 import {
   DRAFT_KEY,
+  FREE_PARALLEL_DONE_HINT,
+  FREE_PARALLEL_HINT,
+  FREE_PARALLEL_TOO_CLOSE_HINT,
+  FREE_SEGMENT_KEPT_HINT,
   anchorsAfterMove,
+  anchorsToGeometry,
   buildSketchGeometry,
   canFreeMoveHandle,
-  canFreePlaceArrival,
   channelLabel,
+  cursorReleasesMagnet,
+  drawingStartHint,
   extremaIndices,
   invertLinear,
   isDemagnetizeModifier,
@@ -61,8 +67,12 @@ import {
   moveSketchHandle,
   nearestSampleByX,
   nearestSketchHandle,
+  isFreeFigure,
+  isParallelContact,
   newSketchId,
   pixelDistance,
+  placementHint,
+  previewGeometry,
   readTooltipIndex,
   readWindow,
   remapSketch,
@@ -778,83 +788,6 @@ function SeriesTooltip({
   )
 }
 
-function placementHint(options: {
-  live: LiveCursor | null
-  startIndex: number | null
-  midIndex?: number | null
-  rails?: boolean
-  moving?: SketchHandle | null
-  hoverHandle?: SketchHandle | null
-  shortWindow?: boolean
-}) {
-  const { live, startIndex, midIndex, rails, moving, hoverHandle, shortWindow } = options
-  const hasStart = startIndex != null
-  const hasMid = midIndex != null
-  if (moving === "start") {
-    if (!live) return "Reprise du départ — survole la courbe."
-    if (shortWindow) return "Au moins 8 tirages pour refermer la figure."
-    if (!live.snapped) {
-      return rails
-        ? "Approche un pivot pour reposer le départ."
-        : "Approche la courbe pour reposer le départ."
-    }
-    return "Clique pour reposer le départ."
-  }
-  if (moving === "mid") {
-    if (!live) return "Reprise du second point de la borne — survole la courbe."
-    if (shortWindow) return "Au moins 8 tirages pour refermer la figure."
-    if (!live.snapped) return "Approche un pivot pour reposer le second point."
-    return "Clique pour reposer le second point de la borne."
-  }
-  if (moving === "end") {
-    if (!live) {
-      return rails
-        ? "Reprise du contact opposé — survole la courbe."
-        : "Reprise de l’arrivée — survole la courbe."
-    }
-    if (shortWindow) return "Au moins 8 tirages pour refermer la figure."
-    if (live.offCurve) return "Point hors courbe — clique pour reposer."
-    if (!live.snapped) {
-      return "Approche un pivot de touche, ou Alt (⌥) pour poser hors courbe."
-    }
-    return rails
-      ? "Clique pour reposer le contact opposé. Alt (⌥) : hors courbe."
-      : "Clique pour reposer l’arrivée. Alt (⌥) : hors courbe."
-  }
-  if (hoverHandle && !hasStart) {
-    return "Clique ou glisse ce point pour le déplacer."
-  }
-  if (!live) return "Survole la courbe."
-  if (live.offCurve) {
-    if (
-      startIndex != null &&
-      live.index !== startIndex &&
-      windowTooShort(startIndex, live.index)
-    ) {
-      return "Au moins 8 tirages entre le premier point et celui-ci."
-    }
-    return "Point hors courbe — clique pour poser."
-  }
-  if (!live.snapped) {
-    if (hasStart) return "Approche un pivot de touche, ou Alt (⌥) pour poser hors courbe."
-    return "Approche un pivot pour ancrer la borne."
-  }
-  if (
-    startIndex != null &&
-    live.index !== startIndex &&
-    windowTooShort(startIndex, live.index) &&
-    !hasMid
-  ) {
-    return "Au moins 8 tirages pour refermer la figure."
-  }
-  if (rails && hasStart && !hasMid) return "Clique le second point de la borne."
-  if (rails && hasMid) return "Clique le contact opposé — le parallèle (ou la seconde borne)."
-  if (hasStart) return "Clique l’arrivée. Alt (⌥) : hors courbe."
-  return rails
-    ? "Clique le premier point de la borne, ou un point déjà posé."
-    : "Clique le départ, ou un point déjà posé pour le reprendre."
-}
-
 export function DrawChart({ draws }: { draws: Draw[] }) {
   const draw = useChartDrawOptional()
   const drawRef = useRef(draw)
@@ -1100,34 +1033,37 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     )
     return visibleSketches.map((item) => (item.id === preview.id ? preview : item))
   }, [visibleSketches, moving, movingSketch, draftLive, series, dates])
+  const parallelOf = draw?.draft?.parallelOf ?? null
   const draftGeometry = useMemo(() => {
-    if (!drawing || moving || !draftStart || !draftLive) return null
+    if (!drawing || moving || !draftStart) return null
     const values = seriesValuesOf(series, targetKey)
-    if (draftMid && isRailFigure(draftFigure)) {
-      return buildSketchGeometry({
-        figure: draftFigure,
-        values,
-        dates,
-        from: draftStart.index,
-        to: draftMid.index,
-        fromActual: draftStart.actual,
-        toActual: draftMid.actual,
-        via: draftLive.index,
-        viaActual: draftLive.actual,
-      })
-    }
-    return buildSketchGeometry({
+    return previewGeometry({
       figure: draftFigure,
       values,
       dates,
-      from: draftStart.index,
-      to: draftLive.index,
-      fromActual: draftStart.actual,
-      toActual: draftLive.actual,
+      start: draftStart,
+      mid: draftMid,
+      live: draftLive,
+      parallel: Boolean(parallelOf),
     })
-  }, [drawing, moving, draftStart, draftMid, draftLive, draftFigure, series, dates, targetKey])
+  }, [
+    drawing,
+    moving,
+    draftStart,
+    draftMid,
+    draftLive,
+    draftFigure,
+    series,
+    dates,
+    targetKey,
+    parallelOf,
+  ])
   const draftPoints = draftGeometry?.points ?? []
   const draftBand = draftGeometry?.band
+  const paintedSketches = useMemo(() => {
+    if (!parallelOf) return displaySketches
+    return displaySketches.filter((sketch) => sketch.id !== parallelOf)
+  }, [displaySketches, parallelOf])
   const previewBand = movingSketch
     ? displaySketches.find((item) => item.id === movingSketch.id)?.band
     : draftBand
@@ -1148,7 +1084,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           ? liveToAnchor(draftLive)
           : movingSketch.mid ?? null
         : movingSketch.mid ?? null
-      : draftMid
+      : draftStart
+        ? draftMid
+        : lastSketch?.mid ?? null
   const hudEnd =
     moving && movingSketch
       ? moving.handle === "end"
@@ -1172,15 +1110,20 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       return readWindow(values, dates, left, right, previewBand)
     }
     if (draftStart && draftLive && draftLive.index !== draftStart.index) {
-      if (windowTooShort(draftStart.index, draftLive.index)) return null
+      const indexes = [draftStart.index, draftLive.index]
+      if (draftMid) indexes.push(draftMid.index)
+      const left = Math.min(...indexes)
+      const right = Math.max(...indexes)
+      if (windowTooShort(left, right)) return null
       const values = seriesValuesOf(series, targetKey)
-      return readWindow(values, dates, draftStart.index, draftLive.index, draftBand)
+      return readWindow(values, dates, left, right, draftBand)
     }
     return lastSketch?.reading ?? null
   }, [
     moving,
     movingSketch,
     draftStart,
+    draftMid,
     draftLive,
     draftBand,
     previewBand,
@@ -1191,9 +1134,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   ])
 
   const plotData = useMemo(() => {
-    if (!displaySketches.length && !draftPoints.length && !draftBand) return chartData
+    if (!paintedSketches.length && !draftPoints.length && !draftBand) return chartData
     const seriesByKey = (key: SeriesKey) => seriesValuesOf(series, key)
-    const bySketch = displaySketches.map((sketch) => {
+    const bySketch = paintedSketches.map((sketch) => {
       const seriesKey = sketch.seriesKey as SeriesKey
       const values = seriesByKey(seriesKey)
       const band = resolveSketchBand(sketch, values, dates)
@@ -1254,7 +1197,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     })
   }, [
     chartData,
-    displaySketches,
+    paintedSketches,
     draftPoints,
     draftBand,
     ranges,
@@ -1298,6 +1241,11 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
         if (movingRef.current) {
           pointerLogicRef.current?.clearMove()
           setHint("Déplacement annulé. Clique un point pour le reprendre, ou un départ.")
+          return
+        }
+        if (current?.draft?.parallelOf) {
+          current.cancelDraft()
+          setHint(FREE_SEGMENT_KEPT_HINT)
           return
         }
         if (current?.draft?.start) current.cancelDraft()
@@ -1466,9 +1414,17 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     const demagnetize =
       demagnetizeOverride ?? (isDemagnetizeModifier(event) || altHeld)
     const figure = sketch?.figure ?? current?.figure ?? ""
-    const offCurve = move
-      ? canFreeMoveHandle(move.handle, demagnetize)
-      : canFreePlaceArrival(Boolean(current?.draft?.start), demagnetize)
+    const offCurve = cursorReleasesMagnet({
+      movingHandle: move?.handle ?? null,
+      hasStart: Boolean(current?.draft?.start),
+      demagnetize,
+      parallelContact: isParallelContact({
+        figure: sketch?.figure ?? current?.figure,
+        hasMid: Boolean(move ? sketch?.mid : current?.draft?.mid),
+        parallelOf: move ? null : current?.draft?.parallelOf,
+        movingHandle: move?.handle ?? null,
+      }),
+    })
     const extrema = extremaIndices(values)
     const touches = swingTouches(values)
     const rails = isRailFigure(figure)
@@ -1610,6 +1566,10 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
         startIndex: current.draft?.start?.index ?? null,
         midIndex: current.draft?.mid?.index ?? null,
         rails: isRailFigure(sketch?.figure ?? current.figure),
+        free: isFreeFigure(sketch?.figure ?? current.figure),
+        parallel:
+          Boolean(current.draft?.parallelOf) ||
+          Boolean(move?.handle === "end" && sketch && isFreeFigure(sketch.figure) && sketch.mid),
         moving: move?.handle ?? null,
         hoverHandle: hoveredHandle?.handle ?? null,
         shortWindow,
@@ -1643,6 +1603,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           startIndex: current.draft?.start?.index ?? null,
           midIndex: current.draft?.mid?.index ?? null,
           rails: isRailFigure(sketch.figure),
+          free: isFreeFigure(sketch.figure),
+          parallel: move.handle === "end" && isFreeFigure(sketch.figure) && Boolean(sketch.mid),
           moving: move.handle,
         })
       )
@@ -1742,6 +1704,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           startIndex: current.draft?.start?.index ?? null,
           midIndex: current.draft?.mid?.index ?? null,
           rails: isRailFigure(current.figure),
+          free: isFreeFigure(current.figure),
+          parallel: Boolean(current.draft?.parallelOf),
         })
       )
       return
@@ -1772,8 +1736,51 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       setHint(
         rails
           ? "Clique le second point de la borne."
-          : "Clique l’arrivée. Alt (⌥) : hors courbe."
+          : isFreeFigure(current.figure)
+            ? "Clique l’arrivée. Le clic suivant pose la parallèle. Alt (⌥) : hors courbe."
+            : "Clique l’arrivée. Alt (⌥) : hors courbe."
       )
+      return
+    }
+    const parallelDraft = current.draft
+    if (parallelDraft?.parallelOf && start && mid && isFreeFigure(current.figure)) {
+      const end = makeAnchor()
+      const left = Math.min(start.index, mid.index, end.index)
+      const right = Math.max(start.index, mid.index, end.index)
+      if (windowTooShort(left, right)) {
+        setHint("Au moins 8 tirages pour refermer la figure.")
+        return
+      }
+      const values = seriesValues(start.seriesKey as SeriesKey)
+      const geo = anchorsToGeometry({
+        figure: current.figure,
+        values,
+        dates,
+        start,
+        mid,
+        end,
+      })
+      if (!geo.band) {
+        setHint(FREE_PARALLEL_TOO_CLOSE_HINT)
+        return
+      }
+      const previous = current.sketches.find((item) => item.id === parallelDraft.parallelOf)
+      current.addSketch({
+        id: parallelDraft.parallelOf,
+        host: previous?.host ?? current.host,
+        figure: current.figure,
+        seriesKey: start.seriesKey,
+        seriesLabel: parallelDraft.seriesLabel,
+        start,
+        mid,
+        end,
+        points: geo.points,
+        band: geo.band,
+        showMedian: current.showMedian,
+        reading: readWindow(values, dates, left, right, geo.band),
+        createdAt: previous?.createdAt ?? new Date().toISOString(),
+      })
+      setHint(FREE_PARALLEL_DONE_HINT)
       return
     }
     if (rails && !mid) {
@@ -1810,8 +1817,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       via: rails ? end.index : undefined,
       viaActual: rails ? end.actual : undefined,
     })
-    current.addSketch({
-      id: newSketchId(),
+    const sketchId = newSketchId()
+    const placed = {
+      id: sketchId,
       host: current.host,
       figure: current.figure,
       seriesKey: targetKey,
@@ -1824,7 +1832,20 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       showMedian: current.showMedian,
       reading: readWindow(values, dates, left, right, geo.band),
       createdAt: new Date().toISOString(),
-    })
+    }
+    if (isFreeFigure(current.figure) && !mid) {
+      current.addSketch(placed, {
+        figure: current.figure,
+        seriesKey: targetKey,
+        seriesLabel: chartConfig[targetKey].label,
+        start,
+        mid: end,
+        parallelOf: sketchId,
+      })
+      setHint(FREE_PARALLEL_HINT)
+      return
+    }
+    current.addSketch(placed)
     setHint("Annotation posée. Clique un nouveau départ, ou un point pour le reprendre.")
   }
 
@@ -1963,11 +1984,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     start: null,
                     mid: null,
                   })
-                  setHint(
-                    isRailFigure(draw.figure)
-                      ? "Clique le premier point de la borne, ou un point déjà posé."
-                      : "Clique le départ, ou un point déjà posé pour le reprendre."
-                  )
+                  setHint(drawingStartHint(draw.figure))
                   if (hidden[targetKey]) {
                     setHidden((current) => ({ ...current, [targetKey]: false }))
                   }
@@ -1984,9 +2001,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                 draw.cancelDraft()
                 clearMove()
                 setHint(
-                  isRailFigure(draw.figure)
-                    ? "Clique le premier point de la borne, ou un point déjà posé."
-                    : "Clique le départ, ou un point déjà posé pour le reprendre."
+                  draw.draft?.parallelOf ? FREE_SEGMENT_KEPT_HINT : drawingStartHint(draw.figure)
                 )
               }}
               onCancel={() => {
@@ -1996,7 +2011,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                   setHint("Déplacement annulé. Clique un point pour le reprendre, ou un départ.")
                   return
                 }
+                const pendingParallel = Boolean(draw.draft?.parallelOf)
                 draw.cancelDraft()
+                if (pendingParallel) setHint(FREE_SEGMENT_KEPT_HINT)
               }}
               onClear={() => {
                 clearMove()
@@ -2013,7 +2030,10 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                 start={hudStart}
                 mid={hudMid}
                 end={hudEnd}
-                rails={isRailFigure(movingSketch?.figure ?? draw.figure)}
+                rails={
+                  isRailFigure(movingSketch?.figure ?? draw.figure) ||
+                  Boolean(draw.draft?.parallelOf)
+                }
                 figureLabel={channelLabel(
                   movingSketch?.figure ?? draw.figure,
                   previewBand
@@ -2283,7 +2303,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     />
                   </>
                 ) : null}
-                {displaySketches.map((sketch) => {
+                {paintedSketches.map((sketch) => {
                   const seriesKey = sketch.seriesKey as SeriesKey
                   const axisId = plotAxisId(seriesKey, splitRank1)
                   const values = seriesValuesOf(series, seriesKey)
@@ -2554,7 +2574,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     />
                   </>
                 ) : null}
-                {displaySketches.map((sketch) => {
+                {paintedSketches.map((sketch) => {
                   const seriesKey = sketch.seriesKey as SeriesKey
                   const axisId = plotAxisId(seriesKey, splitRank1)
                   const handleActive = (handle: SketchHandle) =>
