@@ -1930,7 +1930,14 @@ def create_app() -> FastAPI:
         thresholds: str | None = None,
         numbers: bool = True,
     ) -> dict[str, Any]:
-        bundle = _chartisme_bundle(era)
+        from synchro.weekday import request_weekday
+
+        # Le cache disque est l’archive mixte. Un jour isolé doit réexporter
+        # les courbes sur ce jour seul : une coupe par dates mêlerait l’autre jour.
+        if request_weekday():
+            bundle = chartisme_export_curves(_analysis_draws(era))
+        else:
+            bundle = _chartisme_bundle(era)
         curves = bundle.get("curves") or []
         if curve:
             curves = [c for c in curves if c.get("id") == curve]

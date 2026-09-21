@@ -71,6 +71,7 @@ import {
 import { asStudyPreset, readLabSearch } from "@/lib/lab-search"
 import { useDraws } from "@/lib/use-draws"
 import { useWeekdayScope } from "@/lib/use-weekday-scope"
+import { weekdayApiValue, weekdayFilterDay } from "@/lib/weekday-scope"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 
@@ -193,8 +194,9 @@ export function ChartismeLab() {
       lastN:
         Number.isFinite(parsed) && parsed >= MIN_STUDY_DRAWS ? parsed : undefined,
       scale: scaleChoice === "auto" ? "auto" : Number(scaleChoice),
+      weekday: weekdayFilterDay(weekday),
     })
-  }, [draws, preset, lastN, scaleChoice])
+  }, [draws, preset, lastN, scaleChoice, weekday])
 
   // Les courbes se reconstruisent dans le navigateur : sur Netlify aucun
   // backend Python ne répond, et l'onglet doit rester entier.
@@ -1030,6 +1032,7 @@ export function ChartismeLab() {
         bar={{ minConfidence: bars.minConfidence, byScale: bars.byScale }}
         studyWindow={study.window}
         contextCount={study.contextWanted}
+        weekday={weekdayApiValue(weekday)}
       />
     </div>
   )

@@ -178,14 +178,15 @@ export type StudyWindow<T extends { date: string }> = {
  * contexte à réclamer. Une seule passe aurait à choisir un contexte avant de
  * savoir quelles figures on cherche.
  */
-export function resolveStudyWindow<T extends { date: string; star_pool?: number }>(
+export function resolveStudyWindow<T extends { date: string; star_pool?: number; weekday?: string }>(
   draws: T[],
-  spec: { preset: StudyPreset; lastN?: number; scale?: ScaleChoice }
+  spec: { preset: StudyPreset; lastN?: number; scale?: ScaleChoice; weekday?: "mardi" | "vendredi" | null }
 ): StudyWindow<T> {
   const bare = resolveWindow(draws, {
     preset: spec.preset,
     lastN: spec.lastN,
     warmup: 0,
+    weekday: spec.weekday,
   })
   const scales = scalesFor(bare.drawCount, spec.scale ?? "auto")
   const contextWanted = contextFor(scales)
@@ -193,6 +194,7 @@ export function resolveStudyWindow<T extends { date: string; star_pool?: number 
     preset: spec.preset,
     lastN: spec.lastN,
     warmup: contextWanted,
+    weekday: spec.weekday,
   })
   // Découper l'entrée plutôt que jouer sur `toDate` : la fenêtre précédente est
   // alors résolue par le même chemin que la fenêtre étudiée, contexte compris.
@@ -205,6 +207,7 @@ export function resolveStudyWindow<T extends { date: string; star_pool?: number 
           preset: "all",
           lastN: window.drawCount,
           warmup: contextWanted,
+          weekday: spec.weekday,
         })
       : null
   return {
@@ -231,7 +234,8 @@ export function studyBanner(study: StudyWindow<{ date: string }>): string {
   const pools = window.starPoolBreak
     ? ` · rupture star_pool (${window.starPools.join(" / ")})`
     : ""
-  return `Du ${window.fromDate} au ${window.toDate} · ${window.drawCount} tirages étudiés · ${context} · échelles ${scales.join(" · ")}${pools}`
+  const dayNote = window.weekday ? ` · ${window.weekday}` : ""
+  return `Du ${window.fromDate} au ${window.toDate} · ${window.drawCount} tirages étudiés${dayNote} · ${context} · échelles ${scales.join(" · ")}${pools}`
 }
 
 /**

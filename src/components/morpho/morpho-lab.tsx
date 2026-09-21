@@ -36,6 +36,7 @@ import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { useDraws } from "@/lib/use-draws"
 import { useWeekdayScope } from "@/lib/use-weekday-scope"
+import { weekdayApiValue } from "@/lib/weekday-scope"
 
 type Anticipate = ReturnType<typeof anticipateLocal>
 
@@ -175,7 +176,10 @@ export function MorphoLab() {
     if (chrono.length < 2) return
     let cancelled = false
     void (async () => {
-      const remote = await api<Anticipate>(`anticipate?era=${era}&n=400`)
+      const day = weekdayApiValue(weekday)
+      const remote = await api<Anticipate>(
+        `anticipate?era=${era}&n=400${day ? `&weekday=${day}` : ""}`
+      )
       if (cancelled) return
       if (remote && remote.ok) setAnticipation(remote)
       else setAnticipation(anticipateLocal(chrono, { nSim: 200 }))
@@ -183,7 +187,7 @@ export function MorphoLab() {
     return () => {
       cancelled = true
     }
-  }, [chrono, era])
+  }, [chrono, era, weekday])
 
   function persistRules(next: MorphoRule[]) {
     setRules(next)

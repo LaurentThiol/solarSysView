@@ -92,6 +92,7 @@ export function BacktestPanel({
   bar,
   studyWindow,
   contextCount = 0,
+  weekday,
 }: {
   curve: Curve | null
   hits: ScanHit[]
@@ -110,6 +111,8 @@ export function BacktestPanel({
   studyWindow?: { fromDate: string | null; toDate: string | null; drawCount: number }
   /** Tirages de contexte réclamés devant elle par les échelles. */
   contextCount?: number
+  /** Mardi ou vendredi : le backend relit l’archive de ce jour, pas le cache mixte. */
+  weekday?: "mardi" | "vendredi"
 }) {
   const [report, setReport] = useState<Report | null>(null)
   const [running, setRunning] = useState(false)
@@ -158,6 +161,7 @@ export function BacktestPanel({
         params.set("context", String(contextCount))
       }
       if (curve) params.set("curve", curve.id)
+      if (weekday) params.set("weekday", weekday)
       const response = await fetch(`/api/chartisme/backtest?${params}`, { cache: "no-store" })
       if (!response.ok) {
         setError(
