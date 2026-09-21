@@ -67,6 +67,16 @@ export type IaSnapshotPayload = {
   visionNotes?: string | null
 }
 
+export type IaVisionPass = {
+  model: string
+  ok: boolean
+  error: string | null
+  promptTokens: number | null
+  completionTokens: number | null
+  estimated: boolean
+  latencyMs: number | null
+}
+
 export type IaCompleteOk = {
   ok: true
   text: string
@@ -75,13 +85,15 @@ export type IaCompleteOk = {
   requested: string
   imageOmitted: boolean
   visionModel?: string | null
+  visionFailed?: boolean
+  visionPass?: IaVisionPass | null
   promptTokens: number | null
   completionTokens: number | null
   estimated: boolean
   latencyMs: number | null
 }
 
-export type IaCompleteErr = { ok: false; error: string }
+export type IaCompleteErr = { ok: false; error: string; visionPass?: IaVisionPass | null }
 
 function googleKey() {
   const value = (liveEnv("GOOGLE_API_KEY") || liveEnv("GEMINI_API_KEY")).trim()
@@ -102,12 +114,10 @@ export function localLlmBase() {
 }
 
 function systemText(override?: string | null) {
-  const text = (override ?? requestSystem)?.trim()
+  const text = override?.trim()
   if (text && text.length > 0 && text.length <= 12_000) return text
   return IA_SYSTEM_PROMPT
 }
-
-let requestSystem: string | null = null
 
 const LIVE_TIMEOUT_MS = 5_000
 
@@ -374,6 +384,11 @@ export function localTwoPassEnabled() {
   return raw !== "0" && raw !== "false" && raw !== "off"
 }
 
+export function visionUnloadEnabled() {
+  const raw = liveEnv("IA_VISION_UNLOAD").trim().toLowerCase()
+  return raw === "1" || raw === "true" || raw === "on"
+}
+
 export function clipVisionNotes(text: string) {
   const trimmed = text.trim()
   if (trimmed.length <= IA_VISION_NOTE_MAX) return trimmed
@@ -465,6 +480,8 @@ function toCompleteOk(input: {
   requested: string
   imageOmitted: boolean
   visionModel?: string | null
+  visionFailed?: boolean
+  visionPass?: IaVisionPass | null
   usage?: IaTokenUsage
 }): IaCompleteOk {
   return {
@@ -475,6 +492,8 @@ function toCompleteOk(input: {
     requested: input.requested,
     imageOmitted: input.imageOmitted,
     visionModel: input.visionModel ?? null,
+    visionFailed: Boolean(input.visionFailed),
+    visionPass: input.visionPass ?? null,
     promptTokens: input.usage?.promptTokens ?? null,
     completionTokens: input.usage?.completionTokens ?? null,
     estimated: Boolean(input.usage?.estimated),
@@ -487,7 +506,8 @@ async function generateGeminiOnce(
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
   key: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  system?: string | null
 ): Promise<OnceResult> {
   const packed = withOptionalImage(snapshot, model, "google")
   const started = Date.now()
@@ -497,7 +517,7 @@ async function generateGeminiOnce(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemText() }] },
+        systemInstruction: { parts: [{ text: systemText(system) }] },
         contents: geminiContents(messages, packed.snapshot),
         generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
       }),
@@ -533,12 +553,13 @@ async function streamGeminiOnce(
   snapshot: IaSnapshotPayload | null,
   key: string,
   onDelta: (text: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  system?: string | null
 ): Promise<OnceResult> {
   const packed = withOptionalImage(snapshot, model, "google")
   const started = Date.now()
   const body = JSON.stringify({
-    systemInstruction: { parts: [{ text: systemText() }] },
+    systemInstruction: { parts: [{ text: systemText(system) }] },
     contents: geminiContents(messages, packed.snapshot),
     generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
   })
@@ -554,7 +575,7 @@ async function streamGeminiOnce(
   if (!response.ok) {
     const raw = await response.text().catch(() => "")
     if (shouldRetryStatus(response.status, raw)) {
-      return generateGeminiOnce(model, messages, snapshot, key, signal)
+      return generateGeminiOnce(model, messages, snapshot, key, signal, system)
     }
     return {
       ok: false,
@@ -579,9 +600,9 @@ async function streamGeminiOnce(
   } catch (error) {
     if (signal?.aborted) throw error
     if (text.trim()) return onceOk(text.trim(), lastPayload, started)
-    return generateGeminiOnce(model, messages, snapshot, key, signal)
+    return generateGeminiOnce(model, messages, snapshot, key, signal, system)
   }
-  if (!text.trim()) return generateGeminiOnce(model, messages, snapshot, key, signal)
+  if (!text.trim()) return generateGeminiOnce(model, messages, snapshot, key, signal, system)
   return onceOk(text.trim(), lastPayload, started)
 }
 
@@ -589,14 +610,15 @@ async function completeGemini(
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
   requested: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  system?: string | null
 ): Promise<IaCompleteOk | IaCompleteErr> {
   const key = googleKey()
   if (!key) return { ok: false, error: "GOOGLE_API_KEY absente (Admin)." }
   let lastError = "Gemini indisponible"
   for (const model of modelSequence("google", requested)) {
     const packed = withOptionalImage(snapshot, model, "google")
-    const result = await generateGeminiOnce(model, messages, snapshot, key, signal)
+    const result = await generateGeminiOnce(model, messages, snapshot, key, signal, system)
     if (result.ok) {
       return toCompleteOk({
         text: result.text,
@@ -681,7 +703,8 @@ async function generateOpenAIOnce(
   key: string,
   signal?: AbortSignal,
   endpoint?: { url: string; label: string },
-  deepen = false
+  deepen = false,
+  system?: string | null
 ): Promise<OnceResult> {
   const packed = withOptionalImage(snapshot, model, endpoint ? "local" : "openai")
   const url = endpoint?.url ?? "https://api.openai.com/v1/chat/completions"
@@ -697,7 +720,7 @@ async function generateOpenAIOnce(
         "content-type": "application/json",
         Authorization: `Bearer ${key || "local"}`,
       },
-      body: JSON.stringify(openaiPayload(model, messages, packed.snapshot, false, null, { deepen, local })),
+      body: JSON.stringify(openaiPayload(model, messages, packed.snapshot, false, system, { deepen, local })),
       signal: requestSignal(signal, timeoutMs),
     },
     timeoutMs
@@ -729,7 +752,8 @@ async function streamOpenAIOnce(
   onDelta: (text: string) => void,
   signal?: AbortSignal,
   endpoint?: { url: string; label: string },
-  deepen = false
+  deepen = false,
+  system?: string | null
 ): Promise<OnceResult> {
   const packed = withOptionalImage(snapshot, model, endpoint ? "local" : "openai")
   const url = endpoint?.url ?? "https://api.openai.com/v1/chat/completions"
@@ -745,7 +769,7 @@ async function streamOpenAIOnce(
         "content-type": "application/json",
         Authorization: `Bearer ${key || "local"}`,
       },
-      body: JSON.stringify(openaiPayload(model, messages, packed.snapshot, true, null, { deepen, local })),
+      body: JSON.stringify(openaiPayload(model, messages, packed.snapshot, true, system, { deepen, local })),
       signal: requestSignal(signal, timeoutMs),
     },
     timeoutMs
@@ -753,7 +777,7 @@ async function streamOpenAIOnce(
   if (!response.ok) {
     const raw = await response.text().catch(() => "")
     if (shouldRetryStatus(response.status, raw)) {
-      return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint, deepen)
+      return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint, deepen, system)
     }
     return {
       ok: false,
@@ -778,9 +802,9 @@ async function streamOpenAIOnce(
   } catch (error) {
     if (signal?.aborted) throw error
     if (text.trim()) return onceOk(text.trim(), lastPayload, started)
-    return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint, deepen)
+    return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint, deepen, system)
   }
-  if (!text.trim()) return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint, deepen)
+  if (!text.trim()) return generateOpenAIOnce(model, messages, snapshot, key, signal, endpoint, deepen, system)
   return onceOk(text.trim(), lastPayload, started)
 }
 
@@ -788,14 +812,15 @@ async function completeOpenAI(
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
   requested: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  system?: string | null
 ): Promise<IaCompleteOk | IaCompleteErr> {
   const key = openaiKey()
   if (!key) return { ok: false, error: "OPENAI_API_KEY absente (Admin)." }
   let lastError = "OpenAI indisponible"
   for (const model of modelSequence("openai", requested)) {
     const packed = withOptionalImage(snapshot, model, "openai")
-    const result = await generateOpenAIOnce(model, messages, snapshot, key, signal)
+    const result = await generateOpenAIOnce(model, messages, snapshot, key, signal, undefined, false, system)
     if (result.ok) {
       return toCompleteOk({
         text: result.text,
@@ -812,10 +837,15 @@ async function completeOpenAI(
   return { ok: false, error: lastError }
 }
 
-function ollamaMessages(messages: IaChatMessage[], snapshot: IaSnapshotPayload | null, budget: number) {
+function ollamaMessages(
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  budget: number,
+  system?: string | null
+) {
   const pack = snapshotText(snapshot, budget)
   const image = parseDataUrl(snapshot?.imageDataUrl)
-  const out: Array<Record<string, unknown>> = [{ role: "system", content: systemText() }]
+  const out: Array<Record<string, unknown>> = [{ role: "system", content: systemText(system) }]
   messages.forEach((message, index) => {
     if (message.role === "assistant") {
       out.push({ role: "assistant", content: message.content })
@@ -835,7 +865,7 @@ export function buildOllamaChatBody(
   model: string,
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
-  options: { stream?: boolean; deepen?: boolean } = {}
+  options: { stream?: boolean; deepen?: boolean; system?: string | null; keepAlive?: string | number } = {}
 ) {
   const deepen = Boolean(options.deepen)
   const params = localGenParams(deepen)
@@ -843,8 +873,8 @@ export function buildOllamaChatBody(
   const body: Record<string, unknown> = {
     model,
     stream: Boolean(options.stream),
-    keep_alive: "30m",
-    messages: ollamaMessages(messages, packed.snapshot, packCharBudget(ollamaNumCtx())),
+    keep_alive: options.keepAlive ?? "30m",
+    messages: ollamaMessages(messages, packed.snapshot, packCharBudget(ollamaNumCtx()), options.system),
     options: {
       num_ctx: ollamaNumCtx(),
       num_predict: params.predict,
@@ -862,7 +892,9 @@ async function generateOllamaOnce(
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
   signal?: AbortSignal,
-  deepen = false
+  deepen = false,
+  system?: string | null,
+  keepAlive: string | number = "30m"
 ): Promise<OnceResult> {
   const url = localNativeChatUrl(host)
   const started = Date.now()
@@ -871,7 +903,7 @@ async function generateOllamaOnce(
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(buildOllamaChatBody(model, messages, snapshot, { stream: false, deepen })),
+      body: JSON.stringify(buildOllamaChatBody(model, messages, snapshot, { stream: false, deepen, system, keepAlive })),
       signal: requestSignal(signal, LOCAL_CHAT_TIMEOUT_MS),
     },
     LOCAL_CHAT_TIMEOUT_MS
@@ -904,7 +936,9 @@ async function streamOllamaOnce(
   snapshot: IaSnapshotPayload | null,
   onDelta: (text: string) => void,
   signal?: AbortSignal,
-  deepen = false
+  deepen = false,
+  system?: string | null,
+  keepAlive: string | number = "30m"
 ): Promise<OnceResult> {
   const url = localNativeChatUrl(host)
   const started = Date.now()
@@ -913,7 +947,7 @@ async function streamOllamaOnce(
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(buildOllamaChatBody(model, messages, snapshot, { stream: true, deepen })),
+      body: JSON.stringify(buildOllamaChatBody(model, messages, snapshot, { stream: true, deepen, system, keepAlive })),
       signal: requestSignal(signal, LOCAL_CHAT_TIMEOUT_MS),
     },
     LOCAL_CHAT_TIMEOUT_MS
@@ -921,7 +955,7 @@ async function streamOllamaOnce(
   if (!response.ok) {
     const raw = await response.text().catch(() => "")
     if (shouldRetryStatus(response.status, raw)) {
-      return generateOllamaOnce(host, model, messages, snapshot, signal, deepen)
+      return generateOllamaOnce(host, model, messages, snapshot, signal, deepen, system, keepAlive)
     }
     return {
       ok: false,
@@ -946,9 +980,9 @@ async function streamOllamaOnce(
   } catch (error) {
     if (signal?.aborted) throw error
     if (text.trim()) return onceOk(text.trim(), lastPayload, started)
-    return generateOllamaOnce(host, model, messages, snapshot, signal, deepen)
+    return generateOllamaOnce(host, model, messages, snapshot, signal, deepen, system, keepAlive)
   }
-  if (!text.trim()) return generateOllamaOnce(host, model, messages, snapshot, signal, deepen)
+  if (!text.trim()) return generateOllamaOnce(host, model, messages, snapshot, signal, deepen, system, keepAlive)
   return onceOk(text.trim(), lastPayload, started)
 }
 
@@ -961,23 +995,19 @@ export async function completeIa(options: {
   systemPrompt?: string | null
   deepen?: boolean
 }): Promise<IaCompleteOk | IaCompleteErr> {
-  requestSystem = options.systemPrompt ?? null
+  const system = options.systemPrompt ?? null
   const deepen = options.provider === "local" && Boolean(options.deepen)
-  try {
-    const requested = resolveRequestedModel(options.provider, options.model)
-    if (!requested) {
-      return { ok: false, error: "Aucun modèle pour ce fournisseur." }
-    }
-    if (options.provider === "google") {
-      return completeGemini(options.messages, options.snapshot ?? null, requested, options.signal)
-    }
-    if (options.provider === "local") {
-      return completeLocal(options.messages, options.snapshot ?? null, requested, options.signal, deepen)
-    }
-    return completeOpenAI(options.messages, options.snapshot ?? null, requested, options.signal)
-  } finally {
-    requestSystem = null
+  const requested = resolveRequestedModel(options.provider, options.model)
+  if (!requested) {
+    return { ok: false, error: "Aucun modèle pour ce fournisseur." }
   }
+  if (options.provider === "google") {
+    return completeGemini(options.messages, options.snapshot ?? null, requested, options.signal, system)
+  }
+  if (options.provider === "local") {
+    return completeLocal(options.messages, options.snapshot ?? null, requested, options.signal, deepen, system)
+  }
+  return completeOpenAI(options.messages, options.snapshot ?? null, requested, options.signal, system)
 }
 
 type LocalPassPlan = {
@@ -985,6 +1015,8 @@ type LocalPassPlan = {
   models: string[]
   imageOmitted: boolean
   visionModel: string | null
+  visionFailed: boolean
+  visionPass: IaVisionPass | null
 }
 
 async function generateLocalOnce(
@@ -994,9 +1026,11 @@ async function generateLocalOnce(
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
   signal?: AbortSignal,
-  deepen = false
+  deepen = false,
+  system?: string | null,
+  keepAlive: string | number = "30m"
 ): Promise<OnceResult> {
-  if (native) return generateOllamaOnce(base, model, messages, snapshot, signal, deepen)
+  if (native) return generateOllamaOnce(base, model, messages, snapshot, signal, deepen, system, keepAlive)
   return generateOpenAIOnce(
     model,
     messages,
@@ -1004,8 +1038,27 @@ async function generateLocalOnce(
     "local",
     signal,
     { url: localChatCompletionsUrl(base), label: "LLM local" },
-    deepen
+    deepen,
+    system
   )
+}
+
+function visionPassFrom(
+  model: string,
+  ok: boolean,
+  error: string | null,
+  usage?: IaTokenUsage,
+  latencyMs?: number | null
+): IaVisionPass {
+  return {
+    model,
+    ok,
+    error,
+    promptTokens: usage?.promptTokens ?? null,
+    completionTokens: usage?.completionTokens ?? null,
+    estimated: Boolean(usage?.estimated),
+    latencyMs: usage?.latencyMs ?? latencyMs ?? null,
+  }
 }
 
 async function collectVisionNotes(
@@ -1015,24 +1068,44 @@ async function collectVisionNotes(
   bases: string[],
   native: boolean,
   signal?: AbortSignal
-): Promise<string | null> {
-  const previous = requestSystem
-  requestSystem = IA_VISION_PASS_PROMPT
-  try {
-    const visionSnap = visionHeaderSnapshot(snapshot)
-    const visionMessages = lastUserMessages(messages)
-    for (const base of bases) {
-      try {
-        const result = await generateLocalOnce(native, base, visionId, visionMessages, visionSnap, signal, false)
-        if (result.ok) return clipVisionNotes(result.text)
-      } catch {
+): Promise<{ notes: string | null; pass: IaVisionPass }> {
+  const keepAlive = visionUnloadEnabled() ? 0 : "30m"
+  const visionSnap = visionHeaderSnapshot(snapshot)
+  const visionMessages = lastUserMessages(messages)
+  let lastError = "lecture visuelle échouée"
+  let lastLatency: number | null = null
+  for (const base of bases) {
+    const started = Date.now()
+    try {
+      const result = await generateLocalOnce(
+        native,
+        base,
+        visionId,
+        visionMessages,
+        visionSnap,
+        signal,
+        false,
+        IA_VISION_PASS_PROMPT,
+        keepAlive
+      )
+      const latencyMs = Date.now() - started
+      if (result.ok) {
+        const notes = clipVisionNotes(result.text)
+        if (notes) {
+          return { notes, pass: visionPassFrom(visionId, true, null, result.usage, latencyMs) }
+        }
+        lastError = "lecture visuelle vide"
+        lastLatency = result.usage?.latencyMs ?? latencyMs
         continue
       }
+      lastError = result.error
+      lastLatency = latencyMs
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "lecture visuelle échouée"
+      lastLatency = Date.now() - started
     }
-    return null
-  } finally {
-    requestSystem = previous
   }
+  return { notes: null, pass: visionPassFrom(visionId, false, lastError, undefined, lastLatency) }
 }
 
 async function planLocalPass(
@@ -1042,7 +1115,8 @@ async function planLocalPass(
   liveIds: string[],
   bases: string[],
   native: boolean,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onStatus?: (text: string) => void
 ): Promise<LocalPassPlan> {
   const envModel = liveEnv("LOCAL_LLM_MODEL").trim()
   const textId = pickLocalTextModel(liveIds, requested, envModel)
@@ -1050,16 +1124,20 @@ async function planLocalPass(
   const hasImage = Boolean(snapshot?.imageDataUrl)
   const twoPass = Boolean(snapshot && hasImage && localTwoPassEnabled() && visionId)
   if (twoPass && snapshot && visionId) {
-    const notes = await collectVisionNotes(messages, snapshot, visionId, bases, native, signal)
+    onStatus?.("Lecture du visuel…")
+    const collected = await collectVisionNotes(messages, snapshot, visionId, bases, native, signal)
+    if (!collected.notes) onStatus?.("Lecture visuelle échouée, réponse sur le pack seul.")
     return {
-      snapshot: { ...snapshot, imageDataUrl: undefined, visionNotes: notes, visionOnly: false },
+      snapshot: { ...snapshot, imageDataUrl: undefined, visionNotes: collected.notes, visionOnly: false },
       models: [textId || visionId],
-      imageOmitted: !notes,
-      visionModel: notes ? visionId : null,
+      imageOmitted: !collected.notes,
+      visionModel: collected.notes ? visionId : null,
+      visionFailed: !collected.notes,
+      visionPass: collected.pass,
     }
   }
   if (hasImage && visionId && !localTwoPassEnabled()) {
-    return { snapshot, models: [visionId], imageOmitted: false, visionModel: visionId }
+    return { snapshot, models: [visionId], imageOmitted: false, visionModel: visionId, visionFailed: false, visionPass: null }
   }
   const fallback = modelSequence("local", requested).filter((id) => isLocalTextChatModel(id) || !isLocalChatModel(id))
   const models = textId ? [textId, ...fallback.filter((id) => id !== textId)] : fallback
@@ -1068,6 +1146,8 @@ async function planLocalPass(
     models: models.length ? models : modelSequence("local", requested),
     imageOmitted: hasImage,
     visionModel: null,
+    visionFailed: false,
+    visionPass: null,
   }
 }
 
@@ -1076,7 +1156,8 @@ async function completeLocal(
   snapshot: IaSnapshotPayload | null,
   requested: string,
   signal?: AbortSignal,
-  deepen = false
+  deepen = false,
+  system?: string | null
 ): Promise<IaCompleteOk | IaCompleteErr> {
   const probe = await probeLocalLlm()
   const native = isNativeOllamaKind(probe.kind)
@@ -1088,7 +1169,17 @@ async function completeLocal(
     for (const model of plan.models) {
       const packed = withOptionalImage(plan.snapshot, model, "local")
       try {
-        const result = await generateLocalOnce(native, base, model, messages, plan.snapshot, signal, deepen)
+        const result = await generateLocalOnce(
+          native,
+          base,
+          model,
+          messages,
+          plan.snapshot,
+          signal,
+          deepen,
+          system,
+          "30m"
+        )
         if (result.ok) {
           return toCompleteOk({
             text: result.text,
@@ -1097,18 +1188,20 @@ async function completeLocal(
             requested,
             imageOmitted: plan.imageOmitted || packed.imageOmitted,
             visionModel: plan.visionModel,
+            visionFailed: plan.visionFailed,
+            visionPass: plan.visionPass,
             usage: result.usage,
           })
         }
         lastError = result.error
-        if (!result.retry) return { ok: false, error: lastError }
+        if (!result.retry) return { ok: false, error: lastError, visionPass: plan.visionPass }
       } catch (error) {
         lastError = error instanceof Error ? error.message : "LLM local injoignable. Pas de bascule cloud."
         break
       }
     }
   }
-  return { ok: false, error: lastError }
+  return { ok: false, error: lastError, visionPass: plan.visionPass }
 }
 
 export async function streamIa(
@@ -1123,10 +1216,9 @@ export async function streamIa(
   },
   onEvent: (event: IaStreamEvent) => void
 ): Promise<IaCompleteOk | IaCompleteErr> {
-  requestSystem = options.systemPrompt ?? null
+  const system = options.systemPrompt ?? null
   const deepen = options.provider === "local" && Boolean(options.deepen)
-  try {
-    const requested = resolveRequestedModel(options.provider, options.model)
+  const requested = resolveRequestedModel(options.provider, options.model)
     if (!requested) {
       const error = "Aucun modèle pour ce fournisseur."
       onEvent({ type: "error", error })
@@ -1158,7 +1250,8 @@ export async function streamIa(
             localProbe?.ids ?? [],
             localBases,
             native,
-            options.signal
+            options.signal,
+            (text) => onEvent({ type: "status", text })
           )
         : null
     const workingSnapshot = localPlan?.snapshot ?? snapshot
@@ -1174,6 +1267,8 @@ export async function streamIa(
         const packed = withOptionalImage(workingSnapshot, model, options.provider)
         const imageOmitted = localPlan ? localPlan.imageOmitted || packed.imageOmitted : packed.imageOmitted
         const visionModel = localPlan?.visionModel ?? null
+        const visionFailed = Boolean(localPlan?.visionFailed)
+        const visionPass = localPlan?.visionPass ?? null
         let emitted = false
         const onDelta = (chunk: string) => {
           if (!emitted) {
@@ -1185,6 +1280,7 @@ export async function streamIa(
               requested,
               imageOmitted,
               visionModel,
+              visionFailed,
             })
           }
           onEvent({ type: "delta", text: chunk })
@@ -1192,7 +1288,7 @@ export async function streamIa(
         try {
           const result =
             options.provider === "google"
-              ? await streamGeminiOnce(model, options.messages, workingSnapshot, key, onDelta, options.signal)
+              ? await streamGeminiOnce(model, options.messages, workingSnapshot, key, onDelta, options.signal, system)
               : options.provider === "local" && native
                 ? await streamOllamaOnce(
                     localBase,
@@ -1201,7 +1297,9 @@ export async function streamIa(
                     workingSnapshot,
                     onDelta,
                     options.signal,
-                    deepen
+                    deepen,
+                    system,
+                    "30m"
                   )
                 : await streamOpenAIOnce(
                     model,
@@ -1211,7 +1309,8 @@ export async function streamIa(
                     onDelta,
                     options.signal,
                     localEndpoint,
-                    deepen
+                    deepen,
+                    system
                   )
           if (result.ok) {
             const complete = toCompleteOk({
@@ -1221,6 +1320,8 @@ export async function streamIa(
               requested,
               imageOmitted,
               visionModel,
+              visionFailed,
+              visionPass,
               usage: result.usage,
             })
             if (!emitted) {
@@ -1231,6 +1332,7 @@ export async function streamIa(
                 requested,
                 imageOmitted,
                 visionModel,
+                visionFailed,
               })
               onEvent({ type: "delta", text: result.text })
             }
@@ -1242,6 +1344,7 @@ export async function streamIa(
               requested: complete.requested,
               imageOmitted: complete.imageOmitted,
               visionModel: complete.visionModel,
+              visionFailed: complete.visionFailed,
               promptTokens: complete.promptTokens,
               completionTokens: complete.completionTokens,
               estimated: complete.estimated,
@@ -1252,7 +1355,7 @@ export async function streamIa(
           lastError = result.error
           if (emitted || !result.retry) {
             onEvent({ type: "error", error: lastError })
-            return { ok: false, error: lastError }
+            return { ok: false, error: lastError, visionPass }
           }
         } catch (error) {
           if (options.signal?.aborted) throw error
@@ -1266,7 +1369,7 @@ export async function streamIa(
                 : "échec IA"
           if (emitted) {
             onEvent({ type: "error", error: lastError })
-            return { ok: false, error: lastError }
+            return { ok: false, error: lastError, visionPass }
           }
           if (options.provider === "local") {
             hostFailed = true
@@ -1277,8 +1380,5 @@ export async function streamIa(
       if (!hostFailed && options.provider !== "local") break
     }
     onEvent({ type: "error", error: lastError })
-    return { ok: false, error: lastError }
-  } finally {
-    requestSystem = null
-  }
+    return { ok: false, error: lastError, visionPass: localPlan?.visionPass ?? null }
 }

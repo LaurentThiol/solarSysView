@@ -290,13 +290,18 @@ export function IaLab() {
             {
               signal: abort.signal,
               onEvent: (event) => {
+                if (event.type === "status") {
+                  setNotice(event.text)
+                }
                 if (event.type === "meta") {
                   commitLane(lane, {
                     model: event.model,
                     provider: event.provider,
                     requested: event.requested,
                   })
-                  if (event.visionModel) {
+                  if (event.visionFailed) {
+                    setNotice("Lecture visuelle échouée, réponse sur le pack seul.")
+                  } else if (event.visionModel) {
                     setNotice(`Visuel lu par ${event.visionModel}, réponse par ${event.model}.`)
                   } else if (event.imageOmitted) {
                     setNotice("Modèle sans vision : le visuel n’a pas été envoyé, seulement les données.")
@@ -748,7 +753,7 @@ export function IaLab() {
                 items: [
                   {
                     label: "Vision",
-                    text: "En local, un VLM (qwen2.5vl:7b) lit le visuel, puis le modèle texte raisonne sur le pack. Gemini / OpenAI envoient image et données ensemble. Sans VLM, seules les données partent.",
+                    text: "En local, un VLM (qwen2.5vl:7b) lit le visuel (« Lecture du visuel… »), puis le modèle texte raisonne sur le pack. Si cette lecture échoue, la réponse part sur le pack seul. Gemini / OpenAI envoient image et données ensemble. Sans VLM, seules les données partent.",
                   },
                   {
                     label: "Flux",

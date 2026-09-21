@@ -188,16 +188,133 @@ test("local capture uses VLM then text model without sending the pack to vision"
   }
   assert.equal(posts.length, 2)
   assert.equal(posts[0].model, "qwen2.5vl:7b")
-  const visionMessages = posts[0].body.messages as Array<{ images?: string[]; content?: string }>
+  assert.equal(posts[0].body.keep_alive, "30m")
+  const visionMessages = posts[0].body.messages as Array<{ role?: string; images?: string[]; content?: string }>
+  assert.match(String(visionMessages.find((item) => item.role === "system")?.content), /Tu décris seulement/)
   assert.ok(visionMessages.some((item) => item.images?.length))
   const visionBlob = JSON.stringify(posts[0].body)
   assert.doesNotMatch(visionBlob, /ne-pas-envoyer-au-vlm/)
   assert.doesNotMatch(visionBlob, /Données techniques JSON/)
   assert.equal(posts[1].model, "qwen2.5:7b")
+  assert.equal(posts[1].body.keep_alive, "30m")
+  if (result.ok) {
+    assert.equal(result.visionFailed, false)
+    assert.equal(result.visionPass?.ok, true)
+    assert.equal(result.visionPass?.model, "qwen2.5vl:7b")
+  }
+  const textMessages = posts[1].body.messages as Array<{ role?: string; content?: string }>
+  assert.match(String(textMessages.find((item) => item.role === "system")?.content), /assistant de lecture/)
   const textBlob = JSON.stringify(posts[1].body)
   assert.match(textBlob, /Notes visuelles/)
   assert.match(textBlob, /courbe RSI visible en haut/)
   assert.doesNotMatch(textBlob, /"images"/)
+})
+
+test("a failed vision pass keeps the text answer and flags the failure", async () => {
+  const posts: Array<{ model: string; body: Record<string, unknown> }> = []
+  const result = await withTransport(async (url, init) => {
+    if (url.includes("/api/tags") && (!init?.method || init.method === "GET")) {
+      return jsonResponse({ models: [{ name: "qwen2.5:7b" }, { name: "qwen2.5vl:7b" }] })
+    }
+    if (url.includes("/api/chat") && init?.method === "POST") {
+      const body = JSON.parse(String(init.body || "{}")) as Record<string, unknown>
+      posts.push({ model: String(body.model), body })
+      if (body.model === "qwen2.5vl:7b") {
+        return new Response("overloaded", { status: 500, headers: { "content-type": "application/json" } })
+      }
+      return jsonResponse({
+        message: { content: "pack seul" },
+        prompt_eval_count: 9,
+        eval_count: 2,
+      })
+    }
+    return missing()
+  }, () =>
+    completeIa({
+      provider: "local",
+      model: "qwen2.5:7b",
+      messages: [{ role: "user", content: "que vois-tu ?" }],
+      snapshot: { lab: "analyse", tech: { ok: 1 }, imageDataUrl: TINY_PNG },
+    })
+  )
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.text, "pack seul")
+    assert.equal(result.model, "qwen2.5:7b")
+    assert.equal(result.visionModel, null)
+    assert.equal(result.visionFailed, true)
+    assert.equal(result.visionPass?.ok, false)
+    assert.equal(result.visionPass?.model, "qwen2.5vl:7b")
+  }
+  assert.equal(posts.length, 2)
+  assert.doesNotMatch(JSON.stringify(posts[1].body), /Notes visuelles/)
+})
+
+test("IA_VISION_UNLOAD=1 unloads the VLM before the text pass", async () => {
+  const previous = process.env.IA_VISION_UNLOAD
+  process.env.IA_VISION_UNLOAD = "1"
+  try {
+    const keepAlive: unknown[] = []
+    const result = await withTransport(async (url, init) => {
+      if (url.includes("/api/tags") && (!init?.method || init.method === "GET")) {
+        return jsonResponse({ models: [{ name: "qwen2.5:7b" }, { name: "qwen2.5vl:7b" }] })
+      }
+      if (url.includes("/api/chat") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body || "{}")) as { model?: string; keep_alive?: unknown }
+        keepAlive.push(body.keep_alive)
+        const content = body.model === "qwen2.5vl:7b" ? "courbe visible" : "texte"
+        return jsonResponse({ message: { content } })
+      }
+      return missing()
+    }, () =>
+      completeIa({
+        provider: "local",
+        model: "qwen2.5:7b",
+        messages: [{ role: "user", content: "ping" }],
+        snapshot: { lab: "analyse", tech: { ok: 1 }, imageDataUrl: TINY_PNG },
+      })
+    )
+    assert.equal(result.ok, true)
+    assert.deepEqual(keepAlive, [0, "30m"])
+  } finally {
+    if (previous == null) delete process.env.IA_VISION_UNLOAD
+    else process.env.IA_VISION_UNLOAD = previous
+  }
+})
+
+test("parallel local calls keep their own system prompt", async () => {
+  const systems: string[] = []
+  await withTransport(async (url, init) => {
+    if (url.includes("/api/tags") && (!init?.method || init.method === "GET")) {
+      return jsonResponse({ models: [{ name: "qwen2.5:7b" }] })
+    }
+    if (url.includes("/api/chat") && init?.method === "POST") {
+      const body = JSON.parse(String(init.body || "{}")) as {
+        messages?: Array<{ role?: string; content?: string }>
+      }
+      systems.push(String(body.messages?.find((item) => item.role === "system")?.content || ""))
+      return jsonResponse({ message: { content: "ok" } })
+    }
+    return missing()
+  }, () =>
+    Promise.all([
+      completeIa({
+        provider: "local",
+        model: "qwen2.5:7b",
+        systemPrompt: "PROMPT-ALPHA-UNIQUE",
+        messages: [{ role: "user", content: "a" }],
+      }),
+      completeIa({
+        provider: "local",
+        model: "qwen2.5:7b",
+        systemPrompt: "PROMPT-BETA-UNIQUE",
+        messages: [{ role: "user", content: "b" }],
+      }),
+    ])
+  )
+  assert.equal(systems.filter((item) => item.includes("PROMPT-ALPHA-UNIQUE")).length, 1)
+  assert.equal(systems.filter((item) => item.includes("PROMPT-BETA-UNIQUE")).length, 1)
+  assert.ok(systems.every((item) => !item.includes("PROMPT-ALPHA-UNIQUE") || !item.includes("PROMPT-BETA-UNIQUE")))
 })
 
 test("local capture without VLM omits the image", async () => {
@@ -294,6 +411,52 @@ test("local without image stays on a single text POST", async () => {
   )
   assert.equal(result.ok, true)
   assert.deepEqual(posts, ["qwen2.5:7b"])
+})
+
+test("stream announces the vision read before the text deltas", async () => {
+  const events: Array<{ type: string; text?: string; visionFailed?: boolean; visionModel?: string | null }> = []
+  const result = await withTransport(async (url, init) => {
+    if (url.includes("/api/tags") && (!init?.method || init.method === "GET")) {
+      return jsonResponse({ models: [{ name: "qwen2.5:7b" }, { name: "qwen2.5vl:7b" }] })
+    }
+    if (url.includes("/api/chat") && init?.method === "POST") {
+      const body = JSON.parse(String(init.body || "{}")) as { model?: string }
+      if (body.model === "qwen2.5vl:7b") {
+        return jsonResponse({ message: { content: "courbe visible" }, prompt_eval_count: 3, eval_count: 1 })
+      }
+      const stream = new ReadableStream({
+        start(controller) {
+          const enc = new TextEncoder()
+          controller.enqueue(enc.encode('{"message":{"content":"réponse"}}\n'))
+          controller.enqueue(enc.encode('{"done":true,"prompt_eval_count":3,"eval_count":1}\n'))
+          controller.close()
+        },
+      })
+      return new Response(stream, { status: 200, headers: { "content-type": "application/x-ndjson" } })
+    }
+    return missing()
+  }, () =>
+    streamIa(
+      {
+        provider: "local",
+        model: "qwen2.5:7b",
+        messages: [{ role: "user", content: "que vois-tu ?" }],
+        snapshot: { lab: "chartisme", tech: { secret: "pack" }, imageDataUrl: TINY_PNG },
+      },
+      (event) => {
+        if (event.type === "status") events.push({ type: event.type, text: event.text })
+        if (event.type === "meta") {
+          events.push({ type: event.type, visionFailed: event.visionFailed, visionModel: event.visionModel })
+        }
+      }
+    )
+  )
+  assert.equal(result.ok, true)
+  assert.equal(events[0]?.type, "status")
+  assert.equal(events[0]?.text, "Lecture du visuel…")
+  const meta = events.find((item) => item.type === "meta")
+  assert.equal(meta?.visionFailed, false)
+  assert.equal(meta?.visionModel, "qwen2.5vl:7b")
 })
 
 test("native stream reads NDJSON content and ignores thinking", async () => {

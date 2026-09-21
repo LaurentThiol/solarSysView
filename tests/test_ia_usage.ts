@@ -7,7 +7,7 @@ import {
   parseProviderUsage,
   usageFromPayload,
 } from "../src/lib/ia/usage.ts"
-import { chatSurface } from "../src/lib/ia/record-usage.ts"
+import { chatSurface, chatUsageEvents } from "../src/lib/ia/record-usage.ts"
 
 test("Ollama done chunk exposes eval counts and duration", () => {
   const usage = parseProviderUsage({
@@ -54,6 +54,35 @@ test("missing usage falls back to chars/4 marked estimated", () => {
   assert.equal(fromEmpty.estimated, true)
   assert.equal(fromEmpty.latencyMs, 100)
   assert.equal(fromEmpty.promptTokens, null)
+})
+
+test("a local capture records the vision pass then the text pass", () => {
+  const events = chatUsageEvents({
+    surface: "ia",
+    provider: "local",
+    model: "qwen2.5:7b",
+    ok: true,
+    promptTokens: 10,
+    completionTokens: 4,
+    latencyMs: 800,
+    visionPass: {
+      model: "qwen2.5vl:7b",
+      ok: true,
+      promptTokens: 30,
+      completionTokens: 12,
+      estimated: false,
+      latencyMs: 2400,
+    },
+  })
+  assert.equal(events.length, 2)
+  assert.equal(events[0].surface, "ia")
+  assert.equal(events[0].provider, "local")
+  assert.equal(events[0].model, "qwen2.5vl:7b")
+  assert.equal(events[0].promptTokens, 30)
+  assert.equal(events[0].latencyMs, 2400)
+  assert.equal(events[1].model, "qwen2.5:7b")
+  assert.equal(events[1].promptTokens, 10)
+  assert.equal(events[1].latencyMs, 800)
 })
 
 test("chat surface prefers the explicit assistant then Brain lab", () => {

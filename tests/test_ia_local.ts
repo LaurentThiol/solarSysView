@@ -67,6 +67,15 @@ test("the LLM pill does not probe loopback hosts from the browser", () => {
   assert.match(pill, /\/api\/ia\/local/)
 })
 
+test("the IA lab distinguishes a failed vision read from a model without vision", () => {
+  const src = readFileSync(new URL("../src/components/ia/ia-lab.tsx", import.meta.url), "utf8")
+  assert.match(src, /Lecture du visuel…/)
+  assert.match(src, /Lecture visuelle échouée, réponse sur le pack seul\./)
+  const notice = src.slice(src.indexOf('event.type === "meta"'), src.indexOf('event.type === "delta"'))
+  assert.ok(notice.indexOf("visionFailed") < notice.indexOf("visionModel"))
+  assert.ok(notice.indexOf("visionModel") < notice.indexOf("imageOmitted"))
+})
+
 test("startup status ignores overlapping /api/startup polls", () => {
   const src = readFileSync(new URL("../src/components/startup-status.tsx", import.meta.url), "utf8")
   const block = src.slice(src.indexOf("export function StartupStatus"), src.indexOf("function MorphoFiringPill"))

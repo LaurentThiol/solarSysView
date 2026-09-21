@@ -22,6 +22,56 @@ export function chatSurface(lab?: string | null, requested?: string | null): Llm
   return "ia"
 }
 
+export type VisionPassUsage = {
+  model: string
+  ok: boolean
+  error?: string | null
+  promptTokens?: number | null
+  completionTokens?: number | null
+  estimated?: boolean
+  latencyMs?: number | null
+}
+
+export function chatUsageEvents(input: {
+  surface: LlmUsageSurface
+  provider: IaProviderId | "ollama" | "hf"
+  model?: string | null
+  ok: boolean
+  error?: string | null
+  promptTokens?: number | null
+  completionTokens?: number | null
+  estimated?: boolean
+  latencyMs?: number | null
+  visionPass?: VisionPassUsage | null
+}): LlmUsageEvent[] {
+  const events: LlmUsageEvent[] = []
+  if (input.visionPass) {
+    events.push({
+      surface: input.surface,
+      provider: "local",
+      model: input.visionPass.model,
+      ok: input.visionPass.ok,
+      error: input.visionPass.error ?? null,
+      promptTokens: input.visionPass.promptTokens ?? null,
+      completionTokens: input.visionPass.completionTokens ?? null,
+      estimated: Boolean(input.visionPass.estimated),
+      latencyMs: input.visionPass.latencyMs ?? null,
+    })
+  }
+  events.push({
+    surface: input.surface,
+    provider: input.provider,
+    model: input.model,
+    ok: input.ok,
+    error: input.error ?? null,
+    promptTokens: input.promptTokens ?? null,
+    completionTokens: input.completionTokens ?? null,
+    estimated: Boolean(input.estimated),
+    latencyMs: input.latencyMs ?? null,
+  })
+  return events
+}
+
 export async function recordLlmUsage(event: LlmUsageEvent): Promise<void> {
   const base = apiBase()
   if (!base) return

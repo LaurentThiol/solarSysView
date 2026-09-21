@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { isAuthenticated } from "@/lib/admin-auth"
 import { isNetlify } from "@/lib/api-base"
-import { chatSurface, recordLlmUsage, type LlmUsageSurface } from "@/lib/ia/record-usage"
+import { chatSurface, chatUsageEvents, recordLlmUsage, type LlmUsageSurface } from "@/lib/ia/record-usage"
 import {
   completeIa,
   iaStatus,
@@ -153,12 +153,12 @@ export async function POST(request: Request) {
   const { provider, model, messages, snapshot, stream, systemPrompt, deepen, surface } = parsed
 
   const remember = async (
-    result: IaCompleteOk | { ok: false; error: string },
+    result: IaCompleteOk | { ok: false; error: string; visionPass?: IaCompleteOk["visionPass"] },
     usedModel?: string | null
   ) => {
     if (request.signal.aborted) return
     const usage = usageFromResult(result)
-    await recordLlmUsage({
+    const events = chatUsageEvents({
       surface,
       provider,
       model: result.ok ? result.model : usedModel || model,
@@ -168,7 +168,9 @@ export async function POST(request: Request) {
       completionTokens: usage.completionTokens,
       estimated: usage.estimated,
       latencyMs: usage.latencyMs,
+      visionPass: result.visionPass,
     })
+    for (const event of events) await recordLlmUsage(event)
   }
 
   if (!stream) {
@@ -194,6 +196,7 @@ export async function POST(request: Request) {
         requested: result.requested,
         imageOmitted: result.imageOmitted,
         visionModel: result.visionModel ?? null,
+        visionFailed: Boolean(result.visionFailed),
         promptTokens: result.promptTokens,
         completionTokens: result.completionTokens,
         estimated: result.estimated,

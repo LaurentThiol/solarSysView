@@ -1,6 +1,7 @@
 import type { IaProviderId } from "@/lib/ia/models"
 
 export type IaStreamEvent =
+  | { type: "status"; text: string }
   | {
       type: "meta"
       model: string
@@ -8,6 +9,7 @@ export type IaStreamEvent =
       requested: string
       imageOmitted: boolean
       visionModel?: string | null
+      visionFailed?: boolean
     }
   | { type: "delta"; text: string }
   | {
@@ -18,6 +20,7 @@ export type IaStreamEvent =
       requested: string
       imageOmitted: boolean
       visionModel?: string | null
+      visionFailed?: boolean
       promptTokens?: number | null
       completionTokens?: number | null
       estimated?: boolean
