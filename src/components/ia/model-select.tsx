@@ -25,7 +25,8 @@ export function ModelSelect({
 }) {
   const current = models.find((item) => item.id === value) ?? null
   return (
-    <Select value={value ?? undefined} onValueChange={(next) => onChange(next)}>
+    {/* null = empty controlled value; undefined would start the Select uncontrolled. */}
+    <Select value={value} onValueChange={(next) => onChange(next ?? null)}>
       <SelectTrigger className="w-full sm:w-64" aria-label={label}>
         <span className="flex flex-1 text-left">
           {current ? current.label : "Choisir un modèle"}
