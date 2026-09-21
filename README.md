@@ -226,7 +226,7 @@ Les tirages sont indépendants. Une figure sur une courbe de retards ou de sorti
 
 ## Harmo (`/harmo`)
 
-Laboratoire spectral sur les mêmes séries qu’Analyse (somme, étendue, retard, présence, étoiles). scipy est la source de vérité ; le navigateur n’invente pas de FFT. Les unités sont des **cycles/tirage** et des **cycles/an**, pas des hertz : interpoler vers une grille kHz fabriquerait des artefacts. Le « 50 Hz réseau » est l’analogue d’un **peigne de raies verrouillé** sur le calendrier (année, semestre, trimestre, plus un scan de fondamentale).
+Laboratoire spectral sur les mêmes séries qu’Analyse (somme, étendue, retard, présence, étoiles). Le choix du jour (Tous / Mardi / Vendredi / Synthèse) reste sous le bandeau, comme sur Évolution : Mardi ou Vendredi isole ce jour avant les N derniers et le warmup. scipy est la source de vérité ; le navigateur n’invente pas de FFT. Les unités sont des **cycles/tirage** et des **cycles/an**, pas des hertz : interpoler vers une grille kHz fabriquerait des artefacts. Le « 50 Hz réseau » est l’analogue d’un **peigne de raies verrouillé** sur le calendrier (année, semestre, trimestre, plus un scan de fondamentale).
 
 Trois dictionnaires d’énergie, affichés dans **Mélange** :
 

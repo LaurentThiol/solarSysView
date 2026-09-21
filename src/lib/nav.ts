@@ -93,7 +93,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Harmo",
         help: {
           title: "Harmo",
-          body: "Étude harmonique des séries de tirages : mélange réseau / mécanique / acoustique, FFT, STFT, Hilbert. Unités en cycles/tirage, pas des hertz. Décrit le tracé, pas le prochain tirage.",
+          body: "Étude harmonique des séries de tirages : mélange réseau / mécanique / acoustique, FFT, STFT, Hilbert. Unités en cycles/tirage, pas des hertz. Le choix du jour (Tous, Mardi, Vendredi, Synthèse) reste sous le bandeau, comme Évolution. Décrit le tracé, pas le prochain tirage.",
         },
       },
     ],

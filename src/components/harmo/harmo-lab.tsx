@@ -11,7 +11,9 @@ import { TfPanel } from "@/components/harmo/tf-panel"
 import { WindowBar } from "@/components/analysis/window-bar"
 import { CurveName } from "@/components/chartisme/curve-thumb"
 import { useRegisterCapture } from "@/components/capture"
-import { LabelHelp, TitleHelp } from "@/components/help"
+import { HelpTip, LabelHelp, TitleHelp } from "@/components/help"
+import { SiteHeaderSlot } from "@/components/site-header-slot"
+import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -36,7 +38,7 @@ import {
 } from "@/lib/analysis"
 import { DEFAULT_WARMUP, resolveWindow, type WindowPreset } from "@/lib/analysis-window"
 import { useWeekdayScope } from "@/lib/use-weekday-scope"
-import { weekdayApiValue, weekdayFilterDay } from "@/lib/weekday-scope"
+import { weekdayApiValue, weekdayFilterDay, type WeekdayScope } from "@/lib/weekday-scope"
 import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { parseQueryNumbers, drawMatchesQuery } from "@/lib/draws"
 import { packHarmo } from "@/lib/capture/pack"
@@ -110,9 +112,43 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"]
 const HARMO_TAB_IDS = TABS.map((item) => item.id) as TabId[]
 
+const DAY_BAR_HELP = {
+  title: "Jour sous le bandeau",
+  body: "Même choix qu’Évolution : Tous, Mardi, Vendredi ou Synthèse. La barre reste sous le bandeau pour changer de jour sans remonter. Mardi ou Vendredi isole ce jour avant les N derniers et le warmup. Synthèse garde le jeu mixte.",
+} as const
+
+function HarmoDayBar({
+  weekday,
+  onWeekday,
+  drawCount,
+}: {
+  weekday: WeekdayScope
+  onWeekday: (value: WeekdayScope) => void
+  drawCount: number
+}) {
+  return (
+    <SiteHeaderSlot>
+      <div
+        data-harmo-window
+        className="border-t border-border/80"
+        role="region"
+        aria-label="Jour des tirages"
+      >
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-[max(1rem,env(safe-area-inset-left))] py-2 pr-[max(1rem,env(safe-area-inset-right))] sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6">
+          <WeekdayScopeControl value={weekday} onChange={onWeekday} compact />
+          <p className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground">
+            {drawCount} tirage{drawCount > 1 ? "s" : ""}
+            <HelpTip {...DAY_BAR_HELP} />
+          </p>
+        </div>
+      </div>
+    </SiteHeaderSlot>
+  )
+}
+
 export function HarmoLab() {
   const [era, setEra] = useState<"current" | "all">("current")
-  const [weekday] = useWeekdayScope()
+  const [weekday, setWeekday] = useWeekdayScope()
   const { draws, source, loading: drawsLoading } = useDraws(era, weekday)
   const [tab, setTab] = useLabTab(HARMO_TAB_IDS, "melange")
   const [variable, setVariable] = useState<VariableName>("sum")
@@ -297,8 +333,17 @@ export function HarmoLab() {
     setPreset("custom")
   }
 
+  const dayBar = (
+    <HarmoDayBar weekday={weekday} onWeekday={setWeekday} drawCount={work.length} />
+  )
+
   if (drawsLoading) {
-    return <p className="text-sm text-muted-foreground">Chargement des tirages…</p>
+    return (
+      <>
+        {dayBar}
+        <p className="text-sm text-muted-foreground">Chargement des tirages…</p>
+      </>
+    )
   }
 
   const displayFrom = preset === "custom" ? customFrom : resolved.fromDate ?? customFrom
@@ -306,6 +351,7 @@ export function HarmoLab() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      {dayBar}
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
         Série de {work.length} tirages (source {source === "neon" ? "Neon" : "JSON local"}).
         Unités : <strong>cycles/tirage</strong> et <strong>cycles/an</strong>. Le warmup
@@ -339,6 +385,7 @@ export function HarmoLab() {
         warmup={warmup}
         compareOn={false}
         showCompare={false}
+        showWeekday={false}
         onPreset={(v) => {
           setPreset(v)
           if (v !== "custom") {

@@ -28,6 +28,7 @@ export function WindowBar({
   warmup,
   compareOn,
   showCompare = true,
+  showWeekday = true,
   onPreset,
   onFrom,
   onTo,
@@ -43,6 +44,7 @@ export function WindowBar({
   warmup: number
   compareOn: boolean
   showCompare?: boolean
+  showWeekday?: boolean
   onPreset: (v: WindowPreset) => void
   onFrom: (v: string) => void
   onTo: (v: string) => void
@@ -56,7 +58,7 @@ export function WindowBar({
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
-        <WeekdayScopeControl value={weekday} onChange={setWeekday} />
+        {showWeekday ? <WeekdayScopeControl value={weekday} onChange={setWeekday} /> : null}
         <LabelHelp
           label="Fenêtre de travail"
           help={{
