@@ -56,6 +56,7 @@ test("catalog covers every nav page plus URL tabs, overlays and APIs", () => {
   assert.ok(hrefs.has("/analyse?tab=jumeaux&demo=1"))
   assert.ok(hrefs.has("/api/health"))
   assert.ok(hrefs.has("/api/analysis/montecarlo"))
+  assert.ok(hrefs.has("/analyse?variable=sum&preset=last_100&x=20&jour=mardi"))
   assert.ok(hrefs.has("/api/brain/specialists"))
   const kinds = new Set(ADDRESSES.map((entry) => entry.kind))
   assert.deepEqual([...kinds].sort(), Object.keys(ADDRESS_KIND_LABELS).sort())

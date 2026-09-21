@@ -407,6 +407,17 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def weekday_query_middleware(request: Request, call_next):
+        from synchro.weekday import bind_request_weekday, reset_request_weekday
+
+        raw = request.query_params.get("weekday") or request.query_params.get("jour")
+        token = bind_request_weekday(raw)
+        try:
+            return await call_next(request)
+        finally:
+            reset_request_weekday(token)
+
     @app.exception_handler(PoolTimeout)
     async def neon_pool_timeout(_request: Request, exc: PoolTimeout) -> JSONResponse:
         return JSONResponse(
@@ -479,9 +490,13 @@ def create_app() -> FastAPI:
         q: str | None = None,
         year: int | None = Query(None, ge=2004, le=2100),
         era: str | None = Query(None, pattern="^(current|all)$"),
+        weekday: str | None = None,
     ) -> dict[str, Any]:
+        from synchro.weekday import filter_draws_by_weekday, normalize_weekday_filter
+
+        day = normalize_weekday_filter(weekday)
         if era:
-            rows = db.all_draws(era=era)
+            rows = filter_draws_by_weekday(db.all_draws(era=era), day)
             total = len(rows)
             sliced = list(reversed(rows))[offset : offset + limit]
             return {
@@ -489,15 +504,19 @@ def create_app() -> FastAPI:
                 "total": total,
                 "year": year,
                 "era": era,
+                "weekday": day,
             }
         rows = [
             db.serialize_draw(r)
-            for r in db.list_draws(limit=limit, offset=offset, query=q, year=year)
+            for r in db.list_draws(
+                limit=limit, offset=offset, query=q, year=year, weekday=day
+            )
         ]
         return {
             "items": _json(rows),
-            "total": db.count_draws(year=year),
+            "total": db.count_draws(year=year, weekday=day),
             "year": year,
+            "weekday": day,
         }
 
     @app.get("/api/draws/latest")
@@ -515,10 +534,14 @@ def create_app() -> FastAPI:
         era: str,
         from_date: str | None = None,
         to_date: str | None = None,
+        weekday: str | None = None,
     ) -> list[dict[str, Any]]:
+        from synchro.weekday import filter_draws_by_weekday, request_weekday
+
         if not db.database_configured():
             raise HTTPException(503, "Neon non configuré.")
         rows = db.all_draws(era=era)
+        rows = filter_draws_by_weekday(rows, weekday or request_weekday())
         start = date.fromisoformat(from_date[:10]) if from_date else None
         end = date.fromisoformat(to_date[:10]) if to_date else None
         if start:
@@ -726,6 +749,8 @@ def create_app() -> FastAPI:
             )
 
     def _harmo_archive(era: str) -> tuple[list[dict[str, Any]], str]:
+        from synchro.weekday import filter_draws_by_weekday, request_weekday
+
         if db.database_configured():
             try:
                 return _analysis_draws(era, None, None), "neon"
@@ -737,7 +762,7 @@ def create_app() -> FastAPI:
                 ) from exc
         from synchro.harmo.archive import bundled_draws
 
-        rows = bundled_draws(era)
+        rows = filter_draws_by_weekday(bundled_draws(era), request_weekday())
         if not rows:
             raise HTTPException(
                 503,
@@ -1261,20 +1286,27 @@ def create_app() -> FastAPI:
         return _json(report)
 
     def _specialist_draws(era: str = "current") -> tuple[list[dict[str, Any]], str]:
+        from synchro.weekday import filter_draws_by_weekday, request_weekday
+
+        source = "json"
+        rows: list[dict[str, Any]] = []
         if db.database_configured():
             try:
                 rows = db.all_draws(era=era if era in {"current", "all"} else "current")
                 if rows:
-                    return rows, "neon"
+                    source = "neon"
             except Exception:
-                pass
-        snapshot = ROOT / "src" / "data" / "euromillions-2026.json"
-        if snapshot.exists():
-            import json as _jsonlib
+                rows = []
+        if not rows:
+            snapshot = ROOT / "src" / "data" / "euromillions-2026.json"
+            if snapshot.exists():
+                import json as _jsonlib
 
-            items = _jsonlib.loads(snapshot.read_text(encoding="utf-8"))
-            return items, "json"
-        raise HTTPException(503, "Aucun tirage : Neon indisponible et snapshot JSON absent.")
+                rows = _jsonlib.loads(snapshot.read_text(encoding="utf-8"))
+                source = "json"
+        if not rows:
+            raise HTTPException(503, "Aucun tirage : Neon indisponible et snapshot JSON absent.")
+        return filter_draws_by_weekday(rows, request_weekday()), source
 
     def _sync_specialist_row(record: dict[str, Any]) -> None:
         if not record.get("saved"):

@@ -208,8 +208,15 @@ export async function listSpecialistFeatures() {
   }
 }
 
+function weekdayQuerySuffix() {
+  if (typeof window === "undefined") return ""
+  const raw = new URLSearchParams(window.location.search).get("jour")
+  if (raw === "mardi" || raw === "vendredi") return `&weekday=${raw}`
+  return ""
+}
+
 export async function trainSpecialist(input: SpecialistTrainInput) {
-  const response = await fetch("/api/brain/specialists", {
+  const response = await fetch(`/api/brain/specialists?era=${input.era ?? "current"}${weekdayQuerySuffix()}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
@@ -223,7 +230,9 @@ export async function trainSpecialist(input: SpecialistTrainInput) {
 }
 
 export async function inferSpecialist(slug: string, era: "current" | "all" = "current") {
-  const response = await fetch(`/api/brain/specialists/${encodeURIComponent(slug)}/infer?era=${era}`, {
+  const response = await fetch(
+    `/api/brain/specialists/${encodeURIComponent(slug)}/infer?era=${era}${weekdayQuerySuffix()}`,
+    {
     method: "POST",
     headers: { "content-type": "application/json" },
     cache: "no-store",

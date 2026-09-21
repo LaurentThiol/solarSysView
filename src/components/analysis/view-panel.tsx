@@ -62,6 +62,7 @@ export function ViewPanel({
   profile,
   compareOn,
   comparison,
+  weekdayComparison,
   tech,
 }: {
   work: AnalysisDraw[]
@@ -75,6 +76,7 @@ export function ViewPanel({
   profile: { points: ProfilePoint[] }
   compareOn: boolean
   comparison: WindowCompare
+  weekdayComparison?: WindowCompare | null
   tech: Tech
 }) {
   const [block, setBlock] = useState<"month" | "week" | "window">("month")
@@ -150,6 +152,29 @@ export function ViewPanel({
         <Stat label="MACD" value={formatStat(fullTa.last.macd)} />
         <Stat label="Structure" value={tech.structure.trend} />
       </section>
+      {weekdayComparison ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Mardi vs vendredi</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
+            <p>
+              Mardi · {weekdayComparison.a.drawCount} tirages · moyenne{" "}
+              {formatStat(weekdayComparison.a.mean)} · χ² {formatStat(weekdayComparison.a.chiSquare)}
+            </p>
+            <p>
+              Vendredi · {weekdayComparison.b.drawCount} tirages · moyenne{" "}
+              {formatStat(weekdayComparison.b.mean)} · χ² {formatStat(weekdayComparison.b.chiSquare)}
+            </p>
+            <p className="sm:col-span-2 text-muted-foreground">
+              Δ moyenne {formatStat(weekdayComparison.deltaMean)}
+              {weekdayComparison.freqDelta[0]
+                ? ` · plus fort écart de fréquence : boule ${weekdayComparison.freqDelta[0].value}`
+                : ""}
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
       {compareOn ? (
         <Card>
           <CardHeader>

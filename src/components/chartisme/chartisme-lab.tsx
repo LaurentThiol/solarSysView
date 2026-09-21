@@ -70,6 +70,9 @@ import {
 } from "@/lib/chartisme/window"
 import { asStudyPreset, readLabSearch } from "@/lib/lab-search"
 import { useDraws } from "@/lib/use-draws"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
+import { WeekdayScopeControl } from "@/components/weekday-scope-control"
+import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 
 type ModuleStatus = {
   ok?: boolean
@@ -139,7 +142,8 @@ function outcomeVariant(hit: ScanHit) {
 
 export function ChartismeLab() {
   const [era, setEra] = useState<"current" | "all">("current")
-  const { draws, source, loading } = useDraws(era)
+  const [weekday, setWeekday] = useWeekdayScope()
+  const { draws, source, loading } = useDraws(era, weekday)
 
   const [curveId, setCurveId] = useState("sum")
   const [scaleChoice, setScaleChoice] = useState("auto")
@@ -457,6 +461,7 @@ export function ChartismeLab() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      {weekday === "synthese" ? <WeekdaySynthesisCard draws={study.window.work} /> : null}
       <Card>
         <CardHeader className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle>
@@ -597,6 +602,7 @@ export function ChartismeLab() {
                 </SelectContent>
               </Select>
             </LabelHelp>
+            <WeekdayScopeControl value={weekday} onChange={setWeekday} />
 
             {showLastN ? (
               <LabelHelp

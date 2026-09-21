@@ -137,6 +137,9 @@ import {
 } from "@/lib/ia/models"
 import { readStoredProposals, writeStoredProposals } from "@/lib/combinations"
 import { useDraws } from "@/lib/use-draws"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
+import { weekdayFilterDay } from "@/lib/weekday-scope"
+import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { cn } from "@/lib/utils"
 
 type Status = {
@@ -181,7 +184,8 @@ function waitMs(ms: number) {
 
 export function BrainLab() {
   const [era, setEra] = useState<"current" | "all">("current")
-  const { draws, source, loading } = useDraws(era)
+  const [weekday] = useWeekdayScope()
+  const { draws, source, loading } = useDraws(era, weekday)
   const [preset, setPreset] = useState<WindowPreset>("last_100")
   const [customFrom, setCustomFrom] = useState("")
   const [customTo, setCustomTo] = useState("")
@@ -244,8 +248,9 @@ export function BrainLab() {
       toDate: customTo || undefined,
       lastN: Number.isFinite(parsedN) && parsedN > 0 ? parsedN : undefined,
       warmup,
+      weekday: weekdayFilterDay(weekday),
     })
-  }, [archive, preset, customFrom, customTo, lastN, warmup])
+  }, [archive, preset, customFrom, customTo, lastN, warmup, weekday])
 
   const ctxBase = useMemo((): Omit<ResolveContext, "entry"> => {
     const window = windowMetaFrom(resolved)
@@ -1071,6 +1076,7 @@ export function BrainLab() {
         onWarmup={setWarmup}
         onCompare={() => undefined}
       />
+      {weekday === "synthese" ? <WeekdaySynthesisCard draws={resolved.work} /> : null}
 
       <div className="flex flex-col gap-2 rounded-xl border border-border bg-card/40 px-3 py-2">
         <div className="flex flex-wrap items-center gap-2 text-xs">

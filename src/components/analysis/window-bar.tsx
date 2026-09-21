@@ -9,7 +9,9 @@ import {
   type WindowPreset,
 } from "@/lib/analysis-window"
 import { HelpTip, LabelHelp } from "@/components/help"
+import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { Input } from "@/components/ui/input"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
 import {
   Select,
   SelectContent,
@@ -48,11 +50,13 @@ export function WindowBar({
   onWarmup: (v: number) => void
   onCompare: (v: boolean) => void
 }) {
+  const [weekday, setWeekday] = useWeekdayScope()
   const showLastN = preset.startsWith("last_") || lastN !== ""
   const showDates = preset === "custom"
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
+        <WeekdayScopeControl value={weekday} onChange={setWeekday} />
         <LabelHelp
           label="Fenêtre de travail"
           help={{

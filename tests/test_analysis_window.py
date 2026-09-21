@@ -33,7 +33,31 @@ def test_last_n_and_warmup():
     assert resolved["warmup_count"] == 2
     assert resolved["from_date"] == "2026-01-13"
     assert resolved["to_date"] == "2026-01-20"
+    assert resolved["weekday"] is None
     assert slice_series([0, 1, 2, 3, 4], 2) == [2, 3, 4]
+
+
+def test_weekday_filters_before_last_n_and_warmup():
+    rows = [
+        {"draw_date": date(2026, 1, 2), "weekday": "VENDREDI", "numbers": [1, 2, 3, 4, 5], "stars": [1, 2], "star_pool": 12},
+        {"draw_date": date(2026, 1, 6), "weekday": "mardi", "numbers": [2, 3, 4, 5, 6], "stars": [1, 2], "star_pool": 12},
+        {"draw_date": date(2026, 1, 9), "weekday": "vendredi", "numbers": [3, 4, 5, 6, 7], "stars": [1, 2], "star_pool": 12},
+        {"draw_date": date(2026, 1, 13), "weekday": "MARDI", "numbers": [4, 5, 6, 7, 8], "stars": [1, 2], "star_pool": 12},
+        {"draw_date": date(2026, 1, 16), "weekday": "vendredi", "numbers": [5, 6, 7, 8, 9], "stars": [1, 2], "star_pool": 12},
+        {"draw_date": date(2026, 1, 20), "weekday": "mardi", "numbers": [6, 7, 8, 9, 10], "stars": [1, 2], "star_pool": 12},
+        {"draw_date": date(2026, 1, 23), "weekday": "vendredi", "numbers": [7, 8, 9, 10, 11], "stars": [1, 2], "star_pool": 12},
+        {"draw_date": date(2026, 1, 27), "weekday": "mardi", "numbers": [8, 9, 10, 11, 12], "stars": [1, 2], "star_pool": 12},
+    ]
+    resolved = resolve_window(rows, preset="last_20", last_n=3, warmup=1, weekday="MARDI")
+    assert resolved["weekday"] == "mardi"
+    assert resolved["draw_count"] == 3
+    assert [d["draw_date"].isoformat() for d in resolved["work"]] == [
+        "2026-01-13",
+        "2026-01-20",
+        "2026-01-27",
+    ]
+    assert resolved["warmup_count"] == 1
+    assert resolved["warmup"][0]["draw_date"].isoformat() == "2026-01-06"
 
 
 def test_warmup_excluded_from_chi_square():

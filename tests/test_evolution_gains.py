@@ -45,7 +45,11 @@ def test_evolution_gains_block_is_wired() -> None:
     assert "Échelle logarithmique désactivée" in gains
     assert "bg-ok" in gains
     assert "bg-err" in gains
-    assert 'aria-label="Jour des tirages"' in gains
+    control = (ROOT / "src/components/weekday-scope-control.tsx").read_text(encoding="utf-8")
+    scope = (ROOT / "src/lib/weekday-scope.ts").read_text(encoding="utf-8")
+    assert 'aria-label="Jour des tirages"' in control
+    assert "Synthèse" in scope
+    assert "synthese" in scope
     assert "winnersOutsideFrance" in lib
     assert "toGainsChart" in lib
     assert "numbersSum" in lib

@@ -104,6 +104,8 @@ import {
   type DrawSeriesPoint,
   type ValueRange,
 } from "@/lib/draws"
+import { weekdayHue } from "@/lib/sum-spread"
+import { normalizeDrawWeekday } from "@/lib/weekday-scope"
 
 export type DrawChartMode =
   | "sumBoth"
@@ -140,6 +142,8 @@ const chartConfig = {
   e1: { label: "e1", color: "var(--chart-1)" },
   e2: { label: "e2", color: "var(--chart-2)" },
   rank1: { label: "1er rang", color: "oklch(0.68 0.18 25)" },
+  overlayMardi: { label: "Mardi", color: "var(--chart-2)" },
+  overlayVendredi: { label: "Vendredi", color: "var(--chart-4)" },
   sma: { label: "SMA", color: "var(--chart-2)" },
   bbUpper: { label: "Bollinger +", color: "var(--chart-5)" },
   bbLower: { label: "Bollinger −", color: "var(--chart-5)" },
@@ -358,6 +362,24 @@ function mergeOverlays(
     ...point,
     ...overlayRecord(key, chartBands[i], absBands[i]),
   }))
+}
+
+function withWeekdayOverlay(
+  points: ChartPoint[],
+  yKey: SeriesKey,
+  enabled: boolean
+): ChartPoint[] {
+  if (!enabled) return points
+  return points.map((point) => {
+    const day = normalizeDrawWeekday(String(point.weekday ?? ""))
+    const raw = point[yKey]
+    const value = typeof raw === "number" && Number.isFinite(raw) ? raw : null
+    return {
+      ...point,
+      overlayMardi: day === "mardi" ? value : null,
+      overlayVendredi: day === "vendredi" ? value : null,
+    }
+  })
 }
 
 function plottedOf(
@@ -869,6 +891,17 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   const dragRef = useRef<{ startX: number; startY: number; dragged: boolean } | null>(null)
 
   const series = useMemo(() => toDrawSeries(draws), [draws])
+  const mixedDays = useMemo(() => {
+    let mardi = false
+    let vendredi = false
+    for (const point of series) {
+      const day = normalizeDrawWeekday(point.weekday)
+      if (day === "mardi") mardi = true
+      if (day === "vendredi") vendredi = true
+      if (mardi && vendredi) return true
+    }
+    return false
+  }, [series])
   const keys = useMemo(() => chartKeys(mode, series), [mode, series])
   const visibleKeys = useMemo(
     () => keys.filter((key) => !hidden[key]),
@@ -899,6 +932,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   }, [series, keys, smaPeriod])
 
   const chartData = useMemo(() => {
+    const overlayKey: SeriesKey = combined
+      ? "relNumbers"
+      : (keys.find((key) => key !== "rank1") ?? keys[0] ?? "sumNumbers")
     let points: ChartPoint[] = series
     if (combined) {
       const numberRange = resolveRange(
@@ -932,16 +968,16 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           sAbs.map((band) => mapBandPoint(band, (value) => relativeToRange(value, starRange)))
         )
       }
-      return points
+      return withWeekdayOverlay(points, overlayKey, mixedDays)
     }
-    if (!smaPeriod) return points
+    if (!smaPeriod) return withWeekdayOverlay(points, overlayKey, mixedDays)
     for (const key of keys) {
       const abs = overlayPacks[key]?.abs
       if (!abs) continue
       points = mergeOverlays(points, key, abs, abs)
     }
-    return points
-  }, [series, smaPeriod, combined, scale, keys, overlayPacks])
+    return withWeekdayOverlay(points, overlayKey, mixedDays)
+  }, [series, smaPeriod, combined, scale, keys, overlayPacks, mixedDays])
 
   const summaries = useMemo(() => {
     const items: { key: string; label: string; min: number; max: number; avg: number }[] =
@@ -2143,6 +2179,30 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     activeDot={{ r: 4 }}
                   />
                 ))}
+                {mixedDays ? (
+                  <>
+                    <Line
+                      dataKey="overlayMardi"
+                      yAxisId={0}
+                      type="linear"
+                      stroke={weekdayHue("mardi")}
+                      strokeWidth={1.5}
+                      connectNulls
+                      dot={{ r: 3 }}
+                      name="Mardi"
+                    />
+                    <Line
+                      dataKey="overlayVendredi"
+                      yAxisId={0}
+                      type="linear"
+                      stroke={weekdayHue("vendredi")}
+                      strokeWidth={1.5}
+                      connectNulls
+                      dot={{ r: 3 }}
+                      name="Vendredi"
+                    />
+                  </>
+                ) : null}
                 {smaPeriod > 0 && showSma
                   ? visibleKeys.map((key) => (
                       <Line

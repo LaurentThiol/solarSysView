@@ -1,6 +1,7 @@
 import { VARIABLE_NAMES, type VariableName } from "@/lib/analysis"
 import { WINDOW_PRESETS, type WindowPreset } from "@/lib/analysis-window"
 import { STUDY_PRESETS, type StudyPreset } from "@/lib/chartisme/window"
+export { asWeekdayScope } from "@/lib/weekday-scope"
 
 export { asDrawDate } from "@/lib/draw-date"
 

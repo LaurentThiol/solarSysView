@@ -658,12 +658,40 @@ def upsert_draws(rows: list[dict[str, Any]]) -> int:
     return count
 
 
-def count_draws(year: int | None = None) -> int:
-    sql = "SELECT COUNT(*) AS n FROM draws"
+def _draw_filter_clauses(
+    year: int | None = None,
+    query: str | None = None,
+    weekday: str | None = None,
+) -> tuple[list[str], dict[str, Any]]:
+    from synchro.weekday import draw_weekday_clause
+
     params: dict[str, Any] = {}
+    clauses: list[str] = []
     if year is not None:
-        sql += " WHERE EXTRACT(YEAR FROM draw_date) = %(year)s"
+        clauses.append("EXTRACT(YEAR FROM draw_date) = %(year)s")
         params["year"] = year
+    if query:
+        clauses.append(
+            """(
+                CAST(draw_date AS TEXT) ILIKE %(q)s
+                OR COALESCE(draw_code, '') ILIKE %(q)s
+                OR COALESCE(weekday, '') ILIKE %(q)s
+                OR array_to_string(numbers, ',') ILIKE %(q)s
+                OR array_to_string(stars, ',') ILIKE %(q)s
+            )"""
+        )
+        params["q"] = f"%{query.strip()}%"
+    weekday_sql = draw_weekday_clause(weekday, params)
+    if weekday_sql:
+        clauses.append(weekday_sql)
+    return clauses, params
+
+
+def count_draws(year: int | None = None, weekday: str | None = None) -> int:
+    clauses, params = _draw_filter_clauses(year=year, weekday=weekday)
+    sql = "SELECT COUNT(*) AS n FROM draws"
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
@@ -685,24 +713,12 @@ def list_draws(
     offset: int = 0,
     query: str | None = None,
     year: int | None = None,
+    weekday: str | None = None,
 ) -> list[dict[str, Any]]:
     sql = f"SELECT {DRAW_COLUMNS} FROM draws"
-    params: dict[str, Any] = {"limit": limit, "offset": offset}
-    clauses: list[str] = []
-    if year is not None:
-        clauses.append("EXTRACT(YEAR FROM draw_date) = %(year)s")
-        params["year"] = year
-    if query:
-        clauses.append(
-            """(
-                CAST(draw_date AS TEXT) ILIKE %(q)s
-                OR COALESCE(draw_code, '') ILIKE %(q)s
-                OR COALESCE(weekday, '') ILIKE %(q)s
-                OR array_to_string(numbers, ',') ILIKE %(q)s
-                OR array_to_string(stars, ',') ILIKE %(q)s
-            )"""
-        )
-        params["q"] = f"%{query.strip()}%"
+    clauses, params = _draw_filter_clauses(year=year, query=query, weekday=weekday)
+    params["limit"] = limit
+    params["offset"] = offset
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY draw_date DESC LIMIT %(limit)s OFFSET %(offset)s"

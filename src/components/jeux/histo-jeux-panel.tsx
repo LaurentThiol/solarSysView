@@ -59,7 +59,10 @@ import {
   type PlaySource,
   type PlayStats,
 } from "@/lib/plays"
+import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { useDraws } from "@/lib/use-draws"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
+import { filterDrawsByWeekday } from "@/lib/weekday-scope"
 import { formatEuro } from "@/lib/draws"
 import { cn } from "@/lib/utils"
 
@@ -190,6 +193,7 @@ function downloadCsv(items: DecoratedPlay[]) {
 
 export function HistoJeuxPanel() {
   const router = useRouter()
+  const [weekday, setWeekday] = useWeekdayScope()
   const { draws } = useDraws("all")
   const dates = useMemo(() => playDateOptions(), [])
   const [playDate, setPlayDate] = useState(dates.next)
@@ -274,15 +278,19 @@ export function HistoJeuxPanel() {
   }, [])
 
   const decorated = useMemo(() => decoratePlays(saved, draws), [saved, draws])
-  const stats: PlayStats = useMemo(() => summarizePlays(decorated), [decorated])
+  const scopedDecorated = useMemo(
+    () => filterDrawsByWeekday(decorated, weekday),
+    [decorated, weekday]
+  )
+  const stats: PlayStats = useMemo(() => summarizePlays(scopedDecorated), [scopedDecorated])
   const visible = useMemo(() => {
-    return decorated.filter((item) => {
+    return scopedDecorated.filter((item) => {
       if (filter === "pending" && item.status !== "pending") return false
       if (filter === "settled" && item.status !== "settled") return false
       if (sourceFilter !== "all" && item.source !== sourceFilter) return false
       return true
     })
-  }, [decorated, filter, sourceFilter])
+  }, [scopedDecorated, filter, sourceFilter])
 
   const complete = isCompleteGrid({ numbers, stars })
   const grid: CombinationGrid = {
@@ -462,6 +470,7 @@ export function HistoJeuxPanel() {
         jouées pour un tirage donné, puis relit le résultat officiel. Mes grilles
         (Combinaisons) reste la bibliothèque de modèles.
       </p>
+      <WeekdayScopeControl value={weekday} onChange={setWeekday} />
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Card>

@@ -50,6 +50,7 @@ export {
   weekdayMean,
   winnersOutsideFrance,
   type GainsWeekday,
+  type WeekdayScope,
 } from "@/lib/gains"
 
 export type PrizeTier = {
@@ -694,6 +695,7 @@ export function signedStreak(
 
 export type DrawSeriesPoint = {
   date: string
+  weekday?: string
   id: number
   n1: number
   n2: number
@@ -738,6 +740,7 @@ export function toDrawSeries(draws: Draw[]): DrawSeriesPoint[] {
       const decades = decadeCounts(numbers)
       return {
         date: draw.date,
+        weekday: draw.weekday,
         id: draw.id,
         n1,
         n2,

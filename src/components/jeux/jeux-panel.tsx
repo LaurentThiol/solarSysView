@@ -75,7 +75,10 @@ import {
   type StoredSpec,
 } from "@/lib/jeux"
 import { formatPlayDate, nextPlayDate, persistPlays } from "@/lib/plays"
+import { WeekdayScopeControl } from "@/components/weekday-scope-control"
+import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { useDraws } from "@/lib/use-draws"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
 import { cn } from "@/lib/utils"
 
 const HELP = {
@@ -381,7 +384,8 @@ function GridLine({
 
 export function JeuxPanel() {
   const router = useRouter()
-  const { draws } = useDraws("all")
+  const [weekday, setWeekday] = useWeekdayScope()
+  const { draws } = useDraws("all", weekday)
   const [spec, setSpec] = useState<StoredSpec>(defaultStoredSpec)
   const [ready, setReady] = useState(false)
   const [sampleSeed, setSampleSeed] = useState(1)
@@ -630,6 +634,8 @@ export function JeuxPanel() {
         restantes. Les curseurs de chance filtrent (0 % / seuil) ou pondèrent
         (masse) ; ils ne prédisent pas le prochain tirage.
       </p>
+      <WeekdayScopeControl value={weekday} onChange={setWeekday} />
+      {weekday === "synthese" ? <WeekdaySynthesisCard draws={draws} /> : null}
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card>

@@ -1,5 +1,19 @@
 /** Calculs de gains EuroMillions, sans archive : EU FDJ comprend la France. */
 
+import {
+  filterDrawsByWeekday,
+  normalizeDrawWeekday,
+  type GainsWeekday,
+  type WeekdayScope,
+} from "./weekday-scope.ts"
+
+export {
+  filterDrawsByWeekday,
+  normalizeDrawWeekday,
+  type GainsWeekday,
+  type WeekdayScope,
+}
+
 export function winnersOutsideFrance(
   winnersFr: number | null | undefined,
   winnersEu: number | null | undefined
@@ -106,24 +120,6 @@ export function prizeMass(
 }
 
 export const PRIZE_RANKS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const
-
-export type GainsWeekday = "all" | "mardi" | "vendredi"
-
-export function normalizeDrawWeekday(
-  value: string | null | undefined
-): "mardi" | "vendredi" | null {
-  const day = String(value ?? "").toLowerCase()
-  if (day === "mardi" || day === "vendredi") return day
-  return null
-}
-
-export function filterDrawsByWeekday<T extends { weekday?: string }>(
-  draws: T[],
-  weekday: GainsWeekday
-): T[] {
-  if (weekday === "all") return draws
-  return draws.filter((draw) => normalizeDrawWeekday(draw.weekday) === weekday)
-}
 
 export function weekdayMean(
   values: Array<{ weekday?: string; value: number | null | undefined }>,

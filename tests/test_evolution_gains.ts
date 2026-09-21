@@ -71,6 +71,8 @@ test("weekday filter and means keep mardi and vendredi apart", () => {
   ]
   assert.equal(filterDrawsByWeekday(rows, "mardi").length, 2)
   assert.equal(filterDrawsByWeekday(rows, "vendredi").length, 1)
+  assert.equal(filterDrawsByWeekday(rows, "all").length, 3)
+  assert.equal(filterDrawsByWeekday(rows, "synthese").length, 3)
   assert.equal(weekdayMean(rows, "mardi"), 15)
   assert.equal(weekdayMean(rows, "vendredi"), 30)
   assert.equal(massRankKey(13), "massR13")

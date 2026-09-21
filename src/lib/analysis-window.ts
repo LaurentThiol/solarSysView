@@ -7,6 +7,7 @@ import {
   bollinger,
   type VariableName,
 } from "@/lib/analysis"
+import { filterDrawsByWeekday, type DrawWeekday } from "@/lib/weekday-scope"
 
 export const WINDOW_PRESETS = [
   "last_20",
@@ -64,6 +65,7 @@ export type WindowSpec = {
   toDate?: string
   lastN?: number
   warmup?: number
+  weekday?: DrawWeekday | null
 }
 
 export type ResolvedWindow<T extends { date: string }> = {
@@ -75,6 +77,7 @@ export type ResolvedWindow<T extends { date: string }> = {
   warmupFrom: string | null
   starPools: number[]
   starPoolBreak: boolean
+  weekday: DrawWeekday | null
   work: T[]
   warmup: T[]
   withWarmup: T[]
@@ -133,12 +136,13 @@ export function filterCalendarYear<T extends { date: string }>(
   return draws.filter((draw) => draw.date.startsWith(prefix))
 }
 
-export function resolveWindow<T extends { date: string; star_pool?: number }>(
+export function resolveWindow<T extends { date: string; star_pool?: number; weekday?: string }>(
   draws: T[],
   spec: WindowSpec
 ): ResolvedWindow<T> {
   const preset = spec.preset
   const warmupN = spec.warmup ?? DEFAULT_WARMUP
+  const weekday = spec.weekday === "mardi" || spec.weekday === "vendredi" ? spec.weekday : null
   const empty: ResolvedWindow<T> = {
     preset,
     fromDate: null,
@@ -148,12 +152,13 @@ export function resolveWindow<T extends { date: string; star_pool?: number }>(
     warmupFrom: null,
     starPools: [],
     starPoolBreak: false,
+    weekday,
     work: [],
     warmup: [],
     withWarmup: [],
     compare: { fromDate: null, toDate: null, drawCount: 0, work: [] },
   }
-  const all = ordered(draws)
+  const all = ordered(weekday ? filterDrawsByWeekday(draws, weekday) : draws)
   if (all.length === 0) return empty
 
   const end = spec.toDate ?? all[all.length - 1].date
@@ -211,6 +216,7 @@ export function resolveWindow<T extends { date: string; star_pool?: number }>(
     warmupFrom: warmup[0]?.date ?? null,
     starPools: pools,
     starPoolBreak: new Set(pools).size > 1,
+    weekday,
     work,
     warmup,
     withWarmup: [...warmup, ...work],
@@ -387,7 +393,8 @@ export function formatWindowBanner(window: ResolvedWindow<{ date: string }>) {
   const breakNote = window.starPoolBreak
     ? ` · rupture star_pool (${window.starPools.join(" / ")})`
     : ""
+  const dayNote = window.weekday ? ` · ${window.weekday}` : ""
   return `Du ${window.fromDate} au ${window.toDate} · ${window.drawCount} tirage${
     window.drawCount > 1 ? "s" : ""
-  } · warmup ${window.warmupCount}${breakNote}`
+  }${dayNote} · warmup ${window.warmupCount}${breakNote}`
 }

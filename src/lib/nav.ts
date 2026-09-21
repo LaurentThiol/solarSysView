@@ -34,7 +34,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Tirage",
         help: {
           title: "Tirage",
-          body: "Archives EuroMillions : filtrer par mois ou par numéros, puis exporter en CSV.",
+          body: "Archives EuroMillions : filtrer par mois, numéros ou jour (mardi / vendredi / synthèse), puis exporter en CSV.",
         },
       },
       {
@@ -42,7 +42,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Évolution",
         help: {
           title: "Évolution",
-          body: "Courbes dans le temps, gains FR/EU (log, mardi/vendredi, report, masse empilée, dessin chartiste), suivi pair/impair, forme de la grille, classements. Accès protégé par mot de passe admin.",
+          body: "Courbes dans le temps, gains FR/EU (log, jour mardi/vendredi/synthèse, report, masse empilée, dessin chartiste), suivi pair/impair, forme de la grille, classements. Accès protégé par mot de passe admin.",
         },
       },
     ],
@@ -61,7 +61,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Analyse",
         help: {
           title: "Analyse",
-          body: "Indicateurs, numéros, hasard, Jumeaux (empreintes + démo guidée). Probabilités et mémo sont dans le Glossaire du bandeau ; l’annuaire des chemins est dans Adresse. Tous les onglets lisent la même fenêtre de travail.",
+          body: "Indicateurs, numéros, hasard, Jumeaux (empreintes + démo guidée). Probabilités et mémo sont dans le Glossaire du bandeau ; l’annuaire des chemins est dans Adresse. Tous les onglets lisent la même fenêtre de travail, y compris le filtre jour.",
         },
       },
       {
@@ -147,7 +147,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Spécialistes",
         help: {
           title: "Spécialistes",
-          body: "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté 20/50/100. Jamais une grille 5+2. Démo guidée avec pastilles explicatives.",
+          body: "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté 20/50/100. Le décompte d’archive suit le jour ; l’entraînement API reste borné au même weekday si Mardi ou Vendredi est choisi. Jamais une grille 5+2. Démo guidée avec pastilles explicatives.",
         },
       },
       {

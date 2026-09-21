@@ -33,7 +33,6 @@ import {
   NUMBER_SUM_RANGE,
   PRIZE_RANK_LABELS,
   PRIZE_RANKS,
-  filterDrawsByWeekday,
   finiteNumbers,
   formatCompactCount,
   formatCompactEuro,
@@ -54,8 +53,8 @@ import {
   type Draw,
   type GainsChartPoint,
   type GainsScope,
-  type GainsWeekday,
 } from "@/lib/draws"
+import { normalizeDrawWeekday } from "@/lib/weekday-scope"
 import { cn } from "@/lib/utils"
 
 type GainsView = "winners" | "jackpot" | "mass" | "stack" | "report"
@@ -85,12 +84,6 @@ const VIEWS: { value: GainsView; label: string }[] = [
   { value: "mass", label: "Masse €" },
   { value: "stack", label: "Empilée" },
   { value: "report", label: "Report" },
-]
-
-const WEEKDAYS: { value: GainsWeekday; label: string }[] = [
-  { value: "all", label: "Tous" },
-  { value: "mardi", label: "Mardi" },
-  { value: "vendredi", label: "Vendredi" },
 ]
 
 const STACK_KEYS = [...PRIZE_RANKS].reverse().map((rank) => massRankKey(rank))
@@ -135,6 +128,8 @@ const chartConfig = {
   sumNumbers: { label: "Somme n°", color: "var(--chart-5)" },
   reportLength: { label: "Longueur report", color: "var(--chart-4)" },
   rank1: { label: "1er rang", color: "oklch(0.68 0.18 25)" },
+  overlayMardi: { label: "Mardi", color: "var(--chart-2)" },
+  overlayVendredi: { label: "Vendredi", color: "var(--chart-4)" },
   sma: { label: "SMA", color: "var(--chart-2)" },
   ...Object.fromEntries(
     PRIZE_RANKS.map((rank) => [
@@ -166,11 +161,6 @@ const VIEW_HELP: HelpCopy = {
 const SCOPE_HELP: HelpCopy = {
   title: "Périmètre",
   body: "Totaux des 13 rangs, ou un rang FDJ (1 = jackpot, 13 = 2 numéros). Le fichier local n’a souvent que le rang 1 ; Neon porte l’échelle complète.",
-}
-
-const WEEKDAY_HELP: HelpCopy = {
-  title: "Mardi / vendredi",
-  body: "Le vendredi draine en général plus de mises que le mardi (jackpot souvent plus haut, plus de gagnants aux petits rangs). Le filtre ne change pas la longueur de report, calculée sur toute la chronologie.",
 }
 
 const LOG_HELP: HelpCopy = {
@@ -445,7 +435,6 @@ export function EvolutionGains({
 }) {
   const [view, setView] = useState<GainsView>("winners")
   const [scope, setScope] = useState<GainsScope>("totals")
-  const [weekday, setWeekday] = useState<GainsWeekday>("all")
   const [logScale, setLogScale] = useState(true)
   const [hidden, setHidden] = useState<Partial<Record<string, boolean>>>(() =>
     defaultHidden("winners")
@@ -453,15 +442,22 @@ export function EvolutionGains({
   const [showSma, setShowSma] = useState(true)
   const [targetKey, setTargetKey] = useState<SeriesKey>("winnersEu")
 
-  const scopedDraws = useMemo(
-    () => filterDrawsByWeekday(draws, weekday),
-    [draws, weekday]
-  )
   const chartScope = view === "jackpot" || view === "report" ? 1 : scope
   const series = useMemo(
-    () => toGainsChart(scopedDraws, chartScope, history ?? draws),
-    [scopedDraws, chartScope, history, draws]
+    () => toGainsChart(draws, chartScope, history ?? draws),
+    [draws, chartScope, history]
   )
+  const mixedDays = useMemo(() => {
+    let mardi = false
+    let vendredi = false
+    for (const point of series) {
+      const day = normalizeDrawWeekday(String(point.weekday ?? ""))
+      if (day === "mardi") mardi = true
+      if (day === "vendredi") vendredi = true
+      if (mardi && vendredi) return true
+    }
+    return false
+  }, [series])
   const keys = viewKeys(view, view === "jackpot" ? "totals" : scope)
   const visible = keys.filter((key) => !hidden[key])
   const splitSum =
@@ -516,6 +512,23 @@ export function EvolutionGains({
         return next
       })
     }
+    if (mixedDays && view !== "stack") {
+      const yKey: SeriesKey =
+        view === "jackpot" || view === "report"
+          ? "jackpot"
+          : view === "mass"
+            ? "massEu"
+            : "winnersEu"
+      points = points.map((point) => {
+        const day = normalizeDrawWeekday(String(point.weekday ?? ""))
+        const value = asNumber(point[yKey])
+        return {
+          ...point,
+          overlayMardi: day === "mardi" ? value : null,
+          overlayVendredi: day === "vendredi" ? value : null,
+        }
+      })
+    }
     if (!smaPeriod) return points
     for (const key of keys) {
       const bands = overlayPacks[key]
@@ -527,7 +540,7 @@ export function EvolutionGains({
       })
     }
     return points
-  }, [series, smaPeriod, keys, overlayPacks, useLog, view])
+  }, [series, smaPeriod, keys, overlayPacks, useLog, view, mixedDays])
 
   const summaries = useMemo(() => {
     return keys
@@ -721,30 +734,6 @@ export function EvolutionGains({
                 ))}
               </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                Jour
-                <HelpTip {...WEEKDAY_HELP} />
-              </span>
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Jour des tirages">
-                {WEEKDAYS.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    aria-pressed={weekday === item.value}
-                    onClick={() => setWeekday(item.value)}
-                    className={cn(
-                      "rounded-full border px-2.5 py-1 text-xs",
-                      weekday === item.value
-                        ? "border-primary bg-primary/15 text-foreground"
-                        : "border-border text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
             {showsScope(view) ? (
               <LabelHelp label="Périmètre" help={SCOPE_HELP}>
                 <Select
@@ -859,7 +848,7 @@ export function EvolutionGains({
               )}
             >
               <ComposedChart
-                key={`${view}-${scopeValue(scope)}-${weekday}-${leftIsLog ? "log" : "lin"}`}
+                key={`${view}-${scopeValue(scope)}-${mixedDays ? "mix" : "one"}-${leftIsLog ? "log" : "lin"}`}
                 accessibilityLayer
                 data={plotData}
                 margin={{
@@ -994,6 +983,30 @@ export function EvolutionGains({
                         name={seriesLabelOf(key)}
                       />
                     ))}
+                {mixedDays && view !== "stack" ? (
+                  <>
+                    <Line
+                      dataKey="overlayMardi"
+                      yAxisId={0}
+                      type="linear"
+                      stroke="var(--chart-2)"
+                      strokeWidth={1.5}
+                      connectNulls
+                      dot={{ r: 3 }}
+                      name="Mardi"
+                    />
+                    <Line
+                      dataKey="overlayVendredi"
+                      yAxisId={0}
+                      type="linear"
+                      stroke="var(--chart-4)"
+                      strokeWidth={1.5}
+                      connectNulls
+                      dot={{ r: 3 }}
+                      name="Vendredi"
+                    />
+                  </>
+                ) : null}
                 {smaPeriod > 0 && showSma
                   ? visible
                       .filter((key) => overlayPacks[key])
@@ -1175,7 +1188,7 @@ export function EvolutionGains({
               {view === "winners" && shareStats ? (
                 <li>part FR · moy. {formatStat(shareStats.avg, 1)} %</li>
               ) : null}
-              {weekday === "all" &&
+              {mixedDays &&
               (weekdayStats.mardi != null || weekdayStats.vendredi != null) ? (
                 <li>
                   mardi · moy.{" "}

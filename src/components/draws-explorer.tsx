@@ -40,11 +40,15 @@ import {
   type Draw,
   PRIZE_RANK_LABELS,
 } from "@/lib/draws"
+import { WeekdayScopeControl } from "@/components/weekday-scope-control"
+import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { useDraws } from "@/lib/use-draws"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
 import { cn } from "@/lib/utils"
 
 export function DrawsExplorer() {
-  const { draws, source } = useDraws("year")
+  const [weekday, setWeekday] = useWeekdayScope()
+  const { draws, source } = useDraws("year", weekday)
   const [month, setMonth] = useState("all")
   const [query, setQuery] = useState("")
   const [openDate, setOpenDate] = useState<string | null>(null)
@@ -90,6 +94,7 @@ export function DrawsExplorer() {
         recoupées avec les archives publiques ; source officielle : FDJ
         {source === "neon" ? " · Neon." : " · fichier local."}
       </p>
+      {weekday === "synthese" ? <WeekdaySynthesisCard draws={filtered} /> : null}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Tirages archivés"
@@ -154,7 +159,8 @@ export function DrawsExplorer() {
               </Button>
             </WithHelp>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <WeekdayScopeControl value={weekday} onChange={setWeekday} />
             <LabelHelp
               label="Mois"
               className="w-full sm:w-auto"

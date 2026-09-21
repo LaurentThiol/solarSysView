@@ -48,14 +48,19 @@ function toOptionalInt(value: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-async function fetchEra(base: string, era: "current" | "all") {
+function weekdayQuery(weekday: string | null) {
+  if (weekday !== "mardi" && weekday !== "vendredi") return ""
+  return `&weekday=${weekday}`
+}
+
+async function fetchEra(base: string, era: "current" | "all", weekday: string | null) {
   const items: ReturnType<typeof toUi>[] = []
   let offset = 0
   let total = Number.POSITIVE_INFINITY
   const page = 2000
   while (items.length < total) {
     const response = await fetch(
-      `${base}/api/draws?limit=${page}&offset=${offset}&era=${era}`,
+      `${base}/api/draws?limit=${page}&offset=${offset}&era=${era}${weekdayQuery(weekday)}`,
       { cache: "no-store", signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) }
     )
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -91,9 +96,9 @@ function calendarYearOf(date: string): number | null {
   return Number.isFinite(year) ? year : null
 }
 
-async function fetchLast(base: string, lastN: number) {
+async function fetchLast(base: string, lastN: number, weekday: string | null) {
   const response = await fetch(
-    `${base}/api/draws?limit=${lastN}&offset=0`,
+    `${base}/api/draws?limit=${lastN}&offset=0${weekdayQuery(weekday)}`,
     { cache: "no-store", signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) }
   )
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -111,9 +116,9 @@ async function fetchLatestYear(base: string): Promise<number | null> {
   return calendarYearOf(String(latest.draw_date || "").slice(0, 10))
 }
 
-async function fetchYear(base: string, year: number) {
+async function fetchYear(base: string, year: number, weekday: string | null) {
   const response = await fetch(
-    `${base}/api/draws?limit=500&offset=0&year=${year}`,
+    `${base}/api/draws?limit=500&offset=0&year=${year}${weekdayQuery(weekday)}`,
     { cache: "no-store", signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) }
   )
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -127,6 +132,8 @@ export async function GET(request: NextRequest) {
   const era = eraParam === "all" || eraParam === "current" ? eraParam : null
   const lastN = parseLastN(request.nextUrl.searchParams.get("last"))
   const yearQuery = parseYearQuery(request.nextUrl.searchParams.get("year"))
+  const weekdayRaw = (request.nextUrl.searchParams.get("weekday") || "").toLowerCase()
+  const weekday = weekdayRaw === "mardi" || weekdayRaw === "vendredi" ? weekdayRaw : null
   if (!url) {
     return NextResponse.json({
       ok: false,
@@ -139,24 +146,26 @@ export async function GET(request: NextRequest) {
   }
   try {
     if (lastN) {
-      const items = await fetchLast(url, lastN)
+      const items = await fetchLast(url, lastN, weekday)
       return NextResponse.json({
         ok: items.length > 0,
         items,
         total: items.length,
         year: null,
         last: lastN,
+        weekday,
         source: "neon",
       })
     }
     if (era) {
-      const items = await fetchEra(url, era)
+      const items = await fetchEra(url, era, weekday)
       return NextResponse.json({
         ok: items.length > 0,
         items,
         total: items.length,
         year: null,
         era,
+        weekday,
         source: "neon",
       })
     }
@@ -170,11 +179,12 @@ export async function GET(request: NextRequest) {
     if (year == null || year < 2004) {
       return NextResponse.json({ ok: false, items: [], year: null, source: "json" })
     }
-    const items = await fetchYear(url, year)
+    const items = await fetchYear(url, year, weekday)
     return NextResponse.json({
       ok: items.length > 0,
       items,
       year,
+      weekday,
       source: "neon",
     })
   } catch {

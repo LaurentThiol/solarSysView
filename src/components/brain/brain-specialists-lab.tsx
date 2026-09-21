@@ -11,11 +11,15 @@ import { Badge } from "@/components/ui/badge"
 import type { CatalogEntry } from "@/lib/brain/catalog"
 import { INDEPENDENCE_DISCLAIMER } from "@/lib/capture/snapshot"
 import { ERA_LABELS } from "@/lib/copy"
+import { WeekdayScopeControl } from "@/components/weekday-scope-control"
+import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { useDraws } from "@/lib/use-draws"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
 
 export function BrainSpecialistsLab() {
   const [era, setEra] = useState<"current" | "all">("current")
-  const { draws, source, loading } = useDraws(era)
+  const [weekday, setWeekday] = useWeekdayScope()
+  const { draws, source, loading } = useDraws(era, weekday)
   const [pins, setPins] = useState<CatalogEntry[]>([])
 
   useRegisterCapture(() => ({
@@ -67,8 +71,9 @@ export function BrainSpecialistsLab() {
             <StatusDot
               ok={!loading && count > 0}
               label={loading ? "tirages…" : `${count} tirages · ${source}`}
-              hint="L’entraînement lit l’ère formule côté API. La démo n’écrit rien toute seule."
+              hint="L’entraînement lit l’ère formule côté API, bornée au même jour si Mardi ou Vendredi est choisi. La démo n’écrit rien toute seule."
             />
+            <WeekdayScopeControl value={weekday} onChange={setWeekday} compact />
             <label className="flex items-center gap-1 text-xs">
               Archive
               <select
@@ -93,6 +98,7 @@ export function BrainSpecialistsLab() {
       <p className="rounded-xl border border-primary/20 bg-primary/8 px-3 py-2 text-xs leading-5 text-muted-foreground">
         {INDEPENDENCE_DISCLAIMER}
       </p>
+      {weekday === "synthese" ? <WeekdaySynthesisCard draws={draws} /> : null}
 
       {pins.length ? (
         <p className="flex flex-wrap items-center gap-2 text-xs">

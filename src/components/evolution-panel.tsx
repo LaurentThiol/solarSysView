@@ -21,6 +21,8 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select"
+import { WeekdayScopeControl } from "@/components/weekday-scope-control"
+import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { packEvolution } from "@/lib/capture/pack"
 import type { ChartSketch } from "@/lib/chart-draw"
 import {
@@ -30,6 +32,7 @@ import {
   expectedNumberHits,
   expectedStarDelay,
   expectedStarHits,
+  filterDrawsByWeekday,
   hottest,
   mergeDraws,
   monthOf,
@@ -45,6 +48,8 @@ import {
 import { WINDOW_PRESET_LABELS, filterCalendarYear, newestCalendarYear } from "@/lib/analysis-window"
 import { ERA_LABELS } from "@/lib/copy"
 import { useDraws, type DrawWindow } from "@/lib/use-draws"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
+import type { WeekdayScope } from "@/lib/weekday-scope"
 
 const PERIODS: { id: DrawWindow; label: string; full: string }[] = [
   { id: "last_20", label: "20 derniers", full: WINDOW_PRESET_LABELS.last_20 },
@@ -89,6 +94,8 @@ function EvolutionWindowBar({
   onMonth,
   monthOptions,
   drawCount,
+  weekday,
+  onWeekday,
 }: {
   period: DrawWindow
   onPeriod: (id: DrawWindow) => void
@@ -97,6 +104,8 @@ function EvolutionWindowBar({
   onMonth: (value: string) => void
   monthOptions: { value: string; label: string }[]
   drawCount: number
+  weekday: WeekdayScope
+  onWeekday: (value: WeekdayScope) => void
 }) {
   return (
     <SiteHeaderSlot>
@@ -122,6 +131,7 @@ function EvolutionWindowBar({
               className="min-w-0 flex-1"
             />
           </div>
+          <WeekdayScopeControl value={weekday} onChange={onWeekday} compact />
           {lastWindow ? (
             <p className="hidden shrink-0 text-xs tabular-nums text-muted-foreground lg:block">
               {drawCount} tirage{drawCount > 1 ? "s" : ""}
@@ -167,16 +177,18 @@ function formatStat(value: number, digits = 1) {
 function EvolutionContent() {
   const [period, setPeriod] = useState<DrawWindow>("last_20")
   const [month, setMonth] = useState("all")
-  const { draws, source, loading } = useDraws(period)
+  const [weekday, setWeekday] = useWeekdayScope()
+  const { draws, source, loading } = useDraws(period, weekday)
   const { sketches, chartMeta } = useChartDraw()
   const [gainsSketches, setGainsSketches] = useState<ChartSketch[]>([])
   const lastWindow = isLastWindow(period)
   const archive = useMemo(() => {
-    if (period === "year_n1") {
-      return [...draws].sort((a, b) => b.date.localeCompare(a.date))
-    }
-    return mergeDraws(draws, DRAWS)
-  }, [draws, period])
+    const merged =
+      period === "year_n1"
+        ? [...draws].sort((a, b) => b.date.localeCompare(a.date))
+        : mergeDraws(draws, DRAWS)
+    return filterDrawsByWeekday(merged, weekday)
+  }, [draws, period, weekday])
   const monthOptions = useMemo(() => monthsPresent(archive), [archive])
   const activeMonth = useMemo(() => {
     if (lastWindow) return "all"
@@ -276,6 +288,8 @@ function EvolutionContent() {
       onMonth={setMonth}
       monthOptions={monthOptions}
       drawCount={filtered.length}
+      weekday={weekday}
+      onWeekday={setWeekday}
     />
   )
 
@@ -295,6 +309,7 @@ function EvolutionContent() {
         {archiveSummary(filtered)} Source{" "}
         {source === "neon" ? "Neon" : "fichier local"}.
       </p>
+      {weekday === "synthese" ? <WeekdaySynthesisCard draws={filtered} /> : null}
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

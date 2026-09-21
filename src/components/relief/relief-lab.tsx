@@ -44,10 +44,14 @@ import {
   type ReliefSample,
   type ViewStyle,
 } from "@/lib/relief"
+import { WeekdayScopeControl } from "@/components/weekday-scope-control"
+import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { useDraws } from "@/lib/use-draws"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
 
 export function ReliefLab() {
-  const { draws: archive, source, loading } = useDraws("current")
+  const [weekday, setWeekday] = useWeekdayScope()
+  const { draws: archive, source, loading } = useDraws("current", weekday)
   const [sample, setSample] = useState<ReliefSample>(20)
   const [offset, setOffset] = useState<OffsetMode>("temps")
   const [style, setStyle] = useState<ViewStyle>("scene")
@@ -151,9 +155,11 @@ export function ReliefLab() {
         (comme Évolution) ; on peut remplir les facettes entre rangs voisins.
         Le glyphe 5×10 reste l’onglet Morpho.
       </p>
+      {weekday === "synthese" ? <WeekdaySynthesisCard draws={chronological} /> : null}
 
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
+          <WeekdayScopeControl value={weekday} onChange={setWeekday} />
           <LabelHelp
             label="Échantillon"
             help={{

@@ -71,7 +71,12 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Fenêtre de travail",
     group: "fenetre",
-    text: "Jeu de tirages lu par les laboratoires. Les presets (20/50/100 tirages, année civile, année n-1, formule actuelle…) sont les mêmes partout. En Chartisme, l’échelle (longueur d’une figure) est distincte : elle ne change pas la fenêtre.",
+    text: "Jeu de tirages lu par les laboratoires. Les presets (20/50/100 tirages, année civile, année n-1, formule actuelle…) sont les mêmes partout. Le filtre Jour (Tous / Mardi / Vendredi / Synthèse) s’applique avant la fenêtre : 20 derniers mardi = 20 mardis. En Chartisme, l’échelle (longueur d’une figure) est distincte : elle ne change pas la fenêtre.",
+  },
+  {
+    term: "Jour de tirage",
+    group: "fenetre",
+    text: "EuroMillions ne tire que le mardi et le vendredi. Mardi ou Vendredi isole ce jour avant last_N et le warmup. Synthèse garde le jeu mixte et compare mardi, vendredi et combiné. Le choix voyage avec ?jour= et le menu burger.",
   },
   {
     term: "Période X",
@@ -176,7 +181,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Prévision",
     group: "assistants",
-    text: "Sortie t+1 d’un spécialiste Brain (parité, somme…). Ce n’est pas une grille 5+2. Le score vs hasard dit s’il bat le modèle nul.",
+    text: "Sortie t+1 d’un spécialiste Brain (parité, somme…). Ce n’est pas une grille 5+2. Le score vs hasard dit s’il bat le modèle nul. Le décompte d’archive suit le jour ; l’entraînement API reste l’ère formule, borné au même weekday si Mardi ou Vendredi est choisi.",
   },
   {
     term: "Score vs hasard",

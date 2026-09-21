@@ -280,11 +280,11 @@ const TABS: AddressEntry[] = [
     "demo=1|specialistes"
   ),
   tabEntry(
-    "/analyse?variable=sum&preset=last_100&x=20",
+    "/analyse?variable=sum&preset=last_100&x=20&jour=mardi",
     "Analyse · recette fenêtre",
-    "Ouvre Analyse sur la somme des numéros, 100 derniers tirages, période X = 20.",
+    "Ouvre Analyse sur la somme des numéros, 100 derniers mardis, période X = 20.",
     "lecture",
-    "variable, preset, x, n (boule ou étoile)"
+    "variable, preset, x, n (boule ou étoile), jour=mardi|vendredi|synthese"
   ),
   tabEntry(
     "/chartisme?curve=sum&preset=last_100",
@@ -303,19 +303,19 @@ const TABS: AddressEntry[] = [
 ]
 
 const APIS: AddressEntry[] = [
-  apiEntry("/api/draws", "GET", "Tirages", "Archive EuroMillions paginée (Neon, sinon fichier local).", "archive", "era=current|all, year, last, q, limit, offset"),
+  apiEntry("/api/draws", "GET", "Tirages", "Archive EuroMillions paginée (Neon, sinon fichier local).", "archive", "era=current|all, year, last, weekday=mardi|vendredi, q, limit, offset"),
   apiEntry("/api/draws/latest", "GET", "Dernier tirage", "Le tirage le plus récent et sa date.", "archive"),
   apiEntry("/api/stats", "GET", "Stats d’archive", "Totaux, couverture et résumés sur l’ère demandée.", "archive", "era=current|all"),
   apiEntry("/api/analysis/proba", "GET", "Probabilités officielles", "Tables combinatoires 5/50 + 2/12, indépendantes de la fenêtre.", "lecture"),
-  apiEntry("/api/analysis/variables", "GET", "Série d’une variable", "Valeurs d’une grandeur (somme, retard…) sur une plage.", "lecture", "variable, n, from_date, to_date, era"),
-  apiEntry("/api/analysis/ohlc", "GET", "OHLC", "Barres agrégées pour chandeliers / Heikin-Ashi / Renko.", "lecture"),
-  apiEntry("/api/analysis/ta", "GET", "Indicateurs techniques", "Pack TA (RSI, MACD, Ichimoku…) calculé côté API.", "lecture"),
-  apiEntry("/api/analysis/inference", "GET", "Hasard / χ²", "Adéquation et intervalles de Wilson sur la fenêtre.", "lecture"),
-  apiEntry("/api/analysis/montecarlo", "GET", "Monte-Carlo", "Records de fréquence et de retard sous tirages uniformes.", "lecture", "from_date, to_date, n, seed, era"),
-  apiEntry("/api/analysis/bayes", "GET", "Bayésien", "Prédictive beta-binomiale par boule.", "lecture"),
-  apiEntry("/api/analysis/dependence", "GET", "Dépendance", "Lift des paires et nuage somme (X) × étendue (Y).", "lecture"),
-  apiEntry("/api/analysis/numbers", "GET", "Numéros", "Sorties, retards et IC Wilson pour la grille 1–50.", "lecture"),
-  apiEntry("/api/analysis/lab", "GET", "Laboratoire complet", "Rapport groupé du labo Analyse (plus long à calculer).", "lecture"),
+  apiEntry("/api/analysis/variables", "GET", "Série d’une variable", "Valeurs d’une grandeur (somme, retard…) sur une plage.", "lecture", "variable, n, from_date, to_date, era, weekday"),
+  apiEntry("/api/analysis/ohlc", "GET", "OHLC", "Barres agrégées pour chandeliers / Heikin-Ashi / Renko.", "lecture", "from_date, to_date, era, weekday"),
+  apiEntry("/api/analysis/ta", "GET", "Indicateurs techniques", "Pack TA (RSI, MACD, Ichimoku…) calculé côté API.", "lecture", "from_date, to_date, era, weekday"),
+  apiEntry("/api/analysis/inference", "GET", "Hasard / χ²", "Adéquation et intervalles de Wilson sur la fenêtre.", "lecture", "from_date, to_date, era, weekday"),
+  apiEntry("/api/analysis/montecarlo", "GET", "Monte-Carlo", "Records de fréquence et de retard sous tirages uniformes.", "lecture", "from_date, to_date, n, seed, era, weekday"),
+  apiEntry("/api/analysis/bayes", "GET", "Bayésien", "Prédictive beta-binomiale par boule.", "lecture", "from_date, to_date, era, weekday"),
+  apiEntry("/api/analysis/dependence", "GET", "Dépendance", "Lift des paires et nuage somme (X) × étendue (Y).", "lecture", "from_date, to_date, era, weekday"),
+  apiEntry("/api/analysis/numbers", "GET", "Numéros", "Sorties, retards et IC Wilson pour la grille 1–50.", "lecture", "from_date, to_date, era, weekday"),
+  apiEntry("/api/analysis/lab", "GET", "Laboratoire complet", "Rapport groupé du labo Analyse (plus long à calculer).", "lecture", "from_date, to_date, era, weekday"),
   apiEntry("/api/harmo/status", "GET", "Harmo · statut", "Dépendances Python (PyWavelets, ssqueezepy, librosa).", "lecture"),
   apiEntry("/api/harmo/spectrum", "GET", "Harmo · spectre", "Raies / Lomb-Scargle sur la série.", "lecture"),
   apiEntry("/api/harmo/welch", "GET", "Harmo · Welch", "Densité spectrale (Welch / multitaper).", "lecture"),
@@ -361,10 +361,10 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/brain/readings/{id}/notes", "POST", "Brain · note", "Ajouter une note à une lecture du carnet.", "assistants"),
   apiEntry("/api/brain/retrieve", "POST", "Brain · retrieve", "Recherche dans le carnet / la table épinglée.", "assistants"),
   apiEntry("/api/brain/analogs", "POST", "Brain · analogie", "Voisins (dont Jumeaux) pour une fiche.", "assistants"),
-  apiEntry("/api/brain/specialists", "GET · POST", "Spécialistes", "Réseaux par série : lister ou entraîner.", "assistants"),
+  apiEntry("/api/brain/specialists", "GET · POST", "Spécialistes", "Réseaux par série : lister ou entraîner.", "assistants", "era, weekday"),
   apiEntry("/api/brain/specialists/features", "GET", "Spécialistes · traits", "Catalogue des descripteurs utilisables.", "assistants"),
   apiEntry("/api/brain/specialists/{slug}", "GET", "Un spécialiste", "Fiche, scores 20/50/100, prévision t+1.", "assistants"),
-  apiEntry("/api/brain/specialists/{slug}/infer", "POST", "Spécialiste · inférer", "Calcule la prévision de série nommée.", "assistants"),
+  apiEntry("/api/brain/specialists/{slug}/infer", "POST", "Spécialiste · inférer", "Calcule la prévision de série nommée.", "assistants", "era, weekday"),
   apiEntry("/api/brain/specialists/{slug}", "DELETE", "Spécialiste · supprimer", "Retire un réseau enregistré.", "assistants"),
   apiEntry("/api/ia/status", "GET", "IA · statut", "Fournisseurs Gemini / OpenAI / local visibles.", "assistants"),
   apiEntry("/api/ia/local", "GET", "IA · modèles locaux", "Liste Ollama (et options locales).", "assistants"),

@@ -24,6 +24,7 @@ import { VolatilityPanel } from "@/components/analysis/volatility-panel"
 import { useRegisterCapture } from "@/components/capture"
 import { LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
 import { WindowBar } from "@/components/analysis/window-bar"
+import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { CurveName } from "@/components/chartisme/curve-thumb"
 import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import { Input } from "@/components/ui/input"
@@ -66,6 +67,8 @@ import { readTwinsSearch } from "@/lib/twins-url"
 import { ERA_LABELS } from "@/lib/copy"
 import { useLabTab } from "@/lib/use-lab-tab"
 import { useDraws } from "@/lib/use-draws"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
+import { filterDrawsByWeekday, weekdayApiValue, weekdayFilterDay } from "@/lib/weekday-scope"
 
 const TECH_TABS = [
   {
@@ -225,7 +228,8 @@ const ANALYSE_TAB_IDS = [...TECH_TABS, ...DRAW_TABS].map((item) => item.id) as T
 
 export function AnalysisLab() {
   const [era, setEra] = useState<"current" | "all">("current")
-  const { draws, source, loading } = useDraws(era)
+  const [weekday] = useWeekdayScope()
+  const { draws, source, loading } = useDraws(era, weekday)
   const [tab, setTab] = useLabTab(ANALYSE_TAB_IDS, "vue")
   const [variable, setVariable] = useState<VariableName>("sum")
   const [windowSize, setWindowSize] = useState(20)
@@ -279,8 +283,9 @@ export function AnalysisLab() {
       toDate: customTo || undefined,
       lastN: Number.isFinite(parsedN) && parsedN > 0 ? parsedN : undefined,
       warmup,
+      weekday: weekdayFilterDay(weekday),
     })
-  }, [archive, preset, customFrom, customTo, lastN, warmup])
+  }, [archive, preset, customFrom, customTo, lastN, warmup, weekday])
 
   const wanted = useMemo(() => parseQueryNumbers(query), [query])
   const work = useMemo(
@@ -319,6 +324,18 @@ export function AnalysisLab() {
     () => compareWindows(work, resolved.compare.work, variable, variableN),
     [work, resolved.compare.work, variable, variableN]
   )
+  const weekdayComparison = useMemo(
+    () =>
+      weekday === "synthese"
+        ? compareWindows(
+            filterDrawsByWeekday(work, "mardi"),
+            filterDrawsByWeekday(work, "vendredi"),
+            variable,
+            variableN
+          )
+        : null,
+    [weekday, work, variable, variableN]
+  )
 
   useRegisterCapture(() =>
     packAnalyse({
@@ -351,6 +368,8 @@ export function AnalysisLab() {
       const params = new URLSearchParams({ era, n: "400", seed: "0" })
       if (from) params.set("from_date", from)
       if (to) params.set("to_date", to)
+      const day = weekdayApiValue(weekday)
+      if (day) params.set("weekday", day)
       const response = await fetch(`/api/analysis/montecarlo?${params}`, { cache: "no-store" })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       setMc(await response.json())
@@ -413,6 +432,7 @@ export function AnalysisLab() {
         onCompare={setCompareOn}
       />
       </div>
+      {weekday === "synthese" ? <WeekdaySynthesisCard draws={work} /> : null}
 
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
         <p className="text-sm font-medium text-foreground">
@@ -569,6 +589,7 @@ export function AnalysisLab() {
           profile={profile}
           compareOn={compareOn}
           comparison={comparison}
+          weekdayComparison={weekdayComparison}
           tech={tech}
         />
       ) : null}

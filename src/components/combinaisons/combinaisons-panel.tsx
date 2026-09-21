@@ -90,6 +90,9 @@ import {
   type FrequencyItem,
 } from "@/lib/draws"
 import { useDraws } from "@/lib/use-draws"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
+import { weekdayFilterDay } from "@/lib/weekday-scope"
+import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { cn } from "@/lib/utils"
 
 const SESSION_KEY = "synchro.combinaisons.grids"
@@ -659,7 +662,8 @@ function SavedGridItem({
 }
 
 export function CombinaisonsPanel() {
-  const { draws, source, loading } = useDraws("all")
+  const [weekday] = useWeekdayScope()
+  const { draws, source, loading } = useDraws("all", weekday)
   const [preset, setPreset] = useState<WindowPreset>("last_100")
   const [customFrom, setCustomFrom] = useState("")
   const [customTo, setCustomTo] = useState("")
@@ -701,8 +705,9 @@ export function CombinaisonsPanel() {
       toDate: customTo || undefined,
       lastN: Number.isFinite(parsedN) && parsedN > 0 ? parsedN : undefined,
       warmup,
+      weekday: weekdayFilterDay(weekday),
     })
-  }, [archive, preset, customFrom, customTo, lastN, warmup])
+  }, [archive, preset, customFrom, customTo, lastN, warmup, weekday])
 
   const work = resolved.work
   const numberStats = useMemo(() => numberFrequencyTable(work), [work])
@@ -1086,6 +1091,7 @@ export function CombinaisonsPanel() {
         onWarmup={setWarmup}
         onCompare={setCompareOn}
       />
+      {weekday === "synthese" ? <WeekdaySynthesisCard draws={work} /> : null}
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatHelp

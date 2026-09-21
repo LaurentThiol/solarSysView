@@ -6,7 +6,8 @@ from calendar import monthrange
 from datetime import date
 from typing import Any
 
-from synchro.analysis.common import as_date, numbers_of, ordered_draws
+from synchro.analysis.common import as_date, filter_draws_by_weekday, numbers_of, ordered_draws
+from synchro.weekday import normalize_weekday_filter
 from synchro.analysis.inference import chi_square_uniform, number_frequencies
 from synchro.analysis.ta import atr, bollinger, sma
 from synchro.analysis.variables import series as extract_series
@@ -90,15 +91,18 @@ def resolve_window(
     to_date: str | date | None = None,
     last_n: int | None = None,
     warmup: int = DEFAULT_WARMUP,
+    weekday: str | None = None,
 ) -> dict[str, Any]:
     """Découpe l’archive en warmup + jeu de travail.
 
     Les agrégats (χ², Bayes, …) doivent lire `work` uniquement.
     Les indicateurs à mémoire (EMA, Ichimoku) se calculent sur `with_warmup`.
+    `weekday` (mardi/vendredi) filtre l’archive avant last_n / warmup.
     """
     if preset not in PRESETS:
         raise ValueError(f"preset inconnu: {preset}. Choisir parmi {PRESETS}.")
-    ordered = ordered_draws(draws)
+    day = normalize_weekday_filter(weekday)
+    ordered = ordered_draws(filter_draws_by_weekday(draws, day))
     if not ordered:
         return {
             "preset": preset,
@@ -109,6 +113,7 @@ def resolve_window(
             "warmup_from": None,
             "star_pools": [],
             "star_pool_break": False,
+            "weekday": day,
             "work": [],
             "warmup": [],
             "with_warmup": [],
@@ -153,6 +158,7 @@ def resolve_window(
             "warmup_from": None,
             "star_pools": [],
             "star_pool_break": False,
+            "weekday": day,
             "work": [],
             "warmup": [],
             "with_warmup": [],
@@ -181,6 +187,7 @@ def resolve_window(
         "from_date": as_date(work[0]["draw_date"]).isoformat(),
         "to_date": as_date(work[-1]["draw_date"]).isoformat(),
         "draw_count": len(work),
+        "weekday": day,
         "warmup_count": len(warmup_rows),
         "warmup_from": as_date(warmup_rows[0]["draw_date"]).isoformat() if warmup_rows else None,
         "star_pools": pools,

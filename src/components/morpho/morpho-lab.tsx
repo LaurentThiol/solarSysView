@@ -32,7 +32,10 @@ import {
   type StoredFiring,
 } from "@/lib/morpho/store"
 import { formatShortDate, type Draw } from "@/lib/draws"
+import { WeekdayScopeControl } from "@/components/weekday-scope-control"
+import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { useDraws } from "@/lib/use-draws"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
 
 type Anticipate = ReturnType<typeof anticipateLocal>
 
@@ -83,7 +86,8 @@ async function api<T>(path: string, init?: RequestInit): Promise<T | null> {
 
 export function MorphoLab() {
   const [era, setEra] = useState<"current" | "all">("current")
-  const { draws, source, loading } = useDraws(era)
+  const [weekday, setWeekday] = useWeekdayScope()
+  const { draws, source, loading } = useDraws(era, weekday)
   const chrono = useMemo(
     () => [...draws].sort((a, b) => a.date.localeCompare(b.date)),
     [draws]
@@ -365,10 +369,12 @@ export function MorphoLab() {
             </SelectContent>
           </Select>
         </LabelHelp>
+        <WeekdayScopeControl value={weekday} onChange={setWeekday} />
         <p className="pb-1 text-sm text-muted-foreground">
           {chrono.length} tirages · source {source === "neon" ? "Neon" : "JSON"}
         </p>
       </div>
+      {weekday === "synthese" ? <WeekdaySynthesisCard draws={chrono} /> : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <Card>

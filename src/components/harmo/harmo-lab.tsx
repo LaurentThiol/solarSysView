@@ -35,6 +35,9 @@ import {
   type VariableName,
 } from "@/lib/analysis"
 import { DEFAULT_WARMUP, resolveWindow, type WindowPreset } from "@/lib/analysis-window"
+import { useWeekdayScope } from "@/lib/use-weekday-scope"
+import { weekdayApiValue, weekdayFilterDay } from "@/lib/weekday-scope"
+import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { parseQueryNumbers, drawMatchesQuery } from "@/lib/draws"
 import { packHarmo } from "@/lib/capture/pack"
 import {
@@ -109,7 +112,8 @@ const HARMO_TAB_IDS = TABS.map((item) => item.id) as TabId[]
 
 export function HarmoLab() {
   const [era, setEra] = useState<"current" | "all">("current")
-  const { draws, source, loading: drawsLoading } = useDraws(era)
+  const [weekday] = useWeekdayScope()
+  const { draws, source, loading: drawsLoading } = useDraws(era, weekday)
   const [tab, setTab] = useLabTab(HARMO_TAB_IDS, "melange")
   const [variable, setVariable] = useState<VariableName>("sum")
   const [ball, setBall] = useState(7)
@@ -153,8 +157,9 @@ export function HarmoLab() {
       toDate: customTo || undefined,
       lastN: Number.isFinite(parsedN) && parsedN > 0 ? parsedN : undefined,
       warmup,
+      weekday: weekdayFilterDay(weekday),
     })
-  }, [archive, preset, customFrom, customTo, lastN, warmup])
+  }, [archive, preset, customFrom, customTo, lastN, warmup, weekday])
   const wanted = useMemo(() => parseQueryNumbers(query), [query])
   const work = useMemo(
     () => resolved.work.filter((draw) => drawMatchesQuery(draw, wanted)),
@@ -174,8 +179,9 @@ export function HarmoLab() {
       last_n: Number.isFinite(parsedN) && parsedN > 0 ? parsedN : undefined,
       warmup,
       window: fftWindow,
+      weekday: weekdayApiValue(weekday),
     })
-  }, [variable, variableN, era, preset, resolved.fromDate, resolved.toDate, lastN, warmup, fftWindow])
+  }, [variable, variableN, era, preset, resolved.fromDate, resolved.toDate, lastN, warmup, fftWindow, weekday])
 
   useEffect(() => {
     let cancelled = false
@@ -347,6 +353,7 @@ export function HarmoLab() {
         onWarmup={setWarmup}
         onCompare={() => undefined}
       />
+      {weekday === "synthese" ? <WeekdaySynthesisCard draws={work} /> : null}
 
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
         <p className="text-sm font-medium text-foreground">
