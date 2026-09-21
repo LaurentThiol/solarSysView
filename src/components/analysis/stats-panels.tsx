@@ -3,14 +3,14 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import {
+  Area,
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Label,
-  Legend,
   ReferenceLine,
   Scatter,
-  ScatterChart,
   XAxis,
   YAxis,
   ZAxis,
@@ -36,10 +36,12 @@ import { type Draw, formatDrawDate, formatShortDate } from "@/lib/draws"
 import {
   NUMBER_SPREAD_AXIS,
   NUMBER_SUM_AXIS,
-  cellsByWeekday,
   domainContains,
+  recencyFill,
   sumSpreadCloud,
   sumSpreadDomains,
+  sumSpreadEnvelope,
+  weekdayHue,
   type SumSpreadCell,
   type SumSpreadScale,
 } from "@/lib/sum-spread"
@@ -247,8 +249,8 @@ function ScaleChip({
 }
 
 function SumSpreadTooltip({ payload }: { payload?: ReadonlyArray<{ payload?: SumSpreadCell }> }) {
-  const row = payload?.[0]?.payload
-  if (!row) return null
+  const row = payload?.find((item) => item.payload?.dates)?.payload
+  if (!row?.dates) return null
   const shown = row.dates.slice(-4)
   const extra = row.dates.length - shown.length
   return (
@@ -259,6 +261,7 @@ function SumSpreadTooltip({ payload }: { payload?: ReadonlyArray<{ payload?: Sum
       <div className="text-muted-foreground">
         {row.count} tirage{row.count > 1 ? "s" : ""}
         {row.weekday ? ` · ${row.weekday}` : ""}
+        {row.recency < 0.25 ? " · ancien" : row.recency > 0.75 ? " · récent" : ""}
       </div>
       <ul className="mt-1 flex flex-col gap-0.5">
         {shown.map((date) => (
@@ -274,11 +277,42 @@ function SumSpreadTooltip({ payload }: { payload?: ReadonlyArray<{ payload?: Sum
   )
 }
 
+function SumSpreadDot({
+  cx,
+  cy,
+  size,
+  payload,
+}: {
+  cx?: number
+  cy?: number
+  size?: number
+  payload?: SumSpreadCell
+}) {
+  if (cx == null || cy == null || !payload) return null
+  const area = Number(size)
+  const r = Number.isFinite(area) && area > 0 ? Math.sqrt(area / Math.PI) : 4
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={r}
+      fill={recencyFill(payload.recency, payload.weekday)}
+      stroke={weekdayHue(payload.weekday)}
+      strokeWidth={1}
+      strokeOpacity={0.85}
+    />
+  )
+}
+
 function SumSpreadCloudCard({ draws }: { draws: Draw[] }) {
   const [scale, setScale] = useState<SumSpreadScale>("universe")
   const cloud = useMemo(() => sumSpreadCloud(draws), [draws])
   const domains = useMemo(() => sumSpreadDomains(cloud.cells, scale), [cloud.cells, scale])
-  const series = useMemo(() => cellsByWeekday(cloud.cells), [cloud.cells])
+  const envelope = useMemo(() => sumSpreadEnvelope(domains.x), [domains.x])
+  const painted = useMemo(
+    () => cloud.cells.slice().sort((a, b) => a.recency - b.recency),
+    [cloud.cells]
+  )
   const showMean = domainContains(domains.x, NUMBER_SUM_AXIS.mean)
   return (
     <Card>
@@ -287,15 +321,19 @@ function SumSpreadCloudCard({ draws }: { draws: Draw[] }) {
           <TitleHelp
             help={{
               title: "Nuage somme × étendue",
-              body: "Abscisse (X) : somme des 5 numéros, 15 (1+2+3+4+5) à 240 (46+…+50), moyenne théorique 128. Ordonnée (Y) : étendue n5 − n1, 4 à 49. Un même couple (somme, étendue) empile les tirages : la taille du point est le compte. Mardi et vendredi sont séparés. La ligne verticale est la moyenne théorique de la somme. Lecture d’archive, pas un pronostic.",
+              body: "Abscisse (X) : somme des 5 numéros, 15 (1+2+3+4+5) à 240 (46+…+50), moyenne théorique 128. Ordonnée (Y) : étendue n5 − n1, 4 à 49. À somme S, l’étendue max vaut min(49, S−11, 244−S) : le trapèze grisé est cette enveloppe. La teinte va du délavé (ancien) au saturé (récent) ; le trait reste mardi / vendredi. Un même couple empile les tirages (taille = compte). Lecture d’archive, pas un pronostic.",
               items: [
                 {
                   label: "Univers",
-                  text: "Cadre fixe 15–240 × 4–49 : la fenêtre se place dans l’espace possible.",
+                  text: "Cadre fixe 15–240 × 4–49 : la fenêtre et l’enveloppe se placent dans l’espace possible.",
                 },
                 {
                   label: "Fenêtre",
                   text: "Zoom sur les valeurs observées, toujours borné par ces extrema théoriques.",
+                },
+                {
+                  label: "Ancienneté",
+                  text: "Couleur mixée vers muted pour les cellules dont le dernier tirage est tôt dans la fenêtre. Le plus récent a un anneau.",
                 },
               ],
             }}
@@ -306,7 +344,8 @@ function SumSpreadCloudCard({ draws }: { draws: Draw[] }) {
         <p className="text-sm text-muted-foreground">
           Abscisse : somme des 5 numéros ({NUMBER_SUM_AXIS.min}–{NUMBER_SUM_AXIS.max}, moyenne{" "}
           {NUMBER_SUM_AXIS.mean}). Ordonnée : étendue n5 − n1 ({NUMBER_SPREAD_AXIS.min}–
-          {NUMBER_SPREAD_AXIS.max}).
+          {NUMBER_SPREAD_AXIS.max}). Enveloppe : étendue ≤ min(49, S−11, 244−S). Teinte : ancien →
+          récent.
         </p>
         <div className="flex flex-wrap gap-1">
           <ScaleChip
@@ -328,14 +367,12 @@ function SumSpreadCloudCard({ draws }: { draws: Draw[] }) {
           <>
             <ChartContainer
               config={{
-                mardi: { label: "Mardi", color: "var(--chart-2)" },
-                vendredi: { label: "Vendredi", color: "var(--chart-4)" },
-                other: { label: "Autre", color: "var(--chart-3)" },
+                envelope: { label: "Enveloppe", color: "var(--chart-5)" },
                 last: { label: "Dernier", color: "var(--chart-1)" },
               }}
               className="h-[280px] w-full"
             >
-              <ScatterChart margin={{ top: 8, right: 12, bottom: 28, left: 4 }}>
+              <ComposedChart margin={{ top: 8, right: 12, bottom: 28, left: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   type="number"
@@ -361,6 +398,21 @@ function SumSpreadCloudCard({ draws }: { draws: Draw[] }) {
                   <Label value="Étendue" angle={-90} position="insideLeft" />
                 </YAxis>
                 <ZAxis type="number" dataKey="count" range={[36, 160]} />
+                <Area
+                  name="Enveloppe"
+                  data={envelope}
+                  dataKey="spreadMax"
+                  type="linear"
+                  baseValue={NUMBER_SPREAD_AXIS.min}
+                  stroke="var(--color-envelope)"
+                  strokeOpacity={0.55}
+                  fill="var(--color-envelope)"
+                  fillOpacity={0.12}
+                  dot={false}
+                  activeDot={false}
+                  isAnimationActive={false}
+                  legendType="none"
+                />
                 {showMean ? (
                   <ReferenceLine
                     x={NUMBER_SUM_AXIS.mean}
@@ -375,22 +427,19 @@ function SumSpreadCloudCard({ draws }: { draws: Draw[] }) {
                     />
                   )}
                 />
-                <Legend verticalAlign="top" height={22} />
-                {series.mardi.length ? (
-                  <Scatter name="Mardi" data={series.mardi} fill="var(--color-mardi)" />
-                ) : null}
-                {series.vendredi.length ? (
-                  <Scatter name="Vendredi" data={series.vendredi} fill="var(--color-vendredi)" />
-                ) : null}
-                {series.other.length ? (
-                  <Scatter name="Autre" data={series.other} fill="var(--color-other)" />
-                ) : null}
+                <Scatter
+                  name="Tirages"
+                  data={painted}
+                  isAnimationActive={false}
+                  shape={(props) => <SumSpreadDot {...props} />}
+                />
                 {cloud.last ? (
                   <Scatter
                     name="Dernier"
                     data={[cloud.last]}
                     fill="none"
                     legendType="none"
+                    isAnimationActive={false}
                     shape={(props) => {
                       const cx = Number(props.cx)
                       const cy = Number(props.cy)
@@ -408,8 +457,33 @@ function SumSpreadCloudCard({ draws }: { draws: Draw[] }) {
                     }}
                   />
                 ) : null}
-              </ScatterChart>
+              </ComposedChart>
             </ChartContainer>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className="h-2 w-16 rounded-full"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, color-mix(in oklab, var(--chart-2) 16%, var(--muted)), var(--chart-2))",
+                  }}
+                />
+                Ancien → récent
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="size-2 rounded-full" style={{ background: "var(--chart-2)" }} />
+                Mardi
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="size-2 rounded-full" style={{ background: "var(--chart-4)" }} />
+                Vendredi
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="h-px w-4" style={{ background: "var(--chart-5)" }} />
+                Enveloppe
+              </span>
+            </div>
             <p className="mt-2 text-xs tabular-nums text-muted-foreground">
               {cloud.drawCount} tirage{cloud.drawCount > 1 ? "s" : ""} · {cloud.cells.length} cellule
               {cloud.cells.length > 1 ? "s" : ""}
@@ -421,9 +495,9 @@ function SumSpreadCloudCard({ draws }: { draws: Draw[] }) {
                 : ""}
             </p>
             <Disclaimer>
-              Graduations numériques : X = somme, Y = étendue — pas l’ordre des tirages. L’univers
-              15–240 × 4–49 est l’espace combinatoire ; cadrer la fenêtre zoom sans sortir de ces
-              bornes. H0 = indépendance uniforme.
+              Graduations numériques : X = somme, Y = étendue. Le trapèze est l’enveloppe
+              combinatoire (étendue ≤ min(49, S−11, 244−S)). La teinte suit l’ancienneté dans la
+              fenêtre ; le contour reste mardi / vendredi. H0 = indépendance uniforme.
             </Disclaimer>
           </>
         )}

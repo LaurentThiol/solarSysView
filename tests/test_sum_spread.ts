@@ -9,8 +9,12 @@ import {
   domainContains,
   maxReachableSpread,
   padDomain,
+  recencyFill,
+  recencyUnit,
   sumSpreadCloud,
   sumSpreadDomains,
+  sumSpreadEnvelope,
+  sumSpreadEnvelopeCorners,
 } from "../src/lib/sum-spread.ts"
 
 const panelSrc = readFileSync(
@@ -19,8 +23,8 @@ const panelSrc = readFileSync(
 )
 
 function scatterCard(src: string) {
-  const start = src.indexOf("function SumSpreadCloudCard")
-  assert.ok(start >= 0, "SumSpreadCloudCard")
+  const start = src.indexOf("function SumSpreadDot")
+  assert.ok(start >= 0, "SumSpreadDot")
   return src.slice(start)
 }
 
@@ -77,6 +81,42 @@ test("envelope keeps extreme sums on spread 4 and frees the middle", () => {
   assert.ok(maxReachableSpread(60) >= 49)
   assert.ok(maxReachableSpread(16) >= 4)
   assert.ok(maxReachableSpread(16) < 49)
+  assert.deepEqual(sumSpreadEnvelopeCorners(), [15, 60, 195, 240])
+  assert.deepEqual(
+    sumSpreadEnvelope(),
+    [
+      { sum: 15, spreadMax: 4 },
+      { sum: 60, spreadMax: 49 },
+      { sum: 195, spreadMax: 49 },
+      { sum: 240, spreadMax: 4 },
+    ]
+  )
+  const clipped = sumSpreadEnvelope([80, 160])
+  assert.deepEqual(
+    clipped.map((row) => row.sum),
+    [80, 160]
+  )
+  assert.ok(clipped.every((row) => row.spreadMax === 49))
+})
+
+test("recency is 0 on the oldest cell and 1 on the newest", () => {
+  assert.equal(recencyUnit("2026-08-21", "2026-08-21", "2026-08-28"), 0)
+  assert.equal(recencyUnit("2026-08-28", "2026-08-21", "2026-08-28"), 1)
+  const mid = recencyUnit("2026-08-25", "2026-08-21", "2026-08-28")
+  assert.ok(mid > 0 && mid < 1)
+  const cloud = sumSpreadCloud([
+    { date: "2026-08-21", weekday: "mardi", numbers: [1, 2, 3, 4, 5] },
+    { date: "2026-08-25", weekday: "vendredi", numbers: [1, 2, 3, 4, 50] },
+    { date: "2026-08-28", weekday: "mardi", numbers: [10, 11, 12, 13, 14] },
+  ])
+  const oldest = cloud.cells.find((cell) => cell.lastDate === "2026-08-21")
+  const newest = cloud.cells.find((cell) => cell.lastDate === "2026-08-28")
+  assert.equal(oldest?.recency, 0)
+  assert.equal(newest?.recency, 1)
+  assert.equal(cloud.fromDate, "2026-08-21")
+  assert.equal(cloud.toDate, "2026-08-28")
+  assert.match(recencyFill(0, "mardi"), /color-mix\(in oklab, var\(--chart-2\) 16%, var\(--muted\)\)/)
+  assert.match(recencyFill(1, "vendredi"), /color-mix\(in oklab, var\(--chart-4\) 100%, var\(--muted\)\)/)
 })
 
 test("universe domains are the theoretical axes; window pads inside them", () => {
@@ -109,6 +149,11 @@ test("scatter chart pins numeric X=sum and Y=spread", () => {
   assert.match(y, /name="Étendue"/)
   assert.match(y, /allowDecimals=\{false\}/)
   assert.match(card, /sumSpreadDomains/)
+  assert.match(card, /sumSpreadEnvelope/)
+  assert.match(card, /<ComposedChart/)
+  assert.match(card, /dataKey="spreadMax"/)
+  assert.match(card, /recencyFill/)
+  assert.match(card, /Ancien → récent/)
   assert.match(card, /Abscisse/)
   assert.match(card, /Ordonnée/)
   assert.doesNotMatch(card, /<XAxis dataKey="sum" name="somme"/)
