@@ -165,6 +165,58 @@ function emptyRule(): ChartismeRule {
   return normalizeRule({ name: "Nouvelle règle" })
 }
 
+function SelectedRulePreview({
+  hit,
+  rules,
+  curve,
+  alongsideFor,
+  onDraft,
+}: {
+  hit: FigureHit
+  rules: ChartismeRule[]
+  curve: Curve | null
+  alongsideFor: (rules: ChartismeRule[]) => AlongsideFigure[] | undefined
+  onDraft: () => void
+}) {
+  const matches = useMemo(() => {
+    const active = rules.filter((rule) => rule.active)
+    if (!active.length) return []
+    return evaluateRules(active, stateFromHit(hit, { curve, alongside: alongsideFor(active) }))
+  }, [alongsideFor, curve, hit, rules])
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">
+          Figure affichée : <strong>{hit.label}</strong>
+        </span>
+        <Button size="xs" variant="outline" onClick={onDraft}>
+          en faire un brouillon de règle
+        </Button>
+      </div>
+      {matches.length ? (
+        <ul className="space-y-1">
+          {matches.map((firing) => (
+            <li key={firing.rule_id} className="text-xs">
+              <Badge variant="secondary" className="mr-1.5">
+                correspond
+              </Badge>
+              {firing.name}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Aucune règle active ne correspond à cette figure.
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Cette liste est une lecture. Le journal se remplit avec « Évaluer sur la courbe affichée ».
+      </p>
+    </div>
+  )
+}
+
 export function RulesPanel({
   hit,
   hits,
@@ -268,14 +320,13 @@ export function RulesPanel({
         </p>
 
         {hit ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3">
-            <span className="text-xs text-muted-foreground">
-              Figure affichée : <strong>{hit.label}</strong>
-            </span>
-            <Button size="xs" variant="outline" onClick={() => setDraft(draftRuleFromHit(hit))}>
-              en faire un brouillon de règle
-            </Button>
-          </div>
+          <SelectedRulePreview
+            hit={hit}
+            rules={rules}
+            curve={curve}
+            alongsideFor={alongsideFor}
+            onDraft={() => setDraft(draftRuleFromHit(hit))}
+          />
         ) : null}
 
         <div className="space-y-3 rounded-lg border border-border p-3">

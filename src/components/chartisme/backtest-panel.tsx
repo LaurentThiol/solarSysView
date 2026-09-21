@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { splitByEnsemble } from "@/lib/chartisme/base-rate"
 import { labelOf } from "@/lib/chartisme/catalog"
 import type { Curve } from "@/lib/chartisme/curves"
 import { outcomeStats, type ScanHit } from "@/lib/chartisme/scan"
@@ -123,9 +124,19 @@ export function BacktestPanel({
   // hypothèse, pas une neutralité, et elle ne se choisit pas par omission.
   const [bounded, setBounded] = useState(true)
 
-  // Sans backend, on peut déjà répondre à la première question sur la courbe
-  // affichée : le comptage des objectifs atteints ne demande aucun modèle.
-  const local = useMemo(() => outcomeStats(hits), [hits])
+  // Deux lectures de la même fenêtre. Les formes vues sont le balayage
+  // géométrique. Celles que le seuil d'ensemble garderait sont celles que le
+  // passage Python rebalaye : un seuil par échelle, le même pour toutes les
+  // figures. Le badge de la fiche juge chaque motif à part.
+  const ensemble = useMemo(
+    () =>
+      splitByEnsemble(hits, {
+        minConfidence: bar?.minConfidence ?? 0.6,
+        byScale: bar?.byScale ?? null,
+      }),
+    [hits, bar]
+  )
+  const local = useMemo(() => outcomeStats(ensemble.kept), [ensemble])
 
   // Le tracé lu en rareté visée peut n'avoir gardé aucune échelle. Mesurer
   // quand même reviendrait à retomber sur les échelles et le seuil par défaut,
@@ -293,10 +304,18 @@ export function BacktestPanel({
           </p>
         ) : null}
 
+        <p className="text-xs text-muted-foreground">
+          Formes vues : {ensemble.seen.length}. Retenues par le seuil d’ensemble :{" "}
+          {ensemble.kept.length}. Le passage Python rebalaye à ce seuil-là, un par
+          échelle et le même pour toutes les figures. Le badge « rare » de la fiche
+          reste le taux propre à chaque motif.
+        </p>
+
         {localRows.length ? (
           <div className="space-y-2">
             <p className="text-xs font-medium">
-              Comptage local · courbe affichée ({hits.length} figures)
+              Comptage local · seuil d’ensemble ({ensemble.kept.length} retenues sur{" "}
+              {ensemble.seen.length} vues)
             </p>
             <Table>
               <TableHeader>

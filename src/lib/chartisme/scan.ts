@@ -34,6 +34,40 @@ export const MIN_WINDOW = 16
  */
 export const GEOMETRIC_FLOOR = 0
 
+/** Lectures affichées d'un coup. Au-delà, la liste le dit au lieu de couper en silence. */
+export const HIT_LIST_CAP = 40
+
+/** « 40 premières sur N », ou rien quand la liste tient entière. */
+export function hitListCaption(total: number, cap = HIT_LIST_CAP): string | null {
+  if (total <= cap) return null
+  return `${Math.min(cap, total)} premières sur ${total}`
+}
+
+/**
+ * Indices des lectures montrées : les `cap` premières, plus la sélection
+ * si les flèches l'ont emmenée plus loin.
+ */
+export function visibleHitIndices(total: number, selected: number, cap = HIT_LIST_CAP): number[] {
+  const count = Math.min(cap, Math.max(0, total))
+  const indices = Array.from({ length: count }, (_, index) => index)
+  if (selected >= cap && selected < total) indices.push(selected)
+  return indices
+}
+
+/** Statut d'objectif, avec le nombre de tirages quand la mesure en a un. */
+export function outcomePhrase(
+  outcome?: { status?: string | null; bars?: number | null } | null
+): string {
+  const status = outcome?.status ?? "no_breakout"
+  const bars = outcome?.bars
+  const count =
+    bars == null ? "" : ` en ${bars} tirage${bars > 1 ? "s" : ""}`
+  if (status === "reached") return `objectif atteint${count}`
+  if (status === "invalidated") return `invalidée${count}`
+  if (status === "open") return bars == null ? "en cours" : `en cours depuis ${bars} tirage${bars > 1 ? "s" : ""}`
+  return "pas de cassure"
+}
+
 /** Figure d'un balayage : indices dans le repère de la courbe entière. */
 export type ScanHit = FigureHit & {
   curve_id?: string | null

@@ -306,6 +306,12 @@ export function CurveMap({
                 ? " Mesure faite sur d’autres réglages — la fenêtre, l’échelle ou la rareté ont changé depuis."
                 : ""}
             </p>
+            {!stale && shown.some((row) => row.id === current) ? (
+              <p className="text-xs text-muted-foreground">
+                La ligne surlignée est la courbe affichée. Son seuil d’ensemble, à l’échelle{" "}
+                {measuredAt}, est celui annoncé sous le tracé.
+              </p>
+            ) : null}
             <div className="max-h-96 overflow-y-auto rounded-lg border border-border">
               <table className="w-full text-left text-xs">
                 <thead className="sticky top-0 bg-muted/80 backdrop-blur">

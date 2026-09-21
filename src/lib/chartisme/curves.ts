@@ -110,6 +110,36 @@ export function curveLabel(variable: string, n: number | null) {
   return `${base} — ${variable.startsWith("star_") ? "étoile" : "boule"} ${n}`
 }
 
+export type CurveFamily = {
+  id: string
+  label: string
+  specs: CurveSpec[]
+}
+
+const FREE_VARIABLES = ["sum", "spread", "parity", "high_low", "consecutive", "centroid"] as const
+const RANK_VARIABLES = ["n1", "n2", "n3", "n4", "n5"] as const
+const GAP_VARIABLES = ["g1", "g2", "g3", "g4"] as const
+const STAR_ORDER_VARIABLES = ["star_sum", "e1", "e2"] as const
+
+/**
+ * Familles du sélecteur. Les identifiants restent ceux qu'une règle vise ;
+ * seul le regroupement change, pour qu'une liste de 142 courbes se lise.
+ */
+export function curveFamilies(): CurveFamily[] {
+  const specs = curveSpecs()
+  const take = (names: readonly string[]) => specs.filter((spec) => names.includes(spec.variable))
+  return [
+    { id: "free", label: "Variables libres", specs: take(FREE_VARIABLES) },
+    { id: "ranks", label: "Rangs n1–n5", specs: take(RANK_VARIABLES) },
+    { id: "gaps", label: "Écarts g1–g4", specs: take(GAP_VARIABLES) },
+    { id: "stars", label: "Étoiles", specs: take(STAR_ORDER_VARIABLES) },
+    { id: "delay", label: "Retard d'une boule", specs: take(BALL_VARIABLES.slice(0, 1)) },
+    { id: "hit", label: "Présence d'une boule", specs: take(BALL_VARIABLES.slice(1)) },
+    { id: "star_delay", label: "Retard d'une étoile", specs: take(STAR_VARIABLES.slice(0, 1)) },
+    { id: "star_hit", label: "Présence d'une étoile", specs: take(STAR_VARIABLES.slice(1)) },
+  ]
+}
+
 export function curveSpecs(
   options: { plain?: boolean; balls?: boolean; stars?: boolean } = {}
 ): CurveSpec[] {

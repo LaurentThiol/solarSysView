@@ -319,6 +319,113 @@ export function hitIsRare(
   return hit.confidence >= row.threshold
 }
 
+export type FigureVerdict = {
+  mode: "rarity" | "confidence"
+  confidence: number
+  /** Seuil appliqué à cette figure. `null` : hors d'atteinte. */
+  threshold: number | null
+  /** Seuil qu'il aurait fallu, même hors d'atteinte. */
+  required: number | null
+  /** Part de bruit que ce seuil laisse passer, pour cette figure. */
+  achieved: number | null
+  /** Absente de l'échantillon : le hasard ne l'a pas produite à cette échelle. */
+  unseen: boolean
+}
+
+/**
+ * Le jugement de la fiche : un motif, une échelle, son propre taux.
+ *
+ * En confiance, le seuil est le nombre posé, le même pour toutes les figures.
+ * En rareté, il vient de l'échantillon de cette figure-là. Une figure absente
+ * de l'échantillon est distinctive : le hasard ne l'a pas produite.
+ */
+export function figureVerdict(
+  hit: { figure: string; scale: number; confidence: number },
+  bars: Readonly<Record<number, Readonly<Record<string, BaseRateThreshold>>>> | null,
+  fallback: number
+): FigureVerdict {
+  if (!bars) {
+    return {
+      mode: "confidence",
+      confidence: hit.confidence,
+      threshold: fallback,
+      required: fallback,
+      achieved: null,
+      unseen: false,
+    }
+  }
+  const row = bars[hit.scale]?.[hit.figure]
+  if (row == null) {
+    return {
+      mode: "rarity",
+      confidence: hit.confidence,
+      threshold: 0,
+      required: 0,
+      achieved: 0,
+      unseen: true,
+    }
+  }
+  return {
+    mode: "rarity",
+    confidence: hit.confidence,
+    threshold: row.threshold,
+    required: row.required,
+    achieved: row.achieved,
+    unseen: false,
+  }
+}
+
+/** Phrase de la fiche : le seuil de ce motif, et ce que le bruit en fait. */
+export function verdictSentence(verdict: FigureVerdict): string {
+  const confidence = `Confiance ${verdict.confidence.toFixed(2)}`
+  if (verdict.mode === "confidence") {
+    const bar = verdict.threshold ?? 0
+    return `${confidence}. Seuil posé ${bar.toFixed(2)}, le même pour toutes les figures.`
+  }
+  if (verdict.unseen) {
+    return `${confidence}. Absente des remaniements à cette échelle : toute occurrence est distinctive.`
+  }
+  if (verdict.threshold == null) {
+    const required = verdict.required ?? 1
+    return `${confidence}. Hors d'atteinte pour ce motif : il faudrait ${required.toFixed(2)}.`
+  }
+  const passed =
+    verdict.achieved == null
+      ? ""
+      : ` Le bruit en laisse passer ${Math.round(verdict.achieved * 100)} %.`
+  return `${confidence}. Seuil de ce motif ${verdict.threshold.toFixed(2)}.${passed}`
+}
+
+/**
+ * Le seuil d'ensemble, un par échelle, le même pour toutes les figures.
+ *
+ * C'est celui du rétro-test. Le badge « rare » de la fiche juge autrement :
+ * chaque motif a le sien. Une échelle dont le seuil vaut `null` ne garde
+ * aucune lecture — la rareté demandée y est hors d'atteinte.
+ */
+export function passesEnsembleBar(
+  hit: { scale: number; confidence: number },
+  bar: { minConfidence: number; byScale?: Readonly<Record<number, number | null>> | null }
+): boolean {
+  const byScale = bar.byScale
+  if (byScale && hit.scale in byScale) {
+    const threshold = byScale[hit.scale]
+    if (threshold == null) return false
+    return hit.confidence >= threshold
+  }
+  return hit.confidence >= bar.minConfidence
+}
+
+export function splitByEnsemble<T extends { scale: number; confidence: number }>(
+  hits: readonly T[],
+  bar: { minConfidence: number; byScale?: Readonly<Record<number, number | null>> | null }
+): { seen: T[]; kept: T[] } {
+  return {
+    seen: [...hits],
+    kept: hits.filter((hit) => passesEnsembleBar(hit, bar)),
+  }
+}
+
 function pct(value: number) {
   return `${Math.round(value * 100)} %`
 }

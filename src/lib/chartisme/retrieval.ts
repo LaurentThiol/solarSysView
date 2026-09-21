@@ -1,3 +1,4 @@
+import { windowStarts } from "./scan"
 import { normalizeWindow, resampleValues } from "./svgpath"
 
 /**
@@ -98,6 +99,51 @@ export function buildIndex(windows: IndexEntry[], length = DEFAULT_LENGTH): Prof
     index.push({ ...window, profile: shape })
   }
   return index
+}
+
+export type CurveNeighbour = {
+  from_index: number
+  to_index: number
+  distance: number
+  similarity: number
+}
+
+/**
+ * Plus proches fenêtres de cette courbe, la fenêtre lue exclue.
+ *
+ * La comparaison est la forme, pas le niveau : chaque tranche est ramenée
+ * au profil DTW. Une tranche qui recouvre la fenêtre lue est la fenêtre
+ * elle-même, ou un décalage qui la contient encore — elle ne compte pas
+ * comme un voisin.
+ */
+export function nearestOnCurve(
+  values: number[],
+  fromIndex: number,
+  toIndex: number,
+  options: { top?: number; strideRatio?: number } = {}
+): CurveNeighbour[] {
+  const { top = 3, strideRatio = 0.25 } = options
+  const length = toIndex - fromIndex + 1
+  if (length < 2 || fromIndex < 0 || toIndex >= values.length) return []
+  const stride = Math.max(1, Math.trunc(length * strideRatio))
+  const windows: IndexEntry[] = []
+  for (const start of windowStarts(values.length, length, stride)) {
+    const stop = start + length - 1
+    const overlapLo = Math.max(start, fromIndex)
+    const overlapHi = Math.min(stop, toIndex)
+    if (overlapHi >= overlapLo) continue
+    windows.push({
+      values: values.slice(start, start + length),
+      from_index: start,
+      to_index: stop,
+    })
+  }
+  return search(values.slice(fromIndex, toIndex + 1), buildIndex(windows), { top }).map((match) => ({
+    from_index: Number(match.from_index),
+    to_index: Number(match.to_index),
+    distance: match.distance,
+    similarity: match.similarity,
+  }))
 }
 
 /** Fenêtres les plus proches du croquis, par DTW. */

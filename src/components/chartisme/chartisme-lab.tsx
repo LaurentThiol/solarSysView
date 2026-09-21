@@ -20,7 +20,9 @@ import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
 } from "@/components/ui/select"
 import {
@@ -28,19 +30,34 @@ import {
   baseRateAbove,
   baseRateNote,
   figureThresholds,
+  figureVerdict,
   hitIsRare,
   rarityNote,
   sampleBaseRate,
   thresholdForBaseRate,
+  verdictSentence,
   type BaseRateThreshold,
 } from "@/lib/chartisme/base-rate"
-import { buildCurve, curveLabel, curveSpecs, parseCurveId, type Curve } from "@/lib/chartisme/curves"
+import {
+  buildCurve,
+  curveFamilies,
+  curveId as specId,
+  curveLabel,
+  curveSpecs,
+  parseCurveId,
+  type Curve,
+} from "@/lib/chartisme/curves"
 import { catalog, isChannelFigure, labelOf, slopeBiasLabel } from "@/lib/chartisme/catalog"
 import { rankKey } from "@/lib/chartisme/figures"
+import { interpretDetectResponse, opinionSentence, type DetectModels } from "@/lib/chartisme/opinions"
+import { nearestOnCurve } from "@/lib/chartisme/retrieval"
 import {
   GEOMETRIC_FLOOR,
   collapseZones,
+  hitListCaption,
+  outcomePhrase,
   scanCurve,
+  visibleHitIndices,
   type ScanHit,
 } from "@/lib/chartisme/scan"
 import { cycleHitIndex, hitIndicesForLabel } from "@/lib/chartisme/banner"
@@ -340,18 +357,26 @@ export function ChartismeLab() {
     : barMode === "rarity"
       ? rarityNote(thresholds, targetRate)
       : baseRateNote(baseRates, minConfidence)
+  // Le paragraphe sous le tracé reste le seuil d'ensemble. Le jugement
+  // figure par figure vit sur la fiche de la lecture sélectionnée.
+  const ensembleInterval =
+    barMode === "rarity"
+      ? baseRates
+          .filter((rate) => rate.trials > 0)
+          .map(
+            (rate) =>
+              `échelle ${rate.length} : ${Math.round(rate.interval[0] * 100)} % – ${Math.round(
+                rate.interval[1] * 100
+              )} %`
+          )
+          .join(" · ")
+      : ""
   const measured =
     !curve || fitNote
       ? null
       : [
           measuredCore,
-          annotatedHits.length
-            ? `Lecture géométrique d’abord : ${annotatedHits.length} forme${
-                annotatedHits.length > 1 ? "s" : ""
-              } vue${annotatedHits.length > 1 ? "s" : ""}, dont ${rareCount} distinctive${
-                rareCount > 1 ? "s" : ""
-              } à cette rareté, figure par figure — un double creux que le hasard produit à peine reste rare même si les triangles, plus banals, fixeraient un seuil plus haut.`
-            : null,
+          ensembleInterval ? `Intervalle de Wilson du taux d'ensemble : ${ensembleInterval}.` : null,
         ]
           .filter(Boolean)
           .join(" ") || null
@@ -399,6 +424,75 @@ export function ChartismeLab() {
   }
 
   const hit = hits[selected] ?? null
+
+  const neighbours = useMemo(() => {
+    if (!curve || !hit) return []
+    return nearestOnCurve(curve.values, hit.from_index, hit.to_index, { top: 3 })
+  }, [curve, hit])
+
+  const verdict = hit ? figureVerdict(hit, figureBars, minConfidence) : null
+
+  const [modelRead, setModelRead] = useState<
+    | { status: "loading" | "short" }
+    | { status: "absent" | "ready"; models: DetectModels }
+    | null
+  >(null)
+
+  const modelKey = hit && curve ? `${curve.id}|${hit.scale}|${hit.from_index}|${hit.to_index}|${hit.figure}` : ""
+
+  useEffect(() => {
+    if (!hit || !curve) {
+      setModelRead(null)
+      return
+    }
+    const values = curve.values.slice(hit.from_index, hit.to_index + 1)
+    if (values.length < 8) {
+      setModelRead({ status: "short" })
+      return
+    }
+    const controller = new AbortController()
+    setModelRead({ status: "loading" })
+    const dates = curve.dates.slice(hit.from_index, hit.to_index + 1)
+    const activity = curve.activity.slice(hit.from_index, hit.to_index + 1)
+    void (async () => {
+      try {
+        const response = await fetch("/api/chartisme/detect", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          cache: "no-store",
+          signal: controller.signal,
+          body: JSON.stringify({ values, dates, activity, min_confidence: 0, models: true }),
+        })
+        const payload = (await response.json().catch(() => null)) as unknown
+        if (controller.signal.aborted) return
+        const models = interpretDetectResponse(response.ok ? payload : { ok: false })
+        setModelRead({ status: models.status, models })
+      } catch {
+        if (controller.signal.aborted) return
+        setModelRead({ status: "absent", models: interpretDetectResponse(null) })
+      }
+    })()
+    return () => controller.abort()
+  }, [modelKey, curve, hit])
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      const target = event.target
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) return
+        if (target.closest("[data-slot='select-content'], [role='listbox'], [role='option']")) return
+      }
+      if (!hits.length) return
+      event.preventDefault()
+      const step = event.key === "ArrowRight" ? 1 : -1
+      setSelected((current) => (current + step + hits.length) % hits.length)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [hits.length])
 
   const byFigure = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -558,17 +652,22 @@ export function ChartismeLab() {
                   </span>
                 </SelectTrigger>
                 <SelectContent className="min-w-64">
-                  {specs.map((spec) => {
-                    const id = spec.n === null ? spec.variable : `${spec.variable}:${spec.n}`
-                    return (
-                      <SelectItem key={id} value={id}>
-                        {/* L'identifiant d'abord : c'est lui qu'une règle vise et
-                            que le journal consigne. Le libellé suit pour qu'on
-                            sache ce qu'on choisit dans une liste de {specs.length}. */}
-                        <CurveName kind={spec.variable} label={`${id} · ${curveLabel(spec.variable, spec.n)}`} />
-                      </SelectItem>
-                    )
-                  })}
+                  {curveFamilies().map((family) => (
+                    <SelectGroup key={family.id}>
+                      <SelectLabel>{family.label}</SelectLabel>
+                      {family.specs.map((spec) => {
+                        const id = specId(spec.variable, spec.n)
+                        return (
+                          <SelectItem key={id} value={id}>
+                            {/* L'identifiant d'abord : c'est lui qu'une règle vise et
+                                que le journal consigne. Le libellé suit pour qu'on
+                                sache ce qu'on choisit dans une liste de {specs.length}. */}
+                            <CurveName kind={spec.variable} label={`${id} · ${curveLabel(spec.variable, spec.n)}`} />
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectGroup>
+                  ))}
                 </SelectContent>
               </Select>
             </LabelHelp>
@@ -877,8 +976,19 @@ export function ChartismeLab() {
               <div className="sm:h-[19rem] sm:overflow-y-auto">
                 {hits.length ? (
                 <div className="space-y-2">
+                  {hitListCaption(hits.length) ? (
+                    <p className="text-xs text-muted-foreground">
+                      {hitListCaption(hits.length)}. Les flèches parcourent les {hits.length} lectures.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Flèches gauche et droite : lecture précédente et suivante.
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-1.5">
-                    {hits.slice(0, 40).map((found, index) => (
+                    {visibleHitIndices(hits.length, selected).map((index) => {
+                      const found = hits[index]
+                      return (
                       <Button
                         key={`${found.figure}-${found.from_index}-${index}`}
                         size="xs"
@@ -896,7 +1006,8 @@ export function ChartismeLab() {
                           ? " · à cheval"
                           : ""}
                       </Button>
-                    ))}
+                      )
+                    })}
                   </div>
                   {hit ? (
                     <div className="rounded-lg border border-border p-3 text-xs">
@@ -935,12 +1046,47 @@ export function ChartismeLab() {
                         Signal : {hit.signal}.{" "}
                         {hit.target
                           ? `Objectif ${hit.target.value.toFixed(1)} — ${hit.target.basis}.`
-                          : "Objectif non projetable sans cassure."}
+                          : "Objectif non projetable sans cassure."}{" "}
+                        {outcomePhrase(hit.outcome)}.
                       </p>
+                      {verdict ? (
+                        <p className="mt-1 text-muted-foreground">{verdictSentence(verdict)}</p>
+                      ) : null}
                       <p className="mt-1 text-muted-foreground">
                         {hit.from} → {hit.to} · échelle {hit.scale} · détecteur{" "}
                         {hit.detector}
                       </p>
+                      <div className="mt-2 space-y-1 border-t border-border pt-2 text-muted-foreground">
+                        <p className="font-medium text-foreground">Autres lectures de cette fenêtre</p>
+                        {neighbours.length ? (
+                          <ul className="space-y-0.5">
+                            {neighbours.map((neighbour) => (
+                              <li key={`${neighbour.from_index}-${neighbour.to_index}`}>
+                                DTW · {curve?.dates[neighbour.from_index] ?? neighbour.from_index} →{" "}
+                                {curve?.dates[neighbour.to_index] ?? neighbour.to_index} · similarité{" "}
+                                {neighbour.similarity.toFixed(2)}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p>DTW : aucune autre fenêtre de cette courbe ne s’en détache.</p>
+                        )}
+                        {modelRead?.status === "loading" ? <p>Réseaux en lecture…</p> : null}
+                        {modelRead?.status === "short" ? (
+                          <p>Fenêtre trop courte pour les réseaux (8 tirages minimum).</p>
+                        ) : null}
+                        {modelRead?.status === "absent" ? (
+                          <p>
+                            Backend Python injoignable ou réseaux absents. La géométrie et le DTW
+                            restent lus dans le navigateur.
+                          </p>
+                        ) : null}
+                        {modelRead?.status === "ready"
+                          ? modelRead.models.opinions.map((opinion) => (
+                              <p key={opinion.detector}>{opinionSentence(opinion, hit.figure)}</p>
+                            ))
+                          : null}
+                      </div>
                       {hit.alternatives?.length ? (
                         <p className="mt-1 text-muted-foreground">
                           Autres figures de la zone :{" "}
@@ -1026,7 +1172,7 @@ export function ChartismeLab() {
 
       <BacktestPanel
         curve={curve}
-        hits={hits}
+        hits={annotatedHits}
         era={era}
         scales={bars.scales}
         bar={{ minConfidence: bars.minConfidence, byScale: bars.byScale }}
