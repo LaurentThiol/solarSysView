@@ -104,8 +104,14 @@ import {
   type DrawSeriesPoint,
   type ValueRange,
 } from "@/lib/draws"
-import { weekdayHue } from "@/lib/sum-spread"
-import { normalizeDrawWeekday } from "@/lib/weekday-scope"
+import { WeekdayDot, WeekdaySplitLegend } from "@/components/weekday-split"
+import {
+  WEEKDAY_LINE_COLOR,
+  normalizeDrawWeekday,
+  weekdayLineDash,
+  weekdaySplitFields,
+  type DrawWeekday,
+} from "@/lib/weekday-scope"
 
 export type DrawChartMode =
   | "sumBoth"
@@ -142,8 +148,8 @@ const chartConfig = {
   e1: { label: "e1", color: "var(--chart-1)" },
   e2: { label: "e2", color: "var(--chart-2)" },
   rank1: { label: "1er rang", color: "oklch(0.68 0.18 25)" },
-  overlayMardi: { label: "Mardi", color: "var(--chart-2)" },
-  overlayVendredi: { label: "Vendredi", color: "var(--chart-4)" },
+  overlayMardi: { label: "Mardi", color: WEEKDAY_LINE_COLOR.mardi },
+  overlayVendredi: { label: "Vendredi", color: WEEKDAY_LINE_COLOR.vendredi },
   sma: { label: "SMA", color: "var(--chart-2)" },
   bbUpper: { label: "Bollinger +", color: "var(--chart-5)" },
   bbLower: { label: "Bollinger −", color: "var(--chart-5)" },
@@ -371,13 +377,11 @@ function withWeekdayOverlay(
 ): ChartPoint[] {
   if (!enabled) return points
   return points.map((point) => {
-    const day = normalizeDrawWeekday(String(point.weekday ?? ""))
     const raw = point[yKey]
     const value = typeof raw === "number" && Number.isFinite(raw) ? raw : null
     return {
       ...point,
-      overlayMardi: day === "mardi" ? value : null,
-      overlayVendredi: day === "vendredi" ? value : null,
+      ...weekdaySplitFields(String(point.weekday ?? ""), value),
     }
   })
 }
@@ -879,6 +883,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({})
   const [showSma, setShowSma] = useState(true)
   const [showBb, setShowBb] = useState(false)
+  const [dayLine, setDayLine] = useState({ mardi: true, vendredi: true })
   const [targetKey, setTargetKey] = useState<SeriesKey>("relNumbers")
   const [hint, setHint] = useState<string | null>(null)
   const [moving, setMoving] = useState<{ sketchId: string; handle: SketchHandle } | null>(null)
@@ -931,10 +936,12 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     return packs
   }, [series, keys, smaPeriod])
 
+  const splitKey: SeriesKey =
+    visibleKeys.find((key) => key !== "rank1") ??
+    keys.find((key) => key !== "rank1") ??
+    "sumNumbers"
+
   const chartData = useMemo(() => {
-    const overlayKey: SeriesKey = combined
-      ? "relNumbers"
-      : (keys.find((key) => key !== "rank1") ?? keys[0] ?? "sumNumbers")
     let points: ChartPoint[] = series
     if (combined) {
       const numberRange = resolveRange(
@@ -968,16 +975,16 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           sAbs.map((band) => mapBandPoint(band, (value) => relativeToRange(value, starRange)))
         )
       }
-      return withWeekdayOverlay(points, overlayKey, mixedDays)
+      return withWeekdayOverlay(points, splitKey, mixedDays)
     }
-    if (!smaPeriod) return withWeekdayOverlay(points, overlayKey, mixedDays)
+    if (!smaPeriod) return withWeekdayOverlay(points, splitKey, mixedDays)
     for (const key of keys) {
       const abs = overlayPacks[key]?.abs
       if (!abs) continue
       points = mergeOverlays(points, key, abs, abs)
     }
-    return withWeekdayOverlay(points, overlayKey, mixedDays)
-  }, [series, smaPeriod, combined, scale, keys, overlayPacks, mixedDays])
+    return withWeekdayOverlay(points, splitKey, mixedDays)
+  }, [series, smaPeriod, combined, scale, keys, overlayPacks, mixedDays, splitKey])
 
   const summaries = useMemo(() => {
     const items: { key: string; label: string; min: number; max: number; avg: number }[] =
@@ -2179,30 +2186,6 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     activeDot={{ r: 4 }}
                   />
                 ))}
-                {mixedDays ? (
-                  <>
-                    <Line
-                      dataKey="overlayMardi"
-                      yAxisId={0}
-                      type="linear"
-                      stroke={weekdayHue("mardi")}
-                      strokeWidth={1.5}
-                      connectNulls
-                      dot={{ r: 3 }}
-                      name="Mardi"
-                    />
-                    <Line
-                      dataKey="overlayVendredi"
-                      yAxisId={0}
-                      type="linear"
-                      stroke={weekdayHue("vendredi")}
-                      strokeWidth={1.5}
-                      connectNulls
-                      dot={{ r: 3 }}
-                      name="Vendredi"
-                    />
-                  </>
-                ) : null}
                 {smaPeriod > 0 && showSma
                   ? visibleKeys.map((key) => (
                       <Line
@@ -2266,6 +2249,40 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       </Fragment>
                     ))
                   : null}
+                {mixedDays ? (
+                  <>
+                    <Line
+                      dataKey="overlayMardi"
+                      yAxisId={plotAxisId(splitKey, splitRank1)}
+                      type="linear"
+                      stroke={WEEKDAY_LINE_COLOR.mardi}
+                      strokeWidth={2.75}
+                      strokeDasharray={weekdayLineDash("mardi")}
+                      connectNulls
+                      hide={!dayLine.mardi}
+                      dot={(props) => <WeekdayDot day="mardi" {...props} />}
+                      activeDot={(props) => <WeekdayDot day="mardi" {...props} />}
+                      isAnimationActive={false}
+                      legendType="none"
+                      name="Mardi"
+                    />
+                    <Line
+                      dataKey="overlayVendredi"
+                      yAxisId={plotAxisId(splitKey, splitRank1)}
+                      type="linear"
+                      stroke={WEEKDAY_LINE_COLOR.vendredi}
+                      strokeWidth={2.75}
+                      strokeDasharray={weekdayLineDash("vendredi")}
+                      connectNulls
+                      hide={!dayLine.vendredi}
+                      dot={(props) => <WeekdayDot day="vendredi" {...props} />}
+                      activeDot={(props) => <WeekdayDot day="vendredi" {...props} />}
+                      isAnimationActive={false}
+                      legendType="none"
+                      name="Vendredi"
+                    />
+                  </>
+                ) : null}
                 {displaySketches.map((sketch) => {
                   const seriesKey = sketch.seriesKey as SeriesKey
                   const axisId = plotAxisId(seriesKey, splitRank1)
@@ -2596,6 +2613,16 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               </ComposedChart>
             </ChartContainer>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              {mixedDays ? (
+                <WeekdaySplitLegend
+                  metric={chartConfig[splitKey].label}
+                  showMardi={dayLine.mardi}
+                  showVendredi={dayLine.vendredi}
+                  onToggle={(day: DrawWeekday) =>
+                    setDayLine((current) => ({ ...current, [day]: !current[day] }))
+                  }
+                />
+              ) : null}
               {smaPeriod > 0 ? (
                 <>
                   <span className="inline-flex items-center gap-1">
@@ -2678,6 +2705,12 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               <p className="mt-3 text-center text-xs text-muted-foreground">
                 Axe droit : 1er rang · 0 = gagnant du jackpot · +1 = pas de gagnant
                 (report).
+              </p>
+            ) : null}
+            {mixedDays ? (
+              <p className="mt-2 text-center text-xs text-muted-foreground">
+                Mardi (cyan) et vendredi (rose) : « {chartConfig[splitKey].label} », soir par
+                soir.
               </p>
             ) : null}
             {combined ? (

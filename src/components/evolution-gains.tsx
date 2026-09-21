@@ -8,6 +8,7 @@ import { SketchPlotLayers } from "@/components/chart-draw/sketch-layers"
 import { SketchToolbar } from "@/components/chart-draw/sketch-toolbar"
 import { useSketchChart } from "@/components/chart-draw/use-sketch-chart"
 import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
+import { WeekdayDot, WeekdaySplitLegend } from "@/components/weekday-split"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ChartContainer,
@@ -54,7 +55,13 @@ import {
   type GainsChartPoint,
   type GainsScope,
 } from "@/lib/draws"
-import { normalizeDrawWeekday } from "@/lib/weekday-scope"
+import {
+  WEEKDAY_LINE_COLOR,
+  normalizeDrawWeekday,
+  weekdayLineDash,
+  weekdaySplitFields,
+  type DrawWeekday,
+} from "@/lib/weekday-scope"
 import { cn } from "@/lib/utils"
 
 type GainsView = "winners" | "jackpot" | "mass" | "stack" | "report"
@@ -128,8 +135,8 @@ const chartConfig = {
   sumNumbers: { label: "Somme n°", color: "var(--chart-5)" },
   reportLength: { label: "Longueur report", color: "var(--chart-4)" },
   rank1: { label: "1er rang", color: "oklch(0.68 0.18 25)" },
-  overlayMardi: { label: "Mardi", color: "var(--chart-2)" },
-  overlayVendredi: { label: "Vendredi", color: "var(--chart-4)" },
+  overlayMardi: { label: "Mardi", color: WEEKDAY_LINE_COLOR.mardi },
+  overlayVendredi: { label: "Vendredi", color: WEEKDAY_LINE_COLOR.vendredi },
   sma: { label: "SMA", color: "var(--chart-2)" },
   ...Object.fromEntries(
     PRIZE_RANKS.map((rank) => [
@@ -426,6 +433,12 @@ function allowsDraw(view: GainsView) {
   return view !== "stack"
 }
 
+function splitSeries(view: GainsView): { key: SeriesKey; label: string } {
+  if (view === "jackpot" || view === "report") return { key: "jackpot", label: "jackpot" }
+  if (view === "mass" || view === "stack") return { key: "massEu", label: "masse EU" }
+  return { key: "winnersEu", label: "EU" }
+}
+
 export function EvolutionGains({
   draws,
   history,
@@ -440,6 +453,7 @@ export function EvolutionGains({
     defaultHidden("winners")
   )
   const [showSma, setShowSma] = useState(true)
+  const [dayLine, setDayLine] = useState({ mardi: true, vendredi: true })
   const [targetKey, setTargetKey] = useState<SeriesKey>("winnersEu")
 
   const chartScope = view === "jackpot" || view === "report" ? 1 : scope
@@ -468,6 +482,8 @@ export function EvolutionGains({
     visible.includes("jackpot")
   const smaPeriod = allowsSma(view) ? overlayPeriodFor(series.length) : 0
   const useLog = allowsLog(view) && logScale
+  const split = splitSeries(view)
+  const showDayLines = mixedDays && view !== "stack"
 
   useEffect(() => {
     if (!keys.includes(targetKey)) {
@@ -513,21 +529,10 @@ export function EvolutionGains({
       })
     }
     if (mixedDays && view !== "stack") {
-      const yKey: SeriesKey =
-        view === "jackpot" || view === "report"
-          ? "jackpot"
-          : view === "mass"
-            ? "massEu"
-            : "winnersEu"
-      points = points.map((point) => {
-        const day = normalizeDrawWeekday(String(point.weekday ?? ""))
-        const value = asNumber(point[yKey])
-        return {
-          ...point,
-          overlayMardi: day === "mardi" ? value : null,
-          overlayVendredi: day === "vendredi" ? value : null,
-        }
-      })
+      points = points.map((point) => ({
+        ...point,
+        ...weekdaySplitFields(String(point.weekday ?? ""), asNumber(point[split.key])),
+      }))
     }
     if (!smaPeriod) return points
     for (const key of keys) {
@@ -540,7 +545,7 @@ export function EvolutionGains({
       })
     }
     return points
-  }, [series, smaPeriod, keys, overlayPacks, useLog, view, mixedDays])
+  }, [series, smaPeriod, keys, overlayPacks, useLog, view, mixedDays, split.key])
 
   const summaries = useMemo(() => {
     return keys
@@ -558,28 +563,20 @@ export function EvolutionGains({
   )
 
   const weekdayStats = useMemo(() => {
-    const yKey: SeriesKey =
-      view === "jackpot" || view === "report"
-        ? "jackpot"
-        : view === "mass" || view === "stack"
-          ? "massEu"
-          : "winnersEu"
-    const rows = series.map((point) => ({
-      weekday: String(point.weekday ?? ""),
-      value: typeof point[yKey] === "number" ? point[yKey] : null,
-    }))
+    const rows = series.map((point) => {
+      const raw = point[split.key]
+      return {
+        weekday: String(point.weekday ?? ""),
+        value: typeof raw === "number" ? raw : null,
+      }
+    })
     return {
-      label:
-        view === "jackpot" || view === "report"
-          ? "jackpot"
-          : view === "mass" || view === "stack"
-            ? "masse EU"
-            : "EU",
-      euro: isEuroKey(yKey),
+      label: split.label,
+      euro: isEuroKey(split.key),
       mardi: weekdayMean(rows, "mardi"),
       vendredi: weekdayMean(rows, "vendredi"),
     }
-  }, [series, view])
+  }, [series, split.key, split.label])
 
   const correlation = useMemo(() => {
     if (view === "stack" || view === "report") return null
@@ -983,30 +980,6 @@ export function EvolutionGains({
                         name={seriesLabelOf(key)}
                       />
                     ))}
-                {mixedDays && view !== "stack" ? (
-                  <>
-                    <Line
-                      dataKey="overlayMardi"
-                      yAxisId={0}
-                      type="linear"
-                      stroke="var(--chart-2)"
-                      strokeWidth={1.5}
-                      connectNulls
-                      dot={{ r: 3 }}
-                      name="Mardi"
-                    />
-                    <Line
-                      dataKey="overlayVendredi"
-                      yAxisId={0}
-                      type="linear"
-                      stroke="var(--chart-4)"
-                      strokeWidth={1.5}
-                      connectNulls
-                      dot={{ r: 3 }}
-                      name="Vendredi"
-                    />
-                  </>
-                ) : null}
                 {smaPeriod > 0 && showSma
                   ? visible
                       .filter((key) => overlayPacks[key])
@@ -1026,6 +999,40 @@ export function EvolutionGains({
                         />
                       ))
                   : null}
+                {showDayLines ? (
+                  <>
+                    <Line
+                      dataKey="overlayMardi"
+                      yAxisId={plotAxisId(split.key)}
+                      type="linear"
+                      stroke={WEEKDAY_LINE_COLOR.mardi}
+                      strokeWidth={2.75}
+                      strokeDasharray={weekdayLineDash("mardi")}
+                      connectNulls
+                      hide={!dayLine.mardi}
+                      dot={(props) => <WeekdayDot day="mardi" {...props} />}
+                      activeDot={(props) => <WeekdayDot day="mardi" {...props} />}
+                      isAnimationActive={false}
+                      legendType="none"
+                      name="Mardi"
+                    />
+                    <Line
+                      dataKey="overlayVendredi"
+                      yAxisId={plotAxisId(split.key)}
+                      type="linear"
+                      stroke={WEEKDAY_LINE_COLOR.vendredi}
+                      strokeWidth={2.75}
+                      strokeDasharray={weekdayLineDash("vendredi")}
+                      connectNulls
+                      hide={!dayLine.vendredi}
+                      dot={(props) => <WeekdayDot day="vendredi" {...props} />}
+                      activeDot={(props) => <WeekdayDot day="vendredi" {...props} />}
+                      isAnimationActive={false}
+                      legendType="none"
+                      name="Vendredi"
+                    />
+                  </>
+                ) : null}
                 {sketch.draw ? (
                   <SketchPlotLayers
                     sketches={sketch.displaySketches}
@@ -1046,6 +1053,16 @@ export function EvolutionGains({
               </ComposedChart>
             </ChartContainer>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              {showDayLines ? (
+                <WeekdaySplitLegend
+                  metric={split.label}
+                  showMardi={dayLine.mardi}
+                  showVendredi={dayLine.vendredi}
+                  onToggle={(day: DrawWeekday) =>
+                    setDayLine((current) => ({ ...current, [day]: !current[day] }))
+                  }
+                />
+              ) : null}
               {allowsLog(view) ? (
                 <span className="inline-flex items-center gap-1">
                   <button
@@ -1152,6 +1169,11 @@ export function EvolutionGains({
             {leftIsLog ? (
               <p className="mt-1 text-center text-xs text-muted-foreground">
                 Échelle log : 0 (report) hors axe. R1 et R13 deviennent lisibles ensemble.
+              </p>
+            ) : null}
+            {showDayLines ? (
+              <p className="mt-1 text-center text-xs text-muted-foreground">
+                Mardi (cyan) et vendredi (rose) : « {split.label} », soir par soir.
               </p>
             ) : null}
             {view === "stack" ? (

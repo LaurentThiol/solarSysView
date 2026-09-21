@@ -2,11 +2,14 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  WEEKDAY_LINE_COLOR,
   asWeekdayScope,
   filterDrawsByWeekday,
   normalizeDrawWeekday,
   weekdayApiValue,
   weekdayFilterDay,
+  weekdayLineDash,
+  weekdaySplitFields,
 } from "../src/lib/weekday-scope.ts"
 import { synthesizeWeekdays, weekdayCounts } from "../src/lib/weekday-synthesis.ts"
 
@@ -34,6 +37,30 @@ test("filterDrawsByWeekday treats synthese like all", () => {
       filterDrawsByWeekday(rows, "vendredi").length,
     filterDrawsByWeekday(rows, "synthese").length
   )
+})
+
+test("weekday split keeps mardi and vendredi on their own curve", () => {
+  assert.deepEqual(weekdaySplitFields("MARDI", 12), {
+    overlayMardi: 12,
+    overlayVendredi: null,
+  })
+  assert.deepEqual(weekdaySplitFields("vendredi", 4), {
+    overlayMardi: null,
+    overlayVendredi: 4,
+  })
+  assert.deepEqual(weekdaySplitFields("mardi", null), {
+    overlayMardi: null,
+    overlayVendredi: null,
+  })
+  assert.deepEqual(weekdaySplitFields("mercredi", 9), {
+    overlayMardi: null,
+    overlayVendredi: null,
+  })
+  assert.notEqual(WEEKDAY_LINE_COLOR.mardi, WEEKDAY_LINE_COLOR.vendredi)
+  assert.equal(WEEKDAY_LINE_COLOR.mardi.includes("chart-2"), false)
+  assert.equal(WEEKDAY_LINE_COLOR.vendredi.includes("chart-4"), false)
+  assert.equal(weekdayLineDash("mardi"), undefined)
+  assert.equal(weekdayLineDash("vendredi"), "6 3")
 })
 
 test("weekday API value is omitted for Tous and Synthèse", () => {
