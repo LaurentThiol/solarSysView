@@ -1,9 +1,9 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { consumeSse, encodeSse, geminiDeltaText, openaiDeltaText } from "../src/lib/ia/sse"
-import type { IaChatMessage } from "../src/lib/ia/models"
-import { groupIaTurns, historyForLane } from "../src/lib/ia/turns"
+import { consumeSse, encodeSse, geminiDeltaText, openaiDeltaText } from "../src/lib/ia/sse.ts"
+import type { IaChatMessage } from "../src/lib/ia/models.ts"
+import { groupIaTurns, historyForLane } from "../src/lib/ia/turns.ts"
 
 test("SSE frames round-trip and stop on [DONE]", () => {
   const frame = encodeSse({ type: "delta", text: "Bonjour" })

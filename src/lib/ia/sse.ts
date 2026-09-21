@@ -7,6 +7,7 @@ export type IaStreamEvent =
       provider: IaProviderId
       requested: string
       imageOmitted: boolean
+      visionModel?: string | null
     }
   | { type: "delta"; text: string }
   | {
@@ -16,6 +17,7 @@ export type IaStreamEvent =
       provider: IaProviderId
       requested: string
       imageOmitted: boolean
+      visionModel?: string | null
       promptTokens?: number | null
       completionTokens?: number | null
       estimated?: boolean

@@ -15,25 +15,26 @@ import time
 from pathlib import Path
 from typing import Any
 
-from synchro.morpho.board import point_to_number, point_to_star
+from synchro.morpho.board import cell_number, cell_star, pixel_to_norm, point_to_number, point_to_star
 from synchro.morpho.geometry import detect
 from synchro.morpho.lexicon import caption_from_facts
 from synchro.morpho.rules import draft_rule_from_state, validate_draft
 
 PROMPT_ID = "morpho-vqa-v1"
+PROMPT_ID_V2 = "morpho-vqa-v2"
 GROUNDING_THRESHOLD = 0.4
 DEFAULT_MODEL_ID = "vikhyatk/moondream2"
 DEFAULT_REVISION = "2025-06-21"
 INSTALL_CMD = "./launch install-vlm"
 OLLAMA_HINT = (
-    "Pour Morpho via Ollama : ollama pull moondream puis Charger / interroger "
-    "(pas besoin de torch)."
+    "Pour Morpho via Ollama : ollama pull qwen2.5vl:7b puis Charger / interroger "
+    "(pas besoin de torch). Repli léger : ollama pull moondream."
 )
 INSTALL_HINT = (
     "Aucun VLM local. "
-    "Recommandé : ollama pull moondream puis Charger / interroger. "
-    "Sinon ./launch install-vlm (torch + transformers + accelerate, ~2 Go) "
-    "— ou laissez le bouton installer tout seul."
+    "Recommandé : ollama pull qwen2.5vl:7b puis Charger / interroger. "
+    "Repli : ollama pull moondream, ou ./launch install-vlm "
+    "(torch + transformers + accelerate, ~2 Go)."
 )
 OLLAMA_LOAD_PROGRESS = "Connexion au VLM Ollama…"
 COMPAT_HINT = (
@@ -67,10 +68,38 @@ _ollama_vision_cache: tuple[float, dict[str, Any]] | None = None
 OLLAMA_VISION_TTL_S = 10.0
 VISION_EXCLUDE = re.compile(r"(embed|nomic-embed|tts|whisper|clip)", re.I)
 VISION_RANK = (
-    (re.compile(r"moondream", re.I), 0),
-    (re.compile(r"minicpm-?v", re.I), 1),
-    (re.compile(r"llava", re.I), 2),
-    (re.compile(r"qwen.*vl", re.I), 3),
+    (re.compile(r"qwen2\.5vl|qwen2\.5-?vl", re.I), 0),
+    (re.compile(r"qwen2-vl|qwen.*vl", re.I), 1),
+    (re.compile(r"minicpm-?v", re.I), 2),
+    (re.compile(r"llava", re.I), 3),
+    (re.compile(r"llama3\.2-vision|(?:^|[^a-z0-9])vision", re.I), 4),
+    (re.compile(r"moondream", re.I), 5),
+)
+VISION_CHAT = re.compile(
+    r"qwen2\.5vl|qwen2\.5-?vl|qwen2-vl|qwen.*vl|llava|llama3\.2-vision|minicpm-?v",
+    re.I,
+)
+_JSON_OBJECT = re.compile(r"\{.*\}", re.S)
+VQA_V2_PROMPT = (
+    "Reply with one JSON object only, no markdown. "
+    "The image is a 5x10 number grid (rows 0-4, cols 0-9 map to numbers 1-50) "
+    "above a 2x6 star grid (rows 0-1, cols 0-5 map to stars 1-12). Filled dots are occupied. "
+    'Schema: {{"region":"top|bottom|center|periphery|mixed","collinear":"yes|no",'
+    '"compact":"compact|spread|mixed","stars":"adjacent|apart|unclear",'
+    '"caption":"one sentence","cells":[{{"row":0,"col":0}}],'
+    '"star_cells":[{{"row":0,"col":0}}],'
+    '"boxes":[{{"x":0.1,"y":0.1,"w":0.04,"h":0.06,"kind":"number"}}]}} '
+    "Do not invent objects. Do not contradict these facts: {facts}"
+)
+SEQUENCE_V2_PROMPT = (
+    "Reply with one JSON object only, no markdown. "
+    'Schema: {"drift":"one sentence","cluster_move":"left|right|up|down|none"}. '
+    "What spatial change occurs from left to right among the filled dots?"
+)
+CONTRASTIVE_V2_PROMPT = (
+    "Reply with one JSON object only, no markdown. "
+    'Schema: {"difference":"one sentence"}. '
+    "What is the morphological difference between the left glyph and the right glyph?"
 )
 
 
@@ -151,7 +180,93 @@ def vision_model_rank(name: str) -> int | None:
     return None
 
 
+def is_vision_chat_model(name: str) -> bool:
+    lower = (name or "").strip()
+    if not lower or VISION_EXCLUDE.search(lower) or re.search(r"moondream", lower, re.I):
+        return False
+    return bool(VISION_CHAT.search(lower))
+
+
+def parse_json_object(raw: str) -> dict[str, Any] | None:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
+    if fence:
+        text = fence.group(1)
+    else:
+        match = _JSON_OBJECT.search(text)
+        if match:
+            text = match.group(0)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def cells_to_values(cells: Any, *, kind: str) -> list[int]:
+    found: list[int] = []
+    if not isinstance(cells, list):
+        return found
+    for cell in cells:
+        if not isinstance(cell, dict):
+            continue
+        try:
+            row = int(cell.get("row"))
+            col = int(cell.get("col"))
+        except (TypeError, ValueError):
+            continue
+        try:
+            value = cell_number(row, col) if kind == "number" else cell_star(row, col)
+        except ValueError:
+            continue
+        found.append(value)
+    return sorted(set(found))
+
+
+def boxes_to_predicted(boxes: Any) -> tuple[list[int], list[int]]:
+    numbers: list[int] = []
+    stars: list[int] = []
+    if not isinstance(boxes, list):
+        return numbers, stars
+    for box in boxes:
+        if not isinstance(box, dict):
+            continue
+        try:
+            x = float(box.get("x", 0))
+            y = float(box.get("y", 0))
+            width = float(box.get("w", box.get("width", 0)) or 0)
+            height = float(box.get("h", box.get("height", 0)) or 0)
+        except (TypeError, ValueError):
+            continue
+        cx = x + width / 2 if width else x
+        cy = y + height / 2 if height else y
+        if cx > 1 or cy > 1:
+            cx, cy = pixel_to_norm(cx, cy)
+        kind = str(box.get("kind") or "").lower()
+        hit_number = point_to_number(cx, cy)
+        hit_star = point_to_star(cx, cy)
+        if kind in {"star", "s"}:
+            if hit_star is not None:
+                stars.append(hit_star)
+        elif kind in {"number", "n"}:
+            if hit_number is not None:
+                numbers.append(hit_number)
+        elif hit_number is not None:
+            numbers.append(hit_number)
+        elif hit_star is not None:
+            stars.append(hit_star)
+    return sorted(set(numbers)), sorted(set(stars))
+
+
 def pick_vision_model(names: list[str]) -> str | None:
+    wanted = (os.environ.get("MORPHO_VLM_MODEL") or "").strip()
+    if wanted:
+        for name in names:
+            if name == wanted or name.startswith(f"{wanted}:") or wanted.startswith(f"{name}:"):
+                if vision_model_rank(name) is not None:
+                    return name
     scored: list[tuple[int, int, str]] = []
     for name in names:
         rank = vision_model_rank(name)
@@ -591,7 +706,7 @@ def unload() -> None:
 def _load_ollama() -> dict[str, Any]:
     probe = ollama_vision_status(force=True)
     if not probe.get("ok") or not probe.get("model") or not probe.get("host"):
-        raise RuntimeError("Ollama n'expose pas de modèle vision (ollama pull moondream)")
+        raise RuntimeError("Ollama n'expose pas de modèle vision (ollama pull qwen2.5vl:7b)")
     return {
         "name": "ollama",
         "model": None,
@@ -601,7 +716,7 @@ def _load_ollama() -> dict[str, Any]:
     }
 
 
-def _chat_ollama(host: str, model: str, png: bytes, question: str, timeout: float = 60) -> str:
+def _chat_ollama(host: str, model: str, png: bytes, question: str, timeout: float = 120) -> str:
     from synchro.brain import _open
 
     encoded = base64.standard_b64encode(png).decode("ascii")
@@ -609,7 +724,7 @@ def _chat_ollama(host: str, model: str, png: bytes, question: str, timeout: floa
         {
             "model": model,
             "stream": False,
-            "keep_alive": "10m",
+            "keep_alive": "30m",
             "messages": [{"role": "user", "content": question, "images": [encoded]}],
         }
     ).encode("utf-8")
@@ -731,7 +846,7 @@ def _pil_image(png: bytes):
     return Image.open(io.BytesIO(png)).convert("RGB")
 
 
-def _ask(png: bytes, question: str) -> str:
+def _ask(png: bytes, question: str, timeout: float | None = None) -> str:
     if _backend is None:
         raise RuntimeError("VLM non chargé")
     if _backend.get("name") == "ollama":
@@ -739,7 +854,7 @@ def _ask(png: bytes, question: str) -> str:
         model = str(_backend.get("model_id") or "")
         if not host or not model:
             raise RuntimeError("backend Ollama incomplet")
-        return _chat_ollama(host, model, png, question)
+        return _chat_ollama(host, model, png, question, timeout=timeout or 120)
     model = _backend["model"]
     image = _pil_image(png)
     if hasattr(model, "query"):
@@ -822,25 +937,41 @@ def analyze(
     used_vlm = False
     backend_name = None
 
+    prompt_id = PROMPT_ID
     if _backend is not None:
         backend_name = _backend["name"]
         used_vlm = True
         started = time.perf_counter()
         try:
             fact_line = "; ".join(facts)
-            for key, pattern, question in _QUERY_SPECS:
-                answer = _ask(blob, question)
-                parsed = parse_label(answer, pattern)
-                if parsed:
-                    queries[key] = parsed
-            residual = _ask(
-                blob,
-                "One sentence. Describe only the geometric arrangement of filled dots. "
-                f"Do not invent objects. Do not contradict these facts: {fact_line}.",
-            ).strip()
-            points = _point(blob, "filled circle")
-            predicted_numbers = project_points(points, kind="number")
-            predicted_stars = project_points(points, kind="star")
+            if backend_name == "ollama" and is_vision_chat_model(str(_backend.get("model_id") or "")):
+                prompt_id = PROMPT_ID_V2
+                raw = _ask(blob, VQA_V2_PROMPT.format(facts=fact_line), timeout=120)
+                parsed = parse_json_object(raw) or {}
+                for key, pattern, _question in _QUERY_SPECS:
+                    label = parse_label(str(parsed.get(key) or ""), pattern)
+                    if label:
+                        queries[key] = label
+                residual = str(parsed.get("caption") or raw).strip()
+                predicted_numbers = cells_to_values(parsed.get("cells"), kind="number")
+                predicted_stars = cells_to_values(parsed.get("star_cells"), kind="star")
+                box_numbers, box_stars = boxes_to_predicted(parsed.get("boxes"))
+                predicted_numbers = sorted(set(predicted_numbers + box_numbers))
+                predicted_stars = sorted(set(predicted_stars + box_stars))
+            else:
+                for key, pattern, question in _QUERY_SPECS:
+                    answer = _ask(blob, question)
+                    parsed_label = parse_label(answer, pattern)
+                    if parsed_label:
+                        queries[key] = parsed_label
+                residual = _ask(
+                    blob,
+                    "One sentence. Describe only the geometric arrangement of filled dots. "
+                    f"Do not invent objects. Do not contradict these facts: {fact_line}.",
+                ).strip()
+                points = _point(blob, "filled circle")
+                predicted_numbers = project_points(points, kind="number")
+                predicted_stars = project_points(points, kind="star")
             if predicted_numbers or predicted_stars:
                 score = 0.75 * grounding_score(predicted_numbers, numbers) + 0.25 * grounding_score(
                     predicted_stars, stars
@@ -867,7 +998,7 @@ def analyze(
         "backend": backend_name,
         "model_id": None if _backend is None else _backend.get("model_id"),
         "revision": None if _backend is None else _backend.get("revision"),
-        "prompt_id": PROMPT_ID,
+        "prompt_id": prompt_id,
         "image_hash": image_hash(blob),
     }
     return state
@@ -883,11 +1014,16 @@ def sequence_query(draws: list[tuple[list[int], list[int]]]) -> dict[str, Any]:
         return {"ok": True, "loaded": False, "drift": None, "cluster_move": None}
     started = time.perf_counter()
     try:
-        drift = _ask(png, "One sentence: what spatial change occurs from left to right among the filled dots?")
-        move = parse_label(
-            _ask(png, "Reply with exactly one of: left, right, up, down, none. Does the cluster migrate?"),
-            "left|right|up|down|none",
-        )
+        if _backend.get("name") == "ollama" and is_vision_chat_model(str(_backend.get("model_id") or "")):
+            parsed = parse_json_object(_ask(png, SEQUENCE_V2_PROMPT, timeout=120)) or {}
+            drift = str(parsed.get("drift") or "").strip()
+            move = parse_label(str(parsed.get("cluster_move") or ""), "left|right|up|down|none")
+        else:
+            drift = _ask(png, "One sentence: what spatial change occurs from left to right among the filled dots?")
+            move = parse_label(
+                _ask(png, "Reply with exactly one of: left, right, up, down, none. Does the cluster migrate?"),
+                "left|right|up|down|none",
+            )
         _record_morpho(
             ok=True,
             latency_ms=round((time.perf_counter() - started) * 1000),
@@ -910,10 +1046,14 @@ def contrastive_query(
         return {"ok": True, "loaded": False, "difference": None}
     started = time.perf_counter()
     try:
-        difference = _ask(
-            png,
-            "One sentence: what is the morphological difference between the left glyph and the right glyph?",
-        )
+        if _backend.get("name") == "ollama" and is_vision_chat_model(str(_backend.get("model_id") or "")):
+            parsed = parse_json_object(_ask(png, CONTRASTIVE_V2_PROMPT, timeout=120)) or {}
+            difference = str(parsed.get("difference") or "").strip()
+        else:
+            difference = _ask(
+                png,
+                "One sentence: what is the morphological difference between the left glyph and the right glyph?",
+            )
         _record_morpho(
             ok=True,
             latency_ms=round((time.perf_counter() - started) * 1000),

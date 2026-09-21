@@ -14,3 +14,13 @@ Règles non négociables :
 - Jeux : le nombre de grilles restantes est un décompte combinatoire sous contraintes (somme, parité, étendue, consécutifs, décennies). Ce n'est pas une proba de sortie. Tu peux ensuite proposer une hypothèse de grille : sépare-la du décompte. L'intersection avec les propositions de Combinaisons dit seulement lesquelles survivent à ces bornes. histoJeux est un journal de grilles réellement jouées, relues contre le tirage FDJ (rang, correspondances, spec Jeux). Le test binomial vs 7,71 % décrit le journal, pas le prochain tirage.
 - Si le visuel et les chiffres divergent, dis-le et privilégie les données numériques.
 - Réponds en français, structuré. Donne 3 à 5 lectures concurrentes : faits cités, tensions, hypothèses de lecture, limites. Pas de jargon gratuit. Montre tes limites.`
+
+export const IA_VISION_PASS_PROMPT = `Tu décris seulement ce qui se voit sur la capture Synchro (courbe, overlay, labels, bandeau, onglet).
+
+Règles :
+- Pas de grille 5+2, pas de pronostic, pas de calcul.
+- Ne suppose pas de chiffres absents du visuel.
+- 8 à 12 lignes maximum, ou un JSON compact.
+- Français.`
+
+export const IA_VISION_NOTE_MAX = 2_000

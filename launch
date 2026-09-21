@@ -1120,7 +1120,7 @@ vlm_doctor() {
   elif "$py" -c 'import transformers, torch' 2>/dev/null; then
     warn "VLM : accelerate manquant — relancez ./launch install-vlm (device_map CUDA/MPS)"
   else
-    warn "VLM : transformers/torch absents — Morpho utilise Ollama si un tag vision est là (ollama pull moondream), sinon ./launch install-vlm"
+    warn "VLM : transformers/torch absents — Morpho utilise Ollama si un tag vision est là (ollama pull qwen2.5vl:7b, repli ollama pull moondream), sinon ./launch install-vlm"
   fi
   if "$py" -c 'import moondream' 2>/dev/null; then
     ok "VLM : photon (paquet moondream)"
@@ -1442,10 +1442,10 @@ ollama_doctor() {
   names="$(llm_model_names "$found" || true)"
   if [[ -n "$names" ]]; then
     ok "Ollama serveur : ${found} · ${names}"
-    if printf '%s' "$names" | grep -Eqi 'moondream|llava|qwen[^ ]*vl|minicpm-?v'; then
+    if printf '%s' "$names" | grep -Eqi 'moondream|llava|qwen[^ ]*vl|minicpm-?v|qwen2\.5vl|llama3\.2-vision'; then
       ok "Morpho VLM : tag vision présent — pas besoin de torch"
     else
-      printf '%sMorpho VLM : pas de modèle vision — ollama pull moondream%s\n' "$C_DIM" "$C_RESET"
+      printf '%sMorpho VLM : pas de modèle vision — ollama pull qwen2.5vl:7b (repli : ollama pull moondream)%s\n' "$C_DIM" "$C_RESET"
     fi
     local chat
     chat="$(llm_chat_names "$names")"

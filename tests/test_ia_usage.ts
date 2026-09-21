@@ -6,8 +6,8 @@ import {
   fallbackUsage,
   parseProviderUsage,
   usageFromPayload,
-} from "../src/lib/ia/usage"
-import { chatSurface } from "../src/lib/ia/record-usage"
+} from "../src/lib/ia/usage.ts"
+import { chatSurface } from "../src/lib/ia/record-usage.ts"
 
 test("Ollama done chunk exposes eval counts and duration", () => {
   const usage = parseProviderUsage({

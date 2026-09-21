@@ -1,9 +1,12 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { packCharBudget } from "../src/lib/capture/snapshot"
-import { buildOllamaChatBody, clearLocalLlmProbeCache, completeIa, setLlmTransport, streamIa } from "../src/lib/ia/providers"
-import { supportsLocalThink } from "../src/lib/ia/models"
+import { packCharBudget } from "../src/lib/capture/snapshot.ts"
+import { buildOllamaChatBody, clearLocalLlmProbeCache, completeIa, setLlmTransport, streamIa } from "../src/lib/ia/providers.ts"
+import { supportsLocalThink } from "../src/lib/ia/models.ts"
+
+const TINY_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -147,6 +150,150 @@ test("deepen enables think only on reasoning models", () => {
   assert.equal(deepOpts.num_predict, 8192)
   assert.equal(deepOpts.top_p, 0.95)
   assert.equal(supportsLocalThink("qwen3:8b"), true)
+})
+
+test("local capture uses VLM then text model without sending the pack to vision", async () => {
+  const posts: Array<{ model: string; body: Record<string, unknown> }> = []
+  const result = await withTransport(async (url, init) => {
+    if (url.includes("/api/tags") && (!init?.method || init.method === "GET")) {
+      return jsonResponse({ models: [{ name: "qwen2.5:7b" }, { name: "qwen2.5vl:7b" }] })
+    }
+    if (url.includes("/api/chat") && init?.method === "POST") {
+      const body = JSON.parse(String(init.body || "{}")) as Record<string, unknown>
+      posts.push({ model: String(body.model), body })
+      const content = body.model === "qwen2.5vl:7b" ? "courbe RSI visible en haut" : "lecture pack"
+      return jsonResponse({ message: { content } })
+    }
+    return missing()
+  }, () =>
+    completeIa({
+      provider: "local",
+      model: "qwen2.5:7b",
+      messages: [{ role: "user", content: "que vois-tu ?" }],
+      snapshot: {
+        lab: "chartisme",
+        tab: "vue",
+        route: "/chartisme",
+        tech: { secret: "ne-pas-envoyer-au-vlm" },
+        imageDataUrl: TINY_PNG,
+      },
+    })
+  )
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.text, "lecture pack")
+    assert.equal(result.model, "qwen2.5:7b")
+    assert.equal(result.visionModel, "qwen2.5vl:7b")
+    assert.equal(result.imageOmitted, false)
+  }
+  assert.equal(posts.length, 2)
+  assert.equal(posts[0].model, "qwen2.5vl:7b")
+  const visionMessages = posts[0].body.messages as Array<{ images?: string[]; content?: string }>
+  assert.ok(visionMessages.some((item) => item.images?.length))
+  const visionBlob = JSON.stringify(posts[0].body)
+  assert.doesNotMatch(visionBlob, /ne-pas-envoyer-au-vlm/)
+  assert.doesNotMatch(visionBlob, /Données techniques JSON/)
+  assert.equal(posts[1].model, "qwen2.5:7b")
+  const textBlob = JSON.stringify(posts[1].body)
+  assert.match(textBlob, /Notes visuelles/)
+  assert.match(textBlob, /courbe RSI visible en haut/)
+  assert.doesNotMatch(textBlob, /"images"/)
+})
+
+test("local capture without VLM omits the image", async () => {
+  const posts: Array<Record<string, unknown>> = []
+  const result = await withTransport(async (url, init) => {
+    if (url.includes("/api/tags") && (!init?.method || init.method === "GET")) {
+      return jsonResponse({ models: [{ name: "qwen2.5:7b" }] })
+    }
+    if (url.includes("/api/chat") && init?.method === "POST") {
+      posts.push(JSON.parse(String(init.body || "{}")) as Record<string, unknown>)
+      return jsonResponse({ message: { content: "texte seul" } })
+    }
+    return missing()
+  }, () =>
+    completeIa({
+      provider: "local",
+      model: "qwen2.5:7b",
+      messages: [{ role: "user", content: "ping" }],
+      snapshot: { lab: "analyse", tech: { ok: 1 }, imageDataUrl: TINY_PNG },
+    })
+  )
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.imageOmitted, true)
+    assert.equal(result.visionModel, null)
+  }
+  assert.equal(posts.length, 1)
+  assert.doesNotMatch(JSON.stringify(posts[0]), /"images"/)
+})
+
+test("IA_LOCAL_TWO_PASS=0 sends image and pack to the VLM in one pass", async () => {
+  const previous = process.env.IA_LOCAL_TWO_PASS
+  process.env.IA_LOCAL_TWO_PASS = "0"
+  try {
+    const posts: Array<{ model: string; body: Record<string, unknown> }> = []
+    const result = await withTransport(async (url, init) => {
+      if (url.includes("/api/tags") && (!init?.method || init.method === "GET")) {
+        return jsonResponse({ models: [{ name: "qwen2.5:7b" }, { name: "qwen2.5vl:7b" }] })
+      }
+      if (url.includes("/api/chat") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body || "{}")) as Record<string, unknown>
+        posts.push({ model: String(body.model), body })
+        return jsonResponse({ message: { content: "une passe" } })
+      }
+      return missing()
+    }, () =>
+      completeIa({
+        provider: "local",
+        model: "qwen2.5:7b",
+        messages: [{ role: "user", content: "que vois-tu ?" }],
+        snapshot: {
+          lab: "chartisme",
+          tech: { secret: "pack-ok-en-secours" },
+          imageDataUrl: TINY_PNG,
+        },
+      })
+    )
+    assert.equal(result.ok, true)
+    if (result.ok) {
+      assert.equal(result.text, "une passe")
+      assert.equal(result.model, "qwen2.5vl:7b")
+      assert.equal(result.visionModel, "qwen2.5vl:7b")
+      assert.equal(result.imageOmitted, false)
+    }
+    assert.equal(posts.length, 1)
+    assert.equal(posts[0].model, "qwen2.5vl:7b")
+    const blob = JSON.stringify(posts[0].body)
+    assert.match(blob, /"images"/)
+    assert.match(blob, /pack-ok-en-secours/)
+  } finally {
+    if (previous == null) delete process.env.IA_LOCAL_TWO_PASS
+    else process.env.IA_LOCAL_TWO_PASS = previous
+  }
+})
+
+test("local without image stays on a single text POST", async () => {
+  const posts: string[] = []
+  const result = await withTransport(async (url, init) => {
+    if (url.includes("/api/tags") && (!init?.method || init.method === "GET")) {
+      return jsonResponse({ models: [{ name: "qwen2.5:7b" }, { name: "qwen2.5vl:7b" }] })
+    }
+    if (url.includes("/api/chat") && init?.method === "POST") {
+      const body = JSON.parse(String(init.body || "{}")) as { model?: string }
+      posts.push(String(body.model))
+      return jsonResponse({ message: { content: "ok" } })
+    }
+    return missing()
+  }, () =>
+    completeIa({
+      provider: "local",
+      model: "qwen2.5:7b",
+      messages: [{ role: "user", content: "ping" }],
+    })
+  )
+  assert.equal(result.ok, true)
+  assert.deepEqual(posts, ["qwen2.5:7b"])
 })
 
 test("native stream reads NDJSON content and ignores thinking", async () => {

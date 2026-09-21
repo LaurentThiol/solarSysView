@@ -8,6 +8,9 @@ from synchro.morpho.vlm import (
     geometry_queries,
     grounding_score,
     load,
+    boxes_to_predicted,
+    cells_to_values,
+    parse_json_object,
     parse_label,
     pick_vision_model,
     project_points,
@@ -373,10 +376,11 @@ def test_load_retries_install_on_tied_weights_error(monkeypatch) -> None:
         unload()
 
 
-def test_pick_vision_model_prefers_moondream() -> None:
+def test_pick_vision_model_prefers_qwen25vl() -> None:
     assert pick_vision_model(["llama3.2", "nomic-embed-text"]) is None
-    assert pick_vision_model(["llava", "moondream:latest"]) == "moondream:latest"
-    assert pick_vision_model(["qwen2.5vl", "minicpm-v"]) == "minicpm-v"
+    assert pick_vision_model(["moondream", "qwen2-vl:7b", "qwen2.5vl:7b"]) == "qwen2.5vl:7b"
+    assert pick_vision_model(["llava", "moondream:latest"]) == "llava"
+    assert pick_vision_model(["qwen2.5vl", "minicpm-v"]) == "qwen2.5vl"
 
 
 def test_ollama_vision_status_requires_native_tags(monkeypatch) -> None:
@@ -479,6 +483,64 @@ def test_analyze_ollama_parses_closed_labels_without_point(monkeypatch) -> None:
     assert len(calls) >= 5
 
 
+def test_parse_json_object_and_cells() -> None:
+    parsed = parse_json_object('prefix {"region":"top","cells":[{"row":0,"col":0}]} suffix')
+    assert parsed is not None
+    assert parsed["region"] == "top"
+    assert cells_to_values(parsed["cells"], kind="number") == [1]
+    numbers, stars = boxes_to_predicted(
+        [{"x": 0.08, "y": 0.08, "w": 0.02, "h": 0.02, "kind": "number"}]
+    )
+    assert numbers
+    assert stars == []
+
+
+def test_analyze_qwen_vl_uses_one_json_call(monkeypatch) -> None:
+    unload()
+    monkeypatch.setenv("MORPHO_VLM_NO_INSTALL", "1")
+    monkeypatch.delenv("MORPHO_GGUF_PATH", raising=False)
+    monkeypatch.setattr(
+        vlm_mod,
+        "ollama_vision_status",
+        lambda **_k: {
+            "ok": True,
+            "host": "http://127.0.0.1:11434",
+            "model": "qwen2.5vl:7b",
+            "models": ["qwen2.5vl:7b"],
+        },
+    )
+    calls: list[str] = []
+
+    def fake_chat(host: str, model: str, png: bytes, question: str, timeout: float = 120) -> str:
+        assert model == "qwen2.5vl:7b"
+        assert png
+        calls.append(question)
+        return (
+            '{"region":"top","collinear":"yes","compact":"compact","stars":"adjacent",'
+            '"caption":"A compact top row.","cells":[{"row":0,"col":0},{"row":0,"col":1}],'
+            '"star_cells":[{"row":0,"col":0}]}'
+        )
+
+    monkeypatch.setattr(vlm_mod, "_chat_ollama", fake_chat)
+    monkeypatch.setattr(
+        vlm_mod,
+        "_load_transformers",
+        lambda: (_ for _ in ()).throw(RuntimeError("transformers should not load")),
+    )
+    try:
+        body = load(install=False)
+        assert body["model_id"] == "qwen2.5vl:7b"
+        state = analyze([1, 2, 3, 4, 5], [1, 2])
+    finally:
+        unload()
+    assert len(calls) == 1
+    assert state["prompt_id"] == "morpho-vqa-v2"
+    assert state["queries"]["region"] == "top"
+    assert state["predicted_numbers"] == [1, 2]
+    assert state["predicted_stars"] == [1]
+    assert state["grounding_score"] is not None
+
+
 def test_chat_ollama_posts_native_api_chat(monkeypatch) -> None:
     seen: dict[str, object] = {}
 
@@ -505,7 +567,9 @@ def test_chat_ollama_posts_native_api_chat(monkeypatch) -> None:
     payload = __import__("json").loads(seen["body"])
     assert payload["model"] == "moondream"
     assert payload["stream"] is False
+    assert payload["keep_alive"] == "30m"
     assert payload["messages"][0]["images"]
+    assert seen["timeout"] == 120
 
 
 def test_ollama_down_does_not_pip_install_when_forbidden(monkeypatch) -> None:

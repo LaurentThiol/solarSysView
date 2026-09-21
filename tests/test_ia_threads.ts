@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import type { DiagnosticSnapshot } from "../src/lib/capture/snapshot"
+import type { DiagnosticSnapshot } from "../src/lib/capture/snapshot.ts"
 import {
   capThreads,
   deleteThreadIn,
@@ -15,7 +15,7 @@ import {
   threadToMarkdown,
   upsertThreadList,
   type IaThread,
-} from "../src/lib/ia/threads"
+} from "../src/lib/ia/threads.ts"
 
 function snapshot(id = "cap-1"): DiagnosticSnapshot {
   return {

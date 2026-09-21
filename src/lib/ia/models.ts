@@ -145,6 +145,14 @@ export const IA_MODELS: IaModelDef[] = [
     tier: "balanced",
     preferred: true,
   },
+  {
+    id: "qwen2.5vl:7b",
+    provider: "local",
+    label: "Local vision",
+    hint: "Qwen2.5-VL 7B · passe visuel",
+    vision: true,
+    tier: "balanced",
+  },
 ]
 
 const LIVE_EXTRA_CAP = 10
@@ -159,10 +167,34 @@ export function providerLabel(id: IaProviderId) {
   return "OpenAI"
 }
 
+const LOCAL_EMBED_OR_AUDIO = /(embed|nomic-embed|tts|whisper|clip)/i
+const LOCAL_TINY_VLM = /moondream/i
+const LOCAL_VISION_CHAT =
+  /(llava|llama3\.2-vision|(^|[^a-z0-9])vision([^a-z0-9]|$)|qwen2\.5vl|qwen2\.5-?vl|qwen2-vl|qwen[^:\s]*vl|minicpm-?v)/i
+
+export function isLocalEmbedOrAudio(id: string) {
+  return LOCAL_EMBED_OR_AUDIO.test(id)
+}
+
+export function isLocalTinyVlm(id: string) {
+  return LOCAL_TINY_VLM.test(id) && !isLocalEmbedOrAudio(id)
+}
+
+export function isLocalVisionChatModel(id: string) {
+  if (isLocalEmbedOrAudio(id) || isLocalTinyVlm(id)) return false
+  return LOCAL_VISION_CHAT.test(id)
+}
+
+export function isLocalVisionModel(id: string) {
+  return isLocalTinyVlm(id) || isLocalVisionChatModel(id)
+}
+
+export function isLocalTextChatModel(id: string) {
+  return isLocalChatModel(id) && !isLocalVisionChatModel(id)
+}
+
 export function isLocalChatModel(id: string) {
-  const lower = id.toLowerCase()
-  if (/(embed|nomic-embed|tts|whisper|clip)/i.test(lower)) return false
-  if (/(llava|vision|qwen.*vl|moondream|minicpm-?v)/i.test(lower)) return false
+  if (isLocalEmbedOrAudio(id) || isLocalTinyVlm(id)) return false
   return true
 }
 
@@ -182,12 +214,27 @@ export function localModelSizeB(id: string) {
 
 export function localFamilyBonus(id: string) {
   const lower = id.toLowerCase()
+  if (isLocalVisionChatModel(id)) return 5
   if (/qwen3|deepseek-r1|gpt-oss|(^|[^a-z0-9])r1([^a-z0-9]|$)/.test(lower)) return 50
   if (/qwen2\.5/.test(lower)) return 40
   if (/llama3\.[13]|mistral-nemo|mistral-small|mixtral/.test(lower)) return 30
   if (/(^|[:/])mistral([^a-z]|$)/.test(lower) || /^mistral/.test(lower)) return 20
   if (/llama3\.2|\bphi|gemma|tinyllama/.test(lower)) return 0
   return 10
+}
+
+export function localVisionRank(id: string) {
+  const lower = id.toLowerCase()
+  if (/qwen2\.5vl|qwen2\.5-?vl/.test(lower)) return 0
+  if (/qwen2-vl|qwen[^:\s]*vl/.test(lower)) return 1
+  if (/minicpm-?v/.test(lower)) return 2
+  if (/llava/.test(lower)) return 3
+  if (/llama3\.2-vision|(^|[^a-z0-9])vision/.test(lower)) return 4
+  return 10
+}
+
+export function compareLocalVisionIds(left: string, right: string) {
+  return localVisionRank(left) - localVisionRank(right) || left.localeCompare(right)
 }
 
 export function localSizeBonus(size: number) {
@@ -210,8 +257,12 @@ export function localLiveIds(models: Array<Pick<IaModelOption, "id" | "provider"
   return models.filter((item) => item.provider === "local" && item.source === "live").map((item) => item.id)
 }
 
-function idServed(id: string, liveIds: string[]) {
+export function idServed(id: string, liveIds: string[]) {
   return liveIds.some((live) => live === id || live.startsWith(`${id}:`) || id.startsWith(`${live}:`))
+}
+
+function servedName(id: string, liveIds: string[]) {
+  return liveIds.find((live) => live === id || live.startsWith(`${id}:`) || id.startsWith(`${live}:`)) ?? null
 }
 
 export function providerOfModel(id: string): IaProviderId | null {
@@ -244,8 +295,25 @@ export function guessVision(id: string, provider: IaProviderId) {
   const known = IA_MODELS.find((item) => item.id === id)
   if (known) return known.vision
   if (provider === "google") return /gemini/i.test(id) && !/(embed|tts|imagen|veo)/i.test(id)
-  if (provider === "local") return /(llava|vision|qwen.*vl|moondream|minicpm-?v)/i.test(id)
+  if (provider === "local") return isLocalVisionModel(id)
   return /^(gpt-4o|gpt-4\.1|gpt-5)/.test(id)
+}
+
+export function pickLocalTextModel(liveIds: string[], requested?: string | null, envModel?: string | null) {
+  const text = liveIds.filter((id) => isModelId(id) && isLocalTextChatModel(id))
+  const served = (id?: string | null): string | null =>
+    id && isModelId(id) && isLocalTextChatModel(id) ? servedName(id, text) : null
+  return served(envModel) || served(requested) || (text.length ? [...text].sort(compareLocalChatIds)[0] : null)
+}
+
+export function pickLocalVisionModel(liveIds: string[], requested?: string | null) {
+  const vision = liveIds.filter((id) => isModelId(id) && isLocalVisionChatModel(id))
+  if (requested && isLocalVisionChatModel(requested)) {
+    const hit = servedName(requested, vision)
+    if (hit) return hit
+  }
+  if (!vision.length) return null
+  return [...vision].sort(compareLocalVisionIds)[0]
 }
 
 export function openaiUsesMaxCompletionTokens(model: string) {
@@ -383,9 +451,9 @@ export function pickAvailableModel(
   const available = models.filter((item) => item.provider === provider && item.available)
   if (!available.length) return null
   if (provider === "local") {
-    const liveIds = (opts?.liveIds ?? localLiveIds(available)).filter((id) => isModelId(id) && isLocalChatModel(id))
+    const liveIds = (opts?.liveIds ?? localLiveIds(available)).filter((id) => isModelId(id) && isLocalTextChatModel(id))
     const served = (id?: string | null): id is string =>
-      Boolean(id && isModelId(id) && isLocalChatModel(id) && idServed(id, liveIds))
+      Boolean(id && isModelId(id) && isLocalTextChatModel(id) && idServed(id, liveIds))
     const envModel = opts?.envModel?.trim() || ""
     if (served(envModel)) return envModel
     if (served(stored)) return stored

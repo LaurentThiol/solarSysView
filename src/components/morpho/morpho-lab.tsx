@@ -537,7 +537,7 @@ export function MorphoLab() {
               <TitleHelp
                 help={{
                   title: "VLM local",
-                  body: "Vision locale pour légender le glyphe (questions de forme). Si Ollama a un modèle vision (moondream, llava…), il est utilisé en premier — ollama pull moondream, pas besoin de torch. Sinon Moondream2 via transformers : le premier clic peut installer ~2 Go. La géométrie reste la source de vérité ; CLIP (kNN) reste dans le navigateur.",
+                  body: "Vision locale pour légender le glyphe (questions de forme). Qwen2.5-VL (ollama pull qwen2.5vl:7b) est préféré : un JSON et un ancrage par cases / boîtes. Moondream, LLaVA, Qwen2-VL restent des replis — pas besoin de torch. Sinon Moondream2 via transformers : le premier clic peut installer ~2 Go. La géométrie reste la source de vérité ; CLIP (kNN) reste dans le navigateur.",
                 }}
               >
                 VLM
@@ -548,7 +548,7 @@ export function MorphoLab() {
             <WithHelp
               help={{
                 title: "Interroger le VLM",
-                body: "Charge Ollama (modèle vision) ou Moondream2, puis décrit le glyphe courant. Sans ancrage par coordonnées côté Ollama. Sans API, la caption géométrique du lexique reste affichée.",
+                body: "Charge Ollama (Qwen2.5-VL en premier) ou Moondream2, puis décrit le glyphe courant. Un VLM chat peut ancrer des cases ; Moondream via Ollama n’a pas l’API point(). Sans API, la caption géométrique du lexique reste affichée.",
               }}
             >
               <Button type="button" onClick={() => void runVlm()} disabled={vlmBusy}>

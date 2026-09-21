@@ -33,9 +33,9 @@ def test_estimate_tokens_and_p50() -> None:
 
 
 def test_pick_chat_model_skips_embed_and_vision() -> None:
-    names = ["nomic-embed-text", "moondream", "qwen2.5:7b", "llama3.2"]
+    names = ["nomic-embed-text", "moondream", "qwen2.5vl:7b", "qwen2.5:7b", "llama3.2"]
     assert pick_chat_model(names, "qwen2.5") == "qwen2.5:7b"
-    assert pick_chat_model(["moondream", "nomic-embed-text"], None) == "llama3.2"
+    assert pick_chat_model(["moondream", "qwen2.5vl:7b", "nomic-embed-text"], None) == "llama3.2"
 
 
 def test_summarize_keeps_idle_rows_and_marks_errors(monkeypatch) -> None:

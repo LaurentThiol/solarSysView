@@ -193,6 +193,7 @@ export async function POST(request: Request) {
         provider: result.provider,
         requested: result.requested,
         imageOmitted: result.imageOmitted,
+        visionModel: result.visionModel ?? null,
         promptTokens: result.promptTokens,
         completionTokens: result.completionTokens,
         estimated: result.estimated,

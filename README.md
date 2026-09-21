@@ -78,10 +78,10 @@ Deux onglets.
 Laboratoire visuel : chaque tirage est un glyphe sur la grille 5×10 + étoiles. Détecteurs géométriques (alignements, grappe, miroir, …), kNN visuel CLIP (navigateur), règles QUAND/ALORS, anticipation `P(forme suivante | contexte)` vs tirages uniformes. VLM optionnel pour la légende :
 
 ```bash
-ollama pull moondream
+ollama pull qwen2.5vl:7b
 ```
 
-Puis bouton **Charger / interroger** dans Morpho. Ollama est le backend VLM prioritaire dès qu’un modèle vision est listé (`moondream`, `llava`, `qwen2-vl`, `minicpm-v`). Pas d’install torch dans ce cas. La géométrie reste la source de vérité : Ollama n’a pas l’API `point()` de Moondream, donc pas de score d’ancrage par coordonnées.
+Puis bouton **Charger / interroger** dans Morpho. Ollama est le backend VLM prioritaire dès qu’un modèle vision est listé (`qwen2.5vl`, `qwen2-vl`, `llava`, `minicpm-v`, `moondream`). Pas d’install torch dans ce cas. La géométrie reste la source de vérité. Un VLM chat (Qwen2.5-VL) répond en un JSON et peut ancrer des cases / boîtes (`grounding_score`). Moondream n’a pas cet ancrage via Ollama (`ollama pull moondream` reste un repli léger).
 
 Sinon, Moondream2 via Hugging Face :
 
@@ -252,13 +252,13 @@ Lecture d’une capture (visuel + données de fenêtre). L’onglet propose **Ge
 
 L’historique (colonne **Captures**) se **renomme**, s’**épingle**, s’**exporte** (Markdown, JSON, PDF du fil) et se **supprime**. Un JSON réimporte les lectures. Les épinglées ne tombent pas des huit derniers fils. Les clés sont dans Admin. L’assistant décrit l’archive, puis peut pronostiquer (hypothèse, pas une certitude).
 
-Un troisième fournisseur **Local** (Ollama / llama-server) sert surtout les lectures **texte** du pack. Un 404 Ollama **ne bascule pas** sur Gemini / OpenAI. Si le probe touche vraiment Ollama (`/api/tags` ou `/api/version`), le chat utilise `/api/chat` avec `num_ctx` (défaut 16384, `OLLAMA_NUM_CTX`). LM Studio et llama-server restent sur `/v1/chat/completions`. Case **Approfondir** : température 0.7, plus long, `think` seulement sur qwen3 / deepseek-r1 / gpt-oss / r1. Les modèles vision (`moondream`, `llava`…) restent pour Morpho, pas pour le chat.
+Un troisième fournisseur **Local** (Ollama / llama-server) sert les lectures **texte** du pack. Avec une capture, Synchro fait **deux passes** : `qwen2.5vl:7b` lit le visuel (sans le JSON technique), puis `qwen2.5:7b` (ou `LOCAL_LLM_MODEL`) raisonne sur le pack + ces notes. `IA_LOCAL_TWO_PASS=0` envoie image et pack au VLM en une fois. Un 404 Ollama **ne bascule pas** sur Gemini / OpenAI. Si le probe touche vraiment Ollama (`/api/tags` ou `/api/version`), le chat utilise `/api/chat` avec `num_ctx` (défaut 16384, `OLLAMA_NUM_CTX`). LM Studio et llama-server restent sur `/v1/chat/completions`. Case **Approfondir** : température 0.7, plus long, `think` seulement sur qwen3 / deepseek-r1 / gpt-oss / r1. Moondream reste pour Morpho, pas pour le chat IA.
 
 ## Brain (`/brain`)
 
 Catalog nommé des indicateurs (`@rsi`, `@sum.rsi`, `@ete`, `@fft`, `@analogs`), **spécialistes** (un petit réseau par série — parité, somme… — entraîné sur l’ère formule, noté sur les 20/50/100 derniers, enregistré dans `.brain/specialists/` ; le décompte d’archive suit le jour, l’entraînement API reste borné au même `weekday` si Mardi ou Vendredi est choisi), journal persisté (Neon, repli local), mémoire vectorielle locale (`nomic-embed-text`) et **agent manuel** (catalog ou 142 courbes Chartisme). Le panneau **Objets** est exactement le prompt. Chat et lots passent par Ollama ; **Ce tour dans le cloud** / **Lots cloud** sont opt-in. **Approfondir** n’agit que sur le chat local (pas les lots). **Lire la table** décrit les fiches sans modèle. Une **démo guidée** (`/brain?demo=1` ou bouton « Lancer la démo ») épingle un handle par lab, lit la table, suit `@rsi`, balaye ces fiches et les consigne au carnet. Après chaque phase un pop-up explique ce que vous voyez : **Suivant** ou **Annuler**. **Spécialistes** (`/brain/specialistes` ou `/brain?demo=specialistes`) a sa propre démo : nom, cible, forme, indicateurs, score vs hasard, enregistrés ; après chaque étape un pop-up : **Suivant** ou **Annuler**. Elle n’entraîne pas toute seule. L’onglet IA n’est pas fusionné : il reste la lecture de captures. Un spécialiste cite une prévision de série nommée ; Brain peut aussi pronostiquer une grille (hypothèse, pas une certitude).
 
-`./launch doctor` ping Ollama (lecture seule, ne démarre pas le serveur) et prévient si seuls des 3B de chat sont tirés. `OLLAMA_HOST` (défaut `http://127.0.0.1:11434`), `OLLAMA_NUM_CTX` et `LOCAL_LLM_MODEL` sont dans `.env.example`. Pull manuel : `ollama pull qwen2.5:7b`. Un clic glyphe Morpho peut décharger le 7B (`keep_alive` 10m vs 30m côté chat). Entraînement d’un spécialiste : `./launch brain-specialist-train` (ou le panneau Spécialistes de `/brain` / `/brain/specialistes`).
+`./launch doctor` ping Ollama (lecture seule, ne démarre pas le serveur) et prévient si seuls des 3B de chat sont tirés. `OLLAMA_HOST` (défaut `http://127.0.0.1:11434`), `OLLAMA_NUM_CTX` et `LOCAL_LLM_MODEL` sont dans `.env.example`. Pull manuel : `ollama pull qwen2.5:7b` et `ollama pull qwen2.5vl:7b`. Un clic glyphe Morpho et une passe IA vision partagent `keep_alive` 30m ; deux 7B se swapent si la VRAM ne tient pas les deux. Entraînement d’un spécialiste : `./launch brain-specialist-train` (ou le panneau Spécialistes de `/brain` / `/brain/specialistes`).
 
 ## Admin (`/admin`)
 

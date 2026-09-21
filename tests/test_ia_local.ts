@@ -12,7 +12,7 @@ import {
   localProbeUrls,
   normalizeLocalLlmBase,
   probeKindFromUrl,
-} from "../src/lib/ia/local-url"
+} from "../src/lib/ia/local-url.ts"
 
 test("localhost LLM base is rewritten to IPv4", () => {
   assert.equal(normalizeLocalLlmBase("http://localhost:11434/"), "http://127.0.0.1:11434")

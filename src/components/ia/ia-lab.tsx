@@ -296,7 +296,9 @@ export function IaLab() {
                     provider: event.provider,
                     requested: event.requested,
                   })
-                  if (event.imageOmitted) {
+                  if (event.visionModel) {
+                    setNotice(`Visuel lu par ${event.visionModel}, réponse par ${event.model}.`)
+                  } else if (event.imageOmitted) {
                     setNotice("Modèle sans vision : le visuel n’a pas été envoyé, seulement les données.")
                   }
                 }
@@ -477,6 +479,13 @@ export function IaLab() {
   const currentModel = allModels.find((item) => item.id === model) ?? null
   const currentModelB = allModels.find((item) => item.id === modelB) ?? null
   const hasImage = Boolean(visual)
+  const localVisionReady = allModels.some((item) => item.provider === "local" && item.available && item.vision)
+  const visionHint = (item: IaModelOption | null) => {
+    if (!hasImage || !item) return ""
+    if (item.provider === "local" && localVisionReady) return " · vision (2 passes)"
+    if (!item.vision) return " · sans vision"
+    return " · vision"
+  }
   const canSend = Boolean(provider && model && status?.[provider])
   const providerB = modelB ? providerOfModel(modelB) : null
   const canSendB = Boolean(providerB && status?.[providerB] && modelB && modelB !== model)
@@ -739,7 +748,7 @@ export function IaLab() {
                 items: [
                   {
                     label: "Vision",
-                    text: "Les captures avec visuel demandent un modèle vision. Sinon seules les données partent.",
+                    text: "En local, un VLM (qwen2.5vl:7b) lit le visuel, puis le modèle texte raisonne sur le pack. Gemini / OpenAI envoient image et données ensemble. Sans VLM, seules les données partent.",
                   },
                   {
                     label: "Flux",
@@ -781,12 +790,12 @@ export function IaLab() {
           <p className="text-[11px] leading-4 text-muted-foreground">
             {compare ? "A · " : ""}
             {providerLabel(currentModel.provider)} · {currentModel.id}
-            {hasImage && !currentModel.vision ? " · sans vision" : hasImage ? " · vision" : ""}
+            {visionHint(currentModel)}
             {compare && currentModelB ? (
               <>
                 {" · B · "}
                 {providerLabel(currentModelB.provider)} · {currentModelB.id}
-                {hasImage && !currentModelB.vision ? " · sans vision" : ""}
+                {visionHint(currentModelB)}
               </>
             ) : null}
           </p>

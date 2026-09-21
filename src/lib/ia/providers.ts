@@ -6,12 +6,15 @@ import {
   guessVision,
   isGeminiChatModel,
   isLocalChatModel,
+  isLocalTextChatModel,
   isModelId,
   isOpenAiChatModel,
   mergeModelOptions,
   modelSequence,
   openaiUsesMaxCompletionTokens,
   pickAvailableModel,
+  pickLocalTextModel,
+  pickLocalVisionModel,
   preferredModel,
   resolveRequestedModel,
   stripGeminiName,
@@ -34,7 +37,7 @@ import {
 } from "@/lib/ia/local-url"
 import { localGenParams, localPackBudget, ollamaNumCtx } from "@/lib/ia/local-options"
 import { llmFetch } from "@/lib/ia/loopback-fetch"
-import { IA_SYSTEM_PROMPT } from "@/lib/ia/prompt"
+import { IA_SYSTEM_PROMPT, IA_VISION_NOTE_MAX, IA_VISION_PASS_PROMPT } from "@/lib/ia/prompt"
 import { usageFromPayload, type IaTokenUsage } from "@/lib/ia/usage"
 import {
   geminiDeltaText,
@@ -60,6 +63,8 @@ export type IaSnapshotPayload = {
   disclaimer?: string
   question?: string
   imageDataUrl?: string | null
+  visionOnly?: boolean
+  visionNotes?: string | null
 }
 
 export type IaCompleteOk = {
@@ -69,6 +74,7 @@ export type IaCompleteOk = {
   provider: IaProviderId
   requested: string
   imageOmitted: boolean
+  visionModel?: string | null
   promptTokens: number | null
   completionTokens: number | null
   estimated: boolean
@@ -335,6 +341,16 @@ function clipTech(tech: unknown, budget = JSON_BUDGET) {
 
 function snapshotText(snapshot: IaSnapshotPayload | null | undefined, budget = JSON_BUDGET) {
   if (!snapshot) return ""
+  if (snapshot.visionOnly) {
+    return [
+      "Capture d’écran Synchro. Décris seulement ce qui se voit.",
+      `Laboratoire : ${snapshot.lab ?? "?"} · onglet : ${snapshot.tab ?? "—"} · route : ${snapshot.route ?? "—"}`,
+      snapshot.capturedAt ? `Capturé : ${snapshot.capturedAt}` : "",
+      snapshot.question ? `Question : ${snapshot.question}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n")
+  }
   const header = [
     "Pack de lecture Synchro (données sous-jacentes ; un pronostic est une hypothèse, pas une certitude).",
     snapshot.disclaimer || "",
@@ -343,11 +359,42 @@ function snapshotText(snapshot: IaSnapshotPayload | null | undefined, budget = J
     snapshot.gitSha ? `Git : ${snapshot.gitSha}` : "",
     snapshot.archive ? `Archive : ${JSON.stringify(snapshot.archive)}` : "",
     snapshot.summary?.length ? `Résumé :\n- ${snapshot.summary.join("\n- ")}` : "",
+    snapshot.visionNotes
+      ? `Notes visuelles (VLM, hypothèse d’écran, pas une source chiffrée) :\n${snapshot.visionNotes}`
+      : "",
   ]
     .filter(Boolean)
     .join("\n")
   const techBudget = Math.max(1_000, budget - header.length - 28)
   return `${header}\nDonnées techniques JSON :\n${clipTech(snapshot.tech, techBudget)}`
+}
+
+export function localTwoPassEnabled() {
+  const raw = liveEnv("IA_LOCAL_TWO_PASS").trim().toLowerCase()
+  return raw !== "0" && raw !== "false" && raw !== "off"
+}
+
+export function clipVisionNotes(text: string) {
+  const trimmed = text.trim()
+  if (trimmed.length <= IA_VISION_NOTE_MAX) return trimmed
+  return `${trimmed.slice(0, IA_VISION_NOTE_MAX)}\n… [tronqué]`
+}
+
+function visionHeaderSnapshot(snapshot: IaSnapshotPayload): IaSnapshotPayload {
+  return {
+    lab: snapshot.lab,
+    tab: snapshot.tab,
+    route: snapshot.route,
+    capturedAt: snapshot.capturedAt,
+    question: snapshot.question,
+    imageDataUrl: snapshot.imageDataUrl,
+    visionOnly: true,
+  }
+}
+
+function lastUserMessages(messages: IaChatMessage[]) {
+  const last = [...messages].reverse().find((item) => item.role === "user")
+  return last ? [last] : messages
 }
 
 function parseDataUrl(dataUrl: string | null | undefined) {
@@ -417,6 +464,7 @@ function toCompleteOk(input: {
   provider: IaProviderId
   requested: string
   imageOmitted: boolean
+  visionModel?: string | null
   usage?: IaTokenUsage
 }): IaCompleteOk {
   return {
@@ -426,6 +474,7 @@ function toCompleteOk(input: {
     provider: input.provider,
     requested: input.requested,
     imageOmitted: input.imageOmitted,
+    visionModel: input.visionModel ?? null,
     promptTokens: input.usage?.promptTokens ?? null,
     completionTokens: input.usage?.completionTokens ?? null,
     estimated: Boolean(input.usage?.estimated),
@@ -931,6 +980,97 @@ export async function completeIa(options: {
   }
 }
 
+type LocalPassPlan = {
+  snapshot: IaSnapshotPayload | null
+  models: string[]
+  imageOmitted: boolean
+  visionModel: string | null
+}
+
+async function generateLocalOnce(
+  native: boolean,
+  base: string,
+  model: string,
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  signal?: AbortSignal,
+  deepen = false
+): Promise<OnceResult> {
+  if (native) return generateOllamaOnce(base, model, messages, snapshot, signal, deepen)
+  return generateOpenAIOnce(
+    model,
+    messages,
+    snapshot,
+    "local",
+    signal,
+    { url: localChatCompletionsUrl(base), label: "LLM local" },
+    deepen
+  )
+}
+
+async function collectVisionNotes(
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload,
+  visionId: string,
+  bases: string[],
+  native: boolean,
+  signal?: AbortSignal
+): Promise<string | null> {
+  const previous = requestSystem
+  requestSystem = IA_VISION_PASS_PROMPT
+  try {
+    const visionSnap = visionHeaderSnapshot(snapshot)
+    const visionMessages = lastUserMessages(messages)
+    for (const base of bases) {
+      try {
+        const result = await generateLocalOnce(native, base, visionId, visionMessages, visionSnap, signal, false)
+        if (result.ok) return clipVisionNotes(result.text)
+      } catch {
+        continue
+      }
+    }
+    return null
+  } finally {
+    requestSystem = previous
+  }
+}
+
+async function planLocalPass(
+  messages: IaChatMessage[],
+  snapshot: IaSnapshotPayload | null,
+  requested: string,
+  liveIds: string[],
+  bases: string[],
+  native: boolean,
+  signal?: AbortSignal
+): Promise<LocalPassPlan> {
+  const envModel = liveEnv("LOCAL_LLM_MODEL").trim()
+  const textId = pickLocalTextModel(liveIds, requested, envModel)
+  const visionId = pickLocalVisionModel(liveIds, requested)
+  const hasImage = Boolean(snapshot?.imageDataUrl)
+  const twoPass = Boolean(snapshot && hasImage && localTwoPassEnabled() && visionId)
+  if (twoPass && snapshot && visionId) {
+    const notes = await collectVisionNotes(messages, snapshot, visionId, bases, native, signal)
+    return {
+      snapshot: { ...snapshot, imageDataUrl: undefined, visionNotes: notes, visionOnly: false },
+      models: [textId || visionId],
+      imageOmitted: !notes,
+      visionModel: notes ? visionId : null,
+    }
+  }
+  if (hasImage && visionId && !localTwoPassEnabled()) {
+    return { snapshot, models: [visionId], imageOmitted: false, visionModel: visionId }
+  }
+  const fallback = modelSequence("local", requested).filter((id) => isLocalTextChatModel(id) || !isLocalChatModel(id))
+  const models = textId ? [textId, ...fallback.filter((id) => id !== textId)] : fallback
+  return {
+    snapshot,
+    models: models.length ? models : modelSequence("local", requested),
+    imageOmitted: hasImage,
+    visionModel: null,
+  }
+}
+
 async function completeLocal(
   messages: IaChatMessage[],
   snapshot: IaSnapshotPayload | null,
@@ -941,22 +1081,22 @@ async function completeLocal(
   const probe = await probeLocalLlm()
   const native = isNativeOllamaKind(probe.kind)
   const bases = probe.ok ? [probe.host] : localLlmCandidates(localLlmBase())
+  const liveIds = probe.ids ?? []
+  const plan = await planLocalPass(messages, snapshot, requested, liveIds, bases, native, signal)
   let lastError = "LLM local injoignable (Ollama ?). Pas de bascule cloud."
   for (const base of bases) {
-    const endpoint = { url: localChatCompletionsUrl(base), label: "LLM local" }
-    for (const model of modelSequence("local", requested)) {
-      const packed = withOptionalImage(snapshot, model, "local")
+    for (const model of plan.models) {
+      const packed = withOptionalImage(plan.snapshot, model, "local")
       try {
-        const result = native
-          ? await generateOllamaOnce(base, model, messages, snapshot, signal, deepen)
-          : await generateOpenAIOnce(model, messages, snapshot, "local", signal, endpoint, deepen)
+        const result = await generateLocalOnce(native, base, model, messages, plan.snapshot, signal, deepen)
         if (result.ok) {
           return toCompleteOk({
             text: result.text,
             model,
             provider: "local",
             requested,
-            imageOmitted: packed.imageOmitted,
+            imageOmitted: plan.imageOmitted || packed.imageOmitted,
+            visionModel: plan.visionModel,
             usage: result.usage,
           })
         }
@@ -1009,6 +1149,20 @@ export async function streamIa(
           ? [localProbe.host]
           : localLlmCandidates(localLlmBase())
         : [""]
+    const localPlan =
+      options.provider === "local"
+        ? await planLocalPass(
+            options.messages,
+            snapshot,
+            requested,
+            localProbe?.ids ?? [],
+            localBases,
+            native,
+            options.signal
+          )
+        : null
+    const workingSnapshot = localPlan?.snapshot ?? snapshot
+    const modelIds = localPlan?.models ?? modelSequence(options.provider, requested)
     let lastError = "IA indisponible"
     for (const localBase of localBases) {
       const localEndpoint =
@@ -1016,8 +1170,10 @@ export async function streamIa(
           ? { url: localChatCompletionsUrl(localBase), label: "LLM local" }
           : undefined
       let hostFailed = false
-      for (const model of modelSequence(options.provider, requested)) {
-        const packed = withOptionalImage(snapshot, model, options.provider)
+      for (const model of modelIds) {
+        const packed = withOptionalImage(workingSnapshot, model, options.provider)
+        const imageOmitted = localPlan ? localPlan.imageOmitted || packed.imageOmitted : packed.imageOmitted
+        const visionModel = localPlan?.visionModel ?? null
         let emitted = false
         const onDelta = (chunk: string) => {
           if (!emitted) {
@@ -1027,7 +1183,8 @@ export async function streamIa(
               model,
               provider: options.provider,
               requested,
-              imageOmitted: packed.imageOmitted,
+              imageOmitted,
+              visionModel,
             })
           }
           onEvent({ type: "delta", text: chunk })
@@ -1035,13 +1192,13 @@ export async function streamIa(
         try {
           const result =
             options.provider === "google"
-              ? await streamGeminiOnce(model, options.messages, snapshot, key, onDelta, options.signal)
+              ? await streamGeminiOnce(model, options.messages, workingSnapshot, key, onDelta, options.signal)
               : options.provider === "local" && native
                 ? await streamOllamaOnce(
                     localBase,
                     model,
                     options.messages,
-                    snapshot,
+                    workingSnapshot,
                     onDelta,
                     options.signal,
                     deepen
@@ -1049,7 +1206,7 @@ export async function streamIa(
                 : await streamOpenAIOnce(
                     model,
                     options.messages,
-                    snapshot,
+                    workingSnapshot,
                     key,
                     onDelta,
                     options.signal,
@@ -1062,7 +1219,8 @@ export async function streamIa(
               model,
               provider: options.provider,
               requested,
-              imageOmitted: packed.imageOmitted,
+              imageOmitted,
+              visionModel,
               usage: result.usage,
             })
             if (!emitted) {
@@ -1071,7 +1229,8 @@ export async function streamIa(
                 model,
                 provider: options.provider,
                 requested,
-                imageOmitted: packed.imageOmitted,
+                imageOmitted,
+                visionModel,
               })
               onEvent({ type: "delta", text: result.text })
             }
@@ -1082,6 +1241,7 @@ export async function streamIa(
               provider: complete.provider,
               requested: complete.requested,
               imageOmitted: complete.imageOmitted,
+              visionModel: complete.visionModel,
               promptTokens: complete.promptTokens,
               completionTokens: complete.completionTokens,
               estimated: complete.estimated,
