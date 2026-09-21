@@ -24,8 +24,8 @@ export function ModelSelect({
   groups: Array<{ label: string; items: IaModelOption[] }>
 }) {
   const current = models.find((item) => item.id === value) ?? null
+  // null is a controlled empty value; undefined would start the Select uncontrolled.
   return (
-    {/* null = empty controlled value; undefined would start the Select uncontrolled. */}
     <Select value={value} onValueChange={(next) => onChange(next ?? null)}>
       <SelectTrigger className="w-full sm:w-64" aria-label={label}>
         <span className="flex flex-1 text-left">
