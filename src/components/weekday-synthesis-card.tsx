@@ -29,7 +29,8 @@ function formatMean(value: number | null, digits = 1) {
 
 function formatNum(value: number | null, digits = 2) {
   if (value == null || !Number.isFinite(value)) return "—"
-  return value.toLocaleString("fr-FR", { maximumFractionDigits: digits })
+  const text = Math.abs(value).toLocaleString("fr-FR", { maximumFractionDigits: digits })
+  return value < 0 ? `−${text}` : text
 }
 
 function formatSigned(value: number | null, digits = 2) {
@@ -144,7 +145,7 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
   const domain = chartDomain(report.runningSumStd)
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Divergence</CardTitle>
         <p className="text-xs text-muted-foreground">
@@ -153,7 +154,7 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="overflow-x-auto">
+        <div className="max-w-full overflow-x-auto">
           <table className="w-full min-w-[52rem] text-sm whitespace-nowrap">
             <thead>
               <tr className="text-left text-muted-foreground">
@@ -234,6 +235,7 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
                   strokeWidth={2}
                   dot={false}
                   connectNulls={false}
+                  isAnimationActive={false}
                 />
                 <Line
                   dataKey="vendredi"
@@ -243,6 +245,7 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
                   strokeDasharray={weekdayLineDash("vendredi")}
                   dot={false}
                   connectNulls={false}
+                  isAnimationActive={false}
                 />
               </LineChart>
             </ChartContainer>
@@ -268,7 +271,7 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
 export function WeekdaySynthesisCard({ draws }: { draws: Draw[] }) {
   const report = synthesizeWeekdays(draws)
   return (
-    <section className="flex flex-col gap-3" aria-label="Synthèse mardi et vendredi">
+    <section className="flex min-w-0 flex-col gap-3" aria-label="Synthèse mardi et vendredi">
       <p className="inline-flex items-center gap-1 text-sm text-foreground">
         Synthèse mardi + vendredi
         <HelpTip

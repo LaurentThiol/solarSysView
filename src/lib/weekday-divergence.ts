@@ -111,7 +111,7 @@ const STAR_AXES: Array<{ id: DivergenceAxisId; label: string }> = [
 function lgamma(z: number): number {
   if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - lgamma(1 - z)
   let x = LANCZOS[0]
-  let shifted = z - 1
+  const shifted = z - 1
   for (let i = 1; i < LANCZOS.length; i += 1) x += LANCZOS[i] / (shifted + i)
   const t = shifted + 7.5
   return 0.5 * Math.log(2 * Math.PI) + (shifted + 0.5) * Math.log(t) - t + Math.log(x)
