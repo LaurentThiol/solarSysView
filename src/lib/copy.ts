@@ -169,6 +169,11 @@ export const GLOSSARY: GlossaryEntry[] = [
     text: "Forme chartiste repérée sur une courbe. Une fausse cassure (fake breakout) n’est pas confirmée par l’activité et la clôture.",
   },
   {
+    term: "Bouncing",
+    group: "lecture",
+    text: "Onglet Évolution qui cherche, sur n1…n5 et e1, e2, des arches dont la hauteur décroît comme une balle qui s’amortit (restitution e). Lecture du tracé sur la fenêtre, pas un pronostic.",
+  },
+  {
     term: "Gagnants EU",
     group: "lecture",
     text: "Colonne FDJ « en Europe » : tous les pays participants, France comprise. On n’additionne pas FR et EU. Hors FR = EU − FR. Visible dans Tirage et dans Évolution · gains. Mardi et vendredi n’ont pas les mêmes mises : le filtre jour les sépare.",

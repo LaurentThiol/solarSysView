@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import type { Metadata } from "next"
 
 import { EvolutionPanel } from "@/components/evolution-panel"
@@ -16,7 +17,9 @@ export default function EvolutionPage() {
       title="Évolution"
       subtitle="Courbe, gains FR/EU dans le temps (log, mardi/vendredi, report, masse empilée, dessin chartiste), pair/impair, forme de la grille, fréquences et retards. Accès admin, comme les services."
     >
-      <EvolutionPanel />
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Chargement…</p>}>
+        <EvolutionPanel />
+      </Suspense>
     </PageShell>
   )
 }

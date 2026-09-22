@@ -1,4 +1,5 @@
 import { macd, rsi, VARIABLE_LABELS, type VariableName } from "@/lib/analysis"
+import type { BounceCapture } from "@/lib/bouncing"
 import { compactSketch, drawingSummaryLines, type ChartSketch, type EvolutionChartMeta } from "@/lib/chart-draw"
 import {
   formatWindowBanner,
@@ -419,6 +420,14 @@ export function packRelief(input: {
   }
 }
 
+function bounceSummary(bounce: BounceCapture) {
+  const restitution = bounce.restitution.toLocaleString("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return `Bouncing · ${bounce.series} · e ${restitution} · ${bounce.bounces} rebonds · ${bounce.from ?? "?"} → ${bounce.to ?? "?"}`
+}
+
 export function packEvolution(input: {
   period: string
   periodLabel: string
@@ -429,6 +438,7 @@ export function packEvolution(input: {
   drawCount: number
   sketches: ChartSketch[]
   chartMeta?: EvolutionChartMeta | null
+  bounce?: BounceCapture | null
 }): CaptureContext {
   const drawings = input.sketches.map(compactSketch)
   const summary = [
@@ -436,11 +446,13 @@ export function packEvolution(input: {
     `${input.drawCount} tirages · ${input.from ?? "?"} → ${input.to ?? "?"}${
       input.month !== "all" ? ` · mois ${input.month}` : ""
     }`,
-    input.chartMeta
-      ? `Série ${input.chartMeta.modeLabel}${
-          input.chartMeta.showSma ? ` · SMA ${input.chartMeta.smaPeriod}` : ""
-        }${input.chartMeta.showBb ? " · Bollinger" : ""}`
-      : "Courbe d’évolution",
+    input.bounce
+      ? bounceSummary(input.bounce)
+      : input.chartMeta
+        ? `Série ${input.chartMeta.modeLabel}${
+            input.chartMeta.showSma ? ` · SMA ${input.chartMeta.smaPeriod}` : ""
+          }${input.chartMeta.showBb ? " · Bollinger" : ""}`
+        : "Courbe d’évolution",
   ]
   if (drawings.length) {
     summary.push(...drawingSummaryLines(input.sketches))
@@ -449,7 +461,7 @@ export function packEvolution(input: {
   }
   return {
     lab: "evolution",
-    tab: input.chartMeta?.mode ?? input.period,
+    tab: input.bounce ? "bouncing" : (input.chartMeta?.mode ?? input.period),
     archive: {
       n: input.drawCount,
       from: input.from,
@@ -469,6 +481,7 @@ export function packEvolution(input: {
         n: input.drawCount,
       },
       chart: input.chartMeta ?? null,
+      bounce: input.bounce ?? null,
       drawings,
       disclaimer: INDEPENDENCE_DISCLAIMER,
     }),

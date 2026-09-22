@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { ChartDrawProvider, useChartDraw } from "@/components/chart-draw/chart-draw-context"
 import { HelpTip } from "@/components/help"
 import { AdminGate } from "@/components/admin-gate"
 import { SiteHeaderSlot } from "@/components/site-header-slot"
 import { useRegisterCapture } from "@/components/capture"
+import { BouncingPanel } from "@/components/bouncing-panel"
 import { DrawChart } from "@/components/draw-chart"
 import { EvolutionGains } from "@/components/evolution-gains"
 import { EvolutionHeat } from "@/components/evolution-heat"
@@ -14,7 +15,7 @@ import { EvolutionParity } from "@/components/evolution-parity"
 import { EvolutionShape } from "@/components/evolution-shape"
 import { FrequencyCard } from "@/components/frequency-card"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
-import { PillTabs } from "@/components/ui/pill-tabs"
+import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import {
   Select,
   SelectContent,
@@ -24,6 +25,8 @@ import {
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { packEvolution } from "@/lib/capture/pack"
+import type { BounceCapture } from "@/lib/bouncing"
+import { useLabTab } from "@/lib/use-lab-tab"
 import type { ChartSketch } from "@/lib/chart-draw"
 import {
   DRAWS,
@@ -50,6 +53,27 @@ import { ERA_LABELS } from "@/lib/copy"
 import { useDraws, type DrawWindow } from "@/lib/use-draws"
 import { useWeekdayScope } from "@/lib/use-weekday-scope"
 import type { WeekdayScope } from "@/lib/weekday-scope"
+
+const EVOLUTION_CHART_TABS = ["courbes", "bouncing"] as const
+
+const CHART_TABS = [
+  {
+    id: "courbes",
+    label: "Courbes",
+    help: {
+      title: "Courbes",
+      body: "Sommes, n1 à n5 et étoiles sur la fenêtre. SMA et Bollinger décrivent le tracé, ils ne prédisent pas le tirage suivant.",
+    },
+  },
+  {
+    id: "bouncing",
+    label: "Bouncing",
+    help: {
+      title: "Bouncing",
+      body: "Cherche, sur n1…n5 et e1, e2, les passages où la courbe fait des arches de plus en plus basses, comme une balle qui s’amortit. Lecture du tracé, pas un pronostic.",
+    },
+  },
+] as const
 
 const PERIODS: { id: DrawWindow; label: string; full: string }[] = [
   { id: "last_20", label: "20 derniers", full: WINDOW_PRESET_LABELS.last_20 },
@@ -183,6 +207,26 @@ function formatStat(value: number, digits = 1) {
 
 function EvolutionContent() {
   const [period, setPeriod] = useState<DrawWindow>("last_20")
+  const [chartTab, setChartTab] = useLabTab(EVOLUTION_CHART_TABS, "courbes")
+  const [bounceCapture, setBounceCapture] = useState<BounceCapture | null>(null)
+  const onBounce = useCallback((episode: BounceCapture | null) => {
+    setBounceCapture((prev) => {
+      if (!episode && !prev) return prev
+      if (
+        episode &&
+        prev &&
+        prev.series === episode.series &&
+        prev.from === episode.from &&
+        prev.to === episode.to &&
+        prev.bounces === episode.bounces &&
+        prev.restitution === episode.restitution &&
+        prev.score === episode.score
+      ) {
+        return prev
+      }
+      return episode
+    })
+  }, [])
   const [month, setMonth] = useState("all")
   const [weekday, setWeekday] = useWeekdayScope()
   const { draws, source, loading } = useDraws(period, weekday)
@@ -283,6 +327,7 @@ function EvolutionContent() {
       drawCount: filtered.length,
       sketches: [...sketches, ...gainsSketches],
       chartMeta,
+      bounce: chartTab === "bouncing" ? bounceCapture : null,
     })
   )
 
@@ -387,7 +432,22 @@ function EvolutionContent() {
         />
       </section>
 
-      <DrawChart draws={filtered} />
+      <section className="flex flex-col gap-3">
+        <PillTabs
+          idPrefix="evolution-chart"
+          label="Lecture de la courbe"
+          value={chartTab}
+          onValueChange={setChartTab}
+          items={CHART_TABS}
+        />
+        <PillTabPanel idPrefix="evolution-chart" tab={chartTab}>
+          {chartTab === "bouncing" ? (
+            <BouncingPanel draws={filtered} onEpisode={onBounce} />
+          ) : (
+            <DrawChart draws={filtered} />
+          )}
+        </PillTabPanel>
+      </section>
 
       <ChartDrawProvider host="gains">
         <GainsSketchBridge onSketches={setGainsSketches} />
