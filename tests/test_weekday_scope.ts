@@ -11,6 +11,7 @@ import {
   weekdayLineDash,
   weekdaySplitFields,
 } from "../src/lib/weekday-scope.ts"
+import { NUMBER_SUM_SD, weekdayDivergence } from "../src/lib/weekday-divergence.ts"
 import { synthesizeWeekdays, weekdayCounts } from "../src/lib/weekday-synthesis.ts"
 
 test("weekday scope parses jour aliases and ignores mercredi", () => {
@@ -136,4 +137,106 @@ test("synthesizeWeekdays totals are mardi plus vendredi", () => {
   assert.equal(report.combined.meanSum, (15 + 15 + 40) / 3)
   assert.equal(report.mardi.meanJackpot, 15)
   assert.equal(report.vendredi.meanJackpot, 30)
+})
+
+function divergenceDraw(
+  date: string,
+  weekday: string,
+  numbers: number[],
+  starPool?: number
+) {
+  return {
+    date,
+    weekday,
+    numbers,
+    stars: [1, 2],
+    star_pool: starPool,
+  }
+}
+
+test("number sum standard deviation matches the closed form", () => {
+  assert.equal(NUMBER_SUM_SD.toFixed(2), "30.92")
+})
+
+test("weekday divergence matches a hand-computed Welch contrast", () => {
+  const report = weekdayDivergence([
+    divergenceDraw("2026-01-06", "mardi", [1]),
+    divergenceDraw("2026-01-13", "mardi", [2]),
+    divergenceDraw("2026-01-20", "mardi", [3]),
+    divergenceDraw("2026-01-09", "vendredi", [3]),
+    divergenceDraw("2026-01-16", "vendredi", [4]),
+    divergenceDraw("2026-01-23", "vendredi", [5]),
+  ])
+  const sum = report.axes.find((axis) => axis.id === "sum")
+  assert.ok(sum)
+  assert.equal(sum.mardi.mean, 2)
+  assert.equal(sum.mardi.std, 1)
+  assert.equal(sum.mardi.cv, 0.5)
+  assert.equal(sum.vendredi.mean, 4)
+  assert.equal(sum.vendredi.std, 1)
+  assert.equal(sum.delta, -2)
+  assert.equal(sum.cohenD, -2)
+  assert.ok(Math.abs((sum.welchSe ?? 0) - Math.sqrt(2 / 3)) < 1e-12)
+  assert.ok(Math.abs((sum.welchDf ?? 0) - 4) < 1e-12)
+  assert.ok(Math.abs((sum.welchT ?? 0) + Math.sqrt(6)) < 1e-12)
+  const half = ((sum.ciHigh ?? 0) - (sum.ciLow ?? 0)) / 2
+  const critical = half / (sum.welchSe ?? 1)
+  assert.ok(Math.abs(critical - 2.7764451051977987) < 1e-6)
+})
+
+test("identical weekday series have a zero mean gap", () => {
+  const report = weekdayDivergence([
+    divergenceDraw("2026-01-06", "mardi", [10]),
+    divergenceDraw("2026-01-13", "mardi", [20]),
+    divergenceDraw("2026-01-20", "mardi", [30]),
+    divergenceDraw("2026-01-09", "vendredi", [10]),
+    divergenceDraw("2026-01-16", "vendredi", [20]),
+    divergenceDraw("2026-01-23", "vendredi", [30]),
+  ])
+  const sum = report.axes.find((axis) => axis.id === "sum")
+  assert.ok(sum)
+  assert.equal(sum.delta, 0)
+  assert.equal(sum.cohenD, 0)
+  assert.equal(sum.welchT, 0)
+  assert.equal(sum.welchP, 1)
+})
+
+test("running sum std starts at the eighth draw of the longer evening", () => {
+  const draws = []
+  for (let i = 0; i < 10; i += 1) {
+    draws.push(divergenceDraw(`2026-01-${String(i + 1).padStart(2, "0")}`, "mardi", [i + 1]))
+  }
+  for (let i = 0; i < 12; i += 1) {
+    draws.push(divergenceDraw(`2026-02-${String(i + 1).padStart(2, "0")}`, "vendredi", [i + 2]))
+  }
+  const report = weekdayDivergence(draws)
+  assert.equal(report.runningSumStd.length, 5)
+  assert.equal(report.runningSumStd[0]?.k, 8)
+  assert.equal(report.runningSumStd.at(-1)?.k, 12)
+  assert.equal(report.runningSumStd[0]?.vendredi == null, false)
+  assert.equal(report.runningSumStd.at(-1)?.mardi, null)
+})
+
+test("star axes drop when the window mixes two star pools", () => {
+  const shared = [
+    divergenceDraw("2026-01-06", "mardi", [1, 2, 3, 4, 5], 12),
+    divergenceDraw("2026-01-13", "mardi", [2, 3, 4, 5, 6], 12),
+    divergenceDraw("2026-01-09", "vendredi", [3, 4, 5, 6, 7], 12),
+    divergenceDraw("2026-01-16", "vendredi", [4, 5, 6, 7, 8], 12),
+  ]
+  const onePool = weekdayDivergence(shared)
+  assert.equal(onePool.starPoolBreak, false)
+  assert.ok(onePool.axes.some((axis) => axis.id === "star_sum"))
+
+  const mixed = weekdayDivergence([
+    shared[0],
+    shared[1],
+    { ...shared[2], star_pool: 11 },
+    { ...shared[3], star_pool: 11 },
+  ])
+  assert.equal(mixed.starPoolBreak, true)
+  assert.equal(
+    mixed.axes.some((axis) => axis.id === "star_sum" || axis.id === "star_spread"),
+    false
+  )
 })
