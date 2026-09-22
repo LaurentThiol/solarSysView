@@ -62,6 +62,13 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
       "Parmi les propositions de Combinaisons, combien survivent ici ? Sépare décompte et masse pondérée.",
     ]
   }
+  if (lab === "pronostic") {
+    return [
+      "Combien de grilles restent après la cascade (somme → parité → espaces), et quelle couche a le plus réduit le volume ?",
+      "Le proposeur (min/max±kσ vs percentiles) et le walk-forward : la couverture est-elle achetée par un univers encore trop large ?",
+      "Rappelle que ce décompte est une hypothèse de lecture : P(rang) officiel ne change pas.",
+    ]
+  }
   if (lab === "morpho") {
     return [
       "Quelles formes géométriques sont visibles sur le glyphe, et que valent-elles statistiquement ?",

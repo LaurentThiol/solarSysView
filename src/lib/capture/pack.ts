@@ -474,3 +474,67 @@ export function packEvolution(input: {
     }),
   }
 }
+
+export function packPronostic(input: {
+  pool: string
+  source: string
+  preset: WindowPreset
+  resolved: ResolvedWindow<{ date: string }>
+  grids: number
+  numberCount: number
+  starCount: number
+  cascade: Array<{ id: string; label: string; count: number }>
+  coverage: { n: number; hits: number; rate: number; meanVolume: number | null }
+  learn: { method: string; k: number; percentile: number }
+  diagnostics: string[]
+  numbers: {
+    minSum: number
+    maxSum: number
+    minEven: number
+    maxEven: number
+    slots: Array<{ lo: number; hi: number }>
+  }
+  stars: {
+    minSum: number
+    maxSum: number
+    minEven: number
+    maxEven: number
+    slots: Array<{ lo: number; hi: number }>
+  }
+}): CaptureContext {
+  const banner = formatWindowBanner(input.resolved)
+  const cascade = input.cascade.map((step) => `${step.label} ${step.count}`).join(" → ")
+  const summary = [
+    `Pronostic · ${input.pool === "stars" ? "étoiles" : "numéros"}`,
+    banner,
+    `${input.grids.toLocaleString("fr-FR")} grilles 5+2 · ${input.numberCount.toLocaleString("fr-FR")} × ${input.starCount.toLocaleString("fr-FR")}`,
+    cascade,
+    input.diagnostics[0] ?? `enveloppe ${input.learn.method} k=${input.learn.k}`,
+  ]
+  return {
+    lab: "pronostic",
+    tab: input.pool,
+    archive: {
+      n: input.resolved.drawCount,
+      from: input.resolved.fromDate,
+      to: input.resolved.toDate,
+      source: input.source,
+    },
+    summary,
+    tech: withinBudget({
+      lab: "pronostic",
+      preset: input.preset,
+      pool: input.pool,
+      grids: input.grids,
+      numbers: input.numberCount,
+      stars: input.starCount,
+      cascade: input.cascade,
+      coverage: input.coverage,
+      learn: input.learn,
+      diagnostics: input.diagnostics,
+      numberStack: input.numbers,
+      starStack: input.stars,
+      disclaimer: INDEPENDENCE_DISCLAIMER,
+    }),
+  }
+}

@@ -12,10 +12,11 @@ from synchro.analysis.combinatorics import rank_probabilities
 from synchro.analysis.inference import wilson_interval
 from synchro.ranks import RANK_LABELS, evaluate_grid, validate_grid
 
-PLAY_SOURCES = ("combinaisons", "jeux", "manuel")
+PLAY_SOURCES = ("combinaisons", "jeux", "pronostic", "manuel")
 PLAY_SOURCE_LABELS = {
     "combinaisons": "Combinaisons",
     "jeux": "Jeux",
+    "pronostic": "Pronostic",
     "manuel": "Manuel",
 }
 MAX_COPIES = 20
@@ -295,6 +296,22 @@ def summarize_play_spec(spec: dict[str, Any] | None) -> list[str]:
     ]
     if star_excluded:
         chips.append("★ hors " + ", ".join(str(n) for n in star_excluded))
+    number_slots = spec.get("numberSlotBands") or spec.get("number_slot_bands")
+    if isinstance(number_slots, list) and number_slots:
+        parts = []
+        for i, item in enumerate(number_slots[:5]):
+            if isinstance(item, dict) and "lo" in item and "hi" in item:
+                parts.append(f"n{i + 1} {int(item['lo'])}–{int(item['hi'])}")
+        if parts:
+            chips.append(" ".join(parts))
+    star_slots = spec.get("starSlotBands") or spec.get("star_slot_bands")
+    if isinstance(star_slots, list) and star_slots:
+        parts = []
+        for i, item in enumerate(star_slots[:2]):
+            if isinstance(item, dict) and "lo" in item and "hi" in item:
+                parts.append(f"e{i + 1} {int(item['lo'])}–{int(item['hi'])}")
+        if parts:
+            chips.append(" ".join(parts))
     return chips
 
 

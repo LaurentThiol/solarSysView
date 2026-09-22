@@ -16,12 +16,13 @@ import {
   type StoredSpec,
 } from "@/lib/jeux"
 
-export const PLAY_SOURCES = ["combinaisons", "jeux", "manuel"] as const
+export const PLAY_SOURCES = ["combinaisons", "jeux", "pronostic", "manuel"] as const
 export type PlaySource = (typeof PLAY_SOURCES)[number]
 
 export const PLAY_SOURCE_LABELS: Record<PlaySource, string> = {
   combinaisons: "Combinaisons",
   jeux: "Jeux",
+  pronostic: "Pronostic",
   manuel: "Manuel",
 }
 

@@ -154,6 +154,16 @@ export const GLOSSARY: GlossaryEntry[] = [
     text: "Onglet Jeux des grilles jouées (histoJeux). Pas une bibliothèque de modèles : ce sont les mises réellement posées.",
   },
   {
+    term: "Pronostic par couches",
+    group: "grilles",
+    text: "Atelier /pronostic : on réduit l’univers 5+2 par des couches (somme, parité des rangs n1–n5, espaces). Les couches se resserrent. Le nombre affiché est le volume restant, pas P(prochain tirage). Le proposeur lit 20/50/100/année ; un walk-forward mesure la couverture.",
+  },
+  {
+    term: "Statistique d’ordre",
+    group: "grilles",
+    text: "n1 est le plus petit numéro du tirage, n5 le plus grand — jamais l’ordre de sortie, non publié. e1 / e2 pour les étoiles. Les espaces de Pronostic bornent ces rangs.",
+  },
+  {
     term: "Figure / détection",
     group: "lecture",
     text: "Forme chartiste repérée sur une courbe. Une fausse cassure (fake breakout) n’est pas confirmée par l’activité et la clôture.",

@@ -104,7 +104,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     home: "/combinaisons",
     help: {
       title: "Grilles",
-      body: "Composer des grilles 5+2, compter les solutions, consigner les mises jouées.",
+      body: "Composer des grilles 5+2, poser un pronostic par couches, compter les solutions, consigner les mises jouées.",
     },
     items: [
       {
@@ -113,6 +113,14 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         help: {
           title: "Combinaisons",
           body: "Composer, proposer et comparer des grilles EuroMillions. Enregistrer garde un modèle ; Consigner l’envoie dans le journal. Le score est une proba de gain, pas un pronostic.",
+        },
+      },
+      {
+        href: "/pronostic",
+        label: "Pronostic",
+        help: {
+          title: "Pronostic",
+          body: "Réduire l’univers 5+2 par couches (somme, parité, espaces n1–n5). Le bandeau donne le nombre exact de solutions. Hypothèse de lecture : le tirage officiel reste uniforme.",
         },
       },
       {

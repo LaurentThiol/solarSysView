@@ -67,6 +67,7 @@ import {
   listGrids,
   listPool,
   parseStoredSpec,
+  poolSlotRestricted,
   samplePool,
   storedToPoolSpecs,
   writeStoredSpec,
@@ -634,6 +635,15 @@ export function JeuxPanel() {
         restantes. Les curseurs de chance filtrent (0 % / seuil) ou pondèrent
         (masse) ; ils ne prédisent pas le prochain tirage.
       </p>
+      {poolSlotRestricted(pools.numbers) || poolSlotRestricted(pools.stars) ? (
+        <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+          Bornes de rang (n1–n5 / e1–e2) actives, issues de{" "}
+          <Link href="/pronostic" className="underline underline-offset-2">
+            Pronostic
+          </Link>
+          . Le compteur les applique ; les curseurs d’ici ne les affichent pas.
+        </p>
+      ) : null}
       <WeekdayScopeControl value={weekday} onChange={setWeekday} />
       {weekday === "synthese" ? <WeekdaySynthesisCard draws={draws} /> : null}
 

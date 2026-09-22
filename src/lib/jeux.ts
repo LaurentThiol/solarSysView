@@ -19,6 +19,15 @@ import {
   shapeIsRestricted,
   type ShapeBands,
 } from "@/lib/grid-shape"
+import {
+  comboPassesSlots,
+  normalizeSlots,
+  parseSlotBands,
+  slotsRestricted,
+  type SlotBand,
+} from "@/lib/pronostic/bounds"
+
+export type { SlotBand }
 
 export const NUMBER_DRAW = 5
 export const STAR_DRAW = 2
@@ -63,6 +72,8 @@ export type PoolSpec = {
   maxConsecutive: number
   decadeMin: number[]
   decadeMax: number[]
+  /** Bornes par statistique d’ordre (n1…n5 / e1–e2). Absentes = univers théorique. */
+  slotBands?: SlotBand[]
 }
 
 export type SumBin = { sum: number; count: number }
@@ -220,6 +231,14 @@ export function poolShapeRestricted(spec: PoolSpec) {
   return shapeIsRestricted(shapeBandsFromSpec(spec), spec.kind === "numbers")
 }
 
+export function poolSlotRestricted(spec: PoolSpec) {
+  return slotsRestricted(spec.kind, spec.slotBands)
+}
+
+export function specSlotBands(spec: PoolSpec): SlotBand[] {
+  return normalizeSlots(spec.kind, spec.slotBands)
+}
+
 function impossibleShapeMessage(spec: PoolSpec, bands: ShapeBands): string | null {
   if (spec.kind !== "numbers") return null
   const minNeed = bands.decadeMin.reduce((total, item) => total + item, 0)
@@ -261,6 +280,31 @@ function addBall(
 ) {
   const even = isEven(value)
   for (let k = maxK; k >= 1; k -= 1) {
+    for (let s = maxSum; s >= value; s -= 1) {
+      for (let e = maxEven; e >= even; e -= 1) {
+        const prev = dp[k - 1][s - value][e - even]
+        if (prev.count === 0 && prev.mass === 0) continue
+        const cell = dp[k][s][e]
+        cell.count += prev.count
+        cell.mass += prev.mass * weight
+      }
+    }
+  }
+}
+
+function addBallSlotted(
+  dp: Cell[][][],
+  value: number,
+  weight: number,
+  maxK: number,
+  maxSum: number,
+  maxEven: number,
+  bands: SlotBand[]
+) {
+  const even = isEven(value)
+  for (let k = maxK; k >= 1; k -= 1) {
+    const band = bands[k - 1]
+    if (!band || value < band.lo || value > band.hi) continue
     for (let s = maxSum; s >= value; s -= 1) {
       for (let e = maxEven; e >= even; e -= 1) {
         const prev = dp[k - 1][s - value][e - even]
@@ -404,6 +448,7 @@ function forEachMatch(
       }
       k += 1
     }
+    if (!comboPassesSlots(comboBuf, spec.kind, spec.slotBands)) return false
     return (
       onMatch(comboBuf, sum + mustSum, even + mustEven, mass * forcedMass) === false
     )
@@ -526,7 +571,8 @@ export function evaluatePool(spec: PoolSpec): PoolResult {
       mustSum <= band.max &&
       mustEven >= evenBand.min &&
       mustEven <= evenBand.max &&
-      comboPassesShape(classified.forced, shapeBands, spec.kind === "numbers")
+      comboPassesShape(classified.forced, shapeBands, spec.kind === "numbers") &&
+      comboPassesSlots(classified.forced, spec.kind, spec.slotBands)
     const mass = ok
       ? classified.forced.reduce((total, value) => total * weightOf(spec.chance[value] ?? 0), 1)
       : 0
@@ -550,7 +596,7 @@ export function evaluatePool(spec: PoolSpec): PoolResult {
     }
   }
 
-  if (poolShapeRestricted(spec)) {
+  if (poolShapeRestricted(spec) || (poolSlotRestricted(spec) && classified.forced.length > 0)) {
     return { ...base, ...gatherFromVisit(spec, impossible) }
   }
 
@@ -571,8 +617,15 @@ export function evaluatePool(spec: PoolSpec): PoolResult {
 
   const dp = emptyDp(maxK, maxSum, maxEven)
   dp[0][0][0] = { count: 1, mass: 1 }
+  const slotted = poolSlotRestricted(spec)
+  const slotBands = slotted ? specSlotBands(spec) : null
   for (const value of classified.optional) {
-    addBall(dp, value, weightOf(spec.chance[value] ?? 0), maxK, maxSum, maxEven)
+    const weight = weightOf(spec.chance[value] ?? 0)
+    if (slotBands) {
+      addBallSlotted(dp, value, weight, maxK, maxSum, maxEven, slotBands)
+    } else {
+      addBall(dp, value, weight, maxK, maxSum, maxEven)
+    }
   }
   const gathered = collect(
     dp,
@@ -788,7 +841,7 @@ export function samplePool(
   const result = evaluatePool(spec)
   if (result.count === 0 || n <= 0) return []
   const take = Math.min(n, result.count)
-  if (poolShapeRestricted(spec)) return sampleByReservoir(spec, take, seed)
+  if (poolShapeRestricted(spec) || poolSlotRestricted(spec)) return sampleByReservoir(spec, take, seed)
   const { classified, need, remainMinSum, remainMaxSum, remainMinEven, remainMaxEven, forced } =
     shiftTargets(spec)
   if (need === 0) {
@@ -927,6 +980,8 @@ export type StoredSpec = {
   starMaxSpread: number
   starMinConsecutive: number
   starMaxConsecutive: number
+  numberSlotBands?: SlotBand[]
+  starSlotBands?: SlotBand[]
 }
 
 export function defaultStoredSpec(): StoredSpec {
@@ -1017,6 +1072,8 @@ export function parseStoredSpec(value: unknown): StoredSpec | null {
     starMaxSpread: clampInt(Number(parsed.starMaxSpread ?? base.starMaxSpread), STAR_SPREAD_MIN, STAR_SPREAD_MAX),
     starMinConsecutive: clampInt(Number(parsed.starMinConsecutive ?? base.starMinConsecutive), 0, STAR_CONSEC_MAX),
     starMaxConsecutive: clampInt(Number(parsed.starMaxConsecutive ?? base.starMaxConsecutive), 0, STAR_CONSEC_MAX),
+    numberSlotBands: parseSlotBands("numbers", parsed.numberSlotBands),
+    starSlotBands: parseSlotBands("stars", parsed.starSlotBands),
   }
 }
 
@@ -1075,6 +1132,16 @@ export function summarizeStoredSpec(spec: StoredSpec | null | undefined): string
   if (spec.starForced.length > 0) {
     chips.push(`★ forcées ${[...spec.starForced].sort((a, b) => a - b).join(", ")}`)
   }
+  if (spec.numberSlotBands && slotsRestricted("numbers", spec.numberSlotBands)) {
+    chips.push(
+      spec.numberSlotBands.map((band, i) => `n${i + 1} ${band.lo}–${band.hi}`).join(" ")
+    )
+  }
+  if (spec.starSlotBands && slotsRestricted("stars", spec.starSlotBands)) {
+    chips.push(
+      spec.starSlotBands.map((band, i) => `e${i + 1} ${band.lo}–${band.hi}`).join(" ")
+    )
+  }
   const starExcluded = STAR_VALUES.filter((_, i) => (spec.starChance[i] ?? DEFAULT_CHANCE) <= 0)
   if (starExcluded.length > 0) {
     chips.push(`★ hors ${starExcluded.join(", ")}`)
@@ -1121,6 +1188,7 @@ export function storedToPoolSpecs(stored: StoredSpec): {
       maxConsecutive: stored.numberMaxConsecutive,
       decadeMin: stored.numberDecadeMin,
       decadeMax: stored.numberDecadeMax,
+      slotBands: stored.numberSlotBands,
     },
     stars: {
       kind: "stars",
@@ -1137,6 +1205,7 @@ export function storedToPoolSpecs(stored: StoredSpec): {
       maxConsecutive: stored.starMaxConsecutive,
       decadeMin: defaultStarShape().decadeMin,
       decadeMax: defaultStarShape().decadeMax,
+      slotBands: stored.starSlotBands,
     },
   }
 }
@@ -1159,7 +1228,10 @@ export function comboSurvives(values: number[], spec: PoolSpec): boolean {
   if (sum < band.min || sum > band.max || even < evenBand.min || even > evenBand.max) {
     return false
   }
-  return comboPassesShape(values, shapeBandsFromSpec(spec), spec.kind === "numbers")
+  return (
+    comboPassesShape(values, shapeBandsFromSpec(spec), spec.kind === "numbers") &&
+    comboPassesSlots(values, spec.kind, spec.slotBands)
+  )
 }
 
 export function gridSurvives(

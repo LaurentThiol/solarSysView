@@ -31,6 +31,8 @@ test("glossary and fausse cassure", () => {
   assert.match(copySrc, /term: "Fenêtre de travail"/)
   assert.match(copySrc, /term: "Jour de tirage"/)
   assert.match(copySrc, /term: "Enregistrer"/)
+  assert.match(copySrc, /term: "Pronostic par couches"/)
+  assert.match(copySrc, /term: "Statistique d’ordre"/)
   assert.match(copySrc, /term: "Période X"/)
   assert.match(copySrc, /term: "Warmup"/)
   assert.match(copySrc, /term: "Probabilités officielles"/)

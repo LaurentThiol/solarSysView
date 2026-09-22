@@ -164,6 +164,45 @@ def _shape_bands(spec: dict[str, Any], kind: str) -> dict[str, Any]:
     }
 
 
+def _slot_bands(spec: dict[str, Any], kind: str) -> list[tuple[int, int]] | None:
+    raw = spec.get("slot_bands")
+    if raw is None:
+        raw = spec.get("slotBands")
+    draw = NUMBER_DRAW if kind == "numbers" else STAR_DRAW
+    pool = NUMBER_POOL if kind == "numbers" else STAR_POOL
+    if not isinstance(raw, (list, tuple)) or len(raw) != draw:
+        return None
+    out: list[tuple[int, int]] = []
+    for i, item in enumerate(raw):
+        theo_lo = i + 1
+        theo_hi = pool - (draw - 1 - i)
+        if isinstance(item, dict):
+            lo = clamp_int(item.get("lo", theo_lo), theo_lo, theo_hi)
+            hi = clamp_int(item.get("hi", theo_hi), theo_lo, theo_hi)
+        elif isinstance(item, (list, tuple)) and len(item) >= 2:
+            lo = clamp_int(item[0], theo_lo, theo_hi)
+            hi = clamp_int(item[1], theo_lo, theo_hi)
+        else:
+            return None
+        if lo > hi:
+            lo, hi = hi, lo
+        out.append((lo, hi))
+    theo = [(i + 1, pool - (draw - 1 - i)) for i in range(draw)]
+    if all(band == theo[i] for i, band in enumerate(out)):
+        return None
+    return out
+
+
+def _combo_passes_slots(combo: list[int], spec: dict[str, Any], kind: str) -> bool:
+    bands = _slot_bands(spec, kind)
+    if not bands:
+        return True
+    sorted_combo = sorted(combo)
+    if len(sorted_combo) != len(bands):
+        return False
+    return all(lo <= value <= hi for value, (lo, hi) in zip(sorted_combo, bands))
+
+
 def _shape_restricted(spec: dict[str, Any], kind: str) -> bool:
     bands = _shape_bands(spec, kind)
     if kind == "numbers":
@@ -214,6 +253,8 @@ def combo_survives(values: list[int], spec: dict[str, Any]) -> bool:
     even = sum(_is_even(value) for value in values)
     if not (band[0] <= total <= band[1] and even_band[0] <= even <= even_band[1]):
         return False
+    if not _combo_passes_slots(sorted(values), spec, kind):
+        return False
     return _combo_passes_shape(sorted(values), spec, kind)
 
 
@@ -247,6 +288,8 @@ def _gather_from_visit(spec: dict[str, Any], classified: dict[str, Any], band: t
         if not (band[0] <= total <= band[1] and even_band[0] <= even <= even_band[1]):
             return
         if not _combo_passes_shape(combo, spec, spec["kind"]):
+            return
+        if not _combo_passes_slots(combo, spec, spec["kind"]):
             return
         w = forced_mass
         for value in rest:
@@ -304,13 +347,18 @@ def evaluate_pool(spec: dict[str, Any]) -> dict[str, Any]:
     remain_max_sum = band[1] - must_sum
     remain_min_even = even_band[0] - must_even
     remain_max_even = even_band[1] - must_even
+    slot_bands = _slot_bands(spec, spec["kind"])
+    slot_restricted = slot_bands is not None
+    visit = _shape_restricted(spec, spec["kind"]) or (slot_restricted and len(classified["forced"]) > 0)
 
-    if _shape_restricted(spec, spec["kind"]):
+    if visit:
         gathered = _gather_from_visit(spec, classified, band, even_band, chance)
         return {**base, **gathered}
 
     if need == 0:
         ok = band[0] <= must_sum <= band[1] and even_band[0] <= must_even <= even_band[1]
+        if ok:
+            ok = _combo_passes_slots(classified["forced"], spec, spec["kind"])
         mass = 1.0
         if ok:
             for value in classified["forced"]:
@@ -336,6 +384,10 @@ def evaluate_pool(spec: dict[str, Any]) -> dict[str, Any]:
         w = _weight(ch(value))
         even = _is_even(value)
         for k in range(max_k, 0, -1):
+            if slot_bands is not None:
+                lo, hi = slot_bands[k - 1]
+                if value < lo or value > hi:
+                    continue
             for s in range(max_sum, value - 1, -1):
                 for e in range(max_even, even - 1, -1):
                     prev_c, prev_m = layers[k - 1][s - value][e - even]

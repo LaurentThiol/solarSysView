@@ -193,3 +193,31 @@ def test_grid_survives_even_only_and_rejects_odd():
     stars = _spec("stars")
     assert grid_survives({"numbers": [2, 4, 6, 8, 10], "stars": [1, 2]}, numbers, stars)
     assert not grid_survives({"numbers": [1, 2, 3, 4, 5], "stars": [1, 2]}, numbers, stars)
+
+
+def test_slot_bands_star_sum_twenty_three_still_one():
+    spec = _spec(
+        "stars",
+        min_sum=23,
+        max_sum=23,
+        slot_bands=[{"lo": 1, "hi": 11}, {"lo": 2, "hi": 12}],
+    )
+    assert evaluate_pool(spec)["count"] == 1
+
+
+def test_slot_bands_reject_out_of_slot_grid():
+    from synchro.analysis.jeux import combo_survives
+
+    spec = _spec(
+        "numbers",
+        slot_bands=[
+            {"lo": 1, "hi": 10},
+            {"lo": 11, "hi": 20},
+            {"lo": 21, "hi": 30},
+            {"lo": 31, "hi": 40},
+            {"lo": 41, "hi": 50},
+        ],
+    )
+    assert combo_survives([1, 12, 23, 34, 45], spec)
+    assert not combo_survives([1, 2, 3, 4, 5], spec)
+

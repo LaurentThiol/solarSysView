@@ -73,6 +73,10 @@ Deux onglets.
 
 **histoJeux** — journal des grilles **réellement jouées**, stocké dans Neon (`plays`). Chaque ligne a une date de tirage (mardi/vendredi, défaut = prochain tirage encore ouvert avant 20h45 Paris). Après synchro FDJ, rang, correspondances et **rapport €** (× copies) se calculent. Stats descriptives (rangs, matches, total des gains FDJ, boules les plus jouées), **IC Wilson** et **test binomial exact** vs P(gain) officielle ≈ 7,71 % (une consignation = un essai ; les copies ne sont pas des essais de plus). Les consignations depuis Solutions emportent le **spec Jeux** (somme, décennies, forcés…) pour relire pourquoi la grille a été jouée, et **Rouvrir dans Jeux** recharge ces curseurs. Export CSV. Repli session si l’API ne répond pas. Distinct de Mes grilles, qui reste une bibliothèque de modèles.
 
+## Pronostic (`/pronostic`)
+
+Composeur d’hypothèses 5+2 : trois couches modulables (**somme**, **rangs + parité**, **espaces n1–n5 / e1–e2**) se resserrent. Le bandeau affiche le nombre exact de grilles restantes (cascade univers → couches). Les espaces peuvent se chevaucher ; un numéro n’est pris qu’une fois (`n1 < n2 < …`). Un **proposeur** lit la fenêtre (20 / 50 / 100 / année) avec une formule réglable (`min/max ± k·σ`, moyenne ± k·σ, percentiles) ; un walk-forward mesure la couverture. **Appliquer** n’est jamais silencieux. On peut importer un forecast Spécialiste (somme / parité) et **envoyer vers Jeux**. Ce n’est pas P(prochain tirage) : la loi officielle reste uniforme.
+
 ## Morpho (`/morpho`)
 
 Laboratoire visuel : chaque tirage est un glyphe sur la grille 5×10 + étoiles. Détecteurs géométriques (alignements, grappe, miroir, …), kNN visuel CLIP (navigateur), règles QUAND/ALORS, anticipation `P(forme suivante | contexte)` vs tirages uniformes. VLM optionnel pour la légende :
