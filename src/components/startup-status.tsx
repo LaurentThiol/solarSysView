@@ -739,7 +739,7 @@ export function SiteHeader() {
           </div>
         </div>
       </div>
-      <div id={SITE_HEADER_SLOT_ID} />
+      <div id={SITE_HEADER_SLOT_ID} className="min-w-0" />
       {portalReady && menuOpen
         ? createPortal(
             <div

@@ -40,6 +40,7 @@ export function PillTabs<T extends string>({
   groups,
   mode = "tabs",
   compact = false,
+  wrap = false,
   idPrefix,
   className,
 }: {
@@ -51,6 +52,8 @@ export function PillTabs<T extends string>({
   mode?: "tabs" | "chips"
   /** Une seule ligne, défilement horizontal — pour un bandeau fixe. */
   compact?: boolean
+  /** Avec compact : les pastilles passent à la ligne au lieu d’être coupées. */
+  wrap?: boolean
   idPrefix?: string
   className?: string
 }) {
@@ -61,9 +64,9 @@ export function PillTabs<T extends string>({
   const isTabs = mode === "tabs"
 
   useEffect(() => {
-    if (!compact) return
+    if (!compact || wrap) return
     buttonRefs.current[value]?.scrollIntoView({ inline: "nearest", block: "nearest" })
-  }, [compact, value])
+  }, [compact, wrap, value])
 
   function focusAndSelect(id: T) {
     onValueChange(id)
@@ -141,7 +144,9 @@ export function PillTabs<T extends string>({
               className={cn(
                 "flex gap-2 [scrollbar-width:thin]",
                 compact
-                  ? "min-w-0 flex-nowrap overflow-x-auto"
+                  ? wrap
+                    ? "min-w-0 flex-wrap"
+                    : "min-w-0 flex-nowrap overflow-x-auto"
                   : "-mx-4 flex-nowrap overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0"
               )}
               aria-label={row.caption ? `${label} · ${row.caption}` : label}

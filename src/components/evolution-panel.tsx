@@ -111,12 +111,12 @@ function EvolutionWindowBar({
     <SiteHeaderSlot>
       <div
         data-evolution-window
-        className="border-t border-border/80"
+        className="w-full min-w-0 max-w-full border-t border-border/80"
         role="region"
         aria-label="Fenêtre de travail"
       >
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-[max(1rem,env(safe-area-inset-left))] py-2 pr-[max(1rem,env(safe-area-inset-right))] sm:flex-row sm:items-center sm:gap-3 sm:px-6">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="mx-auto flex w-full min-w-0 max-w-6xl flex-col gap-2 px-[max(1rem,env(safe-area-inset-left))] py-2 pr-[max(1rem,env(safe-area-inset-right))] sm:px-6 min-[100rem]:max-w-none min-[100rem]:flex-row min-[100rem]:flex-wrap min-[100rem]:items-center min-[100rem]:gap-x-4">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 min-[100rem]:shrink-0">
             <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
               Fenêtre
               <HelpTip {...WINDOW_HELP} />
@@ -125,45 +125,52 @@ function EvolutionWindowBar({
               label="Fenêtre de travail"
               mode="chips"
               compact
+              wrap
               value={period}
               onValueChange={onPeriod}
               items={PERIODS}
               className="min-w-0 flex-1"
             />
           </div>
-          <WeekdayScopeControl value={weekday} onChange={onWeekday} compact />
-          {lastWindow ? (
-            <p className="hidden shrink-0 text-xs tabular-nums text-muted-foreground lg:block">
-              {drawCount} tirage{drawCount > 1 ? "s" : ""}
-            </p>
-          ) : (
-            <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                  Mois
-                  <HelpTip {...MONTH_HELP} />
-                </span>
-                <Select value={month} onValueChange={(value) => onMonth(String(value))}>
-                  <SelectTrigger size="sm" className="w-[9.5rem] sm:w-44" aria-label="Mois">
-                    <span className="flex flex-1 text-left">
-                      {monthOptions.find((item) => item.value === month)?.label ??
-                        "Tous les mois"}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {monthOptions.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-xs tabular-nums text-muted-foreground">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-2 min-[100rem]:shrink-0">
+            <WeekdayScopeControl value={weekday} onChange={onWeekday} compact inline />
+            {lastWindow ? (
+              <p className="shrink-0 text-xs tabular-nums text-muted-foreground">
                 {drawCount} tirage{drawCount > 1 ? "s" : ""}
               </p>
-            </div>
-          )}
+            ) : (
+              <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-2">
+                <div className="flex min-w-0 max-w-full items-center gap-1.5">
+                  <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                    Mois
+                    <HelpTip {...MONTH_HELP} />
+                  </span>
+                  <Select value={month} onValueChange={(value) => onMonth(String(value))}>
+                    <SelectTrigger
+                      size="sm"
+                      className="w-44 max-w-[calc(100vw-3rem)]"
+                      aria-label="Mois"
+                    >
+                      <span className="flex flex-1 text-left">
+                        {monthOptions.find((item) => item.value === month)?.label ??
+                          "Tous les mois"}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {monthOptions.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {drawCount} tirage{drawCount > 1 ? "s" : ""}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </SiteHeaderSlot>
