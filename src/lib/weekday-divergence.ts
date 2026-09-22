@@ -73,7 +73,11 @@ export type DivergenceAxis = {
 }
 
 export type RunningSumStdPoint = {
-  k: number
+  /** Date ISO du tirage qui a fait avancer la série. */
+  date: string
+  /** Effectif du soir au moment du point (null tant que le soir n’a pas assez de tirages). */
+  kMardi: number | null
+  kVendredi: number | null
   mardi: number | null
   vendredi: number | null
   distanceMardi: number | null
@@ -349,18 +353,46 @@ function starPoolBreak(draws: DivergenceDraw[]): boolean {
   return pools.size > 1
 }
 
-function runningSumStd(mardi: number[], vendredi: number[]): RunningSumStdPoint[] {
-  const last = Math.max(mardi.length, vendredi.length)
+type SumDraw = { date: string; sum: number }
+
+/**
+ * Écart type cumulé de la somme, pointé sur la date du tirage.
+ * Chaque soir avance sur sa propre chronologie ; l’autre soir conserve
+ * sa dernière valeur pour que les deux courbes restent lisibles sur le calendrier.
+ */
+function runningSumStd(mardi: SumDraw[], vendredi: SumDraw[]): RunningSumStdPoint[] {
+  type Event = { date: string; side: "mardi" | "vendredi"; sum: number }
+  const events: Event[] = [
+    ...mardi.map((draw) => ({ date: draw.date, side: "mardi" as const, sum: draw.sum })),
+    ...vendredi.map((draw) => ({ date: draw.date, side: "vendredi" as const, sum: draw.sum })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.side.localeCompare(b.side))
+
+  const mardiSums: number[] = []
+  const vendrediSums: number[] = []
+  let mardiStd: number | null = null
+  let vendrediStd: number | null = null
   const points: RunningSumStdPoint[] = []
-  for (let k = RUNNING_SUM_STD_FROM; k <= last; k += 1) {
-    const left = k <= mardi.length ? sampleStd(mardi.slice(0, k)) : null
-    const right = k <= vendredi.length ? sampleStd(vendredi.slice(0, k)) : null
+
+  for (const event of events) {
+    if (event.side === "mardi") {
+      mardiSums.push(event.sum)
+      if (mardiSums.length >= RUNNING_SUM_STD_FROM) mardiStd = sampleStd(mardiSums)
+    } else {
+      vendrediSums.push(event.sum)
+      if (vendrediSums.length >= RUNNING_SUM_STD_FROM) vendrediStd = sampleStd(vendrediSums)
+    }
+    const advanced =
+      (event.side === "mardi" && mardiStd != null) ||
+      (event.side === "vendredi" && vendrediStd != null)
+    if (!advanced) continue
     points.push({
-      k,
-      mardi: left,
-      vendredi: right,
-      distanceMardi: left == null ? null : Math.abs(left - NUMBER_SUM_SD),
-      distanceVendredi: right == null ? null : Math.abs(right - NUMBER_SUM_SD),
+      date: event.date,
+      kMardi: mardiStd == null ? null : mardiSums.length,
+      kVendredi: vendrediStd == null ? null : vendrediSums.length,
+      mardi: mardiStd,
+      vendredi: vendrediStd,
+      distanceMardi: mardiStd == null ? null : Math.abs(mardiStd - NUMBER_SUM_SD),
+      distanceVendredi: vendrediStd == null ? null : Math.abs(vendrediStd - NUMBER_SUM_SD),
     })
   }
   return points
@@ -444,8 +476,8 @@ export function weekdayDivergence(draws: DivergenceDraw[]): WeekdayDivergence {
     starPoolBreak: breakPools,
     axes,
     runningSumStd: runningSumStd(
-      mardi.map((draw) => axisValue(draw, "sum")),
-      vendredi.map((draw) => axisValue(draw, "sum"))
+      mardi.map((draw) => ({ date: draw.date, sum: axisValue(draw, "sum") })),
+      vendredi.map((draw) => ({ date: draw.date, sum: axisValue(draw, "sum") }))
     ),
     balls: ballDivergence(mardi, vendredi),
   }

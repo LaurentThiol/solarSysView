@@ -175,7 +175,7 @@ const AXIS_HELP: Record<DivergenceAxisId, HelpCopy> = {
 
 const CONVERGENCE_HELP: HelpCopy = {
   title: "Convergence de l’écart type",
-  body: "Écart type cumulé de la somme, recalculé après chaque tirage du soir à partir du 8e. L’abscisse est le nombre de tirages de ce soir, pas la date : le 10e mardi est aligné sur le 10e vendredi. Le trait horizontal est 30,92, l’écart type théorique de la somme de 5 numéros distincts parmi 1–50. « Écart à la loi » est la distance du dernier point à ce trait.",
+  body: "Écart type cumulé de la somme, recalculé après chaque tirage du soir à partir du 8e. L’abscisse est la date du tirage : chaque soir avance sur son calendrier, l’autre conserve sa dernière valeur. Le trait horizontal est 30,92, l’écart type théorique de la somme de 5 numéros distincts parmi 1–50. « Écart à la loi » est la distance du dernier point à ce trait.",
 }
 
 const BALLS_HELP: HelpCopy = {
@@ -345,11 +345,12 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
               <LineChart data={report.runningSumStd} margin={{ left: 4, right: 8, top: 8, bottom: 4 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis
-                  dataKey="k"
+                  dataKey="date"
                   tickLine={false}
                   axisLine={false}
                   tickMargin={8}
-                  minTickGap={24}
+                  minTickGap={28}
+                  tickFormatter={formatShortDate}
                 />
                 <YAxis
                   domain={domain}
@@ -367,7 +368,14 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      labelFormatter={(value) => `${value} tirages`}
+                      labelFormatter={(_, payload) => {
+                        const point = payload?.[0]?.payload as RunningSumStdPoint | undefined
+                        if (!point?.date) return ""
+                        const parts = [formatShortDate(point.date)]
+                        if (point.kMardi != null) parts.push(`${point.kMardi}e mardi`)
+                        if (point.kVendredi != null) parts.push(`${point.kVendredi}e vendredi`)
+                        return parts.join(" · ")
+                      }}
                     />
                   }
                 />
@@ -377,7 +385,7 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
                   stroke="var(--color-mardi)"
                   strokeWidth={2}
                   dot={false}
-                  connectNulls={false}
+                  connectNulls
                   isAnimationActive={false}
                 />
                 <Line
@@ -387,7 +395,7 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
                   strokeWidth={2}
                   strokeDasharray={weekdayLineDash("vendredi")}
                   dot={false}
-                  connectNulls={false}
+                  connectNulls
                   isAnimationActive={false}
                 />
               </LineChart>

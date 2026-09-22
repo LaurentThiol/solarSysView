@@ -221,7 +221,7 @@ test("identical weekday series have a zero mean gap", () => {
   assert.equal(sum.welchP, 1)
 })
 
-test("running sum std starts at the eighth draw of the longer evening", () => {
+test("running sum std is keyed by draw date from the eighth of each evening", () => {
   const draws = []
   for (let i = 0; i < 10; i += 1) {
     draws.push(divergenceDraw(`2026-01-${String(i + 1).padStart(2, "0")}`, "mardi", [i + 1]))
@@ -230,11 +230,19 @@ test("running sum std starts at the eighth draw of the longer evening", () => {
     draws.push(divergenceDraw(`2026-02-${String(i + 1).padStart(2, "0")}`, "vendredi", [i + 2]))
   }
   const report = weekdayDivergence(draws)
-  assert.equal(report.runningSumStd.length, 5)
-  assert.equal(report.runningSumStd[0]?.k, 8)
-  assert.equal(report.runningSumStd.at(-1)?.k, 12)
-  assert.equal(report.runningSumStd[0]?.vendredi == null, false)
-  assert.equal(report.runningSumStd.at(-1)?.mardi, null)
+  // Mardi : 8→10 janvier (3 pts). Vendredi : à partir du 8 février (5 pts). Total 8.
+  assert.equal(report.runningSumStd.length, 8)
+  assert.equal(report.runningSumStd[0]?.date, "2026-01-08")
+  assert.equal(report.runningSumStd[0]?.kMardi, 8)
+  assert.equal(report.runningSumStd[0]?.vendredi, null)
+  assert.equal(report.runningSumStd[0]?.mardi == null, false)
+  const firstVendredi = report.runningSumStd.find((point) => point.kVendredi === 8)
+  assert.ok(firstVendredi)
+  assert.equal(firstVendredi.date, "2026-02-08")
+  assert.equal(firstVendredi.mardi == null, false)
+  assert.equal(report.runningSumStd.at(-1)?.date, "2026-02-12")
+  assert.equal(report.runningSumStd.at(-1)?.kVendredi, 12)
+  assert.equal(report.runningSumStd.at(-1)?.kMardi, 10)
 })
 
 test("star axes drop when the window mixes two star pools", () => {
