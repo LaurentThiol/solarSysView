@@ -114,7 +114,7 @@ export function BrainSpecialistsLab() {
         </p>
       ) : null}
 
-      <BrainSpecialists era={era} onPin={pinEntry} />
+      <BrainSpecialists era={era} weekday={weekday} onPin={pinEntry} />
     </div>
   )
 }

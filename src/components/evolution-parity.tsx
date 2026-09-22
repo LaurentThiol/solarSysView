@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
 import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
+import { WeekdayDot, WeekdaySplitLegend } from "@/components/weekday-split"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ChartContainer,
@@ -23,6 +24,13 @@ import {
   toParityChart,
 } from "@/lib/draws"
 import { cn } from "@/lib/utils"
+import {
+  WEEKDAY_LINE_COLOR,
+  seriesHasBothWeekdays,
+  weekdayLineDash,
+  weekdaySplitFields,
+  type DrawWeekday,
+} from "@/lib/weekday-scope"
 
 type ParityView = "walk" | "step"
 type SeriesKey = "numbers" | "stars"
@@ -54,7 +62,9 @@ Score d’un tirage = somme de ces signes :
 • 5 numéros : de −5 (5 impairs) à +5 (5 pairs), toujours un entier impair.
 • 2 étoiles : −2, 0 ou +2.
 
-Le cumul part de 0 au premier tirage de la fenêtre et additionne les scores. Espérance 0 (25 pairs / 25 impairs dans l’urne, 6 / 6 pour les étoiles). Une dérive n’augmente pas la chance au tirage suivant.`,
+Le cumul part de 0 au premier tirage de la fenêtre et additionne les scores. Espérance 0 (25 pairs / 25 impairs dans l’urne, 6 / 6 pour les étoiles). Une dérive n’augmente pas la chance au tirage suivant.
+
+Quand la fenêtre mêle mardi et vendredi, la courbe des numéros (des étoiles si les numéros sont masqués) se dédouble : mardi en trait plein, vendredi en tirets.`,
 }
 
 const VIEW_HELP: HelpCopy = {
@@ -86,6 +96,8 @@ const SUMMARY_HELP: HelpCopy = {
 type ChartPoint = ParityChartPoint & {
   smaNumbers: number | null
   smaStars: number | null
+  overlayMardi?: number | null
+  overlayVendredi?: number | null
 }
 
 function formatStat(value: number, digits = 1) {
@@ -232,6 +244,7 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({})
   const [showSma, setShowSma] = useState(true)
   const [showBand, setShowBand] = useState(false)
+  const [dayLine, setDayLine] = useState({ mardi: true, vendredi: true })
 
   const points = useMemo(() => toParityChart(draws), [draws])
   const smaPeriod = overlayPeriodFor(points.length)
@@ -239,6 +252,10 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
   const starKey = view === "walk" ? "walkStars" : "parityStars"
   const showNumbers = !hidden.numbers
   const showStars = !hidden.stars
+  const mixedDays = useMemo(() => seriesHasBothWeekdays(points), [points])
+  const splitKey = showNumbers ? numberKey : showStars ? starKey : null
+  const splitLabel = showNumbers ? "numéros" : "étoiles"
+  const showDayLines = mixedDays && splitKey != null
 
   const chartData = useMemo(() => {
     const numberValues = points.map((point) => point[numberKey])
@@ -249,8 +266,11 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
       ...point,
       smaNumbers: smaPeriod ? (smaN[i] ?? null) : null,
       smaStars: smaPeriod ? (smaS[i] ?? null) : null,
+      ...(showDayLines && splitKey
+        ? weekdaySplitFields(point.weekday, point[splitKey])
+        : {}),
     }))
-  }, [points, numberKey, starKey, smaPeriod])
+  }, [points, numberKey, starKey, smaPeriod, showDayLines, splitKey])
 
   const numberStats = useMemo(
     () => summarizeParitySeries(points, "numbers"),
@@ -318,7 +338,7 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
               className="aspect-auto h-[220px] w-full sm:h-[280px] lg:h-[340px]"
             >
               <LineChart
-                key={`${view}-${showBand ? "band" : "plain"}`}
+                key={`${view}-${showBand ? "band" : "plain"}-${showDayLines ? "mix" : "one"}`}
                 accessibilityLayer
                 data={chartData}
                 margin={{ left: 4, right: 8, top: 8, bottom: 4 }}
@@ -444,9 +464,51 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
                     name={`SMA ${smaPeriod} étoiles`}
                   />
                 ) : null}
+                {showDayLines ? (
+                  <>
+                    <Line
+                      dataKey="overlayMardi"
+                      type="linear"
+                      stroke={WEEKDAY_LINE_COLOR.mardi}
+                      strokeWidth={2.75}
+                      strokeDasharray={weekdayLineDash("mardi")}
+                      connectNulls
+                      hide={!dayLine.mardi}
+                      dot={(props) => <WeekdayDot day="mardi" {...props} />}
+                      activeDot={(props) => <WeekdayDot day="mardi" {...props} />}
+                      isAnimationActive={false}
+                      legendType="none"
+                      name="Mardi"
+                    />
+                    <Line
+                      dataKey="overlayVendredi"
+                      type="linear"
+                      stroke={WEEKDAY_LINE_COLOR.vendredi}
+                      strokeWidth={2.75}
+                      strokeDasharray={weekdayLineDash("vendredi")}
+                      connectNulls
+                      hide={!dayLine.vendredi}
+                      dot={(props) => <WeekdayDot day="vendredi" {...props} />}
+                      activeDot={(props) => <WeekdayDot day="vendredi" {...props} />}
+                      isAnimationActive={false}
+                      legendType="none"
+                      name="Vendredi"
+                    />
+                  </>
+                ) : null}
               </LineChart>
             </ChartContainer>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              {showDayLines ? (
+                <WeekdaySplitLegend
+                  metric={splitLabel}
+                  showMardi={dayLine.mardi}
+                  showVendredi={dayLine.vendredi}
+                  onToggle={(day: DrawWeekday) =>
+                    setDayLine((current) => ({ ...current, [day]: !current[day] }))
+                  }
+                />
+              ) : null}
               {smaPeriod > 0 ? (
                 <span className="inline-flex items-center gap-1">
                   <button

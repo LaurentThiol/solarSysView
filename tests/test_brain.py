@@ -355,3 +355,41 @@ def test_brain_specialist_demo_is_wired() -> None:
     assert "/brain/specialistes" in nav
     assert "/brain?demo=specialistes" in readme
     assert "/brain/specialistes" in readme
+    assert "weekday={weekday}" in panel or "inferSpecialist(slug, era, weekday)" in panel
+
+
+def test_specialist_train_follows_weekday_and_keeps_synthese_mixed() -> None:
+    draws = [
+        {"weekday": "mardi", "draw_date": "2024-01-02"},
+        {"weekday": "vendredi", "draw_date": "2024-01-05"},
+        {"weekday": "mardi", "draw_date": "2024-01-09"},
+    ]
+    seen: dict[str, object] = {}
+
+    def fake_train(rows, **kwargs):
+        seen["n"] = len(rows)
+        seen["days"] = sorted({str(row.get("weekday")) for row in rows})
+        return {"saved": False, "reason": "test", "slug": "x", "name": "x"}
+
+    body = {
+        "name": "Somme mardi",
+        "target": "sum",
+        "indicators": ["lag1"],
+        "instructions": "test",
+    }
+    with (
+        patch("synchro.db.init_db"),
+        patch("synchro.db.database_configured", return_value=True),
+        patch("synchro.db.all_draws", return_value=draws),
+        patch("synchro.brain_specialists.train_specialist", side_effect=fake_train),
+    ):
+        with _client() as client:
+            mixed = client.post("/api/brain/specialists", json=body)
+            assert mixed.status_code == 200
+            assert seen["n"] == 3
+            scoped = client.post("/api/brain/specialists?weekday=mardi", json=body)
+            assert scoped.status_code == 200
+            assert seen == {"n": 2, "days": ["mardi"]}
+            synthesis = client.post("/api/brain/specialists?jour=synthese", json=body)
+            assert synthesis.status_code == 200
+            assert seen["n"] == 3

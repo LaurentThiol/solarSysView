@@ -11,6 +11,7 @@ import {
 } from "recharts"
 
 import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
+import { WeekdayDot, WeekdaySplitLegend } from "@/components/weekday-split"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ChartContainer,
@@ -35,6 +36,13 @@ import {
 } from "@/lib/draws"
 import { DECADE_LABELS } from "@/lib/grid-shape"
 import { cn } from "@/lib/utils"
+import {
+  WEEKDAY_LINE_COLOR,
+  seriesHasBothWeekdays,
+  weekdayLineDash,
+  weekdaySplitFields,
+  type DrawWeekday,
+} from "@/lib/weekday-scope"
 
 type ShapeView = "spread" | "consecutive" | "decades"
 
@@ -88,7 +96,9 @@ const TITLE_HELP: HelpCopy = {
 • Consécutifs = paires (n, n+1). 0 à 4 pour les numéros, 0 ou 1 pour les étoiles.
 • Décennies = combien de boules dans 1–10, 11–20, …, 41–50.
 
-SMA et Bollinger (optionnels) lissent ou encadrent chaque courbe visible. Maj+clic isole une série. Descriptif : chaque tirage reste indépendant.`,
+SMA et Bollinger (optionnels) lissent ou encadrent chaque courbe visible. Maj+clic isole une série. Descriptif : chaque tirage reste indépendant.
+
+Quand la fenêtre mêle mardi et vendredi, la première courbe visible se dédouble : mardi en trait plein, vendredi en tirets.`,
 }
 
 const VIEW_HELP: HelpCopy = {
@@ -222,12 +232,16 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({})
   const [showSma, setShowSma] = useState(true)
   const [showBb, setShowBb] = useState(false)
+  const [dayLine, setDayLine] = useState({ mardi: true, vendredi: true })
 
   const series = useMemo(() => toDrawSeries(draws), [draws])
   const keys = VIEW_KEYS[view]
   const visible = keys.filter((key) => !hidden[key])
   const smaPeriod = overlayPeriodFor(series.length)
   const multiSeries = view === "decades"
+  const mixedDays = useMemo(() => seriesHasBothWeekdays(series), [series])
+  const splitKey = visible[0] ?? null
+  const showDayLines = mixedDays && splitKey != null
 
   const overlayPacks = useMemo(() => {
     const packs: Partial<
@@ -242,15 +256,25 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
   }, [series, keys, smaPeriod])
 
   const chartData = useMemo(() => {
-    if (!smaPeriod) return series
     let points: ChartPoint[] = series
+    if (showDayLines && splitKey) {
+      points = points.map((point) => {
+        const raw = point[splitKey]
+        const value = typeof raw === "number" ? raw : null
+        return {
+          ...point,
+          ...weekdaySplitFields(point.weekday, value),
+        }
+      })
+    }
+    if (!smaPeriod) return points
     for (const key of keys) {
       const abs = overlayPacks[key]?.abs
       if (!abs) continue
       points = mergeOverlays(points, key, abs)
     }
     return points
-  }, [series, smaPeriod, keys, overlayPacks])
+  }, [series, smaPeriod, keys, overlayPacks, showDayLines, splitKey])
 
   const summaries = useMemo(() => {
     return keys.map((key) => ({
@@ -360,7 +384,7 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
               className="aspect-auto h-[220px] w-full sm:h-[280px] lg:h-[340px]"
             >
               <ComposedChart
-                key={view}
+                key={`${view}-${showDayLines ? "mix" : "one"}`}
                 accessibilityLayer
                 data={chartData}
                 margin={{ left: 4, right: 8, top: 8, bottom: 4 }}
@@ -492,9 +516,51 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
                       </Fragment>
                     ))
                   : null}
+                {showDayLines && splitKey ? (
+                  <>
+                    <Line
+                      dataKey="overlayMardi"
+                      type="linear"
+                      stroke={WEEKDAY_LINE_COLOR.mardi}
+                      strokeWidth={2.75}
+                      strokeDasharray={weekdayLineDash("mardi")}
+                      connectNulls
+                      hide={!dayLine.mardi}
+                      dot={(props) => <WeekdayDot day="mardi" {...props} />}
+                      activeDot={(props) => <WeekdayDot day="mardi" {...props} />}
+                      isAnimationActive={false}
+                      legendType="none"
+                      name="Mardi"
+                    />
+                    <Line
+                      dataKey="overlayVendredi"
+                      type="linear"
+                      stroke={WEEKDAY_LINE_COLOR.vendredi}
+                      strokeWidth={2.75}
+                      strokeDasharray={weekdayLineDash("vendredi")}
+                      connectNulls
+                      hide={!dayLine.vendredi}
+                      dot={(props) => <WeekdayDot day="vendredi" {...props} />}
+                      activeDot={(props) => <WeekdayDot day="vendredi" {...props} />}
+                      isAnimationActive={false}
+                      legendType="none"
+                      name="Vendredi"
+                    />
+                  </>
+                ) : null}
               </ComposedChart>
             </ChartContainer>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              {showDayLines && splitKey ? (
+                <WeekdaySplitLegend
+                  metric={String(chartConfig[splitKey].label)}
+                  showMardi={dayLine.mardi}
+                  showVendredi={dayLine.vendredi}
+                  onToggle={(day: DrawWeekday) =>
+                    setDayLine((current) => ({ ...current, [day]: !current[day] }))
+                  }
+                />
+              ) : null}
               {smaPeriod > 0 ? (
                 <>
                   <span className="inline-flex items-center gap-1">

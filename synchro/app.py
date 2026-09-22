@@ -196,6 +196,8 @@ class ChartismeSketchIn(BaseModel):
     size: int = Field(default=60, ge=16, le=200)
     stride: int = Field(default=15, ge=1, le=120)
     top: int = Field(default=12, ge=1, le=50)
+    # Mardi ou vendredi : chercher dans ce jour, pas dans l’export mixte.
+    weekday: str | None = None
 
 
 class ChartismeLabelIn(BaseModel):
@@ -1790,12 +1792,22 @@ def create_app() -> FastAPI:
 
     @app.post("/api/chartisme/similar")
     def chartisme_similar(payload: ChartismeSketchIn) -> dict[str, Any]:
+        from synchro.weekday import filter_draws_by_weekday, normalize_weekday_filter, request_weekday
+
         values = list(payload.values or [])
         if payload.points and not values:
             values = chartisme_sketch_to_values(payload.points)
         if len(values) < 8:
             raise HTTPException(400, "Croquis trop court")
-        bundle = _chartisme_bundle(payload.era)
+        # Le cache disque est l’archive mixte. Un jour isolé réexporte les
+        # courbes sur ce jour seul : une coupe par dates mêlerait l’autre jour.
+        day = request_weekday() or normalize_weekday_filter(payload.weekday)
+        if day:
+            bundle = chartisme_export_curves(
+                filter_draws_by_weekday(_analysis_draws(payload.era), day)
+            )
+        else:
+            bundle = _chartisme_bundle(payload.era)
         windows = chartisme_windows_of(
             bundle, size=payload.size, stride=payload.stride, curve=payload.curve
         )
@@ -1806,6 +1818,7 @@ def create_app() -> FastAPI:
             "matches": chartisme_search(values, index, top=payload.top),
             "searched": len(index),
             "method": "dtw",
+            "weekday": day,
         }
 
     @app.get("/api/chartisme/labels")

@@ -28,9 +28,12 @@ type Point = [number, number]
 export function Sketchpad({
   curve,
   era,
+  weekday,
 }: {
   curve: Curve | null
   era: "current" | "all"
+  /** Mardi ou vendredi : la recherche balaie ce jour, pas l’export mixte. */
+  weekday?: "mardi" | "vendredi"
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [points, setPoints] = useState<Point[]>([])
@@ -63,10 +66,13 @@ export function Sketchpad({
     if (values.length < 8) return
     setSearching(true)
     setMatches(null)
-    // Le backend balaie tout le bundle ; sans lui on cherche dans la courbe
-    // affichée, ce qui reste le cas d'usage le plus fréquent.
+    // Le backend balaie l’archive du jour affiché. Sans lui on cherche dans la
+    // courbe déjà filtrée, ce qui reste le cas d’usage le plus fréquent.
     try {
-      const response = await fetch("/api/chartisme/similar", {
+      const params = new URLSearchParams()
+      if (weekday) params.set("weekday", weekday)
+      const query = params.toString()
+      const response = await fetch(`/api/chartisme/similar${query ? `?${query}` : ""}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -74,12 +80,18 @@ export function Sketchpad({
           era,
           curve: scope === "curve" ? curve?.id ?? null : null,
           top: 12,
+          weekday: weekday ?? null,
         }),
       })
       if (response.ok) {
-        const payload = (await response.json()) as { matches?: Match[]; searched?: number }
+        const payload = (await response.json()) as {
+          matches?: Match[]
+          searched?: number
+          weekday?: string | null
+        }
         setMatches(payload.matches ?? [])
-        setSource(`backend · ${payload.searched ?? 0} fenêtres`)
+        const day = payload.weekday ? ` · ${payload.weekday}` : ""
+        setSource(`backend · ${payload.searched ?? 0} fenêtres${day}`)
         setSearching(false)
         return
       }

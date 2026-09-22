@@ -775,6 +775,7 @@ export function toDrawSeries(draws: Draw[]): DrawSeriesPoint[] {
 
 export type ParityChartPoint = {
   date: string
+  weekday?: string
   id: number
   evenNumbers: number
   oddNumbers: number
@@ -799,6 +800,7 @@ export function toParityChart(draws: Draw[]): ParityChartPoint[] {
     const bandS = parityBand(STAR_PARITY_SIGMA, i)
     return {
       date: point.date,
+      weekday: point.weekday,
       id: point.id,
       evenNumbers: point.evenNumbers,
       oddNumbers: point.oddNumbers,

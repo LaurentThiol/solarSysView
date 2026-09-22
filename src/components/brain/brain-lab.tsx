@@ -1529,6 +1529,7 @@ export function BrainLab() {
       >
         <BrainSpecialists
           era={era}
+          weekday={weekday}
           onPin={pinEntry}
           onIndex={(items) => setSpecialists(items.map((item) => specialistToEntry(item)))}
         />

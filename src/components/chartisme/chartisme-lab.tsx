@@ -1166,7 +1166,7 @@ export function ChartismeLab() {
         stateKey={`${era}|${preset}|${lastN}|${scaleChoice}|${targetRate}`}
       />
 
-      <Sketchpad curve={curve} era={era} />
+      <Sketchpad curve={curve} era={era} weekday={weekdayApiValue(weekday)} />
 
       <RulesPanel hit={hit} hits={hits} curve={curve} alongsideFor={alongsideFor} />
 

@@ -6,6 +6,8 @@ import {
   asWeekdayScope,
   filterDrawsByWeekday,
   normalizeDrawWeekday,
+  seriesHasBothWeekdays,
+  weekdayApiFromSources,
   weekdayApiValue,
   weekdayFilterDay,
   weekdayLineDash,
@@ -69,6 +71,24 @@ test("weekday API value is omitted for Tous and Synthèse", () => {
   assert.equal(weekdayApiValue("vendredi"), "vendredi")
   assert.equal(weekdayApiValue("all"), undefined)
   assert.equal(weekdayApiValue("synthese"), undefined)
+})
+
+test("weekday API follows the chosen day, and Synthèse stays mixed", () => {
+  assert.equal(weekdayApiFromSources("mardi", "vendredi"), "mardi")
+  assert.equal(weekdayApiFromSources(null, "vendredi"), "vendredi")
+  assert.equal(weekdayApiFromSources("synthese", "mardi"), undefined)
+  assert.equal(weekdayApiFromSources("all", "mardi"), undefined)
+  assert.equal(weekdayApiFromSources(null, "synthese"), undefined)
+  assert.equal(weekdayApiFromSources(null, null), undefined)
+})
+
+test("both weekdays are required before a day overlay", () => {
+  assert.equal(
+    seriesHasBothWeekdays([{ weekday: "mardi" }, { weekday: "vendredi" }]),
+    true
+  )
+  assert.equal(seriesHasBothWeekdays([{ weekday: "mardi" }, { weekday: "MARDI" }]), false)
+  assert.equal(seriesHasBothWeekdays([{ weekday: "vendredi" }]), false)
 })
 
 test("last N after weekday filter keeps only that day", () => {

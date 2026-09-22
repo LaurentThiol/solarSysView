@@ -343,7 +343,7 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/chartisme/figures", "GET", "Chartisme · figures", "Lectures déjà détectées pour une courbe.", "lecture"),
   apiEntry("/api/chartisme/svg", "GET", "Chartisme · SVG", "Tracé vectoriel d’une fenêtre.", "lecture"),
   apiEntry("/api/chartisme/detect", "POST", "Chartisme · détecter", "Balayage géométrique aux échelles demandées.", "lecture"),
-  apiEntry("/api/chartisme/similar", "POST", "Chartisme · similaires", "Recherche par ressemblance (atelier).", "lecture"),
+  apiEntry("/api/chartisme/similar", "POST", "Chartisme · similaires", "Recherche par ressemblance dans le jour affiché (mardi, vendredi, ou l’archive mixte).", "lecture", "weekday=mardi|vendredi"),
   apiEntry("/api/chartisme/labels", "GET · POST", "Chartisme · étiquettes", "Atelier d’étiquetage : lister ou poser une classe.", "lecture"),
   apiEntry("/api/chartisme/labels/{id}", "DELETE", "Chartisme · supprimer une étiquette", "Retire une classe libre.", "lecture"),
   apiEntry("/api/chartisme/rules", "GET · POST", "Chartisme · règles", "Règles descriptives : lister ou créer.", "lecture"),

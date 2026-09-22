@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select"
 import { VARIABLE_LABELS, VARIABLE_NAMES, type VariableName } from "@/lib/analysis"
 import type { CatalogEntry } from "@/lib/brain/catalog"
+import type { WeekdayScope } from "@/lib/weekday-scope"
 import {
   DEMO_SPECIALIST,
   DEMO_SPECIALIST_NOTE,
@@ -115,10 +116,12 @@ const TRAIN_TARGETS = VARIABLE_NAMES.filter(
 
 export function BrainSpecialists({
   era,
+  weekday,
   onPin,
   onIndex,
 }: {
   era: "current" | "all"
+  weekday?: WeekdayScope
   onPin: (entry: CatalogEntry) => void
   onIndex?: (items: SpecialistRecord[]) => void
 }) {
@@ -204,7 +207,7 @@ export function BrainSpecialists({
         horizon,
         force,
         era,
-      })
+      }, weekday)
       setLast(record)
       if (!record.saved && record.reason) setError(record.reason)
       if (record.saved) setAtelierForced(false)
@@ -220,7 +223,7 @@ export function BrainSpecialists({
     setInferring(slug)
     setError(null)
     try {
-      const fresh = await inferSpecialist(slug, era)
+      const fresh = await inferSpecialist(slug, era, weekday)
       setLast(fresh)
       await refresh()
     } catch (err) {

@@ -281,6 +281,36 @@ def test_similar_searches_the_archive_by_resemblance() -> None:
     assert all(m["curve_id"] == "sum" for m in matches)
 
 
+def test_similar_searches_the_displayed_weekday_not_the_mixed_cache() -> None:
+    """Un jour isolé réexporte ses courbes. Synthèse et l’absence de jour restent mixtes."""
+    mardi_dates = {d["draw_date"].isoformat() for d in DRAWS if d["weekday"] == "mardi"}
+    vendredi_dates = {d["draw_date"].isoformat() for d in DRAWS if d["weekday"] == "vendredi"}
+    payload = {"values": WINDOW, "curve": "sum", "size": 40, "stride": 20, "top": 8}
+    left, right = _with_draws()
+    with left, right:
+        with _client() as client:
+            mixed = client.post("/api/chartisme/similar", json=payload)
+            scoped = client.post("/api/chartisme/similar?weekday=MARDI", json=payload)
+            body_only = client.post(
+                "/api/chartisme/similar",
+                json={**payload, "weekday": "vendredi"},
+            )
+    assert mixed.status_code == 200
+    assert scoped.status_code == 200
+    assert body_only.status_code == 200
+    mixed_body = mixed.json()
+    scoped_body = scoped.json()
+    friday = body_only.json()
+    assert mixed_body["weekday"] is None
+    assert scoped_body["weekday"] == "mardi"
+    assert friday["weekday"] == "vendredi"
+    assert mixed_body["searched"] > scoped_body["searched"] > 0
+    assert friday["searched"] == scoped_body["searched"]
+    assert all(m["from"] in mardi_dates and m["to"] in mardi_dates for m in scoped_body["matches"])
+    assert all(m["from"] in vendredi_dates and m["to"] in vendredi_dates for m in friday["matches"])
+    assert any(m["from"] not in mardi_dates for m in mixed_body["matches"])
+
+
 def test_similar_accepts_a_mouse_sketch() -> None:
     """L'écran a `y` croissant vers le bas : la route doit le retourner."""
     points = [[float(i), 100.0 - i] for i in range(60)]

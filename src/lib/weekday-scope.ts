@@ -88,6 +88,42 @@ export function weekdayApiValue(scope: WeekdayScope | null | undefined): DrawWee
   return weekdayFilterDay(scope) ?? undefined
 }
 
+/** Jour d’API : l’URL prime, sinon la session. Tous et Synthèse ne filtrent pas. */
+export function weekdayApiFromSources(
+  urlValue: string | null | undefined,
+  storedValue?: string | null
+): DrawWeekday | undefined {
+  const scope = asWeekdayScope(urlValue) ?? asWeekdayScope(storedValue)
+  return weekdayApiValue(scope)
+}
+
+export function weekdayApiFromBrowser(): DrawWeekday | undefined {
+  if (typeof window === "undefined") return undefined
+  let stored: string | null = null
+  try {
+    stored = window.sessionStorage.getItem(WEEKDAY_STORAGE_KEY)
+  } catch {
+    stored = null
+  }
+  const url = new URLSearchParams(window.location.search).get(WEEKDAY_QUERY)
+  return weekdayApiFromSources(url, stored)
+}
+
+/** Vrai quand la série mélange au moins un mardi et un vendredi. */
+export function seriesHasBothWeekdays(
+  points: readonly { weekday?: string | null }[]
+): boolean {
+  let mardi = false
+  let vendredi = false
+  for (const point of points) {
+    const day = normalizeDrawWeekday(point.weekday)
+    if (day === "mardi") mardi = true
+    if (day === "vendredi") vendredi = true
+    if (mardi && vendredi) return true
+  }
+  return false
+}
+
 export function setWeekdaySearchParam(
   params: URLSearchParams,
   scope: WeekdayScope

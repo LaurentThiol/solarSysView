@@ -1,5 +1,10 @@
 import type { VariableName } from "@/lib/analysis"
 import type { CatalogEntry } from "@/lib/brain/catalog"
+import {
+  weekdayApiFromBrowser,
+  weekdayApiValue,
+  type WeekdayScope,
+} from "../weekday-scope.ts"
 import { SPECIALIST_FEATURE_READINGS } from "./specialist-view"
 
 export { SPECIALIST_FEATURE_READINGS }
@@ -208,15 +213,16 @@ export async function listSpecialistFeatures() {
   }
 }
 
-function weekdayQuerySuffix() {
-  if (typeof window === "undefined") return ""
-  const raw = new URLSearchParams(window.location.search).get("jour")
-  if (raw === "mardi" || raw === "vendredi") return `&weekday=${raw}`
-  return ""
+function weekdayQuerySuffix(scope?: WeekdayScope | null) {
+  const day = scope == null ? weekdayApiFromBrowser() : weekdayApiValue(scope)
+  return day ? `&weekday=${day}` : ""
 }
 
-export async function trainSpecialist(input: SpecialistTrainInput) {
-  const response = await fetch(`/api/brain/specialists?era=${input.era ?? "current"}${weekdayQuerySuffix()}`, {
+export async function trainSpecialist(
+  input: SpecialistTrainInput,
+  scope?: WeekdayScope | null
+) {
+  const response = await fetch(`/api/brain/specialists?era=${input.era ?? "current"}${weekdayQuerySuffix(scope)}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
@@ -229,9 +235,13 @@ export async function trainSpecialist(input: SpecialistTrainInput) {
   return body as SpecialistRecord
 }
 
-export async function inferSpecialist(slug: string, era: "current" | "all" = "current") {
+export async function inferSpecialist(
+  slug: string,
+  era: "current" | "all" = "current",
+  scope?: WeekdayScope | null
+) {
   const response = await fetch(
-    `/api/brain/specialists/${encodeURIComponent(slug)}/infer?era=${era}${weekdayQuerySuffix()}`,
+    `/api/brain/specialists/${encodeURIComponent(slug)}/infer?era=${era}${weekdayQuerySuffix(scope)}`,
     {
     method: "POST",
     headers: { "content-type": "application/json" },
