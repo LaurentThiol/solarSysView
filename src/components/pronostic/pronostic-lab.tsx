@@ -399,7 +399,17 @@ export function PronosticLab() {
     if (grids === 0 || grids <= LIST_LIMIT) return []
     const nCombos = samplePool(numberSpec, Math.min(SAMPLE_SIZE, Math.max(1, numberCount)), sampleSeed)
     const sCombos = samplePool(starSpec, Math.min(SAMPLE_SIZE, Math.max(1, starCount)), sampleSeed + 17)
-    return listGrids(nCombos, sCombos, SAMPLE_SIZE)
+    const nLen = Math.max(nCombos.length, 1)
+    const sLen = Math.max(sCombos.length, 1)
+    const take = Math.min(SAMPLE_SIZE, Math.max(nCombos.length, sCombos.length))
+    const gridsOut: Array<{ numbers: number[]; stars: number[] }> = []
+    for (let i = 0; i < take; i += 1) {
+      const numbers = nCombos[i % nLen]
+      const stars = sCombos[i % sLen]
+      if (!numbers || !stars) continue
+      gridsOut.push({ numbers, stars })
+    }
+    return gridsOut
   }, [grids, numberSpec, starSpec, numberCount, starCount, sampleSeed])
 
   const proposal = useMemo(

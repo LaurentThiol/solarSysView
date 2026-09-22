@@ -9,6 +9,7 @@ def test_nav_groups_and_glossary_exist() -> None:
     header = (ROOT / "src/components/startup-status.tsx").read_text(encoding="utf-8")
     assert 'id: "archive"' in nav
     assert 'id: "lecture"' in nav
+    assert "/pronostic" in nav
     assert "/brain/specialistes" in nav
     assert "Fenêtre de travail" in copy
     assert "GlossaryButton" in header

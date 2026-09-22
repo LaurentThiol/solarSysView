@@ -778,7 +778,8 @@ function suffixCounts(
   balls: number[],
   maxK: number,
   maxSum: number,
-  maxEven: number
+  maxEven: number,
+  slotBands: SlotBand[] | null = null
 ): Int32Array[] {
   const n = balls.length
   const evenDim = maxEven + 1
@@ -796,6 +797,11 @@ function suffixCounts(
     const dst = layers[i]
     dst.set(src)
     for (let k = 0; k < maxK; k += 1) {
+      if (slotBands) {
+        const rank = maxK - (k + 1)
+        const band = slotBands[rank]
+        if (!band || value < band.lo || value > band.hi) continue
+      }
       for (let s = 0; s <= maxSum - value; s += 1) {
         for (let e = 0; e <= maxEven - even; e += 1) {
           const ways = src[k * strideK + s * strideS + e]
@@ -841,15 +847,20 @@ export function samplePool(
   const result = evaluatePool(spec)
   if (result.count === 0 || n <= 0) return []
   const take = Math.min(n, result.count)
-  if (poolShapeRestricted(spec) || poolSlotRestricted(spec)) return sampleByReservoir(spec, take, seed)
+  if (poolShapeRestricted(spec)) return sampleByReservoir(spec, take, seed)
   const { classified, need, remainMinSum, remainMaxSum, remainMinEven, remainMaxEven, forced } =
     shiftTargets(spec)
+  if (poolSlotRestricted(spec) && classified.forced.length > 0) {
+    return sampleByReservoir(spec, take, seed)
+  }
   if (need === 0) {
     return [finishCombo(forced, [])]
   }
+  const slotBands =
+    poolSlotRestricted(spec) && classified.forced.length === 0 ? specSlotBands(spec) : null
   const maxSum = Math.max(0, remainMaxSum)
   const maxEven = Math.max(0, Math.min(need, remainMaxEven))
-  const layers = suffixCounts(classified.optional, need, maxSum, maxEven)
+  const layers = suffixCounts(classified.optional, need, maxSum, maxEven, slotBands)
   const evenDim = maxEven + 1
   const sumDim = maxSum + 1
   const rand = mulberry32(seed)
@@ -882,8 +893,10 @@ export function samplePool(
       )
       const value = classified.optional[i]
       const even = isEven(value)
+      const band = slotBands?.[need - kLeft]
+      const fitsSlot = !band || (value >= band.lo && value <= band.hi)
       const takeWays =
-        kLeft > 0
+        kLeft > 0 && fitsSlot
           ? waysInRange(
               layers[i + 1],
               kLeft - 1,

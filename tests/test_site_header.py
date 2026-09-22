@@ -29,6 +29,7 @@ def test_nav_items_are_grouped_in_the_drawer() -> None:
     assert 'id: "assistants"' in NAV
     assert 'id: "systeme"' in NAV
     assert "NAV_GROUPS" in STARTUP
+    assert "/pronostic" in NAV
     assert "/brain/specialistes" in NAV
     assert NAV.count('href: "/evolution"') == 1
     hrefs = re.findall(r'href: "([^"]+)"', NAV)

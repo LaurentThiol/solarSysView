@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -166,6 +167,22 @@ test("walk-forward coverage is 1 when the envelope is the full universe", () => 
   assert.ok(report.n > 0)
   assert.equal(report.rate, 1)
   assert.ok(report.meanVolume != null && report.meanVolume > 0)
+})
+
+test("slot-only Jeux sampling stays on the DP walker", () => {
+  const jeuxSrc = readFileSync(new URL("../src/lib/jeux.ts", import.meta.url), "utf8")
+  assert.match(jeuxSrc, /slotBands: SlotBand\[\] \| null = null/)
+  assert.doesNotMatch(
+    jeuxSrc,
+    /if \(poolShapeRestricted\(spec\) \|\| poolSlotRestricted\(spec\)\) return sampleByReservoir/
+  )
+  assert.match(jeuxSrc, /poolSlotRestricted\(spec\) && classified\.forced\.length > 0/)
+  const labSrc = readFileSync(
+    new URL("../src/components/pronostic/pronostic-lab.tsx", import.meta.url),
+    "utf8"
+  )
+  assert.match(labSrc, /nCombos\[i % nLen\]/)
+  assert.match(labSrc, /sCombos\[i % sLen\]/)
 })
 
 test("proposal covers a point inside its bands", () => {

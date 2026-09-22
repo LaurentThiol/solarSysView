@@ -13,6 +13,7 @@ test("five nav families cover every lab", () => {
   assert.match(navSrc, /id: "assistants"/)
   assert.match(navSrc, /id: "systeme"/)
   assert.match(navSrc, /href: "\/tirage"/)
+  assert.match(navSrc, /href: "\/pronostic"/)
   assert.match(navSrc, /href: "\/brain\/specialistes"/)
   assert.match(navSrc, /href: "\/admin"/)
   assert.match(headerSrc, /NAV_GROUPS/)
