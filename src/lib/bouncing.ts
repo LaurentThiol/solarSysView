@@ -17,11 +17,25 @@ export type BounceSeriesId = (typeof BOUNCE_SERIES)[number]
 export const MIN_BOUNCES = 3
 export const MAX_BOUNCES = 8
 
-const MIN_R2 = 0.55
-const MIN_PARABOLA = 0.7
 const E_MIN = 0.35
-const E_MAX = 0.92
 const MAX_RISE = 0.15
+
+/** Seuils de la recherche. Les monter (sauf l’amplitude, un multiple) la rend plus sévère. */
+export type BounceQuery = {
+  minBounces: number
+  minR2: number
+  minParabola: number
+  maxRestitution: number
+  swingScale: number
+}
+
+export const DEFAULT_BOUNCE_QUERY: BounceQuery = {
+  minBounces: MIN_BOUNCES,
+  minR2: 0.55,
+  minParabola: 0.7,
+  maxRestitution: 0.92,
+  swingScale: 1,
+}
 
 export type BouncePoint = {
   index: number
@@ -87,33 +101,46 @@ export function bounceCaptureOf(episode: BounceEpisode): BounceCapture {
 
 export function findBounces(
   input: { values: number[]; dates?: Array<string | null> | null },
-  series: BounceSeriesId
+  series: BounceSeriesId,
+  query?: Partial<BounceQuery>
 ): BounceEpisode[] {
+  const gates = resolveQuery(query)
   const values = input.values.map(Number)
   if (values.some((value) => !Number.isFinite(value))) return []
   const dates = alignDates(input.dates, values.length)
-  const arches = bounceArches(values, series)
+  const arches = bounceArches(values, series, gates.swingScale)
   const found: BounceEpisode[] = []
   const maxCount = Math.min(MAX_BOUNCES, arches.length)
-  for (let count = MIN_BOUNCES; count <= maxCount; count += 1) {
+  for (let count = gates.minBounces; count <= maxCount; count += 1) {
     for (let start = 0; start + count <= arches.length; start += 1) {
       const window = arches.slice(start, start + count)
       if (!archesChain(window)) continue
-      const episode = scoreWindow(window, values, dates, series)
+      const episode = scoreWindow(window, values, dates, series, gates)
       if (episode) found.push(episode)
     }
   }
   return suppressOverlaps(found)
 }
 
-export function scanBounces(points: BounceSample[]): BounceEpisode[] {
+export function scanBounces(points: BounceSample[], query?: Partial<BounceQuery>): BounceEpisode[] {
   const dates = points.map((point) => point.date)
   const found: BounceEpisode[] = []
   for (const series of BOUNCE_SERIES) {
     const values = points.map((point) => point[series])
-    found.push(...findBounces({ values, dates }, series))
+    found.push(...findBounces({ values, dates }, series, query))
   }
   return found.sort(compareEpisodes)
+}
+
+function resolveQuery(query?: Partial<BounceQuery>): BounceQuery {
+  const merged = { ...DEFAULT_BOUNCE_QUERY, ...query }
+  return {
+    minBounces: clampInt(merged.minBounces, MIN_BOUNCES, MAX_BOUNCES),
+    minR2: clamp01(merged.minR2),
+    minParabola: clamp01(merged.minParabola),
+    maxRestitution: Math.min(0.99, Math.max(E_MIN, merged.maxRestitution)),
+    swingScale: Math.min(4, Math.max(1, merged.swingScale)),
+  }
 }
 
 function alignDates(dates: Array<string | null> | null | undefined, count: number) {
@@ -125,11 +152,11 @@ function valuesBlank(count: number): Array<string | null> {
   return Array.from({ length: count }, () => null)
 }
 
-function bounceArches(values: number[], series: BounceSeriesId): Arch[] {
+function bounceArches(values: number[], series: BounceSeriesId, swingScale: number): Arch[] {
   if (values.length < 4) return []
   const floor = bounceFloor(series)
   const adaptive = swingThreshold(values)
-  const limit = Math.max(adaptive, floor)
+  const limit = Math.max(adaptive, floor) * swingScale
   const pivots = swingPivots(values, null, undefined, { threshold: limit })
   const arches: Arch[] = []
   for (let i = 0; i + 2 < pivots.length; i += 1) {
@@ -170,16 +197,17 @@ function scoreWindow(
   arches: Arch[],
   values: number[],
   dates: Array<string | null>,
-  series: BounceSeriesId
+  series: BounceSeriesId,
+  gates: BounceQuery
 ): BounceEpisode | null {
   const heights = arches.map((arch) => arch.height)
-  const checked = heightLaw(heights)
+  const checked = heightLaw(heights, gates.maxRestitution)
   if (!checked) return null
   const bounceIndex = heights.map((_, index) => index)
   const fit = logFit(bounceIndex, heights)
-  if (!fit || !(fit.slope < 0) || fit.r2 < MIN_R2) return null
+  if (!fit || !(fit.slope < 0) || fit.r2 < gates.minR2) return null
   const parabola = median(arches.map((arch) => parabolaScore(values, arch)))
-  if (!(parabola >= MIN_PARABOLA)) return null
+  if (!(parabola >= gates.minParabola)) return null
 
   const timeAgreement = durationAgreement(
     checked.restitution,
@@ -230,7 +258,7 @@ function scoreWindow(
 }
 
 /** Hauteurs positives, au plus une remontée légère, restitution dans la bande. */
-function heightLaw(heights: number[]): { restitution: number } | null {
+function heightLaw(heights: number[], maxRestitution: number): { restitution: number } | null {
   if (heights.some((height) => !(height > 0))) return null
   let rises = 0
   const ratios: number[] = []
@@ -244,7 +272,7 @@ function heightLaw(heights: number[]): { restitution: number } | null {
     ratios.push(Math.sqrt(next / prev))
   }
   const restitution = median(ratios)
-  if (restitution < E_MIN || restitution > E_MAX) return null
+  if (restitution < E_MIN || restitution > maxRestitution) return null
   return { restitution }
 }
 
@@ -406,5 +434,11 @@ function median(values: number[]) {
 }
 
 function clamp01(value: number) {
+  if (!Number.isFinite(value)) return 0
   return Math.min(1, Math.max(0, value))
+}
+
+function clampInt(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min
+  return Math.min(max, Math.max(min, Math.round(value)))
 }

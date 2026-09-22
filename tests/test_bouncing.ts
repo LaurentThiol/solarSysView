@@ -4,6 +4,7 @@ import test from "node:test"
 
 import {
   BOUNCE_SERIES,
+  DEFAULT_BOUNCE_QUERY,
   findBounces,
   scanBounces,
   type BounceSeriesId,
@@ -72,6 +73,31 @@ test("constant amplitude, growing bounces and a flat series are rejected", () =>
   assert.equal(sampleSeries(Array.from({ length: 30 }, () => 5)).length, 0)
 })
 
+test("stricter gates reject the same damped series", () => {
+  const heights = geometricHeights(RESTITUTION, 16, 4)
+  const values = dampedParabolas(RESTITUTION, heights, [12, 10, 8, 8])
+  const dates = datesFor(values.length)
+  assert.equal(
+    findBounces({ values, dates }, "n3", { ...DEFAULT_BOUNCE_QUERY, maxRestitution: 0.6 }).length,
+    0
+  )
+  assert.equal(
+    findBounces({ values, dates }, "n3", { ...DEFAULT_BOUNCE_QUERY, minBounces: 5 }).length,
+    0
+  )
+  assert.equal(
+    findBounces({ values, dates }, "n3", { ...DEFAULT_BOUNCE_QUERY, minBounces: 4 }).length,
+    1
+  )
+  assert.ok(
+    findBounces({ values, dates }, "n3", {
+      minR2: 0.4,
+      minParabola: 0.5,
+      maxRestitution: 0.95,
+    }).length >= 1
+  )
+})
+
 test("the scan covers n1–n5 and both stars", () => {
   const heights = geometricHeights(RESTITUTION, 16, 4)
   const values = dampedParabolas(RESTITUTION, heights, [12, 10, 8, 8])
@@ -98,5 +124,12 @@ test("evolution exposes the bouncing tab", () => {
   assert.match(panel, /id: "bouncing"/)
   assert.match(panel, /BouncingPanel/)
   assert.match(view, /Aucun amortissement de rebond sur cette fenêtre/)
+  assert.match(view, /ariaLabel="Rebonds minimum"/)
+  assert.match(view, /ariaLabel="Ajustement des hauteurs"/)
+  assert.match(view, /ariaLabel="Forme des arches"/)
+  assert.match(view, /ariaLabel="Amortissement exigé"/)
+  assert.match(view, /ariaLabel="Amplitude minimale"/)
+  assert.match(view, /type="range"/)
+  assert.match(view, /Aucun amortissement avec ces seuils/)
   assert.match(page, /Suspense/)
 })

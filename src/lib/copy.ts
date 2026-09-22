@@ -171,7 +171,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Bouncing",
     group: "lecture",
-    text: "Onglet Évolution qui cherche, sur n1…n5 et e1, e2, des arches dont la hauteur décroît comme une balle qui s’amortit (restitution e). Lecture du tracé sur la fenêtre, pas un pronostic.",
+    text: "Onglet Évolution qui cherche, sur n1…n5 et e1, e2, des arches dont la hauteur décroît comme une balle qui s’amortit (restitution e). Des curseurs resserrent le nombre de rebonds, l’ajustement, la forme, l’amortissement et l’amplitude. Lecture du tracé sur la fenêtre, pas un pronostic.",
   },
   {
     term: "Gagnants EU",

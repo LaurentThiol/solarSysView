@@ -25,7 +25,7 @@ import {
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { packEvolution } from "@/lib/capture/pack"
-import type { BounceCapture } from "@/lib/bouncing"
+import { DEFAULT_BOUNCE_QUERY, type BounceCapture, type BounceQuery } from "@/lib/bouncing"
 import { useLabTab } from "@/lib/use-lab-tab"
 import type { ChartSketch } from "@/lib/chart-draw"
 import {
@@ -70,7 +70,7 @@ const CHART_TABS = [
     label: "Bouncing",
     help: {
       title: "Bouncing",
-      body: "Cherche, sur n1…n5 et e1, e2, les passages où la courbe fait des arches de plus en plus basses, comme une balle qui s’amortit. Lecture du tracé, pas un pronostic.",
+      body: "Cherche, sur n1…n5 et e1, e2, les passages où la courbe fait des arches de plus en plus basses, comme une balle qui s’amortit. Les curseurs resserrent la recherche vers la droite. Lecture du tracé, pas un pronostic.",
     },
   },
 ] as const
@@ -209,6 +209,7 @@ function EvolutionContent() {
   const [period, setPeriod] = useState<DrawWindow>("last_20")
   const [chartTab, setChartTab] = useLabTab(EVOLUTION_CHART_TABS, "courbes")
   const [bounceCapture, setBounceCapture] = useState<BounceCapture | null>(null)
+  const [bounceQuery, setBounceQuery] = useState<BounceQuery>(DEFAULT_BOUNCE_QUERY)
   const onBounce = useCallback((episode: BounceCapture | null) => {
     setBounceCapture((prev) => {
       if (!episode && !prev) return prev
@@ -442,7 +443,12 @@ function EvolutionContent() {
         />
         <PillTabPanel idPrefix="evolution-chart" tab={chartTab}>
           {chartTab === "bouncing" ? (
-            <BouncingPanel draws={filtered} onEpisode={onBounce} />
+            <BouncingPanel
+              draws={filtered}
+              onEpisode={onBounce}
+              query={bounceQuery}
+              onQuery={setBounceQuery}
+            />
           ) : (
             <DrawChart draws={filtered} />
           )}
