@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
-import { HelpTip } from "@/components/help"
+import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatCompactCount, formatCompactEuro, formatShortDate, type Draw } from "@/lib/draws"
@@ -12,6 +12,7 @@ import {
   RUNNING_SUM_STD_FROM,
   weekdayDivergence,
   type DivergenceAxis,
+  type DivergenceAxisId,
   type RunningSumStdPoint,
 } from "@/lib/weekday-divergence"
 import { WEEKDAY_LINE_COLOR, weekdayLineDash } from "@/lib/weekday-scope"
@@ -94,11 +95,126 @@ function SideCard({ side }: { side: WeekdaySynthesisSide }) {
   )
 }
 
+const COLUMN_HELP = {
+  axis: {
+    title: "Axe",
+    body: "Grandeur lue sur chaque tirage, puis résumée soir par soir. Les numéros sont des statistiques d’ordre : n1 est le plus petit, n5 le plus grand, jamais l’ordre de sortie.",
+  },
+  mean: {
+    title: "Moyenne μ",
+    body: "Moyenne des tirages de ce soir dans la fenêtre. μ mardi et μ vendredi se lisent chacun sur leur propre série.",
+  },
+  std: {
+    title: "Écart type σ",
+    body: "Écart type d’échantillon, diviseur n − 1. Il mesure l’éparpillement des tirages de ce soir autour de leur moyenne. Deux tirages au moins ; sinon la case reste vide.",
+  },
+  cv: {
+    title: "Coefficient de variation",
+    body: "Écart type divisé par la valeur absolue de la moyenne. Il rend comparables une somme et un comptage, qui n’ont pas la même échelle. Si la moyenne est nulle, le coefficient n’est pas affiché.",
+  },
+  delta: {
+    title: "Écart des moyennes Δ",
+    body: "Moyenne du mardi moins moyenne du vendredi. Un signe plus : le mardi est au-dessus du vendredi.",
+  },
+  cohen: {
+    title: "d de Cohen",
+    body: "Δ divisé par l’écart type commun aux deux soirs. Repères usuels : 0,2 petit, 0,5 moyen, 0,8 grand. Un d petit sur une fenêtre courte est la lecture attendue lorsque les deux soirs suivent la même loi.",
+  },
+  interval: {
+    title: "Intervalle de Welch",
+    body: "Intervalle à 95 % pour Δ. La formule de Welch laisse chaque soir garder sa variance. S’il contient 0, l’écart de moyennes reste compatible avec le hasard d’échantillonnage.",
+  },
+  welchP: {
+    title: "p de Welch",
+    body: "Probabilité, si les deux soirs avaient la même moyenne, d’observer un écart au moins aussi grand que Δ. Le seuil usuel est 0,05. p qualifie la fenêtre affichée.",
+  },
+  variance: {
+    title: "Rapport des variances",
+    body: "Variance du mardi divisée par celle du vendredi. 1 : même dispersion. Au-dessus de 1 : le mardi s’étale davantage.",
+  },
+  brown: {
+    title: "Brown–Forsythe",
+    body: "p-value qui compare les dispersions. Chaque tirage est remplacé par sa distance à la médiane de son soir, puis un test de Fisher compare ces distances. La case affiche la p-value, pas la statistique F.",
+  },
+} as const satisfies Record<string, HelpCopy>
+
+const AXIS_HELP: Record<DivergenceAxisId, HelpCopy> = {
+  sum: {
+    title: "Somme",
+    body: "Somme des cinq numéros, entre 15 et 240. Sous un tirage uniforme, la moyenne vaut 127,5 et l’écart type 30,92.",
+  },
+  spread: {
+    title: "Étendue",
+    body: "Plus grand numéro moins le plus petit, entre 4 et 49. Elle dit comment la grille occupe la plage 1–50.",
+  },
+  parity: {
+    title: "Pairs",
+    body: "Nombre de numéros pairs dans la grille, de 0 à 5.",
+  },
+  consecutive: {
+    title: "Consécutifs",
+    body: "Nombre de paires de numéros qui se suivent. 12 et 13 comptent pour une paire.",
+  },
+  n1: {
+    title: "Plus petit",
+    body: "n1, le plus petit des cinq numéros. Il vit près du plancher 1.",
+  },
+  n5: {
+    title: "Plus grand",
+    body: "n5, le plus grand des cinq numéros. Il vit près du plafond 50.",
+  },
+  star_sum: {
+    title: "Somme étoiles",
+    body: "Somme des deux étoiles. La ligne n’est calculée que si la fenêtre n’a qu’une formule d’étoiles.",
+  },
+  star_spread: {
+    title: "Écart étoiles",
+    body: "Plus grande étoile moins la plus petite. Même réserve de formule que la somme des étoiles.",
+  },
+}
+
+const CONVERGENCE_HELP: HelpCopy = {
+  title: "Convergence de l’écart type",
+  body: "Écart type cumulé de la somme, recalculé après chaque tirage du soir à partir du 8e. L’abscisse est le nombre de tirages de ce soir, pas la date : le 10e mardi est aligné sur le 10e vendredi. Le trait horizontal est 30,92, l’écart type théorique de la somme de 5 numéros distincts parmi 1–50. « Écart à la loi » est la distance du dernier point à ce trait.",
+}
+
+const BALLS_HELP: HelpCopy = {
+  title: "Fréquences des boules",
+  body: "Variation totale : moitié de la somme des écarts de fréquence des boules 1 à 50. 0, les deux soirs ont les mêmes proportions.\n\nχ² d’homogénéité : on le compare à son espérance, le nombre de degrés de liberté (boules vues au moins une fois, moins une). En dessous de cette espérance, les fréquences sont plus proches que le bruit typique.\n\n« Effectif trop faible » : l’attendu par boule est sous 5. Le χ² n’est alors qu’un indice.",
+}
+
+const STAR_POOL_HELP: HelpCopy = {
+  title: "Formules d’étoiles",
+  body: "Le pool d’étoiles a changé (9, puis 11, puis 12). Deux valeurs de star_pool dans la même fenêtre retirent Somme étoiles et Écart étoiles : les moyennes ne décriraient plus la même loi.",
+}
+
+const DIVERGENCE_HELP: HelpCopy = {
+  title: "Divergence",
+  wide: true,
+  body: "Contraste des deux soirs sur la fenêtre déjà choisie. Chaque tirage est indépendant : ces champs décrivent l’archive.",
+  items: [
+    ...Object.values(COLUMN_HELP).map((help) => ({ label: help.title, text: help.body })),
+    ...Object.values(AXIS_HELP).map((help) => ({ label: help.title, text: help.body })),
+    { label: CONVERGENCE_HELP.title, text: CONVERGENCE_HELP.body },
+    { label: BALLS_HELP.title, text: BALLS_HELP.body },
+    { label: STAR_POOL_HELP.title, text: STAR_POOL_HELP.body },
+  ],
+}
+
+function FieldLabel({ label, help }: { label: string; help: HelpCopy }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {label}
+      <HelpTip {...help} />
+    </span>
+  )
+}
+
 function AxisRow({ axis }: { axis: DivergenceAxis }) {
   return (
     <tr className="border-t border-border">
       <th scope="row" className="py-1 pr-3 text-left font-medium">
-        {axis.label}
+        <FieldLabel label={axis.label} help={AXIS_HELP[axis.id]} />
       </th>
       <td className="py-1 pr-3 tabular-nums">{formatNum(axis.mardi.mean)}</td>
       <td className="py-1 pr-3 tabular-nums">{formatNum(axis.mardi.std)}</td>
@@ -147,10 +263,11 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
   return (
     <Card className="min-w-0">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Divergence</CardTitle>
+        <CardTitle className="text-base">
+          <TitleHelp help={DIVERGENCE_HELP}>Divergence</TitleHelp>
+        </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Δ = moyenne du mardi − moyenne du vendredi. L’intervalle est celui de Welch à 95 %. σ² est
-          le rapport des variances. BF est la p-value de Brown–Forsythe, sur les écarts à la médiane.
+          Δ = moyenne du mardi − moyenne du vendredi. Les pastilles détaillent chaque champ.
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -158,22 +275,44 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
           <table className="w-full min-w-[52rem] text-sm whitespace-nowrap">
             <thead>
               <tr className="text-left text-muted-foreground">
-                <th className="py-1 pr-3 font-medium">Axe</th>
-                <th className="py-1 pr-3 font-medium">μ mardi</th>
-                <th className="py-1 pr-3 font-medium">σ mardi</th>
-                <th className="py-1 pr-3 font-medium">CV mardi</th>
-                <th className="py-1 pr-3 font-medium">μ vendredi</th>
-                <th className="py-1 pr-3 font-medium">σ vendredi</th>
-                <th className="py-1 pr-3 font-medium">CV vendredi</th>
-                <th className="py-1 pr-3 font-medium">Δ</th>
-                <th className="py-1 pr-3 font-medium">d</th>
-                <th className="py-1 pr-3 font-medium">IC 95 %</th>
-                <th className="py-1 pr-3 font-medium">p</th>
-                <th className="py-1 pr-3 font-medium" title="Rapport des variances, mardi / vendredi">
-                  σ²
+                <th className="py-1 pr-3 font-medium">
+                  <FieldLabel label="Axe" help={COLUMN_HELP.axis} />
                 </th>
-                <th className="py-1 font-medium" title="Brown–Forsythe, centré sur la médiane">
-                  BF
+                <th className="py-1 pr-3 font-medium">
+                  <FieldLabel label="μ mardi" help={COLUMN_HELP.mean} />
+                </th>
+                <th className="py-1 pr-3 font-medium">
+                  <FieldLabel label="σ mardi" help={COLUMN_HELP.std} />
+                </th>
+                <th className="py-1 pr-3 font-medium">
+                  <FieldLabel label="CV mardi" help={COLUMN_HELP.cv} />
+                </th>
+                <th className="py-1 pr-3 font-medium">
+                  <FieldLabel label="μ vendredi" help={COLUMN_HELP.mean} />
+                </th>
+                <th className="py-1 pr-3 font-medium">
+                  <FieldLabel label="σ vendredi" help={COLUMN_HELP.std} />
+                </th>
+                <th className="py-1 pr-3 font-medium">
+                  <FieldLabel label="CV vendredi" help={COLUMN_HELP.cv} />
+                </th>
+                <th className="py-1 pr-3 font-medium">
+                  <FieldLabel label="Δ" help={COLUMN_HELP.delta} />
+                </th>
+                <th className="py-1 pr-3 font-medium">
+                  <FieldLabel label="d" help={COLUMN_HELP.cohen} />
+                </th>
+                <th className="py-1 pr-3 font-medium">
+                  <FieldLabel label="IC 95 %" help={COLUMN_HELP.interval} />
+                </th>
+                <th className="py-1 pr-3 font-medium">
+                  <FieldLabel label="p" help={COLUMN_HELP.welchP} />
+                </th>
+                <th className="py-1 pr-3 font-medium">
+                  <FieldLabel label="σ²" help={COLUMN_HELP.variance} />
+                </th>
+                <th className="py-1 font-medium">
+                  <FieldLabel label="BF" help={COLUMN_HELP.brown} />
                 </th>
               </tr>
             </thead>
@@ -185,17 +324,21 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
           </table>
         </div>
         {report.starPoolBreak ? (
-          <p className="text-xs text-muted-foreground">
+          <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             Étoiles non comparées : la fenêtre mélange plusieurs formules.
+            <HelpTip {...STAR_POOL_HELP} />
           </p>
         ) : null}
         <div className="flex flex-col gap-1">
-          <p className="text-xs text-muted-foreground">
-            Écart type cumulé de la somme, à partir du {RUNNING_SUM_STD_FROM}e tirage de chaque soir.
-            Trait horizontal : {law}, loi des 5 numéros.
-            {distance.mardi != null || distance.vendredi != null
-              ? ` Écart à la loi : mardi ${formatNum(distance.mardi)} · vendredi ${formatNum(distance.vendredi)}.`
-              : ""}
+          <p className="inline-flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+            <span>
+              Écart type cumulé de la somme, à partir du {RUNNING_SUM_STD_FROM}e tirage de chaque soir.
+              Trait horizontal : {law}, loi des 5 numéros.
+              {distance.mardi != null || distance.vendredi != null
+                ? ` Écart à la loi : mardi ${formatNum(distance.mardi)} · vendredi ${formatNum(distance.vendredi)}.`
+                : ""}
+            </span>
+            <HelpTip {...CONVERGENCE_HELP} />
           </p>
           {report.runningSumStd.length ? (
             <ChartContainer config={divergenceConfig} className="aspect-auto h-40 w-full">
@@ -255,13 +398,16 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
             </p>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Boules : variation totale{" "}
-          <span className="tabular-nums">{formatNum(report.balls.totalVariation, 3)}</span>
-          {" · χ² "}
-          <span className="tabular-nums">{formatNum(report.balls.chiSquare, 1)}</span>
-          {report.balls.df != null ? ` (${report.balls.df} ddl)` : ""}
-          {report.balls.lowCount ? " · effectif trop faible" : ""}
+        <p className="inline-flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+          <span>
+            Boules : variation totale{" "}
+            <span className="tabular-nums">{formatNum(report.balls.totalVariation, 3)}</span>
+            {" · χ² "}
+            <span className="tabular-nums">{formatNum(report.balls.chiSquare, 1)}</span>
+            {report.balls.df != null ? ` (${report.balls.df} ddl)` : ""}
+            {report.balls.lowCount ? " · effectif trop faible" : ""}
+          </span>
+          <HelpTip {...BALLS_HELP} />
         </p>
       </CardContent>
     </Card>
