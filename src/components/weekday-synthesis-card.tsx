@@ -371,10 +371,10 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
                       labelFormatter={(_, payload) => {
                         const point = payload?.[0]?.payload as RunningSumStdPoint | undefined
                         if (!point?.date) return ""
-                        const parts = [formatShortDate(point.date)]
-                        if (point.kMardi != null) parts.push(`${point.kMardi}e mardi`)
-                        if (point.kVendredi != null) parts.push(`${point.kVendredi}e vendredi`)
-                        return parts.join(" · ")
+                        const rank = point.soir === "mardi" ? point.kMardi : point.kVendredi
+                        return rank != null
+                          ? `${formatShortDate(point.date)} · ${rank}e ${point.soir}`
+                          : formatShortDate(point.date)
                       }}
                     />
                   }

@@ -75,6 +75,8 @@ export type DivergenceAxis = {
 export type RunningSumStdPoint = {
   /** Date ISO du tirage qui a fait avancer la série. */
   date: string
+  /** Soir réellement tiré à cette date. */
+  soir: "mardi" | "vendredi"
   /** Effectif du soir au moment du point (null tant que le soir n’a pas assez de tirages). */
   kMardi: number | null
   kVendredi: number | null
@@ -387,6 +389,7 @@ function runningSumStd(mardi: SumDraw[], vendredi: SumDraw[]): RunningSumStdPoin
     if (!advanced) continue
     points.push({
       date: event.date,
+      soir: event.side,
       kMardi: mardiStd == null ? null : mardiSums.length,
       kVendredi: vendrediStd == null ? null : vendrediSums.length,
       mardi: mardiStd,
