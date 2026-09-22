@@ -47,12 +47,18 @@ export const WALKER_STATUS_LABELS: Record<string, string> = {
   error: "souci",
 }
 
-export const STARTER_QUESTIONS = [
-  "Que disent @rsi et @adx sur cette fenêtre ?",
-  "Lis @ete : figure complète, ou juste une ressemblance ?",
-  "@fft : quelle raie est lisible, laquelle est un artefact de fenêtre ?",
-  "Cite la prévision du spécialiste épinglé : valeur, σ, score vs hasard 20/50/100. Une grille 5+2, si vous en proposez une, est une hypothèse séparée.",
-]
+export const STARTER_PROMPTS = [
+  { label: "RSI et ADX", question: "Que disent @rsi et @adx sur cette fenêtre ?" },
+  { label: "Figure ETE", question: "Lis @ete : figure complète, ou juste une ressemblance ?" },
+  { label: "Raie FFT", question: "@fft : quelle raie est lisible, laquelle est un artefact de fenêtre ?" },
+  {
+    label: "Prévision spécialiste",
+    question:
+      "Cite la prévision du spécialiste épinglé : valeur, σ, score vs hasard 20/50/100. Une grille 5+2, si vous en proposez une, est une hypothèse séparée.",
+  },
+] as const
+
+export const STARTER_QUESTIONS = STARTER_PROMPTS.map((item) => item.question)
 
 export const LAB_TONE: Record<BrainLab, string> = {
   analyse: "border-chart-1/40 bg-chart-1/15 text-foreground",

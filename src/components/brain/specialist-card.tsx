@@ -15,6 +15,7 @@ import {
   targetGlyph,
   verdictTone,
   type TargetGlyphKind,
+  type VerdictKind,
 } from "@/lib/brain/specialist-view"
 import { cn } from "@/lib/utils"
 
@@ -94,7 +95,7 @@ function SkillMeters({ record }: { record: SpecialistRecord }) {
       {rows.map((row) => (
         <div key={row.key} className="grid grid-cols-[1.6rem_1fr_2.6rem] items-center gap-1.5">
           <span className="text-[10px] text-muted-foreground">{row.key}</span>
-          <div className="relative h-1.5 overflow-hidden rounded-full bg-muted">
+          <div className="relative h-2 overflow-hidden rounded-full bg-muted">
             <div className="absolute inset-y-0 left-1/2 w-px bg-foreground/25" />
             {row.bar.side !== "empty" && row.bar.side !== "zero" ? (
               <div
@@ -113,9 +114,43 @@ function SkillMeters({ record }: { record: SpecialistRecord }) {
   )
 }
 
-function ForecastPanel({ record }: { record: SpecialistRecord }) {
+function verdictRail(kind: VerdictKind) {
+  if (kind === "beats") return "bg-chart-3"
+  if (kind === "worse") return "bg-destructive"
+  if (kind === "tie") return "bg-muted-foreground/45"
+  return "bg-border"
+}
+
+function ConfidenceRing({ pct }: { pct: number }) {
+  const radius = 14
+  const circ = 2 * Math.PI * radius
+  const dash = (Math.max(0, Math.min(100, pct)) / 100) * circ
+  return (
+    <svg viewBox="0 0 40 40" className="size-11 shrink-0 text-foreground" role="img" aria-label={`Confiance ${pct} pour cent`}>
+      <circle cx="20" cy="20" r={radius} fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="3" />
+      <circle
+        cx="20"
+        cy="20"
+        r={radius}
+        fill="none"
+        className="text-primary"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray={`${dash} ${circ - dash}`}
+        transform="rotate(-90 20 20)"
+      />
+      <text x="20" y="21" textAnchor="middle" dominantBaseline="middle" fill="currentColor" fontSize="9">
+        {pct}
+      </text>
+    </svg>
+  )
+}
+
+function ForecastPanel({ record, preview }: { record: SpecialistRecord; preview?: boolean }) {
   const forecast = record.last_forecast ?? record.forecast
   const view = formatForecast(forecast)
+  const pending = Boolean(preview) && forecast?.value == null && !view.abstain
   const proba = view.proba
   const showProba = (record.task === "classes" || record.task === "binary") && proba != null && proba.length > 1
   const maxP = showProba && proba ? Math.max(...proba, 1e-6) : 1
@@ -126,21 +161,21 @@ function ForecastPanel({ record }: { record: SpecialistRecord }) {
         view.abstain ? "border-dashed border-border bg-muted/20" : "border-primary/25 bg-primary/8"
       )}
     >
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">Prévision t+1</p>
-        {view.abstain ? (
-          <span className="rounded-full border border-border px-1.5 py-px text-[10px] text-muted-foreground">s’abstient</span>
-        ) : null}
-      </div>
-      <p className="mt-0.5 font-mono text-sm text-foreground">{view.summary}</p>
-      {view.confidencePct != null ? (
-        <div className="mt-1.5 flex items-center gap-2">
-          <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${view.confidencePct}%` }} />
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">Prévision t+1</p>
+            {view.abstain ? (
+              <span className="rounded-full border border-border px-1.5 py-px text-[10px] text-muted-foreground">s’abstient</span>
+            ) : null}
           </div>
-          <span className="text-[10px] text-muted-foreground">{view.confidencePct}%</span>
+          <p className="mt-1 font-mono text-2xl leading-none text-foreground">
+            {pending ? "pas encore noté" : view.valueLabel}
+          </p>
+          {view.sigmaLabel ? <p className="mt-1 font-mono text-xs text-muted-foreground">{view.sigmaLabel}</p> : null}
         </div>
-      ) : null}
+        {view.confidencePct != null ? <ConfidenceRing pct={view.confidencePct} /> : null}
+      </div>
       {showProba && proba ? (
         <div className="mt-2 flex h-10 items-end gap-0.5" aria-label="Probabilités de classes">
           {proba.map((p, i) => (
@@ -163,6 +198,7 @@ export function SpecialistCard({
   record,
   highlighted,
   inferring,
+  preview,
   onPin,
   onInfer,
   onDelete,
@@ -170,9 +206,10 @@ export function SpecialistCard({
   record: SpecialistRecord
   highlighted?: boolean
   inferring?: boolean
-  onPin: () => void
-  onInfer: () => void
-  onDelete: () => void
+  preview?: boolean
+  onPin?: () => void
+  onInfer?: () => void
+  onDelete?: () => void
 }) {
   const tone = verdictTone(record.verdict)
   const glyph = targetGlyph(record.target)
@@ -182,10 +219,12 @@ export function SpecialistCard({
     <article
       data-specialist-card={record.slug}
       className={cn(
-        "flex flex-col gap-2.5 rounded-xl border px-3 py-2.5",
+        "flex overflow-hidden rounded-xl border",
         highlighted ? "border-primary/45 bg-primary/8" : "border-border/70 bg-card/40"
       )}
     >
+      <div className={cn("w-1.5 shrink-0", verdictRail(tone.kind))} aria-hidden />
+      <div className="flex min-w-0 flex-1 flex-col gap-2.5 px-3 py-2.5">
       <div className="flex items-start gap-2.5">
         <SpecialistGlyph kind={glyph} className="text-primary" />
         <div className="min-w-0 flex-1">
@@ -194,6 +233,10 @@ export function SpecialistCard({
             {record.verdict ? (
               <span className={cn("inline-flex h-5 items-center rounded-full border px-2 text-[10px] font-medium", tone.className)}>
                 {record.verdict}
+              </span>
+            ) : preview ? (
+              <span className="inline-flex h-5 items-center rounded-full border border-dashed border-border px-2 text-[10px] text-muted-foreground">
+                pas encore noté
               </span>
             ) : null}
           </div>
@@ -205,7 +248,7 @@ export function SpecialistCard({
       </div>
 
       <SkillMeters record={record} />
-      <ForecastPanel record={record} />
+      <ForecastPanel record={record} preview={preview} />
 
       {record.indicators?.length ? (
         <div className="flex flex-wrap items-center gap-1">
@@ -237,18 +280,21 @@ export function SpecialistCard({
         <p className="line-clamp-2 text-[11px] leading-4 text-muted-foreground">{record.instructions}</p>
       ) : null}
 
+      {preview ? null : (
       <div className="mt-auto flex flex-wrap gap-1">
-        <Button size="xs" variant="outline" onClick={onPin}>
+        <Button size="xs" variant="outline" onClick={() => onPin?.()}>
           <Pin />
           Épingler
         </Button>
-        <Button size="xs" variant="outline" disabled={inferring} onClick={onInfer}>
+        <Button size="xs" variant="outline" disabled={inferring} onClick={() => onInfer?.()}>
           {inferring ? <Loader2 className="animate-spin" /> : <RefreshCw />}
           Réinférer
         </Button>
-        <Button size="icon-xs" variant="ghost" title="Supprimer" className="ml-auto" onClick={onDelete}>
+        <Button size="icon-xs" variant="ghost" title="Supprimer" className="ml-auto" onClick={() => onDelete?.()}>
           <Trash2 />
         </Button>
+      </div>
+      )}
       </div>
     </article>
   )

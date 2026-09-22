@@ -12,7 +12,6 @@ import {
   Play,
   ScanSearch,
   Send,
-  Sparkles,
   Star,
   StopCircle,
 } from "lucide-react"
@@ -24,15 +23,15 @@ import {
   KIND_LABELS,
   KIND_TONE,
   LAB_TONE,
-  STARTER_QUESTIONS,
+  STARTER_PROMPTS,
   StatusDot,
   WALKER_STATUS_LABELS,
 } from "@/components/brain/brain-chrome"
 import { BrainDemoBar, BrainDemoPopup } from "@/components/brain/brain-demo"
 import { BrainMascot } from "@/components/brain/brain-mascot"
-import { BrainSpecialists } from "@/components/brain/brain-specialists"
-import { FigureThumb } from "@/components/chartisme/figure-thumb"
-import { CurveName, CurveThumb } from "@/components/chartisme/curve-thumb"
+import { CatalogThumb, PackTile } from "@/components/brain/brain-tiles"
+import { SpecialistRibbon } from "@/components/brain/specialist-ribbon"
+import { CurveName } from "@/components/chartisme/curve-thumb"
 import { useRegisterCapture } from "@/components/capture"
 import { HelpTip } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
@@ -81,13 +80,13 @@ import {
 } from "@/lib/brain/demo"
 import {
   clearPendingBrainPins,
+  isSpecialistDemoQuery,
   readPendingBrainPins,
-  specialistDemoWantsStart,
 } from "@/lib/brain/specialist-demo"
 import { deepLinkFor } from "@/lib/brain/deep-links"
 import { formatHandle, parseHandle, parseHandlesInText } from "@/lib/brain/handles"
 import { DEMO_QUESTION, lectureFromWorkingSet, TABLE_LECTURE_MODEL } from "@/lib/brain/lecture"
-import { listSpecialists, specialistToEntry } from "@/lib/brain/specialists"
+import { listSpecialists, specialistToEntry, type SpecialistRecord } from "@/lib/brain/specialists"
 import {
   addNote,
   lastWatchlistRun,
@@ -222,7 +221,9 @@ export function BrainLab() {
   const [inspector, setInspector] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
+  const [journalOpen, setJournalOpen] = useState(false)
   const [specialists, setSpecialists] = useState<CatalogEntry[]>([])
+  const [specialistRecords, setSpecialistRecords] = useState<SpecialistRecord[]>([])
   const [gridOverride, setGridOverride] = useState<typeof DEMO_GRID | null>(null)
   const [demoStep, setDemoStep] = useState<DemoStepId | null>(null)
   const [demoRunning, setDemoRunning] = useState(false)
@@ -336,6 +337,13 @@ export function BrainLab() {
       }
     })()
   }, [refreshJournal])
+
+  useEffect(() => {
+    void listSpecialists().then((listed) => {
+      setSpecialistRecords(listed.items)
+      setSpecialists(listed.items.map((item) => specialistToEntry(item)))
+    })
+  }, [])
 
   const pinEntry = useCallback((entry: CatalogEntry) => {
     setPins((prev) => (prev.some((item) => item.id === entry.id) ? prev : [...prev, entry]))
@@ -762,7 +770,8 @@ export function BrainLab() {
     setDemoWaiting(false)
     setError(null)
     setInspector(true)
-    setScanOpen(true)
+    setScanOpen(false)
+    setJournalOpen(false)
     setActiveLab("all")
     setQuery("")
     setPreset("last_100")
@@ -774,6 +783,8 @@ export function BrainLab() {
     const begin = (step: DemoStepId) => {
       setDemoStep(step)
       setDemoWaiting(false)
+      if (step === "scan") setScanOpen(true)
+      if (step === "journal") setJournalOpen(true)
       scrollDemoTarget(demoStepOf(step).target)
     }
 
@@ -797,7 +808,8 @@ export function BrainLab() {
       begin("pin")
       const specialistIndex = await listSpecialists()
       const liveSpecialists = specialistIndex.items.map((item) => specialistToEntry(item))
-      if (liveSpecialists.length) setSpecialists(liveSpecialists)
+      setSpecialistRecords(specialistIndex.items)
+      setSpecialists(liveSpecialists)
       const entries = demoEntries(liveSpecialists.length ? liveSpecialists : specialists, handleCtx)
       setPins(entries)
       if (!(await ask("pin"))) return
@@ -929,11 +941,16 @@ export function BrainLab() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const wants =
-      specialistDemoWantsStart(window.location.search, window.location.pathname) ||
-      window.location.hash.toLowerCase().includes("special")
-    if (!wants) return
-    const timer = window.setTimeout(() => scrollDemoTarget("specialists"), 80)
+    const path = window.location.pathname.replace(/\/$/, "")
+    if (path === "/brain" && isSpecialistDemoQuery(window.location.search)) {
+      const params = new URLSearchParams(window.location.search)
+      window.location.replace(`/brain/specialistes?${params.toString()}`)
+      return
+    }
+    if (!window.location.hash.toLowerCase().includes("special")) return
+    const timer = window.setTimeout(() => {
+      document.getElementById("specialistes")?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 80)
     return () => window.clearTimeout(timer)
   }, [])
 
@@ -980,6 +997,12 @@ export function BrainLab() {
   })
 
   const mascotMood = busy || walker?.status === "running" || demoRunning ? "think" : status?.local === false ? "sleep" : messages.length ? "talk" : "idle"
+  const stage = pins.length === 0 ? 0 : messages.length === 0 ? 1 : 2
+  const stages = [
+    { label: "Épingle", detail: "Table vide" },
+    { label: "Question", detail: "Fiches sur la table" },
+    { label: "Table", detail: "Brain ne voit que la table" },
+  ] as const
   const scanProgress = walker && walker.jobs.length ? Math.min(100, (walker.index / walker.jobs.length) * 100) : 0
   const localOn = Boolean(status?.local)
   const cloudReady = Boolean(status?.google || status?.openai)
@@ -992,51 +1015,48 @@ export function BrainLab() {
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <section className="relative overflow-hidden rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/22 via-chart-5/12 to-card p-5 sm:p-6">
-        <div className="pointer-events-none absolute -top-12 -right-6 size-44 rounded-full bg-primary/25 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-16 left-1/4 size-40 rounded-full bg-chart-5/20 blur-3xl" />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
-          <BrainMascot mood={mascotMood} size="lg" />
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium tracking-[0.18em] text-primary uppercase">Assistants</p>
-            <p className="mt-1 text-xl font-semibold tracking-tight">Table de lecture</p>
-            <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-              Épinglez un nom — <span className="text-foreground">@rsi</span>,{" "}
-              <span className="text-foreground">@ete</span>,{" "}
-              <span className="text-foreground">@specialist.paire-impair</span>{" "}
-              — puis posez une question. Les spécialistes publient une prévision
-              de série nommée. Brain décrit la fenêtre, puis peut pronostiquer
-              (hypothèse, pas une certitude).
-            </p>
-            <ol className="mt-3 flex flex-wrap gap-2 text-xs">
-              <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">1. Épingle</li>
-              <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">2. Pose une question</li>
-              <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">3. Il ne voit que la table</li>
-            </ol>
-          </div>
-          <div className="flex flex-col items-start gap-2 sm:items-end">
-            <StatusDot
-              ok={localOn}
-              label={localOn ? `Ollama ${status?.localHost ?? "allumé"}` : status ? "Ollama éteint" : "Ollama…"}
-              hint="Brain discute d’abord en local. Le cloud n’intervient que si vous le demandez."
-            />
-            {cloudReady ? (
-              <StatusDot
-                ok
-                label={status?.google && status?.openai ? "Gemini et OpenAI prêts" : status?.google ? "Gemini prêt" : "OpenAI prêt"}
-              />
-            ) : null}
-            <p className="text-[11px] text-muted-foreground">
-              {pins.length ? `${pins.length} fiche${pins.length > 1 ? "s" : ""} sur la table` : "Table vide"}
-              {watch.length ? ` · ${watch.length} suivi${watch.length > 1 ? "s" : ""}` : ""}
-            </p>
-            <Link
-              href="/brain/specialistes"
-              className="inline-flex h-7 items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] hover:bg-muted"
+      <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-card to-card px-3 py-2">
+        <BrainMascot mood={mascotMood} size="sm" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold tracking-tight">Table de lecture</p>
+          <p className="text-[11px] text-muted-foreground">
+            {pins.length ? `${pins.length} fiche${pins.length > 1 ? "s" : ""} sur la table` : "Table vide"}
+            {watch.length ? ` · ${watch.length} suivi${watch.length > 1 ? "s" : ""}` : ""}
+          </p>
+        </div>
+        <ol className="flex flex-wrap gap-1 text-[11px]">
+          {stages.map((item, index) => (
+            <li
+              key={item.label}
+              aria-current={index === stage ? "step" : undefined}
+              title={item.detail}
+              className={cn(
+                "rounded-full border px-2.5 py-1",
+                index === stage ? "border-primary/50 bg-primary/20 text-foreground" : "border-border/70 text-muted-foreground"
+              )}
             >
-              Spécialistes
-            </Link>
-          </div>
+              {index + 1}. {item.label}
+            </li>
+          ))}
+        </ol>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <StatusDot
+            ok={localOn}
+            label={localOn ? `Ollama ${status?.localHost ?? "allumé"}` : status ? "Ollama éteint" : "Ollama…"}
+            hint="Brain discute d’abord en local. Le cloud n’intervient que si vous le demandez."
+          />
+          {cloudReady ? (
+            <StatusDot
+              ok
+              label={status?.google && status?.openai ? "Gemini et OpenAI prêts" : status?.google ? "Gemini prêt" : "OpenAI prêt"}
+            />
+          ) : null}
+          <Link
+            href="/brain/specialistes"
+            className="inline-flex h-7 items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] hover:bg-muted"
+          >
+            Spécialistes
+          </Link>
         </div>
       </section>
 
@@ -1148,10 +1168,13 @@ export function BrainLab() {
       </div>
       </div>
 
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[16rem_minmax(0,1fr)_minmax(0,1.05fr)]">
         <Card
           data-demo="discussion"
-          className={cn("border-primary/20", demoHighlight(demoStep, ["chat"], demoWaiting))}
+          className={cn(
+            "order-3 flex min-h-[32rem] min-w-0 flex-col border-primary/20 xl:max-h-[calc(100dvh-14rem)] xl:min-h-0",
+            demoHighlight(demoStep, ["chat"], demoWaiting)
+          )}
         >
           <CardHeader className="border-b border-border/60">
             <CardTitle className="flex items-center gap-2">
@@ -1164,7 +1187,7 @@ export function BrainLab() {
             </CardTitle>
             <CardDescription>Pose une question comme à un collègue. Les @ collent les fiches toutes seules.</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3 pt-3">
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-3">
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <StatusDot ok={localOn} label={localOn ? "local" : "local off"} />
               {localOn ? (
@@ -1205,7 +1228,7 @@ export function BrainLab() {
             </div>
             <div
               ref={chatRef}
-              className="flex max-h-[28rem] min-h-64 flex-col gap-3 overflow-auto rounded-2xl border border-border bg-gradient-to-b from-card/80 to-background/40 p-3"
+              className="flex min-h-64 flex-1 flex-col gap-3 overflow-auto rounded-2xl border border-border bg-gradient-to-b from-card/80 to-background/40 p-3 xl:min-h-0"
             >
               {messages.length === 0 && !busy ? (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 px-3 py-6 text-center">
@@ -1216,20 +1239,21 @@ export function BrainLab() {
                       ? "Épingle un indicateur à droite, clique une question, ou lance la démo."
                       : "Ollama est éteint : lancez la démo ou « Lire la table » — les chiffres sont calculés ici. Le cloud seulement si vous cochez « ce tour »."}
                   </p>
-                  <div className="flex w-full max-w-md flex-col gap-1.5">
-                    {STARTER_QUESTIONS.map((question) => (
+                  <div className="flex w-full max-w-md flex-wrap justify-center gap-1.5">
+                    {STARTER_PROMPTS.map((item) => (
                       <button
-                        key={question}
+                        key={item.label}
                         type="button"
-                        className="rounded-xl border border-primary/25 bg-primary/8 px-3 py-2 text-left text-[12px] leading-5 text-foreground hover:border-primary/50 hover:bg-primary/15"
+                        title={item.question}
+                        className="rounded-full border border-primary/25 bg-primary/8 px-3 py-1.5 text-[12px] text-foreground hover:border-primary/50 hover:bg-primary/15"
                         onClick={() => {
-                          setDraft(question)
-                          for (const item of parseHandlesInText(question, handleCtx)) {
-                            if (item.entry) pinEntry(item.entry)
+                          setDraft(item.question)
+                          for (const parsed of parseHandlesInText(item.question, handleCtx)) {
+                            if (parsed.entry) pinEntry(parsed.entry)
                           }
                         }}
                       >
-                        {question}
+                        {item.label}
                       </button>
                     ))}
                   </div>
@@ -1293,9 +1317,8 @@ export function BrainLab() {
                         pinEntry(entry)
                       }}
                     >
+                      <CatalogThumb entry={entry} />
                       <span className="font-mono text-primary">@{entry.handle}</span>
-                      {entry.kind === "figure" ? <FigureThumb figure={entry.handle} /> : null}
-                      {entry.kind === "variable" ? <CurveThumb kind={entry.handle} /> : null}
                       <span className="truncate text-muted-foreground">{entry.label}</span>
                     </button>
                   ))}
@@ -1304,15 +1327,6 @@ export function BrainLab() {
             </div>
             <div className="flex items-center gap-2">
               <p className="text-[11px] text-muted-foreground">Entrée envoie · Maj+Entrée pour une ligne</p>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy || demoRunning}
-                onClick={() => readTable()}
-              >
-                <ListChecks />
-                Lire la table
-              </Button>
               <Button size="sm" className="ml-auto" disabled={busy || !draft.trim()} onClick={sendDraft}>
                 <Send />
                 {busy ? "…" : "Envoyer"}
@@ -1321,48 +1335,101 @@ export function BrainLab() {
           </CardContent>
         </Card>
 
-        <div className="flex flex-col gap-4">
+        <div className="contents">
           <Card
             data-demo="table"
-            className={demoHighlight(demoStep, ["table"], demoWaiting)}
+            className={cn(
+              "order-2 flex min-w-0 flex-col xl:max-h-[calc(100dvh-14rem)]",
+              demoHighlight(demoStep, ["table"], demoWaiting)
+            )}
           >
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex flex-wrap items-center gap-2">
                 <Pin className="size-4 text-primary" />
                 Sur la table
                 <HelpTip
                   title="Sur la table"
                   body="C’est exactement ce que Brain reçoit. Une fiche épinglée, un souvenir, un lot : s’il n’est pas ici, Brain ne le voit pas."
                 />
+                <Button
+                  size="sm"
+                  className="ml-auto"
+                  disabled={busy || demoRunning}
+                  onClick={() => readTable()}
+                >
+                  <ListChecks />
+                  Lire la table
+                </Button>
               </CardTitle>
-              <CardDescription>Brain ne lit que ces fiches. Cliquez une pastille pour la retirer.</CardDescription>
+              <CardDescription>Brain ne lit que ces fiches. La croix retire une épingle.</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-2 text-sm">
-              {pins.length ? (
-                <div className="flex flex-wrap gap-1">
-                  {pins.map((entry) => (
-                    <button
-                      key={entry.id}
-                      type="button"
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
-                        LAB_TONE[entry.lab]
-                      )}
-                      onClick={() => setPins((prev) => prev.filter((item) => item.id !== entry.id))}
-                      title="Retirer de la table"
-                    >
-                      @{formatHandle(entry).replace(/^@/, "")} ×
-                    </button>
-                  ))}
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto text-sm">
+              {pins.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border px-3 py-4">
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    Table vide. Un kit pose un plateau entier : Brain aura enfin quelque chose à lire.
+                  </p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {BRAIN_PACKS.map((pack) => (
+                      <PackTile key={pack.id} pack={pack} onPin={() => pinPack(pack.handles)} />
+                    ))}
+                  </div>
                 </div>
               ) : null}
-              {board.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-border px-3 py-4 text-xs leading-5 text-muted-foreground">
-                  Table vide. Cliquez un nom dans la bibliothèque, ou un kit ci-dessous : Brain aura enfin quelque chose à lire.
-                </p>
-              ) : (
-                board.map((item) => {
-                  const entry = pins.find((pin) => pin.id === item.fiche?.id) ?? BRAIN_CATALOG.find((row) => row.id === item.fiche?.id)
+              {pins.map((entry) => {
+                const item = board.find((row) => row.kind === "pin" && row.id === entry.id)
+                const href = item?.fiche
+                  ? deepLinkFor({
+                      entry,
+                      variable: item.fiche.params.variable,
+                      n: item.fiche.params.n,
+                      periodX: item.fiche.params.periodX,
+                      preset,
+                      curveId: item.fiche.params.curveId,
+                      queryDate: typeof item.fiche.last.query === "string" ? item.fiche.last.query : null,
+                      axes: typeof item.fiche.last.axes === "string" ? item.fiche.last.axes : null,
+                    }).href
+                  : null
+                return (
+                  <div
+                    key={entry.id}
+                    className={cn("flex items-start gap-2 rounded-xl border px-2.5 py-2", KIND_TONE.pin)}
+                  >
+                    <CatalogThumb entry={entry} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-[13px]">{formatHandle(entry)}</span>
+                        <Badge variant="outline">{KIND_LABELS.pin}</Badge>
+                        <span className="text-[10px] text-muted-foreground">vu par Brain</span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                        {item?.summary ?? entry.reading}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      {href ? (
+                        <a className="text-[11px] text-primary underline-offset-2 hover:underline" href={href}>
+                          ouvrir
+                        </a>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="text-[11px] text-muted-foreground hover:text-foreground"
+                        title="Retirer de la table"
+                        onClick={() => setPins((prev) => prev.filter((pin) => pin.id !== entry.id))}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              {board
+                .filter((item) => item.kind !== "pin")
+                .map((item) => {
+                  const entry =
+                    specialists.find((row) => row.id === item.id || row.id === item.fiche?.id) ??
+                    BRAIN_CATALOG.find((row) => row.id === item.fiche?.id || row.id === item.id)
                   const href = item.fiche && entry
                     ? deepLinkFor({
                         entry,
@@ -1378,27 +1445,32 @@ export function BrainLab() {
                   return (
                     <div
                       key={`${item.kind}:${item.id}`}
-                      className={cn("rounded-xl border px-2.5 py-2", item.inPrompt ? KIND_TONE[item.kind] : "border-border bg-muted/20")}
+                      className={cn(
+                        "flex items-start gap-2 rounded-xl border px-2.5 py-2",
+                        item.inPrompt ? KIND_TONE[item.kind] : "border-border bg-muted/20"
+                      )}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[13px]">{item.handle}</span>
-                        <Badge variant="outline">{KIND_LABELS[item.kind]}</Badge>
-                        {item.inPrompt ? (
-                          <span className="text-[10px] text-muted-foreground">vu par Brain</span>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground">hors prompt</span>
-                        )}
-                        {href ? (
-                          <a className="ml-auto text-[11px] text-primary underline-offset-2 hover:underline" href={href}>
-                            ouvrir
-                          </a>
-                        ) : null}
+                      {entry ? <CatalogThumb entry={entry} /> : <span className="size-8 shrink-0 rounded-lg border border-dashed border-border" />}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-[13px]">{item.handle}</span>
+                          <Badge variant="outline">{KIND_LABELS[item.kind]}</Badge>
+                          {item.inPrompt ? (
+                            <span className="text-[10px] text-muted-foreground">vu par Brain</span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">hors prompt</span>
+                          )}
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.summary}</p>
                       </div>
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.summary}</p>
+                      {href ? (
+                        <a className="shrink-0 text-[11px] text-primary underline-offset-2 hover:underline" href={href}>
+                          ouvrir
+                        </a>
+                      ) : null}
                     </div>
                   )
-                })
-              )}
+                })}
               <Button size="sm" variant="outline" onClick={() => setInspector((value) => !value)}>
                 {inspector ? "Masquer le JSON" : "Inspecteur JSON"}
               </Button>
@@ -1412,7 +1484,10 @@ export function BrainLab() {
 
           <Card
             data-demo="library"
-            className={demoHighlight(demoStep, ["pin", "watch"], demoWaiting)}
+            className={cn(
+              "order-1 flex min-w-0 flex-col xl:max-h-[calc(100dvh-14rem)]",
+              demoHighlight(demoStep, ["pin", "watch"], demoWaiting)
+            )}
           >
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1425,7 +1500,7 @@ export function BrainLab() {
               </CardTitle>
               <CardDescription>Cliquez un nom pour l’épingler. L’étoile le suit à chaque synchro.</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-3">
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
               <div className="flex flex-wrap gap-1">
                 <Button size="xs" variant={activeLab === "all" ? "default" : "outline"} onClick={() => setActiveLab("all")}>
                   Tous
@@ -1443,25 +1518,14 @@ export function BrainLab() {
                 ))}
               </div>
               <Input placeholder="chercher @rsi, tête-épaules…" value={query} onChange={(e) => setQuery(e.target.value)} />
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="flex gap-2 overflow-x-auto pb-1">
                 {BRAIN_PACKS.map((pack) => (
-                  <button
-                    key={pack.id}
-                    type="button"
-                    className="rounded-2xl border border-primary/25 bg-primary/8 px-3 py-2 text-left hover:border-primary/50 hover:bg-primary/14"
-                    onClick={() => pinPack(pack.handles)}
-                  >
-                    <span className="flex items-center gap-1.5 text-sm font-medium">
-                      <Sparkles className="size-3.5 text-primary" />
-                      Kit {pack.label}
-                    </span>
-                    <span className="mt-1 block font-mono text-[11px] text-muted-foreground">
-                      {pack.handles.map((handle) => `@${handle}`).join(" · ")}
-                    </span>
-                  </button>
+                  <div key={pack.id} className="w-40 shrink-0">
+                    <PackTile pack={pack} onPin={() => pinPack(pack.handles)} />
+                  </div>
                 ))}
               </div>
-              <div className="max-h-80 overflow-auto pr-1">
+              <div className="min-h-48 flex-1 overflow-auto pr-1">
                 {catalogGroups.map((group) => (
                   <div key={group.family} className="mb-3">
                     <p className="mb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
@@ -1481,16 +1545,14 @@ export function BrainLab() {
                           >
                             <button
                               type="button"
-                              className="min-w-0 flex-1 text-left"
+                              className="flex min-w-0 flex-1 items-center gap-2 text-left"
                               title={entry.reading}
                               onClick={() => pinEntry(entry)}
                             >
-                              <span className="font-mono text-[13px] text-primary">{formatHandle(entry)}</span>
-                              <span className="mt-0.5 flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
-                                {entry.kind === "figure" ? <FigureThumb figure={entry.handle} /> : null}
-                                {entry.kind === "variable" ? <CurveThumb kind={entry.handle} /> : null}
-                                {entry.label}
-                                {entry.units ? ` · ${entry.units}` : ""}
+                              <CatalogThumb entry={entry} />
+                              <span className="min-w-0">
+                                <span className="block truncate text-xs font-medium">{entry.label}</span>
+                                <span className="block truncate font-mono text-[10px] text-primary">{formatHandle(entry)}</span>
                               </span>
                             </button>
                             <button
@@ -1523,15 +1585,11 @@ export function BrainLab() {
         </div>
       </div>
 
-      <div
-        data-demo="specialists"
-        className={cn("rounded-xl", demoHighlight(demoStep, ["pin"], demoWaiting))}
-      >
-        <BrainSpecialists
-          era={era}
-          weekday={weekday}
+      <div className={cn("rounded-xl", demoHighlight(demoStep, ["pin"], demoWaiting))}>
+        <SpecialistRibbon
+          records={specialistRecords}
+          pinnedIds={pins.map((entry) => entry.id)}
           onPin={pinEntry}
-          onIndex={(items) => setSpecialists(items.map((item) => specialistToEntry(item)))}
         />
       </div>
 
@@ -1658,19 +1716,27 @@ export function BrainLab() {
         className={demoHighlight(demoStep, ["journal"], demoWaiting)}
       >
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <NotebookPen className="size-4 text-primary" />
-            Carnet
-            <HelpTip
-              title="Carnet"
-              body="Lectures datées, souvenirs locaux, notes humaines. Neon si disponible, sinon cet ordinateur. Exporte en Markdown ou CSV."
-            />
-          </CardTitle>
-          <CardDescription>
-            {journalSource === "neon" ? "Enregistré sur Neon." : "Sur cet ordinateur (Neon indisponible)."} {journal.length} lecture
-            {journal.length > 1 ? "s" : ""}.
-          </CardDescription>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <CardTitle className="flex items-center gap-2">
+                <NotebookPen className="size-4 text-primary" />
+                Carnet
+                <HelpTip
+                  title="Carnet"
+                  body="Lectures datées, souvenirs locaux, notes humaines. Neon si disponible, sinon cet ordinateur. Exporte en Markdown ou CSV."
+                />
+              </CardTitle>
+              <CardDescription>
+                {journalSource === "neon" ? "Enregistré sur Neon." : "Sur cet ordinateur (Neon indisponible)."} {journal.length} lecture
+                {journal.length > 1 ? "s" : ""}.
+              </CardDescription>
+            </div>
+            <Button size="sm" variant="ghost" className="shrink-0" onClick={() => setJournalOpen((value) => !value)}>
+              {journalOpen ? "Replier" : "Ouvrir"}
+            </Button>
+          </div>
         </CardHeader>
+        {journalOpen ? (
         <CardContent className="flex flex-col gap-2">
           <Input placeholder="filtre @rsi ou un mot…" value={journalFilter} onChange={(e) => setJournalFilter(e.target.value)} />
           <div className="max-h-72 overflow-auto text-sm">
@@ -1724,6 +1790,7 @@ export function BrainLab() {
             </Button>
           </div>
         </CardContent>
+        ) : null}
       </Card>
     </div>
   )

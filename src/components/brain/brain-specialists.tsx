@@ -6,18 +6,12 @@ import { usePathname } from "next/navigation"
 import { BrainCircuit, FlaskConical, Loader2 } from "lucide-react"
 
 import { DemoTourBar, SpecialistDemoPopup } from "@/components/brain/brain-demo"
-import { SpecialistCard } from "@/components/brain/specialist-card"
+import { SpecialistCard, SpecialistGlyph } from "@/components/brain/specialist-card"
 import { HelpTip, HelpWrap, LabelHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CurveName } from "@/components/chartisme/curve-thumb"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select"
 import { VARIABLE_LABELS, VARIABLE_NAMES, type VariableName } from "@/lib/analysis"
 import type { CatalogEntry } from "@/lib/brain/catalog"
 import type { WeekdayScope } from "@/lib/weekday-scope"
@@ -46,7 +40,7 @@ import {
   type SpecialistRecord,
   type SpecialistTask,
 } from "@/lib/brain/specialists"
-import { beatsChanceCount, formatSkill, skillOf, specialistFeatureHelp, specialistFeaturesHelp } from "@/lib/brain/specialist-view"
+import { beatsChanceCount, formatSkill, skillOf, specialistFeatureHelp, specialistFeaturesHelp, targetGlyph, verdictKind } from "@/lib/brain/specialist-view"
 import { cn } from "@/lib/utils"
 
 const DEFAULT_INDICATORS = [...DEMO_SPECIALIST.indicators]
@@ -146,6 +140,8 @@ export function BrainSpecialists({
   const [demoRunning, setDemoRunning] = useState(false)
   const [demoDone, setDemoDone] = useState(false)
   const [demoWaiting, setDemoWaiting] = useState(false)
+  const [targetFilter, setTargetFilter] = useState("all")
+  const [verdictFilter, setVerdictFilter] = useState<"all" | "beats" | "tie" | "worse">("all")
   const demoStopRef = useRef(false)
   const demoAutoRef = useRef(false)
   const demoGateRef = useRef<{ resolve: (ok: boolean) => void } | null>(null)
@@ -154,6 +150,32 @@ export function BrainSpecialists({
 
   const atelierOpen = demoRunning || (atelierForced ?? (ready && items.length === 0))
   const beating = beatsChanceCount(items)
+  const targetOptions = useMemo(() => {
+    const seen = new Set<string>()
+    for (const item of items) seen.add(item.target)
+    return [...seen]
+  }, [items])
+  const roster = useMemo(() => {
+    if (demoRunning) return items
+    return items.filter((item) => {
+      if (targetFilter !== "all" && item.target !== targetFilter) return false
+      if (verdictFilter !== "all" && verdictKind(item.verdict) !== verdictFilter) return false
+      return true
+    })
+  }, [demoRunning, items, targetFilter, verdictFilter])
+  const previewRecord = useMemo<SpecialistRecord>(
+    () => ({
+      slug: "atelier-apercu",
+      name: name.trim() || "Nouveau réseau",
+      handle: "atelier-apercu",
+      target,
+      task,
+      horizon,
+      indicators: picked,
+      instructions,
+    }),
+    [horizon, instructions, name, picked, target, task]
+  )
 
   const onIndexRef = useRef(onIndex)
   onIndexRef.current = onIndex
@@ -465,8 +487,44 @@ export function BrainSpecialists({
               ) : null}
             </div>
           ) : (
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2 text-xs">
+                <label className="flex items-center gap-1">
+                  Cible
+                  <select
+                    className="rounded-md border border-border bg-background px-2 py-1"
+                    value={targetFilter}
+                    onChange={(event) => setTargetFilter(event.target.value)}
+                    aria-label="Filtrer par cible"
+                  >
+                    <option value="all">Toutes</option>
+                    {targetOptions.map((item) => (
+                      <option key={item} value={item}>
+                        {(VARIABLE_LABELS as Record<string, string>)[item] ?? item}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-1">
+                  Verdict
+                  <select
+                    className="rounded-md border border-border bg-background px-2 py-1"
+                    value={verdictFilter}
+                    onChange={(event) => setVerdictFilter(event.target.value as "all" | "beats" | "tie" | "worse")}
+                    aria-label="Filtrer par verdict"
+                  >
+                    <option value="all">Tous</option>
+                    <option value="beats">Bat le nul</option>
+                    <option value="tie">À égalité</option>
+                    <option value="worse">Moins bon</option>
+                  </select>
+                </label>
+              </div>
+              {roster.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Aucun réseau pour ce filtre.</p>
+              ) : null}
             <div data-specialist-roster="" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {items.map((item, index) => (
+              {roster.map((item, index) => (
                 <div
                   key={item.slug}
                   data-demo={index === 0 ? "spec-pin" : undefined}
@@ -488,14 +546,16 @@ export function BrainSpecialists({
                 </div>
               ))}
             </div>
+            </div>
           )}
         </div>
 
         {atelierOpen ? (
           <div
             data-specialist-atelier=""
-            className="flex flex-col gap-3 rounded-xl border border-primary/25 bg-primary/5 p-3"
+            className="grid gap-4 rounded-xl border border-primary/25 bg-primary/5 p-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(16rem,0.85fr)]"
           >
+            <div className="flex min-w-0 flex-col gap-3">
             <div>
               <p className="text-xs font-medium">Atelier</p>
               <p className="text-[11px] text-muted-foreground">
@@ -505,7 +565,7 @@ export function BrainSpecialists({
             <div className="grid gap-3 lg:grid-cols-2">
               <div
                 data-demo="spec-name"
-                className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["name"], demoWaiting))}
+                className={cn("rounded-xl p-0.5 lg:col-span-2", specialistDemoHighlight(demoStep, ["name"], demoWaiting))}
               >
                 <LabelHelp label="Nom" help={HELP.name}>
                   <Input
@@ -517,59 +577,93 @@ export function BrainSpecialists({
               </div>
               <div
                 data-demo="spec-target"
-                className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["target"], demoWaiting))}
+                className={cn("rounded-xl p-0.5 lg:col-span-2", specialistDemoHighlight(demoStep, ["target"], demoWaiting))}
               >
-                <LabelHelp label="Cible" help={HELP.target}>
-                  <Select
-                    value={target}
-                    onValueChange={(value) => value && setTarget(value as VariableName)}
-                  >
-                    <SelectTrigger className="w-full" aria-label="Cible">
-                      <span className="flex flex-1 text-left">
-                        <CurveName kind={target} label={VARIABLE_LABELS[target]} />
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent className="min-w-56">
-                      {TRAIN_TARGETS.map((item) => (
-                        <SelectItem key={item} value={item}>
-                          <CurveName kind={item} label={VARIABLE_LABELS[item]} />
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </LabelHelp>
+                <p className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  Cible
+                  <HelpTip {...HELP.target} />
+                </p>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2" role="radiogroup" aria-label="Cible">
+                  {TRAIN_TARGETS.map((item) => {
+                    const on = target === item
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg border px-2 py-1 text-left",
+                          on ? "border-primary/50 bg-primary/15 text-foreground" : "border-border text-muted-foreground"
+                        )}
+                        onClick={() => setTarget(item)}
+                      >
+                        <SpecialistGlyph kind={targetGlyph(item)} className="size-7 text-primary" />
+                        <CurveName kind={item} label={VARIABLE_LABELS[item]} className="min-w-0 text-[11px]" />
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
               <div
                 data-demo="spec-task"
                 className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["task"], demoWaiting))}
               >
-                <LabelHelp label="Forme" help={HELP.task}>
-                  <select
-                    className="h-8 rounded-lg border border-border bg-background px-2"
-                    value={task}
-                    onChange={(event) => setTask(event.target.value as SpecialistTask | "auto")}
-                  >
-                    <option value="auto">auto (classes si parité…)</option>
-                    <option value="classes">classes (0–5)</option>
-                    <option value="binary">binaire (plus de pairs)</option>
-                    <option value="regression">régression (somme…)</option>
-                  </select>
-                </LabelHelp>
+                <p className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  Forme
+                  <HelpTip {...HELP.task} />
+                </p>
+                <div className="flex flex-wrap gap-1" role="group" aria-label="Forme">
+                  {(
+                    [
+                      ["auto", "auto"],
+                      ["classes", "classes"],
+                      ["binary", "binaire"],
+                      ["regression", "régression"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-xs",
+                        task === id ? "border-primary/50 bg-primary/15 text-foreground" : "border-border text-muted-foreground"
+                      )}
+                      onClick={() => setTask(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div
                 data-demo="spec-horizon"
                 className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["horizon"], demoWaiting))}
               >
-                <LabelHelp label="Horizon" help={HELP.horizon}>
-                  <select
-                    className="h-8 rounded-lg border border-border bg-background px-2"
-                    value={horizon}
-                    onChange={(event) => setHorizon(event.target.value as SpecialistHorizon)}
-                  >
-                    <option value="value">valeur t+1</option>
-                    <option value="delta">évolution Δ</option>
-                  </select>
-                </LabelHelp>
+                <p className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  Horizon
+                  <HelpTip {...HELP.horizon} />
+                </p>
+                <div className="flex flex-wrap gap-1" role="group" aria-label="Horizon">
+                  {(
+                    [
+                      ["value", "valeur t+1"],
+                      ["delta", "évolution Δ"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-xs",
+                        horizon === id ? "border-primary/50 bg-primary/15 text-foreground" : "border-border text-muted-foreground"
+                      )}
+                      onClick={() => setHorizon(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -577,9 +671,12 @@ export function BrainSpecialists({
               data-demo="spec-features"
               className={cn("rounded-xl p-0.5", specialistDemoHighlight(demoStep, ["features"], demoWaiting))}
             >
-              <p className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-medium">
+              <p className="mb-1.5 inline-flex flex-wrap items-center gap-1.5 text-xs font-medium">
                 Indicateurs (features causales jusqu’à t)
                 <HelpTip {...specialistFeaturesHelp(features)} />
+                <span className="font-normal text-muted-foreground">
+                  {picked.length} choisi{picked.length > 1 ? "s" : ""}
+                </span>
               </p>
               <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card/30 p-2">
                 {grouped.map((group) => (
@@ -597,7 +694,7 @@ export function BrainSpecialists({
                               type="button"
                               title={help.body}
                               className={cn(
-                                "rounded-full border px-2 py-0.5 text-[11px]",
+                                "rounded-full border px-2.5 py-1 text-xs",
                                 on
                                   ? "border-primary/50 bg-primary/15 text-foreground"
                                   : "border-border text-muted-foreground"
@@ -668,6 +765,11 @@ export function BrainSpecialists({
               <span className="text-[11px] text-muted-foreground">
                 Ère formule, score sur 20 / 50 / 100. CPU, une minute tout au plus.
               </span>
+            </div>
+            </div>
+            <div className="lg:sticky lg:top-4 lg:self-start">
+              <p className="mb-1.5 text-xs font-medium">Aperçu</p>
+              <SpecialistCard record={previewRecord} preview />
             </div>
           </div>
         ) : null}

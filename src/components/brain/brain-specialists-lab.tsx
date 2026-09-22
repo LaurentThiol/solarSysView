@@ -9,6 +9,8 @@ import { StatusDot } from "@/components/brain/brain-chrome"
 import { useRegisterCapture } from "@/components/capture"
 import { Badge } from "@/components/ui/badge"
 import type { CatalogEntry } from "@/lib/brain/catalog"
+import { beatsChanceCount } from "@/lib/brain/specialist-view"
+import { specialistIndex, type SpecialistRecord } from "@/lib/brain/specialists"
 import { INDEPENDENCE_DISCLAIMER } from "@/lib/capture/snapshot"
 import { ERA_LABELS } from "@/lib/copy"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
@@ -21,6 +23,8 @@ export function BrainSpecialistsLab() {
   const [weekday, setWeekday] = useWeekdayScope()
   const { draws, source, loading } = useDraws(era, weekday)
   const [pins, setPins] = useState<CatalogEntry[]>([])
+  const [records, setRecords] = useState<SpecialistRecord[]>(() => specialistIndex())
+  const beating = beatsChanceCount(records)
 
   useRegisterCapture(() => ({
     lab: "brain",
@@ -50,48 +54,44 @@ export function BrainSpecialistsLab() {
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <section className="relative overflow-hidden rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/22 via-chart-5/12 to-card p-5 sm:p-6">
-        <div className="pointer-events-none absolute -top-12 -right-6 size-44 rounded-full bg-primary/25 blur-3xl" />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
-          <BrainMascot mood="idle" size="lg" />
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium tracking-[0.18em] text-primary uppercase">Brain</p>
-            <p className="mt-1 text-xl font-semibold tracking-tight">Atelier des réseaux</p>
-            <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-              Un réseau, une série nommée (parité, somme…). Prévision t+1, score vs le hasard. Jamais une grille 5+2.
-              Un pop-up vous arrête après chaque champ : Suivant ou Annuler. Sans lancer l’entraînement.
-            </p>
-            <ol className="mt-3 flex flex-wrap gap-2 text-xs">
-              <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">1. Nommez la question</li>
-              <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">2. Entraîne</li>
-              <li className="rounded-full border border-primary/35 bg-background/45 px-3 py-1">3. Épingle pour Brain</li>
-            </ol>
-          </div>
-          <div className="flex flex-col items-start gap-2 sm:items-end">
-            <StatusDot
-              ok={!loading && count > 0}
-              label={loading ? "tirages…" : `${count} tirages · ${source}`}
-              hint="L’entraînement lit l’ère formule côté API, bornée au même jour si Mardi ou Vendredi est choisi. La démo n’écrit rien toute seule."
-            />
-            <WeekdayScopeControl value={weekday} onChange={setWeekday} compact />
-            <label className="flex items-center gap-1 text-xs">
-              Archive
-              <select
-                className="rounded-md border border-border bg-background px-2 py-1"
-                value={era}
-                onChange={(event) => setEra(event.target.value as "current" | "all")}
-              >
-                <option value="current">{ERA_LABELS.current}</option>
-                <option value="all">{ERA_LABELS.all}</option>
-              </select>
-            </label>
-            <Link
-              href="/brain"
-              className="inline-flex h-7 items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] hover:bg-muted"
+      <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-primary/30 bg-card/50 px-3 py-2">
+        <BrainMascot mood="idle" size="sm" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold tracking-tight">Atelier des réseaux</p>
+          <p className="text-[11px] text-muted-foreground">
+            {records.length
+              ? `${records.length} réseau${records.length > 1 ? "x" : ""} · ${
+                  beating
+                    ? `${beating} ${beating > 1 ? "battent" : "bat"} le nul`
+                    : "aucun ne bat le nul"
+                }`
+              : "Aucun réseau enregistré"}
+          </p>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <StatusDot
+            ok={!loading && count > 0}
+            label={loading ? "tirages…" : `${count} tirages · ${source}`}
+            hint="L’entraînement lit l’ère formule côté API, bornée au même jour si Mardi ou Vendredi est choisi. La démo n’écrit rien toute seule."
+          />
+          <WeekdayScopeControl value={weekday} onChange={setWeekday} compact />
+          <label className="flex items-center gap-1 text-xs">
+            Archive
+            <select
+              className="rounded-md border border-border bg-background px-2 py-1"
+              value={era}
+              onChange={(event) => setEra(event.target.value as "current" | "all")}
             >
-              Discussion Brain
-            </Link>
-          </div>
+              <option value="current">{ERA_LABELS.current}</option>
+              <option value="all">{ERA_LABELS.all}</option>
+            </select>
+          </label>
+          <Link
+            href="/brain"
+            className="inline-flex h-7 items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] hover:bg-muted"
+          >
+            Discussion
+          </Link>
         </div>
       </section>
 
@@ -114,7 +114,7 @@ export function BrainSpecialistsLab() {
         </p>
       ) : null}
 
-      <BrainSpecialists era={era} weekday={weekday} onPin={pinEntry} />
+      <BrainSpecialists era={era} weekday={weekday} onPin={pinEntry} onIndex={setRecords} />
     </div>
   )
 }
