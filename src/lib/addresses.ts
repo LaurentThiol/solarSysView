@@ -250,6 +250,13 @@ const TABS: AddressEntry[] = [
   ...OVERLAYS,
   tabEntry("/jeux?tab=solutions", "Jeux · Solutions", "Décompte exact des grilles 5+2 sous contraintes. Ce n’est pas un pronostic.", "grilles"),
   tabEntry(
+    "/pronostic?tab=historic",
+    "Pronostic · Historique",
+    "Rejeu des 100 derniers tirages, numéros et étoiles. La largeur des bandes fait varier la couverture et le nombre de combinaisons. Lecture d’archive : la loi officielle reste uniforme.",
+    "grilles",
+    "tab=historic"
+  ),
+  tabEntry(
     `/jeux?tab=${JEUX_JOURNAL_TAB}`,
     `Jeux · ${JEUX_JOURNAL_LABEL}`,
     "Journal des grilles réellement jouées (histoJeux). Rang après synchro FDJ, test binomial vs 7,71 %.",

@@ -75,7 +75,11 @@ Deux onglets.
 
 ## Pronostic (`/pronostic`)
 
-Composeur d’hypothèses 5+2 : trois couches modulables (**somme**, **rangs + parité**, **espaces n1–n5 / e1–e2**) se resserrent. Le bandeau affiche le nombre exact de grilles restantes (cascade univers → couches). Les espaces peuvent se chevaucher ; un numéro n’est pris qu’une fois (`n1 < n2 < …`). Un **proposeur** lit la fenêtre (20 / 50 / 100 / année) avec une formule réglable (`min/max ± k·σ`, moyenne ± k·σ, percentiles) ; un walk-forward mesure la couverture. **Appliquer** n’est jamais silencieux. On peut importer un forecast Spécialiste (somme / parité) et **envoyer vers Jeux**. Ce n’est pas P(prochain tirage) : la loi officielle reste uniforme.
+Deux onglets.
+
+**Atelier** — composeur d’hypothèses 5+2 : trois couches modulables (**somme**, **rangs + parité**, **espaces n1–n5 / e1–e2**) se resserrent. Le bandeau affiche le nombre exact de grilles restantes (cascade univers → couches). Les espaces peuvent se chevaucher ; un numéro n’est pris qu’une fois (`n1 < n2 < …`). Un **proposeur** lit la fenêtre (20 / 50 / 100 / année) avec une formule réglable (`min/max ± k·σ`, moyenne ± k·σ, percentiles) ; un walk-forward mesure la couverture. **Appliquer** n’est jamais silencieux. On peut importer un forecast Spécialiste (somme / parité) et **envoyer vers Jeux**. Ce n’est pas P(prochain tirage) : la loi officielle reste uniforme.
+
+**Historique** (`?tab=historic`) — rejoue les **100 derniers tirages**, numéros et étoiles ensemble. Pour chaque tirage, les bandes viennent des 20 / 50 / 100 tirages d’avant (pas du tirage testé). Un tirage est retenu seulement si les deux pools tombent dans les bandes ; le décompte est le produit des combinaisons restantes. Le curseur de **largeur** (k·σ ou percentiles) trace la couverture à côté de la part d’univers gardée, et le nombre de combinaisons (rejeu moyen et enveloppe des 100). Si les deux parts se suivent, élargir la bande achète des grilles. Une largeur n’est suggérée que lorsque l’écart couverture − volume dépasse 2 points ; parmi ces largeurs, on garde celle qui laisse le moins de combinaisons. **Appliquer ces réglages** recopie l’enveloppe des 100 (lecture en échantillon, affichée à part du taux de rejeu). Les couches se coupent une à une. Le filtre mardi / vendredi du bandeau s’applique.
 
 ## Morpho (`/morpho`)
 

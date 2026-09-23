@@ -156,7 +156,12 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Pronostic par couches",
     group: "grilles",
-    text: "Atelier /pronostic : on réduit l’univers 5+2 par des couches (somme, parité des rangs n1–n5, espaces). Les couches se resserrent. Le nombre affiché est le volume restant, pas P(prochain tirage). Le proposeur lit 20/50/100/année ; un walk-forward mesure la couverture.",
+    text: "Atelier /pronostic : on réduit l’univers 5+2 par des couches (somme, parité des rangs n1–n5, espaces). Les couches se resserrent. Le nombre affiché est le volume restant, pas P(prochain tirage). Le proposeur lit 20/50/100/année ; un walk-forward mesure la couverture. L’onglet Historique rejoue les 100 derniers tirages.",
+  },
+  {
+    term: "Historique pronostic",
+    group: "grilles",
+    text: "Onglet /pronostic?tab=historic. Rejeu des 100 derniers tirages 5+2 : la largeur des bandes fait varier la part de tirages retenus et le nombre de combinaisons. On compare cette part à la part de l’univers gardée. Sous la loi officielle les deux se suivent si les bandes n’ont rien appris du passé.",
   },
   {
     term: "Statistique d’ordre",

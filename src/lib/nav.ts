@@ -120,7 +120,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Pronostic",
         help: {
           title: "Pronostic",
-          body: "Réduire l’univers 5+2 par couches (somme, parité, espaces n1–n5). Le bandeau donne le nombre exact de solutions. Hypothèse de lecture : le tirage officiel reste uniforme.",
+          body: "Atelier : réduire l’univers 5+2 par couches et compter les solutions. Historique : rejouer les 100 derniers tirages et voir comment la largeur des bandes change la couverture et le nombre de combinaisons. Le tirage officiel reste uniforme.",
         },
       },
       {

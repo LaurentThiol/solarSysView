@@ -14,7 +14,9 @@ import {
   type HelpCopy,
 } from "@/components/help"
 import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
+import { HistoricPanel } from "@/components/pronostic/historic-panel"
 import { Button } from "@/components/ui/button"
+import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import {
   Card,
   CardContent,
@@ -47,6 +49,7 @@ import {
   writeStoredSpec,
 } from "@/lib/jeux"
 import { asWindowPreset } from "@/lib/lab-search"
+import { useLabTab } from "@/lib/use-lab-tab"
 import { formatPlayDate, nextPlayDate, persistPlays } from "@/lib/plays"
 import {
   ENVELOPE_METHODS,
@@ -118,6 +121,28 @@ const HELP = {
 } satisfies Record<string, HelpCopy>
 
 const LOOKBACKS = [20, 50, 100] as const
+
+const TABS = [
+  {
+    id: "atelier",
+    label: "Atelier",
+    help: {
+      title: "Atelier",
+      body: "Couches, proposeur et décompte exact des grilles 5+2 restantes.",
+    },
+  },
+  {
+    id: "historic",
+    label: "Historique",
+    help: {
+      title: "Historique",
+      body: "Rejoue les 100 derniers tirages, numéros et étoiles. La largeur des bandes fait varier la couverture et le nombre de combinaisons. Ce n’est pas P(prochain tirage).",
+    },
+  },
+] as const
+
+type PronosticTab = (typeof TABS)[number]["id"]
+const PRONOSTIC_TAB_IDS = TABS.map((item) => item.id) as PronosticTab[]
 
 type StoredPronostic = {
   numbers: StackState
@@ -301,6 +326,7 @@ export function PronosticLab() {
   const [ready, setReady] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [sampleSeed, setSampleSeed] = useState(1)
+  const [tab, selectTab] = useLabTab(PRONOSTIC_TAB_IDS, "atelier")
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -435,6 +461,21 @@ export function PronosticLab() {
     })
   )
 
+  function applyHistoric(next: {
+    numbers: StackState
+    stars: StackState
+    learn: LearnConfig
+    lookback: (typeof LOOKBACKS)[number]
+  }) {
+    setNumbers(clampStack(next.numbers))
+    setStars(clampStack(next.stars))
+    setLearn(next.learn)
+    setLookback(next.lookback)
+    setPool("numbers")
+    setNote("Réglages de l’historique appliqués : enveloppe des derniers tirages.")
+    selectTab("atelier")
+  }
+
   function patchActive(patch: Partial<StackState>) {
     setActive(clampStack({ ...active, ...patch }))
   }
@@ -530,13 +571,34 @@ export function PronosticLab() {
   const impossible = isImpossible(tightActive.state)
 
   return (
-    <div className="flex min-w-0 flex-col gap-6 pb-28">
+    <div className={tab === "atelier" ? "flex min-w-0 flex-col gap-6 pb-28" : "flex min-w-0 flex-col gap-6"}>
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-        <TitleHelp help={HELP.banner}>Atelier d’hypothèse</TitleHelp> : trois
-        couches (somme, rangs/parité, espaces) se resserrent. Le nombre affiché
-        est le volume restant, pas une chance de gain.
+        <TitleHelp help={HELP.banner}>Pronostic</TitleHelp> pose une hypothèse
+        de lecture sur l’univers 5+2. L’atelier compte les grilles restantes.
+        L’historique rejoue les tirages passés : la largeur des bandes change
+        la couverture et le nombre de combinaisons, pas P(grille).
       </p>
-
+      <PillTabs
+        idPrefix="pronostic"
+        label="Pronostic"
+        value={tab}
+        onValueChange={selectTab}
+        items={TABS}
+      />
+      <PillTabPanel idPrefix="pronostic" tab={tab}>
+        {tab === "historic" ? (
+          <HistoricPanel
+            draws={archive}
+            source={source}
+            weekday={weekday}
+            onApply={applyHistoric}
+          />
+        ) : (
+          <div className="flex min-w-0 flex-col gap-6">
+      <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+        Trois couches (somme, rangs/parité, espaces) se resserrent. Le nombre
+        affiché est le volume restant, pas une chance de gain.
+      </p>
       <WindowBar
         window={resolved}
         preset={preset}
@@ -970,6 +1032,9 @@ export function PronosticLab() {
           </p>
         </div>
       </div>
+          </div>
+        )}
+      </PillTabPanel>
     </div>
   )
 }

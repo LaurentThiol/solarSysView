@@ -215,11 +215,26 @@ export function applyProposal(state: StackState, proposal: StackProposal): Stack
   return next
 }
 
-export function pointCovered(point: WindowPoint, proposal: StackProposal) {
-  if (point.sum < proposal.minSum || point.sum > proposal.maxSum) return false
-  if (point.even < proposal.minEven || point.even > proposal.maxEven) return false
+export type CoverLayers = {
+  sum: boolean
+  parity: boolean
+  slots: boolean
+}
+
+export function coversPoint(
+  point: WindowPoint,
+  proposal: StackProposal,
+  layers: CoverLayers = { sum: true, parity: true, slots: true }
+) {
+  if (layers.sum && (point.sum < proposal.minSum || point.sum > proposal.maxSum)) return false
+  if (layers.parity && (point.even < proposal.minEven || point.even > proposal.maxEven)) return false
+  if (!layers.slots) return true
   if (point.ranks.length !== proposal.slots.length) return false
   return point.ranks.every((value, i) => value >= proposal.slots[i].lo && value <= proposal.slots[i].hi)
+}
+
+export function pointCovered(point: WindowPoint, proposal: StackProposal) {
+  return coversPoint(point, proposal)
 }
 
 export function walkForwardCoverage(
