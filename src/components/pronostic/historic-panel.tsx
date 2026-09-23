@@ -489,6 +489,7 @@ export function HistoricPanel({
                 draws: packet.payload.draws,
                 trainCap: packet.payload.trainCap,
                 elapsedMs: packet.payload.elapsedMs,
+                workers: packet.payload.workers,
               }
             : null
         }

@@ -59,6 +59,18 @@ const HELP = {
 
 export type CommitteePhase = "loading" | "ready" | "absent" | "error"
 
+function readySentence(run: { draws?: number; trainCap?: number; elapsedMs?: number; workers?: number } | null) {
+  const parts = ["Le comité est calculé sur les tirages d’avant seulement."]
+  if (run?.draws == null) return parts[0]
+  const detail = [`${run.draws.toLocaleString("fr-FR")} tirages lus`]
+  if (run.trainCap != null) detail.push(`ajustement sur ${run.trainCap.toLocaleString("fr-FR")} situations`)
+  if (run.elapsedMs != null) {
+    detail.push(`${(run.elapsedMs / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} s`)
+  }
+  if (run.workers != null && run.workers > 1) detail.push("en parallèle")
+  return `${parts[0]} ${detail.join(", ")}.`
+}
+
 function formatMoment(value: number) {
   return value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })
 }
@@ -98,7 +110,7 @@ export function HistoricCommittee({
   message: string | null
   requestedDraws: number
   heads: CommitteeHeadLine[]
-  run: { draws?: number; trainCap?: number; elapsedMs?: number } | null
+  run: { draws?: number; trainCap?: number; elapsedMs?: number; workers?: number } | null
   scored: ScoredCommittee | null
   meanRates: { postHocSummary: RateSummary; played: RateSummary; fallback: boolean } | null
   onApply: (next: {
@@ -177,20 +189,7 @@ export function HistoricCommittee({
               </p>
             </div>
           ) : null}
-          {phase === "ready" ? (
-            <p>
-              Le comité est calculé sur les tirages d’avant seulement.
-              {run?.draws != null
-                ? ` ${run.draws.toLocaleString("fr-FR")} tirages lus${
-                    run.trainCap != null ? `, ajustement sur ${run.trainCap.toLocaleString("fr-FR")} situations` : ""
-                  }${
-                    run.elapsedMs != null
-                      ? `, ${(run.elapsedMs / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} s`
-                      : ""
-                  }.`
-                : null}
-            </p>
-          ) : null}
+          {phase === "ready" ? <p>{readySentence(run)}</p> : null}
         </div>
         {mixesDays ? <p className="text-sm text-muted-foreground">{mixWindowSentence(lookback)}</p> : null}
         {forcedWindow ? <p className="text-sm text-muted-foreground">{committeeWindowSentence()}</p> : null}

@@ -140,6 +140,7 @@ export type CommitteePayload = {
   draws?: number
   trainCap?: number
   elapsedMs?: number
+  workers?: number
   scopes: Record<CommitteeScopeId, CommitteeScopePayload>
 }
 
@@ -376,12 +377,14 @@ export function parseCommitteePayload(value: unknown): CommitteePayload | null {
   const draws = finite(raw.draws, Number.NaN)
   const trainCap = finite(raw.trainCap, Number.NaN)
   const elapsedMs = finite(raw.elapsedMs, Number.NaN)
+  const workers = finite(raw.workers, Number.NaN)
   return {
     ok: true,
     lookback: raw.lookback,
     draws: Number.isFinite(draws) ? draws : undefined,
     trainCap: Number.isFinite(trainCap) ? trainCap : undefined,
     elapsedMs: Number.isFinite(elapsedMs) ? elapsedMs : undefined,
+    workers: Number.isFinite(workers) ? workers : undefined,
     scopes: parsed,
   }
 }

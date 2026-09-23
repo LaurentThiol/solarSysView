@@ -5,6 +5,7 @@ k n’entre pas ici. Le navigateur applique la marge sur les (μ, σ) renvoyés.
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
@@ -38,6 +39,8 @@ NUMBER_SLOTS = (2, 3, 4, 5, 6)
 STAR_SLOTS = (9, 10)
 SUM_INDEX = {"numbers": 0, "stars": 7}
 SCOPES = ("mixte", "mardi", "vendredi")
+# En dessous, le démarrage des processus coûte plus cher que le calcul.
+PARALLEL_MIN_DRAWS = 160
 
 
 def slot_bounds(pool: str, index: int) -> tuple[float, float]:
@@ -540,17 +543,52 @@ def run_scope(
     }
 
 
+def _fit_scopes(
+    scopes: dict[str, list[dict[str, Any]]],
+    lookback: int,
+    *,
+    epochs: int,
+    seed: int,
+    parallel: bool,
+) -> tuple[dict[str, Any], int]:
+    """Les trois séries ne partagent rien. Les fils Python ne servent pas : NumPy tient le verrou."""
+    runnable = [(name, series) for name, series in scopes.items() if len(series) >= max(2, int(lookback))]
+    if not parallel or len(runnable) < 2 or (os.cpu_count() or 1) < 2:
+        fitted = {
+            name: run_scope(series, lookback, epochs=epochs, seed=seed) for name, series in scopes.items()
+        }
+        return fitted, 1
+    from synchro.pronostic_net.workers import run_scope_job, scope_pool, scope_workers
+
+    jobs = [
+        (name, series, int(lookback), int(epochs), int(seed)) for name, series in scopes.items()
+    ]
+    try:
+        fitted = dict(scope_pool().map(run_scope_job, jobs))
+    except Exception:
+        from synchro.pronostic_net.workers import close_scope_pool
+
+        close_scope_pool()
+        fitted = {
+            name: run_scope(series, lookback, epochs=epochs, seed=seed) for name, series in scopes.items()
+        }
+        return fitted, 1
+    return fitted, scope_workers()
+
+
 def run_confrontation(
     draws: list[Any],
     lookback: int,
     *,
     epochs: int = 8,
     seed: int = 0,
+    parallel: bool | None = None,
 ) -> dict[str, Any]:
     """Trois séries : mixte (mardi + vendredi), mardi seul, vendredi seul.
 
     Un tirage sans jour ne compte que dans le mixte. Il n’y a pas de série du mercredi.
     Chaque tête et le global ne s’ajustent que sur les `lookback` situations d’avant.
+    Les trois séries tournent en parallèle dès que l’archive est assez longue.
     """
     started = time.perf_counter()
     cleaned = _normalize_draws(draws)
@@ -559,13 +597,17 @@ def run_confrontation(
         "mardi": [draw for draw in cleaned if draw["weekday"] == "mardi"],
         "vendredi": [draw for draw in cleaned if draw["weekday"] == "vendredi"],
     }
-    fitted = {
-        name: run_scope(series, lookback, epochs=epochs, seed=seed) for name, series in scopes.items()
-    }
+    use_parallel = (
+        max(len(series) for series in scopes.values()) >= PARALLEL_MIN_DRAWS
+        if parallel is None
+        else parallel
+    )
+    fitted, workers = _fit_scopes(scopes, lookback, epochs=epochs, seed=seed, parallel=use_parallel)
     return {
         "lookback": int(lookback),
         "draws": len(cleaned),
         "trainCap": int(lookback),
         "elapsedMs": int(round((time.perf_counter() - started) * 1000)),
+        "workers": workers,
         "scopes": fitted,
     }

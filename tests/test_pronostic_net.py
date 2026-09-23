@@ -121,6 +121,29 @@ def test_committee_route_accepts_a_long_archive_and_skips_a_bad_draw() -> None:
     assert mixed.json()["scopes"]["mixte"]["available"] == 3
 
 
+def test_parallel_scopes_match_the_sequential_committee() -> None:
+    from synchro.pronostic_net.workers import close_scope_pool
+
+    draws = []
+    for i in range(48):
+        shift = i % 5
+        draws.append(
+            _draw(i, [1 + shift, 8, 15, 22, 30], [1 + (i % 3), 6], "mardi" if i % 2 == 0 else "vendredi")
+        )
+    try:
+        alone = run_confrontation(draws, 20, epochs=1, seed=2, parallel=False)
+        together = run_confrontation(draws, 20, epochs=1, seed=2, parallel=True)
+    finally:
+        close_scope_pool()
+    assert together["workers"] >= 2
+    assert alone["workers"] == 1
+    left = alone["scopes"]["mixte"]["next"]["axes"]
+    right = together["scopes"]["mixte"]["next"]["axes"]
+    assert [axis["mu"] for axis in left] == [axis["mu"] for axis in right]
+    assert [axis["fellBack"] for axis in left] == [axis["fellBack"] for axis in right]
+    assert len(alone["scopes"]["mixte"]["rows"]) == len(together["scopes"]["mixte"]["rows"])
+
+
 def test_fit_stays_inside_the_lookback_window() -> None:
     from unittest.mock import patch
 
