@@ -6,7 +6,9 @@ import { bandFromMoments, MARGIN_STEPS } from "../src/lib/pronostic/historic.ts"
 import {
   AUTO_MIN_HITS,
   chooseAutoMargin,
+  committeeErrorMessage,
   committeeLookback,
+  committeeRequestDraws,
   confrontationSentence,
   parseCommitteePayload,
   playedMargins,
@@ -93,6 +95,24 @@ test("a point forecast counts one grid and does not need three hits", () => {
   assert.match(sentence, /Pas assez de tirages du mardi/)
   assert.match(sentence, /mercredi/)
   assert.match(sentence, /Mardi \+ vendredi mélange/)
+})
+
+test("a null ball is left out of the committee request", () => {
+  const sent = committeeRequestDraws([
+    { date: "2026-01-02", numbers: [1, 2, 3, 4, 5], stars: [1, 2], weekday: "mardi" },
+    { date: 20260106, numbers: [1, null, 3, 4, 5], stars: [1, 2], weekday: 2 },
+  ])
+  assert.equal(sent.length, 1)
+  assert.equal(sent[0]?.date, "2026-01-02")
+})
+
+test("a validation list is shown instead of a silent refusal", () => {
+  assert.equal(committeeErrorMessage(null), "Le comité n’a pas répondu.")
+  assert.equal(
+    committeeErrorMessage({ detail: [{ msg: "Input should be a valid integer" }] }),
+    "Input should be a valid integer"
+  )
+  assert.equal(committeeErrorMessage({ detail: "La fenêtre du comité est 20 ou 50." }), "La fenêtre du comité est 20 ou 50.")
 })
 
 test("committee lookback collapses auto and 100 onto 20", () => {

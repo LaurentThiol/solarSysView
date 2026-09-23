@@ -278,18 +278,6 @@ class BrainAnalogsIn(BaseModel):
     to_date: str | None = None
 
 
-class CommitteeDrawIn(BaseModel):
-    date: str = ""
-    numbers: list[int] = Field(default_factory=list)
-    stars: list[int] = Field(default_factory=list)
-    weekday: str | None = None
-
-
-class CommitteeIn(BaseModel):
-    lookback: int
-    draws: list[CommitteeDrawIn] = Field(default_factory=list, max_length=400)
-
-
 class BrainSpecialistIn(BaseModel):
     name: str
     target: str
@@ -2028,16 +2016,16 @@ def create_app() -> FastAPI:
         }
 
     @app.post("/api/pronostic/committee")
-    def pronostic_committee(payload: CommitteeIn) -> dict[str, Any]:
-        if payload.lookback not in (20, 50):
-            raise HTTPException(400, "La fenêtre du comité est 20 ou 50.")
-        from synchro.pronostic_net import run_confrontation
+    async def pronostic_committee(request: Request) -> dict[str, Any]:
+        try:
+            payload = await request.json()
+        except Exception as exc:
+            raise HTTPException(400, "Le comité n’a pas reçu une requête lisible.") from exc
+        from synchro.pronostic_net import parse_committee_request, run_confrontation
 
         try:
-            report = run_confrontation(
-                [item.model_dump() for item in payload.draws],
-                payload.lookback,
-            )
+            lookback, draws = parse_committee_request(payload)
+            report = run_confrontation(draws, lookback)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         return {"ok": True, **report}

@@ -289,12 +289,41 @@ def _axis_payload(
     return rows
 
 
-def _normalize_draws(draws: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def parse_committee_request(payload: Any) -> tuple[int, list[Any]]:
+    """Lit le corps sans le rejeter pour un seul champ mal typé."""
+    if not isinstance(payload, dict):
+        raise ValueError("Le comité n’a pas reçu une requête lisible.")
+    lookback = payload.get("lookback")
+    if lookback in (50, "50"):
+        window = 50
+    elif lookback in (20, "20"):
+        window = 20
+    else:
+        raise ValueError("La fenêtre du comité est 20 ou 50.")
+    draws = payload.get("draws", [])
+    if not isinstance(draws, list):
+        raise ValueError("Les tirages du comité sont illisibles.")
+    if len(draws) > 5000:
+        raise ValueError("Trop de tirages pour le comité.")
+    return window, draws
+
+
+def _ball(value: Any) -> int:
+    if isinstance(value, bool) or value is None:
+        raise TypeError
+    if isinstance(value, float) and not value.is_integer():
+        raise ValueError
+    return int(value)
+
+
+def _normalize_draws(draws: list[Any]) -> list[dict[str, Any]]:
     cleaned: list[dict[str, Any]] = []
     for item in draws:
+        if not isinstance(item, dict):
+            continue
         try:
-            numbers = sorted(int(value) for value in item.get("numbers") or [])
-            stars = sorted(int(value) for value in item.get("stars") or [])
+            numbers = sorted(_ball(value) for value in item.get("numbers") or [])
+            stars = sorted(_ball(value) for value in item.get("stars") or [])
         except (TypeError, ValueError):
             continue
         if len(numbers) != 5 or len(set(numbers)) != 5:
@@ -501,7 +530,7 @@ def run_scope(
 
 
 def run_confrontation(
-    draws: list[dict[str, Any]],
+    draws: list[Any],
     lookback: int,
     *,
     epochs: int = 16,

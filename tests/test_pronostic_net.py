@@ -86,6 +86,41 @@ def test_short_day_has_no_rate_and_mixte_keeps_undated_draws() -> None:
     assert "actual" not in report["scopes"]["mixte"]["next"]["axes"][0]
 
 
+def test_committee_route_accepts_a_long_archive_and_skips_a_bad_draw() -> None:
+    app = create_app()
+    client = TestClient(app)
+    empty = client.post(
+        "/api/pronostic/committee",
+        content=b"",
+        headers={"content-type": "application/json"},
+    )
+    assert empty.status_code == 400
+    assert isinstance(empty.json()["detail"], str)
+    foreign = client.post("/api/pronostic/committee", json={"lookback": "auto", "draws": []})
+    assert foreign.status_code == 400
+    assert "20 ou 50" in foreign.json()["detail"]
+    many = client.post(
+        "/api/pronostic/committee",
+        json={
+            "lookback": 20,
+            "draws": [{"date": index, "numbers": [None], "stars": [], "weekday": 2} for index in range(450)],
+        },
+    )
+    assert many.status_code == 200
+    mixed = client.post(
+        "/api/pronostic/committee",
+        json={
+            "lookback": "20",
+            "draws": [
+                {"date": 20260102, "numbers": [1, None, 3, 4, 5], "stars": [1, 2], "weekday": 2},
+                *_constant_series(3),
+            ],
+        },
+    )
+    assert mixed.status_code == 200
+    assert mixed.json()["scopes"]["mixte"]["available"] == 3
+
+
 def test_committee_route_rejects_a_foreign_window_and_scores_twenty() -> None:
     app = create_app()
     client = TestClient(app)

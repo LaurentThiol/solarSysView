@@ -24,6 +24,7 @@ import {
   MARGIN_STEPS,
   chooseAutoMargin,
   committeeLookback,
+  committeeRequestDraws,
   formatMargin,
   formatRequired,
   historicAutoRows,
@@ -194,12 +195,7 @@ export function HistoricPanel({
   useEffect(() => {
     const controller = new AbortController()
     let cancelled = false
-    const sent = allDraws.map((draw) => ({
-      date: draw.date,
-      numbers: draw.numbers,
-      stars: draw.stars,
-      weekday: draw.weekday ?? null,
-    }))
+    const sent = committeeRequestDraws(allDraws)
     fetch("/api/pronostic/committee", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -479,7 +475,7 @@ export function HistoricPanel({
                   ? ` La ligne horizontale est la marge choisie après ces tirages (${marginLabel}).`
                   : ` La ligne horizontale est la marge annoncée (${marginLabel}).`}
               </p>
-              <ChartContainer config={errorConfig} className="aspect-[16/6] w-full">
+              <ChartContainer config={errorConfig} className="aspect-[16/6] min-h-24 w-full">
                 <LineChart data={errorData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} minTickGap={16} />
@@ -510,7 +506,7 @@ export function HistoricPanel({
                   />
                 </LineChart>
               </ChartContainer>
-              <ChartContainer config={catchConfig} className="aspect-[16/6] w-full">
+              <ChartContainer config={catchConfig} className="aspect-[16/6] min-h-24 w-full">
                 <LineChart data={catchData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={1} minTickGap={8} />

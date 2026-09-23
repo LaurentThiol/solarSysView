@@ -12,6 +12,7 @@ import {
   COMMITTEE_SCOPES,
   PYTHON_ABSENT,
   baselineSummary,
+  committeeErrorMessage,
   committeeLookback,
   committeeWindowSentence,
   confrontationSentence,
@@ -61,13 +62,7 @@ function rateLine(summary: RateSummary) {
   } grilles`
 }
 
-export function committeeErrorMessage(body: unknown) {
-  if (!body || typeof body !== "object") return "Le comité n’a pas répondu."
-  const raw = body as { error?: unknown; detail?: unknown }
-  if (typeof raw.error === "string" && raw.error.trim()) return raw.error
-  if (typeof raw.detail === "string" && raw.detail.trim()) return raw.detail
-  return "Le comité n’a pas répondu."
-}
+export { committeeErrorMessage }
 
 export function HistoricCommittee({
   weekday,

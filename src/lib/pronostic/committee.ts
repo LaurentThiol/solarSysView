@@ -35,6 +35,55 @@ export const COMMITTEE_LOADING = "Comité en cours de calcul."
 
 export const COMMITTEE_MEAN_BANNER = "Le comité reprend la moyenne."
 
+export const COMMITTEE_NO_REPLY = "Le comité n’a pas répondu."
+
+function finiteInts(value: unknown): number[] | null {
+  if (!Array.isArray(value)) return null
+  const out: number[] = []
+  for (const item of value) {
+    if (typeof item !== "number" || !Number.isInteger(item)) return null
+    out.push(item)
+  }
+  return out
+}
+
+/** Ne transmet que des grilles entières. Un champ nul ne doit pas faire refuser toute la requête. */
+export function committeeRequestDraws(
+  draws: Array<{ date?: unknown; numbers?: unknown; stars?: unknown; weekday?: unknown }>
+) {
+  const sent: Array<{ date: string; numbers: number[]; stars: number[]; weekday: string | null }> = []
+  for (const draw of draws) {
+    const numbers = finiteInts(draw.numbers)
+    const stars = finiteInts(draw.stars)
+    if (!numbers || numbers.length !== 5 || !stars || stars.length !== 2) continue
+    sent.push({
+      date: typeof draw.date === "string" ? draw.date : "",
+      numbers,
+      stars,
+      weekday: typeof draw.weekday === "string" ? draw.weekday : null,
+    })
+  }
+  return sent
+}
+
+export function committeeErrorMessage(body: unknown) {
+  if (!body || typeof body !== "object") return COMMITTEE_NO_REPLY
+  const raw = body as { error?: unknown; detail?: unknown }
+  if (typeof raw.error === "string" && raw.error.trim()) return raw.error
+  if (typeof raw.detail === "string" && raw.detail.trim()) return raw.detail
+  if (Array.isArray(raw.detail)) {
+    const parts = raw.detail
+      .map((item) => {
+        if (!item || typeof item !== "object") return ""
+        const msg = (item as { msg?: unknown }).msg
+        return typeof msg === "string" ? msg.trim() : ""
+      })
+      .filter(Boolean)
+    if (parts.length > 0) return parts.slice(0, 3).join(" ")
+  }
+  return COMMITTEE_NO_REPLY
+}
+
 export type CommitteeAxis = {
   id: ErrorAxisId
   mu: number
