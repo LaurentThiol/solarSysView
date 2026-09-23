@@ -1,37 +1,11 @@
 import { NextResponse } from "next/server"
 
-import { apiBase, HEALTH_TIMEOUT_MS, isNetlify } from "@/lib/api-base"
+import { apiBase, isNetlify } from "@/lib/api-base"
 import { gitStatus } from "@/lib/git"
 import { secretSnapshot } from "@/lib/secrets"
+import { backendStatus } from "@/lib/startup-backend"
 
 export const dynamic = "force-dynamic"
-
-async function backendStatus(url: string) {
-  if (!url) {
-    return { ok: false, url: "", error: "API locale non configurée" }
-  }
-  try {
-    const alive = await fetch(`${url}/api/alive`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(2000),
-    })
-    if (!alive.ok) {
-      return { ok: false, url, error: `alive HTTP ${alive.status}` }
-    }
-    const healthRes = await fetch(`${url}/api/health`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
-    })
-    const health = await healthRes.json().catch(() => null)
-    return { ok: true, url, health }
-  } catch (error) {
-    return {
-      ok: false,
-      url,
-      error: error instanceof Error ? error.message : "injoignable",
-    }
-  }
-}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)

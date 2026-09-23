@@ -18,6 +18,28 @@ def _client() -> TestClient:
     return TestClient(create_app())
 
 
+def test_alive_answers_while_init_db_is_still_running() -> None:
+    import threading
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_init() -> None:
+        started.set()
+        release.wait(2)
+
+    with (
+        patch("synchro.db.database_configured", return_value=True),
+        patch("synchro.db.init_db", side_effect=slow_init),
+    ):
+        with _client() as client:
+            assert started.wait(1)
+            response = client.get("/api/alive")
+            release.set()
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+
 def test_alive_does_not_need_database() -> None:
     with _client() as client:
         response = client.get("/api/alive")
@@ -69,7 +91,7 @@ def test_health_ok_includes_draws() -> None:
 
 def test_shutdown_localhost_schedules_stop(tmp_path) -> None:
     class Immediate:
-        def __init__(self, target=None, daemon=None):
+        def __init__(self, target=None, daemon=None, **_kwargs):
             self.target = target
 
         def start(self) -> None:
@@ -103,7 +125,7 @@ def test_shutdown_marks_stopped_and_signals_launcher_pids(tmp_path) -> None:
     (run_dir / "backend.pid").write_text("4343\n", encoding="utf-8")
 
     class Immediate:
-        def __init__(self, target=None, daemon=None):
+        def __init__(self, target=None, daemon=None, **_kwargs):
             self.target = target
 
         def start(self) -> None:

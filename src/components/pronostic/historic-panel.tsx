@@ -23,6 +23,7 @@ import {
   HISTORIC_LOOKBACKS,
   MARGIN_STEPS,
   chooseAutoMargin,
+  committeeApiDown,
   committeeLookback,
   committeeRequestDraws,
   formatMargin,
@@ -195,38 +196,61 @@ export function HistoricPanel({
   useEffect(() => {
     const controller = new AbortController()
     let cancelled = false
+    let retryTimer = 0
     const sent = committeeRequestDraws(allDraws)
-    fetch("/api/pronostic/committee", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ lookback: committeeWindow, draws: sent }),
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        const body = await response.json().catch(() => null)
-        if (cancelled) return
-        if (response.status === 503) {
+    const delays = [1_000, 2_000, 4_000]
+    const run = (attempt: number) => {
+      fetch("/api/pronostic/committee", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ lookback: committeeWindow, draws: sent }),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const body = await response.json().catch(() => null)
+          if (cancelled) return
+          if (response.status === 503 && committeeApiDown(body)) {
+            if (attempt < delays.length) {
+              retryTimer = window.setTimeout(() => run(attempt + 1), delays[attempt] ?? 4_000)
+              return
+            }
+            setPacket({ key: requestKey, status: "absent" })
+            return
+          }
+          if (!response.ok) {
+            setPacket({ key: requestKey, status: "error", message: committeeErrorMessage(body) })
+            return
+          }
+          const payload = parseCommitteePayload(body)
+          if (!payload) {
+            setPacket({ key: requestKey, status: "error", message: "Réponse du comité illisible." })
+            return
+          }
+          setPacket({ key: requestKey, status: "ready", payload })
+        })
+        .catch((error: unknown) => {
+          if (cancelled) return
+          if (error instanceof DOMException && error.name === "AbortError") return
+          const message = error instanceof Error ? error.message : ""
+          if (/aborted due to timeout|\btimeout\b/i.test(message)) {
+            setPacket({
+              key: requestKey,
+              status: "error",
+              message: committeeErrorMessage({ error: message }),
+            })
+            return
+          }
+          if (attempt < delays.length) {
+            retryTimer = window.setTimeout(() => run(attempt + 1), delays[attempt] ?? 4_000)
+            return
+          }
           setPacket({ key: requestKey, status: "absent" })
-          return
-        }
-        if (!response.ok) {
-          setPacket({ key: requestKey, status: "error", message: committeeErrorMessage(body) })
-          return
-        }
-        const payload = parseCommitteePayload(body)
-        if (!payload) {
-          setPacket({ key: requestKey, status: "error", message: "Réponse du comité illisible." })
-          return
-        }
-        setPacket({ key: requestKey, status: "ready", payload })
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return
-        if (error instanceof DOMException && error.name === "AbortError") return
-        setPacket({ key: requestKey, status: "absent" })
-      })
+        })
+    }
+    run(0)
     return () => {
       cancelled = true
+      window.clearTimeout(retryTimer)
       controller.abort()
     }
   }, [allDraws, committeeWindow, requestKey])

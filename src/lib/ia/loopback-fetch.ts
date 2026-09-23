@@ -92,14 +92,20 @@ export function nodeLoopbackFetch(url: string, init: RequestInit = {}, timeoutMs
       req.destroy()
       reject(error instanceof Error ? error : new Error(String(error)))
     }
+    const abortFailure = (signal: AbortSignal) => {
+      const reason: unknown = signal.reason
+      if (reason instanceof Error) return reason
+      if (typeof reason === "string" && reason.trim()) return new Error(reason)
+      return new Error("aborted")
+    }
     req.on("timeout", () => fail(new Error(`timeout ${timeoutMs}ms ${url}`)))
     req.on("error", fail)
     if (init.signal) {
       if (init.signal.aborted) {
-        fail(new Error("aborted"))
+        fail(abortFailure(init.signal))
         return
       }
-      init.signal.addEventListener("abort", () => fail(new Error("aborted")), { once: true })
+      init.signal.addEventListener("abort", () => fail(abortFailure(init.signal)), { once: true })
     }
     if (body) req.write(body)
     req.end()

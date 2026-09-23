@@ -389,14 +389,18 @@ def stop_local_stack() -> None:
         _terminate_pid(me)
 
 
-@asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    # Ne pas bloquer /api/alive si Neon dort ou n'est pas configuré.
+def _init_db_background() -> None:
+    """Neon peut dormir plusieurs secondes. Ça ne doit pas retenir /api/alive."""
     try:
         if db.database_configured():
             db.init_db()
     except Exception:
         pass
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    threading.Thread(target=_init_db_background, name="synchro-init-db", daemon=True).start()
     yield
 
 

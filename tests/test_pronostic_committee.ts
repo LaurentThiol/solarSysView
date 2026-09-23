@@ -6,6 +6,8 @@ import { bandFromMoments, MARGIN_STEPS } from "../src/lib/pronostic/historic.ts"
 import {
   AUTO_MIN_HITS,
   chooseAutoMargin,
+  COMMITTEE_API_LATE,
+  committeeApiDown,
   committeeErrorMessage,
   committeeLookback,
   committeeRequestDraws,
@@ -115,6 +117,20 @@ test("a validation list is shown instead of a silent refusal", () => {
   assert.equal(committeeErrorMessage({ detail: "La fenêtre du comité est 20 ou 50." }), "La fenêtre du comité est 20 ou 50.")
 })
 
+test("a startup timeout is not reported as Python missing", () => {
+  const late = { error: "The operation was aborted due to timeout" }
+  assert.equal(committeeErrorMessage(late), COMMITTEE_API_LATE)
+  assert.equal(committeeApiDown(late), false)
+  assert.equal(
+    committeeErrorMessage({ error: "timeout 120000ms http://127.0.0.1:8000/api/pronostic/committee" }),
+    COMMITTEE_API_LATE
+  )
+  assert.equal(committeeApiDown({ error: "connect ECONNREFUSED 127.0.0.1:8000" }), true)
+  assert.equal(committeeApiDown({ error: "API injoignable" }), true)
+  assert.equal(committeeApiDown({ error: "API locale non configurée" }), true)
+  assert.equal(committeeApiDown({ detail: "La fenêtre du comité est 20 ou 50." }), false)
+})
+
 test("committee lookback collapses auto and 100 onto 20", () => {
   assert.equal(committeeLookback(20), 20)
   assert.equal(committeeLookback(50), 50)
@@ -142,6 +158,7 @@ test("historic tab names both automatic rates and the absent python banner", () 
   assert.match(committee, /PYTHON_ABSENT/)
   assert.match(committee, /COMMITTEE_MEAN_BANNER/)
   assert.match(committee, /mixWindowSentence/)
+  assert.match(panel, /committeeApiDown/)
   assert.match(logic, /Python est absent/)
   assert.match(logic, /Le comité reprend la moyenne/)
   assert.match(logic, /mélange les mardis et les vendredis/)

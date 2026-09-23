@@ -37,6 +37,8 @@ export const COMMITTEE_MEAN_BANNER = "Le comité reprend la moyenne."
 
 export const COMMITTEE_NO_REPLY = "Le comité n’a pas répondu."
 
+export const COMMITTEE_API_LATE = "L’API n’a pas répondu à temps. Le comité n’est pas calculé."
+
 function finiteInts(value: unknown): number[] | null {
   if (!Array.isArray(value)) return null
   const out: number[] = []
@@ -66,11 +68,18 @@ export function committeeRequestDraws(
   return sent
 }
 
+function readableFailure(message: string) {
+  const text = message.trim()
+  if (!text) return COMMITTEE_NO_REPLY
+  if (/aborted due to timeout|\btimeout\b/i.test(text)) return COMMITTEE_API_LATE
+  return text
+}
+
 export function committeeErrorMessage(body: unknown) {
   if (!body || typeof body !== "object") return COMMITTEE_NO_REPLY
   const raw = body as { error?: unknown; detail?: unknown }
-  if (typeof raw.error === "string" && raw.error.trim()) return raw.error
-  if (typeof raw.detail === "string" && raw.detail.trim()) return raw.detail
+  if (typeof raw.error === "string" && raw.error.trim()) return readableFailure(raw.error)
+  if (typeof raw.detail === "string" && raw.detail.trim()) return readableFailure(raw.detail)
   if (Array.isArray(raw.detail)) {
     const parts = raw.detail
       .map((item) => {
@@ -79,9 +88,20 @@ export function committeeErrorMessage(body: unknown) {
         return typeof msg === "string" ? msg.trim() : ""
       })
       .filter(Boolean)
-    if (parts.length > 0) return parts.slice(0, 3).join(" ")
+    if (parts.length > 0) return readableFailure(parts.slice(0, 3).join(" "))
   }
   return COMMITTEE_NO_REPLY
+}
+
+const API_UNREACHABLE =
+  /ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|EAI_AGAIN|fetch failed|ECONNRESET|injoignable|non configur/i
+
+/** Vrai seulement quand l’API n’est pas là. Un délai n’est pas une absence de Python. */
+export function committeeApiDown(body: unknown) {
+  const message = committeeErrorMessage(body)
+  if (message === COMMITTEE_API_LATE) return false
+  if (message === COMMITTEE_NO_REPLY) return true
+  return API_UNREACHABLE.test(message)
 }
 
 export type CommitteeAxis = {

@@ -348,7 +348,8 @@ export function StartupStatus() {
         : data.latest?.draw_date || "en ligne"
   } else if (data.neon.configured) {
     neonTone = "err"
-    neonDetail = "hors ligne"
+    const neonError = typeof data.neon.error === "string" ? data.neon.error : ""
+    neonDetail = /délai/i.test(neonError) ? "délai" : "hors ligne"
   }
 
   const neonTitle = [
