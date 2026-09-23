@@ -136,7 +136,8 @@ const TABS = [
     label: "Historique",
     help: {
       title: "Historique",
-      body: "Note chaque tirage des 100 derniers avec une marge d’erreur annoncée avant lui, et compte la mise en grilles 5+2. Ce n’est pas P(prochain tirage).",
+      wide: true,
+      body: "Note chaque tirage des 100 derniers avec une marge d’erreur. En manuel, la marge est annoncée avant le tirage. En automatique, elle est choisie après, et une partie jouée la fige tirage par tirage.\n\nLa mise est le nombre de grilles 5+2 restantes. Le comité compare ses bandes à la moyenne de fenêtre : onze têtes, une porte, un global. Ce n’est pas P(prochain tirage).",
     },
   },
 ] as const

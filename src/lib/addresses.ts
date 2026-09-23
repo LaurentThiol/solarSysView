@@ -252,7 +252,7 @@ const TABS: AddressEntry[] = [
   tabEntry(
     "/pronostic?tab=historic",
     "Pronostic · Historique",
-    "Notation des 100 derniers tirages, un par un. La marge d’erreur est annoncée à l’avance, ou choisie après les tirages notés. Un comité de réseaux propose une autre prévision, comparée à la moyenne. Lecture d’archive : la loi officielle reste uniforme.",
+    "Notation des 100 derniers tirages, un par un. La marge d’erreur est annoncée à l’avance, ou choisie après les tirages notés ; la partie jouée la fige avant chaque tirage. Un comité de onze têtes propose une autre prévision, comparée à la moyenne. Lecture d’archive : la loi officielle reste uniforme.",
     "grilles",
     "tab=historic"
   ),

@@ -54,38 +54,142 @@ import {
   type CommitteePhase,
 } from "@/components/pronostic/historic-committee"
 
+const RANK_HELP = {
+  z: {
+    title: "|z| médian",
+    body: "Médiane de |réel − moyenne| / σ, sur les tirages où σ est positif. Si σ vaut 0 et que la valeur diffère, il n’y a pas de z : cet écart n’entre pas dans la médiane, et aucune marge finie ne le couvre.",
+  },
+  binding: {
+    title: "Fois décisif",
+    body: "Tirages où cet axe a exigé la plus grande marge. À marge égale, le plus grand |z| l’emporte. C’est l’axe affiché à côté de chaque tirage noté, avec son écart à la moyenne.",
+  },
+  outside: {
+    title: "Hors marge",
+    body: "L’axe sort de la marge en cours, ou aucune marge jusqu’à 3 σ ne le contient.",
+  },
+} as const satisfies Record<string, HelpCopy>
+
 const HELP = {
   game: {
     title: "Partie notée",
-    body: "Chaque tirage est jugé avec une prévision calculée sur les tirages d’avant seulement. La marge est la vôtre : elle est annoncée avant le tirage. À cette marge, le décompte est le nombre de grilles 5+2 qui restent — la mise. La plus petite marge qui aurait contenu le tirage est l’erreur mesurée.",
+    wide: true,
+    body: "Chaque tirage des 100 derniers est noté seul. La prévision qui le juge n’utilise que les tirages strictement antérieurs. Numéros et étoiles sont notés ensemble : le tirage est dans la marge seulement si les deux le sont.\n\nÀ la marge en cours, le décompte est le nombre de grilles 5+2 encore possibles. C’est la mise. La plus petite marge dont la bande entière contient le tirage est l’erreur mesurée. Le tirage officiel reste uniforme sur 139 838 160 grilles : ces taux décrivent l’archive.",
+    items: [
+      {
+        label: "Fenêtre notée",
+        text: "Les 100 tirages les plus récents de la série affichée. Le filtre mardi / vendredi du bandeau s’applique à cette moyenne. Le comité, plus bas, confronte quand même les trois séries.",
+      },
+      {
+        label: "Dans la marge",
+        text: "Les couches allumées, numéros et étoiles, tombent dans les bandes. Une couche éteinte ne peut pas faire sortir le tirage.",
+      },
+      {
+        label: "Mise",
+        text: "Nombre de grilles numéros encore possibles, multiplié par le nombre de grilles étoiles. Seules les couches allumées réduisent ce produit.",
+      },
+      {
+        label: "Erreur mesurée",
+        text: "Plus petit pas parmi 0, 0,25, 0,5, 0,75, 1, 1,25, 1,5, 1,75, 2, 2,5 et 3 σ. Si aucun de ces pas ne contient le tirage, il est hors 3 σ.",
+      },
+    ],
   },
   margin: {
     title: "Marge d’erreur",
-    body: "Autour de la moyenne des tirages d’avant. 0 σ suit la moyenne arrondie : une seule valeur entière quand la moyenne tombe juste. Élargir augmente la mise. En manuel, le curseur est une règle fixée à l’avance. En automatique, la marge est choisie après les tirages notés : ce n’est pas une règle annoncée.",
+    wide: true,
+    body: "Bande autour de la moyenne des tirages d’avant : moyenne ± k·σ. Les bornes sont entières, plancher en bas et plafond en haut, puis recoupées par les bornes théoriques de l’axe.\n\n0 σ suit la moyenne arrondie. Quand la moyenne tombe sur un entier, une seule valeur est gardée. Sinon la bande tient les deux entiers qui l’encadrent. Élargir k augmente la mise. En manuel, le curseur est une règle fixée à l’avance, la même pour chaque tirage noté. En automatique, il affiche la marge choisie après ces tirages et ne se règle plus à la main.",
+    items: [
+      {
+        label: "Pas",
+        text: "0, 0,25, 0,5, 0,75, 1, 1,25, 1,5, 1,75, 2, 2,5 et 3. Le défaut manuel est 1 σ.",
+      },
+      {
+        label: "σ",
+        text: "Écart type d’échantillon des tirages d’avant, diviseur n − 1. S’il vaut 0 et que le tirage diffère de la moyenne, aucune marge finie ne le couvre.",
+      },
+    ],
   },
   mode: {
     title: "Manuel ou automatique",
-    body: "Manuel : la marge est la vôtre, annoncée avant chaque tirage. Automatique : parmi les marges qui contiennent au moins trois tirages, on garde celle dont la mise cumulée divisée par les tirages contenus est la plus petite. Égalité : la plus étroite. S’il n’y en a pas trois, on reste à 1 σ.",
+    wide: true,
+    body: "Manuel : la marge est la vôtre, annoncée avant chaque tirage, et le curseur la fixe.\n\nAutomatique : parmi les marges qui contiennent au moins trois tirages, on garde celle dont la mise cumulée divisée par les tirages contenus est la plus petite. À ratio égal, la plus étroite reste. S’il n’y en a pas trois, on reste à 1 σ. Cette marge est choisie une fois toute la série notée : ce n’est pas une règle annoncée. La partie jouée, dans le comité, refait ce choix tirage par tirage sur les seuls tirages d’avant.",
   },
   lookback: {
     title: "Tirages d’avant",
-    body: "20, 50 ou 100 tirages strictement antérieurs. « Choisi avant » retient, avant chaque tirage, la fenêtre dont les essais précédents ont demandé la plus petite marge. En cas d’égalité, la fenêtre la plus courte. S’il n’y a pas encore trois essais, la fenêtre est 20.",
+    wide: true,
+    body: "20, 50 ou 100 tirages strictement antérieurs. Une fenêtre incomplète n’est pas notée : il faut les 20, les 50 ou les 100 au complet. L’archive locale 2026 n’a pas encore 100 tirages antérieurs : la fenêtre 100 reste vide tant que l’archive complète n’est pas là.\n\n« Choisi avant » retient, avant le tirage, la fenêtre dont les essais précédents ont la plus petite erreur médiane. On relit jusqu’à dix essais déjà notés, et il en faut au moins trois. À médiane égale, la plus courte reste. Un tirage hors 3 σ compte comme la plus mauvaise erreur. S’il n’y a pas encore trois essais, la fenêtre est 20.",
+    items: [
+      {
+        label: "Comité",
+        text: "Le comité ne lit que 20 ou 50. Choisi avant et la fenêtre 100 sont ramenés à 20.",
+      },
+    ],
   },
-  layers: {
-    title: "Couches",
-    body: "Somme, parité et espaces sont les mêmes couches que l’atelier. Une couche éteinte ne compte ni dans l’erreur, ni dans la mise.",
+  sum: {
+    title: "Somme",
+    body: "Somme des cinq numéros, entre 15 et 240, et somme des deux étoiles, entre 3 et 23. Une couche éteinte ne compte ni dans l’erreur mesurée, ni dans la mise.",
+  },
+  parity: {
+    title: "Parité",
+    body: "Nombre de numéros pairs, de 0 à 5, et d’étoiles paires, de 0 à 2. Une couche éteinte ne compte ni dans l’erreur mesurée, ni dans la mise.",
+  },
+  slots: {
+    title: "Espaces",
+    body: "n1 à n5 et e1, e2 : statistiques d’ordre. n1 est le plus petit numéro, n5 le plus grand, jamais l’ordre de sortie. Une couche éteinte ne compte ni dans l’erreur mesurée, ni dans la mise.",
+  },
+  hits: {
+    title: "Dans la marge",
+    body: "Tirages notés dont les numéros et les étoiles tombent dans la marge en cours. Le pourcentage est cette part. En dessous, les deux comptes sont séparés : un tirage peut avoir ses numéros dans la marge et ses étoiles dehors, ou l’inverse. Seul le compte du haut exige les deux.",
+  },
+  stake: {
+    title: "Mise moyenne",
+    body: "Nombre moyen de grilles 5+2 qu’il aurait fallu jouer, à cette marge, sur les tirages notés. La part de l’univers rapporte cette moyenne aux 139 838 160 grilles. Le total additionne les mises, y compris les tirages hors marge.",
+  },
+  perHit: {
+    title: "Grilles par tirage retenu",
+    body: "Mise cumulée de tous les tirages notés, divisée par le nombre de tirages contenus. Les hors marge restent dans le numérateur. C’est le quotient que le mode automatique cherche à rendre petit. Aucun tirage contenu : la case reste vide.",
+  },
+  median: {
+    title: "Erreur médiane",
+    body: "Médiane des erreurs mesurées. La moitié des tirages demandent au plus cette marge. Si le nombre de tirages est pair, c’est la moyenne des deux valeurs centrales. Quand plus de la moitié sort de 3 σ, la carte affiche « hors 3 σ ».",
   },
   curve: {
     title: "Erreur et prise",
-    body: "En haut, la marge qu’il aurait fallu pour contenir chaque tirage, et la marge que vous annoncez. En bas, la part des tirages contenus quand la marge grandit. La mise, elle, se recalcule à la marge choisie.",
+    wide: true,
+    body: "En haut, un point par tirage noté : la marge qu’il aurait fallu pour le contenir. Les points isolés au-dessus de 3 sont des tirages qu’aucune de ces marges ne contient. La ligne horizontale est la marge en cours. En manuel, elle est annoncée. En automatique, elle est choisie après ces tirages.\n\nEn bas, la part des tirages déjà notés dont l’erreur mesurée tient dans chaque pas. Cette courbe ne refait pas le décompte des grilles. La mise se recalcule à la marge choisie.",
   },
   ranks: {
     title: "Paramètres qui pèsent",
-    body: "Fois décisif : l’axe qui a exigé la plus grande marge sur ce tirage. Hors marge : l’axe sort de la marge annoncée. |z| est l’écart à la moyenne passée, en écarts-types. Si σ vaut 0 et que la valeur diffère, il n’y a pas de z : aucune marge finie ne la couvre.",
+    wide: true,
+    body: "Classe les axes encore allumés. L’ordre du tableau est : fois décisif, puis hors marge, puis |z| médian.",
+    items: [
+      { label: RANK_HELP.z.title, text: RANK_HELP.z.body },
+      { label: RANK_HELP.binding.title, text: RANK_HELP.binding.body },
+      { label: RANK_HELP.outside.title, text: RANK_HELP.outside.body },
+    ],
   },
   next: {
     title: "Prochain tirage",
-    body: "Bandes de la prochaine prévision : la dernière fenêtre, à la marge annoncée. Le prochain tirage n’entre pas dans le calcul. Appliquer les recopie dans l’atelier.",
+    wide: true,
+    body: "Bandes de la prochaine prévision de la moyenne : la dernière fenêtre, formule moyenne ± k·σ, à la marge en cours. Le prochain tirage n’entre pas dans le calcul.\n\nPréparer le prochain tirage recopie ces bandes dans l’atelier. Le comité a son propre bouton : il recopie les siennes, quand il ne reprend pas la moyenne.",
+  },
+  scored: {
+    title: "Tirages notés",
+    wide: true,
+    body: "Du plus récent au plus ancien. Chaque ligne donne la fenêtre qui a servi, l’axe décisif et son écart à la moyenne, l’erreur mesurée, et la mise à la marge en cours.",
+    items: [
+      {
+        label: "Tous",
+        text: "Les tirages qui ont une fenêtre entière avant eux.",
+      },
+      {
+        label: "Dans la marge",
+        text: "Numéros et étoiles contenus à la marge en cours.",
+      },
+      {
+        label: "Hors marge",
+        text: "Au moins une couche allumée sort de la bande. L’erreur peut encore être un pas plus large, ou « hors 3 σ ».",
+      },
+    ],
   },
 } satisfies Record<string, HelpCopy>
 
@@ -321,8 +425,8 @@ export function HistoricPanel({
     <div className="flex min-w-0 flex-col gap-6">
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
         <TitleHelp help={HELP.game}>Les {HISTORIC_HORIZON} derniers tirages</TitleHelp>
-        , notés un par un. La marge d’erreur est annoncée avant le tirage. À cette marge, on
-        compte les grilles 5+2 qui restent : c’est la mise d’une vraie partie.
+        , notés un par un. En manuel, la marge est annoncée avant le tirage. En automatique,
+        elle est choisie après. À cette marge, on compte les grilles 5+2 qui restent : c’est la mise.
         {dayLabel ? ` Filtre du bandeau : ${dayLabel}.` : ""}
       </p>
 
@@ -393,19 +497,19 @@ export function HistoricPanel({
             label="Somme"
             on={layers.sum}
             onClick={() => setLayers((prev) => ({ ...prev, sum: !prev.sum }))}
-            help={HELP.layers}
+            help={HELP.sum}
           />
           <OverlayToggle
             label="Parité"
             on={layers.parity}
             onClick={() => setLayers((prev) => ({ ...prev, parity: !prev.parity }))}
-            help={HELP.layers}
+            help={HELP.parity}
           />
           <OverlayToggle
             label="Espaces"
             on={layers.slots}
             onClick={() => setLayers((prev) => ({ ...prev, slots: !prev.slots }))}
-            help={HELP.layers}
+            help={HELP.slots}
           />
         </div>
       </div>
@@ -428,7 +532,10 @@ export function HistoricPanel({
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
-                <p className="text-xs tracking-wide text-muted-foreground uppercase">Dans la marge</p>
+                <p className="inline-flex flex-wrap items-center gap-1 text-xs tracking-wide text-muted-foreground uppercase">
+                  Dans la marge
+                  <HelpTip {...HELP.hits} />
+                </p>
                 <CardTitle className="text-lg tabular-nums">
                   {summary.hits}/{summary.n}
                   <span className="ml-2 text-sm font-normal text-muted-foreground">{formatPct(summary.rate)}</span>
@@ -440,7 +547,10 @@ export function HistoricPanel({
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <p className="text-xs tracking-wide text-muted-foreground uppercase">Mise moyenne</p>
+                <p className="inline-flex flex-wrap items-center gap-1 text-xs tracking-wide text-muted-foreground uppercase">
+                  Mise moyenne
+                  <HelpTip {...HELP.stake} />
+                </p>
                 <CardTitle className="text-lg tabular-nums">{formatCount(summary.meanGrids ?? 0)}</CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground tabular-nums">
@@ -450,7 +560,10 @@ export function HistoricPanel({
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <p className="text-xs tracking-wide text-muted-foreground uppercase">Grilles par tirage retenu</p>
+                <p className="inline-flex flex-wrap items-center gap-1 text-xs tracking-wide text-muted-foreground uppercase">
+                  Grilles par tirage retenu
+                  <HelpTip {...HELP.perHit} />
+                </p>
                 <CardTitle className="text-lg tabular-nums">
                   {summary.gridsPerHit == null ? "—" : formatCompactCount(summary.gridsPerHit)}
                 </CardTitle>
@@ -461,7 +574,10 @@ export function HistoricPanel({
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <p className="text-xs tracking-wide text-muted-foreground uppercase">Erreur médiane</p>
+                <p className="inline-flex flex-wrap items-center gap-1 text-xs tracking-wide text-muted-foreground uppercase">
+                  Erreur médiane
+                  <HelpTip {...HELP.median} />
+                </p>
                 <CardTitle className="text-lg tabular-nums">{medianLabel}</CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
@@ -579,9 +695,24 @@ export function HistoricPanel({
                   <thead>
                     <tr className="border-b text-xs tracking-wide text-muted-foreground uppercase">
                       <th className="py-2 pr-3 font-medium">Paramètre</th>
-                      <th className="py-2 pr-3 font-medium">|z| médian</th>
-                      <th className="py-2 pr-3 font-medium">Fois décisif</th>
-                      <th className="py-2 font-medium">Hors marge</th>
+                      <th className="py-2 pr-3 font-medium">
+                        <span className="inline-flex items-center gap-1">
+                          |z| médian
+                          <HelpTip {...RANK_HELP.z} />
+                        </span>
+                      </th>
+                      <th className="py-2 pr-3 font-medium">
+                        <span className="inline-flex items-center gap-1">
+                          Fois décisif
+                          <HelpTip {...RANK_HELP.binding} />
+                        </span>
+                      </th>
+                      <th className="py-2 font-medium">
+                        <span className="inline-flex items-center gap-1">
+                          Hors marge
+                          <HelpTip {...RANK_HELP.outside} />
+                        </span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -636,7 +767,9 @@ export function HistoricPanel({
 
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-              <CardTitle>Tirages notés</CardTitle>
+              <CardTitle>
+                <TitleHelp help={HELP.scored}>Tirages notés</TitleHelp>
+              </CardTitle>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>
                   Tous

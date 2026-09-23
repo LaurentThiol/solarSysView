@@ -161,7 +161,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Historique pronostic",
     group: "grilles",
-    text: "Onglet /pronostic?tab=historic. Chaque tirage des 100 derniers est noté avec une marge d’erreur (moyenne ± k·σ des tirages antérieurs). Le comité ajoute onze têtes et un global, σ recalée, rangs remis en ordre. Deux taux automatiques : choisi après les tirages notés, et partie réellement jouée. Mardi, vendredi, et mardi + vendredi sont confrontés. Il n’y a pas de série du mercredi. Ce n’est pas P(prochain tirage).",
+    text: "Onglet /pronostic?tab=historic. Chaque tirage des 100 derniers est noté avec une marge d’erreur (moyenne ± k·σ des tirages antérieurs). En manuel, la marge est annoncée à l’avance. En automatique, elle est choisie après les tirages notés ; la partie jouée la fige sur les seuls tirages d’avant. Le comité ajoute onze têtes, une porte sur au plus dix essais d’avant, et un global. σ est recalée pour qu’1 σ couvre environ deux tiers, et les rangs sont remis en ordre. Mardi, vendredi, et mardi + vendredi sont confrontés. EuroMillions ne tire pas le mercredi. La mise est le nombre de grilles 5+2 restantes. Ce n’est pas P(prochain tirage).",
   },
   {
     term: "Statistique d’ordre",

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 
-import { HelpWrap, TitleHelp, type HelpCopy } from "@/components/help"
+import { HelpTip, HelpWrap, TitleHelp, type HelpCopy } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatCompactCount } from "@/lib/gains"
@@ -34,26 +34,117 @@ import {
 } from "@/lib/pronostic"
 import type { WeekdayScope } from "@/lib/weekday-scope"
 
+const HEAD_DECISION =
+  "« Réseau » : la porte a gardé la tête pour le prochain tirage. « Moyenne » : elle reprend la moyenne de fenêtre."
+
+const HEAD_KEPT =
+  "Tirages déjà notés où la porte a laissé le réseau, sur le nombre de tirages notés. Ce n’est pas le nombre de fois où le réseau a été plus près du tirage après coup."
+
 const HELP = {
   zone: {
     title: "Comité",
-    body: "Onze têtes lisent la fenêtre d’avant, une par axe, puis un global réécrit leurs prévisions. Chaque tête ne s’ajuste que sur les situations de cette fenêtre. Si elle est moins juste que la moyenne sur les dix derniers essais, elle reprend la moyenne. La marge k est appliquée ensuite. Le tirage noté n’entre pas dans l’ajustement.",
+    wide: true,
+    body: "Onze têtes lisent la fenêtre d’avant, une par axe : somme, pairs, n1 à n5, somme des étoiles, pairs des étoiles, e1 et e2. Chacune s’ajuste seulement sur les situations de cette fenêtre, pas sur toute l’archive, et propose un centre et un écart type.\n\nUne porte compare ensuite le réseau à la moyenne de fenêtre. Le global réécrit les onze centres dès qu’une tête reste en réseau. Si toutes reprennent la moyenne, il n’écrit rien. Les rangs sont remis dans l’ordre, et la somme est ramenée près de la somme des rangs. σ est recalée pour que le centre ± 1 σ couvre environ 68 % des tirages d’avant, dès qu’il y a au moins cinq écarts. La marge k est appliquée ensuite, dans le navigateur. Le tirage noté n’entre pas dans l’ajustement.",
+    items: [
+      {
+        label: "Porte",
+        text: "Sur au plus dix essais d’avant où le réseau a déjà été ajusté, on compare les erreurs absolues médianes. Si celle du réseau est plus grande, la tête reprend la moyenne. À égalité, le réseau reste. Le premier ajustement, sans essai antérieur, est gardé. Une série trop plate, ou moins de quatre situations, reste la moyenne.",
+      },
+      {
+        label: "Global",
+        text: "Il attend huit situations déjà vues. Avant cela, les têtes gardées passent telles quelles, puis les rangs sont remis dans l’ordre. Il réécrit aussi les axes revenus à la moyenne, tant qu’au moins une tête est restée en réseau.",
+      },
+      {
+        label: "Repli",
+        text: "Si toutes les têtes reprennent la moyenne, le bandeau le dit. Préparer le comité ne propose pas une autre prévision.",
+      },
+      {
+        label: "Python absent",
+        text: "Le comité n’est pas calculé. La marge et la mise du haut restent celles de la moyenne des tirages d’avant. Un délai d’API n’est pas une absence de Python : le bandeau le dit à part.",
+      },
+      {
+        label: "Fenêtre",
+        text: "20 ou 50 tirages d’avant. Choisi avant et la fenêtre 100 sont lus comme 20. Mardi, vendredi et mardi + vendredi sont calculés à part. Ils tournent en parallèle quand la machine a plusieurs cœurs et qu’au moins deux séries ont assez de tirages.",
+      },
+    ],
   },
   heads: {
     title: "Têtes",
-    body: "Pour le prochain tirage : μ et σ du comité, et ceux de la moyenne de fenêtre. « Réseau » signifie que la tête a été gardée. « Gardée » compte, sur les tirages déjà notés, combien de fois cette tête a battu la moyenne.",
+    wide: true,
+    body: "Lecture du prochain tirage, axe par axe. μ et σ du comité sont ceux qui serviront aux bandes, après le global et le recalage. La moyenne est celle de la fenêtre d’avant, avant le réseau.",
+    items: [
+      {
+        label: "Décision",
+        text: HEAD_DECISION,
+      },
+      {
+        label: "μ et σ",
+        text: "Centre et écart type du comité pour cet axe. La marge k élargit ensuite μ ± k·σ, comme pour la moyenne.",
+      },
+      {
+        label: "Moyenne μ et σ",
+        text: "Moyenne et écart type des tirages d’avant, avant que le réseau et le global n’interviennent.",
+      },
+      {
+        label: "Gardée",
+        text: HEAD_KEPT,
+      },
+    ],
   },
   rates: {
     title: "Deux taux",
-    body: "Choisie après ces tirages : une seule marge, retenue une fois toute la série notée. C’est la marge du prochain tirage, pas une règle annoncée. Partie jouée : pour chaque tirage, la marge est choisie seulement sur les tirages d’avant, puis gelée.",
+    wide: true,
+    body: "Les deux cartes comptent les tirages contenus et la mise moyenne en grilles. Elles ne choisissent pas la marge de la même façon. Sans Python, le même choix est fait sur la moyenne de fenêtre.",
+    items: [
+      {
+        label: "Choisie après ces tirages",
+        text: "Une seule marge, retenue une fois toute la série notée. C’est la marge du prochain tirage. Elle n’était pas annoncée avant les tirages déjà notés. Moins de trois contenus : on reste à 1 σ.",
+      },
+      {
+        label: "Partie jouée",
+        text: "Pour chaque tirage, la marge est choisie seulement sur les tirages d’avant, puis gelée. Les premiers, sans trois contenus derrière eux, restent à 1 σ.",
+      },
+    ],
+  },
+  inMargin: {
+    title: "Comité dans la marge",
+    body: "Tirages de la série affichée dont les bandes du comité, à la marge en cours, contiennent numéros et étoiles. La ligne du dessous est le même compte pour la moyenne de fenêtre, à la même marge.",
+  },
+  stake: {
+    title: "Mise moyenne du comité",
+    body: "Nombre moyen de grilles 5+2 qu’il aurait fallu jouer avec les bandes du comité. La ligne du dessous est la mise de la moyenne de fenêtre, à la même marge. Les tirages hors marge restent dans cette moyenne.",
   },
   days: {
     title: "Mardi, vendredi, mixte",
-    body: "EuroMillions ne tire pas le mercredi. Le mixte est mardi + vendredi. Une fenêtre qui mélange les deux soirs n’est pas une troisième série.",
+    wide: true,
+    body: "EuroMillions tire le mardi et le vendredi. Mardi + vendredi mélange les deux soirs : ce n’est pas une troisième série. Le filtre du bandeau choisit la série lue par la moyenne ; ce tableau confronte les trois colonnes à la marge affichée. Les trois séries sont calculées à part.",
+    items: [
+      {
+        label: "Tirages notés",
+        text: "Tirages de la colonne qui ont une fenêtre entière avant eux.",
+      },
+      {
+        label: "Comité et moyenne dans la marge",
+        text: "Même marge, deux prévisions : les centres du comité, et la moyenne de fenêtre.",
+      },
+      {
+        label: "Mise",
+        text: "Nombre moyen de grilles 5+2 à cette marge. La phrase sous le tableau dit si le comité baisse cette mise sous la moyenne, mardi et vendredi séparément.",
+      },
+      {
+        label: "Partie jouée",
+        text: "Tirages contenus quand la marge a été gelée avant chacun d’eux.",
+      },
+      {
+        label: "Après coup",
+        text: "Marge unique choisie une fois la colonne notée. Elle sert au prochain tirage de cette série. Elle n’était pas annoncée avant.",
+      },
+    ],
   },
   prepare: {
     title: "Préparer le comité",
-    body: "Recopie les bandes du prochain tirage, à la marge affichée. Ce tirage n’entre pas dans le calcul. Si le comité reprend la moyenne, le bouton ne propose pas une autre prévision.",
+    wide: true,
+    body: "Recopie dans l’atelier les bandes du prochain tirage, à la marge affichée. Ce tirage n’entre pas dans le calcul. Si le comité reprend la moyenne, le bouton reste inactif : il n’y a pas une autre prévision à recopier.\n\nLes bandes sont μ ± k·σ après le global, le recalage de σ et la remise en ordre des rangs. k est celui du curseur, ou la marge choisie après ces tirages quand le mode est automatique.",
   },
 } satisfies Record<string, HelpCopy>
 
@@ -201,6 +292,7 @@ export function HistoricCommittee({
           <div className="grid gap-3 sm:grid-cols-2">
             <RateCard
               title="Choisie après ces tirages"
+              help={HELP.rates}
               body={rateLine(meanRates.postHocSummary)}
               note={
                 meanRates.fallback
@@ -210,6 +302,7 @@ export function HistoricCommittee({
             />
             <RateCard
               title="Partie jouée"
+              help={HELP.rates}
               body={rateLine(meanRates.played)}
               note="Pour chaque tirage, la marge est gelée sur les tirages d’avant. Moyenne de fenêtre."
             />
@@ -227,12 +320,22 @@ export function HistoricCommittee({
                   <thead>
                     <tr className="border-b text-xs tracking-wide text-muted-foreground uppercase">
                       <th className="py-2 pr-3 font-medium">Tête</th>
-                      <th className="py-2 pr-3 font-medium">Décision</th>
+                      <th className="py-2 pr-3 font-medium">
+                        <span className="inline-flex items-center gap-1">
+                          Décision
+                          <HelpTip title="Décision" body={HEAD_DECISION} />
+                        </span>
+                      </th>
                       <th className="py-2 pr-3 font-medium">μ</th>
                       <th className="py-2 pr-3 font-medium">σ</th>
                       <th className="py-2 pr-3 font-medium">Moyenne μ</th>
                       <th className="py-2 pr-3 font-medium">Moyenne σ</th>
-                      <th className="py-2 pr-3 font-medium">Gardée</th>
+                      <th className="py-2 pr-3 font-medium">
+                        <span className="inline-flex items-center gap-1">
+                          Gardée
+                          <HelpTip title="Gardée" body={HEAD_KEPT} />
+                        </span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -254,8 +357,8 @@ export function HistoricCommittee({
                   </tbody>
                 </table>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                  « Gardée » : sur les tirages notés, la tête a battu la moyenne de fenêtre. Le global ne réécrit que
-                  les têtes restées en réseau, puis les rangs sont remis dans l’ordre.
+                  « Gardée » compte les tirages notés où la porte a laissé le réseau. Le global réécrit les onze
+                  centres dès qu’une tête reste en réseau, puis les rangs sont remis dans l’ordre.
                 </p>
               </div>
             ) : null}
@@ -267,7 +370,10 @@ export function HistoricCommittee({
               <section className="grid gap-3 sm:grid-cols-2">
                 <Card>
                   <CardHeader className="pb-2">
-                    <p className="text-xs tracking-wide text-muted-foreground uppercase">Comité dans la marge</p>
+                    <p className="inline-flex flex-wrap items-center gap-1 text-xs tracking-wide text-muted-foreground uppercase">
+                      Comité dans la marge
+                      <HelpTip {...HELP.inMargin} />
+                    </p>
                     <CardTitle className="text-lg tabular-nums">
                       {atMargin ? `${atMargin.hits}/${atMargin.n}` : "—"}
                       {atMargin ? (
@@ -281,7 +387,10 @@ export function HistoricCommittee({
                 </Card>
                 <Card>
                   <CardHeader className="pb-2">
-                    <p className="text-xs tracking-wide text-muted-foreground uppercase">Mise moyenne du comité</p>
+                    <p className="inline-flex flex-wrap items-center gap-1 text-xs tracking-wide text-muted-foreground uppercase">
+                      Mise moyenne du comité
+                      <HelpTip {...HELP.stake} />
+                    </p>
                     <CardTitle className="text-lg tabular-nums">
                       {atMargin?.meanGrids == null ? "—" : formatCount(atMargin.meanGrids)}
                     </CardTitle>
@@ -308,6 +417,7 @@ export function HistoricCommittee({
                 />
                 <RateCard
                   title="Partie jouée"
+                  help={HELP.rates}
                   body={rateLine(display.played)}
                   note="Pour chaque tirage noté, la marge est choisie seulement sur les tirages d’avant, puis gelée."
                 />
