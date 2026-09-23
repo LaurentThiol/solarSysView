@@ -1,25 +1,33 @@
-import { TOTAL_GRIDS, rankLabel, type PoolKind } from "./bounds.ts"
+import { TOTAL_GRIDS, drawSize, sumBounds, theoreticalSlot, type PoolKind } from "./bounds.ts"
 import { countStack } from "./count.ts"
 import {
   applyProposal,
   coversPoint,
+  meanOf,
   proposeStack,
+  sampleStd,
   type CoverLayers,
-  type EnvelopeMethod,
   type LearnConfig,
   type StackProposal,
   type WindowPoint,
 } from "./learn.ts"
-import { defaultStack, setLayerEnabled, type StackState } from "./state.ts"
+import { defaultStack, setLayerEnabled, type LayerId, type StackState } from "./state.ts"
 
-/** Tirages rejoués : les plus récents, numéros et étoiles ensemble. */
+/** Tirages notés : les plus récents, numéros et étoiles ensemble. */
 export const HISTORIC_HORIZON = 100
 export const HISTORIC_LOOKBACKS = [20, 50, 100] as const
-const MIN_TRAIN = 5
-/** Écart (couverture − part d’univers) en dessous duquel on ne désigne pas de largeur. */
-export const HISTORIC_EXCESS_GAP = 0.02
-/** En dessous, l’écart peut n’être que deux ou trois tirages : pas une largeur à proposer. */
-export const HISTORIC_MIN_HITS = 8
+export type HistoricLookback = (typeof HISTORIC_LOOKBACKS)[number]
+export const HISTORIC_AUTO = "auto" as const
+export type HistoricLookbackChoice = HistoricLookback | typeof HISTORIC_AUTO
+
+/** Marge annoncée avant le tirage : moyenne ± k·σ, mêmes pas que les bandes entières. */
+export const MARGIN_STEPS = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const
+export type MarginStep = (typeof MARGIN_STEPS)[number]
+export const DEFAULT_MARGIN: MarginStep = 1
+
+const AUTO_PRIOR_WINDOW = 10
+const AUTO_MIN_PRIORS = 3
+const FALLBACK_LOOKBACK: HistoricLookback = 20
 
 export type HistoricLayers = CoverLayers
 
@@ -28,6 +36,26 @@ export const DEFAULT_HISTORIC_LAYERS: HistoricLayers = {
   parity: true,
   slots: true,
 }
+
+export const ERROR_AXES = [
+  { id: "sum", label: "somme", pool: "numbers", layer: "sum" },
+  { id: "parity", label: "pairs", pool: "numbers", layer: "parity" },
+  { id: "n1", label: "n1", pool: "numbers", layer: "slots", slot: 0 },
+  { id: "n2", label: "n2", pool: "numbers", layer: "slots", slot: 1 },
+  { id: "n3", label: "n3", pool: "numbers", layer: "slots", slot: 2 },
+  { id: "n4", label: "n4", pool: "numbers", layer: "slots", slot: 3 },
+  { id: "n5", label: "n5", pool: "numbers", layer: "slots", slot: 4 },
+  { id: "starSum", label: "somme ★", pool: "stars", layer: "sum" },
+  { id: "starParity", label: "pairs ★", pool: "stars", layer: "parity" },
+  { id: "e1", label: "e1", pool: "stars", layer: "slots", slot: 0 },
+  { id: "e2", label: "e2", pool: "stars", layer: "slots", slot: 1 },
+] as const
+
+export type ErrorAxisId = (typeof ERROR_AXES)[number]["id"]
+
+type AxisSpec = (typeof ERROR_AXES)[number]
+
+const LOOKBACK_INDEX: Record<HistoricLookback, number> = { 20: 0, 50: 1, 100: 2 }
 
 export type HistoricDraw = {
   date: string
@@ -43,103 +71,157 @@ export type PairedDraw = {
   starPoint: WindowPoint
 }
 
-export type HistoricRow = {
+export type AxisReading = {
+  id: ErrorAxisId
+  label: string
+  pool: PoolKind
+  layer: LayerId
+  enabled: boolean
+  mean: number
+  sigma: number
+  actual: number
+  delta: number
+  /** (réel − moyenne) / σ. 0 si σ = 0 et la valeur égale la moyenne. null si σ = 0 et elle diffère. */
+  z: number | null
+  /** Plus petit pas de marge dont la bande entière contient la valeur. null au-delà de 3 σ. */
+  required: number | null
+}
+
+export type PreparedRow = {
+  index: number
   date: string
   numbers: number[]
   stars: number[]
+  chosenLookback: HistoricLookback
+  axes: AxisReading[]
+  requiredMargin: number | null
+  binding: ErrorAxisId | null
+  /** Résidus z, ordre ERROR_AXES, couches éteintes comprises. */
+  vector: Array<number | null>
+}
+
+export type HistoricPrepared = {
+  horizon: number
+  available: number
+  inWindow: number
+  lookback: HistoricLookbackChoice
+  layers: HistoricLayers
+  rows: PreparedRow[]
+  nextLookback: HistoricLookback | null
+  paired: PairedDraw[]
+  cache: Map<string, number>
+}
+
+export type HistoricGameRow = {
+  date: string
+  numbers: number[]
+  stars: number[]
+  chosenLookback: HistoricLookback
+  axes: AxisReading[]
+  requiredMargin: number | null
+  binding: ErrorAxisId | null
+  hit: boolean
   numberHit: boolean
   starHit: boolean
-  hit: boolean
   grids: number
-  numberReasons: string[]
-  starReasons: string[]
+  vector: Array<number | null>
 }
 
-export type HistoricPortrait = {
-  n: number
-  covered: number
-  rate: number
-  numberCount: number
-  starCount: number
-  grids: number
-  numbers: StackProposal
-  stars: StackProposal
-}
-
-export type HistoricReport = {
-  width: number
-  config: LearnConfig
+export type HistoricSummary = {
   n: number
   hits: number
   rate: number
   numberHits: number
   starHits: number
   meanGrids: number | null
-  medianGrids: number | null
+  totalGrids: number | null
+  gridsPerHit: number | null
   meanVolume: number | null
-  lift: number | null
-  rows: HistoricRow[]
-  portrait: HistoricPortrait | null
+  /** null s’il n’y a aucun tirage, ou si la médiane est au-delà de 3 σ (voir medianBeyond). */
+  medianRequired: number | null
+  medianBeyond: boolean
 }
 
-export type WidthPoint = {
-  width: number
-  n: number
-  hits: number
+export type ParameterRank = {
+  id: ErrorAxisId
+  label: string
+  medianAbsZ: number | null
+  bindingCount: number
+  outsideCount: number
+}
+
+export type CatchPoint = {
+  margin: number
+  caught: number
   rate: number
-  meanGrids: number | null
-  medianGrids: number | null
-  meanVolume: number | null
-  lift: number | null
-  portraitGrids: number | null
-  portraitRate: number | null
 }
 
-export type HistoricSweep = {
+export type NextForecast = {
+  lookback: HistoricLookback
+  learn: LearnConfig
+  numbers: StackProposal
+  stars: StackProposal
+  numberState: StackState
+  starState: StackState
+  grids: number
+}
+
+export type HistoricGame = {
   horizon: number
   available: number
-  studied: number
-  lookback: number
-  method: EnvelopeMethod
-  points: WidthPoint[]
-  reports: HistoricReport[]
-  recommendedIndex: number
-  excess: number
-  separated: boolean
+  inWindow: number
+  lookback: HistoricLookbackChoice
+  margin: MarginStep
+  layers: HistoricLayers
+  rows: HistoricGameRow[]
+  summary: HistoricSummary
+  ranks: ParameterRank[]
+  curve: CatchPoint[]
+  next: NextForecast | null
 }
 
-export function widthSteps(method: EnvelopeMethod): number[] {
-  if (method === "percentile") return [0, 1, 2, 5, 8, 10, 15, 20, 25]
-  return [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
-}
-
-export function formatWidth(method: EnvelopeMethod, width: number) {
-  if (method === "percentile") {
-    if (width <= 0) return "min–max"
-    return `P${width}–P${100 - width}`
+export function snapMargin(margin: number): MarginStep {
+  if (!Number.isFinite(margin)) return DEFAULT_MARGIN
+  let best: MarginStep = MARGIN_STEPS[0]
+  let gap = Number.POSITIVE_INFINITY
+  for (const step of MARGIN_STEPS) {
+    const distance = Math.abs(step - margin)
+    if (distance < gap) {
+      gap = distance
+      best = step
+    }
   }
-  const text = width.toLocaleString("fr-FR", { maximumFractionDigits: 2 })
+  return best
+}
+
+export function formatMargin(margin: number) {
+  const text = margin.toLocaleString("fr-FR", { maximumFractionDigits: 2 })
   return `${text} σ`
 }
 
-export function learnAtWidth(method: EnvelopeMethod, width: number): LearnConfig {
-  if (method === "percentile") return { method, k: 1, percentile: width }
-  return { method, k: width, percentile: 5 }
+export function formatRequired(margin: number | null) {
+  if (margin == null) return "hors 3 σ"
+  return formatMargin(margin)
 }
 
-export function referenceWidthIndex(method: EnvelopeMethod) {
-  const steps = widthSteps(method)
-  const target = method === "percentile" ? 5 : 1
-  let best = 0
-  let gap = Number.POSITIVE_INFINITY
-  steps.forEach((step, index) => {
-    const distance = Math.abs(step - target)
-    if (distance < gap) {
-      gap = distance
-      best = index
-    }
-  })
-  return best
+/** Bande entière moyenne ± k·σ. Même arrondi que proposeBand en méthode mean_std. */
+export function bandFromMoments(
+  mean: number,
+  sigma: number,
+  k: number,
+  theoretical: { lo: number; hi: number }
+) {
+  const width = Number.isFinite(k) ? Math.max(0, k) : 1
+  let lo = mean - width * sigma
+  let hi = mean + width * sigma
+  lo = Math.max(theoretical.lo, Math.floor(lo))
+  hi = Math.min(theoretical.hi, Math.ceil(hi))
+  if (lo > hi) {
+    const mid = Math.round((lo + hi) / 2)
+    lo = Math.min(theoretical.hi, Math.max(theoretical.lo, mid))
+    hi = lo
+  }
+  return { lo, hi }
 }
 
 function pointOf(date: string, values: number[]): WindowPoint {
@@ -192,11 +274,7 @@ function countCached(cache: Map<string, number>, state: StackState) {
   return count
 }
 
-export function constrainedStack(
-  kind: PoolKind,
-  proposal: StackProposal,
-  layers: HistoricLayers
-): StackState {
+export function constrainedStack(kind: PoolKind, proposal: StackProposal, layers: HistoricLayers): StackState {
   let state = applyProposal(defaultStack(kind), proposal)
   state = setLayerEnabled(state, "sum", layers.sum)
   state = setLayerEnabled(state, "parity", layers.parity)
@@ -204,34 +282,94 @@ export function constrainedStack(
   return state
 }
 
-export function stacksForSettings(portrait: HistoricPortrait, layers: HistoricLayers) {
-  return {
-    numbers: constrainedStack("numbers", portrait.numbers, layers),
-    stars: constrainedStack("stars", portrait.stars, layers),
-  }
+function actualOf(draw: PairedDraw, axis: AxisSpec) {
+  const point = axis.pool === "numbers" ? draw.numberPoint : draw.starPoint
+  if (axis.layer === "sum") return point.sum
+  if (axis.layer === "parity") return point.even
+  return point.ranks[axis.slot]
 }
 
-function outsideReasons(
-  kind: PoolKind,
-  point: WindowPoint,
-  proposal: StackProposal,
-  layers: HistoricLayers
-) {
-  const reasons: string[] = []
-  if (layers.sum && (point.sum < proposal.minSum || point.sum > proposal.maxSum)) reasons.push("somme")
-  if (layers.parity && (point.even < proposal.minEven || point.even > proposal.maxEven)) {
-    reasons.push("parité")
+function theoreticalOf(axis: AxisSpec) {
+  if (axis.layer === "sum") {
+    const bounds = sumBounds(axis.pool)
+    return { lo: bounds.min, hi: bounds.max }
   }
-  if (layers.slots) {
-    point.ranks.forEach((value, index) => {
-      const band = proposal.slots[index]
-      if (!band || value < band.lo || value > band.hi) reasons.push(rankLabel(kind, index))
-    })
-  }
-  return reasons
+  if (axis.layer === "parity") return { lo: 0, hi: drawSize(axis.pool) }
+  return theoreticalSlot(axis.pool, axis.slot)
 }
 
-function medianOf(values: number[]) {
+function residual(actual: number, mean: number, sigma: number) {
+  if (!(sigma > 0)) return actual === mean ? 0 : null
+  return (actual - mean) / sigma
+}
+
+function requiredForValue(actual: number, mean: number, sigma: number, theoretical: { lo: number; hi: number }) {
+  for (const step of MARGIN_STEPS) {
+    const band = bandFromMoments(mean, sigma, step, theoretical)
+    if (actual >= band.lo && actual <= band.hi) return step
+  }
+  return null
+}
+
+function readingsAt(paired: PairedDraw[], t: number, lookback: HistoricLookback, layers: HistoricLayers) {
+  const from = t - lookback
+  return ERROR_AXES.map((axis) => {
+    const series: number[] = []
+    for (let index = from; index < t; index += 1) series.push(actualOf(paired[index], axis))
+    const mean = meanOf(series)
+    const sigma = sampleStd(series)
+    const actual = actualOf(paired[t], axis)
+    return {
+      id: axis.id,
+      label: axis.label,
+      pool: axis.pool,
+      layer: axis.layer,
+      enabled: layers[axis.layer],
+      mean,
+      sigma,
+      actual,
+      delta: actual - mean,
+      z: residual(actual, mean, sigma),
+      required: requiredForValue(actual, mean, sigma, theoreticalOf(axis)),
+    } satisfies AxisReading
+  })
+}
+
+function jointRequired(axes: AxisReading[]) {
+  let max = 0
+  let any = false
+  for (const axis of axes) {
+    if (!axis.enabled) continue
+    any = true
+    if (axis.required == null) return null
+    if (axis.required > max) max = axis.required
+  }
+  return any ? max : 0
+}
+
+function bindingOf(axes: AxisReading[]): ErrorAxisId | null {
+  let best: AxisReading | null = null
+  for (const axis of axes) {
+    if (!axis.enabled) continue
+    if (!best) {
+      best = axis
+      continue
+    }
+    const requiredGap = rankRequired(axis.required) - rankRequired(best.required)
+    if (requiredGap > 0 || (requiredGap === 0 && rankAbs(axis.z) > rankAbs(best.z))) best = axis
+  }
+  return best?.id ?? null
+}
+
+function rankRequired(value: number | null) {
+  return value == null ? Number.POSITIVE_INFINITY : value
+}
+
+function rankAbs(value: number | null) {
+  return value == null ? Number.POSITIVE_INFINITY : Math.abs(value)
+}
+
+function medianNumbers(values: number[]) {
   if (values.length === 0) return null
   const sorted = [...values].sort((a, b) => a - b)
   const mid = Math.floor(sorted.length / 2)
@@ -239,51 +377,116 @@ function medianOf(values: number[]) {
   return (sorted[mid - 1] + sorted[mid]) / 2
 }
 
-function summarize(hits: number, n: number, grids: number[]) {
-  const meanGrids = grids.length > 0 ? grids.reduce((total, value) => total + value, 0) / grids.length : null
-  const meanVolume = meanGrids == null || !TOTAL_GRIDS ? null : meanGrids / TOTAL_GRIDS
-  const rate = n > 0 ? hits / n : 0
-  return {
-    n,
-    hits,
-    rate,
-    meanGrids,
-    medianGrids: medianOf(grids),
-    meanVolume,
-    lift: meanVolume != null && meanVolume > 0 ? rate / meanVolume : null,
-  }
+function medianRank(values: Array<number | null>) {
+  if (values.length === 0) return null
+  const ranks = values.map((value) => rankRequired(value)).sort((a, b) => a - b)
+  const mid = Math.floor(ranks.length / 2)
+  const picked = ranks.length % 2 === 1 ? ranks[mid] : (ranks[mid - 1] + ranks[mid]) / 2
+  return picked
 }
 
-function testIndexes(length: number, horizon: number, lookback: number) {
-  const start = Math.max(0, length - Math.max(1, horizon))
-  const back = Math.max(MIN_TRAIN, Math.round(lookback) || MIN_TRAIN)
-  const indexes: number[] = []
-  for (let t = start; t < length; t += 1) {
-    const from = Math.max(0, t - back)
-    if (t - from < MIN_TRAIN) continue
-    indexes.push(t)
+function chooseLookback(t: number, table: Array<Array<number | null> | undefined>): HistoricLookback | null {
+  let best: HistoricLookback | null = null
+  let bestMedian = Number.POSITIVE_INFINITY
+  for (const lookback of HISTORIC_LOOKBACKS) {
+    const priors: Array<number | null> = []
+    for (let s = t - 1; s >= lookback && priors.length < AUTO_PRIOR_WINDOW; s -= 1) {
+      const row = table[s]
+      if (!row) continue
+      priors.push(row[LOOKBACK_INDEX[lookback]])
+    }
+    if (priors.length < AUTO_MIN_PRIORS) continue
+    const median = medianRank(priors)
+    if (median == null) continue
+    if (best == null || median < bestMedian) {
+      best = lookback
+      bestMedian = median
+    }
   }
-  return { indexes, back }
+  if (best != null) return best
+  if (t >= FALLBACK_LOOKBACK) return FALLBACK_LOOKBACK
+  return null
 }
 
-export function historicReplay(
+function isLookback(value: number): value is HistoricLookback {
+  return (HISTORIC_LOOKBACKS as readonly number[]).includes(value)
+}
+
+export function prepareHistoric(
   draws: HistoricDraw[],
-  horizon: number,
-  lookback: number,
-  config: LearnConfig,
-  layers: HistoricLayers = DEFAULT_HISTORIC_LAYERS,
-  cache: Map<string, number> = new Map()
-): Omit<HistoricReport, "width" | "config" | "portrait"> {
+  query: {
+    horizon?: number
+    lookback: HistoricLookbackChoice
+    layers?: HistoricLayers
+  }
+): HistoricPrepared {
+  const horizon = Math.max(1, query.horizon ?? HISTORIC_HORIZON)
+  const layers = query.layers ?? DEFAULT_HISTORIC_LAYERS
   const paired = pairDraws(draws)
-  const { indexes, back } = testIndexes(paired.length, horizon, lookback)
-  const rows: HistoricRow[] = []
-  const grids: number[] = []
+  const fixed = query.lookback === HISTORIC_AUTO ? null : isLookback(query.lookback) ? query.lookback : FALLBACK_LOOKBACK
+  const cache = new Map<string, AxisReading[]>()
+  const read = (t: number, lookback: HistoricLookback) => {
+    const key = `${t}|${lookback}|${layers.sum ? 1 : 0}${layers.parity ? 1 : 0}${layers.slots ? 1 : 0}`
+    const found = cache.get(key)
+    if (found) return found
+    const axes = readingsAt(paired, t, lookback, layers)
+    cache.set(key, axes)
+    return axes
+  }
+  const table: Array<Array<number | null> | undefined> = new Array(paired.length)
+  if (query.lookback === HISTORIC_AUTO) {
+    for (let t = 0; t < paired.length; t += 1) {
+      table[t] = HISTORIC_LOOKBACKS.map((lookback) => (t >= lookback ? jointRequired(read(t, lookback)) : null))
+    }
+  }
+  const start = Math.max(0, paired.length - horizon)
+  const rows: PreparedRow[] = []
+  for (let t = start; t < paired.length; t += 1) {
+    const chosen = fixed ? (t >= fixed ? fixed : null) : chooseLookback(t, table)
+    if (chosen == null || t < chosen) continue
+    const axes = read(t, chosen)
+    rows.push({
+      index: t,
+      date: paired[t].date,
+      numbers: paired[t].numbers,
+      stars: paired[t].stars,
+      chosenLookback: chosen,
+      axes,
+      requiredMargin: jointRequired(axes),
+      binding: bindingOf(axes),
+      vector: axes.map((axis) => axis.z),
+    })
+  }
+  const nextLookback = fixed ?? chooseLookback(paired.length, table)
+  return {
+    horizon,
+    available: paired.length,
+    inWindow: paired.length - start,
+    lookback: query.lookback === HISTORIC_AUTO ? HISTORIC_AUTO : fixed ?? FALLBACK_LOOKBACK,
+    layers,
+    rows,
+    nextLookback,
+    paired,
+    cache: new Map(),
+  }
+}
+
+function learnAt(margin: MarginStep): LearnConfig {
+  return { method: "mean_std", k: margin, percentile: 5 }
+}
+
+export function playHistoric(prepared: HistoricPrepared, margin: number): HistoricGame {
+  const snapped = snapMargin(margin)
+  const config = learnAt(snapped)
+  const layers = prepared.layers
+  const rows: HistoricGameRow[] = []
   let hits = 0
   let numberHits = 0
   let starHits = 0
-  for (const t of indexes) {
-    const from = Math.max(0, t - back)
-    const train = paired.slice(from, t)
+  let totalGrids = 0
+  for (const row of prepared.rows) {
+    const from = row.index - row.chosenLookback
+    const train = prepared.paired.slice(from, row.index)
     const numbers = proposeStack(
       "numbers",
       train.map((item) => item.numberPoint),
@@ -294,150 +497,134 @@ export function historicReplay(
       train.map((item) => item.starPoint),
       config
     )
-    const sample = paired[t]
+    const sample = prepared.paired[row.index]
     const numberHit = coversPoint(sample.numberPoint, numbers, layers)
     const starHit = coversPoint(sample.starPoint, stars, layers)
-    const numberCount = countCached(cache, constrainedStack("numbers", numbers, layers))
-    const starCount = countCached(cache, constrainedStack("stars", stars, layers))
-    const gridCount = numberCount * starCount
+    const grids =
+      countCached(prepared.cache, constrainedStack("numbers", numbers, layers)) *
+      countCached(prepared.cache, constrainedStack("stars", stars, layers))
+    const hit = numberHit && starHit
+    if (hit) hits += 1
     if (numberHit) numberHits += 1
     if (starHit) starHits += 1
-    if (numberHit && starHit) hits += 1
-    grids.push(gridCount)
+    totalGrids += grids
     rows.push({
-      date: sample.date,
-      numbers: sample.numbers,
-      stars: sample.stars,
+      date: row.date,
+      numbers: row.numbers,
+      stars: row.stars,
+      chosenLookback: row.chosenLookback,
+      axes: row.axes,
+      requiredMargin: row.requiredMargin,
+      binding: row.binding,
+      hit,
       numberHit,
       starHit,
-      hit: numberHit && starHit,
-      grids: gridCount,
-      numberReasons: numberHit ? [] : outsideReasons("numbers", sample.numberPoint, numbers, layers),
-      starReasons: starHit ? [] : outsideReasons("stars", sample.starPoint, stars, layers),
+      grids,
+      vector: row.vector,
     })
   }
-  return {
-    ...summarize(hits, rows.length, grids),
-    numberHits,
-    starHits,
-    rows,
-  }
-}
-
-export function historicPortrait(
-  draws: HistoricDraw[],
-  horizon: number,
-  config: LearnConfig,
-  layers: HistoricLayers = DEFAULT_HISTORIC_LAYERS,
-  cache: Map<string, number> = new Map()
-): HistoricPortrait | null {
-  const paired = pairDraws(draws).slice(-Math.max(1, horizon))
-  if (paired.length === 0) return null
-  const numbers = proposeStack(
-    "numbers",
-    paired.map((item) => item.numberPoint),
-    config
-  )
-  const stars = proposeStack(
-    "stars",
-    paired.map((item) => item.starPoint),
-    config
-  )
-  let covered = 0
-  for (const item of paired) {
-    if (coversPoint(item.numberPoint, numbers, layers) && coversPoint(item.starPoint, stars, layers)) {
-      covered += 1
+  const n = rows.length
+  const meanGrids = n > 0 ? totalGrids / n : null
+  const median = medianRank(rows.map((row) => row.requiredMargin))
+  const medianBeyond = median != null && !Number.isFinite(median)
+  const ranks: ParameterRank[] = ERROR_AXES.filter((axis) => layers[axis.layer]).map((axis) => {
+    const abs: number[] = []
+    let bindingCount = 0
+    let outsideCount = 0
+    for (const row of rows) {
+      const reading = row.axes.find((item) => item.id === axis.id)
+      if (!reading) continue
+      if (reading.z != null) abs.push(Math.abs(reading.z))
+      if (row.binding === axis.id) bindingCount += 1
+      if (reading.required == null || reading.required > snapped) outsideCount += 1
     }
-  }
-  const numberCount = countCached(cache, constrainedStack("numbers", numbers, layers))
-  const starCount = countCached(cache, constrainedStack("stars", stars, layers))
-  return {
-    n: paired.length,
-    covered,
-    rate: covered / paired.length,
-    numberCount,
-    starCount,
-    grids: numberCount * starCount,
-    numbers,
-    stars,
-  }
-}
-
-function toPoint(report: HistoricReport): WidthPoint {
-  return {
-    width: report.width,
-    n: report.n,
-    hits: report.hits,
-    rate: report.rate,
-    meanGrids: report.meanGrids,
-    medianGrids: report.medianGrids,
-    meanVolume: report.meanVolume,
-    lift: report.lift,
-    portraitGrids: report.portrait?.grids ?? null,
-    portraitRate: report.portrait?.rate ?? null,
-  }
-}
-
-export function recommendWidth(points: WidthPoint[]) {
-  let rawExcess = Number.NEGATIVE_INFINITY
-  for (const point of points) {
-    if (point.n === 0 || point.meanVolume == null) continue
-    rawExcess = Math.max(rawExcess, point.rate - point.meanVolume)
-  }
-  const excess = Number.isFinite(rawExcess) ? rawExcess : 0
-  let index = 0
-  let grids = Number.POSITIVE_INFINITY
-  let found = false
-  points.forEach((point, i) => {
-    if (point.n < 30 || point.hits < HISTORIC_MIN_HITS) return
-    if (point.meanVolume == null || point.meanGrids == null) return
-    const gap = point.rate - point.meanVolume
-    if (gap < excess - HISTORIC_EXCESS_GAP) return
-    if (!found || point.meanGrids < grids) {
-      found = true
-      grids = point.meanGrids
-      index = i
+    return {
+      id: axis.id,
+      label: axis.label,
+      medianAbsZ: medianNumbers(abs),
+      bindingCount,
+      outsideCount,
     }
   })
+  ranks.sort(
+    (a, b) =>
+      b.bindingCount - a.bindingCount ||
+      b.outsideCount - a.outsideCount ||
+      (b.medianAbsZ ?? -1) - (a.medianAbsZ ?? -1) ||
+      a.label.localeCompare(b.label, "fr")
+  )
+  const curve: CatchPoint[] = MARGIN_STEPS.map((step) => {
+    const caught = rows.filter((row) => row.requiredMargin != null && row.requiredMargin <= step).length
+    return { margin: step, caught, rate: n > 0 ? caught / n : 0 }
+  })
+  let next: NextForecast | null = null
+  if (prepared.nextLookback != null && prepared.paired.length >= prepared.nextLookback) {
+    const train = prepared.paired.slice(-prepared.nextLookback)
+    const numbers = proposeStack(
+      "numbers",
+      train.map((item) => item.numberPoint),
+      config
+    )
+    const stars = proposeStack(
+      "stars",
+      train.map((item) => item.starPoint),
+      config
+    )
+    const numberState = constrainedStack("numbers", numbers, layers)
+    const starState = constrainedStack("stars", stars, layers)
+    next = {
+      lookback: prepared.nextLookback,
+      learn: config,
+      numbers,
+      stars,
+      numberState,
+      starState,
+      grids:
+        countCached(prepared.cache, numberState) * countCached(prepared.cache, starState),
+    }
+  }
   return {
-    index: found ? index : 0,
-    excess,
-    separated: found && excess >= HISTORIC_EXCESS_GAP,
+    horizon: prepared.horizon,
+    available: prepared.available,
+    inWindow: prepared.inWindow,
+    lookback: prepared.lookback,
+    margin: snapped,
+    layers,
+    rows,
+    summary: {
+      n,
+      hits,
+      rate: n > 0 ? hits / n : 0,
+      numberHits,
+      starHits,
+      meanGrids,
+      totalGrids: n > 0 ? totalGrids : null,
+      gridsPerHit: hits > 0 ? totalGrids / hits : null,
+      meanVolume: meanGrids == null || !TOTAL_GRIDS ? null : meanGrids / TOTAL_GRIDS,
+      medianRequired: median == null || medianBeyond ? null : median,
+      medianBeyond,
+    },
+    ranks,
+    curve,
+    next,
   }
 }
 
-export function historicSweep(
+export function historicGame(
   draws: HistoricDraw[],
   query: {
     horizon?: number
-    lookback: number
-    method: EnvelopeMethod
+    lookback: HistoricLookbackChoice
+    margin: number
     layers?: HistoricLayers
   }
-): HistoricSweep {
-  const horizon = Math.max(1, query.horizon ?? HISTORIC_HORIZON)
-  const layers = query.layers ?? DEFAULT_HISTORIC_LAYERS
-  const paired = pairDraws(draws)
-  const steps = widthSteps(query.method)
-  const cache = new Map<string, number>()
-  const reports: HistoricReport[] = steps.map((width) => {
-    const config = learnAtWidth(query.method, width)
-    const replay = historicReplay(paired, horizon, query.lookback, config, layers, cache)
-    const portrait = historicPortrait(paired, horizon, config, layers, cache)
-    return { width, config, ...replay, portrait }
-  })
-  const points = reports.map(toPoint)
-  const advice = recommendWidth(points)
-  return {
-    horizon,
-    available: paired.length,
-    studied: Math.min(horizon, paired.length),
-    lookback: Math.max(MIN_TRAIN, Math.round(query.lookback) || MIN_TRAIN),
-    method: query.method,
-    points,
-    reports,
-    recommendedIndex: advice.index,
-    excess: advice.excess,
-    separated: advice.separated,
-  }
+): HistoricGame {
+  return playHistoric(
+    prepareHistoric(draws, {
+      horizon: query.horizon,
+      lookback: query.lookback,
+      layers: query.layers,
+    }),
+    query.margin
+  )
 }

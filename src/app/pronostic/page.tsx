@@ -7,14 +7,14 @@ import { PageShell } from "@/components/page-shell"
 export const metadata: Metadata = {
   title: "Pronostic — Synchro",
   description:
-    "Réduire l’univers EuroMillions 5+2 par couches, et rejouer les 100 derniers tirages pour voir comment la largeur des bandes change la couverture et le nombre de combinaisons. La loi officielle reste uniforme.",
+    "Réduire l’univers EuroMillions 5+2 par couches, et noter chaque tirage passé avec une marge d’erreur annoncée à l’avance. La mise est le nombre de grilles restantes. La loi officielle reste uniforme.",
 }
 
 export default function PronosticPage() {
   return (
     <PageShell
       title="Pronostic"
-      subtitle="L’atelier resserre l’univers 5+2 par couches et compte les grilles restantes. L’historique rejoue les 100 derniers tirages : la largeur des bandes fait varier la couverture et le nombre de combinaisons. Ce n’est pas P(prochain tirage) : la loi officielle reste uniforme."
+      subtitle="L’atelier resserre l’univers 5+2 par couches et compte les grilles restantes. L’historique note chaque tirage avec une marge d’erreur annoncée à l’avance, et compte la mise en grilles 5+2. Ce n’est pas P(prochain tirage) : la loi officielle reste uniforme."
       className="pb-[calc(7rem+env(safe-area-inset-bottom))]"
     >
       <Suspense fallback={<p className="text-sm text-muted-foreground">Chargement…</p>}>

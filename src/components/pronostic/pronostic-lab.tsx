@@ -136,7 +136,7 @@ const TABS = [
     label: "Historique",
     help: {
       title: "Historique",
-      body: "Rejoue les 100 derniers tirages, numéros et étoiles. La largeur des bandes fait varier la couverture et le nombre de combinaisons. Ce n’est pas P(prochain tirage).",
+      body: "Note chaque tirage des 100 derniers avec une marge d’erreur annoncée avant lui, et compte la mise en grilles 5+2. Ce n’est pas P(prochain tirage).",
     },
   },
 ] as const
@@ -472,7 +472,10 @@ export function PronosticLab() {
     setLearn(next.learn)
     setLookback(next.lookback)
     setPool("numbers")
-    setNote("Réglages de l’historique appliqués : enveloppe des derniers tirages.")
+    const margin = next.learn.k.toLocaleString("fr-FR", { maximumFractionDigits: 2 })
+    setNote(
+      `Prévision du prochain tirage appliquée : ${next.lookback} tirages d’avant, marge ${margin} σ. Ce tirage n’entre pas dans le calcul.`
+    )
     selectTab("atelier")
   }
 
@@ -575,8 +578,8 @@ export function PronosticLab() {
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
         <TitleHelp help={HELP.banner}>Pronostic</TitleHelp> pose une hypothèse
         de lecture sur l’univers 5+2. L’atelier compte les grilles restantes.
-        L’historique rejoue les tirages passés : la largeur des bandes change
-        la couverture et le nombre de combinaisons, pas P(grille).
+        L’historique note chaque tirage passé avec une marge annoncée à
+        l’avance, et compte la mise en grilles. Ce n’est pas P(grille).
       </p>
       <PillTabs
         idPrefix="pronostic"

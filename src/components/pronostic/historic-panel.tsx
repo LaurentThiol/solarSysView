@@ -10,69 +10,73 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart"
 import { DrawBalls } from "@/components/draw-balls"
-import { HelpWrap, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
+import { HelpTip, HelpWrap, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select"
 import { formatCompactCount } from "@/lib/gains"
 import { formatCount } from "@/lib/jeux"
 import {
-  ENVELOPE_METHODS,
-  ENVELOPE_METHOD_LABELS,
+  DEFAULT_HISTORIC_LAYERS,
+  DEFAULT_MARGIN,
+  HISTORIC_AUTO,
   HISTORIC_HORIZON,
   HISTORIC_LOOKBACKS,
-  DEFAULT_HISTORIC_LAYERS,
-  formatWidth,
-  historicSweep,
+  MARGIN_STEPS,
+  formatMargin,
+  formatRequired,
+  playHistoric,
+  prepareHistoric,
   proposalSummary,
-  referenceWidthIndex,
-  stacksForSettings,
-  type EnvelopeMethod,
+  type HistoricGameRow,
   type HistoricLayers,
-  type HistoricReport,
-  type HistoricRow,
+  type HistoricLookback,
+  type HistoricLookbackChoice,
   type LearnConfig,
   type StackState,
 } from "@/lib/pronostic"
 import { weekdayScopeLabel, type WeekdayScope } from "@/lib/weekday-scope"
 
 const HELP = {
-  replay: {
-    title: "Rejeu",
-    body: "Pour chaque tirage des 100 derniers, les bandes sont calées sur les tirages d’avant seulement. Un tirage est retenu si ses numéros et ses étoiles tombent dans ces bandes. Le décompte est le produit des combinaisons restantes.",
+  game: {
+    title: "Partie notée",
+    body: "Chaque tirage est jugé avec une prévision calculée sur les tirages d’avant seulement. La marge est la vôtre : elle est annoncée avant le tirage. À cette marge, le décompte est le nombre de grilles 5+2 qui restent — la mise. La plus petite marge qui aurait contenu le tirage est l’erreur mesurée.",
   },
-  width: {
-    title: "Largeur des bandes",
-    body: "k · σ élargit l’enveloppe autour du min/max ou de la moyenne. Un percentile plus haut la resserre (P5–P95 est plus étroit que min–max). Le curseur parcourt ces largeurs pour montrer comment la couverture et le nombre de combinaisons bougent ensemble.",
+  margin: {
+    title: "Marge d’erreur",
+    body: "Autour de la moyenne des tirages d’avant. 0 σ suit la moyenne arrondie : une seule valeur entière quand la moyenne tombe juste. Élargir augmente la mise. Le curseur dit, pour une règle fixée à l’avance, combien de tirages tombent dedans et combien de grilles il aurait fallu jouer.",
+  },
+  lookback: {
+    title: "Tirages d’avant",
+    body: "20, 50 ou 100 tirages strictement antérieurs. « Choisi avant » retient, avant chaque tirage, la fenêtre dont les essais précédents ont demandé la plus petite marge. En cas d’égalité, la fenêtre la plus courte. S’il n’y a pas encore trois essais, la fenêtre est 20.",
   },
   layers: {
     title: "Couches",
-    body: "Somme, parité et espaces sont les mêmes couches que l’atelier. Éteignez-en une pour voir ce qu’elle retire comme tirages retenus et comme combinaisons.",
-  },
-  portrait: {
-    title: "Réglages proposés",
-    body: "Enveloppe lue sur les tirages eux-mêmes, à la largeur choisie. Elle décrit l’archive. Le rejeu, à côté, dit combien de ces tirages seraient tombés dans des bandes calculées sans eux. Appliquer recopie cette enveloppe dans l’atelier.",
+    body: "Somme, parité et espaces sont les mêmes couches que l’atelier. Une couche éteinte ne compte ni dans l’erreur, ni dans la mise.",
   },
   curve: {
-    title: "Courbes",
-    body: "Sous la loi officielle, un tirage indépendant tombe dans les bandes à peu près aussi souvent que la part de l’univers qu’elles gardent. Si les deux courbes se suivent, élargir la bande achète des combinaisons. L’écart décrit l’archive passée : il ne change pas P(grille).",
+    title: "Erreur et prise",
+    body: "En haut, la marge qu’il aurait fallu pour contenir chaque tirage, et la marge que vous annoncez. En bas, la part des tirages contenus quand la marge grandit. La mise, elle, se recalcule à la marge choisie.",
+  },
+  ranks: {
+    title: "Paramètres qui pèsent",
+    body: "Fois décisif : l’axe qui a exigé la plus grande marge sur ce tirage. Hors marge : l’axe sort de la marge annoncée. |z| est l’écart à la moyenne passée, en écarts-types. Si σ vaut 0 et que la valeur diffère, il n’y a pas de z : aucune marge finie ne la couvre.",
+  },
+  next: {
+    title: "Prochain tirage",
+    body: "Bandes de la prochaine prévision : la dernière fenêtre, à la marge annoncée. Le prochain tirage n’entre pas dans le calcul. Appliquer les recopie dans l’atelier.",
   },
 } satisfies Record<string, HelpCopy>
 
-const coverageConfig = {
-  rate: { label: "Tirages retenus", color: "var(--chart-1)" },
-  volume: { label: "Part de l’univers", color: "var(--chart-4)" },
+const errorConfig = {
+  required: { label: "Marge mesurée", color: "var(--chart-1)" },
+  beyond: { label: "Hors 3 σ", color: "var(--chart-5)" },
 }
 
-const gridConfig = {
-  replay: { label: "Moyenne du rejeu", color: "var(--chart-1)" },
-  portrait: { label: "Enveloppe des tirages", color: "var(--chart-2)" },
+const catchConfig = {
+  rate: { label: "Tirages contenus", color: "var(--chart-2)" },
 }
+
+const BEYOND_PLOT = 3.4
 
 function formatPct(value: number | null | undefined, digits = 1) {
   if (value == null || Number.isNaN(value)) return "—"
@@ -80,19 +84,6 @@ function formatPct(value: number | null | undefined, digits = 1) {
     style: "percent",
     maximumFractionDigits: digits,
   })
-}
-
-function formatPoints(value: number) {
-  const pts = value * 100
-  const abs = Math.abs(pts).toLocaleString("fr-FR", { maximumFractionDigits: 1 })
-  if (pts > 0) return `+${abs} pts`
-  if (pts < 0) return `−${abs} pts`
-  return "0 pt"
-}
-
-function formatLift(value: number | null) {
-  if (value == null || !Number.isFinite(value)) return "—"
-  return `× ${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}`
 }
 
 function formatDrawDate(iso: string) {
@@ -107,25 +98,28 @@ function formatDrawDate(iso: string) {
   })
 }
 
-function missLabel(row: HistoricRow) {
-  if (row.hit) return "retenu"
-  const parts: string[] = []
-  if (row.numberReasons.length > 0) parts.push(row.numberReasons.join(", "))
-  if (row.starReasons.length > 0) parts.push(`★ ${row.starReasons.join(", ")}`)
-  return parts.join(" · ") || "hors bande"
+function shortDate(iso: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!match) return iso
+  return `${match[3]}/${match[2]}`
 }
 
-function reasonTally(rows: HistoricRow[]) {
-  const counts = new Map<string, number>()
-  for (const row of rows) {
-    for (const reason of row.numberReasons) {
-      counts.set(reason, (counts.get(reason) ?? 0) + 1)
-    }
-    for (const reason of row.starReasons) {
-      counts.set(`★ ${reason}`, (counts.get(`★ ${reason}`) ?? 0) + 1)
-    }
-  }
-  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr"))
+function formatDelta(value: number) {
+  const text = Math.abs(value).toLocaleString("fr-FR", { maximumFractionDigits: 2 })
+  if (value > 0) return `+${text}`
+  if (value < 0) return `−${text}`
+  return "0"
+}
+
+function formatAbs(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return "—"
+  return value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })
+}
+
+function bindingCopy(row: HistoricGameRow) {
+  const axis = row.axes.find((item) => item.id === row.binding)
+  if (!axis) return "—"
+  return `${axis.label} ${formatDelta(axis.delta)}`
 }
 
 export function HistoricPanel({
@@ -141,128 +135,105 @@ export function HistoricPanel({
     numbers: StackState
     stars: StackState
     learn: LearnConfig
-    lookback: (typeof HISTORIC_LOOKBACKS)[number]
+    lookback: HistoricLookback
   }) => void
 }) {
-  const [method, setMethod] = useState<EnvelopeMethod>("mean_std")
-  const [lookback, setLookback] = useState<(typeof HISTORIC_LOOKBACKS)[number]>(50)
+  const [lookback, setLookback] = useState<HistoricLookbackChoice>(20)
+  const [marginIndex, setMarginIndex] = useState(MARGIN_STEPS.indexOf(DEFAULT_MARGIN))
   const [layers, setLayers] = useState<HistoricLayers>(DEFAULT_HISTORIC_LAYERS)
-  const [pick, setPick] = useState<{ key: string; index: number } | null>(null)
   const [filter, setFilter] = useState<"all" | "hit" | "miss">("all")
-  const layerKey = `${method}|${lookback}|${layers.sum ? 1 : 0}${layers.parity ? 1 : 0}${layers.slots ? 1 : 0}`
-  const picked = pick?.key === layerKey ? pick.index : null
+  const margin = MARGIN_STEPS[Math.min(MARGIN_STEPS.length - 1, Math.max(0, marginIndex))] ?? DEFAULT_MARGIN
+  const marginLabel = formatMargin(margin)
 
-  const sweep = useMemo(
+  const prepared = useMemo(
     () =>
-      historicSweep(draws, {
+      prepareHistoric(draws, {
         horizon: HISTORIC_HORIZON,
         lookback,
-        method,
         layers,
       }),
-    [draws, lookback, method, layers]
+    [draws, lookback, layers]
   )
-
-  const index = useMemo(() => {
-    if (sweep.reports.length === 0) return 0
-    const raw = picked ?? (sweep.separated ? sweep.recommendedIndex : referenceWidthIndex(method))
-    return Math.min(sweep.reports.length - 1, Math.max(0, raw))
-  }, [method, picked, sweep])
-
-  const report: HistoricReport | null = sweep && sweep.reports.length > 0 ? sweep.reports[index] : null
-  const label = report ? formatWidth(method, report.width) : ""
+  const game = useMemo(() => playHistoric(prepared, margin), [prepared, margin])
   const rows = useMemo(() => {
-    const list = report?.rows ?? []
-    const visible =
-      filter === "hit" ? list.filter((row) => row.hit) : filter === "miss" ? list.filter((row) => !row.hit) : list
-    return [...visible].reverse()
-  }, [filter, report])
-  const tally = useMemo(() => reasonTally(report?.rows ?? []), [report])
+    const list =
+      filter === "hit" ? game.rows.filter((row) => row.hit) : filter === "miss" ? game.rows.filter((row) => !row.hit) : game.rows
+    return [...list].reverse()
+  }, [filter, game.rows])
   const dayLabel = weekday === "mardi" || weekday === "vendredi" ? weekdayScopeLabel(weekday) : null
+  const errorData = game.rows.map((row) => ({
+    label: shortDate(row.date),
+    required: row.requiredMargin,
+    beyond: row.requiredMargin == null ? BEYOND_PLOT : null,
+  }))
+  const catchData = game.curve.map((point) => ({
+    label: formatMargin(point.margin),
+    rate: Math.round(point.rate * 1000) / 10,
+  }))
 
   function apply() {
-    if (!report?.portrait) return
-    if (!HISTORIC_LOOKBACKS.includes(lookback)) return
-    const stacks = stacksForSettings(report.portrait, layers)
-    onApply({ ...stacks, learn: report.config, lookback })
+    if (!game.next) return
+    onApply({
+      numbers: game.next.numberState,
+      stars: game.next.starState,
+      learn: game.next.learn,
+      lookback: game.next.lookback,
+    })
   }
 
-  const coverageData =
-    sweep?.points.map((point) => ({
-      label: formatWidth(method, point.width),
-      rate: Math.round(point.rate * 1000) / 10,
-      volume: Math.round((point.meanVolume ?? 0) * 1000) / 10,
-    })) ?? []
-  const gridData =
-    sweep?.points.map((point) => ({
-      label: formatWidth(method, point.width),
-      replay: Math.max(1, point.meanGrids ?? 1),
-      portrait: Math.max(1, point.portraitGrids ?? 1),
-    })) ?? []
-  const gridSpan = gridData.reduce(
-    (span, row) => ({
-      min: Math.min(span.min, row.replay, row.portrait),
-      max: Math.max(span.max, row.replay, row.portrait),
-    }),
-    { min: Number.POSITIVE_INFINITY, max: 1 }
-  )
-  const logGrids = Number.isFinite(gridSpan.min) && gridSpan.max / gridSpan.min >= 8
+  const summary = game.summary
+  const medianLabel = summary.medianBeyond ? "hors 3 σ" : formatRequired(summary.medianRequired)
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-        <TitleHelp help={HELP.replay}>Les {HISTORIC_HORIZON} derniers tirages</TitleHelp>
-        , numéros et étoiles. La largeur fait varier deux choses à la fois : la part des
-        tirages qui tombent dans les bandes, et le nombre de combinaisons 5+2 qui restent.
+        <TitleHelp help={HELP.game}>Les {HISTORIC_HORIZON} derniers tirages</TitleHelp>
+        , notés un par un. La marge d’erreur est annoncée avant le tirage. À cette marge, on
+        compte les grilles 5+2 qui restent : c’est la mise d’une vraie partie.
         {dayLabel ? ` Filtre du bandeau : ${dayLabel}.` : ""}
       </p>
 
       <div className="flex flex-col gap-3">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <LabelHelp label="Formule" help={HELP.width}>
-            <Select value={method} onValueChange={(value) => setMethod(value as EnvelopeMethod)}>
-              <SelectTrigger className="w-full" aria-label="Formule d’enveloppe">
-                <span className="flex flex-1 text-left">{ENVELOPE_METHOD_LABELS[method]}</span>
-              </SelectTrigger>
-              <SelectContent>
-                {ENVELOPE_METHODS.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {ENVELOPE_METHOD_LABELS[item]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="flex flex-col gap-2">
+          <LabelHelp label={`Marge d’erreur · ${marginLabel}`} help={HELP.margin}>
+            <input
+              type="range"
+              min={0}
+              max={MARGIN_STEPS.length - 1}
+              step={1}
+              value={MARGIN_STEPS.indexOf(margin)}
+              onChange={(event) => setMarginIndex(Number(event.target.value))}
+              className="jeux-range w-full"
+              aria-label="Marge d’erreur"
+              aria-valuetext={marginLabel}
+            />
           </LabelHelp>
-          <div className="flex flex-col gap-2 sm:col-span-2">
-            <LabelHelp label={`Largeur · ${label || "…"}`} help={HELP.width}>
-              <input
-                type="range"
-                min={0}
-                max={Math.max(0, (sweep?.points.length ?? 1) - 1)}
-                step={1}
-                value={index}
-                disabled={!sweep || sweep.points.length === 0}
-                onChange={(event) => setPick({ key: layerKey, index: Number(event.target.value) })}
-                className="jeux-range w-full"
-                aria-label="Largeur des bandes"
-                aria-valuetext={label}
-              />
-            </LabelHelp>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">Tirages d’avant</span>
-              {HISTORIC_LOOKBACKS.map((item) => (
-                <Button
-                  key={item}
-                  type="button"
-                  size="sm"
-                  variant={lookback === item ? "default" : "outline"}
-                  onClick={() => setLookback(item)}
-                >
-                  {item}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <p className="text-xs text-muted-foreground">0 σ suit la moyenne arrondie.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            Tirages d’avant
+            <HelpTip {...HELP.lookback} />
+          </span>
+          {HISTORIC_LOOKBACKS.map((item) => (
+            <Button
+              key={item}
+              type="button"
+              size="sm"
+              variant={lookback === item ? "default" : "outline"}
+              onClick={() => setLookback(item)}
+            >
+              {item}
+            </Button>
+          ))}
+          <Button
+            type="button"
+            size="sm"
+            variant={lookback === HISTORIC_AUTO ? "default" : "outline"}
+            onClick={() => setLookback(HISTORIC_AUTO)}
+          >
+            Choisi avant
+          </Button>
         </div>
         <div className="flex flex-wrap gap-2">
           <OverlayToggle
@@ -286,65 +257,64 @@ export function HistoricPanel({
         </div>
       </div>
 
-      {!report || report.n === 0 ? (
+      {summary.n === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Pas assez d’historique : il faut au moins 5 tirages avant celui qu’on rejoue.
-          {sweep.available > 0 ? ` Archive utilisable : ${sweep.available} tirages complets.` : ""}
+          {lookback === 100
+            ? "Aucun tirage n’a 100 tirages complets avant lui dans cette archive. Une fenêtre de 20 ou de 50 peut encore être notée."
+            : lookback === 50
+              ? "Aucun tirage n’a 50 tirages complets avant lui dans cette archive."
+              : "Pas assez d’historique : il faut une fenêtre entière de tirages avant celui qu’on note."}
+          {game.available > 0 ? ` Archive utilisable : ${game.available} tirages complets.` : ""}
         </p>
       ) : (
         <>
           <p className="sr-only" aria-live="polite">
-            {label} : {report.hits} tirages retenus sur {report.n},{" "}
-            {report.meanGrids == null ? "combinaisons inconnues" : `${formatCount(report.meanGrids)} combinaisons en moyenne`}.
+            {marginLabel} : {summary.hits} tirages dans la marge sur {summary.n},{" "}
+            {summary.meanGrids == null ? "mise inconnue" : `mise moyenne ${formatCount(summary.meanGrids)} grilles`}.
           </p>
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
-                <p className="text-xs tracking-wide text-muted-foreground uppercase">Tirages retenus</p>
+                <p className="text-xs tracking-wide text-muted-foreground uppercase">Dans la marge</p>
                 <CardTitle className="text-lg tabular-nums">
-                  {report.hits}/{report.n}
-                  <span className="ml-2 text-sm font-normal text-muted-foreground">{formatPct(report.rate)}</span>
+                  {summary.hits}/{summary.n}
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">{formatPct(summary.rate)}</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
-                Numéros {report.numberHits} · étoiles {report.starHits}
+                Numéros {summary.numberHits} · étoiles {summary.starHits}
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <p className="text-xs tracking-wide text-muted-foreground uppercase">Combinaisons</p>
-                <CardTitle className="text-lg tabular-nums">
-                  {formatCount(report.meanGrids ?? 0)}
-                </CardTitle>
+                <p className="text-xs tracking-wide text-muted-foreground uppercase">Mise moyenne</p>
+                <CardTitle className="text-lg tabular-nums">{formatCount(summary.meanGrids ?? 0)}</CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground tabular-nums">
-                Moyenne du rejeu · médiane {formatCount(report.medianGrids ?? 0)}
+                Part de l’univers {formatPct(summary.meanVolume, 3)}
+                {summary.totalGrids != null ? ` · total ${formatCompactCount(summary.totalGrids)}` : ""}
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <p className="text-xs tracking-wide text-muted-foreground uppercase">Écart au volume</p>
+                <p className="text-xs tracking-wide text-muted-foreground uppercase">Grilles par tirage retenu</p>
                 <CardTitle className="text-lg tabular-nums">
-                  {formatPoints(report.rate - (report.meanVolume ?? 0))}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs text-muted-foreground tabular-nums">
-                Univers gardé {formatPct(report.meanVolume, 3)} · lift {formatLift(report.lift)}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <p className="text-xs tracking-wide text-muted-foreground uppercase">
-                  <TitleHelp help={HELP.portrait}>Portrait</TitleHelp>
-                </p>
-                <CardTitle className="text-lg tabular-nums">
-                  {formatCompactCount(report.portrait?.grids ?? null)}
+                  {summary.gridsPerHit == null ? "—" : formatCompactCount(summary.gridsPerHit)}
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
-                {report.portrait
-                  ? `Contient ${report.portrait.covered}/${report.portrait.n} des tirages qui l’ont calé`
-                  : "Pas de portrait"}
+                {summary.hits === 0 ? "Aucun tirage dans la marge." : "Mise cumulée divisée par les tirages contenus."}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <p className="text-xs tracking-wide text-muted-foreground uppercase">Erreur médiane</p>
+                <CardTitle className="text-lg tabular-nums">{medianLabel}</CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs text-muted-foreground">
+                {summary.medianBeyond
+                  ? "Plus de la moitié des tirages sortent de 3 σ."
+                  : "La moitié des tirages demandent au plus cette marge."}
               </CardContent>
             </Card>
           </section>
@@ -352,128 +322,147 @@ export function HistoricPanel({
           <Card>
             <CardHeader>
               <CardTitle>
-                <TitleHelp help={HELP.curve}>Couverture et combinaisons</TitleHelp>
+                <TitleHelp help={HELP.curve}>Marge mesurée, prise</TitleHelp>
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <p className="text-xs leading-5 text-muted-foreground">
-                En haut, en % : tirages retenus et part de l’univers gardée. En bas, échelle
-                logarithmique : combinaisons moyennes du rejeu, et combinaisons de l’enveloppe
-                calée sur les {sweep.studied} tirages eux-mêmes.
+                {game.inWindow < HISTORIC_HORIZON
+                  ? `L’archive filtrée a ${game.available} tirages complets. `
+                  : `${game.inWindow} tirages dans la fenêtre. `}
+                {summary.n} ont une fenêtre entière avant eux
+                {lookback === HISTORIC_AUTO ? ", choisie avant chaque tirage" : ` de ${lookback}`}.
+                La ligne horizontale est la marge annoncée ({marginLabel}).
               </p>
-              <ChartContainer config={coverageConfig} className="aspect-[16/6] w-full">
-                <LineChart data={coverageData}>
+              <ChartContainer config={errorConfig} className="aspect-[16/6] w-full">
+                <LineChart data={errorData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={1} minTickGap={8} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} minTickGap={16} />
                   <YAxis
                     tick={{ fontSize: 10 }}
-                    width={36}
-                    domain={[0, 100]}
-                    tickFormatter={(value) => `${value}`}
+                    width={32}
+                    domain={[0, 3.6]}
+                    ticks={[0, 1, 2, 3]}
                   />
                   <ChartTooltip content={<ChartTooltipContent />} />
-                  <ReferenceLine x={label} stroke="var(--foreground)" strokeDasharray="3 3" />
-                  <Line type="monotone" dataKey="rate" stroke="var(--color-rate)" dot={false} strokeWidth={1.5} />
-                  <Line type="monotone" dataKey="volume" stroke="var(--color-volume)" dot={false} strokeWidth={1.5} />
+                  <ReferenceLine y={margin} stroke="var(--foreground)" strokeDasharray="3 3" />
+                  <Line
+                    type="monotone"
+                    dataKey="required"
+                    stroke="var(--color-required)"
+                    dot={false}
+                    strokeWidth={1.5}
+                    connectNulls={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="beyond"
+                    stroke="var(--color-beyond)"
+                    strokeWidth={0}
+                    dot={{ r: 3 }}
+                    connectNulls={false}
+                    isAnimationActive={false}
+                  />
                 </LineChart>
               </ChartContainer>
-              <ChartContainer config={gridConfig} className="aspect-[16/6] w-full">
-                <LineChart data={gridData}>
+              <ChartContainer config={catchConfig} className="aspect-[16/6] w-full">
+                <LineChart data={catchData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={1} minTickGap={8} />
-                  <YAxis
-                    scale={logGrids ? "log" : "linear"}
-                    domain={logGrids ? ["auto", "auto"] : [0, "auto"]}
-                    tick={{ fontSize: 10 }}
-                    width={48}
-                    tickFormatter={(value) => formatCompactCount(Number(value))}
-                  />
+                  <YAxis tick={{ fontSize: 10 }} width={36} domain={[0, 100]} />
                   <ChartTooltip content={<ChartTooltipContent />} />
-                  <ReferenceLine x={label} stroke="var(--foreground)" strokeDasharray="3 3" />
-                  <Line type="monotone" dataKey="replay" stroke="var(--color-replay)" dot={false} strokeWidth={1.5} />
-                  <Line type="monotone" dataKey="portrait" stroke="var(--color-portrait)" dot={false} strokeWidth={1.5} />
+                  <ReferenceLine x={marginLabel} stroke="var(--foreground)" strokeDasharray="3 3" />
+                  <Line type="monotone" dataKey="rate" stroke="var(--color-rate)" dot={false} strokeWidth={1.5} />
                 </LineChart>
               </ChartContainer>
               <Disclaimer>
-                {sweep.studied < HISTORIC_HORIZON
-                  ? `L’archive filtrée a ${sweep.available} tirages complets, pas ${HISTORIC_HORIZON}. `
-                  : `${sweep.studied} tirages dans le portrait. `}
-                Rejeu sur {report.n} tirages, bandes calées sur {sweep.lookback} tirages d’avant.
-                {report.n < 30 ? " Peu de rejeux : l’écart se lit, il ne se conclut pas." : ""}
-                {sweep.separated
-                  ? ` Largeur suggérée ${formatWidth(method, sweep.points[sweep.recommendedIndex]?.width ?? report.width)} : l’écart y reste proche du maximum, avec moins de combinaisons.`
-                  : " Aucune largeur ne s’écarte nettement de la part d’univers gardée, ou l’écart ne repose pas sur assez de tirages retenus. Le curseur sert à lire le compromis."}
+                Les points au-dessus de 3 σ sont des tirages qu’aucune de ces marges ne contient.
+                La courbe du bas se lit sur l’erreur déjà mesurée : elle ne refait pas le décompte des grilles.
               </Disclaimer>
-              {sweep.separated ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="self-start"
-                  onClick={() => setPick({ key: layerKey, index: sweep.recommendedIndex })}
-                >
-                  Prendre la largeur suggérée
-                </Button>
-              ) : null}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
               <CardTitle>
-                <TitleHelp help={HELP.portrait}>Réglages à cette largeur</TitleHelp>
+                <TitleHelp help={HELP.ranks}>Paramètres qui pèsent</TitleHelp>
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              {report.portrait ? (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    Numéros · {proposalSummary("numbers", report.portrait.numbers)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Étoiles · {proposalSummary("stars", report.portrait.stars)}
-                  </p>
-                  <p className="text-xs text-muted-foreground tabular-nums">
-                    {formatCount(report.portrait.numberCount)} comb. n° × {formatCount(report.portrait.starCount)} comb. ★
-                    {" · "}
-                    {formatCount(report.portrait.grids)} grilles. Cette enveloppe contient les tirages qui l’ont définie
-                    ({formatPct(report.portrait.rate)}) : ce n’est pas le taux du rejeu ({formatPct(report.rate)}).
-                  </p>
-                </>
+            <CardContent className="overflow-x-auto">
+              {game.ranks.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Toutes les couches sont éteintes.</p>
               ) : (
-                <p className="text-sm text-muted-foreground">Aucun tirage complet à décrire.</p>
-              )}
-              <HelpWrap help={HELP.portrait}>
-                <Button type="button" disabled={!report.portrait} onClick={apply}>
-                  Appliquer ces réglages
-                </Button>
-              </HelpWrap>
-              {tally.length > 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Hors bande au rejeu :{" "}
-                  {tally
-                    .slice(0, 6)
-                    .map(([reason, count]) => `${reason} ${count}`)
-                    .join(" · ")}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">Aucun tirage hors bande à cette largeur.</p>
+                <table className="w-full min-w-[28rem] text-left text-sm">
+                  <thead>
+                    <tr className="border-b text-xs tracking-wide text-muted-foreground uppercase">
+                      <th className="py-2 pr-3 font-medium">Paramètre</th>
+                      <th className="py-2 pr-3 font-medium">|z| médian</th>
+                      <th className="py-2 pr-3 font-medium">Fois décisif</th>
+                      <th className="py-2 font-medium">Hors marge</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {game.ranks.map((rank) => (
+                      <tr key={rank.id} className="border-b border-border/60">
+                        <td className="py-2 pr-3">{rank.label}</td>
+                        <td className="py-2 pr-3 tabular-nums">{formatAbs(rank.medianAbsZ)}</td>
+                        <td className="py-2 pr-3 tabular-nums">{rank.bindingCount}</td>
+                        <td className="py-2 tabular-nums">{rank.outsideCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
             </CardContent>
           </Card>
 
           <Card>
+            <CardHeader>
+              <CardTitle>
+                <TitleHelp help={HELP.next}>Prévision du prochain tirage</TitleHelp>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {game.next ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Fenêtre {game.next.lookback}, marge {marginLabel}. Le prochain tirage n’entre pas dans le calcul.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Numéros · {proposalSummary("numbers", game.next.numbers)}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Étoiles · {proposalSummary("stars", game.next.stars)}
+                  </p>
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    {formatCount(game.next.grids)} grilles à cette marge.
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  La fenêtre demandée n’a pas assez de tirages antérieurs pour préparer le prochain.
+                </p>
+              )}
+              <HelpWrap help={HELP.next}>
+                <Button type="button" disabled={!game.next} onClick={apply}>
+                  Préparer le prochain tirage
+                </Button>
+              </HelpWrap>
+            </CardContent>
+          </Card>
+
+          <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-              <CardTitle>Tirages rejoués</CardTitle>
+              <CardTitle>Tirages notés</CardTitle>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>
                   Tous
                 </Button>
                 <Button type="button" size="sm" variant={filter === "hit" ? "default" : "outline"} onClick={() => setFilter("hit")}>
-                  Retenus
+                  Dans la marge
                 </Button>
                 <Button type="button" size="sm" variant={filter === "miss" ? "default" : "outline"} onClick={() => setFilter("miss")}>
-                  Hors bande
+                  Hors marge
                 </Button>
               </div>
             </CardHeader>
@@ -490,13 +479,15 @@ export function HistoricPanel({
                       }`}
                     >
                       <div className="flex min-w-0 flex-col gap-2">
-                        <p className="text-xs text-muted-foreground tabular-nums">{formatDrawDate(row.date)}</p>
+                        <p className="text-xs text-muted-foreground tabular-nums">
+                          {formatDrawDate(row.date)} · fenêtre {row.chosenLookback}
+                        </p>
                         <DrawBalls numbers={row.numbers} stars={row.stars} />
                       </div>
                       <p className="text-xs text-muted-foreground tabular-nums sm:text-right">
-                        {missLabel(row)}
+                        {row.hit ? "dans la marge" : "hors marge"} · {bindingCopy(row)}
                         <br />
-                        {formatCount(row.grids)} comb.
+                        erreur {formatRequired(row.requiredMargin)} · {formatCount(row.grids)} grilles
                       </p>
                     </li>
                   ))}
@@ -504,6 +495,7 @@ export function HistoricPanel({
               )}
               <Disclaimer>
                 Source {source}. Hypothèse de lecture : le tirage officiel reste uniforme sur 139 838 160 grilles.
+                Le vecteur de résidus (somme, pairs, n1–n5, étoiles) est conservé pour une vue 2D ou 3D ultérieure.
               </Disclaimer>
             </CardContent>
           </Card>

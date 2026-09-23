@@ -252,7 +252,7 @@ const TABS: AddressEntry[] = [
   tabEntry(
     "/pronostic?tab=historic",
     "Pronostic · Historique",
-    "Rejeu des 100 derniers tirages, numéros et étoiles. La largeur des bandes fait varier la couverture et le nombre de combinaisons. Lecture d’archive : la loi officielle reste uniforme.",
+    "Notation des 100 derniers tirages, un par un. La marge d’erreur est annoncée à l’avance ; on compte les grilles 5+2 qui restent. Lecture d’archive : la loi officielle reste uniforme.",
     "grilles",
     "tab=historic"
   ),
