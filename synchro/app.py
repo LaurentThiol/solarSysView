@@ -278,6 +278,18 @@ class BrainAnalogsIn(BaseModel):
     to_date: str | None = None
 
 
+class CommitteeDrawIn(BaseModel):
+    date: str = ""
+    numbers: list[int] = Field(default_factory=list)
+    stars: list[int] = Field(default_factory=list)
+    weekday: str | None = None
+
+
+class CommitteeIn(BaseModel):
+    lookback: int
+    draws: list[CommitteeDrawIn] = Field(default_factory=list, max_length=400)
+
+
 class BrainSpecialistIn(BaseModel):
     name: str
     target: str
@@ -2014,6 +2026,21 @@ def create_app() -> FastAPI:
             "report": chartisme_read_report(),
             "models": chartisme_model_availability(),
         }
+
+    @app.post("/api/pronostic/committee")
+    def pronostic_committee(payload: CommitteeIn) -> dict[str, Any]:
+        if payload.lookback not in (20, 50):
+            raise HTTPException(400, "La fenêtre du comité est 20 ou 50.")
+        from synchro.pronostic_net import run_confrontation
+
+        try:
+            report = run_confrontation(
+                [item.model_dump() for item in payload.draws],
+                payload.lookback,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"ok": True, **report}
 
     if WEB_DIR.exists():
         app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")

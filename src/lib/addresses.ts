@@ -252,7 +252,7 @@ const TABS: AddressEntry[] = [
   tabEntry(
     "/pronostic?tab=historic",
     "Pronostic · Historique",
-    "Notation des 100 derniers tirages, un par un. La marge d’erreur est annoncée à l’avance ; on compte les grilles 5+2 qui restent. Lecture d’archive : la loi officielle reste uniforme.",
+    "Notation des 100 derniers tirages, un par un. La marge d’erreur est annoncée à l’avance, ou choisie après les tirages notés. Un comité de réseaux propose une autre prévision, comparée à la moyenne. Lecture d’archive : la loi officielle reste uniforme.",
     "grilles",
     "tab=historic"
   ),
@@ -368,6 +368,14 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/brain/readings/{id}/notes", "POST", "Brain · note", "Ajouter une note à une lecture du carnet.", "assistants"),
   apiEntry("/api/brain/retrieve", "POST", "Brain · retrieve", "Recherche dans le carnet / la table épinglée.", "assistants"),
   apiEntry("/api/brain/analogs", "POST", "Brain · analogie", "Voisins (dont Jumeaux) pour une fiche.", "assistants"),
+  apiEntry(
+    "/api/pronostic/committee",
+    "POST",
+    "Comité pronostic",
+    "Onze têtes et un global sur une fenêtre de 20 ou 50 tirages d’avant. Renvoie (μ, σ) pour mardi, vendredi et le mixte mardi + vendredi. La marge k est appliquée dans l’onglet.",
+    "grilles",
+    "lookback=20|50, draws"
+  ),
   apiEntry("/api/brain/specialists", "GET · POST", "Spécialistes", "Réseaux par série : lister ou entraîner.", "assistants", "era, weekday"),
   apiEntry("/api/brain/specialists/features", "GET", "Spécialistes · traits", "Catalogue des descripteurs utilisables.", "assistants"),
   apiEntry("/api/brain/specialists/{slug}", "GET", "Un spécialiste", "Fiche, scores 20/50/100, prévision t+1.", "assistants"),

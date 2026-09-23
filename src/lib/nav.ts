@@ -120,7 +120,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Pronostic",
         help: {
           title: "Pronostic",
-          body: "Atelier : réduire l’univers 5+2 par couches et compter les solutions. Historique : noter chaque tirage passé avec une marge d’erreur annoncée à l’avance, et compter la mise en grilles. Le tirage officiel reste uniforme.",
+          body: "Atelier : réduire l’univers 5+2 par couches et compter les solutions. Historique : noter chaque tirage passé avec une marge d’erreur, compter la mise en grilles, et comparer un comité de réseaux à la moyenne. Le tirage officiel reste uniforme.",
         },
       },
       {

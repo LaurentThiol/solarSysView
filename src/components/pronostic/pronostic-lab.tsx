@@ -312,6 +312,7 @@ export function PronosticLab() {
   const router = useRouter()
   const [weekday] = useWeekdayScope()
   const { draws, source } = useDraws("all", weekday)
+  const { draws: unfiltered } = useDraws("all", "all")
   const [preset, setPreset] = useState<WindowPreset>("last_50")
   const [customFrom, setCustomFrom] = useState("")
   const [customTo, setCustomTo] = useState("")
@@ -367,6 +368,10 @@ export function PronosticLab() {
   const archive = useMemo(
     () => [...draws].sort((a, b) => a.date.localeCompare(b.date)),
     [draws]
+  )
+  const allDraws = useMemo(
+    () => [...unfiltered].sort((a, b) => a.date.localeCompare(b.date)),
+    [unfiltered]
   )
   const resolved = useMemo(() => {
     const parsedN = Number.parseInt(lastN, 10)
@@ -466,6 +471,7 @@ export function PronosticLab() {
     stars: StackState
     learn: LearnConfig
     lookback: (typeof LOOKBACKS)[number]
+    source: "mean" | "committee"
   }) {
     setNumbers(clampStack(next.numbers))
     setStars(clampStack(next.stars))
@@ -473,8 +479,9 @@ export function PronosticLab() {
     setLookback(next.lookback)
     setPool("numbers")
     const margin = next.learn.k.toLocaleString("fr-FR", { maximumFractionDigits: 2 })
+    const lead = next.source === "committee" ? "Prévision du comité appliquée" : "Prévision du prochain tirage appliquée"
     setNote(
-      `Prévision du prochain tirage appliquée : ${next.lookback} tirages d’avant, marge ${margin} σ. Ce tirage n’entre pas dans le calcul.`
+      `${lead} : ${next.lookback} tirages d’avant, marge ${margin} σ. Ce tirage n’entre pas dans le calcul.`
     )
     selectTab("atelier")
   }
@@ -578,8 +585,9 @@ export function PronosticLab() {
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
         <TitleHelp help={HELP.banner}>Pronostic</TitleHelp> pose une hypothèse
         de lecture sur l’univers 5+2. L’atelier compte les grilles restantes.
-        L’historique note chaque tirage passé avec une marge annoncée à
-        l’avance, et compte la mise en grilles. Ce n’est pas P(grille).
+        L’historique note chaque tirage passé avec une marge, compte la mise
+        en grilles, et peut comparer un comité de réseaux à la moyenne.
+        Ce n’est pas P(grille).
       </p>
       <PillTabs
         idPrefix="pronostic"
@@ -592,6 +600,7 @@ export function PronosticLab() {
         {tab === "historic" ? (
           <HistoricPanel
             draws={archive}
+            allDraws={allDraws}
             source={source}
             weekday={weekday}
             onApply={applyHistoric}

@@ -156,12 +156,12 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Pronostic par couches",
     group: "grilles",
-    text: "Atelier /pronostic : on réduit l’univers 5+2 par des couches (somme, parité des rangs n1–n5, espaces). Les couches se resserrent. Le nombre affiché est le volume restant, pas P(prochain tirage). Le proposeur lit 20/50/100/année ; un walk-forward mesure la couverture. L’onglet Historique note chaque tirage passé avec une marge annoncée à l’avance.",
+    text: "Atelier /pronostic : on réduit l’univers 5+2 par des couches (somme, parité des rangs n1–n5, espaces). Les couches se resserrent. Le nombre affiché est le volume restant, pas P(prochain tirage). Le proposeur lit 20/50/100/année ; un walk-forward mesure la couverture. L’onglet Historique note chaque tirage passé avec une marge annoncée à l’avance, et peut interroger un comité de réseaux.",
   },
   {
     term: "Historique pronostic",
     group: "grilles",
-    text: "Onglet /pronostic?tab=historic. Chaque tirage des 100 derniers est noté avec une marge d’erreur annoncée à l’avance (moyenne ± k·σ des tirages antérieurs). On lit les grilles 5+2 restantes — la mise — et l’erreur mesurée, tirage par tirage. Ce n’est pas P(prochain tirage).",
+    text: "Onglet /pronostic?tab=historic. Chaque tirage des 100 derniers est noté avec une marge d’erreur (moyenne ± k·σ des tirages antérieurs). Le comité ajoute onze têtes et un global, σ recalée, rangs remis en ordre. Deux taux automatiques : choisi après les tirages notés, et partie réellement jouée. Mardi, vendredi, et mardi + vendredi sont confrontés. Il n’y a pas de série du mercredi. Ce n’est pas P(prochain tirage).",
   },
   {
     term: "Statistique d’ordre",

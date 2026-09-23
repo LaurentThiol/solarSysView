@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
 import { Disclaimer, OverlayToggle } from "@/components/analysis/shared"
@@ -22,19 +22,26 @@ import {
   HISTORIC_HORIZON,
   HISTORIC_LOOKBACKS,
   MARGIN_STEPS,
+  chooseAutoMargin,
   formatMargin,
   formatRequired,
+  historicAutoRows,
   playHistoric,
+  playedSummary,
   prepareHistoric,
   proposalSummary,
+  summarizeAt,
   type HistoricGameRow,
   type HistoricLayers,
   type HistoricLookback,
   type HistoricLookbackChoice,
   type LearnConfig,
+  type MarginStep,
   type StackState,
 } from "@/lib/pronostic"
 import { weekdayScopeLabel, type WeekdayScope } from "@/lib/weekday-scope"
+
+import { HistoricCommittee, type CommitteePhaseState } from "@/components/pronostic/historic-committee"
 
 const HELP = {
   game: {
@@ -43,7 +50,11 @@ const HELP = {
   },
   margin: {
     title: "Marge d’erreur",
-    body: "Autour de la moyenne des tirages d’avant. 0 σ suit la moyenne arrondie : une seule valeur entière quand la moyenne tombe juste. Élargir augmente la mise. Le curseur dit, pour une règle fixée à l’avance, combien de tirages tombent dedans et combien de grilles il aurait fallu jouer.",
+    body: "Autour de la moyenne des tirages d’avant. 0 σ suit la moyenne arrondie : une seule valeur entière quand la moyenne tombe juste. Élargir augmente la mise. En manuel, le curseur est une règle fixée à l’avance. En automatique, la marge est choisie après les tirages notés : ce n’est pas une règle annoncée.",
+  },
+  mode: {
+    title: "Manuel ou automatique",
+    body: "Manuel : la marge est la vôtre, annoncée avant chaque tirage. Automatique : parmi les marges qui contiennent au moins trois tirages, on garde celle dont la mise cumulée divisée par les tirages contenus est la plus petite. Égalité : la plus étroite. S’il n’y en a pas trois, on reste à 1 σ.",
   },
   lookback: {
     title: "Tirages d’avant",
@@ -124,11 +135,13 @@ function bindingCopy(row: HistoricGameRow) {
 
 export function HistoricPanel({
   draws,
+  allDraws,
   source,
   weekday,
   onApply,
 }: {
   draws: Array<{ date: string; numbers: number[]; stars: number[] }>
+  allDraws: Array<{ date: string; numbers: number[]; stars: number[]; weekday?: string | null }>
   source: string
   weekday: WeekdayScope
   onApply: (next: {
@@ -136,14 +149,17 @@ export function HistoricPanel({
     stars: StackState
     learn: LearnConfig
     lookback: HistoricLookback
+    source: "mean" | "committee"
   }) => void
 }) {
   const [lookback, setLookback] = useState<HistoricLookbackChoice>(20)
   const [marginIndex, setMarginIndex] = useState(MARGIN_STEPS.indexOf(DEFAULT_MARGIN))
+  const [mode, setMode] = useState<"manual" | "auto">("manual")
+  const [committeeMargin, setCommitteeMargin] = useState<MarginStep | null>(null)
+  const [committeePhase, setCommitteePhase] = useState<CommitteePhaseState["phase"]>("loading")
   const [layers, setLayers] = useState<HistoricLayers>(DEFAULT_HISTORIC_LAYERS)
   const [filter, setFilter] = useState<"all" | "hit" | "miss">("all")
-  const margin = MARGIN_STEPS[Math.min(MARGIN_STEPS.length - 1, Math.max(0, marginIndex))] ?? DEFAULT_MARGIN
-  const marginLabel = formatMargin(margin)
+  const sliderMargin = MARGIN_STEPS[Math.min(MARGIN_STEPS.length - 1, Math.max(0, marginIndex))] ?? DEFAULT_MARGIN
 
   const prepared = useMemo(
     () =>
@@ -154,6 +170,21 @@ export function HistoricPanel({
       }),
     [draws, lookback, layers]
   )
+  const meanAuto = useMemo(() => {
+    if (mode !== "auto") return null
+    if (committeePhase !== "absent" && committeePhase !== "error") return null
+    const rows = historicAutoRows(prepared)
+    const postHoc = chooseAutoMargin(rows)
+    return {
+      postHoc,
+      postHocSummary: summarizeAt(rows, postHoc.margin),
+      played: playedSummary(rows),
+      fallback: postHoc.fallback,
+    }
+  }, [committeePhase, mode, prepared])
+  const margin: MarginStep =
+    mode === "auto" ? (committeeMargin ?? meanAuto?.postHoc.margin ?? sliderMargin) : sliderMargin
+  const marginLabel = formatMargin(margin)
   const game = useMemo(() => playHistoric(prepared, margin), [prepared, margin])
   const rows = useMemo(() => {
     const list =
@@ -178,8 +209,14 @@ export function HistoricPanel({
       stars: game.next.starState,
       learn: game.next.learn,
       lookback: game.next.lookback,
+      source: "mean",
     })
   }
+
+  const onCommitteeState = useCallback((state: CommitteePhaseState) => {
+    setCommitteePhase(state.phase)
+    setCommitteeMargin(state.margin)
+  }, [])
 
   const summary = game.summary
   const medianLabel = summary.medianBeyond ? "hors 3 σ" : formatRequired(summary.medianRequired)
@@ -195,20 +232,40 @@ export function HistoricPanel({
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-2">
-          <LabelHelp label={`Marge d’erreur · ${marginLabel}`} help={HELP.margin}>
+          <LabelHelp
+            label={`Marge d’erreur · ${marginLabel}${mode === "auto" && (committeeMargin != null || meanAuto) ? " · choisie après ces tirages" : ""}`}
+            help={HELP.margin}
+          >
             <input
               type="range"
               min={0}
               max={MARGIN_STEPS.length - 1}
               step={1}
-              value={MARGIN_STEPS.indexOf(margin)}
+              value={Math.max(0, MARGIN_STEPS.indexOf(margin))}
               onChange={(event) => setMarginIndex(Number(event.target.value))}
-              className="jeux-range w-full"
+              disabled={mode === "auto"}
+              className="jeux-range w-full disabled:opacity-60"
               aria-label="Marge d’erreur"
               aria-valuetext={marginLabel}
             />
           </LabelHelp>
-          <p className="text-xs text-muted-foreground">0 σ suit la moyenne arrondie.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              Marge
+              <HelpTip {...HELP.mode} />
+            </span>
+            <Button type="button" size="sm" variant={mode === "manual" ? "default" : "outline"} onClick={() => setMode("manual")}>
+              Manuel
+            </Button>
+            <Button type="button" size="sm" variant={mode === "auto" ? "default" : "outline"} onClick={() => setMode("auto")}>
+              Automatique
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {mode === "manual"
+              ? "0 σ suit la moyenne arrondie. Cette marge est annoncée avant le tirage."
+              : "Automatique choisit la marge après les tirages notés. À côté, la partie jouée fige la marge avant chaque tirage."}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -318,7 +375,23 @@ export function HistoricPanel({
               </CardContent>
             </Card>
           </section>
+        </>
+      )}
 
+      <HistoricCommittee
+        draws={allDraws}
+        weekday={weekday}
+        lookbackChoice={lookback}
+        margin={margin}
+        mode={mode}
+        layers={layers}
+        meanRates={meanAuto}
+        onApply={(next) => onApply({ ...next, source: "committee" })}
+        onState={onCommitteeState}
+      />
+
+      {summary.n === 0 ? null : (
+        <>
           <Card>
             <CardHeader>
               <CardTitle>
@@ -332,7 +405,9 @@ export function HistoricPanel({
                   : `${game.inWindow} tirages dans la fenêtre. `}
                 {summary.n} ont une fenêtre entière avant eux
                 {lookback === HISTORIC_AUTO ? ", choisie avant chaque tirage" : ` de ${lookback}`}.
-                La ligne horizontale est la marge annoncée ({marginLabel}).
+                {mode === "auto"
+                  ? ` La ligne horizontale est la marge choisie après ces tirages (${marginLabel}).`
+                  : ` La ligne horizontale est la marge annoncée (${marginLabel}).`}
               </p>
               <ChartContainer config={errorConfig} className="aspect-[16/6] w-full">
                 <LineChart data={errorData}>
