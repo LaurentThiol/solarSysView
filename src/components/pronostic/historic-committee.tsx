@@ -1,7 +1,5 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-
 import { HelpWrap, TitleHelp, type HelpCopy } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,13 +16,10 @@ import {
   committeeWindowSentence,
   confrontationSentence,
   mixWindowSentence,
-  parseCommitteePayload,
   proposalSummary,
-  scoreCommittee,
   summarizeAt,
-  type CommitteePayload,
   type CommitteeScopeId,
-  type HistoricLayers,
+  type ScoredCommittee,
   type HistoricLookbackChoice,
   type LearnConfig,
   type MarginStep,
@@ -53,19 +48,7 @@ const HELP = {
   },
 } satisfies Record<string, HelpCopy>
 
-type Phase = "loading" | "ready" | "absent" | "error"
-
-type Packet = {
-  key: string
-  status: "ready" | "absent" | "error"
-  payload?: CommitteePayload
-  message?: string
-}
-
-export type CommitteePhaseState = {
-  phase: Phase
-  margin: MarginStep | null
-}
+export type CommitteePhase = "loading" | "ready" | "absent" | "error"
 
 function formatPct(value: number) {
   return value.toLocaleString("fr-FR", { style: "percent", maximumFractionDigits: 1 })
@@ -78,7 +61,7 @@ function rateLine(summary: RateSummary) {
   } grilles`
 }
 
-function messageOf(body: unknown) {
+export function committeeErrorMessage(body: unknown) {
   if (!body || typeof body !== "object") return "Le comité n’a pas répondu."
   const raw = body as { error?: unknown; detail?: unknown }
   if (typeof raw.error === "string" && raw.error.trim()) return raw.error
@@ -87,22 +70,23 @@ function messageOf(body: unknown) {
 }
 
 export function HistoricCommittee({
-  draws,
   weekday,
   lookbackChoice,
   margin,
   mode,
-  layers,
+  phase,
+  message,
+  scored,
   meanRates,
   onApply,
-  onState,
 }: {
-  draws: Array<{ date: string; numbers: number[]; stars: number[]; weekday?: string | null }>
   weekday: WeekdayScope
   lookbackChoice: HistoricLookbackChoice
   margin: MarginStep
   mode: "manual" | "auto"
-  layers: HistoricLayers
+  phase: CommitteePhase
+  message: string | null
+  scored: ScoredCommittee | null
   meanRates: { postHocSummary: RateSummary; played: RateSummary; fallback: boolean } | null
   onApply: (next: {
     numbers: StackState
@@ -110,76 +94,10 @@ export function HistoricCommittee({
     learn: LearnConfig
     lookback: 20 | 50
   }) => void
-  onState: (state: CommitteePhaseState) => void
 }) {
   const lookback = committeeLookback(lookbackChoice)
-  const drawKey = useMemo(
-    () =>
-      draws
-        .map((draw) => `${draw.date}|${draw.weekday ?? ""}|${draw.numbers.join(".")}|${draw.stars.join(".")}`)
-        .join("\n"),
-    [draws]
-  )
-  const requestKey = `${lookback}|${drawKey}`
-  const [packet, setPacket] = useState<Packet | null>(null)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    let cancelled = false
-    const sent = draws.map((draw) => ({
-      date: draw.date,
-      numbers: draw.numbers,
-      stars: draw.stars,
-      weekday: draw.weekday ?? null,
-    }))
-    fetch("/api/pronostic/committee", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ lookback, draws: sent }),
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        const body = await response.json().catch(() => null)
-        if (cancelled) return
-        if (response.status === 503) {
-          setPacket({ key: requestKey, status: "absent" })
-          return
-        }
-        if (!response.ok) {
-          setPacket({ key: requestKey, status: "error", message: messageOf(body) })
-          return
-        }
-        const payload = parseCommitteePayload(body)
-        if (!payload) {
-          setPacket({ key: requestKey, status: "error", message: "Réponse du comité illisible." })
-          return
-        }
-        setPacket({ key: requestKey, status: "ready", payload })
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return
-        if (error instanceof DOMException && error.name === "AbortError") return
-        setPacket({ key: requestKey, status: "absent" })
-      })
-    return () => {
-      cancelled = true
-      controller.abort()
-    }
-  }, [draws, lookback, requestKey])
-
-  const scored = useMemo(() => {
-    if (!packet || packet.key !== requestKey || packet.status !== "ready" || !packet.payload) return null
-    return scoreCommittee(packet.payload, layers)
-  }, [layers, packet, requestKey])
-
   const scopeId: CommitteeScopeId = weekday === "mardi" || weekday === "vendredi" ? weekday : "mixte"
   const display = scored?.scopes[scopeId] ?? null
-  const phase: Phase = packet?.key === requestKey ? packet.status : "loading"
-  const reportedMargin = mode === "auto" && phase === "ready" && display && display.rows.length > 0 ? display.postHoc.margin : null
-
-  useEffect(() => {
-    onState({ phase, margin: reportedMargin })
-  }, [onState, phase, reportedMargin])
 
   const forecast: ScoredForecast | null = display?.forecasts.find((item) => item.margin === margin) ?? null
   const repeatsMean = Boolean(display?.next?.fellBackAll)
@@ -209,7 +127,7 @@ export function HistoricCommittee({
         <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm" role="status">
           {phase === "loading" ? COMMITTEE_LOADING : null}
           {phase === "absent" ? PYTHON_ABSENT : null}
-          {phase === "error" ? packet?.message : null}
+          {phase === "error" ? message : null}
           {phase === "ready" ? "Le comité est calculé sur les tirages d’avant seulement." : null}
         </p>
         {mixesDays ? <p className="text-sm text-muted-foreground">{mixWindowSentence(lookback)}</p> : null}
@@ -433,8 +351,8 @@ function ScopeRow({
   render,
 }: {
   label: string
-  scored: NonNullable<ReturnType<typeof scoreCommittee>>
-  render: (scope: ReturnType<typeof scoreCommittee>["scopes"][CommitteeScopeId]) => string
+  scored: ScoredCommittee
+  render: (scope: ScoredCommittee["scopes"][CommitteeScopeId]) => string
 }) {
   return (
     <tr className="border-b border-border/60">

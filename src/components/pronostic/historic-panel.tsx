@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
 import { Disclaimer, OverlayToggle } from "@/components/analysis/shared"
@@ -23,14 +23,18 @@ import {
   HISTORIC_LOOKBACKS,
   MARGIN_STEPS,
   chooseAutoMargin,
+  committeeLookback,
   formatMargin,
   formatRequired,
   historicAutoRows,
+  parseCommitteePayload,
   playHistoric,
   playedSummary,
   prepareHistoric,
   proposalSummary,
+  scoreCommittee,
   summarizeAt,
+  type CommitteePayload,
   type HistoricGameRow,
   type HistoricLayers,
   type HistoricLookback,
@@ -41,7 +45,11 @@ import {
 } from "@/lib/pronostic"
 import { weekdayScopeLabel, type WeekdayScope } from "@/lib/weekday-scope"
 
-import { HistoricCommittee, type CommitteePhaseState } from "@/components/pronostic/historic-committee"
+import {
+  HistoricCommittee,
+  committeeErrorMessage,
+  type CommitteePhase,
+} from "@/components/pronostic/historic-committee"
 
 const HELP = {
   game: {
@@ -155,10 +163,14 @@ export function HistoricPanel({
   const [lookback, setLookback] = useState<HistoricLookbackChoice>(20)
   const [marginIndex, setMarginIndex] = useState(MARGIN_STEPS.indexOf(DEFAULT_MARGIN))
   const [mode, setMode] = useState<"manual" | "auto">("manual")
-  const [committeeMargin, setCommitteeMargin] = useState<MarginStep | null>(null)
-  const [committeePhase, setCommitteePhase] = useState<CommitteePhaseState["phase"]>("loading")
   const [layers, setLayers] = useState<HistoricLayers>(DEFAULT_HISTORIC_LAYERS)
   const [filter, setFilter] = useState<"all" | "hit" | "miss">("all")
+  const [packet, setPacket] = useState<{
+    key: string
+    status: Exclude<CommitteePhase, "loading">
+    payload?: CommitteePayload
+    message?: string
+  } | null>(null)
   const sliderMargin = MARGIN_STEPS[Math.min(MARGIN_STEPS.length - 1, Math.max(0, marginIndex))] ?? DEFAULT_MARGIN
 
   const prepared = useMemo(
@@ -170,6 +182,69 @@ export function HistoricPanel({
       }),
     [draws, lookback, layers]
   )
+  const committeeWindow = committeeLookback(lookback)
+  const drawKey = useMemo(
+    () =>
+      allDraws
+        .map((draw) => `${draw.date}|${draw.weekday ?? ""}|${draw.numbers.join(".")}|${draw.stars.join(".")}`)
+        .join("\n"),
+    [allDraws]
+  )
+  const requestKey = `${committeeWindow}|${drawKey}`
+  useEffect(() => {
+    const controller = new AbortController()
+    let cancelled = false
+    const sent = allDraws.map((draw) => ({
+      date: draw.date,
+      numbers: draw.numbers,
+      stars: draw.stars,
+      weekday: draw.weekday ?? null,
+    }))
+    fetch("/api/pronostic/committee", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ lookback: committeeWindow, draws: sent }),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const body = await response.json().catch(() => null)
+        if (cancelled) return
+        if (response.status === 503) {
+          setPacket({ key: requestKey, status: "absent" })
+          return
+        }
+        if (!response.ok) {
+          setPacket({ key: requestKey, status: "error", message: committeeErrorMessage(body) })
+          return
+        }
+        const payload = parseCommitteePayload(body)
+        if (!payload) {
+          setPacket({ key: requestKey, status: "error", message: "Réponse du comité illisible." })
+          return
+        }
+        setPacket({ key: requestKey, status: "ready", payload })
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        if (error instanceof DOMException && error.name === "AbortError") return
+        setPacket({ key: requestKey, status: "absent" })
+      })
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [allDraws, committeeWindow, requestKey])
+  const scored = useMemo(() => {
+    if (!packet || packet.key !== requestKey || packet.status !== "ready" || !packet.payload) return null
+    return scoreCommittee(packet.payload, layers)
+  }, [layers, packet, requestKey])
+  const committeePhase: CommitteePhase = packet?.key === requestKey ? packet.status : "loading"
+  const scopeId = weekday === "mardi" || weekday === "vendredi" ? weekday : "mixte"
+  const displayScope = scored?.scopes[scopeId]
+  const committeeMargin =
+    mode === "auto" && committeePhase === "ready" && displayScope && displayScope.rows.length > 0
+      ? displayScope.postHoc.margin
+      : null
   const meanAuto = useMemo(() => {
     if (mode !== "auto") return null
     if (committeePhase !== "absent" && committeePhase !== "error") return null
@@ -212,11 +287,6 @@ export function HistoricPanel({
       source: "mean",
     })
   }
-
-  const onCommitteeState = useCallback((state: CommitteePhaseState) => {
-    setCommitteePhase(state.phase)
-    setCommitteeMargin(state.margin)
-  }, [])
 
   const summary = game.summary
   const medianLabel = summary.medianBeyond ? "hors 3 σ" : formatRequired(summary.medianRequired)
@@ -379,15 +449,15 @@ export function HistoricPanel({
       )}
 
       <HistoricCommittee
-        draws={allDraws}
         weekday={weekday}
         lookbackChoice={lookback}
         margin={margin}
         mode={mode}
-        layers={layers}
+        phase={committeePhase}
+        message={packet?.key === requestKey ? (packet.message ?? null) : null}
+        scored={scored}
         meanRates={meanAuto}
         onApply={(next) => onApply({ ...next, source: "committee" })}
-        onState={onCommitteeState}
       />
 
       {summary.n === 0 ? null : (
