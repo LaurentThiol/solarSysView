@@ -128,6 +128,25 @@ export {
 } from "./historic.ts"
 
 export {
+  RESIDUAL_MUTED,
+  defaultResidualPair,
+  enabledResidualAxes,
+  residualCloud,
+  residualDomain,
+  residualFill,
+  residualTicks,
+  residualGrid,
+  swapResidualAxes,
+  type ResidualAxis,
+  type ResidualCell,
+  type ResidualCloud,
+  type ResidualGrid,
+  type ResidualGridRow,
+  type ResidualPair,
+  type ResidualPoint,
+} from "./plane.ts"
+
+export {
   AUTO_MIN_HITS,
   COMMITTEE_LOADING,
   COMMITTEE_MEAN_BANNER,

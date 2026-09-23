@@ -23,6 +23,21 @@ def test_pronostic_node() -> None:
     _run_node()
 
 
+def test_pronostic_plane_node() -> None:
+    result = subprocess.run(
+        [
+            "node",
+            "--experimental-strip-types",
+            "--test",
+            str(ROOT / "tests" / "test_pronostic_plane.ts"),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def _spec(kind: str, **kwargs):
     meta_pool = 50 if kind == "numbers" else 12
     spec = {

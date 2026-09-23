@@ -53,6 +53,7 @@ import {
   committeeErrorMessage,
   type CommitteePhase,
 } from "@/components/pronostic/historic-committee"
+import { HistoricPlane } from "@/components/pronostic/historic-plane"
 
 const RANK_HELP = {
   z: {
@@ -681,6 +682,8 @@ export function HistoricPanel({
             </CardContent>
           </Card>
 
+          <HistoricPlane rows={game.rows} ranks={game.ranks} margin={margin} />
+
           <Card>
             <CardHeader>
               <CardTitle>
@@ -811,7 +814,8 @@ export function HistoricPanel({
               )}
               <Disclaimer>
                 Source {source}. Hypothèse de lecture : le tirage officiel reste uniforme sur 139 838 160 grilles.
-                Le vecteur de résidus (somme, pairs, n1–n5, étoiles) est conservé pour une vue 2D ou 3D ultérieure.
+                Le plan des résidus et la grille lisent le vecteur z de chaque tirage noté : (réel − moyenne des
+                tirages d’avant) / σ.
               </Disclaimer>
             </CardContent>
           </Card>
