@@ -9,6 +9,7 @@ import {
   COMMITTEE_API_LATE,
   committeeApiDown,
   committeeErrorMessage,
+  committeeHeads,
   committeeLookback,
   committeeRequestDraws,
   confrontationSentence,
@@ -138,6 +139,41 @@ test("committee lookback collapses auto and 100 onto 20", () => {
   assert.equal(committeeLookback("auto"), 20)
 })
 
+test("committee heads keep a network only when it beat the mean", () => {
+  const axes = axesOf([2, 8, 16, 28, 40], [3, 9]).map((axis, index) => ({
+    ...axis,
+    fellBack: index !== 0,
+    mu: index === 0 ? 90 : axis.mu,
+    sigma: 4,
+  }))
+  const rowAxes = axesOf([2, 8, 16, 28, 40], [3, 9]).map((axis, index) => ({
+    ...axis,
+    fellBack: index !== 0,
+  }))
+  const scope = {
+    available: 2,
+    rows: [
+      {
+        date: "2026-01-01",
+        fellBackAll: false,
+        numbers: [2, 8, 16, 28, 40],
+        stars: [3, 9],
+        axes: rowAxes,
+      },
+    ],
+    next: { fellBackAll: false, axes },
+  }
+  const heads = committeeHeads(scope)
+  assert.equal(heads.length, 11)
+  assert.equal(heads[0]?.label, "somme")
+  assert.equal(heads[0]?.fellBack, false)
+  assert.equal(heads[0]?.kept, 1)
+  assert.equal(heads[0]?.scored, 1)
+  assert.equal(heads[1]?.fellBack, true)
+  assert.equal(heads[1]?.kept, 0)
+  assert.equal(committeeHeads({ available: 0, rows: [], next: null }).length, 0)
+})
+
 test("parser rejects a payload that is not the committee", () => {
   assert.equal(parseCommitteePayload({ ok: false }), null)
   assert.equal(parseCommitteePayload({ ok: true, lookback: 100, scopes: {} }), null)
@@ -159,6 +195,8 @@ test("historic tab names both automatic rates and the absent python banner", () 
   assert.match(committee, /COMMITTEE_MEAN_BANNER/)
   assert.match(committee, /mixWindowSentence/)
   assert.match(panel, /committeeApiDown/)
+  assert.match(committee, /Têtes/)
+  assert.match(committee, /réseau/)
   assert.match(logic, /Python est absent/)
   assert.match(logic, /Le comité reprend la moyenne/)
   assert.match(logic, /mélange les mardis et les vendredis/)

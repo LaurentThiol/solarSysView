@@ -5,6 +5,7 @@ k n’entre pas ici. Le navigateur applique la marge sur les (μ, σ) renvoyés.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import numpy as np
@@ -369,7 +370,7 @@ def run_scope(
     draws: list[dict[str, Any]],
     lookback: int,
     *,
-    epochs: int = 16,
+    epochs: int = 8,
     seed: int = 0,
 ) -> dict[str, Any]:
     """Walk-forward sur une série déjà filtrée. lookback tirages strictement avant t."""
@@ -401,7 +402,9 @@ def run_scope(
         gated_sigma = baseline_sigma.copy()
         fell_back = [True] * N_AXES
         for axis in range(N_AXES):
-            train_idx = list(range(window, t))
+            # La fenêtre du comité, pas toute l’archive : sinon chaque tirage
+            # réapprend des milliers de lignes et la requête expire.
+            train_idx = list(range(max(window, t - window), t))
             y = values[train_idx, axis] if train_idx else np.zeros(0)
             used_net = False
             pred_mu = float(baseline_mu[axis])
@@ -450,8 +453,8 @@ def run_scope(
         else:
             if len(global_x) >= MIN_GLOBAL:
                 g_mu, g_sigma = _fit_predict_global(
-                    np.vstack(global_x),
-                    np.vstack(global_y),
+                    np.vstack(global_x[-window:]),
+                    np.vstack(global_y[-window:]),
                     g_input,
                     epochs,
                     seed + 1000 + window,
@@ -463,7 +466,11 @@ def run_scope(
                 work_sigma = gated_sigma
             emitted_mu = np.asarray(project_moments(work_mu.tolist(), work_sigma.tolist()), dtype=float)
             raw_sigma = work_sigma
-            scales = _scale_from_history(history_mu, history_sigma, history_actual)
+            scales = _scale_from_history(
+                history_mu[-window:],
+                history_sigma[-window:],
+                history_actual[-window:],
+            )
             shown_sigma = raw_sigma * scales
         history_mu.append(emitted_mu.copy())
         history_sigma.append(raw_sigma.copy())
@@ -498,8 +505,8 @@ def run_scope(
     else:
         if len(global_x) >= MIN_GLOBAL:
             g_mu, g_sigma = _fit_predict_global(
-                np.vstack(global_x),
-                np.vstack(global_y),
+                np.vstack(global_x[-window:]),
+                np.vstack(global_y[-window:]),
                 next_input,
                 epochs,
                 seed + 1000 + window,
@@ -510,7 +517,11 @@ def run_scope(
             work_mu = next_mu
             work_sigma = next_sigma
         emitted_mu = np.asarray(project_moments(work_mu.tolist(), work_sigma.tolist()), dtype=float)
-        scales = _scale_from_history(history_mu, history_sigma, history_actual)
+        scales = _scale_from_history(
+            history_mu[-window:],
+            history_sigma[-window:],
+            history_actual[-window:],
+        )
         shown_sigma = work_sigma * scales
     return {
         "available": n,
@@ -533,22 +544,28 @@ def run_confrontation(
     draws: list[Any],
     lookback: int,
     *,
-    epochs: int = 16,
+    epochs: int = 8,
     seed: int = 0,
 ) -> dict[str, Any]:
     """Trois séries : mixte (mardi + vendredi), mardi seul, vendredi seul.
 
     Un tirage sans jour ne compte que dans le mixte. Il n’y a pas de série du mercredi.
+    Chaque tête et le global ne s’ajustent que sur les `lookback` situations d’avant.
     """
+    started = time.perf_counter()
     cleaned = _normalize_draws(draws)
     scopes = {
         "mixte": cleaned,
         "mardi": [draw for draw in cleaned if draw["weekday"] == "mardi"],
         "vendredi": [draw for draw in cleaned if draw["weekday"] == "vendredi"],
     }
+    fitted = {
+        name: run_scope(series, lookback, epochs=epochs, seed=seed) for name, series in scopes.items()
+    }
     return {
         "lookback": int(lookback),
-        "scopes": {
-            name: run_scope(series, lookback, epochs=epochs, seed=seed) for name, series in scopes.items()
-        },
+        "draws": len(cleaned),
+        "trainCap": int(lookback),
+        "elapsedMs": int(round((time.perf_counter() - started) * 1000)),
+        "scopes": fitted,
     }

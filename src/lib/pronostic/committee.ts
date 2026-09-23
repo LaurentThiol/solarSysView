@@ -137,6 +137,9 @@ export type CommitteeScopePayload = {
 export type CommitteePayload = {
   ok: boolean
   lookback: 20 | 50
+  draws?: number
+  trainCap?: number
+  elapsedMs?: number
   scopes: Record<CommitteeScopeId, CommitteeScopePayload>
 }
 
@@ -370,7 +373,53 @@ export function parseCommitteePayload(value: unknown): CommitteePayload | null {
     if (!scope) return null
     parsed[id] = scope
   }
-  return { ok: true, lookback: raw.lookback, scopes: parsed }
+  const draws = finite(raw.draws, Number.NaN)
+  const trainCap = finite(raw.trainCap, Number.NaN)
+  const elapsedMs = finite(raw.elapsedMs, Number.NaN)
+  return {
+    ok: true,
+    lookback: raw.lookback,
+    draws: Number.isFinite(draws) ? draws : undefined,
+    trainCap: Number.isFinite(trainCap) ? trainCap : undefined,
+    elapsedMs: Number.isFinite(elapsedMs) ? elapsedMs : undefined,
+    scopes: parsed,
+  }
+}
+
+export type CommitteeHeadLine = {
+  id: ErrorAxisId
+  label: string
+  fellBack: boolean
+  mu: number
+  sigma: number
+  baselineMu: number
+  baselineSigma: number
+  kept: number
+  scored: number
+}
+
+/** Ce que chaque tête a fait : reprise de la moyenne, ou réseau gardé. */
+export function committeeHeads(scope: CommitteeScopePayload | null | undefined): CommitteeHeadLine[] {
+  if (!scope?.next) return []
+  return ERROR_AXES.map((spec) => {
+    const next = scope.next?.axes.find((axis) => axis.id === spec.id)
+    let kept = 0
+    for (const row of scope.rows) {
+      const axis = row.axes.find((item) => item.id === spec.id)
+      if (axis && !axis.fellBack) kept += 1
+    }
+    return {
+      id: spec.id,
+      label: spec.label,
+      fellBack: next?.fellBack !== false,
+      mu: next?.mu ?? 0,
+      sigma: next?.sigma ?? 0,
+      baselineMu: next?.baselineMu ?? 0,
+      baselineSigma: next?.baselineSigma ?? 0,
+      kept,
+      scored: scope.rows.length,
+    }
+  })
 }
 
 function axisById(axes: CommitteeAxis[]) {

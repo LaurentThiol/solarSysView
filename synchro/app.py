@@ -2029,9 +2029,11 @@ def create_app() -> FastAPI:
 
         try:
             lookback, draws = parse_committee_request(payload)
-            report = run_confrontation(draws, lookback)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        from starlette.concurrency import run_in_threadpool
+
+        report = await run_in_threadpool(run_confrontation, draws, lookback)
         return {"ok": True, **report}
 
     if WEB_DIR.exists():

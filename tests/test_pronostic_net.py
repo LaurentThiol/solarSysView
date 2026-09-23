@@ -121,6 +121,40 @@ def test_committee_route_accepts_a_long_archive_and_skips_a_bad_draw() -> None:
     assert mixed.json()["scopes"]["mixte"]["available"] == 3
 
 
+def test_fit_stays_inside_the_lookback_window() -> None:
+    from unittest.mock import patch
+
+    from synchro.pronostic_net import committee as committee_mod
+
+    seen: list[int] = []
+    real_axis = committee_mod._fit_predict_axis
+    real_global = committee_mod._fit_predict_global
+
+    def axis(x, y, query, epochs, seed):
+        seen.append(int(y.shape[0]))
+        return real_axis(x, y, query, epochs, seed)
+
+    def global_fit(x, y, query, epochs, seed):
+        seen.append(int(y.shape[0]))
+        return real_global(x, y, query, epochs, seed)
+
+    draws = []
+    for i in range(80):
+        shift = i % 5
+        draws.append(
+            _draw(i, [1 + shift, 8, 15, 22, 30], [1 + (i % 3), 6], "mardi" if i % 2 == 0 else "vendredi")
+        )
+    with (
+        patch.object(committee_mod, "_fit_predict_axis", side_effect=axis),
+        patch.object(committee_mod, "_fit_predict_global", side_effect=global_fit),
+    ):
+        report = committee_mod.run_scope(draws, 20, epochs=1, seed=0)
+    assert seen
+    assert max(seen) <= 20
+    assert report["available"] == 80
+    assert len(report["rows"]) == 60
+
+
 def test_committee_route_rejects_a_foreign_window_and_scores_twenty() -> None:
     app = create_app()
     client = TestClient(app)

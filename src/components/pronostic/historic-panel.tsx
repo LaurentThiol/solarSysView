@@ -24,6 +24,7 @@ import {
   MARGIN_STEPS,
   chooseAutoMargin,
   committeeApiDown,
+  committeeHeads,
   committeeLookback,
   committeeRequestDraws,
   formatMargin,
@@ -192,6 +193,7 @@ export function HistoricPanel({
         .join("\n"),
     [allDraws]
   )
+  const requestedDraws = useMemo(() => committeeRequestDraws(allDraws).length, [allDraws])
   const requestKey = `${committeeWindow}|${drawKey}`
   useEffect(() => {
     const controller = new AbortController()
@@ -261,6 +263,10 @@ export function HistoricPanel({
   const committeePhase: CommitteePhase = packet?.key === requestKey ? packet.status : "loading"
   const scopeId = weekday === "mardi" || weekday === "vendredi" ? weekday : "mixte"
   const displayScope = scored?.scopes[scopeId]
+  const heads = useMemo(() => {
+    if (!packet || packet.key !== requestKey || packet.status !== "ready" || !packet.payload) return []
+    return committeeHeads(packet.payload.scopes[scopeId])
+  }, [packet, requestKey, scopeId])
   const committeeMargin =
     mode === "auto" && committeePhase === "ready" && displayScope && displayScope.rows.length > 0
       ? displayScope.postHoc.margin
@@ -475,6 +481,17 @@ export function HistoricPanel({
         mode={mode}
         phase={committeePhase}
         message={packet?.key === requestKey ? (packet.message ?? null) : null}
+        requestedDraws={requestedDraws}
+        heads={heads}
+        run={
+          packet?.key === requestKey && packet.status === "ready" && packet.payload
+            ? {
+                draws: packet.payload.draws,
+                trainCap: packet.payload.trainCap,
+                elapsedMs: packet.payload.elapsedMs,
+              }
+            : null
+        }
         scored={scored}
         meanRates={meanAuto}
         onApply={(next) => onApply({ ...next, source: "committee" })}
