@@ -9,6 +9,7 @@ import { SiteHeaderSlot } from "@/components/site-header-slot"
 import { useRegisterCapture } from "@/components/capture"
 import { BouncingPanel } from "@/components/bouncing-panel"
 import { DrawChart } from "@/components/draw-chart"
+import { EvolutionDelta } from "@/components/evolution-delta"
 import { EvolutionGains } from "@/components/evolution-gains"
 import { EvolutionHeat } from "@/components/evolution-heat"
 import { EvolutionParity } from "@/components/evolution-parity"
@@ -455,6 +456,8 @@ function EvolutionContent() {
         </PillTabPanel>
       </section>
 
+      <EvolutionDelta draws={filtered} />
+
       <ChartDrawProvider host="gains">
         <GainsSketchBridge onSketches={setGainsSketches} />
         <EvolutionGains draws={filtered} history={archive} />
@@ -525,9 +528,9 @@ function EvolutionContent() {
 
       <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
         Chaque tirage est indépendant. Les fréquences, la SMA, les bandes de
-        Bollinger, le cumul pair/impair, les totaux de gagnants, la longueur de
-        report et la masse empilée décrivent la fenêtre choisie, elles ne
-        prédisent pas le prochain tirage.
+        Bollinger, les écarts n − n−1, le cumul pair/impair, les totaux de
+        gagnants, la longueur de report et la masse empilée décrivent la fenêtre
+        choisie, elles ne prédisent pas le prochain tirage.
       </p>
     </div>
   )
