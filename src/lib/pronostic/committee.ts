@@ -33,6 +33,10 @@ export const PYTHON_ABSENT =
 
 export const COMMITTEE_LOADING = "Comité en cours de calcul."
 
+export const COMMITTEE_OFF = "Calcul arrêté. La page reste disponible : allumez le calcul pour lancer le comité."
+
+export const COMMITTEE_SCORING = "Décompte des grilles du comité, par petites étapes."
+
 export const COMMITTEE_MEAN_BANNER = "Le comité reprend la moyenne."
 
 export const COMMITTEE_NO_REPLY = "Le comité n’a pas répondu."
@@ -505,32 +509,38 @@ function cellAt(
   return { margin: k, hit: numberHit && starHit, grids }
 }
 
-function scoreScope(scope: CommitteeScopePayload, layers: HistoricLayers, cache: Map<string, number>): ScoredScope {
-  const rows: ScoredCommitteeRow[] = scope.rows.map((row) => ({
+type ScoreJob =
+  | {
+      kind: "cell"
+      scope: CommitteeScopeId
+      row: number
+      margin: MarginStep
+      source: "committee" | "baseline"
+    }
+  | { kind: "forecast"; scope: CommitteeScopeId; margin: MarginStep }
+
+export type CommitteeScorer = {
+  /** Une bande. `true` quand les trois séries sont notées. */
+  step(): boolean
+  result(): ScoredCommittee | null
+}
+
+function blankRow(row: CommitteeMomentRow): ScoredCommitteeRow {
+  return {
     date: row.date,
     fellBackAll: row.fellBackAll,
     numbers: row.numbers,
     stars: row.stars,
-    cells: MARGIN_STEPS.map((margin) => cellAt(cache, row.axes, margin, layers, "committee")),
-    baseline: MARGIN_STEPS.map((margin) => cellAt(cache, row.axes, margin, layers, "baseline")),
-  }))
-  const forecasts: ScoredForecast[] = []
-  if (scope.next) {
-    for (const margin of MARGIN_STEPS) {
-      const numbers = proposalFromAxes(scope.next.axes, "numbers", margin, "committee")
-      const stars = proposalFromAxes(scope.next.axes, "stars", margin, "committee")
-      const numberState = constrainedStack("numbers", numbers, layers)
-      const starState = constrainedStack("stars", stars, layers)
-      forecasts.push({
-        margin,
-        numbers,
-        stars,
-        numberState,
-        starState,
-        grids: countCached(cache, numberState) * countCached(cache, starState),
-      })
-    }
+    cells: [],
+    baseline: [],
   }
+}
+
+function finishScope(
+  scope: CommitteeScopePayload,
+  rows: ScoredCommitteeRow[],
+  forecasts: ScoredForecast[]
+): ScoredScope {
   const postHoc = chooseAutoMargin(rows)
   return {
     available: scope.available,
@@ -543,16 +553,89 @@ function scoreScope(scope: CommitteeScopePayload, layers: HistoricLayers, cache:
   }
 }
 
-export function scoreCommittee(payload: CommitteePayload, layers: HistoricLayers): ScoredCommittee {
+/** Le décompte des grilles se fait une bande à la fois, pour ne pas figer le navigateur. */
+export function createCommitteeScorer(payload: CommitteePayload, layers: HistoricLayers): CommitteeScorer {
   const cache = new Map<string, number>()
+  const rows: Record<CommitteeScopeId, ScoredCommitteeRow[]> = {
+    mixte: payload.scopes.mixte.rows.map(blankRow),
+    mardi: payload.scopes.mardi.rows.map(blankRow),
+    vendredi: payload.scopes.vendredi.rows.map(blankRow),
+  }
+  const forecasts: Record<CommitteeScopeId, ScoredForecast[]> = {
+    mixte: [],
+    mardi: [],
+    vendredi: [],
+  }
+  const jobs: ScoreJob[] = []
+  for (const scope of COMMITTEE_SCOPES) {
+    payload.scopes[scope].rows.forEach((_, row) => {
+      for (const margin of MARGIN_STEPS) {
+        jobs.push({ kind: "cell", scope, row, margin, source: "committee" })
+        jobs.push({ kind: "cell", scope, row, margin, source: "baseline" })
+      }
+    })
+    if (payload.scopes[scope].next) {
+      for (const margin of MARGIN_STEPS) jobs.push({ kind: "forecast", scope, margin })
+    }
+  }
+  let cursor = 0
+  let done: ScoredCommittee | null = null
+
   return {
-    lookback: payload.lookback,
-    scopes: {
-      mixte: scoreScope(payload.scopes.mixte, layers, cache),
-      mardi: scoreScope(payload.scopes.mardi, layers, cache),
-      vendredi: scoreScope(payload.scopes.vendredi, layers, cache),
+    step() {
+      if (done) return true
+      if (cursor < jobs.length) {
+        const job = jobs[cursor]
+        cursor += 1
+        if (job.kind === "cell") {
+          const source = payload.scopes[job.scope].rows[job.row]
+          const cell = cellAt(cache, source.axes, job.margin, layers, job.source)
+          const target = rows[job.scope][job.row]
+          if (job.source === "committee") target.cells.push(cell)
+          else target.baseline.push(cell)
+        } else {
+          const next = payload.scopes[job.scope].next
+          if (next) {
+            const numbers = proposalFromAxes(next.axes, "numbers", job.margin, "committee")
+            const stars = proposalFromAxes(next.axes, "stars", job.margin, "committee")
+            const numberState = constrainedStack("numbers", numbers, layers)
+            const starState = constrainedStack("stars", stars, layers)
+            forecasts[job.scope].push({
+              margin: job.margin,
+              numbers,
+              stars,
+              numberState,
+              starState,
+              grids: countCached(cache, numberState) * countCached(cache, starState),
+            })
+          }
+        }
+        if (cursor < jobs.length) return false
+      }
+      done = {
+        lookback: payload.lookback,
+        scopes: {
+          mixte: finishScope(payload.scopes.mixte, rows.mixte, forecasts.mixte),
+          mardi: finishScope(payload.scopes.mardi, rows.mardi, forecasts.mardi),
+          vendredi: finishScope(payload.scopes.vendredi, rows.vendredi, forecasts.vendredi),
+        },
+      }
+      return true
+    },
+    result() {
+      return done
     },
   }
+}
+
+export function scoreCommittee(payload: CommitteePayload, layers: HistoricLayers): ScoredCommittee {
+  const scorer = createCommitteeScorer(payload, layers)
+  while (!scorer.step()) {
+    /* le fil de test n’a pas à rendre la main */
+  }
+  const scored = scorer.result()
+  if (!scored) throw new Error("comité incomplet")
+  return scored
 }
 
 export function baselineSummary(scope: ScoredScope, margin: MarginStep): RateSummary {

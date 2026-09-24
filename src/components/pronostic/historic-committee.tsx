@@ -9,6 +9,8 @@ import { formatCompactCount } from "@/lib/gains"
 import { formatCount } from "@/lib/jeux"
 import {
   COMMITTEE_LOADING,
+  COMMITTEE_OFF,
+  COMMITTEE_SCORING,
   COMMITTEE_MEAN_BANNER,
   COMMITTEE_SCOPE_LABEL,
   COMMITTEE_SCOPES,
@@ -148,7 +150,7 @@ const HELP = {
   },
 } satisfies Record<string, HelpCopy>
 
-export type CommitteePhase = "loading" | "ready" | "absent" | "error"
+export type CommitteePhase = "off" | "loading" | "scoring" | "ready" | "absent" | "error"
 
 function readySentence(run: { draws?: number; trainCap?: number; elapsedMs?: number; workers?: number } | null) {
   const parts = ["Le comité est calculé sur les tirages d’avant seulement."]
@@ -180,6 +182,8 @@ function rateLine(summary: RateSummary) {
 export { committeeErrorMessage }
 
 export function HistoricCommittee({
+  enabled,
+  onEnabledChange,
   weekday,
   lookbackChoice,
   margin,
@@ -193,6 +197,8 @@ export function HistoricCommittee({
   meanRates,
   onApply,
 }: {
+  enabled: boolean
+  onEnabledChange: (next: boolean) => void
   weekday: WeekdayScope
   lookbackChoice: HistoricLookbackChoice
   margin: MarginStep
@@ -246,13 +252,23 @@ export function HistoricCommittee({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
         <CardTitle>
           <TitleHelp help={HELP.zone}>Comité</TitleHelp>
         </CardTitle>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Calcul du comité">
+          <Button type="button" size="sm" variant={enabled ? "outline" : "default"} onClick={() => onEnabledChange(false)} aria-pressed={!enabled}>
+            OFF
+          </Button>
+          <Button type="button" size="sm" variant={enabled ? "default" : "outline"} onClick={() => onEnabledChange(true)} aria-pressed={enabled}>
+            ON
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm" role="status">
+          {phase === "off" ? <p>{COMMITTEE_OFF}</p> : null}
+          {phase === "scoring" ? <p>{COMMITTEE_SCORING}</p> : null}
           {phase === "loading" ? (
             <div className="flex flex-col gap-2">
               <p>

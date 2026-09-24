@@ -475,139 +475,170 @@ function learnAt(margin: MarginStep): LearnConfig {
   return { method: "mean_std", k: margin, percentile: 5 }
 }
 
-export function playHistoric(prepared: HistoricPrepared, margin: number): HistoricGame {
+export type HistoricPlayer = {
+  /** Une mise. `true` quand la partie est complète. */
+  step(): boolean
+  result(): HistoricGame | null
+}
+
+/** Décompte des mises par tirage, pour laisser le fil du navigateur respirer. */
+export function createHistoricPlayer(prepared: HistoricPrepared, margin: number): HistoricPlayer {
   const snapped = snapMargin(margin)
   const config = learnAt(snapped)
   const layers = prepared.layers
   const rows: HistoricGameRow[] = []
+  let cursor = 0
   let hits = 0
   let numberHits = 0
   let starHits = 0
   let totalGrids = 0
-  for (const row of prepared.rows) {
-    const from = row.index - row.chosenLookback
-    const train = prepared.paired.slice(from, row.index)
-    const numbers = proposeStack(
-      "numbers",
-      train.map((item) => item.numberPoint),
-      config
-    )
-    const stars = proposeStack(
-      "stars",
-      train.map((item) => item.starPoint),
-      config
-    )
-    const sample = prepared.paired[row.index]
-    const numberHit = coversPoint(sample.numberPoint, numbers, layers)
-    const starHit = coversPoint(sample.starPoint, stars, layers)
-    const grids =
-      countCached(prepared.cache, constrainedStack("numbers", numbers, layers)) *
-      countCached(prepared.cache, constrainedStack("stars", stars, layers))
-    const hit = numberHit && starHit
-    if (hit) hits += 1
-    if (numberHit) numberHits += 1
-    if (starHit) starHits += 1
-    totalGrids += grids
-    rows.push({
-      date: row.date,
-      numbers: row.numbers,
-      stars: row.stars,
-      chosenLookback: row.chosenLookback,
-      axes: row.axes,
-      requiredMargin: row.requiredMargin,
-      binding: row.binding,
-      hit,
-      numberHit,
-      starHit,
-      grids,
-      vector: row.vector,
-    })
-  }
-  const n = rows.length
-  const meanGrids = n > 0 ? totalGrids / n : null
-  const median = medianRank(rows.map((row) => row.requiredMargin))
-  const medianBeyond = median != null && !Number.isFinite(median)
-  const ranks: ParameterRank[] = ERROR_AXES.filter((axis) => layers[axis.layer]).map((axis) => {
-    const abs: number[] = []
-    let bindingCount = 0
-    let outsideCount = 0
-    for (const row of rows) {
-      const reading = row.axes.find((item) => item.id === axis.id)
-      if (!reading) continue
-      if (reading.z != null) abs.push(Math.abs(reading.z))
-      if (row.binding === axis.id) bindingCount += 1
-      if (reading.required == null || reading.required > snapped) outsideCount += 1
-    }
-    return {
-      id: axis.id,
-      label: axis.label,
-      medianAbsZ: medianNumbers(abs),
-      bindingCount,
-      outsideCount,
-    }
-  })
-  ranks.sort(
-    (a, b) =>
-      b.bindingCount - a.bindingCount ||
-      b.outsideCount - a.outsideCount ||
-      (b.medianAbsZ ?? -1) - (a.medianAbsZ ?? -1) ||
-      a.label.localeCompare(b.label, "fr")
-  )
-  const curve: CatchPoint[] = MARGIN_STEPS.map((step) => {
-    const caught = rows.filter((row) => row.requiredMargin != null && row.requiredMargin <= step).length
-    return { margin: step, caught, rate: n > 0 ? caught / n : 0 }
-  })
-  let next: NextForecast | null = null
-  if (prepared.nextLookback != null && prepared.paired.length >= prepared.nextLookback) {
-    const train = prepared.paired.slice(-prepared.nextLookback)
-    const numbers = proposeStack(
-      "numbers",
-      train.map((item) => item.numberPoint),
-      config
-    )
-    const stars = proposeStack(
-      "stars",
-      train.map((item) => item.starPoint),
-      config
-    )
-    const numberState = constrainedStack("numbers", numbers, layers)
-    const starState = constrainedStack("stars", stars, layers)
-    next = {
-      lookback: prepared.nextLookback,
-      learn: config,
-      numbers,
-      stars,
-      numberState,
-      starState,
-      grids:
-        countCached(prepared.cache, numberState) * countCached(prepared.cache, starState),
-    }
-  }
+  let done: HistoricGame | null = null
+
   return {
-    horizon: prepared.horizon,
-    available: prepared.available,
-    inWindow: prepared.inWindow,
-    lookback: prepared.lookback,
-    margin: snapped,
-    layers,
-    rows,
-    summary: {
-      n,
-      hits,
-      rate: n > 0 ? hits / n : 0,
-      numberHits,
-      starHits,
-      meanGrids,
-      totalGrids: n > 0 ? totalGrids : null,
-      gridsPerHit: hits > 0 ? totalGrids / hits : null,
-      meanVolume: meanGrids == null || !TOTAL_GRIDS ? null : meanGrids / TOTAL_GRIDS,
-      medianRequired: median == null || medianBeyond ? null : median,
-      medianBeyond,
+    step() {
+      if (done) return true
+      if (cursor < prepared.rows.length) {
+        const row = prepared.rows[cursor]
+        cursor += 1
+        const from = row.index - row.chosenLookback
+        const train = prepared.paired.slice(from, row.index)
+        const numbers = proposeStack(
+          "numbers",
+          train.map((item) => item.numberPoint),
+          config
+        )
+        const stars = proposeStack(
+          "stars",
+          train.map((item) => item.starPoint),
+          config
+        )
+        const sample = prepared.paired[row.index]
+        const numberHit = coversPoint(sample.numberPoint, numbers, layers)
+        const starHit = coversPoint(sample.starPoint, stars, layers)
+        const grids =
+          countCached(prepared.cache, constrainedStack("numbers", numbers, layers)) *
+          countCached(prepared.cache, constrainedStack("stars", stars, layers))
+        const hit = numberHit && starHit
+        if (hit) hits += 1
+        if (numberHit) numberHits += 1
+        if (starHit) starHits += 1
+        totalGrids += grids
+        rows.push({
+          date: row.date,
+          numbers: row.numbers,
+          stars: row.stars,
+          chosenLookback: row.chosenLookback,
+          axes: row.axes,
+          requiredMargin: row.requiredMargin,
+          binding: row.binding,
+          hit,
+          numberHit,
+          starHit,
+          grids,
+          vector: row.vector,
+        })
+        if (cursor < prepared.rows.length) return false
+      }
+      const n = rows.length
+      const meanGrids = n > 0 ? totalGrids / n : null
+      const median = medianRank(rows.map((row) => row.requiredMargin))
+      const medianBeyond = median != null && !Number.isFinite(median)
+      const ranks: ParameterRank[] = ERROR_AXES.filter((axis) => layers[axis.layer]).map((axis) => {
+        const abs: number[] = []
+        let bindingCount = 0
+        let outsideCount = 0
+        for (const row of rows) {
+          const reading = row.axes.find((item) => item.id === axis.id)
+          if (!reading) continue
+          if (reading.z != null) abs.push(Math.abs(reading.z))
+          if (row.binding === axis.id) bindingCount += 1
+          if (reading.required == null || reading.required > snapped) outsideCount += 1
+        }
+        return {
+          id: axis.id,
+          label: axis.label,
+          medianAbsZ: medianNumbers(abs),
+          bindingCount,
+          outsideCount,
+        }
+      })
+      ranks.sort(
+        (a, b) =>
+          b.bindingCount - a.bindingCount ||
+          b.outsideCount - a.outsideCount ||
+          (b.medianAbsZ ?? -1) - (a.medianAbsZ ?? -1) ||
+          a.label.localeCompare(b.label, "fr")
+      )
+      const curve: CatchPoint[] = MARGIN_STEPS.map((step) => {
+        const caught = rows.filter((row) => row.requiredMargin != null && row.requiredMargin <= step).length
+        return { margin: step, caught, rate: n > 0 ? caught / n : 0 }
+      })
+      let next: NextForecast | null = null
+      if (prepared.nextLookback != null && prepared.paired.length >= prepared.nextLookback) {
+        const train = prepared.paired.slice(-prepared.nextLookback)
+        const numbers = proposeStack(
+          "numbers",
+          train.map((item) => item.numberPoint),
+          config
+        )
+        const stars = proposeStack(
+          "stars",
+          train.map((item) => item.starPoint),
+          config
+        )
+        const numberState = constrainedStack("numbers", numbers, layers)
+        const starState = constrainedStack("stars", stars, layers)
+        next = {
+          lookback: prepared.nextLookback,
+          learn: config,
+          numbers,
+          stars,
+          numberState,
+          starState,
+          grids: countCached(prepared.cache, numberState) * countCached(prepared.cache, starState),
+        }
+      }
+      done = {
+        horizon: prepared.horizon,
+        available: prepared.available,
+        inWindow: prepared.inWindow,
+        lookback: prepared.lookback,
+        margin: snapped,
+        layers,
+        rows,
+        summary: {
+          n,
+          hits,
+          rate: n > 0 ? hits / n : 0,
+          numberHits,
+          starHits,
+          meanGrids,
+          totalGrids: n > 0 ? totalGrids : null,
+          gridsPerHit: hits > 0 ? totalGrids / hits : null,
+          meanVolume: meanGrids == null || !TOTAL_GRIDS ? null : meanGrids / TOTAL_GRIDS,
+          medianRequired: median == null || medianBeyond ? null : median,
+          medianBeyond,
+        },
+        ranks,
+        curve,
+        next,
+      }
+      return true
     },
-    ranks,
-    curve,
-    next,
+    result() {
+      return done
+    },
   }
+}
+
+export function playHistoric(prepared: HistoricPrepared, margin: number): HistoricGame {
+  const player = createHistoricPlayer(prepared, margin)
+  while (!player.step()) {
+    /* le fil de test n’a pas à rendre la main */
+  }
+  const game = player.result()
+  if (!game) throw new Error("partie historique incomplète")
+  return game
 }
 
 export function historicGame(

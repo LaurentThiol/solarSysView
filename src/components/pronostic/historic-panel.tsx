@@ -23,21 +23,24 @@ import {
   HISTORIC_LOOKBACKS,
   MARGIN_STEPS,
   chooseAutoMargin,
+  COMMITTEE_OFF,
   committeeApiDown,
   committeeHeads,
   committeeLookback,
+  createCommitteeScorer,
+  createHistoricPlayer,
   committeeRequestDraws,
   formatMargin,
   formatRequired,
   historicAutoRows,
   parseCommitteePayload,
-  playHistoric,
   playedSummary,
   prepareHistoric,
   proposalSummary,
-  scoreCommittee,
   summarizeAt,
   type CommitteePayload,
+  type HistoricGame,
+  type ScoredCommittee,
   type HistoricGameRow,
   type HistoricLayers,
   type HistoricLookback,
@@ -243,6 +246,26 @@ function formatAbs(value: number | null) {
   return value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })
 }
 
+const SLICE_BUDGET_MS = 12
+
+function sliceUntil<T>(step: () => boolean, read: () => T | null, onDone: (value: T) => void, isCancelled: () => boolean) {
+  let timer = 0
+  const run = () => {
+    if (isCancelled()) return
+    const started = performance.now()
+    let finished = false
+    while (!finished && performance.now() - started < SLICE_BUDGET_MS) finished = step()
+    if (!finished) {
+      timer = window.setTimeout(run, 0)
+      return
+    }
+    const value = read()
+    if (value) onDone(value)
+  }
+  timer = window.setTimeout(run, 0)
+  return () => window.clearTimeout(timer)
+}
+
 function bindingCopy(row: HistoricGameRow) {
   const axis = row.axes.find((item) => item.id === row.binding)
   if (!axis) return "—"
@@ -273,6 +296,10 @@ export function HistoricPanel({
   const [mode, setMode] = useState<"manual" | "auto">("manual")
   const [layers, setLayers] = useState<HistoricLayers>(DEFAULT_HISTORIC_LAYERS)
   const [filter, setFilter] = useState<"all" | "hit" | "miss">("all")
+  const [committeeOn, setCommitteeOn] = useState(false)
+  const [game, setGame] = useState<HistoricGame | null>(null)
+  const [scoring, setScoring] = useState(false)
+  const [scored, setScored] = useState<ScoredCommittee | null>(null)
   const [packet, setPacket] = useState<{
     key: string
     status: Exclude<CommitteePhase, "loading">
@@ -301,6 +328,12 @@ export function HistoricPanel({
   const requestedDraws = useMemo(() => committeeRequestDraws(allDraws).length, [allDraws])
   const requestKey = `${committeeWindow}|${drawKey}`
   useEffect(() => {
+    if (!committeeOn) {
+      setPacket(null)
+      setScored(null)
+      setScoring(false)
+      return
+    }
     const controller = new AbortController()
     let cancelled = false
     let retryTimer = 0
@@ -360,12 +393,40 @@ export function HistoricPanel({
       window.clearTimeout(retryTimer)
       controller.abort()
     }
-  }, [allDraws, committeeWindow, requestKey])
-  const scored = useMemo(() => {
-    if (!packet || packet.key !== requestKey || packet.status !== "ready" || !packet.payload) return null
-    return scoreCommittee(packet.payload, layers)
-  }, [layers, packet, requestKey])
-  const committeePhase: CommitteePhase = packet?.key === requestKey ? packet.status : "loading"
+  }, [allDraws, committeeOn, committeeWindow, requestKey])
+  useEffect(() => {
+    if (!committeeOn || !packet || packet.key !== requestKey || packet.status !== "ready" || !packet.payload) {
+      setScored(null)
+      setScoring(false)
+      return
+    }
+    const scorer = createCommitteeScorer(packet.payload, layers)
+    let cancelled = false
+    setScored(null)
+    setScoring(true)
+    const stop = sliceUntil(
+      () => scorer.step(),
+      () => scorer.result(),
+      (value) => {
+        if (cancelled) return
+        setScored(value)
+        setScoring(false)
+      },
+      () => cancelled
+    )
+    return () => {
+      cancelled = true
+      setScoring(false)
+      stop()
+    }
+  }, [committeeOn, layers, packet, requestKey])
+  const committeePhase: CommitteePhase = !committeeOn
+    ? "off"
+    : scoring
+      ? "scoring"
+      : packet?.key === requestKey
+        ? packet.status
+        : "loading"
   const scopeId = weekday === "mardi" || weekday === "vendredi" ? weekday : "mixte"
   const displayScope = scored?.scopes[scopeId]
   const heads = useMemo(() => {
@@ -378,7 +439,7 @@ export function HistoricPanel({
       : null
   const meanAuto = useMemo(() => {
     if (mode !== "auto") return null
-    if (committeePhase !== "absent" && committeePhase !== "error") return null
+    if (committeePhase !== "off" && committeePhase !== "absent" && committeePhase !== "error") return null
     const rows = historicAutoRows(prepared)
     const postHoc = chooseAutoMargin(rows)
     return {
@@ -391,25 +452,42 @@ export function HistoricPanel({
   const margin: MarginStep =
     mode === "auto" ? (committeeMargin ?? meanAuto?.postHoc.margin ?? sliderMargin) : sliderMargin
   const marginLabel = formatMargin(margin)
-  const game = useMemo(() => playHistoric(prepared, margin), [prepared, margin])
+  useEffect(() => {
+    const player = createHistoricPlayer(prepared, margin)
+    let cancelled = false
+    setGame(null)
+    const stop = sliceUntil(
+      () => player.step(),
+      () => player.result(),
+      (value) => {
+        if (!cancelled) setGame(value)
+      },
+      () => cancelled
+    )
+    return () => {
+      cancelled = true
+      stop()
+    }
+  }, [prepared, margin])
   const rows = useMemo(() => {
+    if (!game) return []
     const list =
       filter === "hit" ? game.rows.filter((row) => row.hit) : filter === "miss" ? game.rows.filter((row) => !row.hit) : game.rows
     return [...list].reverse()
-  }, [filter, game.rows])
+  }, [filter, game])
   const dayLabel = weekday === "mardi" || weekday === "vendredi" ? weekdayScopeLabel(weekday) : null
-  const errorData = game.rows.map((row) => ({
+  const errorData = (game?.rows ?? []).map((row) => ({
     label: shortDate(row.date),
     required: row.requiredMargin,
     beyond: row.requiredMargin == null ? BEYOND_PLOT : null,
   }))
-  const catchData = game.curve.map((point) => ({
+  const catchData = (game?.curve ?? []).map((point) => ({
     label: formatMargin(point.margin),
     rate: Math.round(point.rate * 1000) / 10,
   }))
 
   function apply() {
-    if (!game.next) return
+    if (!game?.next) return
     onApply({
       numbers: game.next.numberState,
       stars: game.next.starState,
@@ -419,8 +497,8 @@ export function HistoricPanel({
     })
   }
 
-  const summary = game.summary
-  const medianLabel = summary.medianBeyond ? "hors 3 σ" : formatRequired(summary.medianRequired)
+  const summary = game?.summary ?? null
+  const medianLabel = !summary ? "—" : summary.medianBeyond ? "hors 3 σ" : formatRequired(summary.medianRequired)
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -515,14 +593,18 @@ export function HistoricPanel({
         </div>
       </div>
 
-      {summary.n === 0 ? (
+      {!summary ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          Notation des mises, par petites étapes. La page reste utilisable pendant ce calcul.
+        </p>
+      ) : summary.n === 0 ? (
         <p className="text-sm text-muted-foreground">
           {lookback === 100
             ? "Aucun tirage n’a 100 tirages complets avant lui dans cette archive. Une fenêtre de 20 ou de 50 peut encore être notée."
             : lookback === 50
               ? "Aucun tirage n’a 50 tirages complets avant lui dans cette archive."
               : "Pas assez d’historique : il faut une fenêtre entière de tirages avant celui qu’on note."}
-          {game.available > 0 ? ` Archive utilisable : ${game.available} tirages complets.` : ""}
+          {game && game.available > 0 ? ` Archive utilisable : ${game.available} tirages complets.` : ""}
         </p>
       ) : (
         <>
@@ -592,6 +674,8 @@ export function HistoricPanel({
       )}
 
       <HistoricCommittee
+        enabled={committeeOn}
+        onEnabledChange={setCommitteeOn}
         weekday={weekday}
         lookbackChoice={lookback}
         margin={margin}
@@ -615,7 +699,7 @@ export function HistoricPanel({
         onApply={(next) => onApply({ ...next, source: "committee" })}
       />
 
-      {summary.n === 0 ? null : (
+      {!game || !summary || summary.n === 0 ? null : (
         <>
           <Card>
             <CardHeader>

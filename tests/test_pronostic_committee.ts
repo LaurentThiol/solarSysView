@@ -16,6 +16,7 @@ import {
   parseCommitteePayload,
   playedMargins,
   proposalFromAxes,
+  createCommitteeScorer,
   scoreCommittee,
   type AutoRow,
   type CommitteeAxis,
@@ -90,6 +91,12 @@ test("a point forecast counts one grid and does not need three hits", () => {
     },
   }
   const scored = scoreCommittee(payload, DEFAULT_HISTORIC_LAYERS)
+  const scorer = createCommitteeScorer(payload, DEFAULT_HISTORIC_LAYERS)
+  assert.equal(scorer.step(), false)
+  while (!scorer.step()) {
+    /* une bande à la fois */
+  }
+  assert.deepEqual(scorer.result(), scored)
   assert.equal(scored.scopes.mixte.rows[0].cells[0].hit, true)
   assert.equal(scored.scopes.mixte.rows[0].cells[0].grids, 1)
   assert.equal(scored.scopes.mixte.postHoc.fallback, true)
@@ -195,6 +202,12 @@ test("historic tab names both automatic rates and the absent python banner", () 
   assert.match(committee, /COMMITTEE_MEAN_BANNER/)
   assert.match(committee, /mixWindowSentence/)
   assert.match(panel, /committeeApiDown/)
+  assert.match(panel, /committeeOn/)
+  assert.match(panel, /if \(!committeeOn\)/)
+  assert.match(committee, /COMMITTEE_OFF/)
+  assert.match(committee, /aria-label="Calcul du comité"/)
+  assert.match(committee, /\n\s+OFF\n/)
+  assert.match(committee, /\n\s+ON\n/)
   assert.match(committee, /Têtes/)
   assert.match(committee, /en parallèle/)
   assert.match(committee, /réseau/)
