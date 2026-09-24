@@ -139,7 +139,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     home: "/brain",
     help: {
       title: "Assistants",
-      body: "Brain lit les fiches épinglées. Les Spécialistes publient une prévision de série nommée. IA lit une capture.",
+      body: "Brain lit les fiches épinglées. Les Spécialistes publient une prévision de série nommée. IA lit une capture. Réf date des cycles physiques.",
     },
     items: [
       {
@@ -156,6 +156,14 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         help: {
           title: "Spécialistes",
           body: "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté 20/50/100. Le décompte d’archive suit le jour ; l’entraînement API reste borné au même weekday si Mardi ou Vendredi est choisi. Jamais une grille 5+2. Démo guidée avec pastilles explicatives.",
+        },
+      },
+      {
+        href: "/ref",
+        label: "Réf",
+        help: {
+          title: "Réf",
+          body: "Cycles physiques par sous-onglet : lunaire (mois synodique), solaire (Carrington, Schwabe, flux GOES via SunPy), puis les autres candidats. Décrit une date, pas le prochain tirage.",
         },
       },
       {

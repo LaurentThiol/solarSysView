@@ -266,6 +266,25 @@ const TABS: AddressEntry[] = [
     tabEntry(`/harmo?tab=${tab.id}`, `Harmo · ${tab.label}`, tab.text, "lecture")
   ),
   tabEntry(
+    "/ref?tab=lunaire",
+    "Réf · Lunaire",
+    "Mois synodique : âge, éclairement, quartiers et calendrier du mois.",
+    "assistants",
+    "tab=lunaire|solaire|autres"
+  ),
+  tabEntry(
+    "/ref?tab=solaire",
+    "Réf · Solaire",
+    "Rotation de Carrington, cycle de Schwabe, catalogue GOES XRS ou éruptions via SunPy.",
+    "assistants"
+  ),
+  tabEntry(
+    "/ref?tab=autres",
+    "Réf · Autres",
+    "Candidats encore non calculés : anomalistique, draconitique, Saros, Hale, F10.7, Kp, ENSO, QBO.",
+    "assistants"
+  ),
+  tabEntry(
     "/analyse?tab=jumeaux&demo=1",
     "Démo Jumeaux",
     "Lance la visite guidée de l’onglet Jumeaux (pop-up Suivant / Annuler).",
@@ -381,6 +400,17 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/brain/specialists/{slug}", "GET", "Un spécialiste", "Fiche, scores 20/50/100, prévision t+1.", "assistants"),
   apiEntry("/api/brain/specialists/{slug}/infer", "POST", "Spécialiste · inférer", "Calcule la prévision de série nommée.", "assistants", "era, weekday"),
   apiEntry("/api/brain/specialists/{slug}", "DELETE", "Spécialiste · supprimer", "Retire un réseau enregistré.", "assistants"),
+  apiEntry("/api/ref/catalog", "GET", "Réf · catalogue", "Cycles physiques candidats, hors lunaire et solaire déjà calculés.", "assistants"),
+  apiEntry("/api/ref/lunar", "GET", "Réf · lunaire", "Phase synodique, éclairement et mois civil pour une date UTC.", "assistants", "date=YYYY-MM-DD"),
+  apiEntry("/api/ref/solar", "GET", "Réf · solaire", "Carrington, Schwabe et disponibilité de SunPy.", "assistants", "date=YYYY-MM-DD"),
+  apiEntry(
+    "/api/ref/solar/goes",
+    "GET",
+    "Réf · GOES",
+    "Catalogue Fido (XRS ou éruptions HEK). SunPy requis. Ne télécharge pas le TimeSeries.",
+    "assistants",
+    "start, end, kind=xrs|flares"
+  ),
   apiEntry("/api/ia/status", "GET", "IA · statut", "Fournisseurs Gemini / OpenAI / local visibles.", "assistants"),
   apiEntry("/api/ia/local", "GET", "IA · modèles locaux", "Liste Ollama (et options locales).", "assistants"),
   apiEntry("/api/ia/chat", "POST", "IA · conversation", "Lecture d’une capture (flux SSE possible).", "assistants"),

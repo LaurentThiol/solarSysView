@@ -1,0 +1,3 @@
+# Optionnel : flux X GOES et listes d'éruptions (onglet Réf · Solaire).
+# Le cycle de Carrington et le cycle de Schwabe n'en ont pas besoin.
+sunpy>=6.0

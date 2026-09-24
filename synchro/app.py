@@ -990,6 +990,48 @@ def create_app() -> FastAPI:
             lambda: null_report(work, signal, window=window, n_sim=n_sim, seed=seed)
         )
 
+    @app.get("/api/ref/catalog")
+    def ref_catalog() -> dict[str, Any]:
+        from synchro.ref.cycles import catalog
+
+        return catalog()
+
+    @app.get("/api/ref/lunar")
+    def ref_lunar(date_value: str | None = Query(None, alias="date")) -> dict[str, Any]:
+        from synchro.ref.cycles import lunar_report
+
+        try:
+            return lunar_report(date_value)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/ref/solar")
+    def ref_solar(date_value: str | None = Query(None, alias="date")) -> dict[str, Any]:
+        from synchro.ref.cycles import solar_report
+
+        try:
+            return solar_report(date_value)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/ref/solar/goes")
+    def ref_solar_goes(
+        start: str = Query(..., min_length=10, max_length=10),
+        end: str = Query(..., min_length=10, max_length=10),
+        kind: str = Query("xrs", pattern="^(xrs|flares)$"),
+        limit: int = Query(12, ge=1, le=40),
+    ) -> dict[str, Any]:
+        from synchro.ref.solar_net import goes_search
+
+        try:
+            return goes_search(start, end, kind=kind, limit=limit)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(502, f"Fido injoignable : {exc}") from exc
+
     @app.post("/api/check")
     def check(payload: CheckIn) -> dict[str, Any]:
         validate_grid(payload.numbers, payload.stars)

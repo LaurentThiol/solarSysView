@@ -42,6 +42,9 @@ export const TAB_LABELS: Record<string, string> = {
   acoustique: "Acoustique",
   tf: "Temps-fréquence",
   tests: "Tests",
+  lunaire: "Lunaire",
+  solaire: "Solaire",
+  autres: "Autres",
   specialists: "Spécialistes",
   specialistes: "Spécialistes",
 }
@@ -207,6 +210,16 @@ export const GLOSSARY: GlossaryEntry[] = [
     term: "Score vs hasard",
     group: "assistants",
     text: "Score d’un spécialiste sur 20 / 50 / 100 tirages. Positif = mieux que le hasard / la persistance. ≤ 0 : on n’enregistre pas, sauf force.",
+  },
+  {
+    term: "Cycle lunaire",
+    group: "assistants",
+    text: "Mois synodique moyen (~29,53 j) dans Réf. Âge, éclairement et quartiers pour une date UTC. Ce n’est pas un pronostic.",
+  },
+  {
+    term: "Cycle solaire",
+    group: "assistants",
+    text: "Dans Réf : rotation de Carrington (~27,3 j) et cycle de Schwabe (~11 ans, minima SILSO). Le flux X GOES et les éruptions passent par SunPy (Fido), en catalogue, sans télécharger le TimeSeries.",
   },
 ]
 
