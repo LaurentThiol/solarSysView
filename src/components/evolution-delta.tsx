@@ -22,6 +22,7 @@ import {
   ChartTooltip,
   type ChartConfig,
 } from "@/components/ui/chart"
+import { isOrderRankKey, rankStepLaw, type OrderRankKey } from "@/lib/delta-chance"
 import {
   DELTA_VIEW_KEYS,
   deltaBinWidth,
@@ -126,7 +127,25 @@ const MOTION_HELP: HelpCopy = {
 
 const HISTOGRAM_HELP: HelpCopy = {
   title: "Histogramme des pas",
-  body: "Combien de fois chaque écart est apparu dans la fenêtre. Le bac du dernier pas est en couleur. Un bac loin du centre est un grand pas pour cette série, pas une prédiction.",
+  body: "Combien de fois chaque écart est apparu dans la fenêtre. Le bac du dernier pas est en couleur. Pour n1–n5 et e1–e2, la barre claire est le nombre de pas attendu si deux tirages indépendants sortent de l’urne. Un bac loin du centre est un grand pas pour cette série, pas une prédiction.",
+}
+
+const CHANCE_HELP: HelpCopy = {
+  title: "Hasard théorique",
+  wide: true,
+  body: "La barre est le |Δ| moyen observé entre deux tirages qui se suivent. Le trait est l’espérance du même |Δ| si l’on tire deux grilles indépendantes dans l’urne : 5 numéros parmi 50, 2 étoiles parmi le pool de la fenêtre.\n\nLe point est le dernier |Δ|. Près du trait, la variation a l’ampleur de la loi. Plus court, la série bouge moins que deux tirages indépendants. Plus long, elle bouge davantage. Ce n’est pas un signal de jeu.",
+}
+
+const ORDER_RANKS: OrderRankKey[] = ["n1", "n2", "n3", "n4", "n5", "e1", "e2"]
+
+function sharedStarPool(draws: Draw[]) {
+  let pool: number | null = null
+  for (const draw of draws) {
+    const value = draw.star_pool ?? 12
+    if (pool == null) pool = value
+    else if (pool !== value) return null
+  }
+  return pool
 }
 
 function motionPhrase(motion: EdgeMotion | null, slide: -1 | 1 | 0) {
@@ -137,6 +156,14 @@ function motionPhrase(motion: EdgeMotion | null, slide: -1 | 1 | 0) {
   if (motion === "squeeze") return "se resserre"
   if (motion === "still") return "un bord immobile"
   return "—"
+}
+
+function chancePhrase(observed: number, theory: number) {
+  if (theory <= 0) return "—"
+  const ratio = observed / theory
+  if (ratio < 0.85) return "plus calme que la loi"
+  if (ratio > 1.15) return "plus agité que la loi"
+  return "comme la loi"
 }
 
 function shufflePhrase(observed: number, low: number, high: number) {
@@ -265,6 +292,57 @@ function DeltaTooltip({
   )
 }
 
+function ChanceMeter({
+  label,
+  observed,
+  theory,
+  lastAbs,
+  tail,
+  color,
+}: {
+  label: string
+  observed: number
+  theory: number
+  lastAbs: number
+  tail: number
+  color: string
+}) {
+  const span = Math.max(theory * 1.75, observed, lastAbs, 1)
+  const observedPct = Math.min(100, (observed / span) * 100)
+  const theoryPct = Math.min(100, (theory / span) * 100)
+  const lastPct = Math.min(100, (lastAbs / span) * 100)
+  return (
+    <div className="min-w-0">
+      <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+        <span className="font-medium">{label}</span>
+        <span className="tabular-nums text-muted-foreground">
+          {formatStat(observed / theory, 2)} ×
+        </span>
+      </div>
+      <div className="relative h-2.5 rounded-full bg-muted">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full"
+          style={{ width: `${observedPct}%`, background: color, opacity: 0.85 }}
+        />
+        <span
+          aria-hidden
+          className="absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-background"
+          style={{ left: `${lastPct}%`, background: color }}
+        />
+        <span
+          aria-hidden
+          className="absolute inset-y-[-3px] w-0.5 -translate-x-1/2 rounded-full bg-foreground"
+          style={{ left: `${theoryPct}%` }}
+        />
+      </div>
+      <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
+        |Δ| {formatStat(observed)} · loi {formatStat(theory)} · {chancePhrase(observed, theory)}
+        {" · "}dernier {formatStat(lastAbs, 0)}, {formatStat(100 * tail, 0)} % aussi grands
+      </p>
+    </div>
+  )
+}
+
 export function EvolutionDelta({ draws }: { draws: Draw[] }) {
   const [view, setView] = useState<DeltaView>("sums")
   const [hidden, setHidden] = useState<Partial<Record<DeltaKey, boolean>>>({})
@@ -366,18 +444,53 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
     })
   }, [series, keys])
 
+  const starPool = useMemo(() => sharedStarPool(draws), [draws])
+
+  const chanceRows = useMemo(() => {
+    return ORDER_RANKS.flatMap((key) => {
+      if (key.startsWith("e") && starPool == null) return []
+      const stats = summarizeDelta(series.map((point) => point[key]))
+      if (!stats) return []
+      const law = rankStepLaw(key, starPool ?? 12)
+      return [
+        {
+          key,
+          label: chartConfig[key].label.replace("Δ ", ""),
+          observed: stats.meanAbs,
+          lastAbs: Math.abs(stats.last),
+          theory: law.meanAbs,
+          tail: law.absAtLeast(stats.last),
+          color: chartConfig[key].color,
+        },
+      ]
+    })
+  }, [series, starPool])
+
   const histograms = useMemo(() => {
     return visible.map((key) => {
       const values = series.map((point) => point[key])
       const finite = finiteDeltas(values)
       const last = finite.length > 0 ? finite[finite.length - 1] : null
+      const width = deltaBinWidth(key)
+      const law = isOrderRankKey(key) && (key.startsWith("n") || starPool != null)
+        ? rankStepLaw(key, starPool ?? 12)
+        : null
       return {
         key,
         label: chartConfig[key].label,
-        bins: deltaHistogram(values, deltaBinWidth(key), last),
+        bins: deltaHistogram(values, width, last).map((bin) => ({
+          ...bin,
+          chance:
+            law == null
+              ? null
+              : Array.from({ length: width }, (_, offset) => law.mass(bin.bin + offset)).reduce(
+                  (sum, probability) => sum + probability,
+                  0
+                ) * finite.length,
+        })),
       }
     })
-  }, [series, visible])
+  }, [series, visible, starPool])
 
   function changeView(next: DeltaView) {
     if (next === view) return
@@ -778,6 +891,34 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
                 )}
               </ul>
             ) : null}
+            {chanceRows.length > 0 ? (
+              <div className="mt-4">
+                <p className="mb-2 flex items-center justify-center gap-1 text-center text-xs text-muted-foreground">
+                  Hasard théorique
+                  <HelpTip {...CHANCE_HELP} />
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  {chanceRows
+                    .filter((row) => row.key.startsWith("n"))
+                    .map(({ key, ...row }) => (
+                      <ChanceMeter key={key} {...row} />
+                    ))}
+                </div>
+                {starPool == null ? (
+                  <p className="mt-2 text-center text-xs text-muted-foreground">
+                    Étoiles : plusieurs formules dans la fenêtre, pas de loi unique.
+                  </p>
+                ) : (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {chanceRows
+                      .filter((row) => row.key.startsWith("e"))
+                      .map(({ key, ...row }) => (
+                        <ChanceMeter key={key} {...row} />
+                      ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
             {histograms.some((row) => row.bins.length > 0) ? (
               <div className="mt-4">
                 <p className="mb-2 flex items-center justify-center gap-1 text-center text-xs text-muted-foreground">
@@ -790,7 +931,10 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
                       <div key={row.key}>
                         <p className="mb-1 text-center text-xs text-muted-foreground">{row.label}</p>
                         <ChartContainer
-                          config={{ count: { label: row.label, color: chartConfig[row.key].color } }}
+                          config={{
+                            count: { label: row.label, color: chartConfig[row.key].color },
+                            chance: { label: "Loi", color: "var(--muted-foreground)" },
+                          }}
                           className="aspect-auto h-[120px] w-full"
                         >
                           <BarChart data={row.bins} margin={{ left: 0, right: 4, top: 4, bottom: 0 }}>
@@ -804,6 +948,15 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
                               interval="preserveStartEnd"
                             />
                             <YAxis width={24} tickLine={false} axisLine={false} allowDecimals={false} />
+                            {row.bins.some((bin) => bin.chance != null) ? (
+                              <Bar
+                                dataKey="chance"
+                                fill="var(--muted-foreground)"
+                                fillOpacity={0.18}
+                                radius={2}
+                                isAnimationActive={false}
+                              />
+                            ) : null}
                             <Bar dataKey="count" radius={2} isAnimationActive={false}>
                               {row.bins.map((bin) => (
                                 <Cell
