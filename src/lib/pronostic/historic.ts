@@ -1,4 +1,5 @@
-import { TOTAL_GRIDS, drawSize, sumBounds, theoreticalSlot, type PoolKind } from "./bounds.ts"
+import { TOTAL_GRIDS, drawSize, sumBounds, theoreticalSlot, theoreticalSlots, type PoolKind } from "./bounds.ts"
+import { applyDeltaLayer, deltaCovers, readDeltaLayer } from "./delta-layer.ts"
 import { countStack } from "./count.ts"
 import {
   applyProposal,
@@ -35,6 +36,7 @@ export const DEFAULT_HISTORIC_LAYERS: HistoricLayers = {
   sum: true,
   parity: true,
   slots: true,
+  pas: false,
 }
 
 export const ERROR_AXES = [
@@ -156,6 +158,20 @@ export type CatchPoint = {
   rate: number
 }
 
+export type PasReport = {
+  windows: number
+  openCount: number
+  openRate: number
+  /** Tirages que les couches de niveau contenaient et que le pas a exclus. */
+  excluded: number
+  /** Grilles en moins, somme sur les tirages notés, par rapport aux couches de niveau. */
+  stakeSaved: number
+  meanGrids: number | null
+  gridsPerHit: number | null
+  baselineMeanGrids: number | null
+  baselineGridsPerHit: number | null
+}
+
 export type NextForecast = {
   lookback: HistoricLookback
   learn: LearnConfig
@@ -178,6 +194,7 @@ export type HistoricGame = {
   ranks: ParameterRank[]
   curve: CatchPoint[]
   next: NextForecast | null
+  pas: PasReport | null
 }
 
 export function snapMargin(margin: number): MarginStep {
@@ -481,17 +498,75 @@ export type HistoricPlayer = {
   result(): HistoricGame | null
 }
 
+function pasOn(layers: HistoricLayers) {
+  return layers.pas === true
+}
+
+function levelMeans(points: WindowPoint[]) {
+  if (points.length === 0) return []
+  const width = points[0].ranks.length
+  return Array.from({ length: width }, (_, index) => meanOf(points.map((point) => point.ranks[index])))
+}
+
+/** Bandes de pas à partir des tirages d’avant. Le tirage noté n’est pas dans `points`. */
+function deltaProposal(
+  kind: PoolKind,
+  points: WindowPoint[],
+  proposal: StackProposal,
+  layers: HistoricLayers,
+  k: number
+) {
+  const baseSlots = layers.slots ? proposal.slots : theoreticalSlots(kind)
+  if (!pasOn(layers) || points.length === 0) {
+    return { proposal, slots: baseSlots, open: false, impossible: false }
+  }
+  const reading = readDeltaLayer(kind, points)
+  const last = points[points.length - 1].ranks
+  const applied = applyDeltaLayer(kind, baseSlots, last, levelMeans(points), reading, k)
+  return {
+    proposal: { ...proposal, slots: applied.slots },
+    slots: applied.slots,
+    open: reading.open,
+    impossible: applied.impossible,
+  }
+}
+
+function stackForPlay(
+  kind: PoolKind,
+  proposal: StackProposal,
+  layers: HistoricLayers,
+  slots: { lo: number; hi: number }[],
+  usePas: boolean,
+  impossible = false
+) {
+  const state = constrainedStack(
+    kind,
+    { ...proposal, slots },
+    { ...layers, slots: layers.slots || usePas }
+  )
+  if (impossible) {
+    state.minSum = 1
+    state.maxSum = 0
+  }
+  return state
+}
+
 /** Décompte des mises par tirage, pour laisser le fil du navigateur respirer. */
 export function createHistoricPlayer(prepared: HistoricPrepared, margin: number): HistoricPlayer {
   const snapped = snapMargin(margin)
   const config = learnAt(snapped)
   const layers = prepared.layers
   const rows: HistoricGameRow[] = []
+  const usePas = pasOn(layers)
   let cursor = 0
   let hits = 0
   let numberHits = 0
   let starHits = 0
   let totalGrids = 0
+  let baselineGrids = 0
+  let baselineHits = 0
+  let openCount = 0
+  let excluded = 0
   let done: HistoricGame | null = null
 
   return {
@@ -502,22 +577,54 @@ export function createHistoricPlayer(prepared: HistoricPrepared, margin: number)
         cursor += 1
         const from = row.index - row.chosenLookback
         const train = prepared.paired.slice(from, row.index)
-        const numbers = proposeStack(
-          "numbers",
-          train.map((item) => item.numberPoint),
-          config
-        )
-        const stars = proposeStack(
-          "stars",
-          train.map((item) => item.starPoint),
-          config
-        )
+        const numberPoints = train.map((item) => item.numberPoint)
+        const starPoints = train.map((item) => item.starPoint)
+        const numbers = proposeStack("numbers", numberPoints, config)
+        const stars = proposeStack("stars", starPoints, config)
+        const numberDelta = deltaProposal("numbers", numberPoints, numbers, layers, snapped)
+        const starDelta = deltaProposal("stars", starPoints, stars, layers, snapped)
         const sample = prepared.paired[row.index]
-        const numberHit = coversPoint(sample.numberPoint, numbers, layers)
-        const starHit = coversPoint(sample.starPoint, stars, layers)
+        const numberLevel = coversPoint(sample.numberPoint, numbers, layers)
+        const starLevel = coversPoint(sample.starPoint, stars, layers)
+        const numberHit =
+          numberLevel &&
+          (!usePas || (!numberDelta.impossible && deltaCovers(sample.numberPoint.ranks, numberDelta.slots)))
+        const starHit =
+          starLevel && (!usePas || (!starDelta.impossible && deltaCovers(sample.starPoint.ranks, starDelta.slots)))
+        const playedNumbers = usePas ? numberDelta.proposal : numbers
+        const playedStars = usePas ? starDelta.proposal : stars
         const grids =
-          countCached(prepared.cache, constrainedStack("numbers", numbers, layers)) *
-          countCached(prepared.cache, constrainedStack("stars", stars, layers))
+          countCached(
+            prepared.cache,
+            stackForPlay(
+              "numbers",
+              playedNumbers,
+              layers,
+              usePas ? numberDelta.slots : numbers.slots,
+              usePas,
+              usePas && numberDelta.impossible
+            )
+          ) *
+          countCached(
+            prepared.cache,
+            stackForPlay(
+              "stars",
+              playedStars,
+              layers,
+              usePas ? starDelta.slots : stars.slots,
+              usePas,
+              usePas && starDelta.impossible
+            )
+          )
+        if (usePas) {
+          const plain =
+            countCached(prepared.cache, constrainedStack("numbers", numbers, layers)) *
+            countCached(prepared.cache, constrainedStack("stars", stars, layers))
+          baselineGrids += plain
+          if (numberLevel && starLevel) baselineHits += 1
+          if (numberDelta.open || starDelta.open) openCount += 1
+          if (numberLevel && starLevel && !(numberHit && starHit)) excluded += 1
+        }
         const hit = numberHit && starHit
         if (hit) hits += 1
         if (numberHit) numberHits += 1
@@ -576,23 +683,35 @@ export function createHistoricPlayer(prepared: HistoricPrepared, margin: number)
       let next: NextForecast | null = null
       if (prepared.nextLookback != null && prepared.paired.length >= prepared.nextLookback) {
         const train = prepared.paired.slice(-prepared.nextLookback)
-        const numbers = proposeStack(
+        const numberPoints = train.map((item) => item.numberPoint)
+        const starPoints = train.map((item) => item.starPoint)
+        const numbers = proposeStack("numbers", numberPoints, config)
+        const stars = proposeStack("stars", starPoints, config)
+        const numberDelta = deltaProposal("numbers", numberPoints, numbers, layers, snapped)
+        const starDelta = deltaProposal("stars", starPoints, stars, layers, snapped)
+        const playedNumbers = usePas ? numberDelta.proposal : numbers
+        const playedStars = usePas ? starDelta.proposal : stars
+        const numberState = stackForPlay(
           "numbers",
-          train.map((item) => item.numberPoint),
-          config
+          playedNumbers,
+          layers,
+          usePas ? numberDelta.slots : numbers.slots,
+          usePas,
+          usePas && numberDelta.impossible
         )
-        const stars = proposeStack(
+        const starState = stackForPlay(
           "stars",
-          train.map((item) => item.starPoint),
-          config
+          playedStars,
+          layers,
+          usePas ? starDelta.slots : stars.slots,
+          usePas,
+          usePas && starDelta.impossible
         )
-        const numberState = constrainedStack("numbers", numbers, layers)
-        const starState = constrainedStack("stars", stars, layers)
         next = {
           lookback: prepared.nextLookback,
           learn: config,
-          numbers,
-          stars,
+          numbers: playedNumbers,
+          stars: playedStars,
           numberState,
           starState,
           grids: countCached(prepared.cache, numberState) * countCached(prepared.cache, starState),
@@ -622,6 +741,19 @@ export function createHistoricPlayer(prepared: HistoricPrepared, margin: number)
         ranks,
         curve,
         next,
+        pas: usePas
+          ? {
+              windows: n,
+              openCount,
+              openRate: n > 0 ? openCount / n : 0,
+              excluded,
+              stakeSaved: baselineGrids - totalGrids,
+              meanGrids,
+              gridsPerHit: hits > 0 ? totalGrids / hits : null,
+              baselineMeanGrids: n > 0 ? baselineGrids / n : null,
+              baselineGridsPerHit: baselineHits > 0 ? baselineGrids / baselineHits : null,
+            }
+          : null,
       }
       return true
     },

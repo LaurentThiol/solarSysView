@@ -219,6 +219,8 @@ export type CoverLayers = {
   sum: boolean
   parity: boolean
   slots: boolean
+  /** Couche Pas. Absente ou fausse : le décompte reste celui des trois couches de niveau. */
+  pas?: boolean
 }
 
 export function coversPoint(

@@ -60,6 +60,7 @@ import {
   clampStack,
   countStack,
   defaultLearn,
+  stackWithPas,
   defaultStack,
   isImpossible,
   moveLayer,
@@ -109,6 +110,11 @@ const HELP = {
   slots: {
     title: "Espaces",
     body: "Intervalle de chaque statistique d’ordre. Chevauchement autorisé ; n1 < n2 < … impose l’unicité. Formule théorique n_i ∈ [i, 50−5+i].",
+  },
+  pas: {
+    title: "Pas",
+    wide: true,
+    body: "La couche ne resserre que si le pas de la fenêtre s’écarte de deux tirages indépendants (mélange des mêmes niveaux, ou loi du |Δ|). Sinon le décompte ne change pas. Les curseurs d’espaces restent ceux du niveau. Ce n’est pas P(prochain tirage).",
   },
   handoff: {
     title: "Envoyer vers Jeux",
@@ -325,6 +331,7 @@ export function PronosticLab() {
   const [stars, setStars] = useState<StackState>(() => defaultStack("stars"))
   const [learn, setLearn] = useState<LearnConfig>(defaultLearn)
   const [lookback, setLookback] = useState<(typeof LOOKBACKS)[number]>(50)
+  const [pasOn, setPasOn] = useState(false)
   const [ready, setReady] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [sampleSeed, setSampleSeed] = useState(1)
@@ -407,18 +414,31 @@ export function PronosticLab() {
   const tightActive = useMemo(() => tighten(active), [active])
   const windowStart = Math.max(0, historyPoints[pool].length - workPoints[pool].length)
 
-  const numberCount = useMemo(() => countStack(numbers), [numbers])
-  const starCount = useMemo(() => countStack(stars), [stars])
+  const numberPlayed = useMemo(
+    () => (pasOn ? stackWithPas(numbers, workPoints.numbers, learn.k).state : numbers),
+    [pasOn, numbers, workPoints.numbers, learn.k]
+  )
+  const starPlayed = useMemo(
+    () => (pasOn ? stackWithPas(stars, workPoints.stars, learn.k).state : stars),
+    [pasOn, stars, workPoints.stars, learn.k]
+  )
+  const numberCount = useMemo(() => countStack(numberPlayed), [numberPlayed])
+  const starCount = useMemo(() => countStack(starPlayed), [starPlayed])
   const grids = numberCount * starCount
-  const cascade = useMemo(() => cascadeCounts(active), [active])
+  const cascade = useMemo(() => {
+    const steps = cascadeCounts(active)
+    if (!pasOn) return steps
+    const played = pool === "numbers" ? numberPlayed : starPlayed
+    return [...steps, { id: "pas" as const, label: "Pas", count: countStack(played) }]
+  }, [active, pasOn, pool, numberPlayed, starPlayed])
   const coverage = useMemo(
     () =>
       walkForwardCoverage(historyPoints[pool], windowStart, lookback, pool, learn),
     [historyPoints, pool, windowStart, lookback, learn]
   )
 
-  const numberSpec = useMemo(() => stackToPoolSpec(numbers), [numbers])
-  const starSpec = useMemo(() => stackToPoolSpec(stars), [stars])
+  const numberSpec = useMemo(() => stackToPoolSpec(numberPlayed), [numberPlayed])
+  const starSpec = useMemo(() => stackToPoolSpec(starPlayed), [starPlayed])
 
   const listed = useMemo(() => {
     if (grids === 0 || grids > LIST_LIMIT) return []
@@ -609,8 +629,9 @@ export function PronosticLab() {
         ) : (
           <div className="flex min-w-0 flex-col gap-6">
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-        Trois couches (somme, rangs/parité, espaces) se resserrent. Le nombre
-        affiché est le volume restant, pas une chance de gain.
+        Somme, rangs/parité et espaces se resserrent. Pas ne coupe que si la
+        fenêtre s’écarte de deux tirages indépendants. Le nombre affiché est
+        le volume restant, pas une chance de gain.
       </p>
       <WindowBar
         window={resolved}
@@ -968,6 +989,29 @@ export function PronosticLab() {
           </CardContent>
         </Card>
       ))}
+
+      <Card className={cn(!pasOn && "opacity-70")}>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
+          <CardTitle>
+            <TitleHelp help={HELP.pas}>4. Pas</TitleHelp>
+          </CardTitle>
+          <Button
+            type="button"
+            size="xs"
+            variant={pasOn ? "default" : "outline"}
+            onClick={() => setPasOn((value) => !value)}
+          >
+            {pasOn ? "On" : "Off"}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            {pasOn
+              ? "Le décompte intersecte les espaces avec le pas de la fenêtre, seulement si ce pas sort du mélange ou de la loi de deux tirages indépendants. Les curseurs d’espaces ne bougent pas."
+              : "Éteinte : le décompte reste celui de la somme, de la parité et des espaces."}
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

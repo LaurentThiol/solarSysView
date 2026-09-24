@@ -140,6 +140,11 @@ const HELP = {
     title: "Espaces",
     body: "n1 à n5 et e1, e2 : statistiques d’ordre. n1 est le plus petit numéro, n5 le plus grand, jamais l’ordre de sortie. Une couche éteinte ne compte ni dans l’erreur mesurée, ni dans la mise.",
   },
+  pas: {
+    title: "Pas",
+    wide: true,
+    body: "La couche ne resserre que si le pas de la fenêtre s’écarte de deux tirages indépendants (mélange des mêmes niveaux, ou loi du |Δ|). Sinon le décompte ne change pas. Elle n’entre pas dans l’erreur mesurée ni dans le vecteur z. Ce n’est pas P(prochain tirage).",
+  },
   hits: {
     title: "Dans la marge",
     body: "Tirages notés dont les numéros et les étoiles tombent dans la marge en cours. Le pourcentage est cette part. En dessous, les deux comptes sont séparés : un tirage peut avoir ses numéros dans la marge et ses étoiles dehors, ou l’inverse. Seul le compte du haut exige les deux.",
@@ -590,6 +595,12 @@ export function HistoricPanel({
             onClick={() => setLayers((prev) => ({ ...prev, slots: !prev.slots }))}
             help={HELP.slots}
           />
+          <OverlayToggle
+            label="Pas"
+            on={layers.pas === true}
+            onClick={() => setLayers((prev) => ({ ...prev, pas: prev.pas !== true }))}
+            help={HELP.pas}
+          />
         </div>
       </div>
 
@@ -639,6 +650,9 @@ export function HistoricPanel({
               <CardContent className="text-xs text-muted-foreground tabular-nums">
                 Part de l’univers {formatPct(summary.meanVolume, 3)}
                 {summary.totalGrids != null ? ` · total ${formatCompactCount(summary.totalGrids)}` : ""}
+                {game.pas?.baselineMeanGrids != null
+                  ? ` · sans le pas ${formatCount(game.pas.baselineMeanGrids)}`
+                  : ""}
               </CardContent>
             </Card>
             <Card>
@@ -653,6 +667,9 @@ export function HistoricPanel({
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
                 {summary.hits === 0 ? "Aucun tirage dans la marge." : "Mise cumulée divisée par les tirages contenus."}
+                {game.pas
+                  ? ` Sans le pas : ${game.pas.baselineGridsPerHit == null ? "—" : formatCompactCount(game.pas.baselineGridsPerHit)}.`
+                  : ""}
               </CardContent>
             </Card>
             <Card>
@@ -775,7 +792,7 @@ export function HistoricPanel({
               </CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              {game.ranks.length === 0 ? (
+              {game.ranks.length === 0 && !game.pas ? (
                 <p className="text-sm text-muted-foreground">Toutes les couches sont éteintes.</p>
               ) : (
                 <table className="w-full min-w-[28rem] text-left text-sm">
@@ -811,9 +828,26 @@ export function HistoricPanel({
                         <td className="py-2 tabular-nums">{rank.outsideCount}</td>
                       </tr>
                     ))}
+                    {game.pas ? (
+                      <tr className="border-b border-border/60">
+                        <td className="py-2 pr-3">Pas</td>
+                        <td className="py-2 pr-3 tabular-nums">{formatPct(game.pas.openRate)}</td>
+                        <td className="py-2 pr-3 tabular-nums">{game.pas.openCount}</td>
+                        <td className="py-2 tabular-nums">{game.pas.excluded}</td>
+                      </tr>
+                    ) : null}
                   </tbody>
                 </table>
               )}
+              {game.pas ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Porte ouverte sur {game.pas.openCount} fenêtre{game.pas.openCount === 1 ? "" : "s"} ({formatPct(game.pas.openRate)}).
+                  Mise évitée {formatCompactCount(game.pas.stakeSaved)} grilles.
+                  Le pas seul a exclu {game.pas.excluded} tirage{game.pas.excluded === 1 ? "" : "s"}.
+                  Mise moyenne {formatCount(game.pas.meanGrids ?? 0)} avec le pas, {formatCount(game.pas.baselineMeanGrids ?? 0)} sans.
+                  Grilles par tirage retenu {game.pas.gridsPerHit == null ? "—" : formatCompactCount(game.pas.gridsPerHit)} avec, {game.pas.baselineGridsPerHit == null ? "—" : formatCompactCount(game.pas.baselineGridsPerHit)} sans.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 

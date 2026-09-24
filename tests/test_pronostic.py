@@ -9,9 +9,16 @@ from synchro.analysis.jeux import evaluate_pool, TOTAL_NUMBER_WAYS
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _run_node() -> None:
+def _run_node(*scripts: str) -> None:
     result = subprocess.run(
-        ["node", "--experimental-strip-types", "--test", str(ROOT / "tests" / "test_pronostic.ts")],
+        [
+            "node",
+            "--experimental-strip-types",
+            "--import",
+            str(ROOT / "tests" / "node-register.mjs"),
+            "--test",
+            *[str(ROOT / "tests" / script) for script in scripts],
+        ],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -20,22 +27,15 @@ def _run_node() -> None:
 
 
 def test_pronostic_node() -> None:
-    _run_node()
+    _run_node("test_pronostic.ts")
 
 
 def test_pronostic_plane_node() -> None:
-    result = subprocess.run(
-        [
-            "node",
-            "--experimental-strip-types",
-            "--test",
-            str(ROOT / "tests" / "test_pronostic_plane.ts"),
-        ],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
+    _run_node("test_pronostic_plane.ts")
+
+
+def test_pronostic_delta_layer_node() -> None:
+    _run_node("test_pronostic_delta_layer.ts", "test_pronostic_historic.ts")
 
 
 def _spec(kind: str, **kwargs):

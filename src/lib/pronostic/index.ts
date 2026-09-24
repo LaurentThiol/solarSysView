@@ -124,6 +124,7 @@ export {
   type MarginStep,
   type NextForecast,
   type PairedDraw,
+  type PasReport,
   type ParameterRank,
   type PreparedRow,
 } from "./historic.ts"
@@ -146,6 +147,18 @@ export {
   type ResidualPair,
   type ResidualPoint,
 } from "./plane.ts"
+
+export {
+  applyDeltaLayer,
+  deltaCovers,
+  readDeltaLayer,
+  stackWithPas,
+  type DeltaApplyResult,
+  type DeltaGate,
+  type DeltaLayerReading,
+  type DeltaRankReading,
+  type EdgeGate,
+} from "./delta-layer.ts"
 
 export {
   AUTO_MIN_HITS,
