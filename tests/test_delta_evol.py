@@ -17,6 +17,7 @@ def test_delta_series_node() -> None:
             "--test",
             str(script),
             str(ROOT / "tests" / "test_delta_chance.ts"),
+            str(ROOT / "tests" / "test_delta_coherence.ts"),
         ],
         cwd=ROOT,
         capture_output=True,
@@ -44,5 +45,6 @@ def test_delta_evol_block_follows_the_time_chart() -> None:
     assert "Histogramme des pas" in block
     assert "mélange" in block
     assert "Hasard théorique" in block
+    assert "Cohérence des variations" in block
     assert "DeltaEvol" in readme
     assert "écarts n − n−1" in panel

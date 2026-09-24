@@ -24,6 +24,14 @@ import {
 } from "@/components/ui/chart"
 import { isOrderRankKey, rankStepLaw, type OrderRankKey } from "@/lib/delta-chance"
 import {
+  coherenceLabel,
+  coherenceReading,
+  numberCoherence,
+  numberCoherenceTheory,
+  starCoherence,
+  starCoherenceTheory,
+} from "@/lib/delta-coherence"
+import {
   DELTA_VIEW_KEYS,
   deltaBinWidth,
   deltaDomain,
@@ -128,6 +136,12 @@ const MOTION_HELP: HelpCopy = {
 const HISTOGRAM_HELP: HelpCopy = {
   title: "Histogramme des pas",
   body: "Combien de fois chaque écart est apparu dans la fenêtre. Le bac du dernier pas est en couleur. Pour n1–n5 et e1–e2, la barre claire est le nombre de pas attendu si deux tirages indépendants sortent de l’urne. Un bac loin du centre est un grand pas pour cette série, pas une prédiction.",
+}
+
+const COHERENCE_HELP: HelpCopy = {
+  title: "Cohérence des variations",
+  wide: true,
+  body: "À chaque tirage, |somme des Δ| / somme des |Δ|, sur n1–n5 d’un côté et e1–e2 de l’autre.\n\n1 : toute la variation va dans le même sens (la grille glisse). 0 : les hausses annulent les baisses (la forme se déforme). Le trait est l’espérance de cet indice si deux grilles indépendantes sortent de l’urne. Au-dessus, les rangs bougent plus ensemble que la loi. En dessous, ils se contredisent davantage. Descriptif, pas un signal.",
 }
 
 const CHANCE_HELP: HelpCopy = {
@@ -445,6 +459,39 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
   }, [series, keys])
 
   const starPool = useMemo(() => sharedStarPool(draws), [draws])
+
+  const coherence = useMemo(() => {
+    const numberTheory = numberCoherenceTheory()
+    const starsTheory = starPool == null ? null : starCoherenceTheory(starPool)
+    const points = series.map((point) => ({
+      date: point.date,
+      numbers: numberCoherence(point),
+      stars: starPool == null ? null : starCoherence(point),
+      n1: point.n1,
+      n2: point.n2,
+      n3: point.n3,
+      n4: point.n4,
+      n5: point.n5,
+      e1: point.e1,
+      e2: point.e2,
+    }))
+    const meanOf = (key: "numbers" | "stars") => {
+      const values = points
+        .map((point) => point[key])
+        .filter((value): value is number => value != null)
+      if (values.length === 0) return null
+      return values.reduce((sum, value) => sum + value, 0) / values.length
+    }
+    const last = [...points].reverse().find((point) => point.numbers != null) ?? null
+    return {
+      points,
+      numberTheory,
+      starsTheory,
+      numberMean: meanOf("numbers"),
+      starMean: meanOf("stars"),
+      last,
+    }
+  }, [series, starPool])
 
   const chanceRows = useMemo(() => {
     return ORDER_RANKS.flatMap((key) => {
@@ -877,6 +924,133 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
               </span>
               <HelpTip {...MOTION_HELP} />
             </p>
+            {coherence.points.length > 1 ? (
+              <div className="mt-4">
+                <p className="mb-2 flex items-center justify-center gap-1 text-center text-xs text-muted-foreground">
+                  Cohérence des variations
+                  <HelpTip {...COHERENCE_HELP} />
+                </p>
+                <ChartContainer
+                  config={{
+                    numbers: { label: "n1–n5", color: "var(--chart-1)" },
+                    stars: { label: "e1–e2", color: "var(--chart-2)" },
+                  }}
+                  className="aspect-auto h-[160px] w-full"
+                >
+                  <ComposedChart data={coherence.points} margin={{ left: 4, right: 8, top: 8, bottom: 4 }}>
+                    <CartesianGrid vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      minTickGap={28}
+                      tickFormatter={formatShortDate}
+                    />
+                    <YAxis
+                      domain={[0, 1]}
+                      width={32}
+                      tickLine={false}
+                      axisLine={false}
+                      ticks={[0, 0.5, 1]}
+                    />
+                    <ReferenceLine
+                      y={coherence.numberTheory}
+                      stroke="var(--color-numbers)"
+                      strokeDasharray="4 4"
+                      strokeOpacity={0.7}
+                    />
+                    {coherence.starsTheory != null ? (
+                      <ReferenceLine
+                        y={coherence.starsTheory}
+                        stroke="var(--color-stars)"
+                        strokeDasharray="2 3"
+                        strokeOpacity={0.7}
+                      />
+                    ) : null}
+                    <ChartTooltip
+                      content={({ active, payload }) => {
+                        const point = payload?.[0]?.payload as (typeof coherence.points)[number] | undefined
+                        if (!active || !point) return null
+                        const ranks = ["n1", "n2", "n3", "n4", "n5", "e1", "e2"] as const
+                        return (
+                          <div className="grid min-w-0 max-w-[min(20rem,calc(100vw-2rem))] gap-1 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
+                            <div className="font-medium">{formatDrawDate(point.date)}</div>
+                            <div className="flex flex-wrap gap-x-2 tabular-nums">
+                              {ranks.map((key) => (
+                                <span key={key}>
+                                  {key} {point[key] == null ? "—" : formatSigned(point[key], 0)}
+                                </span>
+                              ))}
+                            </div>
+                            <div>
+                              n1–n5 {point.numbers == null ? "—" : formatStat(point.numbers, 2)} ·{" "}
+                              {coherenceLabel(coherenceReading(point.numbers))}
+                            </div>
+                            <div>
+                              e1–e2 {point.stars == null ? "—" : formatStat(point.stars, 2)} ·{" "}
+                              {coherenceLabel(coherenceReading(point.stars))}
+                            </div>
+                          </div>
+                        )
+                      }}
+                    />
+                    <Line
+                      dataKey="numbers"
+                      type="linear"
+                      stroke="var(--color-numbers)"
+                      strokeWidth={2}
+                      dot={false}
+                      connectNulls={false}
+                      name="n1–n5"
+                    />
+                    {starPool != null ? (
+                      <Line
+                        dataKey="stars"
+                        type="linear"
+                        stroke="var(--color-stars)"
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls={false}
+                        name="e1–e2"
+                      />
+                    ) : null}
+                  </ComposedChart>
+                </ChartContainer>
+                <p className="mt-2 text-center text-xs tabular-nums text-muted-foreground">
+                  n1–n5 · moy. {coherence.numberMean == null ? "—" : formatStat(coherence.numberMean, 2)} · loi{" "}
+                  {formatStat(coherence.numberTheory, 2)}
+                  {coherence.starsTheory == null
+                    ? ""
+                    : ` · e1–e2 · moy. ${coherence.starMean == null ? "—" : formatStat(coherence.starMean, 2)} · loi ${formatStat(coherence.starsTheory, 2)}`}
+                  {coherence.last
+                    ? ` · dernier : ${coherenceLabel(coherenceReading(coherence.last.numbers))}`
+                    : ""}
+                </p>
+                {coherence.last ? (
+                  <p className="mt-1 flex flex-wrap justify-center gap-1.5 text-xs tabular-nums">
+                    {(["n1", "n2", "n3", "n4", "n5", "e1", "e2"] as const).map((key) => {
+                      const step = coherence.last?.[key]
+                      const up = typeof step === "number" && step > 0
+                      const down = typeof step === "number" && step < 0
+                      return (
+                        <span
+                          key={key}
+                          className={cn(
+                            "rounded-md border px-1.5 py-0.5",
+                            up && "border-chart-1/40 bg-chart-1/15",
+                            down && "border-chart-5/40 bg-chart-5/15",
+                            !up && !down && "border-border text-muted-foreground"
+                          )}
+                        >
+                          {key} {step == null ? "—" : formatSigned(step, 0)}
+                        </span>
+                      )
+                    })}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {shuffles.some((row) => row.compare) ? (
               <ul className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-center text-xs tabular-nums text-muted-foreground">
                 {shuffles.map((row) =>
