@@ -14,7 +14,7 @@ export default function RefPage() {
   return (
     <PageShell
       title="Réf"
-      subtitle="Cycles physiques datés. Lunaire et solaire sont calculés ; les autres sont des candidats avec leur période et leur source."
+      subtitle="Cycles physiques datés, puis un plan : deux phases en axes, couleur donnée par le total des numéros, le total des étoiles, n1–n5, E1 ou E2."
       note="Une phase ou un numéro de rotation décrit le ciel à une date. Ça ne dit rien du prochain tirage."
     >
       <Suspense fallback={<p className="text-sm text-muted-foreground">Chargement…</p>}>

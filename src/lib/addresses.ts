@@ -281,7 +281,13 @@ const TABS: AddressEntry[] = [
   tabEntry(
     "/ref?tab=autres",
     "Réf · Autres",
-    "Candidats encore non calculés : anomalistique, draconitique, Saros, Hale, F10.7, Kp, ENSO, QBO.",
+    "Année tropique et Chandler en phase locale. F10.7, Kp, cosmiques, ENSO et QBO restent des séries mesurées.",
+    "assistants"
+  ),
+  tabEntry(
+    "/ref?tab=synthese",
+    "Réf · Synthèse",
+    "Plan de deux phases. Couleur : total numéros, total étoiles, n1–n5, E1, E2. Fenêtres 20, 50, 100.",
     "assistants"
   ),
   tabEntry(
@@ -401,6 +407,23 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/brain/specialists/{slug}/infer", "POST", "Spécialiste · inférer", "Calcule la prévision de série nommée.", "assistants", "era, weekday"),
   apiEntry("/api/brain/specialists/{slug}", "DELETE", "Spécialiste · supprimer", "Retire un réseau enregistré.", "assistants"),
   apiEntry("/api/ref/catalog", "GET", "Réf · catalogue", "Cycles physiques candidats, hors lunaire et solaire déjà calculés.", "assistants"),
+  apiEntry("/api/ref/phases", "GET", "Réf · phases", "Cycles à phase locale et séries mesurées (sans horloge inventée).", "assistants"),
+  apiEntry(
+    "/api/ref/trace",
+    "GET",
+    "Réf · trace",
+    "Phase d’un cycle et grandeurs du tirage sur 20, 50 ou 100 tirages.",
+    "assistants",
+    "cycle, window=20|50|100"
+  ),
+  apiEntry(
+    "/api/ref/plane",
+    "GET",
+    "Réf · plan",
+    "Deux phases en axes, totaux et rangs n1–n5 / E1 / E2 sur chaque point.",
+    "assistants",
+    "x, y, window=20|50|100"
+  ),
   apiEntry("/api/ref/lunar", "GET", "Réf · lunaire", "Phase synodique, éclairement et mois civil pour une date UTC.", "assistants", "date=YYYY-MM-DD"),
   apiEntry("/api/ref/solar", "GET", "Réf · solaire", "Carrington, Schwabe et disponibilité de SunPy.", "assistants", "date=YYYY-MM-DD"),
   apiEntry(

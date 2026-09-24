@@ -77,6 +77,43 @@ def test_ref_routes_serve_lunar_solar_and_catalog() -> None:
     assert bad.status_code == 400
 
 
+def test_eclipse_day_is_near_perigee_and_a_node() -> None:
+    from synchro.ref.phases import anomalistic_fraction, draconic_fraction, tropical_fraction
+
+    eclipse = date(2024, 4, 8)
+    assert anomalistic_fraction(eclipse) < 0.08
+    assert draconic_fraction(eclipse) > 0.97 or draconic_fraction(eclipse) < 0.03
+    assert tropical_fraction(date(2024, 3, 20)) < 0.02
+
+
+def test_plane_joins_phases_and_draw_scalars() -> None:
+    from synchro.harmo.archive import bundled_draws
+    from synchro.ref.plane import plane
+
+    payload = plane(bundled_draws("current"), "lunaire", "anomalistique", 20)
+    assert len(payload["points"]) == 20
+    point = payload["points"][-1]
+    for key in ("x", "y", "sum", "star_sum", "n1", "n2", "n3", "n4", "n5", "e1", "e2"):
+        assert key in point
+    assert 0 <= point["x"] <= 1
+    assert point["n1"] <= point["n5"]
+    assert point["e1"] <= point["e2"]
+
+
+def test_trace_and_plane_routes() -> None:
+    client = TestClient(create_app())
+    traced = client.get("/api/ref/trace", params={"cycle": "draconitique", "window": 50})
+    assert traced.status_code == 200
+    assert len(traced.json()["points"]) == 50
+    board = client.get("/api/ref/plane", params={"x": "lunaire", "y": "tropique", "window": 100})
+    assert board.status_code == 200
+    body = board.json()
+    assert 1 <= len(body["points"]) <= 100
+    assert body["count"] == len(body["points"])
+    refused = client.get("/api/ref/plane", params={"x": "f107", "y": "lunaire", "window": 20})
+    assert refused.status_code == 400
+
+
 def test_goes_route_is_503_without_sunpy(monkeypatch: pytest.MonkeyPatch) -> None:
     import synchro.ref.solar_net as solar_net
 

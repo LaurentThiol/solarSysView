@@ -1032,6 +1032,43 @@ def create_app() -> FastAPI:
         except Exception as exc:
             raise HTTPException(502, f"Fido injoignable : {exc}") from exc
 
+    def _ref_archive(era: str) -> list[dict[str, Any]]:
+        rows, _source = _harmo_archive(era)
+        return rows
+
+    @app.get("/api/ref/phases")
+    def ref_phases() -> dict[str, Any]:
+        from synchro.ref.phases import phase_catalog
+
+        return phase_catalog()
+
+    @app.get("/api/ref/trace")
+    def ref_trace(
+        cycle: str = Query("lunaire"),
+        window: int = Query(50),
+        era: str = Query("current", pattern="^(current|all)$"),
+    ) -> dict[str, Any]:
+        from synchro.ref.plane import trace
+
+        try:
+            return trace(_ref_archive(era), cycle, window)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/ref/plane")
+    def ref_plane(
+        x: str = Query("lunaire"),
+        y: str = Query("carrington"),
+        window: int = Query(50),
+        era: str = Query("current", pattern="^(current|all)$"),
+    ) -> dict[str, Any]:
+        from synchro.ref.plane import plane
+
+        try:
+            return plane(_ref_archive(era), x, y, window)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
     @app.post("/api/check")
     def check(payload: CheckIn) -> dict[str, Any]:
         validate_grid(payload.numbers, payload.stars)

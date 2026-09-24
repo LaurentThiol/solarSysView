@@ -163,7 +163,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Réf",
         help: {
           title: "Réf",
-          body: "Cycles physiques par sous-onglet : lunaire (mois synodique), solaire (Carrington, Schwabe, flux GOES via SunPy), puis les autres candidats. Décrit une date, pas le prochain tirage.",
+          body: "Cycles physiques par sous-onglet, avec un nuage phase × tirage. La synthèse croise deux phases et colore le total, n1–n5 ou E1/E2 sur 20, 50 ou 100 tirages. Décrit une date, pas le prochain tirage.",
         },
       },
       {

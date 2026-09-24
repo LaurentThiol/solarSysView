@@ -8,6 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import {
+  CYCLE_LABELS,
+  CycleCloud,
+  EARTH_CYCLES,
+  LUNAR_CYCLES,
+  SOLAR_CYCLES,
+  SynthesisPlane,
+} from "@/components/ref/phase-cloud"
+import {
   fetchCatalog,
   fetchGoes,
   fetchLunar,
@@ -41,7 +49,15 @@ const TABS = [
     label: "Autres",
     help: {
       title: "Autres cycles",
-      body: "Candidats : anomalistique, nœuds, Saros, Hale, F10.7, Kp, ENSO… Période et source, pas encore une série.",
+      body: "Année tropique et Chandler ont une phase locale. F10.7, Kp, rayons cosmiques, ENSO et QBO restent des séries mesurées.",
+    },
+  },
+  {
+    id: "synthese",
+    label: "Synthèse",
+    help: {
+      title: "Synthèse",
+      body: "Deux phases en axes, couleur = total numéros, total étoiles, n1–n5, E1 ou E2. Fenêtres de 20, 50 et 100 tirages.",
     },
   },
 ] as const
@@ -75,6 +91,7 @@ export function RefLab() {
         {tab === "lunaire" ? <LunarPanel /> : null}
         {tab === "solaire" ? <SolarPanel /> : null}
         {tab === "autres" ? <AutresPanel /> : null}
+        {tab === "synthese" ? <SynthesisPlane /> : null}
       </PillTabPanel>
     </div>
   )
@@ -141,6 +158,7 @@ function LunarPanel() {
           </CardContent>
         </Card>
       ) : null}
+      <CycleCloud cycles={LUNAR_CYCLES} initial="lunaire" labels={CYCLE_LABELS} />
     </div>
   )
 }
@@ -280,6 +298,7 @@ function SolarPanel() {
           </Card>
         </div>
       ) : null}
+      <CycleCloud cycles={SOLAR_CYCLES} initial="carrington" labels={CYCLE_LABELS} />
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -392,6 +411,11 @@ function AutresPanel() {
   const kinds = [...new Set((report?.items ?? []).map((item) => item.kind))]
   return (
     <div className="flex flex-col gap-3">
+      <CycleCloud cycles={EARTH_CYCLES} initial="tropique" labels={CYCLE_LABELS} />
+      <p className="text-sm text-muted-foreground">
+        F10.7, Kp, Ap, Dst, rayons cosmiques, ENSO et QBO se lisent sur une série du jour.
+        Une phase 0–1 à la place de cette série ne dirait pas la valeur mesurée.
+      </p>
       <p className="text-sm text-muted-foreground">{report?.note}</p>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {kinds.map((kind) => (

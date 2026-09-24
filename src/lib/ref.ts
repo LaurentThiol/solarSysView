@@ -115,6 +115,63 @@ export function fetchCatalog() {
   )
 }
 
+export const SCALES = [
+  { id: "sum", label: "Total numéros" },
+  { id: "star_sum", label: "Total étoiles" },
+  { id: "n1", label: "n1" },
+  { id: "n2", label: "n2" },
+  { id: "n3", label: "n3" },
+  { id: "n4", label: "n4" },
+  { id: "n5", label: "n5" },
+  { id: "e1", label: "E1" },
+  { id: "e2", label: "E2" },
+] as const
+
+export type ScaleId = (typeof SCALES)[number]["id"]
+
+export type DrawScalars = Record<ScaleId, number> & { date: string }
+
+export type TracePoint = DrawScalars & { phase: number }
+
+export type TraceReport = {
+  ok: boolean
+  cycle: string
+  window: number
+  count: number
+  short: boolean
+  points: TracePoint[]
+  error?: string
+}
+
+export type PlanePoint = DrawScalars & { x: number; y: number }
+
+export type PlaneReport = {
+  ok: boolean
+  x: string
+  y: string
+  window: number
+  count: number
+  short: boolean
+  cycles: string[]
+  note: string
+  points: PlanePoint[]
+  error?: string
+}
+
+export function fetchTrace(cycle: string, window: number) {
+  const query = new URLSearchParams({ cycle, window: String(window) })
+  return fetch(`/api/ref/trace?${query}`, { cache: "no-store" }).then((response) =>
+    readJson<TraceReport>(response)
+  )
+}
+
+export function fetchPlane(x: string, y: string, window: number) {
+  const query = new URLSearchParams({ x, y, window: String(window) })
+  return fetch(`/api/ref/plane?${query}`, { cache: "no-store" }).then((response) =>
+    readJson<PlaneReport>(response)
+  )
+}
+
 export function fetchGoes(start: string, end: string, kind: "xrs" | "flares") {
   const query = new URLSearchParams({ start, end, kind })
   return fetch(`/api/ref/solar/goes?${query}`, { cache: "no-store" }).then((response) =>
