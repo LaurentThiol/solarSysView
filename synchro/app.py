@@ -990,6 +990,134 @@ def create_app() -> FastAPI:
             lambda: null_report(work, signal, window=window, n_sim=n_sim, seed=seed)
         )
 
+    def _cycles_draws(
+        era: str,
+        from_date: str | None,
+        to_date: str | None,
+        preset: str,
+        last_n: int | None,
+        warmup: int,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any], str]:
+        archive, source = _harmo_archive(era)
+        try:
+            resolved = resolve_window(
+                archive,
+                preset=preset,
+                from_date=from_date,
+                to_date=to_date,
+                last_n=last_n,
+                warmup=warmup,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        context = list(resolved["with_warmup"])
+        if not context:
+            raise HTTPException(404, "Aucun tirage dans la fenêtre.")
+        return context, resolved, source
+
+    @app.get("/api/cycles/status")
+    def cycles_status() -> dict[str, Any]:
+        from synchro.cycles import status
+
+        return status()
+
+    @app.get("/api/cycles/registry")
+    def cycles_registry(
+        variable: str = Query("sum"),
+        n: int | None = Query(None, ge=1, le=50),
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        preset: str = Query("last_100"),
+        last_n: int | None = Query(None, ge=1, le=2000),
+        warmup: int = Query(52, ge=0, le=400),
+    ) -> dict[str, Any]:
+        from synchro.cycles.panel import build_panel, registry_payload
+        from synchro.harmo.util import json_safe
+
+        if variable not in VARIABLE_NAMES:
+            raise HTTPException(400, f"Variable inconnue: {variable}")
+        draws, resolved, source = _cycles_draws(
+            era, from_date, to_date, preset, last_n, warmup
+        )
+        try:
+            panel = build_panel(draws, variable=variable, n=n, warmup=int(resolved["warmup_count"]))
+        except (ValueError, TypeError, KeyError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        payload = registry_payload(panel)
+        payload["archive_source"] = source
+        payload["from_date"] = resolved["from_date"]
+        payload["to_date"] = resolved["to_date"]
+        return json_safe(payload)
+
+    @app.get("/api/cycles/panel")
+    def cycles_panel(
+        variable: str = Query("sum"),
+        n: int | None = Query(None, ge=1, le=50),
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        preset: str = Query("last_100"),
+        last_n: int | None = Query(None, ge=1, le=2000),
+        warmup: int = Query(52, ge=0, le=400),
+    ) -> dict[str, Any]:
+        from synchro.cycles.panel import build_panel, panel_payload
+        from synchro.harmo.util import json_safe
+
+        if variable not in VARIABLE_NAMES:
+            raise HTTPException(400, f"Variable inconnue: {variable}")
+        draws, resolved, source = _cycles_draws(
+            era, from_date, to_date, preset, last_n, warmup
+        )
+        try:
+            panel = build_panel(draws, variable=variable, n=n, warmup=int(resolved["warmup_count"]))
+        except (ValueError, TypeError, KeyError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        payload = panel_payload(panel)
+        payload["archive_source"] = source
+        return json_safe(payload)
+
+    @app.post("/api/cycles/fit")
+    def cycles_fit(
+        variable: str = Query("sum"),
+        n: int | None = Query(None, ge=1, le=50),
+        era: str = Query("current", pattern="^(current|all)$"),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        preset: str = Query("last_100"),
+        last_n: int | None = Query(None, ge=1, le=2000),
+        warmup: int = Query(52, ge=0, le=400),
+        encoder: int = Query(32, ge=8, le=120),
+        horizon: int = Query(4, ge=1, le=12),
+        hidden: int = Query(32, ge=8, le=64),
+        epochs: int = Query(12, ge=1, le=40),
+        seed: int = Query(0),
+    ) -> dict[str, Any]:
+        from synchro.cycles.interpret import fit_cycles
+        from synchro.harmo.util import json_safe
+
+        if variable not in VARIABLE_NAMES:
+            raise HTTPException(400, f"Variable inconnue: {variable}")
+        draws, resolved, source = _cycles_draws(
+            era, from_date, to_date, preset, last_n, warmup
+        )
+        try:
+            payload = fit_cycles(
+                draws,
+                variable=variable,
+                n=n,
+                warmup=int(resolved["warmup_count"]),
+                encoder=encoder,
+                horizon=horizon,
+                hidden=hidden,
+                epochs=epochs,
+                seed=seed,
+            )
+        except (ValueError, TypeError, KeyError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        payload["archive_source"] = source
+        return json_safe(payload)
+
     @app.get("/api/ref/catalog")
     def ref_catalog() -> dict[str, Any]:
         from synchro.ref.cycles import catalog

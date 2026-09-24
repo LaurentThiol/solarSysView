@@ -138,6 +138,34 @@ const ANALYSE_TABS: { id: string; label: string; text: string; params?: string }
   },
 ]
 
+const CYCLES_TABS: { id: string; label: string; text: string }[] = [
+  {
+    id: "registre",
+    label: "Registre",
+    text: "Canaux alignés sur la fenêtre : phase au dernier tirage, période en jours et en tirages.",
+  },
+  {
+    id: "atlas",
+    label: "Atlas",
+    text: "Poids du réseau de sélection (VSN) : quels canaux la courbe utilise.",
+  },
+  {
+    id: "attention",
+    label: "Attention",
+    text: "Ruban quantile walk-forward et attention repliée sur les phases.",
+  },
+  {
+    id: "comparaison",
+    label: "Comparaison",
+    text: "Cosinus des signatures de deux courbes, canaux qui divergent.",
+  },
+  {
+    id: "nuls",
+    label: "Nuls",
+    text: "Ablation des horloges contre remaniement, phases permutées et loi marginale.",
+  },
+]
+
 const HARMO_TABS: { id: string; label: string; text: string }[] = [
   {
     id: "melange",
@@ -262,6 +290,9 @@ const TABS: AddressEntry[] = [
     "Journal des grilles réellement jouées (histoJeux). Rang après synchro FDJ, test binomial vs 7,71 %.",
     "grilles"
   ),
+  ...CYCLES_TABS.map((tab) =>
+    tabEntry(`/cycles?tab=${tab.id}`, `Cycles · ${tab.label}`, tab.text, "lecture")
+  ),
   ...HARMO_TABS.map((tab) =>
     tabEntry(`/harmo?tab=${tab.id}`, `Harmo · ${tab.label}`, tab.text, "lecture")
   ),
@@ -348,6 +379,10 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/analysis/dependence", "GET", "Dépendance", "Lift des paires et nuage somme (X) × étendue (Y).", "lecture", "from_date, to_date, era, weekday"),
   apiEntry("/api/analysis/numbers", "GET", "Numéros", "Sorties, retards et IC Wilson pour la grille 1–50.", "lecture", "from_date, to_date, era, weekday"),
   apiEntry("/api/analysis/lab", "GET", "Laboratoire complet", "Rapport groupé du labo Analyse (plus long à calculer).", "lecture", "from_date, to_date, era, weekday"),
+  apiEntry("/api/cycles/status", "GET", "Cycles · statut", "torch optionnel. Le registre répond sans lui.", "lecture"),
+  apiEntry("/api/cycles/registry", "GET", "Cycles · registre", "Canaux Réf, Harmo, Chartisme et séries sur la fenêtre.", "lecture", "variable, n, preset, weekday"),
+  apiEntry("/api/cycles/panel", "GET", "Cycles · panneau", "Cible, phases et occupation, une ligne par tirage.", "lecture", "variable, n, preset, weekday"),
+  apiEntry("/api/cycles/fit", "POST", "Cycles · fit TFT", "Walk-forward, VSN, attention, ablation et nuls. Pas une grille.", "lecture", "variable, encoder, horizon, epochs"),
   apiEntry("/api/harmo/status", "GET", "Harmo · statut", "Dépendances Python (PyWavelets, ssqueezepy, librosa).", "lecture"),
   apiEntry("/api/harmo/spectrum", "GET", "Harmo · spectre", "Raies / Lomb-Scargle sur la série.", "lecture"),
   apiEntry("/api/harmo/welch", "GET", "Harmo · Welch", "Densité spectrale (Welch / multitaper).", "lecture"),

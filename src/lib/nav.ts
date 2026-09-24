@@ -53,7 +53,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     home: "/analyse",
     help: {
       title: "Lecture",
-      body: "Laboratoires qui décrivent l’archive : indicateurs, formes, relief, figures, harmoniques.",
+      body: "Laboratoires qui décrivent l’archive : indicateurs, formes, relief, figures, harmoniques, cycles comparés.",
     },
     items: [
       {
@@ -86,6 +86,14 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         help: {
           title: "Chartisme",
           body: "Figures chartistes sur les courbes du logiciel : détection, annotation dessinée, atelier d'étiquetage, règles descriptives et rétro-test contre le hasard. Ne touche pas aux grilles.",
+        },
+      },
+      {
+        href: "/cycles",
+        label: "Cycles",
+        help: {
+          title: "Cycles",
+          body: "Registre commun des horloges (Réf, Harmo, Chartisme, séries) et TFT d’interprétation : poids des variables, attention repliée, ablation. Compare les cycles d’un module à l’autre. Décrit l’archive, pas le prochain tirage.",
         },
       },
       {
