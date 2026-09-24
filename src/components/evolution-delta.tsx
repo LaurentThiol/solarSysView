@@ -3,7 +3,10 @@
 import { Fragment, useMemo, useState } from "react"
 import {
   Area,
+  Bar,
+  BarChart,
   CartesianGrid,
+  Cell,
   ComposedChart,
   Line,
   ReferenceLine,
@@ -21,15 +24,21 @@ import {
 } from "@/components/ui/chart"
 import {
   DELTA_VIEW_KEYS,
+  deltaBinWidth,
   deltaDomain,
+  deltaHistogram,
   deltaOverlayBands,
   finiteDeltas,
   previousLevel,
+  shuffleMeanAbs,
+  shuffleSeed,
   summarizeDelta,
+  summarizeEdgeMotion,
   toDeltaSeries,
   type DeltaKey,
   type DeltaPoint,
   type DeltaView,
+  type EdgeMotion,
 } from "@/lib/delta-evol"
 import {
   overlayField,
@@ -83,7 +92,11 @@ const TITLE_HELP: HelpCopy = {
 • Le premier tirage de la fenêtre n’a pas de prédécesseur : la courbe commence au second point.
 • La ligne 0 est la base. Au-dessus, la série a monté ; en dessous, elle a baissé.
 
-SMA et Bollinger (optionnels) lissent ou encadrent ces écarts, pas les niveaux. Maj+clic isole une série. Les sommes vivent sur une autre échelle que n1–n5 : Sommes les sépare (Δ somme n à gauche, Δ somme E à droite). Tout les superpose et laisse les sommes écraser les rangs. Descriptif : chaque tirage reste indépendant.`,
+SMA et Bollinger (optionnels) lissent ou encadrent ces écarts, pas les niveaux. Maj+clic isole une série. Les sommes vivent sur une autre échelle que n1–n5 : Sommes les sépare (Δ somme n à gauche, Δ somme E à droite). Tout les superpose et laisse les sommes écraser les rangs.
+
+n1 et n5 du même signe : la grille glisse. Signes opposés : elle s’étire (l’étendue grandit) ou se resserre. L’histogramme situe le dernier pas parmi ceux de la série. |Δ| est comparé à un mélange des mêmes valeurs : une ampleur dans la fourchette est celle de ces nombres remis au hasard, pas un signal.
+
+Descriptif : chaque tirage reste indépendant.`,
 }
 
 const VIEW_HELP: HelpCopy = {
@@ -103,7 +116,33 @@ const BB_HELP: HelpCopy = {
 
 const SUMMARY_HELP: HelpCopy = {
   title: "dernier · moy. · |Δ|",
-  body: "Sur les écarts de la fenêtre : dernier pas, moyenne signée (près de 0 si la série ne dérive pas), moyenne des valeurs absolues (ampleur typique d’un pas), et série en cours du même signe.",
+  body: "Sur les écarts de la fenêtre : dernier pas, moyenne signée (près de 0 si la série ne dérive pas), moyenne des valeurs absolues (ampleur typique d’un pas), et série en cours du même signe. Le mélange remet ces mêmes valeurs dans 200 ordres au hasard : la fourchette est le 5e–95e de leurs |Δ|. Dedans, l’ampleur est celle d’un ordre quelconque. Dehors, le pas est plus calme ou plus agité que ce mélange. Ce n’est pas un signal de jeu.",
+}
+
+const MOTION_HELP: HelpCopy = {
+  title: "n1 et n5",
+  body: "Même sens : les deux bords bougent ensemble, la grille glisse. Sens opposés : l’étendue change — s’étire si n5 monte pendant que n1 descend, se resserre dans l’autre cas. Un bord à 0 ne compte ni l’un ni l’autre.",
+}
+
+const HISTOGRAM_HELP: HelpCopy = {
+  title: "Histogramme des pas",
+  body: "Combien de fois chaque écart est apparu dans la fenêtre. Le bac du dernier pas est en couleur. Un bac loin du centre est un grand pas pour cette série, pas une prédiction.",
+}
+
+function motionPhrase(motion: EdgeMotion | null, slide: -1 | 1 | 0) {
+  if (motion === "slide" && slide > 0) return "glisse vers le haut"
+  if (motion === "slide" && slide < 0) return "glisse vers le bas"
+  if (motion === "slide") return "glisse"
+  if (motion === "stretch") return "s’étire"
+  if (motion === "squeeze") return "se resserre"
+  if (motion === "still") return "un bord immobile"
+  return "—"
+}
+
+function shufflePhrase(observed: number, low: number, high: number) {
+  if (observed < low) return "plus calme que le mélange"
+  if (observed > high) return "plus agité que le mélange"
+  return "dans le mélange"
 }
 
 function formatStat(value: number, digits = 1) {
@@ -310,6 +349,35 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
       stats: summarizeDelta(series.map((point) => point[key])),
     }))
   }, [series, keys])
+
+  const motion = useMemo(
+    () => summarizeEdgeMotion(series.map((point) => ({ n1: point.n1, n5: point.n5 }))),
+    [series]
+  )
+
+  const shuffles = useMemo(() => {
+    return keys.map((key) => {
+      const levels = series.map((point) => point[`level_${key}`])
+      return {
+        key,
+        label: chartConfig[key].label,
+        compare: shuffleMeanAbs(levels, { seed: shuffleSeed(key, levels.length) }),
+      }
+    })
+  }, [series, keys])
+
+  const histograms = useMemo(() => {
+    return visible.map((key) => {
+      const values = series.map((point) => point[key])
+      const finite = finiteDeltas(values)
+      const last = finite.length > 0 ? finite[finite.length - 1] : null
+      return {
+        key,
+        label: chartConfig[key].label,
+        bins: deltaHistogram(values, deltaBinWidth(key), last),
+      }
+    })
+  }, [series, visible])
 
   function changeView(next: DeltaView) {
     if (next === view) return
@@ -686,6 +754,77 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
                 <HelpTip {...SUMMARY_HELP} />
               </li>
             </ul>
+            <p className="mt-2 flex flex-wrap items-center justify-center gap-x-2 text-center text-xs text-muted-foreground">
+              <span>
+                n1 et n5 · {motion.slide} glissement{motion.slide > 1 ? "s" : ""} · {motion.stretch}{" "}
+                étirement{motion.stretch > 1 ? "s" : ""} · {motion.squeeze} resserrement
+                {motion.squeeze > 1 ? "s" : ""} · {motion.still} bord{motion.still > 1 ? "s" : ""}{" "}
+                immobile{motion.still > 1 ? "s" : ""} · dernier :{" "}
+                {motionPhrase(motion.last, motion.lastSlide)}
+              </span>
+              <HelpTip {...MOTION_HELP} />
+            </p>
+            {shuffles.some((row) => row.compare) ? (
+              <ul className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-center text-xs tabular-nums text-muted-foreground">
+                {shuffles.map((row) =>
+                  row.compare ? (
+                    <li key={row.key}>
+                      {row.label} · |Δ| {formatStat(row.compare.observed)} · mélange{" "}
+                      {formatStat(row.compare.shuffleMean)} ({formatStat(row.compare.low)}–
+                      {formatStat(row.compare.high)}) ·{" "}
+                      {shufflePhrase(row.compare.observed, row.compare.low, row.compare.high)}
+                    </li>
+                  ) : null
+                )}
+              </ul>
+            ) : null}
+            {histograms.some((row) => row.bins.length > 0) ? (
+              <div className="mt-4">
+                <p className="mb-2 flex items-center justify-center gap-1 text-center text-xs text-muted-foreground">
+                  Histogramme des pas
+                  <HelpTip {...HISTOGRAM_HELP} />
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {histograms.map((row) =>
+                    row.bins.length === 0 ? null : (
+                      <div key={row.key}>
+                        <p className="mb-1 text-center text-xs text-muted-foreground">{row.label}</p>
+                        <ChartContainer
+                          config={{ count: { label: row.label, color: chartConfig[row.key].color } }}
+                          className="aspect-auto h-[120px] w-full"
+                        >
+                          <BarChart data={row.bins} margin={{ left: 0, right: 4, top: 4, bottom: 0 }}>
+                            <CartesianGrid vertical={false} />
+                            <XAxis
+                              dataKey="label"
+                              tickLine={false}
+                              axisLine={false}
+                              tickMargin={4}
+                              minTickGap={12}
+                              interval="preserveStartEnd"
+                            />
+                            <YAxis width={24} tickLine={false} axisLine={false} allowDecimals={false} />
+                            <Bar dataKey="count" radius={2} isAnimationActive={false}>
+                              {row.bins.map((bin) => (
+                                <Cell
+                                  key={bin.bin}
+                                  fill={
+                                    bin.holdsLast
+                                      ? chartConfig[row.key].color
+                                      : "var(--muted-foreground)"
+                                  }
+                                  fillOpacity={bin.holdsLast ? 1 : 0.35}
+                                />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ChartContainer>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            ) : null}
           </>
         )}
       </CardContent>

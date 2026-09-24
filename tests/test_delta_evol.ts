@@ -3,9 +3,13 @@ import test from "node:test"
 
 import {
   deltaDomain,
+  deltaHistogram,
   deltaOverlayBands,
+  edgeMotion,
   previousLevel,
+  shuffleMeanAbs,
   summarizeDelta,
+  summarizeEdgeMotion,
   toDeltaSeries,
   type DeltaPoint,
 } from "../src/lib/delta-evol.ts"
@@ -82,6 +86,58 @@ test("Bollinger on deltas skips the first gap and stays aligned", () => {
   assert.equal(bands[5].sma, (1 + 1 + 1 + 1 + 10) / 5)
   assert.ok(bands[5].upper != null && bands[5].lower != null)
   assert.ok((bands[5].upper ?? 0) > (bands[5].sma ?? 0))
+})
+
+test("n1 and n5 share a sign when the grid slides", () => {
+  assert.equal(edgeMotion(2, 3), "slide")
+  assert.equal(edgeMotion(-4, -1), "slide")
+  assert.equal(edgeMotion(-2, 5), "stretch")
+  assert.equal(edgeMotion(3, -4), "squeeze")
+  assert.equal(edgeMotion(0, 4), "still")
+  assert.equal(edgeMotion(null, 4), null)
+  const summary = summarizeEdgeMotion([
+    { n1: 1, n5: 2 },
+    { n1: -3, n5: 4 },
+    { n1: 2, n5: -1 },
+    { n1: null, n5: null },
+  ])
+  assert.equal(summary.slide, 1)
+  assert.equal(summary.stretch, 1)
+  assert.equal(summary.squeeze, 1)
+  assert.equal(summary.last, "squeeze")
+  assert.equal(summary.lastSlide, 0)
+})
+
+test("histogram marks the last step and keeps empty bins", () => {
+  const bins = deltaHistogram([null, -2, 0, 4], 1, 4)
+  assert.deepEqual(
+    bins.map((bin) => [bin.bin, bin.count, bin.holdsLast]),
+    [
+      [-2, 1, false],
+      [-1, 0, false],
+      [0, 1, false],
+      [1, 0, false],
+      [2, 0, false],
+      [3, 0, false],
+      [4, 1, true],
+    ]
+  )
+  const wide = deltaHistogram([12, -3], 10, 12)
+  assert.equal(wide[0].label, "-10 – -1")
+  assert.equal(wide.at(-1)?.holdsLast, true)
+})
+
+test("a smooth series is calmer than a shuffle of the same values", () => {
+  const smooth = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  const calm = shuffleMeanAbs(smooth, { seed: 7, trials: 80 })
+  assert.ok(calm)
+  assert.equal(calm.observed, 1)
+  assert.ok(calm.shuffleMean > calm.observed)
+  assert.equal(calm.trials, 80)
+  const jumpy = shuffleMeanAbs([1, 12, 1, 12, 1, 12, 1, 12, 1, 12], { seed: 7, trials: 80 })
+  assert.ok(jumpy)
+  assert.ok(jumpy.observed > jumpy.shuffleMean)
+  assert.equal(shuffleMeanAbs([4]), null)
 })
 
 test("delta domain always contains zero", () => {

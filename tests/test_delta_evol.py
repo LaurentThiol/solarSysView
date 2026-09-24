@@ -39,5 +39,8 @@ def test_delta_evol_block_follows_the_time_chart() -> None:
     assert "Δ somme n" in block
     assert "Δ somme E" in block
     assert "Bollinger" in block
+    assert "glissement" in block
+    assert "Histogramme des pas" in block
+    assert "mélange" in block
     assert "DeltaEvol" in readme
     assert "écarts n − n−1" in panel
