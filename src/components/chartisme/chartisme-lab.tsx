@@ -61,6 +61,7 @@ import {
   type ScanHit,
 } from "@/lib/chartisme/scan"
 import { cycleHitIndex, hitIndicesForLabel } from "@/lib/chartisme/banner"
+import { pulseSentence, readingPulse } from "@/lib/chartisme/pulse"
 import {
   alongsideIndex,
   evaluateRules,
@@ -334,6 +335,12 @@ export function ChartismeLab() {
     return collapseZones(pool, { compare: compareLab }) as LabHit[]
   }, [previousCurve, study, figureBars, minConfidence, viewMode])
 
+  const pulse = useMemo(
+    () => readingPulse(hits, previousCurve ? previousHits : null),
+    [hits, previousCurve, previousHits]
+  )
+  const pulseLine = pulseSentence(pulse, Boolean(curve))
+
   const baseRates = useMemo(
     () =>
       samples.map((sample) =>
@@ -584,8 +591,11 @@ export function ChartismeLab() {
                 modèles : {status.models.available.join(" · ")}
               </Badge>
             ) : (
-              <Badge variant="outline">détection géométrique seule</Badge>
+              <Badge variant="outline">réseaux non chargés</Badge>
             )}
+            <Badge variant={curve ? "default" : "outline"}>
+              {curve ? "chartisme fonctionnel" : loading ? "chargement des tirages" : "en attente des tirages"}
+            </Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-2 text-xs text-muted-foreground">
@@ -595,6 +605,7 @@ export function ChartismeLab() {
               ? ` · dernier cycle ${status.last_cycle.at} (${status.last_cycle.figures ?? 0} figures)`
               : ""}
           </p>
+          <p className="text-foreground">{pulseLine}</p>
           {status?.models?.install_cmd && !status.models.available?.length ? (
             <p>
               Réseaux non installés. Pour les activer :{" "}
@@ -900,6 +911,20 @@ export function ChartismeLab() {
                     · {rareCount} rare{rareCount > 1 ? "s" : ""} parmi{" "}
                     {annotatedHits.length} forme{annotatedHits.length > 1 ? "s" : ""}
                   </span>
+                ) : null}
+                {pulse.agreed > 0 ? (
+                  <Badge variant="secondary">
+                    {pulse.agreed} confirmée{pulse.agreed > 1 ? "s" : ""} par le graphe
+                  </Badge>
+                ) : (
+                  <Badge variant="outline">graphe lu</Badge>
+                )}
+                {pulse.shared != null ? (
+                  <Badge variant={pulse.shared > 0 ? "default" : "outline"}>
+                    {pulse.shared} revien{pulse.shared > 1 ? "nent" : "t"} d&apos;une fenêtre à l&apos;autre
+                    {pulse.appeared ? ` · ${pulse.appeared} nouvelle${pulse.appeared > 1 ? "s" : ""}` : ""}
+                    {pulse.gone ? ` · ${pulse.gone} en moins` : ""}
+                  </Badge>
                 ) : null}
                 {byFigure.slice(0, 6).map(([figure, count]) => {
                   const label = labelOf(figure)
