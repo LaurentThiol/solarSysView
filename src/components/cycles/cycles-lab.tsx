@@ -7,6 +7,16 @@ import { useRegisterCapture } from "@/components/capture"
 import { HelpTip, LabelHelp, TitleHelp } from "@/components/help"
 import { SiteHeaderSlot } from "@/components/site-header-slot"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
+import {
+  AttentionChart,
+  CycleOverlayChart,
+  RibbonChart,
+  WeightChart,
+  channelTitle,
+  moduleLabel,
+  signatureRows,
+  weightTitle,
+} from "@/components/cycles/cycle-charts"
 import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -39,7 +49,6 @@ import {
   type CycleFit,
   type CyclePanel,
   type CycleRegistry,
-  type CycleSignature,
   type CycleStatus,
 } from "@/lib/cycles"
 
@@ -108,36 +117,7 @@ const DAY_BAR_HELP = {
   body: "Même choix qu’Évolution et Harmo : Tous, Mardi, Vendredi ou Synthèse. Mardi ou Vendredi isole ce jour avant la fenêtre.",
 } as const
 
-function Bars({ rows }: { rows: { id: string; label: string; value: number }[] }) {
-  const peak = Math.max(0.001, ...rows.map((row) => Math.abs(row.value)))
-  return (
-    <ul className="flex flex-col gap-1.5">
-      {rows.map((row) => (
-        <li key={row.id} className="grid grid-cols-[9rem_1fr_3.5rem] items-center gap-2 text-xs">
-          <span className="truncate text-muted-foreground" title={row.label}>
-            {row.label}
-          </span>
-          <span className="h-2 overflow-hidden rounded-full bg-muted">
-            <span
-              className="block h-full rounded-full bg-foreground/80"
-              style={{ width: `${Math.min(100, (Math.abs(row.value) / peak) * 100)}%` }}
-            />
-          </span>
-          <span className="tabular-nums text-right">{row.value.toFixed(3)}</span>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function signatureRows(signature: CycleSignature, kind: "known" | "past") {
-  const ids = kind === "known" ? signature.known_ids : signature.past_ids
-  const weights = kind === "known" ? signature.vsn_known : signature.vsn_past
-  return ids
-    .map((id, index) => ({ id, label: id, value: weights[index] ?? 0 }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 12)
-}
+const PAST_ORDER = ["chartisme", "morpho", "relief", "pronostic", "harmo", "analyse"] as const
 
 function CyclesDayBar({
   weekday,
@@ -462,48 +442,73 @@ export function CyclesLab() {
         {registry && !registry.ok ? <p className="text-sm text-destructive">{registry.error}</p> : null}
 
         {tab === "registre" && registry?.ok ? (
-          <div className="grid gap-6 lg:grid-cols-2">
-            <section className="flex flex-col gap-2">
-              <h2 className="text-sm font-medium">Futur connu</h2>
-              <ul className="flex flex-col gap-2 text-sm">
-                {known.map((row) => (
-                  <li key={row.id} className="rounded-lg border border-border px-3 py-2">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span>{row.label.replace(" sin", "")}</span>
-                      <span className="text-xs tabular-nums text-muted-foreground">
-                        phase {row.phase == null ? "—" : row.phase.toFixed(3)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {row.module} · {row.kind}
-                      {row.period_days ? ` · ${row.period_days.toFixed(1)} j` : ""}
-                      {row.period_draws ? ` · ${row.period_draws.toFixed(1)} tirages` : ""}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </section>
-            <section className="flex flex-col gap-2">
-              <h2 className="text-sm font-medium">Passé observé</h2>
-              <ul className="flex max-h-96 flex-col gap-1 overflow-auto text-sm">
-                {past.map((row) => (
-                  <li key={row.id} className="flex justify-between gap-2 border-b border-border/60 py-1">
-                    <span>{row.label}</span>
-                    <span className="text-xs text-muted-foreground">{row.module}</span>
-                  </li>
-                ))}
-              </ul>
-              {panel?.series?.target ? (
-                <p className="text-xs text-muted-foreground">
-                  {panel.dates?.length ?? 0} points affichés, occupation moyenne{" "}
-                  {(
-                    (panel.series.occupancy ?? []).reduce<number>((sum, value) => sum + (value ?? 0), 0) /
-                    Math.max(1, panel.series.occupancy?.length ?? 1)
-                  ).toFixed(2)}
-                  .
+          <div className="flex flex-col gap-6">
+            {panel?.ok && panel.dates?.length ? (
+              <CycleOverlayChart panel={panel} targetLabel={VARIABLE_LABELS[variable]} />
+            ) : null}
+            <div className="grid gap-6 lg:grid-cols-2">
+              <section className="flex flex-col gap-2">
+                <h2 className="text-sm font-medium">Futur connu — les horloges</h2>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Phase au dernier tirage de la fenêtre. 0 ouvre le cycle, 1 le referme.
                 </p>
-              ) : null}
-            </section>
+                <ul className="flex flex-col gap-2 text-sm">
+                  {known.map((row) => (
+                    <li key={row.id} className="rounded-lg border border-border px-3 py-2">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span>{channelTitle(row)}</span>
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          phase {row.phase == null ? "—" : row.phase.toFixed(3)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {moduleLabel(row.module)}
+                        {row.period_days ? ` · ${row.period_days.toFixed(1)} j` : ""}
+                        {row.period_draws ? ` · ${row.period_draws.toFixed(1)} tirages` : ""}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              <section className="flex flex-col gap-3">
+                <h2 className="text-sm font-medium">Passé observé — par module</h2>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Le module n’est pas un filtre. Dix-huit canaux viennent d’Analyse : ce sont les séries sœurs
+                  (somme, rangs, écarts), toutes étiquetées Analyse. Chartisme, Morpho, Relief et Pronostic sont des
+                  canaux à part, listés en premier.
+                </p>
+                {PAST_ORDER.map((module) => {
+                  const rows = past.filter((row) => row.module === module)
+                  if (!rows.length) return null
+                  const body = (
+                    <ul className="flex flex-col gap-1 text-sm">
+                      {rows.map((row) => (
+                        <li key={row.id} className="flex justify-between gap-2 border-b border-border/60 py-1">
+                          <span>{channelTitle(row)}</span>
+                          <span className="text-xs text-muted-foreground">{moduleLabel(row.module)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                  if (module === "analyse") {
+                    return (
+                      <details key={module} className="rounded-lg border border-border px-3 py-2">
+                        <summary className="cursor-pointer text-sm">
+                          Analyse · {rows.length} séries sœurs
+                        </summary>
+                        <div className="mt-2 max-h-64 overflow-auto">{body}</div>
+                      </details>
+                    )
+                  }
+                  return (
+                    <div key={module} className="rounded-lg border border-border px-3 py-2">
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">{moduleLabel(module)}</p>
+                      {body}
+                    </div>
+                  )
+                })}
+              </section>
+            </div>
           </div>
         ) : null}
 
@@ -511,14 +516,16 @@ export function CyclesLab() {
           <FitBlock fit={fit} fitting={fitting}>
             {fit?.signature ? (
               <div className="grid gap-6 lg:grid-cols-2">
-                <section>
-                  <h2 className="mb-2 text-sm font-medium">Horloges</h2>
-                  <Bars rows={signatureRows(fit.signature, "known")} />
-                </section>
-                <section>
-                  <h2 className="mb-2 text-sm font-medium">Séries et figures</h2>
-                  <Bars rows={signatureRows(fit.signature, "past")} />
-                </section>
+                <WeightChart
+                  title="Horloges"
+                  caption="Poids du futur connu. Une barre haute veut dire que cette phase entre dans la lecture de la courbe."
+                  rows={signatureRows(fit.signature, "known")}
+                />
+                <WeightChart
+                  title="Séries et figures"
+                  caption="Poids du passé. Les noms disent le module : Chartisme, Morpho, Relief, Pronostic, ou une série d’Analyse."
+                  rows={signatureRows(fit.signature, "past")}
+                />
               </div>
             ) : null}
           </FitBlock>
@@ -526,58 +533,44 @@ export function CyclesLab() {
 
         {tab === "attention" ? (
           <FitBlock fit={fit} fitting={fitting}>
-            {fit?.ribbon ? (
-              <ul className="mb-4 flex max-h-48 flex-col gap-1 overflow-auto text-xs tabular-nums">
-                {fit.ribbon.slice(-12).map((row) => (
-                  <li key={row.date} className="grid grid-cols-4 gap-2">
-                    <span>{row.date}</span>
-                    <span>{row.q10}</span>
-                    <span>{row.q50}</span>
-                    <span className="text-muted-foreground">réel {row.y}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {fit?.signature
-              ? Object.entries(fit.signature.attention).map(([name, row]) => (
-                  <section key={name} className="mb-4">
-                    <h2 className="mb-1 text-sm font-medium">
-                      {name}{" "}
-                      <span className="font-normal text-muted-foreground">
-                        {row.locked ? "verrouillé" : "plat"} · écart {row.flatness.toFixed(2)}
-                      </span>
-                    </h2>
-                    <Bars
-                      rows={row.mass.map((value, index) => ({
-                        id: `${name}-${index}`,
-                        label: `bin ${index + 1}`,
-                        value,
-                      }))}
+            <div className="flex flex-col gap-4">
+              <RibbonChart fit={fit ?? { ok: false }} />
+              {fit?.signature
+                ? Object.entries(fit.signature.attention).map(([name, row]) => (
+                    <AttentionChart
+                      key={name}
+                      name={name}
+                      mass={row.mass}
+                      locked={row.locked}
+                      flatness={row.flatness}
                     />
-                  </section>
-                ))
-              : null}
+                  ))
+                : null}
+            </div>
           </FitBlock>
         ) : null}
 
         {tab === "comparaison" ? (
           <FitBlock fit={fit} fitting={fitting}>
             {comparison && fit?.signature && otherFit?.signature ? (
-              <div className="flex flex-col gap-3 text-sm">
-                <p>
-                  Cosinus des horloges {comparison.known.toFixed(3)} · cosinus des séries{" "}
-                  {comparison.past.toFixed(3)} entre {VARIABLE_LABELS[variable]} et {VARIABLE_LABELS[other]}.
+              <div className="flex flex-col gap-3">
+                <p className="text-sm leading-6">
+                  Même fenêtre, deux courbes. Le cosinus vaut 1 quand les deux courbes s’appuient sur les mêmes
+                  canaux, 0 quand leurs poids n’ont rien en commun. Horloges {comparison.known.toFixed(3)}, séries{" "}
+                  {comparison.past.toFixed(3)}, entre {VARIABLE_LABELS[variable]} et {VARIABLE_LABELS[other]}.
                 </p>
-                <Bars
-                  rows={fit.signature.known_ids.slice(0, 8).map((id, index) => ({
+                <WeightChart
+                  title="Écart de poids des horloges"
+                  caption="Positif : la première courbe s’appuie plus sur ce canal. Négatif : c’est la seconde."
+                  rows={fit.signature.known_ids.map((id, index) => ({
                     id,
-                    label: id,
+                    label: weightTitle(id),
                     value: (fit.signature?.vsn_known[index] ?? 0) - (otherFit.signature?.vsn_known[index] ?? 0),
                   }))}
                 />
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Deux lectures, même fenêtre.</p>
+              <p className="text-sm text-muted-foreground">Deux lectures, même fenêtre. Choisis la seconde courbe puis lis le TFT.</p>
             )}
           </FitBlock>
         ) : null}
@@ -586,34 +579,28 @@ export function CyclesLab() {
           <FitBlock fit={fit} fitting={fitting}>
             {fit?.signature ? (
               <div className="grid gap-6 lg:grid-cols-2">
-                <section>
-                  <h2 className="mb-2 text-sm font-medium">
-                    Ablation {fit.signature.beats_nulls ? "— le tracé bat les nuls" : "— les nuls ne sont pas battus"}
-                  </h2>
-                  <ul className="flex flex-col gap-1 text-sm">
-                    {fit.signature.ablation.map((row) => (
-                      <li key={row.id} className="flex justify-between gap-2">
-                        <span>
-                          {row.label} {row.wins ? "· gagne" : ""}
-                        </span>
-                        <span className="tabular-nums">{row.delta.toFixed(4)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-                <section>
-                  <h2 className="mb-2 text-sm font-medium">Trois nuls</h2>
-                  <ul className="flex flex-col gap-1 text-sm">
-                    {fit.signature.nulls.map((row) => (
-                      <li key={row.id} className="flex justify-between gap-2">
-                        <span>{row.label}</span>
-                        <span className="tabular-nums">
-                          {row.delta.toFixed(4)} {row.better ? "réel meilleur" : ""}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+                <WeightChart
+                  title={
+                    fit.signature.beats_nulls
+                      ? "Ablation — le tracé bat les nuls"
+                      : "Ablation — les nuls ne sont pas battus"
+                  }
+                  caption="Delta de perte quand on retire l’horloge. Positif : elle servait. Elle ne gagne que si le tracé réel bat aussi les trois nuls."
+                  rows={fit.signature.ablation.map((row) => ({
+                    id: row.id,
+                    label: row.wins ? `${row.label} · gagne` : row.label,
+                    value: row.delta,
+                  }))}
+                />
+                <WeightChart
+                  title="Trois nuls"
+                  caption="Delta contre le tracé réel. Positif et « réel meilleur » : le modèle utilise l’ordre ou les phases, pas seulement la marge des valeurs."
+                  rows={fit.signature.nulls.map((row) => ({
+                    id: row.id,
+                    label: row.better ? `${row.label} · réel meilleur` : row.label,
+                    value: row.delta,
+                  }))}
+                />
               </div>
             ) : null}
           </FitBlock>

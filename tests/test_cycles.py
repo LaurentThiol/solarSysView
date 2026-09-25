@@ -73,6 +73,12 @@ def test_registry_aligns_clocks_on_the_draw_index() -> None:
     assert lunar["module"] == "ref"
     assert lunar["role"] == "known"
     assert lunar["phase"] is not None
+    from synchro.cycles.panel import panel_payload
+
+    view = panel_payload(panel)
+    for key in ("target", "lunar", "harmo", "occupancy", "activity", "morpho", "relief", "residual"):
+        assert key in view["series"]
+        assert len(view["series"][key]) == len(view["dates"])
     assert panel["past"].shape[0] == panel["known"].shape[0] == 60
     assert panel["past"].shape[1] == 23
     delay = build_panel(_draws(40), variable="delay", n=7, warmup=0)

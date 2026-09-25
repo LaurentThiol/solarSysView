@@ -285,9 +285,19 @@ def panel_payload(panel: dict[str, Any], *, max_points: int = 240) -> dict[str, 
     def take(values: np.ndarray) -> list[float | None]:
         return [round(float(values[i]), 5) for i in idx]
 
+    past_ids = [channel.id for channel in panel["past_channels"]]
+
+    def past_series(channel_id: str) -> list[float | None]:
+        index = past_ids.index(channel_id)
+        return take(panel["past"][start:, index])
+
     series = {
         "target": take(target),
         "occupancy": take(panel["occupancy"][start:]),
+        "activity": past_series("chartisme:activity"),
+        "morpho": past_series("morpho:gap_std"),
+        "relief": past_series("relief:centroid"),
+        "residual": past_series("pronostic:z"),
     }
     for name, phase in panel["phases"].items():
         series[name] = take(np.asarray(phase)[start:])
