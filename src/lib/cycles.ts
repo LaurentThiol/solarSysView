@@ -46,6 +46,20 @@ export type CycleNull = {
   better: boolean
 }
 
+export type CycleGroupWeight = {
+  id: string
+  label: string
+  value: number
+}
+
+export type CycleAttentionFold = {
+  mass: number[]
+  mass_next?: number[]
+  flatness: number
+  flatness_next?: number
+  locked: boolean
+}
+
 export type CycleSignature = {
   variable: string
   n?: number | null
@@ -53,7 +67,15 @@ export type CycleSignature = {
   past_ids: string[]
   vsn_known: number[]
   vsn_past: number[]
-  attention: Record<string, { mass: number[]; flatness: number; locked: boolean }>
+  vsn_known_grouped?: CycleGroupWeight[]
+  vsn_past_without_target?: number[]
+  copy_id?: string | null
+  copy_weight?: number
+  baseline_loss?: number
+  loss_ratio?: number | null
+  coverage?: number
+  beats_baseline?: boolean
+  attention: Record<string, CycleAttentionFold>
   ablation: CycleAblation[]
   nulls: CycleNull[]
   beats_nulls: boolean
@@ -65,6 +87,9 @@ export type CycleFit = {
   torch?: boolean
   train_loss?: number
   test_loss?: number
+  baseline_loss?: number
+  loss_ratio?: number | null
+  coverage?: number
   harmo_period_draws?: number | null
   signature?: CycleSignature
   ribbon?: { date: string; q10: number; q50: number; q90: number; y: number }[]

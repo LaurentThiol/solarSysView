@@ -86,11 +86,17 @@ def fold_attention(
     encoder: int,
     *,
     bins: int = _BINS,
+    step: int | None = None,
 ) -> list[float]:
-    """Masse d'attention repliée sur la phase du tirage passé regardé."""
+    """Masse d'attention repliée sur la phase du tirage passé regardé.
+
+    `step` None somme tout l'horizon. `step` 0 ne garde que le pas suivant.
+    """
     hist = np.zeros(bins, dtype=float)
-    # attention: (B, H, L) — on somme l'horizon
-    mass = attention.sum(axis=1)
+    if step is None:
+        mass = attention.sum(axis=1)
+    else:
+        mass = attention[:, step, :]
     for row, origin in enumerate(origins):
         start = int(origin) - encoder
         phase = np.asarray(phases[start : int(origin)], dtype=float)
@@ -112,6 +118,60 @@ def _flatness(mass: list[float]) -> float:
         return 0.0
     uniform = 1.0 / arr.size
     return round(float(np.sum(np.abs(arr - uniform)) / 2.0), 5)
+
+
+def _pinball_np(pred: np.ndarray, target: np.ndarray, quantiles: tuple[float, ...] = (0.1, 0.5, 0.9)) -> float:
+    losses = []
+    for index, q in enumerate(quantiles):
+        err = target - pred[..., index]
+        losses.append(np.maximum(q * err, (q - 1.0) * err))
+    return float(np.mean(np.stack(losses, axis=-1)))
+
+
+def _baseline_pinball(train_target: np.ndarray, test_future: np.ndarray) -> float:
+    """Quantiles empiriques de l'entraînement, constants sur l'horizon de test."""
+    qs = np.quantile(np.asarray(train_target, dtype=float), [0.1, 0.5, 0.9])
+    pred = np.broadcast_to(qs.astype(np.float32), test_future.shape + (3,)).copy()
+    return _pinball_np(pred, np.asarray(test_future, dtype=float))
+
+
+def _group_weights(weights: np.ndarray, groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = []
+    for group in groups:
+        cols = [int(col) for col in group["columns"]]
+        rows.append(
+            {
+                "id": group["id"],
+                "label": group["label"],
+                "value": round(float(sum(weights[col] for col in cols)), 5),
+            }
+        )
+    rows.sort(key=lambda row: row["value"], reverse=True)
+    return rows
+
+
+def _vsn_without_target(
+    model: Any,
+    past: np.ndarray,
+    known: np.ndarray,
+    static: np.ndarray,
+    encoder: int,
+    copy_index: int | None,
+) -> np.ndarray:
+    import torch
+
+    knocked = past.copy()
+    if copy_index is not None:
+        knocked[:, :, copy_index] = 0.0
+    device = next(model.parameters()).device
+    with torch.no_grad():
+        weights = model(
+            torch.tensor(knocked, device=device),
+            torch.tensor(known, device=device),
+            torch.tensor(static, device=device),
+            encoder,
+        )["vsn_past"]
+    return weights.mean(dim=(0, 1)).cpu().numpy()
 
 
 def compare_signatures(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
@@ -228,17 +288,38 @@ def fit_cycles(
 
     known_ids = [channel.id for channel in panel["known_channels"]]
     past_ids = [channel.id for channel in panel["past_channels"]]
+    copy_id = f"series:{variable}"
+    copy_index = past_ids.index(copy_id) if copy_id in past_ids else None
+    copy_weight = float(vsn_past[copy_index]) if copy_index is not None else 0.0
+    without = _vsn_without_target(
+        model,
+        past_w[test_mask],
+        known_w[test_mask],
+        static_w[test_mask],
+        encoder,
+        copy_index,
+    )
+    grouped = _group_weights(vsn_known, panel["groups"])
     test_origins = origins[test_mask]
-    folds = {
-        name: {
-            "mass": fold_attention(attention, panel["phases"][name], test_origins, encoder),
+    folds = {}
+    for name in ("lunar", "carrington", "schwabe", "tropical", "harmo"):
+        if name not in panel["phases"]:
+            continue
+        mass = fold_attention(attention, panel["phases"][name], test_origins, encoder)
+        mass_next = fold_attention(
+            attention, panel["phases"][name], test_origins, encoder, step=0
+        )
+        folds[name] = {
+            "mass": mass,
+            "mass_next": mass_next,
+            "flatness": _flatness(mass),
+            "flatness_next": _flatness(mass_next),
+            "locked": _flatness(mass) >= 0.15 or _flatness(mass_next) >= 0.15,
         }
-        for name in ("lunar", "carrington", "schwabe", "tropical", "harmo")
-        if name in panel["phases"]
-    }
-    for name, row in folds.items():
-        row["flatness"] = _flatness(row["mass"])
-        row["locked"] = row["flatness"] >= 0.15
+
+    baseline_loss = _baseline_pinball(target_s[:train_cut], future[test_mask])
+    loss_ratio = round(real_loss / baseline_loss, 5) if baseline_loss > 1e-12 else None
+    beats_baseline = bool(baseline_loss > 1e-12 and real_loss < baseline_loss)
 
     ablation = _ablation(
         model,
@@ -262,23 +343,32 @@ def fit_cycles(
     )
     beats_nulls = all(row["better"] for row in nulls)
     for row in ablation:
-        row["wins"] = bool(row["delta"] > 0 and beats_nulls)
+        row["wins"] = bool(row["delta"] > 0 and beats_baseline)
+        row["beats_nulls"] = beats_nulls
 
     sd = float(scale["tgt_sd"])
     mu = float(scale["tgt_mu"])
     ribbon = []
+    covered = 0
     for origin, qrow in zip(test_origins, quant):
         step = qrow[0]
+        q10 = float(step[0] * sd + mu)
+        q50 = float(step[1] * sd + mu)
+        q90 = float(step[2] * sd + mu)
+        y = float(panel["target"][int(origin)])
+        if q10 <= y <= q90:
+            covered += 1
         ribbon.append(
             {
                 "date": panel["dates"][int(origin)],
                 "origin": int(origin),
-                "q10": round(float(step[0] * sd + mu), 4),
-                "q50": round(float(step[1] * sd + mu), 4),
-                "q90": round(float(step[2] * sd + mu), 4),
-                "y": round(float(panel["target"][int(origin)]), 4),
+                "q10": round(q10, 4),
+                "q50": round(q50, 4),
+                "q90": round(q90, 4),
+                "y": round(y, 4),
             }
         )
+    coverage = round(covered / len(ribbon), 5) if ribbon else 0.0
 
     signature = {
         "variable": variable,
@@ -287,6 +377,14 @@ def fit_cycles(
         "past_ids": past_ids,
         "vsn_known": [round(float(v), 5) for v in vsn_known],
         "vsn_past": [round(float(v), 5) for v in vsn_past],
+        "vsn_known_grouped": grouped,
+        "vsn_past_without_target": [round(float(v), 5) for v in without],
+        "copy_id": copy_id if copy_index is not None else None,
+        "copy_weight": round(copy_weight, 5),
+        "baseline_loss": round(baseline_loss, 5),
+        "loss_ratio": loss_ratio,
+        "coverage": coverage,
+        "beats_baseline": beats_baseline,
         "attention": folds,
         "ablation": ablation,
         "nulls": nulls,
@@ -303,6 +401,9 @@ def fit_cycles(
         "epochs": epochs,
         "train_loss": round(last_loss, 5),
         "test_loss": round(real_loss, 5),
+        "baseline_loss": round(baseline_loss, 5),
+        "loss_ratio": loss_ratio,
+        "coverage": coverage,
         "train_windows": int(train_mask.sum()),
         "test_windows": int(test_mask.sum()),
         "harmo_period_draws": packed.get("period_draws"),
@@ -393,17 +494,14 @@ def _nulls(
     rolled = np.roll(rolled, shift, axis=1)
 
     iid_past = past.copy()
-    iid_future = future.copy()
     for col in range(iid_past.shape[-1]):
         column = iid_past[:, :, col].ravel()
         iid_past[:, :, col] = rng.choice(column, size=iid_past[:, :, col].shape, replace=True)
-    flat = future.ravel()
-    iid_future = rng.choice(flat, size=future.shape, replace=True).astype(np.float32)
 
     specs = [
         ("shuffle", "Remaniement de l'ordre", shuffled, known, future),
         ("phase", "Permutation des phases", past, rolled, future),
-        ("iid", "Loi marginale i.i.d.", iid_past, known, iid_future),
+        ("iid", "Entrées i.i.d.", iid_past, known, future),
     ]
     rows = []
     for key, label, p, k, y in specs:

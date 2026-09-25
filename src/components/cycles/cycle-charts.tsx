@@ -335,18 +335,24 @@ const PHASE_TICKS = ["0", "⅛", "¼", "⅜", "½", "⅝", "¾", "⅞"]
 export function AttentionChart({
   name,
   mass,
+  massNext,
   locked,
   flatness,
 }: {
   name: string
   mass: number[]
+  massNext?: number[]
   locked: boolean
   flatness: number
 }) {
-  const config = { mass: { label: "Part de l’attention", color: "var(--chart-1)" } } satisfies ChartConfig
+  const config = {
+    pas: { label: "Pas suivant", color: "var(--chart-1)" },
+    horizon: { label: "Tout l’horizon", color: "var(--chart-2)" },
+  } satisfies ChartConfig
   const data = mass.map((value, index) => ({
     label: PHASE_TICKS[index] ?? String(index + 1),
-    mass: Number(value.toFixed(3)),
+    horizon: Number(value.toFixed(3)),
+    pas: massNext ? Number((massNext[index] ?? 0).toFixed(3)) : null,
   }))
   return (
     <Card>
@@ -358,8 +364,9 @@ export function AttentionChart({
           </span>
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Part de l’attention selon la phase du tirage regardé. 0 est le début du cycle, ½ son milieu. Une barre
-          dominante veut dire que le modèle revient toujours au même endroit du cycle.
+          Part de l’attention selon la phase du tirage regardé. 0 est le début du cycle, ½ son milieu. « Pas suivant »
+          ne regarde que le premier pas de l’horizon ; « tout l’horizon » somme les pas. Une barre dominante veut dire
+          que le modèle revient toujours au même endroit du cycle.
         </p>
       </CardHeader>
       <CardContent>
@@ -369,12 +376,36 @@ export function AttentionChart({
             <XAxis dataKey="label" tickLine={false} axisLine={false} />
             <YAxis width={36} tickLine={false} axisLine={false} />
             <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar dataKey="mass" fill="var(--color-mass)" radius={3} />
+            <ChartLegend content={<ChartLegendContent />} />
+            {massNext ? <Bar dataKey="pas" fill="var(--color-pas)" radius={3} /> : null}
+            <Bar dataKey="horizon" fill="var(--color-horizon)" radius={3} />
           </BarChart>
         </ChartContainer>
       </CardContent>
     </Card>
   )
+}
+
+export function clockRows(signature: CycleSignature) {
+  if (signature.vsn_known_grouped?.length) {
+    return signature.vsn_known_grouped.map((row) => ({
+      id: row.id,
+      label: weightTitle(row.id),
+      value: row.value,
+    }))
+  }
+  return signatureRows(signature, "known")
+}
+
+export function pastReadingRows(signature: CycleSignature) {
+  const weights = signature.vsn_past_without_target ?? signature.vsn_past
+  const rows = signature.past_ids
+    .map((id, index) => ({ id, label: weightTitle(id), value: weights[index] ?? 0 }))
+    .filter((row) => row.id !== signature.copy_id)
+  if (signature.copy_weight != null) {
+    rows.push({ id: "copy", label: "Copie du pas précédent", value: signature.copy_weight })
+  }
+  return rows.sort((a, b) => b.value - a.value).slice(0, 12)
 }
 
 export function signatureRows(signature: CycleSignature, kind: "known" | "past") {

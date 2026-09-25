@@ -13,8 +13,9 @@ import {
   RibbonChart,
   WeightChart,
   channelTitle,
+  clockRows,
   moduleLabel,
-  signatureRows,
+  pastReadingRows,
   weightTitle,
 } from "@/components/cycles/cycle-charts"
 import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
@@ -318,8 +319,18 @@ export function CyclesLab() {
   const comparison =
     fit?.signature && otherFit?.signature
       ? {
-          known: cosine(fit.signature.vsn_known, otherFit.signature.vsn_known),
-          past: cosine(fit.signature.vsn_past, otherFit.signature.vsn_past),
+          known: cosine(
+            (fit.signature.vsn_known_grouped ?? []).map((row) => row.value).length
+              ? fit.signature.vsn_known_grouped!.map((row) => row.value)
+              : fit.signature.vsn_known,
+            (otherFit.signature.vsn_known_grouped ?? []).map((row) => row.value).length
+              ? otherFit.signature.vsn_known_grouped!.map((row) => row.value)
+              : otherFit.signature.vsn_known
+          ),
+          past: cosine(
+            fit.signature.vsn_past_without_target ?? fit.signature.vsn_past,
+            otherFit.signature.vsn_past_without_target ?? otherFit.signature.vsn_past
+          ),
         }
       : null
 
@@ -515,17 +526,25 @@ export function CyclesLab() {
         {tab === "atlas" ? (
           <FitBlock fit={fit} fitting={fitting}>
             {fit?.signature ? (
-              <div className="grid gap-6 lg:grid-cols-2">
-                <WeightChart
-                  title="Horloges"
-                  caption="Poids du futur connu. Une barre haute veut dire que cette phase entre dans la lecture de la courbe."
-                  rows={signatureRows(fit.signature, "known")}
-                />
-                <WeightChart
-                  title="Séries et figures"
-                  caption="Poids du passé. Les noms disent le module : Chartisme, Morpho, Relief, Pronostic, ou une série d’Analyse."
-                  rows={signatureRows(fit.signature, "past")}
-                />
+              <div className="flex flex-col gap-4">
+                {fit.signature.beats_baseline === false ? (
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    Le TFT ne bat pas les quantiles empiriques de la fenêtre (rapport{" "}
+                    {fit.signature.loss_ratio?.toFixed(2) ?? "—"}). Ces poids ne décrivent pas un gain.
+                  </p>
+                ) : null}
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <WeightChart
+                    title="Horloges"
+                    caption="Poids du futur connu, sinus et cosinus d’une même horloge additionnés. Une barre haute veut dire que cette phase entre dans la lecture."
+                    rows={clockRows(fit.signature)}
+                  />
+                  <WeightChart
+                    title="Séries et figures"
+                    caption="Poids du passé une fois la cible retirée, pour que les autres modules parlent. « Copie du pas précédent » est le poids qu’avait la cible elle-même."
+                    rows={pastReadingRows(fit.signature)}
+                  />
+                </div>
               </div>
             ) : null}
           </FitBlock>
@@ -541,6 +560,7 @@ export function CyclesLab() {
                       key={name}
                       name={name}
                       mass={row.mass}
+                      massNext={row.mass_next}
                       locked={row.locked}
                       flatness={row.flatness}
                     />
@@ -561,11 +581,11 @@ export function CyclesLab() {
                 </p>
                 <WeightChart
                   title="Écart de poids des horloges"
-                  caption="Positif : la première courbe s’appuie plus sur ce canal. Négatif : c’est la seconde."
-                  rows={fit.signature.known_ids.map((id, index) => ({
-                    id,
-                    label: weightTitle(id),
-                    value: (fit.signature?.vsn_known[index] ?? 0) - (otherFit.signature?.vsn_known[index] ?? 0),
+                  caption="Positif : la première courbe s’appuie plus sur ce canal. Négatif : c’est la seconde. Sinus et cosinus sont déjà groupés."
+                  rows={clockRows(fit.signature).map((row) => ({
+                    id: row.id,
+                    label: row.label,
+                    value: row.value - (clockRows(otherFit.signature!).find((other) => other.id === row.id)?.value ?? 0),
                   }))}
                 />
               </div>
@@ -581,14 +601,16 @@ export function CyclesLab() {
               <div className="grid gap-6 lg:grid-cols-2">
                 <WeightChart
                   title={
-                    fit.signature.beats_nulls
-                      ? "Ablation — le tracé bat les nuls"
-                      : "Ablation — les nuls ne sont pas battus"
+                    fit.signature.beats_baseline
+                      ? fit.signature.beats_nulls
+                        ? "Ablation — bat la base et les nuls"
+                        : "Ablation — bat la base"
+                      : "Ablation — ne bat pas la base"
                   }
-                  caption="Delta de perte quand on retire l’horloge. Positif : elle servait. Elle ne gagne que si le tracé réel bat aussi les trois nuls."
+                  caption="Delta de perte quand on retire l’horloge. Elle gagne si le delta est positif et si le TFT bat les quantiles empiriques. Battre les trois nuls est un second verdict."
                   rows={fit.signature.ablation.map((row) => ({
                     id: row.id,
-                    label: row.wins ? `${row.label} · gagne` : row.label,
+                    label: row.wins ? `${weightTitle(row.id)} · gagne` : weightTitle(row.id),
                     value: row.delta,
                   }))}
                 />
@@ -626,6 +648,9 @@ function FitBlock({
     <div className="flex flex-col gap-3">
       <p className="text-xs text-muted-foreground">
         Perte d’entraînement {fit.train_loss?.toFixed(4)} · test {fit.test_loss?.toFixed(4)}
+        {fit.baseline_loss != null ? ` · base ${fit.baseline_loss.toFixed(4)}` : ""}
+        {fit.loss_ratio != null ? ` · rapport ${fit.loss_ratio.toFixed(2)}` : ""}
+        {fit.coverage != null ? ` · couverture ${(fit.coverage * 100).toFixed(0)} % (cible ~80 %)` : ""}
         {fit.harmo_period_draws ? ` · raie Harmo ${fit.harmo_period_draws.toFixed(1)} tirages` : ""}
         . {fit.disclaimer}
       </p>

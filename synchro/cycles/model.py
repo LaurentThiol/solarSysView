@@ -114,7 +114,12 @@ class TemporalFusion(nn.Module):
         context, attention = self.attention(decoded, encoded)
         static_dec = bias.expand(-1, decoded.shape[1], -1)
         fused = self.enrich(torch.cat([decoded, context, static_dec], dim=-1))
-        quantiles = self.quantile(fused)
+        raw = self.quantile(fused)
+        # Incréments positifs : q10 ≤ q50 ≤ q90, le ruban ne se croise pas.
+        base = raw[..., 0:1]
+        mid = base + torch.nn.functional.softplus(raw[..., 1:2])
+        high = mid + torch.nn.functional.softplus(raw[..., 2:3])
+        quantiles = torch.cat([base, mid, high], dim=-1)
         return {
             "quantiles": quantiles,
             "vsn_past": past_w,

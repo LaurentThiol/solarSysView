@@ -93,6 +93,56 @@ def test_fold_attention_locks_a_constant_phase_bin() -> None:
     mass = fold_attention(attention, phases, origins, encoder=4, bins=8)
     assert abs(sum(mass) - 1.0) < 1e-6
     assert max(mass) > 0.5
+    next_step = fold_attention(attention, phases, origins, encoder=4, bins=8, step=0)
+    assert next_step == mass
+
+
+def test_fold_attention_keeps_the_first_step_apart() -> None:
+    attention = np.zeros((1, 2, 4))
+    attention[0, 0, 0] = 1.0
+    attention[0, 1, 3] = 1.0
+    phases = np.array([0.0, 0.1, 0.2, 0.9, 0.0])
+    origins = np.array([4])
+    horizon = fold_attention(attention, phases, origins, encoder=4, bins=8)
+    nxt = fold_attention(attention, phases, origins, encoder=4, bins=8, step=0)
+    assert horizon[0] == pytest.approx(0.5)
+    assert horizon[-1] == pytest.approx(0.5)
+    assert nxt[0] == pytest.approx(1.0)
+    assert nxt[-1] == pytest.approx(0.0)
+
+
+def test_baseline_and_grouped_weights() -> None:
+    from synchro.cycles.interpret import _baseline_pinball, _group_weights
+
+    train = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+    future = np.array([[1.0, 2.0], [3.0, 0.0]])
+    loss = _baseline_pinball(train, future)
+    assert loss > 0
+    grouped = _group_weights(
+        np.array([0.1, 0.2, 0.3, 0.05]),
+        [
+            {"id": "lunar", "label": "Lune", "columns": [1, 2]},
+            {"id": "weekday", "label": "Mardi", "columns": [0]},
+        ],
+    )
+    assert grouped[0]["id"] == "lunar"
+    assert grouped[0]["value"] == pytest.approx(0.5)
+    assert grouped[1]["value"] == pytest.approx(0.1)
+
+
+def test_quantile_head_is_ordered() -> None:
+    torch = pytest.importorskip("torch")
+    from synchro.cycles.model import TemporalFusion
+
+    torch.manual_seed(0)
+    model = TemporalFusion(n_past=3, n_known=4, n_static=2, d_model=8)
+    past = torch.randn(5, 6, 3)
+    known = torch.randn(5, 8, 4)
+    static = torch.randn(5, 2)
+    out = model(past, known, static, encoder_len=6)
+    q = out["quantiles"]
+    assert torch.all(q[..., 0] <= q[..., 1] + 1e-6)
+    assert torch.all(q[..., 1] <= q[..., 2] + 1e-6)
 
 
 def test_compare_signatures_cosine() -> None:
@@ -139,8 +189,28 @@ def test_cycles_fit_walk_forward() -> None:
     assert body["ok"] is True
     signature = body["signature"]
     assert len(signature["vsn_known"]) == len(signature["known_ids"])
-    assert "lunar" in signature["attention"]
+    assert len(signature["vsn_past_without_target"]) == len(signature["past_ids"])
+    assert signature["copy_id"] == "series:sum"
+    assert "copy_weight" in signature
+    grouped_ids = {row["id"] for row in signature["vsn_known_grouped"]}
+    assert "lunar" in grouped_ids
+    assert "harmo" in grouped_ids
+    lunar = next(row for row in signature["vsn_known_grouped"] if row["id"] == "lunar")
+    sin_i = signature["known_ids"].index("lunar:sin")
+    cos_i = signature["known_ids"].index("lunar:cos")
+    assert lunar["value"] == pytest.approx(
+        signature["vsn_known"][sin_i] + signature["vsn_known"][cos_i], abs=1e-4
+    )
+    assert body["baseline_loss"] == signature["baseline_loss"]
+    assert body["loss_ratio"] == signature["loss_ratio"]
+    assert 0.0 <= body["coverage"] <= 1.0
+    fold = signature["attention"]["lunar"]
+    assert len(fold["mass_next"]) == len(fold["mass"])
     assert {row["id"] for row in signature["nulls"]} == {"shuffle", "phase", "iid"}
+    assert next(row["label"] for row in signature["nulls"] if row["id"] == "iid") == "Entrées i.i.d."
     assert signature["ablation"]
-    assert "wins" in signature["ablation"][0]
-    assert body["ribbon"]
+    for row in signature["ablation"]:
+        assert row["wins"] == (row["delta"] > 0 and signature["beats_baseline"])
+        assert row["beats_nulls"] == signature["beats_nulls"]
+    for point in body["ribbon"]:
+        assert point["q10"] <= point["q50"] <= point["q90"]
