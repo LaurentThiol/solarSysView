@@ -129,7 +129,12 @@ export const SCALES = [
 
 export type ScaleId = (typeof SCALES)[number]["id"]
 
-export type DrawScalars = Record<ScaleId, number> & { date: string }
+export type DrawScalars = Record<ScaleId, number> & {
+  date: string
+  /** true si au moins un gagnant du jackpot (rang 1, EU, France comprise). */
+  jackpot?: boolean | null
+  jackpot_eur?: number | null
+}
 
 export type TracePoint = DrawScalars & { phase: number }
 

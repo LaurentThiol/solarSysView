@@ -21,13 +21,17 @@ JSON_PATH = (
 
 def _row(item: dict[str, Any]) -> dict[str, Any]:
     draw_date = date.fromisoformat(str(item["date"])[:10])
-    return {
+    row: dict[str, Any] = {
         "draw_date": draw_date,
         "weekday": item.get("weekday"),
         "numbers": list(item["numbers"]),
         "stars": list(item["stars"]),
         "star_pool": int(item.get("star_pool") or star_pool_for(draw_date)),
     }
+    prizes = item.get("prizes")
+    if isinstance(prizes, list):
+        row["prizes"] = prizes
+    return row
 
 
 @lru_cache(maxsize=1)

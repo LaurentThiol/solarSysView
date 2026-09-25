@@ -8,10 +8,30 @@ from synchro.fdj import (
     parse_row,
     parse_zip,
     prizes_from_raw,
+    rank1_jackpot,
     rank_winners_total,
     star_pool_for,
     winners_totals,
 )
+
+
+def test_rank1_jackpot_marks_a_winner_and_a_rollover():
+    won, prize = rank1_jackpot(
+        {
+            "prizes": [
+                {"rank": 1, "winners_fr": 0, "winners_eu": 1, "winners_total": 1, "prize": 1000}
+            ]
+        }
+    )
+    assert won is True
+    assert prize == 1000
+    rolled, rolled_prize = rank1_jackpot(
+        {"winners_rank1_fr": 0, "winners_rank1_eu": 0, "prize_rank1": Decimal("0")}
+    )
+    assert rolled is False
+    assert rolled_prize == 0
+    unknown, _ = rank1_jackpot({"numbers": [1, 2, 3, 4, 5]})
+    assert unknown is None
 
 
 def test_parse_dates():

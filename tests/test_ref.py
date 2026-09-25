@@ -100,6 +100,41 @@ def test_plane_joins_phases_and_draw_scalars() -> None:
     assert point["e1"] <= point["e2"]
 
 
+def test_trace_marks_jackpot_winners() -> None:
+    from datetime import date
+
+    from synchro.ref.plane import trace
+
+    draws = [
+        {
+            "draw_date": date(2024, 4, 8),
+            "numbers": [1, 2, 3, 4, 5],
+            "stars": [1, 2],
+            "prizes": [
+                {"rank": 1, "winners_fr": 0, "winners_eu": 2, "winners_total": 2, "prize": 50_000_000}
+            ],
+        },
+        {
+            "draw_date": date(2024, 4, 12),
+            "numbers": [6, 7, 8, 9, 10],
+            "stars": [3, 4],
+            "winners_rank1_fr": 0,
+            "winners_rank1_eu": 0,
+            "prize_rank1": 0,
+        },
+        {
+            "draw_date": date(2024, 4, 16),
+            "numbers": [11, 12, 13, 14, 15],
+            "stars": [5, 6],
+        },
+    ]
+    by_date = {point["date"]: point for point in trace(draws, "lunaire", 20)["points"]}
+    assert by_date["2024-04-08"]["jackpot"] is True
+    assert by_date["2024-04-08"]["jackpot_eur"] == 50_000_000
+    assert by_date["2024-04-12"]["jackpot"] is False
+    assert by_date["2024-04-16"]["jackpot"] is None
+
+
 def test_trace_and_plane_routes() -> None:
     client = TestClient(create_app())
     traced = client.get("/api/ref/trace", params={"cycle": "draconitique", "window": 50})

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from synchro.analysis.common import as_date, iso, numbers_of, ordered_draws, stars_of
+from synchro.fdj import rank1_jackpot
 from synchro.ref.phases import PHASES, phase
 
 WINDOWS = (20, 50, 100)
@@ -44,6 +45,7 @@ def _point(draw: dict[str, Any]) -> dict[str, Any]:
     day = as_date(draw["draw_date"])
     numbers = sorted(numbers_of(draw))
     stars = sorted(stars_of(draw))
+    won, prize = rank1_jackpot(draw)
     return {
         "date": iso(day),
         "sum": int(sum(numbers)),
@@ -55,6 +57,8 @@ def _point(draw: dict[str, Any]) -> dict[str, Any]:
         "n5": numbers[4],
         "e1": stars[0],
         "e2": stars[1],
+        "jackpot": won,
+        "jackpot_eur": prize,
     }
 
 

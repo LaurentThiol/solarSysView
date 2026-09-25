@@ -172,6 +172,50 @@ def rank_winners_total(winners_fr: int | None, winners_eu: int | None) -> int | 
     return winners_fr
 
 
+def _as_float(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def rank1_jackpot(draw: dict[str, Any]) -> tuple[bool | None, float | None]:
+    """Jackpot rang 1 : gagné s'il y a au moins un gagnant (EU, France comprise).
+
+    Retourne (gagné, montant €). `gagné` est None si l'archive n'a pas le rang 1.
+    Un rapport à 0 € sans gagnant est un report, pas un jackpot gagné.
+    """
+    tier: dict[str, Any] | None = None
+    prizes = draw.get("prizes")
+    if isinstance(prizes, list):
+        for item in prizes:
+            if isinstance(item, dict) and _as_int(item.get("rank")) == 1:
+                tier = item
+                break
+    winners: int | None = None
+    prize: float | None = None
+    if tier is not None:
+        winners = _as_int(tier.get("winners_total"))
+        if winners is None:
+            winners = rank_winners_total(
+                _as_int(tier.get("winners_fr")),
+                _as_int(tier.get("winners_eu")),
+            )
+        prize = _as_float(tier.get("prize"))
+    if winners is None:
+        winners = rank_winners_total(
+            _as_int(draw.get("winners_rank1_fr")),
+            _as_int(draw.get("winners_rank1_eu")),
+        )
+    if prize is None:
+        prize = _as_float(draw.get("prize_rank1"))
+    if winners is None:
+        return None, prize
+    return winners > 0, prize
+
+
 def winners_totals(
     prizes: list[dict[str, Any]] | None,
 ) -> tuple[int | None, int | None]:

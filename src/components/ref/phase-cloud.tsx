@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ComponentProps } from "react"
 import {
   CartesianGrid,
   Cell,
@@ -16,6 +16,7 @@ import {
 import { HelpTip } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { formatEuro } from "@/lib/draws"
 import { PillTabs } from "@/components/ui/pill-tabs"
 import { phaseMeanCurve, scaleLabel, trajectorySegments } from "@/lib/ref-chart"
 import {
@@ -107,7 +108,7 @@ export function CycleCloud({
           Phase × tirage
           <HelpTip
             title="Nuage de phase"
-            body="La courbe suit les tirages dans l’ordre des dates : trait plein pour la grandeur, tirets pour la phase. Le nuage place la même grandeur contre la phase, avec la moyenne par tranche."
+            body="La courbe suit les tirages dans l’ordre des dates : trait plein pour la grandeur, tirets pour la phase. Le nuage place la même grandeur contre la phase, avec la moyenne par tranche. Un losange marque un jackpot gagné (au moins un gagnant du rang 1, Europe, France comprise)."
           />
         </CardTitle>
       </CardHeader>
@@ -305,15 +306,15 @@ function DrawCurve({
             tick={{ fontSize: 10 }}
             tickFormatter={(value) => Number(value).toFixed(1)}
           />
-          <ChartTooltip content={<ChartTooltipContent />} />
+          <ChartTooltip content={<PhaseTooltip />} />
           <Line
             yAxisId="draw"
             type="monotone"
             dataKey="draw"
             stroke="var(--color-draw)"
             strokeWidth={2}
-            dot={{ r: 2.5, fill: "var(--color-draw)" }}
-            activeDot={{ r: 4 }}
+            dot={(props) => <MagnitudeDot {...props} />}
+            activeDot={(props) => <MagnitudeDot {...props} active />}
             isAnimationActive={false}
           />
           <Line
@@ -328,6 +329,7 @@ function DrawCurve({
           />
         </ComposedChart>
       </ChartContainer>
+      <JackpotLegend points={points} />
     </div>
   )
 }
@@ -367,7 +369,7 @@ function PhaseScatter({
             tickFormatter={(value) => Number(value).toFixed(1)}
           />
           <YAxis dataKey="value" type="number" name={label} width={36} tick={{ fontSize: 10 }} />
-          <ChartTooltip content={<ChartTooltipContent labelKey="date" />} />
+          <ChartTooltip content={<PhaseTooltip />} />
           <Line
             data={curve}
             dataKey="value"
@@ -381,15 +383,116 @@ function PhaseScatter({
           <Scatter data={scatter} name="value" fill="var(--color-value)" isAnimationActive={false} shape={DrawMark} />
         </ComposedChart>
       </ChartContainer>
+      <JackpotLegend points={points} />
     </div>
   )
 }
 
-function DrawMark(props: { cx?: number; cy?: number; fill?: string }) {
+const JACKPOT_MARK = "oklch(0.68 0.18 25)"
+
+function jackpotWon(payload: { jackpot?: boolean | null } | null | undefined) {
+  return payload?.jackpot === true
+}
+
+function JackpotDiamond({ cx, cy, size }: { cx: number; cy: number; size: number }) {
+  return (
+    <polygon
+      points={`${cx},${cy - size} ${cx + size},${cy} ${cx},${cy + size} ${cx - size},${cy}`}
+      fill={JACKPOT_MARK}
+      stroke="var(--background)"
+      strokeWidth={1}
+    />
+  )
+}
+
+function MagnitudeDot(props: {
+  cx?: number
+  cy?: number
+  payload?: { jackpot?: boolean | null }
+  active?: boolean
+}) {
+  const cx = Number(props.cx)
+  const cy = Number(props.cy)
+  if (!Number.isFinite(cx) || !Number.isFinite(cy)) return <g />
+  if (jackpotWon(props.payload)) {
+    return <JackpotDiamond cx={cx} cy={cy} size={props.active ? 7 : 5.5} />
+  }
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={props.active ? 4 : 2.5}
+      fill="var(--color-draw)"
+    />
+  )
+}
+
+function DrawMark(props: {
+  cx?: number
+  cy?: number
+  fill?: string
+  payload?: { jackpot?: boolean | null }
+}) {
   const cx = Number(props.cx)
   const cy = Number(props.cy)
   if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null
+  if (jackpotWon(props.payload)) return <JackpotDiamond cx={cx} cy={cy} size={6} />
   return <circle cx={cx} cy={cy} r={4} fill={props.fill ?? "var(--chart-1)"} fillOpacity={0.9} />
+}
+
+type TooltipRow = { jackpot?: boolean | null; jackpot_eur?: number | null }
+
+function tooltipRow(payload: ReadonlyArray<{ payload?: unknown }> | undefined): TooltipRow | undefined {
+  for (const item of payload ?? []) {
+    const row = item?.payload
+    if (row && typeof row === "object" && "date" in row) return row as TooltipRow
+  }
+  const first = payload?.[0]?.payload
+  return first && typeof first === "object" ? (first as TooltipRow) : undefined
+}
+
+function jackpotEuro(row: TooltipRow | undefined) {
+  if (!jackpotWon(row)) return null
+  const eur = row?.jackpot_eur
+  return typeof eur === "number" && Number.isFinite(eur) && eur > 0 ? eur : null
+}
+
+function PhaseTooltip(props: ComponentProps<typeof ChartTooltipContent>) {
+  if (!props.active || !props.payload?.length) return null
+  const row = tooltipRow(props.payload)
+  const won = jackpotWon(row)
+  const eur = jackpotEuro(row)
+  return (
+    <div className="grid max-w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-border/50 bg-background text-xs shadow-xl">
+      <ChartTooltipContent {...props} className="border-0 bg-transparent shadow-none" />
+      {won ? (
+        <p className="px-2.5 pb-1.5 text-muted-foreground">
+          Jackpot gagné{eur != null ? ` · ${formatEuro(eur)}` : ""}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function JackpotLegend({ points }: { points: Array<{ jackpot?: boolean | null }> }) {
+  const known = points.some((point) => point.jackpot != null)
+  const wins = points.filter((point) => point.jackpot === true).length
+  if (!known) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Gagnants du rang 1 absents de cette archive : pas de marqueur jackpot.
+      </p>
+    )
+  }
+  return (
+    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden className="shrink-0">
+        <polygon points="6,1 11,6 6,11 1,6" fill={JACKPOT_MARK} />
+      </svg>
+      Losange : jackpot gagné
+      {wins === 0 ? " (aucun sur cette fenêtre)" : ` (${wins})`}
+    </p>
+  )
 }
 
 function PlaneScatter({
