@@ -402,10 +402,12 @@ export function pastReadingRows(signature: CycleSignature) {
   const rows = signature.past_ids
     .map((id, index) => ({ id, label: weightTitle(id), value: weights[index] ?? 0 }))
     .filter((row) => row.id !== signature.copy_id)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 11)
   if (signature.copy_weight != null) {
     rows.push({ id: "copy", label: "Copie du pas précédent", value: signature.copy_weight })
   }
-  return rows.sort((a, b) => b.value - a.value).slice(0, 12)
+  return rows
 }
 
 export function signatureRows(signature: CycleSignature, kind: "known" | "past") {
