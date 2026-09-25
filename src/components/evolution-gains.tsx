@@ -29,6 +29,7 @@ import {
   overlayPeriodFor,
   overlayRecord,
   readOverlay,
+  type BandPoint,
 } from "@/lib/draw-overlays"
 import {
   NUMBER_SUM_RANGE,
@@ -288,6 +289,24 @@ function isSumKey(key: SeriesKey) {
   return key === "sumNumbers"
 }
 
+/** Ces séries restent linéaires : la somme a son axe, le report et le 0/+1 aussi. */
+function gainsUsesLogAxis(key: string) {
+  return key !== "sumNumbers" && key !== "reportLength" && key !== "rank1"
+}
+
+function plotField(key: string) {
+  return `plot_${key}`
+}
+
+function logBand(band: BandPoint): BandPoint {
+  return {
+    sma: logPlotValue(band.sma),
+    upper: logPlotValue(band.upper),
+    lower: logPlotValue(band.lower),
+    percentB: band.percentB,
+  }
+}
+
 function seriesLabelOf(key: SeriesKey) {
   return chartConfig[key as keyof typeof chartConfig]?.label ?? String(key)
 }
@@ -382,7 +401,9 @@ function GainsTooltip({
           .filter((key) => !hidden[key])
           .map((key) => {
             const value = point[key]
-            const sma = showSma ? readOverlay(point, key, "sma") : null
+            const sma = showSma
+              ? readOverlay(point, key, "smaAbs") ?? readOverlay(point, key, "sma")
+              : null
             return (
               <div key={key} className="grid gap-0.5">
                 <div className="flex items-center gap-2">
@@ -509,10 +530,10 @@ export function EvolutionGains({
       points = points.map((point) => {
         const next = { ...point }
         for (const key of keys) {
-          if (isSumKey(key) || key === "reportLength" || key === "rank1") continue
+          if (!gainsUsesLogAxis(key)) continue
           const value = point[key]
-          next[key] =
-            typeof value === "number" ? logPlotValue(value) : value
+          next[plotField(key)] =
+            typeof value === "number" ? logPlotValue(value) : null
         }
         return next
       })
@@ -529,19 +550,28 @@ export function EvolutionGains({
       })
     }
     if (mixedDays && view !== "stack") {
-      points = points.map((point) => ({
-        ...point,
-        ...weekdaySplitFields(String(point.weekday ?? ""), asNumber(point[split.key])),
-      }))
+      points = points.map((point) => {
+        const raw = asNumber(point[split.key])
+        const plotted =
+          useLog && gainsUsesLogAxis(split.key) ? logPlotValue(raw) : raw
+        return {
+          ...point,
+          ...weekdaySplitFields(String(point.weekday ?? ""), plotted),
+        }
+      })
     }
     if (!smaPeriod) return points
     for (const key of keys) {
       const bands = overlayPacks[key]
       if (!bands) continue
+      const onLog = useLog && gainsUsesLogAxis(key)
       points = points.map((point, i) => {
         const band = bands[i]
         if (!band) return point
-        return { ...point, ...overlayRecord(key, band) }
+        return {
+          ...point,
+          ...overlayRecord(key, onLog ? logBand(band) : band, band),
+        }
       })
     }
     return points
@@ -685,8 +715,16 @@ export function EvolutionGains({
   )
 
   const logValues = visible
-    .filter((key) => !isSumKey(key) && key !== "rank1" && key !== "reportLength")
-    .flatMap((key) => series.map((point) => asNumber(point[key])))
+    .filter((key) => gainsUsesLogAxis(key))
+    .flatMap((key) => {
+      const values = series.map((point) => asNumber(point[key]))
+      if (showSma) {
+        for (const band of overlayPacks[key] ?? []) {
+          if (band.sma != null && band.sma > 0) values.push(band.sma)
+        }
+      }
+      return values
+    })
   const leftLogDomain = useLog ? logDomain(logValues) : null
   const leftDomain: [number, number | "auto"] =
     visible.length === 1 && visible[0] === "sumNumbers"
@@ -887,15 +925,28 @@ export function EvolutionGains({
                   width={view === "winners" || view === "report" ? 44 : 56}
                   tickLine={false}
                   axisLine={false}
-                  allowDecimals={view !== "winners" && view !== "report"}
+                  allowDecimals={
+                    leftIsLog
+                      ? (leftLogDomain?.[0] ?? 1) < 1
+                      : view !== "winners" && view !== "report"
+                  }
                   allowDataOverflow={leftIsLog}
-                  tickFormatter={(value) =>
-                    formatTick(
+                  tickFormatter={(value) => {
+                    const n = Number(value)
+                    if (
+                      leftIsLog &&
+                      n > 0 &&
+                      n < 10 &&
+                      Math.abs(n - Math.round(n)) > 1e-6
+                    ) {
+                      return n.toLocaleString("fr-FR", { maximumFractionDigits: 1 })
+                    }
+                    return formatTick(
                       view,
-                      Number(value),
+                      n,
                       visible.length === 1 && visible[0] === "sumNumbers"
                     )
-                  }
+                  }}
                 />
                 {splitSum ? (
                   <YAxis
@@ -970,7 +1021,7 @@ export function EvolutionGains({
                   : visible.map((key) => (
                       <Line
                         key={key}
-                        dataKey={key}
+                        dataKey={useLog && gainsUsesLogAxis(key) ? plotField(key) : key}
                         yAxisId={plotAxisId(key)}
                         type={key === "rank1" || key === "reportLength" ? "stepAfter" : "linear"}
                         stroke={seriesColorOf(key)}
@@ -979,6 +1030,7 @@ export function EvolutionGains({
                           (isSumKey(key) && splitSum) || key === "rank1" ? "4 3" : undefined
                         }
                         connectNulls={false}
+                        isAnimationActive={false}
                         dot={series.length > 24 ? { r: 2 } : { r: 3 }}
                         activeDot={{ r: 4 }}
                         name={seriesLabelOf(key)}
@@ -997,7 +1049,10 @@ export function EvolutionGains({
                           strokeWidth={2}
                           strokeDasharray="5 4"
                           dot={false}
-                          connectNulls
+                          activeDot={false}
+                          tooltipType="none"
+                          connectNulls={!useLog || !gainsUsesLogAxis(key)}
+                          isAnimationActive={false}
                           legendType="none"
                           name={`SMA ${smaPeriod} ${seriesLabelOf(key)}`}
                         />

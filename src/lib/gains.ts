@@ -153,7 +153,9 @@ export function logDomain(
   const min = Math.min(...positives)
   const max = Math.max(...positives)
   const floor = min >= 1 ? Math.max(1, min / 2) : min / 2
-  return [floor, max]
+  // Un domaine [1, 1] écrase l'axe log : Recharts y place 0 et 1 au même pixel.
+  const ceiling = max > floor ? max : floor * 2
+  return [floor, ceiling]
 }
 
 /**

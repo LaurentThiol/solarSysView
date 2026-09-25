@@ -343,7 +343,10 @@ function formatStat(value: number) {
 }
 
 function formatPct(value: number) {
-  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} %`
+  return `${value.toLocaleString("fr-FR", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 0,
+  })} %`
 }
 
 function formatPctB(value: number) {
@@ -662,6 +665,12 @@ function CombinedTooltip({
   return (
     <div className="grid min-w-0 max-w-[min(18rem,calc(100vw-2rem))] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
       <div className="font-medium">{formatDrawDate(String(label ?? point.date))}</div>
+      <div className="flex items-center gap-2 text-[10px] tracking-wide text-muted-foreground uppercase">
+        <span className="size-2.5 shrink-0" />
+        <span className="flex-1">série</span>
+        <span className="w-14 text-right">axe</span>
+        <span className="w-14 text-right">valeur</span>
+      </div>
       <div className="grid gap-1.5">
         {rows.map((row) => (
           <div key={row.key} className="flex items-center gap-2">
@@ -674,11 +683,11 @@ function CombinedTooltip({
               <span className="font-mono font-medium tabular-nums">{row.extra}</span>
             ) : (
               <>
-                <span className="font-mono font-medium tabular-nums">
-                  {row.actual == null ? "—" : formatStat(row.actual)}
-                </span>
-                <span className="w-12 text-right font-mono text-muted-foreground tabular-nums">
+                <span className="w-14 text-right font-mono font-medium tabular-nums">
                   {row.rel == null ? "—" : formatPct(row.rel)}
+                </span>
+                <span className="w-14 text-right font-mono text-muted-foreground tabular-nums">
+                  {row.actual == null ? "—" : formatStat(row.actual)}
                 </span>
               </>
             )}
@@ -1488,6 +1497,10 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       }
     }
     if (index == null || index < 0 || index >= series.length) return null
+    const relative = magnetKey === "relNumbers" || magnetKey === "relStars"
+    const smaRaw = showSma ? overlayPacks[magnetKey]?.abs[index]?.sma ?? null : null
+    const axisOf = (value: number) => plottedOf(magnetKey, value, ranges)
+    const smaAxis = smaRaw == null || !relative ? null : axisOf(smaRaw)
     if (offCurve) {
       const svgLocal = svg && pointer ? clientToSvg(svg, pointer.x, pointer.y) : null
       let plotted: number | null = null
@@ -1514,6 +1527,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           seriesKey: magnetKey,
           seriesLabel: chartConfig[magnetKey].label,
           actual,
+          axis: relative ? plotted : null,
+          sma: smaRaw,
+          smaAxis,
           snapped: false,
           offCurve: true,
           kind: "free",
@@ -1529,12 +1545,16 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       : "free"
     const sample = samples.find((item) => item.index === index)
     if (sample && pointer) distance = Math.hypot(pointer.x - sample.px, pointer.y - sample.py)
+    const actual = values[index]
     return {
       index,
       date: series[index].date,
       seriesKey: magnetKey,
       seriesLabel: chartConfig[magnetKey].label,
-      actual: values[index],
+      actual,
+      axis: relative ? axisOf(actual) : null,
+      sma: smaRaw,
+      smaAxis,
       snapped,
       offCurve: false,
       kind,
@@ -2196,6 +2216,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     strokeDasharray={key === "rank1" ? "4 3" : undefined}
                     hide={Boolean(hidden[key])}
                     connectNulls={false}
+                    isAnimationActive={false}
                     dot={
                       key === "rank1"
                         ? { r: 3 }
@@ -2212,12 +2233,15 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                         key={`sma-${key}`}
                         dataKey={overlayField(key, "sma")}
                         yAxisId={plotAxisId(key, splitRank1)}
-                        type="monotone"
+                        type="linear"
                         stroke={overlayStroke(key, "sma")}
                         strokeWidth={2}
                         strokeDasharray="5 4"
                         dot={false}
+                        activeDot={false}
+                        tooltipType="none"
                         connectNulls
+                        isAnimationActive={false}
                         legendType="none"
                         name={`SMA ${smaPeriod} ${chartConfig[key].label}`}
                       />
@@ -2229,26 +2253,32 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                         <Line
                           dataKey={overlayField(key, "bbUpper")}
                           yAxisId={plotAxisId(key, splitRank1)}
-                          type="monotone"
+                          type="linear"
                           stroke={overlayStroke(key, "bb")}
                           strokeWidth={1.25}
                           strokeDasharray="2 3"
                           strokeOpacity={visibleKeys.length === 1 ? 1 : 0.7}
                           dot={false}
+                          activeDot={false}
+                          tooltipType="none"
                           connectNulls
+                          isAnimationActive={false}
                           legendType="none"
                           name={`Bollinger + ${chartConfig[key].label}`}
                         />
                         <Line
                           dataKey={overlayField(key, "bbLower")}
                           yAxisId={plotAxisId(key, splitRank1)}
-                          type="monotone"
+                          type="linear"
                           stroke={overlayStroke(key, "bb")}
                           strokeWidth={1.25}
                           strokeDasharray="2 3"
                           strokeOpacity={visibleKeys.length === 1 ? 1 : 0.7}
                           dot={false}
+                          activeDot={false}
+                          tooltipType="none"
                           connectNulls
+                          isAnimationActive={false}
                           legendType="none"
                           name={`Bollinger − ${chartConfig[key].label}`}
                         />
@@ -2256,12 +2286,15 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                           <Line
                             dataKey={overlayField(key, "sma")}
                             yAxisId={plotAxisId(key, splitRank1)}
-                            type="monotone"
+                            type="linear"
                             stroke={overlayStroke(key, "sma")}
                             strokeWidth={1.5}
                             strokeDasharray="4 3"
                             dot={false}
+                            activeDot={false}
+                            tooltipType="none"
                             connectNulls
+                            isAnimationActive={false}
                             legendType="none"
                             name={`Bollinger ${chartConfig[key].label}`}
                           />

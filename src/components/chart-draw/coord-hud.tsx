@@ -210,6 +210,12 @@ export function CoordHud({
           <span className="text-muted-foreground">
             {" "}
             · tirage {point.index + 1}/{drawCount || "—"} · valeur {formatValue(point.actual)}
+            {point.axis != null ? ` · axe ${formatValue(point.axis)} %` : ""}
+            {point.sma != null
+              ? ` · SMA ${formatValue(point.sma)}${
+                  point.smaAxis != null ? ` · axe ${formatValue(point.smaAxis)} %` : ""
+                }`
+              : ""}
           </span>
           <span
             className={cn(

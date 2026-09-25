@@ -77,6 +77,12 @@ export type LiveCursor = {
   seriesKey: string
   seriesLabel: string
   actual: number
+  /** Ordonnée 0–100 quand l’axe du graphique est relatif. */
+  axis?: number | null
+  /** SMA de la série visée, dans l’unité de la valeur (pas du %). */
+  sma?: number | null
+  /** SMA sur l’axe relatif, 0–100. */
+  smaAxis?: number | null
   snapped: boolean
   /** Arrivée posée hors courbe (Alt / Option). */
   offCurve: boolean

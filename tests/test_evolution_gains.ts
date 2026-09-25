@@ -61,6 +61,8 @@ test("log scale drops zeros and keeps a positive domain", () => {
   assert.equal(logPlotValue(4.2), 4.2)
   assert.deepEqual(logDomain([0, 5, 50_000_000]), [2.5, 50_000_000])
   assert.equal(logDomain([0, 0]), null)
+  assert.deepEqual(logDomain([0, 1, 1]), [1, 2])
+  assert.equal(logPlotValue(0.2), 0.2)
 })
 
 test("weekday filter and means keep mardi and vendredi apart", () => {
