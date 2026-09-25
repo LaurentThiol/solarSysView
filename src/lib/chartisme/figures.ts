@@ -17,6 +17,7 @@ import {
   signalOf,
   targetBasis,
 } from "./catalog"
+import { applyAgreement, readFigures } from "./motif"
 import { DEFAULT_PCT, type SwingPivot, swingPivots } from "./pivots"
 import { FLAT_SLOPE, fitRailPair, type Line } from "./rails"
 import { type Point, roundHalfEven } from "./svgpath"
@@ -86,6 +87,10 @@ export type FigureHit = {
   detector: string
   /** Pente des bornes — badge, pas une classe. Absent hors figures à rails. */
   slopeBias?: SlopeBias
+  /** Part des tolérances où le même motif est revenu. Présent sur la lecture en graphe. */
+  persistence?: number
+  /** La lecture géométrique a été confirmée par un motif sur la même zone. */
+  agreed?: boolean
 }
 
 export type FigureSummary = {
@@ -1144,13 +1149,14 @@ export function detectFigures(
     eps?: number
     minConfidence?: number
     maxOverlap?: number
+    motifs?: boolean
   } = {}
 ): FigureHit[] {
   const ctx = makeContext(values, dates, activity, {
     zigzagPct: options.zigzagPct,
     eps: options.eps,
   })
-  const hits: FigureHit[] = []
+  let hits: FigureHit[] = []
   for (const detector of DETECTORS) {
     // Un détecteur qui trébuche sur une fenêtre dégénérée ne doit pas emporter
     // les autres : côté navigateur, la carte resterait blanche.
@@ -1158,6 +1164,16 @@ export function detectFigures(
       hits.push(...detector(ctx))
     } catch {
       continue
+    }
+  }
+  if (options.motifs !== false) {
+    // Le graphe de visibilité complète la géométrie. Un accord sur la même
+    // zone relève les deux confiances ; `dedupe` tranche ensuite.
+    try {
+      const extra = readFigures(values, dates, activity, { eps: options.eps })
+      hits = applyAgreement(hits, extra)
+    } catch {
+      // Une fenêtre dégénérée ne doit pas effacer la lecture géométrique.
     }
   }
   const minConfidence = options.minConfidence ?? 0
@@ -1176,6 +1192,7 @@ export function bestFigure(
     eps?: number
     minConfidence?: number
     maxOverlap?: number
+    motifs?: boolean
   } = {}
 ): FigureHit | null {
   const hits = detectFigures(values, dates, activity, options)

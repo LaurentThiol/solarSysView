@@ -101,6 +101,7 @@ export type ScanOptions = {
   minConfidenceByScale?: Readonly<Record<number, number | null>> | null
   maxOverlap?: number
   topPerZone?: boolean
+  motifs?: boolean
 }
 
 export function windowStarts(length: number, size: number, stride: number): number[] {
@@ -173,6 +174,7 @@ export function scanCurve(curve: Partial<Curve>, options: ScanOptions = {}): Sca
     minConfidenceByScale = null,
     maxOverlap = DEFAULT_MAX_OVERLAP,
     topPerZone = false,
+    motifs = true,
   } = options
   const values = (curve.values ?? []).map(Number)
   const dates = [...(curve.dates ?? [])]
@@ -194,7 +196,7 @@ export function scanCurve(curve: Partial<Curve>, options: ScanOptions = {}): Sca
         values.slice(start, stop),
         dates.slice(start, stop),
         activity.slice(start, stop),
-        { zigzagPct, eps, minConfidence: bar, maxOverlap }
+        { zigzagPct, eps, minConfidence: bar, maxOverlap, motifs }
       )
       for (const hit of hits) {
         found.push(rebase(hit, { offset: start, scale: size, curve, values, dates }))

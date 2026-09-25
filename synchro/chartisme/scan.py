@@ -48,6 +48,7 @@ def scan_curve(
     min_confidence_by_scale: dict[int, float | None] | None = None,
     max_overlap: float = DEFAULT_MAX_OVERLAP,
     top_per_zone: bool = False,
+    motifs: bool = True,
 ) -> list[dict[str, Any]]:
     """Figures d'une courbe, indices ramenés au repère de la courbe entière.
 
@@ -89,6 +90,7 @@ def scan_curve(
                 eps=eps,
                 min_confidence=bar,
                 max_overlap=max_overlap,
+                motifs=motifs,
             )
             for hit in hits:
                 found.append(

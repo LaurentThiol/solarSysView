@@ -975,8 +975,14 @@ def detect_figures(
     eps: float = DEFAULT_EPS,
     min_confidence: float = 0.0,
     max_overlap: float = 0.2,
+    motifs: bool = True,
 ) -> list[dict[str, Any]]:
-    """Toutes les figures d'une fenêtre, triées par confiance décroissante."""
+    """Toutes les figures d'une fenêtre, triées par confiance décroissante.
+
+    `motifs` ajoute la lecture sur le graphe de visibilité. Un accord sur la
+    même zone confirme la lecture géométrique — elle garde ses pivots et sa
+    cassure. Un motif sans jumeau géométrique s'ajoute, puis `dedupe` tranche.
+    """
     ctx = Context(values, dates, activity, zigzag_pct=zigzag_pct, eps=eps)
     hits: list[dict[str, Any]] = []
     for detector in DETECTORS:
@@ -984,6 +990,14 @@ def detect_figures(
             hits.extend(detector(ctx))
         except (ValueError, ZeroDivisionError, IndexError):
             continue
+    if motifs:
+        try:
+            from synchro.chartisme.motif import apply_agreement, read_figures
+
+            extra = read_figures(values, dates, activity, eps=eps)
+            hits = apply_agreement(hits, extra)
+        except (ValueError, ZeroDivisionError, IndexError):
+            pass
     hits = [h for h in hits if h["confidence"] >= min_confidence]
     return dedupe(hits, max_overlap=max_overlap)
 
