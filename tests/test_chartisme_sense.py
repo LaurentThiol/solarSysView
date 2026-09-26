@@ -8,6 +8,7 @@ from synchro.chartisme.scan import MIN_WINDOW
 from synchro.chartisme.sense import (
     MIN_SENSE_LENGTH,
     name_sense,
+    name_short_sense,
     register_of,
     segments_sentence,
     sense_segments,
@@ -15,6 +16,7 @@ from synchro.chartisme.sense import (
     sense_shift_sentence,
     series_sigma,
     series_slope_sigma,
+    short_sense_segments,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -205,6 +207,38 @@ def test_a_window_without_a_confirmed_triplet_stays_stable() -> None:
     assert segments_sentence([]) == "Pas de tirage à découper."
     assert sense_segments([0.0, 1.0, 2.0, 3.0], None, 1) is None
     assert sense_segments([0.0, 1.0, 2.0, 3.0], -1, 1) is None
+
+
+def test_extent_cuts_a_v_that_sigma_keeps() -> None:
+    arch = [0, 2, 4, 2, 0]
+    extent_rows = sense_segments(arch, 2, measure="extent")
+    sigma_rows = sense_segments(arch, 2)
+    assert extent_rows is not None and sigma_rows is not None
+    assert [(row["sense"], row["from_index"], row["to_index"]) for row in extent_rows] == [
+        ("monte", 0, 2),
+        ("baisse", 2, 4),
+    ]
+    assert [(row["sense"], row["from_index"], row["to_index"]) for row in sigma_rows] == [
+        ("stable", 0, 4),
+    ]
+    assert extent_rows[0]["extent"] == 0
+
+
+def test_a_short_arch_in_v_has_two_segments_and_one_chord() -> None:
+    arch = [0, 2, 4, 2, 0]
+    chord = name_short_sense(arch, 1)
+    assert chord is not None
+    assert chord["symbol"] == "stable:sup"
+    assert chord["band"] == "court"
+    segments = short_sense_segments(arch, 1, 1)
+    assert segments is not None
+    assert [(row["sense"], row["from_index"], row["to_index"], row["slope_shift"]) for row in segments] == [
+        ("monte", 0, 2, None),
+        ("baisse", 2, 4, "tourne"),
+    ]
+    assert short_sense_segments([0, 1], 1) is None
+    assert short_sense_segments([0, 1, 2], 1) is None
+    assert short_sense_segments(arch + [0, 0, 0, 0], 1) is None
 
 
 def test_sense_twin_node() -> None:
