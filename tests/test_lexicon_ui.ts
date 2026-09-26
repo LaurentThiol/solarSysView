@@ -25,3 +25,12 @@ test("dictionary page names the demo and does not claim draws are independent", 
   const assistants = nav.slice(nav.indexOf('id: "assistants"'), nav.indexOf('id: "systeme"'))
   assert.ok(assistants.indexOf("/brain/specialistes") < assistants.indexOf("/brain/dictionnaire"))
 })
+
+test("the sense sketch is a full-width light curve, not a 64px dark stroke", () => {
+  assert.match(page, /sketchForSymbol/)
+  assert.match(page, /lex-sketch/)
+  assert.match(page, /field-sizing-content min-h-28/)
+  assert.match(page, /droite des deux bouts/)
+  assert.doesNotMatch(page, /h-16 w-40/)
+  assert.doesNotMatch(page, /#0f172a/)
+})

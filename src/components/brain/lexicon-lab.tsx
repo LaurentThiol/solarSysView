@@ -20,8 +20,9 @@ import {
   type Reading,
   type SenseCell,
 } from "@/lib/lexicon/client"
-import { DEMO_QUESTION, DEMO_SIGMA, DEMO_STEPS, DEMO_VALUES, demoSense, demoSkill } from "@/lib/lexicon/demo"
+import { DEMO_QUESTION, DEMO_SIGMA, DEMO_STEPS, demoSense, demoSkill } from "@/lib/lexicon/demo"
 import { ficheHref } from "@/lib/lexicon/fiche"
+import { readableSvg, sketchForSymbol } from "@/lib/lexicon/sketch"
 import { cn } from "@/lib/utils"
 
 const FIELDS = [
@@ -36,7 +37,13 @@ const FIELDS = [
 const LENGTHS = ["20", "50", "100"] as const
 
 const EQUATION =
-  "Droite des deux bouts. stable si |Δ| ≤ σ des résidus. Registre = σ_résidus / σ de toute la courbe : 05 jusqu'à 0,5, 1 jusqu'à 1, sup au-delà. Abstention si moins de 16 tirages."
+  "Droite des deux bouts. stable si |Δ| ≤ σ des résidus.\nRegistre = σ_résidus / σ de toute la courbe : 05 jusqu'à 0,5, 1 jusqu'à 1, sup au-delà.\nAbstention si moins de 16 tirages."
+
+const LEGACY_EQUATION = EQUATION.replaceAll("\n", " ")
+
+function readableEquation(text: string) {
+  return text === LEGACY_EQUATION ? EQUATION : text
+}
 
 const SCOPE =
   "Fenêtre d'au moins 16 tirages, rapportée au σ de toute la courbe. Le jour affiché choisit le prédécesseur. Ce n'est pas le symbole de jambe, ni un pronostic de tirage."
@@ -63,13 +70,29 @@ function safeSvg(svg: string | undefined) {
   return trimmed
 }
 
-function demoSketch() {
-  const points = DEMO_VALUES.map((value, index) => {
-    const x = 4 + index * ((160 - 8) / 19)
-    const y = 58 - value * 2.6
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(" ")
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 64" width="160" height="64"><line x1="4" y1="58" x2="156" y2="8.6" stroke="#94a3b8" stroke-width="1"/><polyline fill="none" stroke="#0f172a" stroke-width="1.5" points="${points}"/></svg>`
+function SketchFrame({ card }: { card: LexiconCard }) {
+  const svg = safeSvg(sketchForSymbol(card.symbol) || readableSvg(card.image_svg))
+  if (!svg) {
+    return <div className="h-28 w-full rounded-xl border border-dashed border-border" />
+  }
+  return (
+    <figure data-capture-visual className="overflow-hidden rounded-xl border border-border">
+      <div
+        className="lex-sketch bg-[#12182a] [&_svg]:block [&_svg]:h-auto [&_svg]:w-full"
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      <figcaption className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border bg-card px-3 py-2 text-xs leading-5 text-muted-foreground">
+        <span className="inline-flex items-center gap-2">
+          <span aria-hidden className="inline-block h-[3px] w-6 rounded-full bg-[#f4efe4]" />
+          fenêtre
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span aria-hidden className="inline-block w-6 border-t-2 border-dashed border-[#9fd0f5]" />
+          droite des deux bouts
+        </span>
+      </figcaption>
+    </figure>
+  )
 }
 
 function emptyDemoCard(): LexiconCard {
@@ -82,7 +105,7 @@ function emptyDemoCard(): LexiconCard {
     keywords: ["monte", "fenêtre", "nuage serré"],
     gloss: named ? senseSentence(named) : "la fenêtre monte",
     scope: SCOPE,
-    image_svg: demoSketch(),
+    image_svg: sketchForSymbol("monte:05"),
     quality: { episodes: 0, skill: null, reviewed: null },
     source: "code",
     revision: 1,
@@ -483,19 +506,13 @@ export function LexiconLab() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {safeSvg(selected.image_svg) ? (
-                <div
-                  className="h-16 w-40"
-                  dangerouslySetInnerHTML={{ __html: safeSvg(selected.image_svg) }}
-                />
-              ) : (
-                <div className="h-16 w-40 rounded-lg border border-dashed border-border" />
-              )}
+              <SketchFrame card={selected} />
               <label className="block text-xs text-muted-foreground">
                 Équation
                 <textarea
-                  className="mt-1 min-h-16 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground"
-                  value={selected.equation}
+                  rows={Math.max(4, readableEquation(selected.equation).split("\n").length + 1)}
+                  className="mt-1 field-sizing-content min-h-28 w-full resize-y rounded-lg border border-border bg-background px-3 py-2.5 text-sm leading-6 text-foreground"
+                  value={readableEquation(selected.equation)}
                   onChange={(event) => patch({ equation: event.target.value })}
                 />
               </label>

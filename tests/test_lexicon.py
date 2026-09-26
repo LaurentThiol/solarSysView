@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from pathlib import Path
+import subprocess
 
 from synchro.chartisme.sense import name_sense
 from synchro.lexicon.cards import fiche_id, seed_cards
@@ -89,6 +90,42 @@ def test_nine_cards_are_seeded_from_the_code() -> None:
     }
     assert all(card["status"] == "confirmed" and card["source"] == "code" for card in cards)
     assert all(card["image_svg"].startswith("<svg") for card in cards)
+    assert all("\n" in card["equation"] for card in cards)
+
+
+def _polyline_ys(svg: str) -> list[float]:
+    points = svg.split('points="', 1)[1].split('"', 1)[0].split()
+    return [float(point.split(",")[1]) for point in points]
+
+
+def test_sketch_reads_on_the_dark_card() -> None:
+    cards = {card["id"]: card["image_svg"] for card in seed_cards()}
+    baisse = cards["sense.baisse.05"]
+    assert 'viewBox="0 0 480 168"' in baisse
+    assert 'fill="#12182a"' in baisse
+    assert 'stroke="#f4efe4"' in baisse
+    assert 'stroke="#9fd0f5"' in baisse
+    assert "#0f172a" not in baisse
+    assert "#94a3b8" not in baisse
+    ys = _polyline_ys(baisse)
+    assert ys[-1] > ys[0] + 40
+    monte = _polyline_ys(cards["sense.monte.05"])
+    assert monte[-1] < monte[0] - 40
+    tight = _polyline_ys(cards["sense.stable.05"])
+    assert max(tight) - min(tight) < 1
+    wide = _polyline_ys(cards["sense.stable.sup"])
+    assert max(wide) - min(wide) > 20
+
+
+def test_lexicon_sketch_node() -> None:
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        ["node", "--experimental-strip-types", "--test", str(root / "tests" / "test_lexicon_ui.ts")],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_horizon_and_shape_verdicts() -> None:
