@@ -6,6 +6,7 @@ import { BookOpen } from "lucide-react"
 
 import { MemoPanel } from "@/components/analysis/memo-panel"
 import { ProbaPanel } from "@/components/analysis/stats-panels"
+import { ChartismeGlossary } from "@/components/help/chartisme-glossary"
 import { StatusPill } from "@/components/status-pill"
 import { PillTabs } from "@/components/ui/pill-tabs"
 import { Input } from "@/components/ui/input"
@@ -22,12 +23,15 @@ const GLOSSARY_MENU: { id: GlossarySection; label: string }[] = [
   { id: "vocab", label: GLOSSARY_SECTION_LABELS.vocab },
   { id: "proba", label: GLOSSARY_SECTION_LABELS.proba },
   { id: "memo", label: GLOSSARY_SECTION_LABELS.memo },
+  { id: "chartisme", label: GLOSSARY_SECTION_LABELS.chartisme },
 ]
 
 const SECTION_INTRO: Record<GlossarySection, string> = {
   vocab: "Termes figés pour tout Synchro. L’interface vouvoie.",
   proba: "Référence officielle 5/50 + 2/12 (139 838 160 grilles), indépendante de la fenêtre.",
   memo: "Périodes d’indicateurs groupées comme Technique, plus les biais à ne pas oublier.",
+  chartisme:
+    "Chaque courbe lue par Chartisme, puis les 18 figures de la table. Le dessin est le gabarit d’école — la forme typique, pas le tracé du moment. Il décrit l’archive, pas le prochain tirage.",
 }
 
 function GlossaryPill({
@@ -50,7 +54,7 @@ function GlossaryPill({
       aria-haspopup="dialog"
       aria-expanded={open}
       aria-label="Glossaire"
-      title="Vocabulaire, probabilités et mémo. Raccourci « l »."
+      title="Vocabulaire, probabilités, mémo et chartisme. Raccourci « l »."
       onClick={onClick}
     />
   )
@@ -91,6 +95,15 @@ function GlossaryButtonInner() {
   const open = glossary != null
   const section: GlossarySection = glossary ?? "vocab"
   const [query, setQuery] = useState("")
+  const [trackedOpen, setTrackedOpen] = useState<{ open: boolean; section: GlossarySection } | null>(
+    null
+  )
+  if (open && (trackedOpen?.open !== true || trackedOpen.section !== section)) {
+    setTrackedOpen({ open: true, section })
+    setQuery("")
+  } else if (!open && trackedOpen?.open) {
+    setTrackedOpen({ open: false, section })
+  }
   const titleId = useId()
   const searchId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
@@ -114,9 +127,8 @@ function GlossaryButtonInner() {
 
   useEffect(() => {
     if (!open) return
-    setQuery("")
     const focus =
-      section === "vocab"
+      section === "vocab" || section === "chartisme"
         ? panelRef.current?.querySelector<HTMLInputElement>('input[type="search"]')
         : panelRef.current
     focus?.focus()
@@ -142,7 +154,7 @@ function GlossaryButtonInner() {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
-                className="relative z-10 max-h-[min(42rem,90vh)] w-full max-w-2xl overflow-auto rounded-t-2xl border border-border bg-card p-4 shadow-2xl sm:rounded-2xl"
+                className={`relative z-10 max-h-[min(42rem,90vh)] w-full overflow-auto rounded-t-2xl border border-border bg-card p-4 shadow-2xl sm:rounded-2xl ${section === "chartisme" ? "max-w-4xl" : "max-w-2xl"}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -170,7 +182,7 @@ function GlossaryButtonInner() {
                     items={GLOSSARY_MENU}
                   />
                 </div>
-                {section === "vocab" ? (
+                {section === "vocab" || section === "chartisme" ? (
                   <label className="mt-3 block text-xs text-muted-foreground" htmlFor={searchId}>
                     Rechercher
                     <Input
@@ -178,13 +190,20 @@ function GlossaryButtonInner() {
                       type="search"
                       value={query}
                       onChange={(event) => setQuery(event.target.value)}
-                      placeholder="Fenêtre, warmup, rang…"
-                      aria-label="Rechercher dans le glossaire"
+                      placeholder={
+                        section === "chartisme" ? "Canal, tête-épaules, n1, retard…" : "Fenêtre, warmup, rang…"
+                      }
+                      aria-label={
+                        section === "chartisme"
+                          ? "Rechercher une courbe ou une figure"
+                          : "Rechercher dans le glossaire"
+                      }
                       className="mt-1"
                     />
                   </label>
                 ) : null}
                 {section === "vocab" ? <GlossaryVocab query={query} /> : null}
+                {section === "chartisme" ? <ChartismeGlossary query={query} /> : null}
                 {section === "proba" ? (
                   <div className="mt-4">
                     <ProbaPanel />

@@ -1,10 +1,11 @@
-export const GLOSSARY_SECTIONS = ["vocab", "proba", "memo"] as const
+export const GLOSSARY_SECTIONS = ["vocab", "proba", "memo", "chartisme"] as const
 export type GlossarySection = (typeof GLOSSARY_SECTIONS)[number]
 
 export const GLOSSARY_SECTION_LABELS: Record<GlossarySection, string> = {
   vocab: "Vocabulaire",
   proba: "Probabilités",
   memo: "Mémo",
+  chartisme: "Chartisme",
 }
 
 export const GLOSSARY_QUERY = "glossaire"
@@ -18,6 +19,7 @@ export function asGlossarySection(raw: string | null | undefined): GlossarySecti
   const value = raw.trim().toLowerCase()
   if (value === "vocabulaire" || value === "glossary") return "vocab"
   if (value === "probabilites" || value === "probabilités") return "proba"
+  if (value === "courbes" || value === "figures") return "chartisme"
   if ((GLOSSARY_SECTIONS as readonly string[]).includes(value)) return value as GlossarySection
   return null
 }

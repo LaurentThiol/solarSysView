@@ -50,6 +50,7 @@ test("catalog covers every nav page plus URL tabs, overlays and APIs", () => {
   assert.ok(hrefs.has("?glossaire=vocab"))
   assert.ok(hrefs.has("?glossaire=proba"))
   assert.ok(hrefs.has("?glossaire=memo"))
+  assert.ok(hrefs.has("?glossaire=chartisme"))
   assert.ok(hrefs.has("?adresse=1"))
   assert.ok(hrefs.has("/jeux?tab=histoJeux"))
   assert.ok(hrefs.has("/pronostic"))

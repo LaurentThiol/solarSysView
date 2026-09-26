@@ -27,16 +27,19 @@ test("Analyse no longer hosts Glossaire or Adresse tab groups", () => {
   assert.match(labSrc, /label: "Tirage"/)
 })
 
-test("banner glossary is a Vocabulaire / Probabilités / Mémo menu", () => {
+test("banner glossary is a Vocabulaire / Probabilités / Mémo / Chartisme menu", () => {
   assert.match(dialogSrc, /GLOSSARY_SECTION_LABELS/)
   assert.match(dialogSrc, /id: "vocab"/)
   assert.match(dialogSrc, /id: "proba"/)
   assert.match(dialogSrc, /id: "memo"/)
+  assert.match(dialogSrc, /id: "chartisme"/)
   assert.match(dialogSrc, /<ProbaPanel/)
   assert.match(dialogSrc, /<MemoPanel/)
+  assert.match(dialogSrc, /<ChartismeGlossary/)
   assert.match(dialogSrc, /filterGlossary/)
   assert.match(dialogSrc, /groupedGlossary/)
   assert.match(dialogSrc, /Rechercher dans le glossaire/)
+  assert.match(dialogSrc, /Rechercher une courbe ou une figure/)
   assert.match(dialogSrc, /event\.key !== "l"/)
   assert.doesNotMatch(dialogSrc, /Analyse\s+· Glossaire/)
 })

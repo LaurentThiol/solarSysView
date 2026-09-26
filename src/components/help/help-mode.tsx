@@ -112,7 +112,7 @@ export function HelpModeToggle() {
       dot={false}
       aria-pressed={enabled}
       aria-label="Afficher ou masquer l’aide contextuelle"
-      title="Aide : points d’exclamation sur les champs et boutons. Glossaire (l) : vocabulaire, probabilités, mémo. Adresse (a) liste les chemins. Raccourci « ? » pour cette aide."
+      title="Aide : points d’exclamation sur les champs et boutons. Glossaire (l) : vocabulaire, probabilités, mémo, chartisme. Adresse (a) liste les chemins. Raccourci « ? » pour cette aide."
       onClick={() => setEnabled(!enabled)}
       label={
         <span className="inline-flex items-center gap-1.5">

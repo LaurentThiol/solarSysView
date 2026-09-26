@@ -246,7 +246,7 @@ const OVERLAYS: AddressEntry[] = [
     "Glossaire · Vocabulaire",
     "Termes figés pour tout Synchro. Même pastille que le bandeau (raccourci « l »).",
     "systeme",
-    "glossaire=vocab|proba|memo"
+    "glossaire=vocab|proba|memo|chartisme"
   ),
   tabEntry(
     "?glossaire=proba",
@@ -261,6 +261,13 @@ const OVERLAYS: AddressEntry[] = [
     "Périodes d’indicateurs et biais (look-ahead, sur-optimisation, indépendance).",
     "lecture",
     "glossaire=memo"
+  ),
+  tabEntry(
+    "?glossaire=chartisme",
+    "Glossaire · Chartisme",
+    "Chaque courbe lue et les 18 figures : gabarit d’école, signal et objectif. Alias glossaire=courbes|figures.",
+    "lecture",
+    "glossaire=chartisme|courbes|figures"
   ),
   tabEntry(
     "?adresse=1",
@@ -538,7 +545,7 @@ const SHORTCUTS: AddressEntry[] = [
     id: "raccourci:l",
     href: "l",
     label: "Glossaire",
-    text: "Ouvre ou ferme le glossaire du bandeau (Vocabulaire, Probabilités, Mémo).",
+    text: "Ouvre ou ferme le glossaire du bandeau (Vocabulaire, Probabilités, Mémo, Chartisme).",
     kind: "raccourci",
     group: "raccourcis",
     action: "none",
