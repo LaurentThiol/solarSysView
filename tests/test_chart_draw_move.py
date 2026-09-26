@@ -19,6 +19,20 @@ def test_free_segment_offers_a_parallel_line() -> None:
     assert "Échap garde le segment seul" in HELP
 
 
+def test_option_click_keeps_the_magnet_release() -> None:
+    hook = (ROOT / "src/components/chart-draw/use-magnet-hold.ts").read_text(encoding="utf-8")
+    sketch = (ROOT / "src/components/chart-draw/use-sketch-chart.ts").read_text(encoding="utf-8")
+    assert "useMagnetHold" in CHART
+    assert "useMagnetHold" in sketch
+    assert "notePointerDown" in CHART
+    assert "notePointerDown" in sketch
+    assert "Hors courbe" in HELP
+    # preventDefault au keydown Option retire altKey des clics macOS.
+    assert "shouldPreventAltKeyDown" in hook
+    assert "retire altKey des clics" in hook
+    assert "shouldReleaseAltHold" in hook
+
+
 def test_free_drawing_can_pick_up_an_existing_handle() -> None:
     assert "moveSketchHandle" in CHART
     assert "nearestSketchHandle" in CHART

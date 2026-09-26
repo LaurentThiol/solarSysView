@@ -25,8 +25,8 @@ const DRAW_HELP = {
 1. Choisis la figure et la série visée.
 2. Figures à rails (rectangle, canal, triangles, biseaux, broadening) : trois clics. Les deux premiers ferment la première borne ; le troisième pose le contact opposé — parallèle pour le canal / rectangle, contrainte de figure pour les triangles. L’aimant privilégie les pivots de touche (H pour la borne haute, L pour la basse).
 3. Segment libre : deux clics pour la droite. Le clic suivant pose une seconde droite, parallèle à la première — l’ordonnée suit le curseur. Échap ou Annuler garde le segment seul. Les autres figures : deux clics. Près de la courbe, l’aimant accroche le tirage le plus proche. Un pivot de swing est seulement étiqueté (aimant · pivot) : il n’avale plus le voisin.
-4. Alt (⌥ Option) lâche l’aimant à l’arrivée : l’abscisse reste un tirage, l’ordonnée suit le curseur. Le gabarit d’école reste pour ETE, tasse, diamant ; sur les rails on dessine deux droites, la hauteur et l’objectif, pas le zigzag. Case Médiane : parallèle à mi-distance. Canal haussier / baissier = pente des bornes, pas une seconde classe.
-5. Un trait déjà posé : clique ou glisse un rond (départ, second point de borne, ou arrivée) pour le reprendre, puis reclique pour le reposer. Même aimant ; Alt sur l’arrivée seulement. Échap ou Annuler rend le point à sa place.
+4. Bouton « Hors courbe », ou Alt (⌥ Option), lâche l’aimant à l’arrivée : l’abscisse reste un tirage, l’ordonnée suit le curseur. Sur Mac, Option+clic est souvent avalé : le bouton reste enfoncé le temps de poser le point. Le gabarit d’école reste pour ETE, tasse, diamant ; sur les rails on dessine deux droites, la hauteur et l’objectif, pas le zigzag. Case Médiane : parallèle à mi-distance. Canal haussier / baissier = pente des bornes, pas une seconde classe.
+5. Un trait déjà posé : clique ou glisse un rond (départ, second point de borne, ou arrivée) pour le reprendre, puis reclique pour le reposer. Même aimant ; Hors courbe ou Alt sur l’arrivée seulement. Échap ou Annuler rend le point à sa place.
 
 Le bandeau Coordonnées, sous cette barre, affiche date, indice, valeur et aimant — pas par-dessus la courbe. Tu peux le détacher et le glisser hors du graphique. Capture : rails, hauteur, objectif et touches partent dans le JSON. Ce n’est pas un signal de jeu.`,
 }
@@ -41,6 +41,8 @@ export function SketchToolbar({
   canUndo,
   showMedian = true,
   onShowMedian,
+  freeArrival = false,
+  onFreeArrival,
   onToggle,
   onFigure,
   onSeries,
@@ -57,6 +59,9 @@ export function SketchToolbar({
   canUndo: boolean
   showMedian?: boolean
   onShowMedian?: (value: boolean) => void
+  /** Arrivée hors courbe, sans garder Option enfoncé. */
+  freeArrival?: boolean
+  onFreeArrival?: (value: boolean) => void
   onToggle: () => void
   onFigure: (figure: string) => void
   onSeries: (key: string) => void
@@ -96,7 +101,7 @@ export function SketchToolbar({
               label="Figure"
               help={{
                 title: "Figure chartiste",
-                body: "Les 18 formes de la table, ou un segment libre. Le segment se pose en deux clics ; le suivant trace la droite parallèle (Échap garde le segment seul). Rectangle, canal, triangles et biseaux se posent en trois clics (une borne, puis le contact opposé). Alt (⌥) démagnétise l’arrivée pour poser hors courbe. Après pose, un clic ou un glisser sur un rond reprend ce point. Le canal n’est pas une courbe : deux rails autour de la série. Haussier / baissier = pente des bornes, une seule classe.",
+                body: "Les 18 formes de la table, ou un segment libre. Le segment se pose en deux clics ; le suivant trace la droite parallèle (Échap garde le segment seul). Rectangle, canal, triangles et biseaux se posent en trois clics (une borne, puis le contact opposé). Le bouton Hors courbe, ou Alt (⌥), démagnétise l’arrivée pour poser hors courbe. Après pose, un clic ou un glisser sur un rond reprend ce point. Le canal n’est pas une courbe : deux rails autour de la série. Haussier / baissier = pente des bornes, une seule classe.",
               }}
             >
               <Select value={figure} onValueChange={(value) => value && onFigure(value)}>
@@ -159,6 +164,22 @@ export function SketchToolbar({
                 )}
               >
                 Médiane
+              </button>
+            ) : null}
+            {onFreeArrival ? (
+              <button
+                type="button"
+                aria-pressed={freeArrival}
+                title="Lâche l’aimant à l’arrivée : l’ordonnée suit le curseur. Même effet que ⌥ Option, qui sur Mac ne survit pas toujours au clic."
+                onClick={() => onFreeArrival(!freeArrival)}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-xs",
+                  freeArrival
+                    ? "border-sky-400/50 bg-sky-400/15 text-sky-100"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Hors courbe
               </button>
             ) : null}
             <Button type="button" size="xs" variant="ghost" onClick={onCancel} disabled={!canUndo}>

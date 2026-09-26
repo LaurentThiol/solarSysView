@@ -68,11 +68,11 @@ export function placementHint(options: {
     if (shortWindow) return "Au moins 8 tirages pour refermer la figure."
     if (live.offCurve) return "Point hors courbe — clique pour reposer."
     if (!live.snapped) {
-      return "Approche un pivot de touche, ou Alt (⌥) pour poser hors courbe."
+      return "Approche un pivot de touche, ou Hors courbe (⌥), pour poser hors courbe."
     }
     return rails
-      ? "Clique pour reposer le contact opposé. Alt (⌥) : hors courbe."
-      : "Clique pour reposer l’arrivée. Alt (⌥) : hors courbe."
+      ? "Clique pour reposer le contact opposé. Hors courbe ou ⌥."
+      : "Clique pour reposer l’arrivée. Hors courbe ou ⌥."
   }
   if (hoverHandle && !hasStart) {
     return "Clique ou glisse ce point pour le déplacer."
@@ -90,7 +90,7 @@ export function placementHint(options: {
     return "Point hors courbe — clique pour poser."
   }
   if (!live.snapped) {
-    if (hasStart) return "Approche un pivot de touche, ou Alt (⌥) pour poser hors courbe."
+    if (hasStart) return "Approche un pivot de touche, ou Hors courbe (⌥), pour poser hors courbe."
     return "Approche un pivot pour ancrer la borne."
   }
   if (
@@ -104,9 +104,9 @@ export function placementHint(options: {
   if (rails && hasStart && !hasMid) return "Clique le second point de la borne."
   if (rails && hasMid) return "Clique le contact opposé — le parallèle (ou la seconde borne)."
   if (hasStart && free) {
-    return "Clique l’arrivée. Le clic suivant pose la parallèle. Alt (⌥) : hors courbe."
+    return "Clique l’arrivée. Le clic suivant pose la parallèle. Hors courbe ou ⌥."
   }
-  if (hasStart) return "Clique l’arrivée. Alt (⌥) : hors courbe."
+  if (hasStart) return "Clique l’arrivée. Hors courbe ou ⌥ : l’ordonnée suit le curseur."
   return rails
     ? "Clique le premier point de la borne, ou un point déjà posé."
     : "Clique le départ, ou un point déjà posé pour le reprendre."

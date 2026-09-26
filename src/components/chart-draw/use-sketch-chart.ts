@@ -18,12 +18,10 @@ import {
   FREE_SEGMENT_KEPT_HINT,
   anchorsAfterMove,
   buildSketchGeometry,
-  canFreeMoveHandle,
   cursorReleasesMagnet,
   drawingStartHint,
   extremaIndices,
   invertLinear,
-  isDemagnetizeModifier,
   isFreeFigure,
   isMagneted,
   isParallelContact,
@@ -60,6 +58,7 @@ import {
 import type { MouseHandlerDataParam } from "recharts"
 
 import { useChartDrawOptional } from "./chart-draw-context"
+import { useMagnetHold } from "./use-magnet-hold"
 
 type ChartPointerState = MouseHandlerDataParam
 
@@ -221,7 +220,7 @@ export function useSketchChart<K extends string>({
     commitMove: (state: ChartPointerState, event: PointerLike) => boolean
     clearMove: () => void
   } | null>(null)
-  const [altHeld, setAltHeld] = useState(false)
+  const magnet = useMagnetHold(Boolean(draw?.drawing))
   const [hint, setHint] = useState<string | null>(null)
   const [moving, setMoving] = useState<{ sketchId: string; handle: SketchHandle } | null>(
     null
@@ -423,62 +422,39 @@ export function useSketchChart<K extends string>({
 
   useEffect(() => {
     if (!draw?.drawing) {
-      setAltHeld(false)
       lastPointerRef.current = null
       return
     }
-    function replay(demagnetize: boolean) {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return
+      const current = drawRef.current
+      if (movingRef.current) {
+        pointerLogicRef.current?.clearMove()
+        setHint("Déplacement annulé. Clique un point pour le reprendre, ou un départ.")
+        return
+      }
+      if (current?.draft?.parallelOf) {
+        current.cancelDraft()
+        setHint(FREE_SEGMENT_KEPT_HINT)
+        return
+      }
+      if (current?.draft?.start) current.cancelDraft()
+      else current?.setDrawing(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [draw?.drawing])
+
+  const replayMagnet = magnet.releases
+  const subscribeMagnet = magnet.subscribe
+  useEffect(() => {
+    return subscribeMagnet(() => {
       const snap = lastPointerRef.current
       const logic = pointerLogicRef.current
       if (!snap || !logic) return
-      logic.publishLive(logic.liveFromPointer(snap.state, snap.event, demagnetize))
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        const current = drawRef.current
-        if (movingRef.current) {
-          pointerLogicRef.current?.clearMove()
-          setHint("Déplacement annulé. Clique un point pour le reprendre, ou un départ.")
-          return
-        }
-        if (current?.draft?.parallelOf) {
-          current.cancelDraft()
-          setHint(FREE_SEGMENT_KEPT_HINT)
-          return
-        }
-        if (current?.draft?.start) current.cancelDraft()
-        else current?.setDrawing(false)
-        return
-      }
-      if (event.key === "Alt" || event.key === "AltGraph") {
-        const current = drawRef.current
-        const move = movingRef.current
-        const freeEnd =
-          Boolean(current?.draft?.start) ||
-          (move != null && canFreeMoveHandle(move.handle, true))
-        if (freeEnd) event.preventDefault()
-        setAltHeld(true)
-        replay(true)
-      }
-    }
-    function onKeyUp(event: KeyboardEvent) {
-      if (event.key !== "Alt" && event.key !== "AltGraph") return
-      setAltHeld(false)
-      replay(false)
-    }
-    function onBlur() {
-      setAltHeld(false)
-      replay(false)
-    }
-    window.addEventListener("keydown", onKeyDown)
-    window.addEventListener("keyup", onKeyUp)
-    window.addEventListener("blur", onBlur)
-    return () => {
-      window.removeEventListener("keydown", onKeyDown)
-      window.removeEventListener("keyup", onKeyUp)
-      window.removeEventListener("blur", onBlur)
-    }
-  }, [draw?.drawing])
+      logic.publishLive(logic.liveFromPointer(snap.state, snap.event, replayMagnet({})))
+    })
+  }, [replayMagnet, subscribeMagnet])
 
   useEffect(() => {
     if (!drawing) {
@@ -576,7 +552,7 @@ export function useSketchChart<K extends string>({
     drawRef.current?.cancelDraft()
     setHint(
       hit.handle === "end"
-        ? "Glisse, ou clique pour reposer le point. Alt (⌥) : hors courbe."
+        ? "Glisse, ou clique pour reposer le point. Hors courbe ou ⌥."
         : hit.handle === "mid"
           ? "Glisse, ou clique pour reposer le second point de la borne."
           : "Glisse, ou clique pour reposer le départ."
@@ -603,7 +579,7 @@ export function useSketchChart<K extends string>({
         })
       : rawSamples
     const current = drawRef.current
-    const demagnetize = demagnetizeOverride ?? (isDemagnetizeModifier(event) || altHeld)
+    const demagnetize = magnet.releases(event, demagnetizeOverride)
     const figure = sketch?.figure ?? current?.figure ?? ""
     const offCurve = cursorReleasesMagnet({
       movingHandle: move?.handle ?? null,
@@ -705,6 +681,8 @@ export function useSketchChart<K extends string>({
           clientY: event.clientY,
         }
       }
+      // Option ou Hors courbe : ne pas retomber sur l’aimant si l’ordonnée est illisible.
+      return null
     }
     const snapped = isMagneted(distance)
     const kind = snapped
@@ -831,6 +809,7 @@ export function useSketchChart<K extends string>({
   function onChartMove(state: ChartPointerState, event: PointerLike) {
     const current = drawRef.current
     if (!enabled || !current?.drawing) return
+    magnet.notePointerMove(event)
     rememberPointer(state, event)
     const drafting = Boolean(current.draft?.start || current.draft?.mid)
     const hit = !drafting && !movingRef.current ? hitHandle(event) : null
@@ -849,6 +828,7 @@ export function useSketchChart<K extends string>({
   function onChartPointerDown(state: ChartPointerState, event: PointerLike) {
     const current = drawRef.current
     if (!enabled || !current?.drawing) return
+    magnet.notePointerDown(event)
     if (current.draft?.start || current.draft?.mid || movingRef.current) return
     rememberPointer(state, event)
     const hit = hitHandle(event)
@@ -861,6 +841,7 @@ export function useSketchChart<K extends string>({
   function onChartClick(state: ChartPointerState, event: PointerLike) {
     const current = drawRef.current
     if (!enabled || !current?.drawing) return
+    try {
     if (ignoreClickRef.current) {
       ignoreClickRef.current = false
       return
@@ -877,7 +858,11 @@ export function useSketchChart<K extends string>({
     }
     const live = liveFromPointer(state, event)
     if (!live) {
-      setHint("Survole la courbe.")
+      setHint(
+        magnet.releases(event)
+          ? "L’ordonnée du curseur n’est pas lisible sur cet axe."
+          : "Survole la courbe."
+      )
       return
     }
     if (!live.snapped && !live.offCurve) {
@@ -920,8 +905,8 @@ export function useSketchChart<K extends string>({
         rails
           ? "Clique le second point de la borne."
           : isFreeFigure(current.figure)
-            ? "Clique l’arrivée. Le clic suivant pose la parallèle. Alt (⌥) : hors courbe."
-            : "Clique l’arrivée. Alt (⌥) : hors courbe."
+            ? "Clique l’arrivée. Le clic suivant pose la parallèle. Hors courbe ou ⌥."
+            : "Clique l’arrivée. Hors courbe ou ⌥ : l’ordonnée suit le curseur."
       )
       return
     }
@@ -1030,6 +1015,9 @@ export function useSketchChart<K extends string>({
     }
     current.addSketch(placed)
     setHint("Annotation posée. Clique un nouveau départ, ou un point pour le reprendre.")
+    } finally {
+      magnet.endGesture()
+    }
   }
 
   function onChartLeave() {
@@ -1074,6 +1062,8 @@ export function useSketchChart<K extends string>({
     hudMid,
     hudEnd,
     draftReading,
+    freeArrival: magnet.freeArrival,
+    setFreeArrival: magnet.setFreeArrival,
     mergeSketchFields,
     onScales,
     onChartMove,

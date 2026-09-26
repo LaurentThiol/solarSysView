@@ -812,6 +812,8 @@ export function EvolutionGains({
               canUndo={Boolean(sketch.draw.draft?.start || sketch.draw.draft?.mid || sketch.moving)}
               showMedian={sketch.draw.showMedian}
               onShowMedian={sketch.draw.setShowMedian}
+              freeArrival={sketch.freeArrival}
+              onFreeArrival={sketch.setFreeArrival}
               onToggle={() => {
                 if (hidden[targetKey]) {
                   setHidden((current) => ({ ...current, [targetKey]: false }))

@@ -26,9 +26,58 @@ export function isMagneted(distancePx: number | null, radiusPx = DEFAULT_MAGNET_
   return distancePx <= radiusPx
 }
 
+export type ModifierSource = {
+  altKey?: boolean
+  getModifierState?: (key: string) => boolean
+}
+
 /** Alt / Option : lâcher l’aimant. Pas Ctrl (clic droit macOS, raccourcis navigateur). */
-export function isDemagnetizeModifier(event: { altKey?: boolean }): boolean {
-  return Boolean(event.altKey)
+export function isDemagnetizeModifier(event: ModifierSource): boolean {
+  if (event.altKey) return true
+  try {
+    return Boolean(event.getModifierState?.("Alt") || event.getModifierState?.("AltGraph"))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * preventDefault sur le keydown Alt casse `altKey` des clics sur macOS.
+ * Ailleurs, il empêche la touche d’ouvrir le menu du navigateur.
+ */
+export function shouldPreventAltKeyDown(userAgent: string) {
+  return !/Mac|iPhone|iPad|iPod/i.test(userAgent)
+}
+
+/** keydown Option : `key` vaut Alt, `code` vaut AltLeft / AltRight. */
+export function isAltKeyboardEvent(event: { key?: string; code?: string }): boolean {
+  return (
+    event.key === "Alt" ||
+    event.key === "AltGraph" ||
+    event.code === "AltLeft" ||
+    event.code === "AltRight"
+  )
+}
+
+/**
+ * Safari envoie un keyup Option au moment du clic, alors que la touche est
+ * encore enfoncée. On ne lâche pas l’aimant tant que le pointeur est bas,
+ * ni si le clavier dit encore Alt.
+ */
+export function shouldReleaseAltHold(options: { pointerDown: boolean; stillDown: boolean }) {
+  if (options.stillDown) return false
+  if (options.pointerDown) return false
+  return true
+}
+
+/** Bouton « Hors courbe », geste en cours, touche tenue, ou modificateur de l’événement. */
+export function modifierReleasesMagnet(options: {
+  eventAlt: boolean
+  held: boolean
+  stickyOff: boolean
+  gesture: boolean
+}) {
+  return options.stickyOff || options.gesture || options.held || options.eventAlt
 }
 
 /** Arrivée déjà posée : Alt lâche l’aimant. Départ et mid restent ancrés. */

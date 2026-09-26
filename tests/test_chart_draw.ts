@@ -14,7 +14,11 @@ import {
   cursorReleasesMagnet,
   extremaIndices,
   invertLinear,
+  isAltKeyboardEvent,
+  shouldPreventAltKeyDown,
   isDemagnetizeModifier,
+  modifierReleasesMagnet,
+  shouldReleaseAltHold,
   isMagneted,
   magnetKindAt,
   magnetOnCurve,
@@ -146,6 +150,22 @@ test("Alt demagnetizes the arrival of any free-draw figure", () => {
   assert.equal(isDemagnetizeModifier({ altKey: true }), true)
   assert.equal(isDemagnetizeModifier({ altKey: false }), false)
   assert.equal(isDemagnetizeModifier({}), false)
+  assert.equal(
+    isDemagnetizeModifier({
+      altKey: false,
+      getModifierState: (key) => key === "Alt",
+    }),
+    true
+  )
+  assert.equal(
+    isDemagnetizeModifier({
+      altKey: false,
+      getModifierState: () => {
+        throw new Error("synthetic")
+      },
+    }),
+    false
+  )
   assert.equal(canFreePlaceArrival(true, true), true)
   assert.equal(canFreePlaceArrival(false, true), false)
   assert.equal(canFreePlaceArrival(true, false), false)
@@ -154,6 +174,32 @@ test("Alt demagnetizes the arrival of any free-draw figure", () => {
   assert.equal(canFreeMoveHandle("start", true), false)
   assert.equal(canFreeMoveHandle("mid", true), false)
   assert.equal(canFreeMoveHandle("end", false), false)
+  assert.equal(isAltKeyboardEvent({ key: "Alt" }), true)
+  assert.equal(isAltKeyboardEvent({ key: "AltGraph" }), true)
+  assert.equal(isAltKeyboardEvent({ key: "Dead", code: "AltLeft" }), true)
+  assert.equal(isAltKeyboardEvent({ key: "a", code: "KeyA" }), false)
+  assert.equal(shouldPreventAltKeyDown("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"), false)
+  assert.equal(shouldPreventAltKeyDown("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), true)
+  assert.equal(shouldPreventAltKeyDown(""), true)
+  assert.equal(shouldReleaseAltHold({ pointerDown: true, stillDown: false }), false)
+  assert.equal(shouldReleaseAltHold({ pointerDown: false, stillDown: true }), false)
+  assert.equal(shouldReleaseAltHold({ pointerDown: false, stillDown: false }), true)
+  assert.equal(
+    modifierReleasesMagnet({ eventAlt: false, held: false, stickyOff: true, gesture: false }),
+    true
+  )
+  assert.equal(
+    modifierReleasesMagnet({ eventAlt: false, held: false, stickyOff: false, gesture: true }),
+    true
+  )
+  assert.equal(
+    modifierReleasesMagnet({ eventAlt: false, held: true, stickyOff: false, gesture: false }),
+    true
+  )
+  assert.equal(
+    modifierReleasesMagnet({ eventAlt: false, held: false, stickyOff: false, gesture: false }),
+    false
+  )
 })
 
 test("nearest sketch handle stays within the magnet radius", () => {

@@ -22,5 +22,6 @@ def test_coord_hud_is_docked_above_the_chart() -> None:
     assert "bandeau Coordonnées" in toolbar
     assert "fenêtre flottante" not in toolbar
     assert "bandeau de coordonnées au-dessus du graphique" in readme
-    assert "hors courbe · Alt" in hud
+    assert "hors courbe" in hud
+    assert "Hors courbe" in toolbar
     assert "arrivée démagnétisable au Alt" in readme

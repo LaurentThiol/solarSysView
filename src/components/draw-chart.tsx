@@ -18,6 +18,7 @@ import {
 import { CoordHud } from "@/components/chart-draw/coord-hud"
 import { useChartDrawOptional } from "@/components/chart-draw/chart-draw-context"
 import { SketchToolbar } from "@/components/chart-draw/sketch-toolbar"
+import { useMagnetHold } from "@/components/chart-draw/use-magnet-hold"
 import { CurveName } from "@/components/chartisme/curve-thumb"
 import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -52,13 +53,11 @@ import {
   anchorsAfterMove,
   anchorsToGeometry,
   buildSketchGeometry,
-  canFreeMoveHandle,
   channelLabel,
   cursorReleasesMagnet,
   drawingStartHint,
   extremaIndices,
   invertLinear,
-  isDemagnetizeModifier,
   isMagneted,
   liveToAnchor,
   magnetKindAt,
@@ -819,7 +818,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     commitMove: (state: ChartPointerState, event: PointerLike) => boolean
     clearMove: () => void
   } | null>(null)
-  const [altHeld, setAltHeld] = useState(false)
+  const magnet = useMagnetHold(Boolean(draw?.drawing))
   const [mode, setMode] = useState<DrawChartMode>("sumBoth")
   const [scale, setScale] = useState<RelativeScale>("theory")
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({})
@@ -1233,63 +1232,39 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
 
   useEffect(() => {
     if (!draw?.drawing) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setAltHeld(false)
       lastPointerRef.current = null
       return
     }
-    function replay(demagnetize: boolean) {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return
+      const current = drawRef.current
+      if (movingRef.current) {
+        pointerLogicRef.current?.clearMove()
+        setHint("Déplacement annulé. Clique un point pour le reprendre, ou un départ.")
+        return
+      }
+      if (current?.draft?.parallelOf) {
+        current.cancelDraft()
+        setHint(FREE_SEGMENT_KEPT_HINT)
+        return
+      }
+      if (current?.draft?.start) current.cancelDraft()
+      else current?.setDrawing(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [draw?.drawing])
+
+  const replayMagnet = magnet.releases
+  const subscribeMagnet = magnet.subscribe
+  useEffect(() => {
+    return subscribeMagnet(() => {
       const snap = lastPointerRef.current
       const logic = pointerLogicRef.current
       if (!snap || !logic) return
-      logic.publishLive(logic.liveFromPointer(snap.state, snap.event, demagnetize))
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        const current = drawRef.current
-        if (movingRef.current) {
-          pointerLogicRef.current?.clearMove()
-          setHint("Déplacement annulé. Clique un point pour le reprendre, ou un départ.")
-          return
-        }
-        if (current?.draft?.parallelOf) {
-          current.cancelDraft()
-          setHint(FREE_SEGMENT_KEPT_HINT)
-          return
-        }
-        if (current?.draft?.start) current.cancelDraft()
-        else current?.setDrawing(false)
-        return
-      }
-      if (event.key === "Alt" || event.key === "AltGraph") {
-        const current = drawRef.current
-        const move = movingRef.current
-        const freeEnd =
-          Boolean(current?.draft?.start) ||
-          (move != null && canFreeMoveHandle(move.handle, true))
-        if (freeEnd) event.preventDefault()
-        setAltHeld(true)
-        replay(true)
-      }
-    }
-    function onKeyUp(event: KeyboardEvent) {
-      if (event.key !== "Alt" && event.key !== "AltGraph") return
-      setAltHeld(false)
-      replay(false)
-    }
-    function onBlur() {
-      setAltHeld(false)
-      replay(false)
-    }
-    window.addEventListener("keydown", onKeyDown)
-    window.addEventListener("keyup", onKeyUp)
-    window.addEventListener("blur", onBlur)
-    return () => {
-      window.removeEventListener("keydown", onKeyDown)
-      window.removeEventListener("keyup", onKeyUp)
-      window.removeEventListener("blur", onBlur)
-    }
-  }, [draw?.drawing])
+      logic.publishLive(logic.liveFromPointer(snap.state, snap.event, replayMagnet({})))
+    })
+  }, [replayMagnet, subscribeMagnet])
 
   useEffect(() => {
     if (!drawing) {
@@ -1393,7 +1368,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     drawRef.current?.cancelDraft()
     setHint(
       hit.handle === "end"
-        ? "Glisse, ou clique pour reposer le point. Alt (⌥) : hors courbe."
+        ? "Glisse, ou clique pour reposer le point. Hors courbe ou ⌥."
         : hit.handle === "mid"
           ? "Glisse, ou clique pour reposer le second point de la borne."
           : "Glisse, ou clique pour reposer le départ."
@@ -1420,8 +1395,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
         })
       : rawSamples
     const current = drawRef.current
-    const demagnetize =
-      demagnetizeOverride ?? (isDemagnetizeModifier(event) || altHeld)
+    const demagnetize = magnet.releases(event, demagnetizeOverride)
     const figure = sketch?.figure ?? current?.figure ?? ""
     const offCurve = cursorReleasesMagnet({
       movingHandle: move?.handle ?? null,
@@ -1538,6 +1512,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           clientY: event.clientY,
         }
       }
+      // Option ou Hors courbe : ne pas retomber sur l’aimant si l’ordonnée est illisible.
+      return null
     }
     const snapped = isMagneted(distance)
     const kind = snapped
@@ -1668,6 +1644,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   function onChartMove(state: ChartPointerState, event: PointerLike) {
     const current = drawRef.current
     if (!current?.drawing) return
+    magnet.notePointerMove(event)
     rememberPointer(state, event)
     const drafting = Boolean(current.draft?.start || current.draft?.mid)
     const hit = !drafting && !movingRef.current ? hitHandle(event) : null
@@ -1686,6 +1663,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   function onChartPointerDown(state: ChartPointerState, event: PointerLike) {
     const current = drawRef.current
     if (!current?.drawing) return
+    magnet.notePointerDown(event)
     if (current.draft?.start || current.draft?.mid || movingRef.current) return
     rememberPointer(state, event)
     const hit = hitHandle(event)
@@ -1698,6 +1676,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   function onChartClick(state: ChartPointerState, event: PointerLike) {
     const current = drawRef.current
     if (!current?.drawing) return
+    try {
     if (ignoreClickRef.current) {
       ignoreClickRef.current = false
       return
@@ -1714,7 +1693,11 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     }
     const live = liveFromPointer(state, event)
     if (!live) {
-      setHint("Survole la courbe.")
+      setHint(
+        magnet.releases(event)
+          ? "L’ordonnée du curseur n’est pas lisible sur cet axe."
+          : "Survole la courbe."
+      )
       return
     }
     if (!live.snapped && !live.offCurve) {
@@ -1757,8 +1740,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
         rails
           ? "Clique le second point de la borne."
           : isFreeFigure(current.figure)
-            ? "Clique l’arrivée. Le clic suivant pose la parallèle. Alt (⌥) : hors courbe."
-            : "Clique l’arrivée. Alt (⌥) : hors courbe."
+            ? "Clique l’arrivée. Le clic suivant pose la parallèle. Hors courbe ou ⌥."
+            : "Clique l’arrivée. Hors courbe ou ⌥ : l’ordonnée suit le curseur."
       )
       return
     }
@@ -1867,6 +1850,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     }
     current.addSketch(placed)
     setHint("Annotation posée. Clique un nouveau départ, ou un point pour le reprendre.")
+    } finally {
+      magnet.endGesture()
+    }
   }
 
   function changeMode(next: DrawChartMode) {
@@ -1992,6 +1978,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               canUndo={Boolean(draw.draft?.start || draw.draft?.mid || moving)}
               showMedian={draw.showMedian}
               onShowMedian={draw.setShowMedian}
+              freeArrival={magnet.freeArrival}
+              onFreeArrival={magnet.setFreeArrival}
               onToggle={() => {
                 const next = !draw.drawing
                 draw.setDrawing(next)

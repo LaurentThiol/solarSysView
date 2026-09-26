@@ -16,7 +16,7 @@ function formatValue(value: number) {
 }
 
 function magnetLabel(point: LiveCursor) {
-  if (point.offCurve) return "hors courbe · Alt"
+  if (point.offCurve) return "hors courbe"
   if (!point.snapped) return "libre — approche la courbe"
   if (point.kind === "extrema") return "aimant · pivot"
   return "aimant · tirage"
