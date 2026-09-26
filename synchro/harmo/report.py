@@ -13,7 +13,7 @@ from synchro.harmo.null import null_spectrum_stats
 from synchro.harmo.orders import orders_bundle
 from synchro.harmo.series import build_signal
 from synchro.harmo.spectrum import spectrum_bundle
-from synchro.harmo.tf import tf_bundle
+from synchro.harmo.tf import short_cycle_peaks, tf_bundle
 from synchro.harmo.unmix import unmix_shares
 from synchro.harmo.util import DISCLAIMER, fnum, json_safe
 
@@ -138,6 +138,7 @@ def welch_report(signal: dict[str, Any], *, nperseg: int | None = None) -> dict[
                 "librosa": hpss.get("librosa"),
             },
             "calendar": spec["calendar"],
+            "short_cycles": short_cycle_peaks(signal["x"], draws_per_year=dpy),
         }
     )
     return json_safe(out)
@@ -180,6 +181,7 @@ def stft_report(
             "stft": tf["stft"],
             "sst": tf["sst"],
             "ridges": ridges,
+            "short_cycles": short_cycle_peaks(signal["x"], draws_per_year=dpy),
             "cwt": tf["cwt"],
             "ssq": tf["ssq"],
         }

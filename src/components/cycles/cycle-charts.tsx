@@ -29,11 +29,13 @@ const CLOCKS = [
   { id: "lunar", label: "Lune", color: "var(--chart-2)" },
   { id: "carrington", label: "Carrington", color: "var(--chart-3)" },
   { id: "harmo", label: "Raie Harmo", color: "var(--chart-4)" },
+  { id: "harmo_court", label: "Cycle court", color: "var(--chart-5)" },
   { id: "tropical", label: "Année", color: "var(--chart-5)" },
 ] as const
 
 const MODULE_TRACES = [
   { id: "occupancy", label: "Figure chartiste", color: "var(--chart-2)" },
+  { id: "court", label: "Cycle court", color: "var(--chart-3)" },
   { id: "activity", label: "Activité", color: "var(--chart-3)" },
   { id: "morpho", label: "Forme Morpho", color: "var(--chart-4)" },
   { id: "relief", label: "Centroïde Relief", color: "var(--chart-5)" },
@@ -56,7 +58,9 @@ export function weightTitle(id: string) {
   const named: Record<string, string> = {
     "chartisme:activity": "Activité",
     "chartisme:occupancy": "Figure",
-    "morpho:gap_std": "Forme Morpho",
+    "chartisme:court": "Cycle court",
+    "chartisme:etendue": "Étendue courte",
+    "morpho:gap_span": "Forme Morpho",
     "relief:centroid": "Centroïde",
     "pronostic:z": "Résidu",
     weekday: "Mardi",

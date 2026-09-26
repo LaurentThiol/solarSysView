@@ -8,6 +8,8 @@
 // `1` s'il ≤ 1, `sup` au-delà. `stable` quand le déplacement net ne dépasse
 // pas le nuage.
 
+import { SHORT_CYCLE_MAX, SHORT_CYCLE_MIN } from "../short-cycle"
+
 export const MIN_SENSE_LENGTH = 16
 
 export const TIGHT = 0.5
@@ -27,6 +29,9 @@ export type CurveSense = {
   reference: number
   ratio: number | null
   delta: number
+  /** Présent sur une arche de 4 à 8 tirages : le nuage est une étendue. */
+  band?: "court"
+  extent?: number
 }
 
 const SENSE_GLOSS: Record<SenseName, string> = {
@@ -39,6 +44,23 @@ const REGISTER_GLOSS: Record<SenseRegister, string> = {
   "05": "le nuage autour de la droite tient dans la moitié de l'écart-type habituel",
   "1": "le nuage autour de la droite est de l'ordre de l'écart-type habituel",
   sup: "le nuage autour de la droite dépasse l'écart-type habituel",
+}
+
+const REGISTER_GLOSS_RANGE: Record<SenseRegister, string> = {
+  "05": "le nuage autour de la droite tient dans la moitié de l'étendue habituelle",
+  "1": "le nuage autour de la droite est de l'ordre de l'étendue habituelle",
+  sup: "le nuage autour de la droite dépasse l'étendue habituelle",
+}
+
+function extentOf(values: number[]) {
+  if (!values.length) return 0
+  let lo = values[0]
+  let hi = lo
+  for (const value of values) {
+    if (value < lo) lo = value
+    if (value > hi) hi = value
+  }
+  return hi - lo
 }
 
 /** Aide au survol : la règle, pas une deuxième phrase de lecture. */
@@ -106,11 +128,46 @@ function readable(named: CurveSense | null): CurveSense | null {
   return named
 }
 
+/**
+ * Sens d'une arche de 4 à 8 tirages.
+ *
+ * Le nuage est l'étendue des résidus, rapportée à l'étendue de référence.
+ * Les registres restent 0,5 et 1. Le σ de toute la courbe n'est pas le dénominateur.
+ */
+export function nameShortSense(values: number[], referenceRange: number | null): CurveSense | null {
+  const count = values.length
+  if (count < SHORT_CYCLE_MIN || count > SHORT_CYCLE_MAX) return null
+  if (referenceRange === null || !Number.isFinite(referenceRange) || referenceRange < 0) return null
+
+  const delta = values[count - 1] - values[0]
+  const slope = delta / (count - 1)
+  const residuals: number[] = []
+  for (let index = 0; index < count; index += 1) {
+    residuals.push(values[index] - (values[0] + slope * index))
+  }
+  const cloud = extentOf(residuals)
+  const ratio = referenceRange === 0 ? (cloud === 0 ? 0 : Number.POSITIVE_INFINITY) : cloud / referenceRange
+  const sense: SenseName = Math.abs(delta) <= cloud ? "stable" : delta > 0 ? "monte" : "baisse"
+  const register = registerOf(ratio)
+  return {
+    symbol: `${sense}:${register}`,
+    sense,
+    register,
+    sigma: cloud,
+    extent: cloud,
+    reference: referenceRange,
+    ratio: Number.isFinite(ratio) ? ratio : null,
+    delta,
+    band: "court",
+  }
+}
+
 /** Phrase lue à côté du tracé. Le symbole reste en tête. */
 export function senseSentence(named: CurveSense | null): string {
   const read = readable(named)
   if (!read) return "Fenêtre trop courte pour nommer le sens."
-  return `${read.symbol} — ${SENSE_GLOSS[read.sense]}, et ${REGISTER_GLOSS[read.register]}.`
+  const gloss = read.band === "court" ? REGISTER_GLOSS_RANGE : REGISTER_GLOSS
+  return `${read.symbol} — ${SENSE_GLOSS[read.sense]}, et ${gloss[read.register]}.`
 }
 
 /**

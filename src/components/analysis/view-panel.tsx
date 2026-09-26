@@ -79,7 +79,7 @@ export function ViewPanel({
   weekdayComparison?: WindowCompare | null
   tech: Tech
 }) {
-  const [block, setBlock] = useState<"month" | "week" | "window">("month")
+  const [block, setBlock] = useState<"month" | "week" | "window" | "short">("month")
   const [style, setStyle] = useState<"ohlc" | "heikin" | "renko">("ohlc")
   const [showSma, setShowSma] = useState(true)
   const [showEma, setShowEma] = useState(true)
@@ -148,6 +148,10 @@ export function ViewPanel({
           value={rolling.mean != null ? formatStat(rolling.mean) : "—"}
         />
         <Stat label="z-score" value={rolling.zscore != null ? formatStat(rolling.zscore) : "—"} />
+        <Stat
+          label="Étendue / 8"
+          value={rolling.short.range != null ? formatStat(rolling.short.range) : "—"}
+        />
         <Stat label={`RSI ${fullTa.periods.rsi}`} value={formatStat(fullTa.last.rsi)} />
         <Stat label="MACD" value={formatStat(fullTa.last.macd)} />
         <Stat label="Structure" value={tech.structure.trend} />
@@ -282,19 +286,20 @@ export function ViewPanel({
               label="Bloc"
               help={{
                 title: "Bloc",
-                body: "Mois civil, semaine ISO, ou paquets successifs de X tirages (X = période des indicateurs, plus haut dans la page).",
+                body: "Mois civil, semaine ISO, paquets successifs de X tirages (X = période des indicateurs, plus haut dans la page), ou paquets de 8 pour un cycle court.",
               }}
             >
               <Select value={block} onValueChange={(v) => setBlock(v as typeof block)}>
                 <SelectTrigger className="w-full min-w-0 sm:w-40" aria-label="Bloc">
                   <span className="flex flex-1 text-left">
-                    {block === "month" ? "Mois" : block === "week" ? "Semaine" : "Paquets de X"}
+                    {block === "month" ? "Mois" : block === "week" ? "Semaine" : block === "short" ? "Cycle court" : "Paquets de X"}
                   </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="month">Mois</SelectItem>
                   <SelectItem value="week">Semaine</SelectItem>
                   <SelectItem value="window">Paquets de X</SelectItem>
+                  <SelectItem value="short">Cycle court (8)</SelectItem>
                 </SelectContent>
               </Select>
             </LabelHelp>

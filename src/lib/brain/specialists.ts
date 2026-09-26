@@ -97,6 +97,7 @@ const DEFAULT_FEATURES: SpecialistFeature[] = [
   { id: "stoch", label: "Stochastique %K", family: "momentum", period: 14, reading: SPECIALIST_FEATURE_READINGS.stoch },
   { id: "cci", label: "CCI", family: "momentum", period: 20, reading: SPECIALIST_FEATURE_READINGS.cci },
   { id: "zscore", label: "Z-score 20", family: "volatilite", period: 20, reading: SPECIALIST_FEATURE_READINGS.zscore },
+  { id: "range8", label: "Étendue 8", family: "volatilite", period: 8, reading: SPECIALIST_FEATURE_READINGS.range8 },
   { id: "slope", label: "Pente 10", family: "tendance", period: 10, reading: SPECIALIST_FEATURE_READINGS.slope },
 ]
 

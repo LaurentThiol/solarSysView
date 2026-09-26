@@ -14,6 +14,7 @@ export const SPECIALIST_FEATURE_READINGS: Record<string, string> = {
   stoch: "Position dans la fourchette des 14 derniers points (0–100). Zones 80 / 20.",
   cci: "Écart à la moyenne typique sur 20. Extrêmes ±100 / ±200.",
   zscore: "(valeur − moyenne) / σ sur 20 tirages. Distance à la moyenne récente de la série.",
+  range8: "max − min des 8 derniers tirages. Hauteur du cycle court, à côté du z-score 20. Pas une marge de grille.",
   slope: "Pente de régression linéaire sur 10 tirages. Tendance locale, pas le prochain point.",
 }
 

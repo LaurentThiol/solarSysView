@@ -1,4 +1,5 @@
 import { consecutiveCount } from "@/lib/grid-shape"
+import { SHORT_CYCLE_MAX, localRange } from "@/lib/short-cycle"
 
 export type AnalysisDraw = {
   date: string
@@ -270,6 +271,14 @@ export function rollingStats(
     zscore: z,
     rsiLike: rsi,
     coverage: seen.size,
+    short: {
+      span: SHORT_CYCLE_MAX,
+      sampleSize: Math.min(SHORT_CYCLE_MAX, payload.values.length),
+      min: payload.values.length ? Math.min(...payload.values.slice(-SHORT_CYCLE_MAX)) : null,
+      max: payload.values.length ? Math.max(...payload.values.slice(-SHORT_CYCLE_MAX)) : null,
+      last,
+      range: payload.values.length ? localRange(payload.values, payload.values.length - 1, SHORT_CYCLE_MAX) : null,
+    },
   }
 }
 
@@ -287,14 +296,14 @@ export type Candle = {
 export function ohlcBlocks(
   draws: AnalysisDraw[],
   name: VariableName,
-  block: "month" | "week" | "window",
+  block: "month" | "week" | "window" | "short",
   window = 10,
   n?: number
 ): Candle[] {
   const points = series(draws, name, n).points
   const groups: { key: string; chunk: SeriesPoint[] }[] = []
-  if (block === "window") {
-    const size = Math.max(1, window)
+  if (block === "window" || block === "short") {
+    const size = block === "short" ? SHORT_CYCLE_MAX : Math.max(1, window)
     for (let i = 0; i < points.length; i += size) {
       const chunk = points.slice(i, i + size)
       groups.push({ key: chunk[0].date, chunk })

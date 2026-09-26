@@ -373,8 +373,8 @@ export function HistoricPlane({
                       {row.cells.map((cell) => {
                         const title =
                           cell.z == null
-                            ? `${formatDrawDate(row.date)} · ${cell.label} · σ = 0 · réel ${formatActual(cell.actual)}`
-                            : `${formatDrawDate(row.date)} · ${cell.label} · z ${formatZ(cell.z)} · réel ${formatActual(cell.actual)}`
+                            ? `${formatDrawDate(row.date)} · ${cell.label} · σ = 0 · réel ${formatActual(cell.actual)} · étendue 8 ${formatActual(cell.shortRange)}`
+                            : `${formatDrawDate(row.date)} · ${cell.label} · z ${formatZ(cell.z)} · réel ${formatActual(cell.actual)} · étendue 8 ${formatActual(cell.shortRange)}`
                         return (
                           <td key={`${row.date}-${cell.axisId}`} className="p-0">
                             <div

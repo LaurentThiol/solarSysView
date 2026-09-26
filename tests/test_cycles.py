@@ -62,8 +62,11 @@ def test_registry_aligns_clocks_on_the_draw_index() -> None:
         "lunar:sin",
         "carrington:sin",
         "harmo:sin",
+        "harmo:court:sin",
         "chartisme:occupancy",
-        "morpho:gap_std",
+        "chartisme:court",
+        "chartisme:etendue",
+        "morpho:gap_span",
         "relief:centroid",
         "pronostic:z",
         "series:sum",
@@ -76,11 +79,11 @@ def test_registry_aligns_clocks_on_the_draw_index() -> None:
     from synchro.cycles.panel import panel_payload
 
     view = panel_payload(panel)
-    for key in ("target", "lunar", "harmo", "occupancy", "activity", "morpho", "relief", "residual"):
+    for key in ("target", "lunar", "harmo", "harmo_court", "occupancy", "court", "activity", "morpho", "relief", "residual"):
         assert key in view["series"]
         assert len(view["series"][key]) == len(view["dates"])
     assert panel["past"].shape[0] == panel["known"].shape[0] == 60
-    assert panel["past"].shape[1] == 23
+    assert panel["past"].shape[1] == 25
     delay = build_panel(_draws(40), variable="delay", n=7, warmup=0)
     assert any(note["id"] == "delay_saw" for note in delay["notes"])
 

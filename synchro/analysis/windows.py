@@ -6,6 +6,7 @@ from typing import Any
 
 from synchro.analysis.common import as_date, numbers_of, ordered_draws
 from synchro.analysis.variables import series as extract_series
+from synchro.short_cycle import SHORT_CYCLE_MAX, local_range
 
 
 def _mean(values: list[float]) -> float:
@@ -89,9 +90,25 @@ def rolling_stats(
         "slope": round(_slope(chunk), 6) if chunk else None,
         "rsi_like": _rsi_like(chunk),
         "coverage": coverage(ordered),
+        "short": _short_band(values),
         "from_date": payload["from_date"],
         "to_date": payload["to_date"],
         "draw_count": payload["draw_count"],
+    }
+
+
+def _short_band(values: list[float], span: int = SHORT_CYCLE_MAX) -> dict[str, Any]:
+    """Bande de 8 tirages : étendue, min, max, dernier. Pas de z-score."""
+    if not values:
+        return {"span": span, "sample_size": 0, "min": None, "max": None, "last": None, "range": None}
+    chunk = values[-span:]
+    return {
+        "span": span,
+        "sample_size": len(chunk),
+        "min": min(chunk),
+        "max": max(chunk),
+        "last": chunk[-1],
+        "range": local_range(values, len(values) - 1, span),
     }
 
 
@@ -108,13 +125,14 @@ def ohlc_blocks(
     n: int | None = None,
 ) -> dict[str, Any]:
     """Chandeliers OHLC d’une variable (mois, semaine ISO, ou paquets de `window` tirages)."""
-    if block not in {"month", "week", "window"}:
-        raise ValueError("block doit être month, week ou window.")
+    if block not in {"month", "week", "window", "short"}:
+        raise ValueError("block doit être month, week, window ou short.")
     payload = extract_series(draws, name, n=n)
     points = payload["points"]
     groups: list[tuple[str, list[dict[str, Any]]]] = []
-    if block == "window":
-        size = max(1, int(window))
+    packet = SHORT_CYCLE_MAX if block == "short" else max(1, int(window))
+    if block in {"window", "short"}:
+        size = packet
         for i in range(0, len(points), size):
             chunk = points[i : i + size]
             groups.append((chunk[0]["date"], chunk))
@@ -149,7 +167,7 @@ def ohlc_blocks(
         "name": name,
         "n": n,
         "block": block,
-        "window": window if block == "window" else None,
+        "window": packet if block in {"window", "short"} else None,
         "draw_count": payload["draw_count"],
         "from_date": payload["from_date"],
         "to_date": payload["to_date"],

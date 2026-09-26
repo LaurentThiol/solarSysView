@@ -12,6 +12,7 @@ import {
   type StackProposal,
   type WindowPoint,
 } from "./learn.ts"
+import { localRange, SHORT_CYCLE_MAX } from "../short-cycle.ts"
 import { defaultStack, setLayerEnabled, type LayerId, type StackState } from "./state.ts"
 
 /** Tirages notés : les plus récents, numéros et étoiles ensemble. */
@@ -87,6 +88,8 @@ export type AxisReading = {
   z: number | null
   /** Plus petit pas de marge dont la bande entière contient la valeur. null au-delà de 3 σ. */
   required: number | null
+  /** Étendue des 8 derniers tirages de la fenêtre. Lecture à côté, hors de la marge kσ. */
+  shortRange: number
 }
 
 export type PreparedRow = {
@@ -348,6 +351,7 @@ function readingsAt(paired: PairedDraw[], t: number, lookback: HistoricLookback,
       delta: actual - mean,
       z: residual(actual, mean, sigma),
       required: requiredForValue(actual, mean, sigma, theoreticalOf(axis)),
+      shortRange: localRange(series, series.length - 1, SHORT_CYCLE_MAX),
     } satisfies AxisReading
   })
 }

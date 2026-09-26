@@ -51,6 +51,7 @@ export type ResidualCell = {
   label: string
   z: number | null
   actual: number
+  shortRange: number
 }
 
 export type ResidualGridRow = {
@@ -195,6 +196,7 @@ export function residualGrid(rows: HistoricGameRow[]): ResidualGrid {
           label: axis.label,
           z: reading?.z ?? null,
           actual: reading?.actual ?? 0,
+          shortRange: reading?.shortRange ?? 0,
         }
       }),
     })),

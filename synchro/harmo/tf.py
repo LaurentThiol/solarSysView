@@ -9,6 +9,9 @@ from scipy.signal import ShortTimeFFT, find_peaks, stft
 from scipy.signal.windows import hann
 
 from synchro.harmo.util import db10, detrend_mean, fgrid, flist, fnum, freq_pack
+from synchro.short_cycle import SHORT_CYCLE_MAX, SHORT_CYCLE_MIN
+
+SHORT_HOP = 2
 
 
 def choose_nperseg(n: int, requested: int | None = None) -> int:
@@ -235,6 +238,51 @@ def optional_ssq(x: np.ndarray) -> dict[str, Any] | None:
     freqs = np.linspace(0.0, 0.5, mag.shape[0])
     times = np.linspace(0.0, max(len(x) - 1, 1), mag.shape[1])
     return downsample_tf(freqs, times, mag) | {"available": True, "source": "ssqueezepy"}
+
+
+def short_cycle_peaks(
+    x: np.ndarray, *, draws_per_year: float = 104.0
+) -> list[dict[str, Any]]:
+    """Pics d'une STFT de 8 tirages, pas 2, dont la période tombe dans 4 à 8.
+
+    Le segment court localise une arche que le Welch long moyenne. On ne
+    garde, par période arrondie, que le pic le plus fort.
+    """
+    series = np.asarray(x, dtype=float)
+    if int(series.size) < SHORT_CYCLE_MAX:
+        return []
+    st = compute_stft(series, nperseg=SHORT_CYCLE_MAX, hop=SHORT_HOP)
+    mag = np.asarray(st["mag"], dtype=float)
+    freqs = np.asarray(st["freqs"], dtype=float).ravel()
+    times = np.asarray(st["times"], dtype=float).ravel()
+    if mag.ndim != 2 or mag.shape[1] == 0 or freqs.size < 2:
+        return []
+    best: dict[int, dict[str, Any]] = {}
+    for slot in range(mag.shape[1]):
+        column = mag[:, slot].copy()
+        column[0] = 0.0
+        if float(np.max(column)) <= 0:
+            continue
+        k = int(np.argmax(column))
+        packed = freq_pack(float(freqs[k]) if k < freqs.size else 0.0, draws_per_year)
+        period = packed.get("period_draws")
+        if period is None or not (SHORT_CYCLE_MIN <= float(period) <= SHORT_CYCLE_MAX):
+            continue
+        peak = {
+            "band": "court",
+            "time": fnum(times[slot]) if slot < times.size else None,
+            "cycles_per_draw": packed["cycles_per_draw"],
+            "period_draws": packed["period_draws"],
+            "cycles_per_year": packed["cycles_per_year"],
+            "amp": fnum(column[k]),
+            "nperseg": SHORT_CYCLE_MAX,
+            "hop": SHORT_HOP,
+        }
+        key = int(round(float(period)))
+        current = best.get(key)
+        if current is None or float(peak["amp"]) > float(current["amp"]):
+            best[key] = peak
+    return [best[key] for key in sorted(best)]
 
 
 def tf_bundle(

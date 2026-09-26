@@ -12,6 +12,9 @@ import {
   type TargetOutcome,
 } from "./figures"
 import type { Curve } from "./curves"
+import { activityConfirms } from "../ta"
+import { SHORT_CYCLE_MAX, SHORT_CYCLE_MIN } from "../short-cycle"
+import { swingPivots } from "./pivots"
 
 /**
  * Jumeau TS de `synchro/chartisme/scan.py`.
@@ -24,6 +27,63 @@ import type { Curve } from "./curves"
 export const DEFAULT_SCALES = [30, 60, 120] as const
 export const DEFAULT_STRIDE_RATIO = 0.25
 export const MIN_WINDOW = 16
+
+function shortArches(
+  values: number[],
+  dates: Array<string | null>,
+  activity: number[],
+  zigzagPct: number
+): FigureHit[] {
+  const pivots = swingPivots(values, dates, zigzagPct)
+  const found: FigureHit[] = []
+  for (let slot = 0; slot < pivots.length - 1; slot += 1) {
+    const left = pivots[slot]
+    const right = pivots[slot + 1]
+    const span = right.index - left.index
+    if (span < SHORT_CYCLE_MIN || span > SHORT_CYCLE_MAX) continue
+    const segment = values.slice(left.index, right.index + 1)
+    if (!segment.length) continue
+    const height = Math.max(...segment) - Math.min(...segment)
+    if (height <= 0) continue
+    let stepSum = 0
+    for (let index = 1; index < segment.length; index += 1) stepSum += Math.abs(segment[index] - segment[index - 1])
+    const highFirst = left.price >= right.price
+    found.push({
+      figure: "arche" as FigureHit["figure"],
+      label: "Arche courte",
+      kind: "range",
+      signal: "—",
+      confidence: Math.round((span / SHORT_CYCLE_MAX) * 10000) / 10000,
+      from_index: left.index,
+      to_index: right.index,
+      from: dates[left.index] ?? null,
+      to: dates[right.index] ?? null,
+      pivots: [
+        {
+          index: left.index,
+          date: left.date,
+          value: left.price,
+          role: highFirst ? "top" : "bottom",
+        },
+        {
+          index: right.index,
+          date: right.date,
+          value: right.price,
+          role: highFirst ? "bottom" : "top",
+        },
+      ],
+      guides: [],
+      breakout: null,
+      target: null,
+      detector: "short",
+      range: height,
+      activity_period: SHORT_CYCLE_MAX,
+      mean_step: segment.length > 1 ? stepSum / (segment.length - 1) : 0,
+      volume_ok: activity.length > 0 && activityConfirms(activity, right.index, SHORT_CYCLE_MAX),
+    } as FigureHit)
+  }
+  return found
+}
 /**
  * Plancher du balayage géométrique.
  *
@@ -179,16 +239,33 @@ export function scanCurve(curve: Partial<Curve>, options: ScanOptions = {}): Sca
   const values = (curve.values ?? []).map(Number)
   const dates = [...(curve.dates ?? [])]
   const activity = (curve.activity ?? []).map(Number)
-  if (values.length < MIN_WINDOW) return []
+  if (values.length < SHORT_CYCLE_MIN) return []
 
   const found: ScanHit[] = []
   for (const size of scales ?? DEFAULT_SCALES) {
-    if (size < MIN_WINDOW || size > values.length) continue
+    if (size > values.length) continue
     const bar =
       minConfidenceByScale && size in minConfidenceByScale
         ? minConfidenceByScale[size]
         : minConfidence
     if (bar === null) continue
+    if (size >= SHORT_CYCLE_MIN && size <= SHORT_CYCLE_MAX) {
+      const stride = Math.max(1, Math.trunc(size * strideRatio))
+      for (const start of windowStarts(values.length, size, stride)) {
+        const stop = start + size
+        for (const hit of shortArches(
+          values.slice(start, stop),
+          dates.slice(start, stop),
+          activity.slice(start, stop),
+          zigzagPct
+        )) {
+          if (hit.confidence < bar) continue
+          found.push(rebase(hit, { offset: start, scale: size, curve, values, dates }))
+        }
+      }
+      continue
+    }
+    if (size < MIN_WINDOW) continue
     const stride = Math.max(1, Math.trunc(size * strideRatio))
     for (const start of windowStarts(values.length, size, stride)) {
       const stop = start + size

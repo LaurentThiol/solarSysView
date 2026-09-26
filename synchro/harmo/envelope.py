@@ -9,6 +9,31 @@ from scipy.signal import hilbert
 
 from synchro.harmo.spectrum import peak_list, rfft_spectrum
 from synchro.harmo.util import detrend_mean, downsample_xy, fnum
+from synchro.short_cycle import SHORT_CYCLE_MAX
+
+
+def _segment_extent_index(env: np.ndarray, span: int = SHORT_CYCLE_MAX, hop: int = 2) -> float:
+    """Plus forte étendue / moyenne sur un segment de `span` tirages.
+
+    Le σ de toute l'enveloppe noie une modulation qui ne dure qu'une arche.
+    """
+    n = int(env.size)
+    if n < 2:
+        return 0.0
+    width = min(max(int(span), 2), n)
+    step = max(int(hop), 1)
+    ratios: list[float] = []
+    for start in range(0, n - width + 1, step):
+        chunk = env[start : start + width]
+        mean = float(np.mean(chunk))
+        if mean <= 1e-12:
+            continue
+        ratios.append(float(chunk.max() - chunk.min()) / mean)
+    if not ratios and n >= 2:
+        mean = float(np.mean(env))
+        if mean > 1e-12:
+            return float(env.max() - env.min()) / mean
+    return float(max(ratios)) if ratios else 0.0
 
 
 def envelope_bundle(
@@ -41,7 +66,7 @@ def envelope_bundle(
     env_peaks = peak_list(freqs, mag, draws_per_year=draws_per_year, max_peaks=10)
     peak_f = float(env_peaks[0]["cycles_per_draw"] or 0.0) if env_peaks else 0.0
     mean_env = float(np.mean(env))
-    mod_index = float(np.std(env) / (mean_env + 1e-12)) if mean_env else 0.0
+    mod_index = _segment_extent_index(env) if mean_env else 0.0
     # Une sinusoïde a une enveloppe quasi constante (indice ~0.08, bords Hilbert).
     # Une vraie modulation dépasse ~0.12.
     periodic = bool(mod_index > 0.12 and peak_f > 3.0 / n and snr >= 4.0)

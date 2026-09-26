@@ -7,6 +7,7 @@ import {
   bollinger,
   type VariableName,
 } from "@/lib/analysis"
+import { SHORT_CYCLE_MAX, localRange } from "@/lib/short-cycle"
 import { filterDrawsByWeekday, type DrawWeekday } from "@/lib/weekday-scope"
 
 export const WINDOW_PRESETS = [
@@ -330,6 +331,7 @@ export type ProfilePoint = {
   coverage: number
   bbWidth: number | null
   atr: number | null
+  shortRange: number
 }
 
 export function rollingProfile(
@@ -372,6 +374,7 @@ export function rollingProfile(
       coverage: coverage(rows.slice(start, i + 1)),
       bbWidth,
       atr: atrLine[i] ?? null,
+      shortRange: localRange(values, i, SHORT_CYCLE_MAX),
     }
   })
   return {

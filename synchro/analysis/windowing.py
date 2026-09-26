@@ -11,6 +11,7 @@ from synchro.weekday import normalize_weekday_filter
 from synchro.analysis.inference import chi_square_uniform, number_frequencies
 from synchro.analysis.ta import atr, bollinger, sma
 from synchro.analysis.variables import series as extract_series
+from synchro.short_cycle import SHORT_CYCLE_MAX, local_range
 
 PRESETS = (
     "last_20",
@@ -314,6 +315,7 @@ def rolling_profile(
                 "date": as_date(draw["draw_date"]).isoformat(),
                 "mean": mean_line[i],
                 "std": _std(chunk) if len(chunk) >= 2 else None,
+                "short_range": local_range(values, i, SHORT_CYCLE_MAX),
                 "coverage": coverage(ordered[start : i + 1]),
                 "bb_width": width[i],
                 "atr": atr_line[i] if i < len(atr_line) else None,

@@ -20,6 +20,7 @@ from synchro.analysis.variables import VARIABLE_NAMES, series as extract_series
 from synchro.harmo.series import sampling_stats
 from synchro.harmo.util import freq_pack
 from synchro.ref.cycles import _CARRINGTON_DAYS, _SYNODIC_DAYS, carrington, lunar_state, schwabe
+from synchro.short_cycle import SHORT_CYCLE_MAX, SHORT_CYCLE_MIN, short_residual
 
 # Agrégats libres : les 18 courbes sans delay/hit.
 AGGREGATE_NAMES: tuple[str, ...] = tuple(
@@ -156,55 +157,78 @@ def _local_extrema(values: np.ndarray) -> list[int]:
     return pivots
 
 
-def figure_occupancy(values: Sequence[float]) -> tuple[np.ndarray, float | None]:
-    """Occupation géométrique : 1 entre deux pivots dont l'écart tient dans le plafond chartiste.
-
-    Ce n'est pas le détecteur des 18 figures. C'est le canal de durée : un
-    tirage est dans une figure locale si l'arche qui le contient dure au
-    plus MAX_CYCLE. La longueur médiane de ces arches est la période du canal.
-    """
+def _arch_bands(
+    values: Sequence[float],
+    low: int,
+    high: int,
+) -> tuple[np.ndarray, float | None, np.ndarray, np.ndarray]:
+    """Occupation, période médiane, hauteur et phase des arches dont la durée est dans [low, high]."""
     x = np.asarray(values, dtype=float)
     n = int(x.size)
     occupied = np.zeros(n, dtype=float)
+    heights = np.zeros(n, dtype=float)
+    phase = np.zeros(n, dtype=float)
     pivots = _local_extrema(x)
     lengths: list[float] = []
     for a, b in zip(pivots, pivots[1:]):
         span = b - a
-        if span < 4 or span > _MAX_CYCLE:
+        if span < low or span > high:
             continue
+        segment = x[a : b + 1]
+        height = float(segment.max() - segment.min()) if segment.size else 0.0
         occupied[a : b + 1] = 1.0
+        heights[a : b + 1] = height
+        if span > 0:
+            slots = np.arange(a, b + 1, dtype=float)
+            phase[a : b + 1] = (slots - a) / float(span)
         lengths.append(float(span))
     period = float(np.median(lengths)) if lengths else None
+    return occupied, period, heights, phase
+
+
+def figure_occupancy(values: Sequence[float]) -> tuple[np.ndarray, float | None]:
+    """Occupation des arches longues : durée de 9 à MAX_CYCLE tirages.
+
+    Les arches de 4 à 8 tirages sont le canal court. Les mélanger ici
+    tirait la médiane vers une période qui n'est ni l'une ni l'autre.
+    """
+    occupied, period, _heights, _phase = _arch_bands(values, SHORT_CYCLE_MAX + 1, _MAX_CYCLE)
     return occupied, period
 
 
-def morpho_gap_std(draws: Sequence[dict[str, Any]]) -> np.ndarray:
-    """Écart-type des quatre trous g1–g4 : la forme du glyphe, pas sa somme."""
+def short_cycle_band(
+    values: Sequence[float],
+) -> tuple[np.ndarray, float | None, np.ndarray, np.ndarray]:
+    """Occupation, période, étendue et phase des arches de 4 à 8 tirages.
+
+    La phase vaut 0 au pivot de départ et 1 au pivot suivant. Hors arche
+    courte, occupation, étendue et phase restent à 0.
+    """
+    return _arch_bands(values, SHORT_CYCLE_MIN, SHORT_CYCLE_MAX)
+
+
+def morpho_gap_span(draws: Sequence[dict[str, Any]]) -> np.ndarray:
+    """Étendue des quatre trous g1–g4 : max − min, la forme du glyphe."""
     gaps = np.column_stack(
         [
             np.asarray(extract_series(list(draws), name)["values"], dtype=float)
             for name in ("g1", "g2", "g3", "g4")
         ]
     )
-    return gaps.std(axis=1)
+    return gaps.max(axis=1) - gaps.min(axis=1)
 
 
 def relief_centroid(draws: Sequence[dict[str, Any]]) -> np.ndarray:
     return np.asarray(extract_series(list(draws), "centroid")["values"], dtype=float)
 
 
-def causal_zscore(values: Sequence[float], period: int = 20) -> np.ndarray:
-    """Résidu contre la moyenne des pas précédents. À t, rien après t."""
-    x = np.asarray(values, dtype=float)
-    out = np.zeros(x.size, dtype=float)
-    for i in range(x.size):
-        lo = max(0, i - period)
-        window = x[lo:i] if i > lo else x[i : i + 1]
-        mu = float(np.mean(window))
-        sigma = float(np.std(window))
-        scale = sigma if sigma > 1e-8 else 1.0
-        out[i] = (x[i] - mu) / scale
-    return out
+def causal_zscore(values: Sequence[float], period: int = SHORT_CYCLE_MAX) -> np.ndarray:
+    """Résidu court. Le nom reste pour les appelants ; l'échelle est l'étendue.
+
+    `(x − médiane des `period` tirages précédents) / (étendue / 2)`.
+    Étendue nulle : résidu nul. À t, rien après t.
+    """
+    return short_residual(values, span=period)
 
 
 def clock_channels() -> list[Channel]:
@@ -323,16 +347,34 @@ def series_channels(target: str) -> list[Channel]:
                 "geometric",
                 "past",
                 group="chartisme",
-                note="1 si le tirage est dans une arche de pivots ≤ 120. Plafond de lecture, pas une fréquence.",
+                note="1 si le tirage est dans une arche de 9 à 120 tirages. Plafond de lecture, pas une fréquence.",
             ),
             Channel(
-                "morpho:gap_std",
-                "Écart des trous",
+                "chartisme:court",
+                "Cycle court",
+                "chartisme",
+                "geometric",
+                "past",
+                group="chartisme",
+                note="1 si l'arche de pivots dure de 4 à 8 tirages.",
+            ),
+            Channel(
+                "chartisme:etendue",
+                "Étendue courte",
+                "chartisme",
+                "geometric",
+                "past",
+                group="chartisme",
+                note="max − min de l'arche courte qui contient le tirage. 0 hors de cette arche.",
+            ),
+            Channel(
+                "morpho:gap_span",
+                "Étendue des trous",
                 "morpho",
                 "series",
                 "past",
                 group="morpho",
-                note="Écart-type de g1–g4 : forme du glyphe.",
+                note="max − min de g1–g4 : forme du glyphe.",
             ),
             Channel(
                 "relief:centroid",
@@ -350,11 +392,24 @@ def series_channels(target: str) -> list[Channel]:
                 "series",
                 "past",
                 group="pronostic",
-                note="Écart de la cible à sa moyenne passée. Pas une bande de grille.",
+                note="Écart de la cible à la médiane des 8 tirages précédents, divisé par la demi-étendue. Étendue nulle : résidu nul.",
             ),
         ]
     )
     return rows
+
+
+def short_clock_channel(period_draws: float | None) -> Channel:
+    return Channel(
+        "harmo:court",
+        "Cycle court",
+        "harmo",
+        "spectral",
+        "known",
+        period_draws=period_draws,
+        group="harmo_court",
+        note="Phase de l'arche de 4 à 8 tirages. Période = médiane de ces arches. La raie dominante reste le canal lent.",
+    )
 
 
 def harmo_channel(period_draws: float | None, period_days: float | None) -> Channel:

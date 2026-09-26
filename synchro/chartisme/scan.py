@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Sequence
 
+from synchro.analysis.tech import activity_confirms
 from synchro.chartisme.figures import (
     DEFAULT_EPS,
     DEFAULT_MAX_OVERLAP,
@@ -20,11 +21,82 @@ from synchro.chartisme.figures import (
     summarize,
     target_reached,
 )
+from synchro.chartisme.pivots import swing_pivots
+from synchro.short_cycle import SHORT_CYCLE_MAX, SHORT_CYCLE_MIN
 
 # Trois échelles : une figure courte n'a pas la même durée qu'un range annuel.
 DEFAULT_SCALES = (30, 60, 120)
 DEFAULT_STRIDE_RATIO = 0.25
 MIN_WINDOW = 16
+
+
+def _short_arches(
+    values: Sequence[float],
+    dates: Sequence[str],
+    activity: Sequence[float],
+    zigzag_pct: float,
+) -> list[dict[str, Any]]:
+    """Arches de 4 à 8 tirages. Le seuil de pivot est celui de cette fenêtre.
+
+    Ce n'est pas une des 18 figures : une tête et épaules ne tient pas ici.
+    L'activité de confirmation se mesure sur 8 tirages, pas sur 20.
+    """
+    pivots = swing_pivots(values, dates, zigzag_pct)
+    found: list[dict[str, Any]] = []
+    series = [float(value) for value in values]
+    moves = [float(step) for step in activity]
+    for left, right in zip(pivots, pivots[1:]):
+        start = int(left["index"])
+        end = int(right["index"])
+        span = end - start
+        if span < SHORT_CYCLE_MIN or span > SHORT_CYCLE_MAX:
+            continue
+        segment = series[start : end + 1]
+        if not segment:
+            continue
+        height = max(segment) - min(segment)
+        if height <= 0:
+            continue
+        steps = [abs(segment[i] - segment[i - 1]) for i in range(1, len(segment))]
+        mean_step = sum(steps) / len(steps) if steps else 0.0
+        volume_ok = bool(moves) and activity_confirms(moves, end, SHORT_CYCLE_MAX)
+        high_first = float(left["price"]) >= float(right["price"])
+        found.append(
+            {
+                "figure": "arche",
+                "label": "Arche courte",
+                "kind": "range",
+                "signal": "—",
+                "confidence": round(span / SHORT_CYCLE_MAX, 4),
+                "from_index": start,
+                "to_index": end,
+                "from": dates[start] if start < len(dates) else None,
+                "to": dates[end] if end < len(dates) else None,
+                "pivots": [
+                    {
+                        "index": start,
+                        "date": left.get("date"),
+                        "value": float(left["price"]),
+                        "role": "top" if high_first else "bottom",
+                    },
+                    {
+                        "index": end,
+                        "date": right.get("date"),
+                        "value": float(right["price"]),
+                        "role": "bottom" if high_first else "top",
+                    },
+                ],
+                "guides": [],
+                "breakout": None,
+                "target": None,
+                "detector": "short",
+                "range": height,
+                "activity_period": SHORT_CYCLE_MAX,
+                "mean_step": mean_step,
+                "volume_ok": volume_ok,
+            }
+        )
+    return found
 
 
 def window_starts(length: int, size: int, stride: int) -> list[int]:
@@ -70,14 +142,40 @@ def scan_curve(
     values = [float(v) for v in curve.get("values") or []]
     dates = list(curve.get("dates") or [])
     activity = [float(a) for a in curve.get("activity") or []]
-    if len(values) < MIN_WINDOW:
+    if len(values) < SHORT_CYCLE_MIN:
         return []
     found: list[dict[str, Any]] = []
     for size in scales or DEFAULT_SCALES:
-        if size < MIN_WINDOW or size > len(values):
+        if size > len(values):
             continue
         bar = (min_confidence_by_scale or {}).get(size, min_confidence)
         if bar is None:
+            continue
+        if SHORT_CYCLE_MIN <= size <= SHORT_CYCLE_MAX:
+            stride = max(1, int(size * stride_ratio))
+            for start in window_starts(len(values), size, stride):
+                stop = start + size
+                hits = _short_arches(
+                    values[start:stop],
+                    dates[start:stop],
+                    activity[start:stop],
+                    zigzag_pct,
+                )
+                for hit in hits:
+                    if hit["confidence"] < bar:
+                        continue
+                    found.append(
+                        _rebase(
+                            hit,
+                            offset=start,
+                            scale=size,
+                            curve=curve,
+                            values=values,
+                            dates=dates,
+                        )
+                    )
+            continue
+        if size < MIN_WINDOW:
             continue
         stride = max(1, int(size * stride_ratio))
         for start in window_starts(len(values), size, stride):

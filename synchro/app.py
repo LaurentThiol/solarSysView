@@ -614,7 +614,7 @@ def create_app() -> FastAPI:
     @app.get("/api/analysis/ohlc")
     def analysis_ohlc(
         name: str = Query("sum"),
-        block: str = Query("month", pattern="^(month|week|window)$"),
+        block: str = Query("month", pattern="^(month|week|window|short)$"),
         window: int = Query(10, ge=1, le=200),
         n: int | None = Query(None, ge=1, le=50),
         heikin: bool = False,
@@ -642,7 +642,7 @@ def create_app() -> FastAPI:
     def analysis_ta(
         name: str = Query("sum"),
         window: int = Query(20, ge=2, le=500),
-        block: str = Query("month", pattern="^(month|week|window)$"),
+        block: str = Query("month", pattern="^(month|week|window|short)$"),
         n: int | None = Query(None, ge=1, le=50),
         era: str = Query("current", pattern="^(current|all)$"),
         from_date: str | None = None,
@@ -745,7 +745,7 @@ def create_app() -> FastAPI:
         era: str = Query("current", pattern="^(current|all)$"),
         name: str = Query("sum"),
         window: int = Query(20, ge=1, le=500),
-        block: str = Query("month", pattern="^(month|week|window)$"),
+        block: str = Query("month", pattern="^(month|week|window|short)$"),
         n: int = Query(7, ge=1, le=50),
         n_sim: int = Query(400, ge=1, le=5000),
         seed: int = Query(0),

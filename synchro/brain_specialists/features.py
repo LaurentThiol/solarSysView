@@ -22,6 +22,7 @@ FEATURE_IDS = (
     "stoch",
     "cci",
     "zscore",
+    "range8",
     "slope",
 )
 
@@ -103,6 +104,12 @@ FEATURES = {
         "family": "volatilite",
         "period": 20,
         "reading": "(valeur − moyenne) / σ sur 20 tirages. Distance à la moyenne récente de la série.",
+    },
+    "range8": {
+        "label": "Étendue 8",
+        "family": "volatilite",
+        "period": 8,
+        "reading": "max − min des 8 derniers tirages. Hauteur du cycle court, à côté du z-score 20. Pas une marge de grille.",
     },
     "slope": {
         "label": "Pente 10",
@@ -190,6 +197,16 @@ def zscore(values: list[float], period: int = 20) -> list[float | None]:
     return out
 
 
+def range_8(values: list[float], span: int = 8) -> list[float | None]:
+    """Étendue des `span` tirages qui finissent à t, t compris."""
+    width = max(1, span)
+    out: list[float | None] = [None] * len(values)
+    for i in range(width - 1, len(values)):
+        window = values[i - width + 1 : i + 1]
+        out[i] = max(window) - min(window)
+    return out
+
+
 def slope(values: list[float], period: int = 10) -> list[float | None]:
     p = max(2, period)
     out: list[float | None] = [None] * len(values)
@@ -220,6 +237,7 @@ _EXTRACTORS: dict[str, Callable[[list[float]], list[float | None]]] = {
     "stoch": lambda v: stochastic_k(v, 14),
     "cci": lambda v: cci_close(v, 20),
     "zscore": lambda v: zscore(v, 20),
+    "range8": lambda v: range_8(v, 8),
     "slope": lambda v: slope(v, 10),
 }
 

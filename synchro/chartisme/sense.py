@@ -18,6 +18,8 @@ from __future__ import annotations
 import math
 from typing import Any, Sequence
 
+from synchro.short_cycle import SHORT_CYCLE_MAX, SHORT_CYCLE_MIN
+
 # Même plancher que la plus courte fenêtre lisible du chartisme (`MIN_WINDOW`).
 MIN_SENSE_LENGTH = 16
 
@@ -38,6 +40,17 @@ _REGISTER_GLOSS = {
     "1": "le nuage autour de la droite est de l'ordre de l'écart-type habituel",
     "sup": "le nuage autour de la droite dépasse l'écart-type habituel",
 }
+_REGISTER_GLOSS_RANGE = {
+    "05": "le nuage autour de la droite tient dans la moitié de l'étendue habituelle",
+    "1": "le nuage autour de la droite est de l'ordre de l'étendue habituelle",
+    "sup": "le nuage autour de la droite dépasse l'étendue habituelle",
+}
+
+
+def _extent(values: Sequence[float]) -> float:
+    if not values:
+        return 0.0
+    return max(values) - min(values)
 
 
 def series_sigma(values: Sequence[float]) -> float:
@@ -113,14 +126,58 @@ def _readable(named: dict[str, Any] | None) -> dict[str, str] | None:
     return {"sense": sense, "register": register, "symbol": symbol}
 
 
+def name_short_sense(values: Sequence[float], reference_range: float | None) -> dict[str, Any] | None:
+    """Sens d'une arche de 4 à 8 tirages.
+
+    Le nuage est l'étendue des résidus, rapportée à l'étendue de référence
+    (médiane des arches courtes passées). Les registres restent 0,5 et 1.
+    Le σ de toute la courbe n'entre pas dans le rapport.
+    """
+    ys = [float(value) for value in values]
+    count = len(ys)
+    if count < SHORT_CYCLE_MIN or count > SHORT_CYCLE_MAX:
+        return None
+    if reference_range is None:
+        return None
+    try:
+        reference = float(reference_range)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(reference) or reference < 0:
+        return None
+
+    delta = ys[-1] - ys[0]
+    slope = delta / (count - 1)
+    residuals = [ys[index] - (ys[0] + slope * index) for index in range(count)]
+    cloud = _extent(residuals)
+    if reference == 0:
+        ratio = 0.0 if cloud == 0 else math.inf
+    else:
+        ratio = cloud / reference
+    sense = "stable" if abs(delta) <= cloud else ("monte" if delta > 0 else "baisse")
+    register = register_of(ratio)
+    return {
+        "symbol": f"{sense}:{register}",
+        "sense": sense,
+        "register": register,
+        "sigma": cloud,
+        "extent": cloud,
+        "reference": reference,
+        "ratio": ratio if math.isfinite(ratio) else None,
+        "delta": delta,
+        "band": "court",
+    }
+
+
 def sense_sentence(named: dict[str, Any] | None) -> str:
     """Phrase lue à côté du tracé. Le symbole reste en tête."""
     read = _readable(named)
     if not read:
         return "Fenêtre trop courte pour nommer le sens."
+    gloss = _REGISTER_GLOSS_RANGE if named and named.get("band") == "court" else _REGISTER_GLOSS
     return (
         f"{read['symbol']} — {_SENSE_GLOSS[read['sense']]}, "
-        f"et {_REGISTER_GLOSS[read['register']]}."
+        f"et {gloss[read['register']]}."
     )
 
 

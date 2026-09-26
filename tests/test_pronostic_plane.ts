@@ -64,6 +64,7 @@ function reading(id: ErrorAxisId, z: number | null, enabled = true, actual = 0):
     delta: actual,
     z,
     required: z == null ? null : 1,
+    shortRange: 0,
   }
 }
 

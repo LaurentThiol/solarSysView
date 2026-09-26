@@ -27,11 +27,13 @@ from synchro.cycles.registry import (
     harmo_channel,
     index_phase,
     lunar_phase,
-    morpho_gap_std,
+    morpho_gap_span,
     notes_for,
     relief_centroid,
     schwabe_phase,
     series_channels,
+    short_clock_channel,
+    short_cycle_band,
     sincos,
     static_vector,
     tropical_phase,
@@ -75,7 +77,8 @@ def build_panel(
     }
     activity = np.asarray(activity_from_close(target.tolist()), dtype=float)
     occupancy, figure_period = figure_occupancy(target)
-    gap_std = morpho_gap_std(rows)
+    court, short_period, extent, short_phase = short_cycle_band(target)
+    gap_span = morpho_gap_span(rows)
     centroid = relief_centroid(rows)
     residual = causal_zscore(target)
 
@@ -164,22 +167,55 @@ def build_panel(
     )
     known_cols.append(h_cos)
 
+    clock = short_clock_channel(float(short_period) if short_period else None)
+    c_sin, c_cos = sincos(short_phase)
+    known_meta.append(
+        Channel(
+            "harmo:court:sin",
+            "Cycle court sin",
+            "harmo",
+            "spectral",
+            "known",
+            period_draws=clock.period_draws,
+            group="harmo_court",
+            note=clock.note,
+        )
+    )
+    known_cols.append(c_sin)
+    known_meta.append(
+        Channel(
+            "harmo:court:cos",
+            "Cycle court cos",
+            "harmo",
+            "spectral",
+            "known",
+            period_draws=clock.period_draws,
+            group="harmo_court",
+        )
+    )
+    known_cols.append(c_cos)
+
     past_meta = series_channels(variable)
     past_cols: list[np.ndarray] = [aggregates[name] for name in AGGREGATE_NAMES]
-    past_cols.extend([activity, occupancy, gap_std, centroid, residual])
-    # La période d'occupation est portée par le canal chartiste.
+    past_cols.extend([activity, occupancy, court, extent, gap_span, centroid, residual])
+    periods = {
+        "chartisme:occupancy": figure_period,
+        "chartisme:court": short_period,
+    }
     for index, channel in enumerate(past_meta):
-        if channel.id == "chartisme:occupancy":
-            past_meta[index] = Channel(
-                channel.id,
-                channel.label,
-                channel.module,
-                channel.kind,
-                channel.role,
-                period_draws=figure_period,
-                group=channel.group,
-                note=channel.note,
-            )
+        period = periods.get(channel.id)
+        if channel.id not in periods:
+            continue
+        past_meta[index] = Channel(
+            channel.id,
+            channel.label,
+            channel.module,
+            channel.kind,
+            channel.role,
+            period_draws=period,
+            group=channel.group,
+            note=channel.note,
+        )
 
     known = np.column_stack(known_cols).astype(float)
     past = np.column_stack(past_cols).astype(float)
@@ -196,6 +232,7 @@ def build_panel(
         "draconitique": fixed_period_phase(days, 27.21222, _ANCHOR),
         "saros": fixed_period_phase(days, 6585.3211, _ANCHOR),
         "harmo": harmo_phi,
+        "harmo_court": short_phase,
     }
 
     return {
@@ -214,6 +251,7 @@ def build_panel(
         "known_channels": known_meta,
         "phases": phases,
         "occupancy": occupancy,
+        "court": court,
         "notes": notes_for(variable),
         "groups": _groups(known_meta),
     }
@@ -294,8 +332,10 @@ def panel_payload(panel: dict[str, Any], *, max_points: int = 240) -> dict[str, 
     series = {
         "target": take(target),
         "occupancy": take(panel["occupancy"][start:]),
+        "court": past_series("chartisme:court"),
+        "extent": past_series("chartisme:etendue"),
         "activity": past_series("chartisme:activity"),
-        "morpho": past_series("morpho:gap_std"),
+        "morpho": past_series("morpho:gap_span"),
         "relief": past_series("relief:centroid"),
         "residual": past_series("pronostic:z"),
     }
