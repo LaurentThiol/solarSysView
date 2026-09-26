@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
-from synchro.chartisme.sense import name_sense, series_sigma
+from synchro.chartisme.sense import name_sense, sense_segments, series_sigma
 
 
 def episode_from_window(
@@ -17,8 +17,13 @@ def episode_from_window(
     facts: dict[str, Any] | None = None,
     context: dict[str, Any] | None = None,
     from_index: int = 0,
+    slope_sigma: float | None = None,
 ) -> dict[str, Any]:
-    """Fenêtre nommée par `name_sense`. Le sens est `None` sous 16 tirages."""
+    """Fenêtre nommée par `name_sense`, avec la chaîne de tronçons à côté.
+
+    Le sens (la corde) est `None` sous 16 tirages. La chaîne utilise le σ des
+    prix et, s'il est fourni, le σ des pentes de toute la courbe.
+    """
     named = name_sense(values, reference_sigma)
     count = len(values)
     start = dates[0] if dates else None
@@ -32,6 +37,7 @@ def episode_from_window(
         "module": module,
         "series": series,
         "sense": named,
+        "segments": sense_segments(values, reference_sigma, slope_sigma),
         "facts": dict(facts or {}),
         "context": dict(context or {}),
         "outcome": {"status": "open"},

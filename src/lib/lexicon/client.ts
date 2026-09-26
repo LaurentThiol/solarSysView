@@ -30,7 +30,19 @@ export type Reading = {
   from_date?: string | null
   to_date?: string | null
   fields?: string[]
-  columns?: Record<string, Record<string, { sense: SenseCell; previous: SenseCell; reread: string | null }>>
+  columns?: Record<
+    string,
+    Record<
+      string,
+      {
+        sense: SenseCell
+        previous: SenseCell
+        reread: string | null
+        /** Chaîne renvoyée par la lecture. Le symbole de la case reste la corde. */
+        segments?: Record<string, unknown>[] | null
+      }
+    >
+  >
   horizons?: Record<string, string>
   ref?: { clock: string; field: string; verdict: string; winners?: Record<string, number | null> }[]
   stamps?: { clock: string; phase: number; date: string }[]
