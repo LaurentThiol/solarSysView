@@ -36,6 +36,7 @@ export {
   registerOf,
   segmentsSentence,
   senseSegments,
+  shortSenseSegments,
   senseSentence,
   senseShiftSentence,
   seriesSigma,
