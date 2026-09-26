@@ -1,4 +1,4 @@
-import { nameSense, type CurveSense } from "@/lib/chartisme/sense"
+import { nameSense, senseSegments, seriesSlopeSigma, type CurveSense, type SenseSegment } from "@/lib/chartisme/sense"
 
 export const DEMO_VALUES = Array.from({ length: 20 }, (_, index) => index)
 export const DEMO_SIGMA = 8
@@ -82,6 +82,11 @@ export type LexiconDemoStepId = (typeof DEMO_STEPS)[number]["id"]
 
 export function demoSense(): CurveSense | null {
   return nameSense(DEMO_VALUES, DEMO_SIGMA)
+}
+
+/** Chaîne de la courbe fixe. La corde reste `demoSense`. */
+export function demoSegments(): SenseSegment[] | null {
+  return senseSegments(DEMO_VALUES, DEMO_SIGMA, seriesSlopeSigma(DEMO_VALUES))
 }
 
 export function demoSkill(n = 8): number | null {
