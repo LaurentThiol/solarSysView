@@ -42,7 +42,10 @@ def local_question(reading: dict[str, Any]) -> str:
     for card in reading.get("pack") or []:
         if card.get("status") != "confirmed":
             continue
-        lines.append(f"Fiche confirmée {card.get('id')} : {card.get('gloss')}.")
+        gloss = f"Fiche confirmée {card.get('id')} : {card.get('gloss')}."
+        if card.get("recall"):
+            gloss = f"{gloss} {card.get('recall')}"
+        lines.append(gloss)
     return " ".join(lines)
 
 

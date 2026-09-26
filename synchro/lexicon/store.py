@@ -80,6 +80,7 @@ class LexiconStore:
         self.cards_path = self.root / "cards.json"
         self.mode_path = self.root / "mode.json"
         self.readings_path = self.root / "readings.json"
+        self.episodes_path = self.root / "episodes.json"
         self.embeddings_path = self.root / "embeddings.json"
         self.images = self.root / "images"
 
@@ -163,6 +164,20 @@ class LexiconStore:
             self.embeddings_path,
             json.dumps({"vectors": vectors}).encode("utf-8"),
         )
+
+    def load_episodes(self) -> list[dict[str, Any]]:
+        payload = _read_json(self.episodes_path)
+        rows = payload.get("episodes") if isinstance(payload, dict) else None
+        if not isinstance(rows, list):
+            return []
+        return [row for row in rows if isinstance(row, dict)]
+
+    def save_episodes(self, episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        atomic_write(
+            self.episodes_path,
+            json.dumps({"episodes": episodes}, ensure_ascii=False).encode("utf-8"),
+        )
+        return episodes
 
     def load_readings(self) -> list[dict[str, Any]]:
         payload = _read_json(self.readings_path)

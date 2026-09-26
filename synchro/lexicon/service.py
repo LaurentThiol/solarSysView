@@ -35,41 +35,46 @@ def prepare_reading(
     reading["id"] = uuid.uuid4().hex
     reading["created_at"] = _stamp()
     held = store or LexiconStore()
+    from synchro.lexicon.outcomes import merge_episodes, replay_open
+
+    ledger = replay_open(draws, merge_episodes(held.load_episodes(), reading.get("episodes") or []))
+    held.save_episodes(ledger)
     if reading["opens_llm"]:
         ids = {card["id"] for card in held.load_cards()}
         for draft in drafts_for(reading, ids):
             held.save_card(draft)
-    _touch_quality(held, reading)
+    _touch_quality(held, reading, ledger)
     from synchro.lexicon.memory import difficulties, pack_for
 
     cards = held.load_cards()
-    reading["pack"] = pack_for(cards, reading.get("episodes") or [])
+    reading["pack"] = pack_for(cards, reading.get("episodes") or [], weekday=reading.get("weekday"))
     reading["difficulties"] = difficulties(cards, reading.get("episodes") or [])
     reading["question"] = local_question(reading) if reading["opens_llm"] else None
     held.save_reading(reading)
     return reading
 
 
-def _touch_quality(store: LexiconStore, reading: dict[str, Any]) -> None:
-    cards = {card["id"]: card for card in store.load_cards()}
-    seen: set[str] = set()
-    for episode in reading.get("episodes") or []:
-        sense = episode.get("sense") or {}
-        symbol = sense.get("symbol")
-        if not symbol or symbol in seen:
-            continue
-        seen.add(symbol)
-        from synchro.lexicon.cards import fiche_id_from_symbol
+def _touch_quality(store: LexiconStore, reading: dict[str, Any], ledger: list[dict[str, Any]]) -> None:
+    from synchro.lexicon.cards import fiche_id_from_symbol
+    from synchro.lexicon.outcomes import tally_by_symbol
 
+    skills: dict[str, Any] = {}
+    for episode in reading.get("episodes") or []:
+        symbol = (episode.get("sense") or {}).get("symbol")
+        skill = ((episode.get("facts") or {}).get("skill") or {}).get("skill")
+        if symbol and isinstance(skill, (int, float)) and not isinstance(skill, bool):
+            skills[symbol] = skill
+    cards = {card["id"]: card for card in store.load_cards()}
+    for symbol, counts in tally_by_symbol(ledger).items():
         card_id = fiche_id_from_symbol(symbol)
         card = cards.get(card_id or "")
-        if not card:
+        if not card or card.get("status") != "confirmed":
             continue
-        skill = (episode.get("facts") or {}).get("skill") or {}
         quality = dict(card.get("quality") or {})
-        quality["episodes"] = int(quality.get("episodes") or 0) + 1
-        if "skill" in skill:
-            quality["skill"] = skill["skill"]
+        quality["outcomes"] = counts
+        quality["episodes"] = sum(sum(day.values()) for day in counts.values())
+        if symbol in skills:
+            quality["skill"] = skills[symbol]
         quality["reviewed"] = reading.get("created_at")
         store.update_card(card_id, {"quality": quality})
 

@@ -14,8 +14,15 @@ def _symbol(episode: dict[str, Any]) -> str | None:
     return str(symbol) if symbol else None
 
 
-def pack_for(cards: list[dict[str, Any]], episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def pack_for(
+    cards: list[dict[str, Any]],
+    episodes: list[dict[str, Any]],
+    *,
+    weekday: str | None = None,
+) -> list[dict[str, Any]]:
     """Fiches confirmées citées par les épisodes. Un brouillon n'entre pas dans le pack."""
+    from synchro.lexicon.outcomes import recall_line
+
     symbols = {symbol for symbol in (_symbol(episode) for episode in episodes) if symbol}
     pack = []
     for card in cards:
@@ -25,6 +32,7 @@ def pack_for(cards: list[dict[str, Any]], episodes: list[dict[str, Any]]) -> lis
             continue
         if card.get("symbol") not in symbols:
             continue
+        outcomes = (card.get("quality") or {}).get("outcomes")
         pack.append(
             {
                 "id": card["id"],
@@ -33,6 +41,9 @@ def pack_for(cards: list[dict[str, Any]], episodes: list[dict[str, Any]]) -> lis
                 "equation": card.get("equation"),
                 "gloss": card.get("gloss"),
                 "keywords": list(card.get("keywords") or []),
+                "outcomes": outcomes,
+                "recall": recall_line(outcomes, weekday) if outcomes else None,
+                "skill": (card.get("quality") or {}).get("skill"),
             }
         )
     return pack

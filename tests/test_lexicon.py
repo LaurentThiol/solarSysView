@@ -10,6 +10,7 @@ from synchro.chartisme.sense import name_sense
 from synchro.lexicon.cards import fiche_id, seed_cards
 from synchro.lexicon.episode import close_outcome, episode_from_window, figure_outcome
 from synchro.lexicon.memory import embed_card, pack_for, retrieve
+from synchro.lexicon.outcomes import replay_open
 from synchro.lexicon.helptext import drafts_for, local_question
 from synchro.lexicon.reading import build_reading
 from synchro.lexicon.service import answer_help, prepare_reading, run_if_automatic
@@ -263,6 +264,75 @@ def test_pack_ignores_a_draft_and_embedding_stays_local(tmp_path: Path) -> None:
     store = LexiconStore(tmp_path)
     store.save_embedding("sense.monte.05", [1.0, 0.0])
     assert store.load_embeddings()["sense.monte.05"] == [1.0, 0.0]
+
+
+def test_replay_waits_until_the_horizon_has_passed() -> None:
+    start = date(2018, 1, 2)
+    draws = []
+    for index in range(30):
+        low = 1 + index
+        draws.append(
+            {
+                "draw_date": start + timedelta(days=index),
+                "weekday": "mardi",
+                "numbers": [low, low + 1, low + 2, low + 3, min(50, low + 4)],
+                "stars": [1, 2],
+                "star_pool": 12,
+            }
+        )
+    early = {
+        "to_date": str(draws[-5]["draw_date"])[:10],
+        "series": "sum",
+        "sense": {"sense": "monte", "symbol": "monte:05", "sigma": 1.0},
+        "facts": {"weekday": "tous", "length": 20},
+        "outcome": {"status": "open"},
+    }
+    assert replay_open(draws, [early])[0]["outcome"]["status"] == "open"
+    ready = {**early, "to_date": str(draws[-6]["draw_date"])[:10]}
+    assert replay_open(draws, [ready])[0]["outcome"]["status"] == "reached"
+
+
+def test_rates_follow_the_weekday_and_the_next_reading_recalls_them(tmp_path: Path) -> None:
+    store = LexiconStore(tmp_path)
+    first = prepare_reading(_draws(40), weekday="mardi", store=store, shuffles=2)
+    assert store.load_episodes()
+    assert all(episode["outcome"]["status"] == "open" for episode in store.load_episodes())
+    assert any(card.get("recall") and "0 suivis" in card["recall"] for card in first["pack"])
+
+    calls: list[str] = []
+    store.save_mode(True)
+    second = run_if_automatic(
+        _draws(50),
+        weekday="mardi",
+        store=store,
+        ask=lambda question: calls.append(question) or "local",
+        shuffles=2,
+    )
+    assert second is not None
+    closed = [episode for episode in store.load_episodes() if episode["outcome"]["status"] != "open"]
+    assert closed
+    symbol = closed[0]["sense"]["symbol"]
+    from synchro.lexicon.cards import fiche_id_from_symbol
+
+    card = next(item for item in store.load_cards() if item["id"] == fiche_id_from_symbol(symbol))
+    mardi = card["quality"]["outcomes"]["mardi"]
+    assert mardi["reached"] + mardi["invalidated"] >= 1
+    assert card["quality"]["outcomes"]["tous"] == {"reached": 0, "invalidated": 0, "open": 0}
+    assert "skill" not in mardi
+    assert isinstance(card["quality"].get("skill"), (int, float))
+    recalled = [item for item in second["pack"] if item.get("recall")]
+    assert recalled
+    assert "Rappel mardi" in recalled[0]["recall"]
+    if second["opens_llm"]:
+        assert calls
+        assert "Rappel mardi" in (second["question"] or "")
+    else:
+        assert calls == []
+        assert second["question"] is None
+    third = prepare_reading(_draws(50), weekday="mardi", store=store, shuffles=2)
+    again = next(item for item in store.load_cards() if item["id"] == card["id"])
+    assert again["quality"]["outcomes"]["mardi"] == mardi
+    assert third["opens_llm"] is second["opens_llm"]
 
 
 def test_figure_issue_uses_target_reached() -> None:

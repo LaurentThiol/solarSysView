@@ -553,8 +553,10 @@ export function LexiconLab() {
               <p className="text-xs text-muted-foreground">
                 Qualité · épisodes {selected.quality?.episodes ?? 0}
                 {selected.quality?.skill != null ? ` · skill ${selected.quality.skill}` : ""}
+                {selected.quality?.skill != null && selected.quality.skill <= 0 ? " · abstention" : ""}
                 {selected.quality?.reviewed ? ` · relu ${selected.quality.reviewed}` : ""}
               </p>
+              <OutcomeRates outcomes={selected.quality?.outcomes} />
               <div data-demo="lex-outcome" className={cn("text-xs text-muted-foreground", active("lex-outcome") && "rounded-lg ring-2 ring-primary")}>
                 Issue du parcours : {demoRunning || demoDone ? demoOutcome : "ouverte tant que la fenêtre est en queue d'archive"}
               </div>
@@ -592,6 +594,33 @@ export function LexiconLab() {
   )
 }
 
+const OUTCOME_DAYS = [
+  ["tous", "Tous"],
+  ["mardi", "Mardi"],
+  ["vendredi", "Vendredi"],
+] as const
+
+function OutcomeRates({
+  outcomes,
+}: {
+  outcomes?: Record<string, { reached?: number; invalidated?: number; open?: number }>
+}) {
+  if (!outcomes) return null
+  return (
+    <ul className="space-y-0.5 text-xs text-muted-foreground">
+      {OUTCOME_DAYS.map(([key, label]) => {
+        const bucket = outcomes[key]
+        if (!bucket) return null
+        return (
+          <li key={key}>
+            {label} · {bucket.reached ?? 0} suivis · {bucket.invalidated ?? 0} invalidés · {bucket.open ?? 0} ouverts
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 function ReadingGrid({ reading }: { reading: Reading }) {
   return (
     <div className="space-y-3">
@@ -600,6 +629,17 @@ function ReadingGrid({ reading }: { reading: Reading }) {
         {reading.from_date && reading.to_date ? ` · du ${reading.from_date} au ${reading.to_date}` : ""}
         {reading.cycles?.draw_date ? ` · jointure Cycles ${reading.cycles.draw_date}` : ""}
       </p>
+      {reading.pack?.some((card) => card.recall) ? (
+        <ul className="space-y-1 text-xs text-muted-foreground">
+          {reading.pack.map((card) =>
+            card.recall ? (
+              <li key={card.id}>
+                {card.id} · {card.recall}
+              </li>
+            ) : null
+          )}
+        </ul>
+      ) : null}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead>

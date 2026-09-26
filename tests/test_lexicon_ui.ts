@@ -19,6 +19,8 @@ test("fiche link keeps the chartisme sentences and opens the dictionary", () => 
 test("dictionary page names the demo and does not claim draws are independent", () => {
   assert.match(page, /Démo — rien n'est enregistré/)
   assert.match(page, /Lire 20\/50\/100/)
+  assert.match(page, /suivis/)
+  assert.match(page, /Issue du parcours/)
   assert.match(page, /Ce cas dans le cloud/)
   assert.doesNotMatch(page, /indépendant/)
   assert.match(nav, /href: "\/brain\/dictionnaire"/)

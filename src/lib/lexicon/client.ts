@@ -7,7 +7,12 @@ export type LexiconCard = {
   gloss: string
   scope: string
   image_svg?: string
-  quality?: { episodes?: number; skill?: number | null; reviewed?: string | null }
+  quality?: {
+    episodes?: number
+    skill?: number | null
+    reviewed?: string | null
+    outcomes?: Record<string, { reached?: number; invalidated?: number; open?: number }>
+  }
   source?: string
   revision?: number
 }
@@ -35,7 +40,7 @@ export type Reading = {
   opens_llm?: boolean
   question?: string | null
   cycles?: { role?: string; draw_date?: string | null }
-  pack?: { id: string; gloss?: string; status?: string }[]
+  pack?: { id: string; gloss?: string; status?: string; recall?: string | null }[]
   difficulties?: string[]
 }
 
