@@ -33,6 +33,17 @@ def test_option_click_keeps_the_magnet_release() -> None:
     assert "shouldReleaseAltHold" in hook
 
 
+def test_median_and_off_curve_buttons_have_their_own_help() -> None:
+    assert "const MEDIAN_HELP" in HELP
+    assert "const OFF_CURVE_HELP" in HELP
+    assert "<HelpTip {...MEDIAN_HELP} />" in HELP
+    assert "<HelpTip {...OFF_CURVE_HELP} />" in HELP
+    assert "(borne haute + borne basse) / 2" in HELP
+    assert "fourchette d’Andrews" in HELP
+    assert "Option+clic est souvent avalé" in HELP
+    assert "Seule l’arrivée est libre" in HELP
+
+
 def test_free_drawing_can_pick_up_an_existing_handle() -> None:
     assert "moveSketchHandle" in CHART
     assert "nearestSketchHandle" in CHART

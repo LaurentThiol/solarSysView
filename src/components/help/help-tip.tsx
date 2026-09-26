@@ -181,7 +181,7 @@ export function HelpTip({
                   {items.map((item) => (
                     <div key={item.label}>
                       <dt className="text-xs font-medium text-foreground">{item.label}</dt>
-                      <dd className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                      <dd className="mt-0.5 text-xs leading-5 whitespace-pre-line text-muted-foreground">
                         {item.text}
                       </dd>
                     </div>
