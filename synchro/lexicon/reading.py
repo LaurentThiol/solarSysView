@@ -7,6 +7,7 @@ from typing import Any, Sequence
 from synchro.analysis.common import filter_draws_by_weekday, ordered_draws
 from synchro.analysis.diagnostics import acf
 from synchro.analysis.variables import series as extract_series
+from synchro.chartisme.sense import name_sense, series_slope_sigma
 from synchro.lexicon.episode import close_outcome, episode_from_window, reference_sigma
 from synchro.lexicon.refcmp import compare_clocks, measured_lines, slow_stamps
 from synchro.lexicon.skill import sense_skill
@@ -120,6 +121,7 @@ def build_reading(
     field_list = [field for field in fields if field in DEFAULT_FIELDS] or list(DEFAULT_FIELDS)
     curves = {name: _values(ordered, name) for name in field_list}
     habit = {name: reference_sigma(values) for name, (values, _dates) in curves.items()}
+    slope_habit = {name: series_slope_sigma(values) for name, (values, _dates) in curves.items()}
 
     columns: dict[str, dict[str, Any]] = {}
     episodes: list[dict[str, Any]] = []
@@ -132,7 +134,7 @@ def build_reading(
         long_enough = len(ordered) >= length
         for name in field_list:
             if not long_enough:
-                cell[name] = {"sense": None, "previous": None, "reread": None}
+                cell[name] = {"sense": None, "previous": None, "reread": None, "segments": None}
                 named_study[name] = None
                 continue
             full_values, _full_dates = curves[name]
@@ -140,6 +142,7 @@ def build_reading(
             study_values = full_values[offset:]
             study_dates = [str(draw["draw_date"])[:10] for draw in study]
             named = None
+            segments = None
             if len(study_values) >= 16:
                 episode = episode_from_window(
                     study_values,
@@ -149,7 +152,9 @@ def build_reading(
                     series=name,
                     from_index=offset,
                     facts={"length": length, "weekday": weekday or "tous"},
+                    slope_sigma=slope_habit[name],
                 )
+                segments = episode["segments"]
                 named = episode["sense"]
                 if named and len(full_values) > episode["to_index"]:
                     episode["outcome"] = close_outcome(
@@ -178,8 +183,6 @@ def build_reading(
             if previous is not None:
                 prev_offset = len(ordered) - len(study) - len(previous)
                 prev_values = full_values[prev_offset : prev_offset + len(previous)]
-                from synchro.chartisme.sense import name_sense
-
                 previous_named = name_sense(prev_values, habit[name]) if len(prev_values) >= 16 else None
             reread = reread_verdict(named, previous_named)
             if reread == "opposé":
@@ -197,6 +200,7 @@ def build_reading(
                 "sense": named,
                 "previous": previous_named,
                 "reread": reread,
+                "segments": segments,
             }
         for pair in free_oppositions(named_study):
             oppositions.append({"kind": "libre", "length": length, **pair})
@@ -257,6 +261,7 @@ def build_reading(
         "to_date": str(ordered[-1]["draw_date"])[:10] if ordered else None,
         "fields": list(field_list),
         "habit_sigma": habit,
+        "habit_slope": slope_habit,
         "columns": columns,
         "horizons": horizons,
         "ref": ref_rows,
