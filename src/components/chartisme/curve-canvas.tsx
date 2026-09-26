@@ -43,6 +43,27 @@ function styleOf(role: string) {
   return GUIDE_STYLE[role] ?? { color: "var(--muted-foreground)", width: 1.3 }
 }
 
+/**
+ * Infobulle d'une lecture sur le bandeau.
+ *
+ * Un seul texte. React 19 ne sérialise pas un `<title>` dont les enfants
+ * forment un tableau : le serveur émet une balise vide, le client remet le
+ * libellé, et l'hydratation casse. Les sauts de ligne autour de l'expression
+ * comptent aussi comme des enfants.
+ */
+function bannerTooltip(
+  found: Pick<FigureHit, "label" | "confidence" | "from_index"> & { rare?: boolean },
+  contextCount: number,
+  selectable: boolean
+): string {
+  return [
+    `${found.label} · ${found.confidence.toFixed(2)}`,
+    found.rare === false ? " · bruit" : "",
+    startsInContext(found, contextCount) ? " · commence dans le contexte" : "",
+    selectable ? " — clic pour sélectionner" : "",
+  ].join("")
+}
+
 /** Points d'une polyline entre deux indices, bornes comprises. */
 function polylinePoints(
   series: number[],
@@ -324,14 +345,7 @@ export function CurveCanvas({
                 setHover((current) => (current === index ? null : current))
               }
             >
-              <title>
-                {found.label} · {found.confidence.toFixed(2)}
-                {found.rare === false ? " · bruit" : ""}
-                {startsInContext(found, contextCount)
-                  ? " · commence dans le contexte"
-                  : ""}
-                {onHitSelect ? " — clic pour sélectionner" : ""}
-              </title>
+              <title>{bannerTooltip(found, contextCount, onHitSelect != null)}</title>
               <rect
                 x={hitX}
                 y={0}

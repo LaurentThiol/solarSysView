@@ -28,6 +28,13 @@ test("the canvas splits the curve at the study boundary", () => {
   assert.match(canvasSrc, /dates\[splitAt\]/)
 })
 
+test("the banner tooltip is one string so the SVG title survives SSR", () => {
+  assert.match(canvasSrc, /<title>\{bannerTooltip\(/)
+  assert.doesNotMatch(canvasSrc, /<title>\s*\n/)
+  assert.match(canvasSrc, /commence dans le contexte/)
+  assert.match(canvasSrc, /clic pour sélectionner/)
+})
+
 test("a straddling figure is badged in the lab", () => {
   assert.match(labSrc, /commence dans le contexte/)
   assert.match(labSrc, /startsInContext/)
