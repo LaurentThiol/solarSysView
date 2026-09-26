@@ -63,6 +63,13 @@ import {
 import { cycleHitIndex, hitIndicesForLabel } from "@/lib/chartisme/banner"
 import { pulseSentence, readingPulse } from "@/lib/chartisme/pulse"
 import {
+  MIN_SENSE_LENGTH,
+  SENSE_TITLE,
+  nameSense,
+  senseSentence,
+  seriesSigma,
+} from "@/lib/chartisme/sense"
+import {
   alongsideIndex,
   evaluateRules,
   stateFromHit,
@@ -225,6 +232,14 @@ export function ChartismeLab() {
     return buildCurve(study.window.withWarmup, spec.variable, spec.n)
   }, [study, specs, curveId])
 
+  // σ habituel : toute la courbe chargée. Le registre rapporte le nuage de
+  // la fenêtre à cet écart-type.
+  const habitSigma = useMemo(() => {
+    const spec = specs.find((s) => (s.n === null ? s.variable : `${s.variable}:${s.n}`) === curveId)
+    if (!spec || !draws.length) return 0
+    return seriesSigma(buildCurve(draws, spec.variable, spec.n).values)
+  }, [draws, specs, curveId])
+
   // Le taux de base est échantillonné une fois par échelle, sans seuil : bouger
   // le curseur relit alors l'échantillon au lieu de le refaire.
   //
@@ -339,6 +354,29 @@ export function ChartismeLab() {
     () => readingPulse(hits, previousCurve ? previousHits : null),
     [hits, previousCurve, previousHits]
   )
+
+  const windowSense = useMemo(() => {
+    if (!curve) return null
+    return nameSense(curve.values.slice(study.contextCount), habitSigma)
+  }, [curve, habitSigma, study.contextCount])
+
+  // La sélection nomme le trait qu'on a tiré, dès qu'elle est assez longue.
+  // Sinon le nom porte sur la fenêtre étudiée, contexte exclu.
+  const senseRead = useMemo(() => {
+    const span = selection ? selection.toIndex - selection.fromIndex + 1 : 0
+    if (curve && selection && span >= MIN_SENSE_LENGTH) {
+      return {
+        named: nameSense(curve.values.slice(selection.fromIndex, selection.toIndex + 1), habitSigma),
+        scope: "Sélection",
+      }
+    }
+    return { named: windowSense, scope: "Fenêtre étudiée" }
+  }, [curve, selection, habitSigma, windowSense])
+
+  const previousSense = useMemo(() => {
+    if (!previousCurve || !study.previous) return null
+    return nameSense(previousCurve.values.slice(study.previous.warmupCount), habitSigma)
+  }, [previousCurve, study.previous, habitSigma])
   const pulseLine = pulseSentence(pulse, Boolean(curve))
 
   const baseRates = useMemo(
@@ -960,6 +998,10 @@ export function ChartismeLab() {
                 })}
               </div>
 
+              <p className="text-xs text-muted-foreground" title={SENSE_TITLE}>
+                {senseRead.scope} · {senseSentence(senseRead.named)}
+              </p>
+
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -987,7 +1029,9 @@ export function ChartismeLab() {
                 onSelect={setSelection}
                 onHitSelect={setSelected}
                 contextCount={study.contextCount}
-                label={curve.label}
+                label={
+                  senseRead.named ? `${curve.label} · ${senseRead.named.symbol}` : curve.label
+                }
                 showMedian={showMedian}
               />
 
@@ -1170,6 +1214,8 @@ export function ChartismeLab() {
         previousHits={previousHits}
         window={study.window}
         previous={study.previous}
+        sense={windowSense}
+        previousSense={previousSense}
       />
 
       <LabelAtelier

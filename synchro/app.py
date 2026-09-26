@@ -64,6 +64,7 @@ from synchro.chartisme.scan import live_in_window as chartisme_live_in_window
 from synchro.chartisme.scan import scan_curve as chartisme_scan_curve
 from synchro.chartisme.scan import slice_curve as chartisme_slice_curve
 from synchro.chartisme.scan import windows_of as chartisme_windows_of
+from synchro.chartisme.sense import name_sense as chartisme_name_sense
 from synchro.config import ROOT, WEB_DIR, get_settings
 from synchro.morpho.anticipation import anticipate
 from synchro.morpho.geometry import analyze_draw, detect
@@ -185,6 +186,9 @@ class ChartismeWindowIn(BaseModel):
     activity: list[float] | None = None
     min_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     models: bool = False
+    # Écart-type habituel de la courbe entière. Sans lui le sens s'abstient :
+    # le registre n'a pas d'unité.
+    reference_sigma: float | None = None
 
 
 class ChartismeSketchIn(BaseModel):
@@ -1996,6 +2000,7 @@ def create_app() -> FastAPI:
             "ok": True,
             "figures": hits,
             "summary": chartisme_summarize(hits),
+            "sense": chartisme_name_sense(values, payload.reference_sigma),
         }
         if payload.models:
             out["models"] = chartisme_annotate(hits, values, activity=payload.activity)

@@ -136,6 +136,21 @@ def test_detect_reads_a_window_posted_by_the_browser() -> None:
     assert first["figure"] and first["label"]
     assert 0.0 <= first["confidence"] <= 1.0
     assert "models" not in body
+    assert body["sense"] is None
+
+
+def test_detect_names_the_sense_against_the_curve_habit() -> None:
+    with _client() as client:
+        response = client.post(
+            "/api/chartisme/detect",
+            json={
+                "values": [float(i) for i in range(20)],
+                "reference_sigma": 8,
+                "min_confidence": 0.0,
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["sense"]["symbol"] == "monte:05"
 
 
 def test_detect_refuses_a_window_too_short_to_read() -> None:

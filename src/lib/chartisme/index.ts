@@ -28,4 +28,11 @@ export {
   slopeBiasOf,
 } from "./rails"
 export * from "./scan"
+export {
+  MIN_SENSE_LENGTH,
+  nameSense,
+  registerOf,
+  senseSentence,
+  seriesSigma,
+} from "./sense"
 export * from "./svgpath"

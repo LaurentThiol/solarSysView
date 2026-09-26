@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import type { ScanHit } from "@/lib/chartisme/scan"
+import { senseSentence, type CurveSense } from "@/lib/chartisme/sense"
 
 /**
  * La même fenêtre, juste avant.
@@ -42,11 +43,15 @@ export function WindowCompare({
   previousHits,
   window,
   previous,
+  sense = null,
+  previousSense = null,
 }: {
   hits: ScanHit[]
   previousHits: ScanHit[]
   window: { fromDate: string | null; toDate: string | null; drawCount: number }
   previous: { fromDate: string | null; toDate: string | null; drawCount: number } | null
+  sense?: CurveSense | null
+  previousSense?: CurveSense | null
 }) {
   const rows = useMemo<Row[]>(() => {
     const now = countByFigure(hits)
@@ -71,7 +76,7 @@ export function WindowCompare({
           <TitleHelp
             help={{
               title: "La fenêtre précédente",
-              body: "La fenêtre de même longueur qui précède immédiatement celle étudiée, lue avec les mêmes échelles et le même seuil. Elle répond à une question que la fenêtre seule ne peut pas trancher : ce qu'on voit décrit-il le système observé, ou l'endroit où l'on a coupé ? Une figure présente dans les deux fenêtres a une chance de décrire le premier.",
+              body: "La fenêtre de même longueur qui précède immédiatement celle étudiée, lue avec les mêmes échelles et le même seuil. Elle répond à une question que la fenêtre seule ne peut pas trancher : ce qu'on voit décrit-il le système observé, ou l'endroit où l'on a coupé ? Une figure présente dans les deux fenêtres a une chance de décrire le premier. Le sens (monte, baisse, stable) est nommé sur les deux, rapporté au même écart-type habituel de la courbe.",
             }}
           >
             Est-ce que ça change ?
@@ -79,6 +84,10 @@ export function WindowCompare({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Fenêtre étudiée · {senseSentence(sense)}
+          {previous ? ` Précédente · ${senseSentence(previousSense)}` : ""}
+        </p>
         {!previous ? (
           <p className="text-sm text-muted-foreground">
             Pas de fenêtre antérieure de {window.drawCount} tirages dans cette
