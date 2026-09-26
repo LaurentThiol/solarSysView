@@ -9,11 +9,12 @@
 // pas le nuage.
 //
 // La corde reste un résumé. Le découpage cherche le plus court tronçon d'au
-// moins trois tirages dont le déplacement dépasse le σ habituel et dont le
-// nuage tient dans ce σ, puis le prolonge. Il le ferme aussi quand les trois
-// derniers tirages forment une autre droite, dont le coefficient directeur
-// s'écarte de plus que l'habitude des pentes — l'écart-type des pentes à
-// trois tirages sur toute la courbe.
+// moins trois tirages dont le déplacement dépasse la référence et dont le
+// nuage tient dans cette référence, puis le prolonge. Le nuage est l'écart-type
+// des résidus, ou leur étendue pour une arche courte. Il ferme aussi le
+// tronçon quand les trois derniers tirages forment une autre droite, dont le
+// coefficient directeur s'écarte de plus que l'habitude des pentes — l'écart-type
+// des pentes à trois tirages sur toute la courbe.
 
 import { SHORT_CYCLE_MAX, SHORT_CYCLE_MIN } from "../short-cycle"
 
@@ -34,6 +35,7 @@ export type SenseName = (typeof SENSES)[number]
 export type SenseRegister = (typeof REGISTERS)[number]
 export type SlopeShift = (typeof SLOPE_SHIFTS)[number]
 export type SlopeHabit = (typeof SLOPE_HABITS)[number]
+export type CloudMeasure = "sigma" | "extent"
 
 export type SenseSegment = {
   fromIndex: number
@@ -48,6 +50,8 @@ export type SenseSegment = {
   slope: number
   slopeHabit: SlopeHabit | null
   slopeShift: SlopeShift | null
+  /** Présent quand le nuage mesuré est l'étendue des résidus. */
+  extent?: number
 }
 
 export type CurveSense = {
@@ -128,17 +132,20 @@ function scaleOf(value: number | null): number | null {
   return value
 }
 
-/** Déplacement, coefficient directeur et σ des résidus de la droite des bouts. */
-function chord(values: number[]): { delta: number; slope: number; sigma: number } {
+/** Déplacement, coefficient directeur et nuage des résidus de la droite des bouts. */
+function chord(
+  values: number[],
+  measure: CloudMeasure = "sigma"
+): { delta: number; slope: number; cloud: number } {
   const count = values.length
-  if (count < 2) return { delta: 0, slope: 0, sigma: 0 }
+  if (count < 2) return { delta: 0, slope: 0, cloud: 0 }
   const delta = values[count - 1] - values[0]
   const slope = delta / (count - 1)
   const residuals: number[] = []
   for (let index = 0; index < count; index += 1) {
     residuals.push(values[index] - (values[0] + slope * index))
   }
-  return { delta, slope, sigma: seriesSigma(residuals) }
+  return { delta, slope, cloud: measure === "extent" ? extentOf(residuals) : seriesSigma(residuals) }
 }
 
 /** Le nuage tient dans le σ habituel. Une habitude nulle n'accepte qu'une droite parfaite. */
@@ -212,25 +219,25 @@ export function nameSense(values: number[], referenceSigma: number | null): Curv
   }
 }
 
-function isTrend(chunk: number[], reference: number): boolean {
+function isTrend(chunk: number[], reference: number, measure: CloudMeasure): boolean {
   if (chunk.length < MIN_SEGMENT_LENGTH) return false
-  const { delta, sigma } = chord(chunk)
-  if (reference === 0) return delta !== 0 && sigma === 0
-  return Math.abs(delta) > reference && cloudHolds(sigma, reference)
+  const { delta, cloud } = chord(chunk, measure)
+  if (reference === 0) return delta !== 0 && cloud === 0
+  return Math.abs(delta) > reference && cloudHolds(cloud, reference)
 }
 
-function trendEnd(values: number[], start: number, reference: number): number | null {
+function trendEnd(values: number[], start: number, reference: number, measure: CloudMeasure): number | null {
   for (let end = start + MIN_SEGMENT_LENGTH - 1; end < values.length; end += 1) {
-    if (isTrend(values.slice(start, end + 1), reference)) return end
+    if (isTrend(values.slice(start, end + 1), reference, measure)) return end
   }
   return null
 }
 
-function tailBreaks(chunk: number[], reference: number, slopeSigma: number): boolean {
+function tailBreaks(chunk: number[], reference: number, slopeSigma: number, measure: CloudMeasure): boolean {
   if (chunk.length < MIN_SEGMENT_LENGTH + 1) return false
-  const { slope } = chord(chunk)
-  const tail = chord(chunk.slice(-MIN_SEGMENT_LENGTH))
-  if (!cloudHolds(tail.sigma, reference)) return false
+  const { slope } = chord(chunk, measure)
+  const tail = chord(chunk.slice(-MIN_SEGMENT_LENGTH), measure)
+  if (!cloudHolds(tail.cloud, reference)) return false
   return Math.abs(tail.slope - slope) > slopeSigma
 }
 
@@ -257,11 +264,12 @@ function segmentOf(
   reference: number,
   slopeSigma: number | null,
   previousSlope: number | null,
-  stable: boolean
+  stable: boolean,
+  measure: CloudMeasure
 ): SenseSegment {
   const chunk = values.slice(start, end + 1)
-  const { delta, slope, sigma } = chord(chunk)
-  const ratio = reference === 0 ? (sigma === 0 ? 0 : Number.POSITIVE_INFINITY) : sigma / reference
+  const { delta, slope, cloud } = chord(chunk, measure)
+  const ratio = reference === 0 ? (cloud === 0 ? 0 : Number.POSITIVE_INFINITY) : cloud / reference
   const sense: SenseName = stable || delta === 0 ? "stable" : delta > 0 ? "monte" : "baisse"
   const register = registerOf(ratio)
   return {
@@ -270,29 +278,33 @@ function segmentOf(
     symbol: `${sense}:${register}`,
     sense,
     register,
-    sigma,
+    sigma: cloud,
     reference,
     ratio: Number.isFinite(ratio) ? ratio : null,
     delta,
     slope,
     slopeHabit: slopeHabit(slope, slopeSigma),
     slopeShift: slopeShift(slope, previousSlope, slopeSigma),
+    ...(measure === "extent" ? { extent: cloud } : {}),
   }
 }
 
 /**
  * Chaîne de tronçons. Le dernier point de l'un est le premier du suivant.
  *
- * On s'abstient si le σ habituel des prix manque ou n'est pas un écart-type.
- * Sans σ des pentes, le nuage découpe quand même, et la comparaison des
- * coefficients s'abstient. Un σ de pentes nul coupe au moindre écart et
- * nomme `vive` toute pente non nulle.
+ * On s'abstient si la référence manque ou n'est pas une échelle. `measure`
+ * vaut `sigma` (écart-type des résidus) ou `extent` (max − min). Sans σ des
+ * pentes, le nuage découpe quand même, et la comparaison des coefficients
+ * s'abstient. Un σ de pentes nul coupe au moindre écart et nomme `vive`
+ * toute pente non nulle.
  */
 export function senseSegments(
   values: number[],
   referenceSigma: number | null,
-  slopeSigma: number | null = null
+  slopeSigma: number | null = null,
+  measure: CloudMeasure = "sigma"
 ): SenseSegment[] | null {
+  const cloudMeasure: CloudMeasure = measure === "extent" ? "extent" : "sigma"
   const reference = scaleOf(referenceSigma)
   if (reference === null) return null
   const slopeScale = scaleOf(slopeSigma)
@@ -301,11 +313,11 @@ export function senseSegments(
   const segments: SenseSegment[] = []
   let start = 0
   while (start < values.length) {
-    const confirmed = trendEnd(values, start, reference)
+    const confirmed = trendEnd(values, start, reference, cloudMeasure)
     if (confirmed === null) {
       let stableEnd = values.length - 1
       for (let cursor = start + 1; cursor <= values.length - MIN_SEGMENT_LENGTH; cursor += 1) {
-        if (trendEnd(values, cursor, reference) !== null) {
+        if (trendEnd(values, cursor, reference, cloudMeasure) !== null) {
           stableEnd = cursor
           break
         }
@@ -318,7 +330,8 @@ export function senseSegments(
           reference,
           slopeScale,
           segments.length ? segments[segments.length - 1].slope : null,
-          true
+          true,
+          cloudMeasure
         )
       )
       if (stableEnd >= values.length - 1) break
@@ -329,8 +342,8 @@ export function senseSegments(
     let end = confirmed
     while (end + 1 < values.length) {
       const grown = values.slice(start, end + 2)
-      if (!cloudHolds(chord(grown).sigma, reference)) break
-      if (slopeScale !== null && tailBreaks(grown, reference, slopeScale)) break
+      if (!cloudHolds(chord(grown, cloudMeasure).cloud, reference)) break
+      if (slopeScale !== null && tailBreaks(grown, reference, slopeScale, cloudMeasure)) break
       end += 1
     }
     segments.push(
@@ -341,7 +354,8 @@ export function senseSegments(
         reference,
         slopeScale,
         segments.length ? segments[segments.length - 1].slope : null,
-        false
+        false,
+        cloudMeasure
       )
     )
     if (end >= values.length - 1) break
@@ -405,6 +419,22 @@ export function nameShortSense(values: number[], referenceRange: number | null):
     delta,
     band: "court",
   }
+}
+
+/**
+ * Tronçons d'une arche de 4 à 8 tirages.
+ *
+ * Même boucle que `senseSegments`, avec l'étendue des résidus à la place du σ.
+ * `nameShortSense` reste la corde. Sous trois tirages, rien à découper.
+ */
+export function shortSenseSegments(
+  values: number[],
+  referenceRange: number | null,
+  slopeSigma: number | null = null
+): SenseSegment[] | null {
+  const count = values.length
+  if (count < MIN_SEGMENT_LENGTH || count < SHORT_CYCLE_MIN || count > SHORT_CYCLE_MAX) return null
+  return senseSegments(values, referenceRange, slopeSigma, "extent")
 }
 
 /** Phrase lue à côté du tracé. Le symbole reste en tête. */
