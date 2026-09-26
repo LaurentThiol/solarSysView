@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from pathlib import Path
 import subprocess
 
-from synchro.chartisme.sense import name_sense
+from synchro.chartisme.sense import name_sense, series_sigma, series_slope_sigma
 from synchro.lexicon.cards import fiche_id, seed_cards
 from synchro.lexicon.episode import close_outcome, episode_from_window, figure_outcome
 from synchro.lexicon.memory import embed_card, pack_for, retrieve
@@ -59,6 +59,29 @@ def test_episode_names_a_clean_rise() -> None:
     assert episode["outcome"]["status"] == "open"
     assert episode["series"] == "sum"
     assert name_sense(values, 8)["symbol"] == episode["sense"]["symbol"]
+
+
+def test_episode_keeps_the_chord_and_carries_the_turn() -> None:
+    values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 11, 10, 9, 8, 7, 6, 5]
+    reference = series_sigma(values)
+    episode = episode_from_window(
+        [float(value) for value in values],
+        [f"2024-01-{index + 1:02d}" for index in range(len(values))],
+        reference,
+        module="analyse",
+        series="sum",
+        slope_sigma=series_slope_sigma(values),
+    )
+    chord = name_sense(values, reference)
+    assert chord is not None
+    assert episode["sense"]["symbol"] == chord["symbol"]
+    assert episode["sense"]["sense"] in {"monte", "stable"}
+    assert episode["sense"]["sense"] == "monte"
+    segments = episode["segments"]
+    assert segments is not None and len(segments) >= 2
+    assert segments[0]["sense"] == "monte"
+    assert any(row["sense"] == "baisse" and row["slope_shift"] == "tourne" for row in segments)
+    assert episode["outcome"]["status"] == "open"
 
 
 def test_short_window_abstains() -> None:
@@ -167,6 +190,14 @@ def test_reading_covers_six_fields_and_ref() -> None:
     assert any(row["clock"] == "schwabe" for row in reading["stamps"])
     assert reading["episodes"]
     assert reading["episodes"][0]["module"] == "analyse"
+    episode = next(row for row in reading["episodes"] if row["series"] == "sum" and row["facts"]["length"] == 20)
+    assert episode["sense"]["symbol"]
+    assert episode["segments"]
+    cell = reading["columns"]["20"]["sum"]
+    assert cell["sense"]["symbol"] == episode["sense"]["symbol"]
+    assert cell["segments"] == episode["segments"]
+    assert cell["reread"] in {None, "aligné", "opposé", "nuage", "emboîté"}
+    assert set(reading["habit_slope"]) == set(reading["fields"])
 
 
 def test_tuesday_predecessor_uses_only_tuesdays() -> None:
