@@ -8,7 +8,7 @@ import { DemoPopup, DemoTourBar } from "@/components/brain/brain-demo"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { senseSentence } from "@/lib/chartisme/sense"
+import { segmentsSentence, senseSentence } from "@/lib/chartisme/sense"
 import {
   fetchCards,
   fetchMode,
@@ -20,7 +20,7 @@ import {
   type Reading,
   type SenseCell,
 } from "@/lib/lexicon/client"
-import { DEMO_QUESTION, DEMO_SIGMA, DEMO_STEPS, demoSense, demoSkill } from "@/lib/lexicon/demo"
+import { DEMO_QUESTION, DEMO_SIGMA, DEMO_STEPS, demoSegments, demoSense, demoSkill } from "@/lib/lexicon/demo"
 import { ficheHref } from "@/lib/lexicon/fiche"
 import { readableSvg, sketchForSymbol } from "@/lib/lexicon/sketch"
 import { cn } from "@/lib/utils"
@@ -374,6 +374,7 @@ export function LexiconLab() {
           <p className="text-sm font-medium">Sens</p>
           <p className="mt-1 font-mono text-sm">{named?.symbol ?? "—"}</p>
           <p className="mt-1 text-xs text-muted-foreground">{named ? senseSentence(named) : "abstention"}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{segmentsSentence(demoSegments())}</p>
         </div>
         <div
           data-demo="lex-episode"
