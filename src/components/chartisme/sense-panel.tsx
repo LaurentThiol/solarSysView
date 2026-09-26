@@ -8,20 +8,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { sparklinePoints } from "@/lib/chartisme/sketch-shapes"
 import {
   MIN_SENSE_LENGTH,
+  formatSlope,
+  segmentsSentence,
   senseSentence,
   senseShiftSentence,
   type CurveSense,
   type SenseName,
+  type SenseSegment,
 } from "@/lib/chartisme/sense"
 import { ficheHref } from "@/lib/lexicon/fiche"
 
 /**
  * Le sens nommé au PR #167, développé.
  *
- * La phrase sous le tracé dit le symbole. Ici on voit la droite qui le produit,
- * le nuage qui décide `stable`, et le rapport à l'écart-type habituel de la
- * courbe. La comparaison porte sur les deux fenêtres de travail, jamais sur
- * une sélection : la précédente n'a pas de trait tiré à la main.
+ * La phrase sous le tracé dit le symbole de la corde, le résumé. Les droites
+ * du croquis sont les tronçons : chacun a son coefficient directeur, comparé
+ * au précédent et à l'habitude des pentes. La comparaison des fenêtres porte
+ * sur les deux fenêtres de travail, jamais sur une sélection.
  */
 
 const SKETCH_W = 480
@@ -32,6 +35,12 @@ const SENSE_BADGE: Record<SenseName, string> = {
   monte: "border-emerald-400/50 bg-emerald-400/15 text-emerald-100",
   baisse: "border-rose-400/50 bg-rose-400/15 text-rose-100",
   stable: "border-sky-400/50 bg-sky-400/15 text-sky-100",
+}
+
+const SEGMENT_STROKE: Record<SenseName, string> = {
+  monte: "text-emerald-300",
+  baisse: "text-rose-300",
+  stable: "text-sky-300",
 }
 
 export type SenseScope = "Fenêtre étudiée" | "Sélection"
@@ -59,20 +68,37 @@ function coords(spec: string): Array<[number, number]> {
   })
 }
 
+function windowPoint(
+  index: number,
+  value: number,
+  count: number,
+  bounds: { min: number; max: number }
+): [number, number] {
+  const span = bounds.max - bounds.min || 1
+  const innerW = SKETCH_W - 2 * SKETCH_PAD
+  const innerH = SKETCH_H - 2 * SKETCH_PAD
+  const x = SKETCH_PAD + (count <= 1 ? innerW / 2 : (index / (count - 1)) * innerW)
+  const y = SKETCH_PAD + (1 - (value - bounds.min) / span) * innerH
+  return [x, y]
+}
+
 function SenseSketch({
   values,
   sigma,
   label,
+  segments,
 }: {
   values: number[]
   sigma: number | null
   label: string
+  segments: SenseSegment[] | null
 }) {
   if (values.length < 2) return null
   const count = values.length
+  const chained = Boolean(segments?.length)
   const slope = (values[count - 1] - values[0]) / (count - 1)
   const line = values.map((_, index) => values[0] + slope * index)
-  const band = sigma != null && sigma > 0
+  const band = !chained && sigma != null && sigma > 0
   const upper = line.map((value) => value + (sigma ?? 0))
   const lower = line.map((value) => value - (sigma ?? 0))
   const cloud = band ? [...values, ...upper, ...lower] : values
@@ -95,19 +121,21 @@ function SenseSketch({
         aria-label={label}
         data-capture-visual=""
       >
-        <g className="text-sky-300">
-          {band && polygon ? (
-            <polygon points={polygon} fill="currentColor" fillOpacity={0.18} stroke="none" />
-          ) : null}
-          <polyline
-            points={chord}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.4}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-        </g>
+        {chained ? null : (
+          <g className="text-sky-300">
+            {band && polygon ? (
+              <polygon points={polygon} fill="currentColor" fillOpacity={0.18} stroke="none" />
+            ) : null}
+            <polyline
+              points={chord}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.4}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          </g>
+        )}
         <g className="text-amber-300">
           <polyline
             points={curve}
@@ -117,16 +145,54 @@ function SenseSketch({
             strokeLinejoin="round"
             strokeLinecap="round"
           />
-          {first ? <circle cx={first[0]} cy={first[1]} r={3.2} fill="currentColor" /> : null}
-          {last ? <circle cx={last[0]} cy={last[1]} r={3.2} fill="currentColor" /> : null}
+          {chained ? null : first ? <circle cx={first[0]} cy={first[1]} r={3.2} fill="currentColor" /> : null}
+          {chained ? null : last ? <circle cx={last[0]} cy={last[1]} r={3.2} fill="currentColor" /> : null}
         </g>
+        {chained
+          ? segments?.map((segment) => {
+              const from = values[segment.fromIndex]
+              const to = values[segment.toIndex]
+              if (from == null || to == null || segment.toIndex <= segment.fromIndex) return null
+              const [x0, y0] = windowPoint(segment.fromIndex, from, count, bounds)
+              const [x1, y1] = windowPoint(segment.toIndex, to, count, bounds)
+              return (
+                <g key={`${segment.fromIndex}-${segment.toIndex}`} className={SEGMENT_STROKE[segment.sense]}>
+                  <line
+                    x1={x0}
+                    y1={y0}
+                    x2={x1}
+                    y2={y1}
+                    stroke="currentColor"
+                    strokeWidth={2.2}
+                    strokeLinecap="round"
+                  />
+                  <circle cx={x0} cy={y0} r={2.8} fill="currentColor" />
+                  <circle cx={x1} cy={y1} r={2.8} fill="currentColor" />
+                </g>
+              )
+            })
+          : null}
       </svg>
       <figcaption className="text-[11px] text-muted-foreground">
         <span className="text-amber-300">Trait</span>
-        {" : la courbe · "}
-        <span className="text-sky-300">droite</span>
-        {" : les deux bouts"}
-        {band ? " · bande : ± le nuage" : ""}
+        {chained ? (
+          <>
+            {" : la courbe · "}
+            <span className="text-emerald-300">monte</span>
+            {" · "}
+            <span className="text-rose-300">baisse</span>
+            {" · "}
+            <span className="text-sky-300">stable</span>
+            {" : un tronçon chacune"}
+          </>
+        ) : (
+          <>
+            {" : la courbe · "}
+            <span className="text-sky-300">droite</span>
+            {" : les deux bouts"}
+            {band ? " · bande : ± le nuage" : ""}
+          </>
+        )}
       </figcaption>
     </figure>
   )
@@ -142,6 +208,7 @@ export function SensePanel({
   windowSense,
   previousSense,
   hasPrevious,
+  segments,
 }: {
   values: number[]
   named: CurveSense | null
@@ -152,8 +219,10 @@ export function SensePanel({
   windowSense: CurveSense | null
   previousSense: CurveSense | null
   hasPrevious: boolean
+  segments: SenseSegment[] | null
 }) {
   const sentence = senseSentence(named)
+  const chain = segmentsSentence(segments)
   const shift = senseShiftSentence(windowSense, previousSense, hasPrevious)
   const span =
     values.length > 0
@@ -170,7 +239,7 @@ export function SensePanel({
           <TitleHelp
             help={{
               title: "Sens de la courbe",
-              body: "La droite joint le premier et le dernier tirage de la fenêtre étudiée. Une sélection d'au moins 16 points la remplace. Le sens est stable quand le déplacement net ne dépasse pas l'écart-type des résidus autour de cette droite ; sinon la fenêtre monte ou baisse. Le registre rapporte cet écart-type à celui de toute la courbe chargée : 05 jusqu'à 0,5, 1 jusqu'à 1, sup au-delà. La fenêtre précédente, de même longueur, est nommée sur le même écart-type.",
+              body: "La corde joint le premier et le dernier tirage : c'est le résumé. Le découpage cherche les tronçons d'au moins trois tirages dont le déplacement dépasse l'écart-type habituel de la courbe et dont le nuage tient dans cet écart-type. Chaque droite a son coefficient directeur, comparé au tronçon précédent (tourne, accélère, fatigue, tient) et à l'habitude des pentes (vive, ordinaire). Une sélection d'au moins 16 points remplace la corde et les tronçons. La fenêtre précédente est nommée sur les mêmes écarts-types.",
             }}
           >
             Sens de la courbe
@@ -178,9 +247,35 @@ export function SensePanel({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <SenseSketch values={values} sigma={named?.sigma ?? null} label={sentence} />
+        <SenseSketch values={values} sigma={named?.sigma ?? null} label={chain} segments={segments} />
+
+        {segments ? (
+          <div className="space-y-2">
+            <p className="text-[11px] font-medium text-muted-foreground">Tronçons</p>
+            <p className="text-sm">{chain}</p>
+            <ul className="space-y-1">
+              {segments.map((segment) => (
+                <li
+                  key={`${segment.fromIndex}-${segment.toIndex}`}
+                  className="flex flex-wrap items-center gap-2 text-xs"
+                >
+                  <Badge variant="outline" className={SENSE_BADGE[segment.sense]}>
+                    {segment.symbol}
+                  </Badge>
+                  <span className="tabular-nums text-muted-foreground">
+                    pente {formatSlope(segment.slope)}
+                    {segment.slopeShift ? ` · ${segment.slopeShift}` : ""}
+                    {segment.slopeHabit ? ` · ${segment.slopeHabit}` : ""}
+                    {` · tirages ${segment.fromIndex + 1}–${segment.toIndex + 1}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <div className="space-y-2">
+          <p className="text-[11px] font-medium text-muted-foreground">Corde</p>
           <div className="flex flex-wrap items-center gap-2">
             {named ? (
               ficheHref(named.symbol) ? (

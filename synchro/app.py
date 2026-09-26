@@ -65,6 +65,7 @@ from synchro.chartisme.scan import scan_curve as chartisme_scan_curve
 from synchro.chartisme.scan import slice_curve as chartisme_slice_curve
 from synchro.chartisme.scan import windows_of as chartisme_windows_of
 from synchro.chartisme.sense import name_sense as chartisme_name_sense
+from synchro.chartisme.sense import sense_segments as chartisme_sense_segments
 from synchro.config import ROOT, WEB_DIR, get_settings
 from synchro.morpho.anticipation import anticipate
 from synchro.morpho.geometry import analyze_draw, detect
@@ -189,6 +190,9 @@ class ChartismeWindowIn(BaseModel):
     # Écart-type habituel de la courbe entière. Sans lui le sens s'abstient :
     # le registre n'a pas d'unité.
     reference_sigma: float | None = None
+    # Écart-type des pentes à trois tirages sur toute la courbe. Sans lui les
+    # tronçons se découpent quand même, et la comparaison des coefficients s'abstient.
+    reference_slope_sigma: float | None = None
 
 
 class ChartismeSketchIn(BaseModel):
@@ -2101,6 +2105,9 @@ def create_app() -> FastAPI:
             "figures": hits,
             "summary": chartisme_summarize(hits),
             "sense": chartisme_name_sense(values, payload.reference_sigma),
+            "segments": chartisme_sense_segments(
+                values, payload.reference_sigma, payload.reference_slope_sigma
+            ),
         }
         if payload.models:
             out["models"] = chartisme_annotate(hits, values, activity=payload.activity)

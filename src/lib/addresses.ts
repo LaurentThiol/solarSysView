@@ -427,7 +427,7 @@ const APIS: AddressEntry[] = [
     "/api/chartisme/detect",
     "POST",
     "Chartisme · détecter",
-    "Balayage géométrique aux échelles demandées. Avec reference_sigma, nomme aussi le sens de la fenêtre (monte, baisse, stable).",
+    "Balayage géométrique aux échelles demandées. Avec reference_sigma, nomme le sens de la fenêtre et découpe ses tronçons. reference_slope_sigma compare leurs coefficients directeurs.",
     "lecture",
   ),
   apiEntry("/api/chartisme/similar", "POST", "Chartisme · similaires", "Recherche par ressemblance dans le jour affiché (mardi, vendredi, ou l’archive mixte).", "lecture", "weekday=mardi|vendredi"),

@@ -9,9 +9,12 @@ from synchro.chartisme.sense import (
     MIN_SENSE_LENGTH,
     name_sense,
     register_of,
+    segments_sentence,
+    sense_segments,
     sense_sentence,
     sense_shift_sentence,
     series_sigma,
+    series_slope_sigma,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -130,6 +133,78 @@ def test_shift_sentence_compares_two_windows() -> None:
     assert sense_shift_sentence({"sense": "nope"}, rise, True) == (
         "L'une des deux fenêtres est trop courte pour comparer le sens."
     )
+
+
+def test_three_point_slopes_of_a_line_have_no_scatter() -> None:
+    assert series_slope_sigma([float(i) for i in range(12)]) == 0
+    assert series_slope_sigma([1.0, 2.0]) == 0
+    slopes = series_slope_sigma([0.0, 2.0, 4.0, 2.0, 0.0])
+    assert slopes == math.sqrt(8 / 3)
+
+
+def test_a_rise_then_a_fall_turns() -> None:
+    segments = sense_segments([0, 2, 4, 6, 4, 2, 0], 1, 1)
+    assert segments is not None
+    assert [(row["sense"], row["from_index"], row["to_index"], row["slope"]) for row in segments] == [
+        ("monte", 0, 3, 2),
+        ("baisse", 3, 6, -2),
+    ]
+    assert segments[0]["slope_shift"] is None
+    assert segments[1]["slope_shift"] == "tourne"
+    assert segments[0]["slope_habit"] == "vive"
+    assert segments_sentence(segments) == (
+        "monte:05, pente +2, vive pour cette courbe ; "
+        "puis baisse:05, pente -2, la pente tourne, vive pour cette courbe."
+    )
+
+
+def test_a_perfect_line_is_one_segment() -> None:
+    line = [float(i) for i in range(12)]
+    ordinary = sense_segments(line, 1, 2)
+    assert ordinary is not None and len(ordinary) == 1
+    assert ordinary[0]["sense"] == "monte"
+    assert ordinary[0]["slope"] == 1
+    assert ordinary[0]["slope_habit"] == "ordinaire"
+    assert ordinary[0]["from_index"] == 0 and ordinary[0]["to_index"] == 11
+    vive = sense_segments(line, 1, 0)
+    assert vive is not None and vive[0]["slope_habit"] == "vive"
+
+
+def test_a_speed_change_inside_the_cloud_accelerates() -> None:
+    # Sans σ des pentes, le nuage du tout tient dans le σ : un seul tronçon.
+    # La queue, elle, s'écarte de plus que l'habitude des pentes.
+    values = [0, 1, 2, 3, 4, 5, 8, 11, 14]
+    whole = sense_segments(values, 3, None)
+    assert whole is not None and len(whole) == 1
+    assert whole[0]["sense"] == "monte"
+    assert whole[0]["slope_shift"] is None
+    split = sense_segments(values, 3, 0.5)
+    assert split is not None
+    assert [(row["from_index"], row["to_index"], row["slope"]) for row in split] == [
+        (0, 5, 1),
+        (5, 8, 3),
+    ]
+    assert split[1]["slope_shift"] == "accélère"
+    assert split[1]["sense"] == "monte"
+
+
+def test_a_slower_second_leg_fatigues() -> None:
+    segments = sense_segments([0, 4, 8, 12, 14, 16, 18], 3, 0.5)
+    assert segments is not None
+    assert [row["sense"] for row in segments] == ["monte", "monte"]
+    assert segments[1]["slope_shift"] == "fatigue"
+    assert segments[1]["slope"] < segments[0]["slope"]
+
+
+def test_a_window_without_a_confirmed_triplet_stays_stable() -> None:
+    segments = sense_segments([0.0, 0.2, 0.0, 0.2, 0.0, 0.2], 1, 1)
+    assert segments is not None and len(segments) == 1
+    assert segments[0]["sense"] == "stable"
+    assert segments[0]["from_index"] == 0 and segments[0]["to_index"] == 5
+    assert segments_sentence(None) == "L'écart-type habituel manque pour découper le sens."
+    assert segments_sentence([]) == "Pas de tirage à découper."
+    assert sense_segments([0.0, 1.0, 2.0, 3.0], None, 1) is None
+    assert sense_segments([0.0, 1.0, 2.0, 3.0], -1, 1) is None
 
 
 def test_sense_twin_node() -> None:

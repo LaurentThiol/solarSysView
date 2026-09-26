@@ -137,6 +137,7 @@ def test_detect_reads_a_window_posted_by_the_browser() -> None:
     assert 0.0 <= first["confidence"] <= 1.0
     assert "models" not in body
     assert body["sense"] is None
+    assert body["segments"] is None
 
 
 def test_detect_names_the_sense_against_the_curve_habit() -> None:
@@ -150,7 +151,26 @@ def test_detect_names_the_sense_against_the_curve_habit() -> None:
             },
         )
     assert response.status_code == 200
-    assert response.json()["sense"]["symbol"] == "monte:05"
+    body = response.json()
+    assert body["sense"]["symbol"] == "monte:05"
+    assert len(body["segments"]) == 1
+    assert body["segments"][0]["sense"] == "monte"
+    assert body["segments"][0]["slope"] == 1
+    assert body["segments"][0]["slope_shift"] is None
+    assert body["segments"][0]["slope_habit"] is None
+    with _client() as client:
+        turned = client.post(
+            "/api/chartisme/detect",
+            json={
+                "values": [0, 2, 4, 6, 8, 6, 4, 2],
+                "reference_sigma": 1,
+                "reference_slope_sigma": 1,
+                "min_confidence": 0.0,
+            },
+        )
+    assert turned.status_code == 200
+    shifts = [row["slope_shift"] for row in turned.json()["segments"]]
+    assert shifts == [None, "tourne"]
 
 
 def test_detect_refuses_a_window_too_short_to_read() -> None:

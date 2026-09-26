@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import type { ScanHit } from "@/lib/chartisme/scan"
-import { senseSentence, type CurveSense } from "@/lib/chartisme/sense"
+import { segmentsSentence, senseSentence, type CurveSense, type SenseSegment } from "@/lib/chartisme/sense"
 import { ficheHref } from "@/lib/lexicon/fiche"
 
 /**
@@ -47,6 +47,8 @@ export function WindowCompare({
   previous,
   sense = null,
   previousSense = null,
+  segments = null,
+  previousSegments = null,
 }: {
   hits: ScanHit[]
   previousHits: ScanHit[]
@@ -54,6 +56,8 @@ export function WindowCompare({
   previous: { fromDate: string | null; toDate: string | null; drawCount: number } | null
   sense?: CurveSense | null
   previousSense?: CurveSense | null
+  segments?: SenseSegment[] | null
+  previousSegments?: SenseSegment[] | null
 }) {
   const rows = useMemo<Row[]>(() => {
     const now = countByFigure(hits)
@@ -78,7 +82,7 @@ export function WindowCompare({
           <TitleHelp
             help={{
               title: "La fenêtre précédente",
-              body: "La fenêtre de même longueur qui précède immédiatement celle étudiée, lue avec les mêmes échelles et le même seuil. Elle répond à une question que la fenêtre seule ne peut pas trancher : ce qu'on voit décrit-il le système observé, ou l'endroit où l'on a coupé ? Une figure présente dans les deux fenêtres a une chance de décrire le premier. Le sens (monte, baisse, stable) est nommé sur les deux, rapporté au même écart-type habituel de la courbe.",
+              body: "La fenêtre de même longueur qui précède immédiatement celle étudiée, lue avec les mêmes échelles et le même seuil. Elle répond à une question que la fenêtre seule ne peut pas trancher : ce qu'on voit décrit-il le système observé, ou l'endroit où l'on a coupé ? Une figure présente dans les deux fenêtres a une chance de décrire le premier. La corde et la chaîne de tronçons sont nommées sur les deux, rapportées aux mêmes écarts-types de la courbe.",
             }}
           >
             Est-ce que ça change ?
@@ -90,6 +94,14 @@ export function WindowCompare({
           Fenêtre étudiée · {senseSentence(sense)}
           {previous ? ` Précédente · ${senseSentence(previousSense)}` : ""}
         </p>
+        {segments ? (
+          <p className="text-xs text-muted-foreground">Chaîne étudiée · {segmentsSentence(segments)}</p>
+        ) : null}
+        {previous && previousSegments ? (
+          <p className="text-xs text-muted-foreground">
+            Chaîne précédente · {segmentsSentence(previousSegments)}
+          </p>
+        ) : null}
         {ficheHref(sense?.symbol) || ficheHref(previousSense?.symbol) ? (
           <p className="text-xs">
             {ficheHref(sense?.symbol) ? (

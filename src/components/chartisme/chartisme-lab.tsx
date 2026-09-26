@@ -68,8 +68,10 @@ import {
   MIN_SENSE_LENGTH,
   SENSE_TITLE,
   nameSense,
+  senseSegments,
   senseSentence,
   seriesSigma,
+  seriesSlopeSigma,
 } from "@/lib/chartisme/sense"
 import { ficheHref } from "@/lib/lexicon/fiche"
 import {
@@ -236,11 +238,17 @@ export function ChartismeLab() {
   }, [study, specs, curveId])
 
   // σ habituel : toute la courbe chargée. Le registre rapporte le nuage de
-  // la fenêtre à cet écart-type.
+  // la fenêtre à cet écart-type. σ des pentes : même courbe, coefficients
+  // directeurs à trois tirages.
   const habitSigma = useMemo(() => {
     const spec = specs.find((s) => (s.n === null ? s.variable : `${s.variable}:${s.n}`) === curveId)
     if (!spec || !draws.length) return 0
     return seriesSigma(buildCurve(draws, spec.variable, spec.n).values)
+  }, [draws, specs, curveId])
+  const habitSlope = useMemo(() => {
+    const spec = specs.find((s) => (s.n === null ? s.variable : `${s.variable}:${s.n}`) === curveId)
+    if (!spec || !draws.length) return 0
+    return seriesSlopeSigma(buildCurve(draws, spec.variable, spec.n).values)
   }, [draws, specs, curveId])
 
   // Le taux de base est échantillonné une fois par échelle, sans seuil : bouger
@@ -363,17 +371,25 @@ export function ChartismeLab() {
     return nameSense(curve.values.slice(study.contextCount), habitSigma)
   }, [curve, habitSigma, study.contextCount])
 
+  const windowSegments = useMemo(() => {
+    if (!curve) return null
+    return senseSegments(curve.values.slice(study.contextCount), habitSigma, habitSlope)
+  }, [curve, habitSigma, habitSlope, study.contextCount])
+
   // La sélection nomme le trait qu'on a tiré, dès qu'elle est assez longue.
-  // Sinon le nom porte sur la fenêtre étudiée, contexte exclu.
+  // Sinon le nom porte sur la fenêtre étudiée, contexte exclu. Les tronçons
+  // suivent la même série que le nom.
   const senseRead = useMemo(() => {
     const span = selection ? selection.toIndex - selection.fromIndex + 1 : 0
     if (curve && selection && span >= MIN_SENSE_LENGTH) {
       const from = selection.fromIndex
       const to = selection.toIndex
       const dates = curve.dates.slice(from, to + 1)
+      const values = curve.values.slice(from, to + 1)
       return {
-        named: nameSense(curve.values.slice(from, to + 1), habitSigma),
-        values: curve.values.slice(from, to + 1),
+        named: nameSense(values, habitSigma),
+        segments: senseSegments(values, habitSigma, habitSlope),
+        values,
         scope: "Sélection" as const,
         fromDate: dates[0] ?? null,
         toDate: dates[dates.length - 1] ?? null,
@@ -385,18 +401,28 @@ export function ChartismeLab() {
     const dates = curve ? curve.dates.slice(from) : []
     return {
       named: windowSense,
+      segments: windowSegments,
       values,
       scope: "Fenêtre étudiée" as const,
       fromDate: dates[0] ?? null,
       toDate: dates[dates.length - 1] ?? null,
       shortSelection: selection && span > 0 && span < MIN_SENSE_LENGTH ? span : null,
     }
-  }, [curve, selection, habitSigma, windowSense, study.contextCount])
+  }, [curve, selection, habitSigma, habitSlope, windowSense, windowSegments, study.contextCount])
 
   const previousSense = useMemo(() => {
     if (!previousCurve || !study.previous) return null
     return nameSense(previousCurve.values.slice(study.previous.warmupCount), habitSigma)
   }, [previousCurve, study.previous, habitSigma])
+
+  const previousSegments = useMemo(() => {
+    if (!previousCurve || !study.previous) return null
+    return senseSegments(
+      previousCurve.values.slice(study.previous.warmupCount),
+      habitSigma,
+      habitSlope
+    )
+  }, [previousCurve, study.previous, habitSigma, habitSlope])
   const pulseLine = pulseSentence(pulse, Boolean(curve))
 
   const baseRates = useMemo(
@@ -1250,6 +1276,7 @@ export function ChartismeLab() {
         windowSense={windowSense}
         previousSense={previousSense}
         hasPrevious={study.previous != null}
+        segments={senseRead.segments}
       />
 
       <WindowCompare
@@ -1259,6 +1286,8 @@ export function ChartismeLab() {
         previous={study.previous}
         sense={windowSense}
         previousSense={previousSense}
+        segments={windowSegments}
+        previousSegments={previousSegments}
       />
 
       <LabelAtelier

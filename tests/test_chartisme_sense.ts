@@ -6,9 +6,12 @@ import {
   MIN_SENSE_LENGTH,
   nameSense,
   registerOf,
+  segmentsSentence,
+  senseSegments,
   senseSentence,
   senseShiftSentence,
   seriesSigma,
+  seriesSlopeSigma,
   type CurveSense,
 } from "../src/lib/chartisme/sense"
 
@@ -92,6 +95,83 @@ test("the sentence leads with the symbol", () => {
     "monte:05 — la fenêtre monte, et le nuage autour de la droite tient dans la moitié de l'écart-type habituel."
   )
   assert.equal(senseSentence(null), "Fenêtre trop courte pour nommer le sens.")
+})
+
+test("three-point slopes of a line have no scatter", () => {
+  assert.equal(seriesSlopeSigma(Array.from({ length: 12 }, (_, index) => index)), 0)
+  assert.equal(seriesSlopeSigma([1, 2]), 0)
+  assert.equal(seriesSlopeSigma([0, 2, 4, 2, 0]), Math.sqrt(8 / 3))
+})
+
+test("a rise then a fall turns", () => {
+  const segments = senseSegments([0, 2, 4, 6, 4, 2, 0], 1, 1)
+  assert.ok(segments)
+  assert.deepEqual(
+    segments?.map((row) => [row.sense, row.fromIndex, row.toIndex, row.slope]),
+    [
+      ["monte", 0, 3, 2],
+      ["baisse", 3, 6, -2],
+    ]
+  )
+  assert.equal(segments?.[0].slopeShift, null)
+  assert.equal(segments?.[1].slopeShift, "tourne")
+  assert.equal(segments?.[0].slopeHabit, "vive")
+  assert.equal(
+    segmentsSentence(segments),
+    "monte:05, pente +2, vive pour cette courbe ; puis baisse:05, pente -2, la pente tourne, vive pour cette courbe."
+  )
+})
+
+test("a perfect line is one segment", () => {
+  const line = Array.from({ length: 12 }, (_, index) => index)
+  const ordinary = senseSegments(line, 1, 2)
+  assert.equal(ordinary?.length, 1)
+  assert.equal(ordinary?.[0].sense, "monte")
+  assert.equal(ordinary?.[0].slope, 1)
+  assert.equal(ordinary?.[0].slopeHabit, "ordinaire")
+  assert.equal(ordinary?.[0].fromIndex, 0)
+  assert.equal(ordinary?.[0].toIndex, 11)
+  assert.equal(senseSegments(line, 1, 0)?.[0].slopeHabit, "vive")
+})
+
+test("a speed change inside the cloud accelerates", () => {
+  const values = [0, 1, 2, 3, 4, 5, 8, 11, 14]
+  const whole = senseSegments(values, 3, null)
+  assert.equal(whole?.length, 1)
+  assert.equal(whole?.[0].sense, "monte")
+  assert.equal(whole?.[0].slopeShift, null)
+  const split = senseSegments(values, 3, 0.5)
+  assert.deepEqual(
+    split?.map((row) => [row.fromIndex, row.toIndex, row.slope]),
+    [
+      [0, 5, 1],
+      [5, 8, 3],
+    ]
+  )
+  assert.equal(split?.[1].slopeShift, "accélère")
+  assert.equal(split?.[1].sense, "monte")
+})
+
+test("a slower second leg fatigues", () => {
+  const segments = senseSegments([0, 4, 8, 12, 14, 16, 18], 3, 0.5)
+  assert.deepEqual(
+    segments?.map((row) => row.sense),
+    ["monte", "monte"]
+  )
+  assert.equal(segments?.[1].slopeShift, "fatigue")
+  assert.ok((segments?.[1].slope ?? 0) < (segments?.[0].slope ?? 0))
+})
+
+test("a window without a confirmed triplet stays stable", () => {
+  const segments = senseSegments([0, 0.2, 0, 0.2, 0, 0.2], 1, 1)
+  assert.equal(segments?.length, 1)
+  assert.equal(segments?.[0].sense, "stable")
+  assert.equal(segments?.[0].fromIndex, 0)
+  assert.equal(segments?.[0].toIndex, 5)
+  assert.equal(segmentsSentence(null), "L'écart-type habituel manque pour découper le sens.")
+  assert.equal(segmentsSentence([]), "Pas de tirage à découper.")
+  assert.equal(senseSegments([0, 1, 2, 3], null, 1), null)
+  assert.equal(senseSegments([0, 1, 2, 3], -1, 1), null)
 })
 
 test("the shift sentence compares two windows in chronological order", () => {
