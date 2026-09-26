@@ -10,6 +10,7 @@ import { CurveName } from "@/components/chartisme/curve-thumb"
 import { LabelAtelier } from "@/components/chartisme/label-atelier"
 import { useRegisterCapture } from "@/components/capture"
 import { RulesPanel } from "@/components/chartisme/rules-panel"
+import { SensePanel } from "@/components/chartisme/sense-panel"
 import { Sketchpad } from "@/components/chartisme/sketchpad"
 import { WindowCompare } from "@/components/chartisme/window-compare"
 import { LabelHelp, TitleHelp } from "@/components/help"
@@ -365,13 +366,30 @@ export function ChartismeLab() {
   const senseRead = useMemo(() => {
     const span = selection ? selection.toIndex - selection.fromIndex + 1 : 0
     if (curve && selection && span >= MIN_SENSE_LENGTH) {
+      const from = selection.fromIndex
+      const to = selection.toIndex
+      const dates = curve.dates.slice(from, to + 1)
       return {
-        named: nameSense(curve.values.slice(selection.fromIndex, selection.toIndex + 1), habitSigma),
-        scope: "Sélection",
+        named: nameSense(curve.values.slice(from, to + 1), habitSigma),
+        values: curve.values.slice(from, to + 1),
+        scope: "Sélection" as const,
+        fromDate: dates[0] ?? null,
+        toDate: dates[dates.length - 1] ?? null,
+        shortSelection: null as number | null,
       }
     }
-    return { named: windowSense, scope: "Fenêtre étudiée" }
-  }, [curve, selection, habitSigma, windowSense])
+    const from = study.contextCount
+    const values = curve ? curve.values.slice(from) : []
+    const dates = curve ? curve.dates.slice(from) : []
+    return {
+      named: windowSense,
+      values,
+      scope: "Fenêtre étudiée" as const,
+      fromDate: dates[0] ?? null,
+      toDate: dates[dates.length - 1] ?? null,
+      shortSelection: selection && span > 0 && span < MIN_SENSE_LENGTH ? span : null,
+    }
+  }, [curve, selection, habitSigma, windowSense, study.contextCount])
 
   const previousSense = useMemo(() => {
     if (!previousCurve || !study.previous) return null
@@ -1208,6 +1226,18 @@ export function ChartismeLab() {
           ) : null}
         </CardContent>
       </Card>
+
+      <SensePanel
+        values={senseRead.values}
+        named={senseRead.named}
+        scope={senseRead.scope}
+        fromDate={senseRead.fromDate}
+        toDate={senseRead.toDate}
+        shortSelection={senseRead.shortSelection}
+        windowSense={windowSense}
+        previousSense={previousSense}
+        hasPrevious={study.previous != null}
+      />
 
       <WindowCompare
         hits={hits}

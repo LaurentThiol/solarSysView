@@ -33,6 +33,7 @@ export {
   nameSense,
   registerOf,
   senseSentence,
+  senseShiftSentence,
   seriesSigma,
 } from "./sense"
 export * from "./svgpath"

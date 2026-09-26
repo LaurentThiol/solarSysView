@@ -10,6 +10,7 @@ from synchro.chartisme.sense import (
     name_sense,
     register_of,
     sense_sentence,
+    sense_shift_sentence,
     series_sigma,
 )
 
@@ -103,6 +104,32 @@ def test_sentence_leads_with_the_symbol() -> None:
         "tient dans la moitié de l'écart-type habituel."
     )
     assert sense_sentence(None) == "Fenêtre trop courte pour nommer le sens."
+
+
+def test_shift_sentence_compares_two_windows() -> None:
+    rise = name_sense([float(i) for i in range(20)], 8)
+    fall = name_sense([float(i) for i in range(19, -1, -1)], 8)
+    assert rise is not None and fall is not None
+    assert sense_shift_sentence(rise, fall, True) == "Le sens change : baisse:05, puis monte:05."
+    assert sense_shift_sentence(rise, rise, True) == "Le sens tient : les deux fenêtres sont monte:05."
+    assert sense_shift_sentence(rise, fall, False) == "Pas de fenêtre antérieure de même longueur."
+    assert (
+        sense_shift_sentence(None, None, True)
+        == "Les deux fenêtres sont trop courtes pour comparer le sens."
+    )
+    assert (
+        sense_shift_sentence(rise, None, True)
+        == "L'une des deux fenêtres est trop courte pour comparer le sens."
+    )
+    looser = dict(rise)
+    looser["register"] = "1"
+    looser["symbol"] = "monte:1"
+    assert sense_shift_sentence(looser, rise, True) == (
+        "Le sens tient (monte), le registre passe de 05 à 1."
+    )
+    assert sense_shift_sentence({"sense": "nope"}, rise, True) == (
+        "L'une des deux fenêtres est trop courte pour comparer le sens."
+    )
 
 
 def test_sense_twin_node() -> None:

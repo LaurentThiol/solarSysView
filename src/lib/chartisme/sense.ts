@@ -100,11 +100,41 @@ export function nameSense(values: number[], referenceSigma: number | null): Curv
   }
 }
 
+function readable(named: CurveSense | null): CurveSense | null {
+  if (!named) return null
+  if (!SENSE_GLOSS[named.sense] || !REGISTER_GLOSS[named.register] || !named.symbol) return null
+  return named
+}
+
 /** Phrase lue à côté du tracé. Le symbole reste en tête. */
 export function senseSentence(named: CurveSense | null): string {
-  if (!named) return "Fenêtre trop courte pour nommer le sens."
-  const gloss = SENSE_GLOSS[named.sense]
-  const cloud = REGISTER_GLOSS[named.register]
-  if (!gloss || !cloud || !named.symbol) return "Fenêtre trop courte pour nommer le sens."
-  return `${named.symbol} — ${gloss}, et ${cloud}.`
+  const read = readable(named)
+  if (!read) return "Fenêtre trop courte pour nommer le sens."
+  return `${read.symbol} — ${SENSE_GLOSS[read.sense]}, et ${REGISTER_GLOSS[read.register]}.`
+}
+
+/**
+ * Ce que devient le sens entre la fenêtre précédente et celle qu'on étudie.
+ *
+ * L'ordre est chronologique : la précédente d'abord. Le registre qui change
+ * sans le sens reste un maintien. Sans fenêtre antérieure de même longueur,
+ * la comparaison s'abstient.
+ */
+export function senseShiftSentence(
+  current: CurveSense | null,
+  previous: CurveSense | null,
+  hasPrevious: boolean
+): string {
+  if (!hasPrevious) return "Pas de fenêtre antérieure de même longueur."
+  const now = readable(current)
+  const before = readable(previous)
+  if (!now && !before) return "Les deux fenêtres sont trop courtes pour comparer le sens."
+  if (!now || !before) return "L'une des deux fenêtres est trop courte pour comparer le sens."
+  if (now.sense === before.sense && now.register === before.register) {
+    return `Le sens tient : les deux fenêtres sont ${now.symbol}.`
+  }
+  if (now.sense === before.sense) {
+    return `Le sens tient (${now.sense}), le registre passe de ${before.register} à ${now.register}.`
+  }
+  return `Le sens change : ${before.symbol}, puis ${now.symbol}.`
 }

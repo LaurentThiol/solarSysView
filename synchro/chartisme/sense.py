@@ -101,15 +101,53 @@ def name_sense(values: Sequence[float], reference_sigma: float | None) -> dict[s
     }
 
 
-def sense_sentence(named: dict[str, Any] | None) -> str:
-    """Phrase lue à côté du tracé. Le symbole reste en tête."""
+def _readable(named: dict[str, Any] | None) -> dict[str, str] | None:
+    """Symbole, sens et registre, ou rien si le dict ne nomme pas une fenêtre."""
     if not named:
-        return "Fenêtre trop courte pour nommer le sens."
+        return None
     sense = str(named.get("sense") or "")
     register = str(named.get("register") or "")
     symbol = str(named.get("symbol") or "")
-    gloss = _SENSE_GLOSS.get(sense)
-    cloud = _REGISTER_GLOSS.get(register)
-    if not gloss or not cloud or not symbol:
+    if sense not in _SENSE_GLOSS or register not in _REGISTER_GLOSS or not symbol:
+        return None
+    return {"sense": sense, "register": register, "symbol": symbol}
+
+
+def sense_sentence(named: dict[str, Any] | None) -> str:
+    """Phrase lue à côté du tracé. Le symbole reste en tête."""
+    read = _readable(named)
+    if not read:
         return "Fenêtre trop courte pour nommer le sens."
-    return f"{symbol} — {gloss}, et {cloud}."
+    return (
+        f"{read['symbol']} — {_SENSE_GLOSS[read['sense']]}, "
+        f"et {_REGISTER_GLOSS[read['register']]}."
+    )
+
+
+def sense_shift_sentence(
+    current: dict[str, Any] | None,
+    previous: dict[str, Any] | None,
+    has_previous: bool,
+) -> str:
+    """Ce que devient le sens entre la fenêtre précédente et celle qu'on étudie.
+
+    L'ordre est chronologique : la précédente d'abord. Le registre qui change
+    sans le sens reste un maintien. Sans fenêtre antérieure de même longueur,
+    la comparaison s'abstient.
+    """
+    if not has_previous:
+        return "Pas de fenêtre antérieure de même longueur."
+    now = _readable(current)
+    before = _readable(previous)
+    if now is None and before is None:
+        return "Les deux fenêtres sont trop courtes pour comparer le sens."
+    if now is None or before is None:
+        return "L'une des deux fenêtres est trop courte pour comparer le sens."
+    if now["sense"] == before["sense"] and now["register"] == before["register"]:
+        return f"Le sens tient : les deux fenêtres sont {now['symbol']}."
+    if now["sense"] == before["sense"]:
+        return (
+            f"Le sens tient ({now['sense']}), le registre passe de "
+            f"{before['register']} à {now['register']}."
+        )
+    return f"Le sens change : {before['symbol']}, puis {now['symbol']}."

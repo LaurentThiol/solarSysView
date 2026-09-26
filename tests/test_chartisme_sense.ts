@@ -7,7 +7,9 @@ import {
   nameSense,
   registerOf,
   senseSentence,
+  senseShiftSentence,
   seriesSigma,
+  type CurveSense,
 } from "../src/lib/chartisme/sense"
 
 function bump() {
@@ -90,4 +92,26 @@ test("the sentence leads with the symbol", () => {
     "monte:05 — la fenêtre monte, et le nuage autour de la droite tient dans la moitié de l'écart-type habituel."
   )
   assert.equal(senseSentence(null), "Fenêtre trop courte pour nommer le sens.")
+})
+
+test("the shift sentence compares two windows in chronological order", () => {
+  const rise = nameSense(Array.from({ length: 20 }, (_, index) => index), 8)
+  const fall = nameSense(Array.from({ length: 20 }, (_, index) => 19 - index), 8)
+  assert.ok(rise && fall)
+  assert.equal(senseShiftSentence(rise, fall, true), "Le sens change : baisse:05, puis monte:05.")
+  assert.equal(senseShiftSentence(rise, rise, true), "Le sens tient : les deux fenêtres sont monte:05.")
+  assert.equal(senseShiftSentence(rise, fall, false), "Pas de fenêtre antérieure de même longueur.")
+  assert.equal(
+    senseShiftSentence(null, null, true),
+    "Les deux fenêtres sont trop courtes pour comparer le sens."
+  )
+  assert.equal(
+    senseShiftSentence(rise, null, true),
+    "L'une des deux fenêtres est trop courte pour comparer le sens."
+  )
+  const looser = { ...(rise as CurveSense), register: "1" as const, symbol: "monte:1" }
+  assert.equal(
+    senseShiftSentence(looser, rise, true),
+    "Le sens tient (monte), le registre passe de 05 à 1."
+  )
 })
