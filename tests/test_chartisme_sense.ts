@@ -5,6 +5,7 @@ import { MIN_WINDOW } from "../src/lib/chartisme/scan"
 import {
   MIN_SENSE_LENGTH,
   nameSense,
+  nameShortSense,
   registerOf,
   segmentsSentence,
   senseSegments,
@@ -12,6 +13,7 @@ import {
   senseShiftSentence,
   seriesSigma,
   seriesSlopeSigma,
+  shortSenseSegments,
   type CurveSense,
 } from "../src/lib/chartisme/sense"
 
@@ -172,6 +174,42 @@ test("a window without a confirmed triplet stays stable", () => {
   assert.equal(segmentsSentence([]), "Pas de tirage à découper.")
   assert.equal(senseSegments([0, 1, 2, 3], null, 1), null)
   assert.equal(senseSegments([0, 1, 2, 3], -1, 1), null)
+})
+
+test("extent cuts a V that sigma keeps", () => {
+  const arch = [0, 2, 4, 2, 0]
+  const extentRows = senseSegments(arch, 2, null, "extent")
+  const sigmaRows = senseSegments(arch, 2)
+  assert.deepEqual(
+    extentRows?.map((row) => [row.sense, row.fromIndex, row.toIndex]),
+    [
+      ["monte", 0, 2],
+      ["baisse", 2, 4],
+    ]
+  )
+  assert.deepEqual(
+    sigmaRows?.map((row) => [row.sense, row.fromIndex, row.toIndex]),
+    [["stable", 0, 4]]
+  )
+  assert.equal(extentRows?.[0].extent, 0)
+})
+
+test("a short arch in V has two segments and one chord", () => {
+  const arch = [0, 2, 4, 2, 0]
+  const chord = nameShortSense(arch, 1)
+  assert.equal(chord?.symbol, "stable:sup")
+  assert.equal(chord?.band, "court")
+  const segments = shortSenseSegments(arch, 1, 1)
+  assert.deepEqual(
+    segments?.map((row) => [row.sense, row.fromIndex, row.toIndex, row.slopeShift]),
+    [
+      ["monte", 0, 2, null],
+      ["baisse", 2, 4, "tourne"],
+    ]
+  )
+  assert.equal(shortSenseSegments([0, 1], 1), null)
+  assert.equal(shortSenseSegments([0, 1, 2], 1), null)
+  assert.equal(shortSenseSegments([...arch, 0, 0, 0, 0], 1), null)
 })
 
 test("the shift sentence compares two windows in chronological order", () => {
