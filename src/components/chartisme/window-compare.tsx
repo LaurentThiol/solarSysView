@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo } from "react"
 
 import { TitleHelp } from "@/components/help"
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/table"
 import type { ScanHit } from "@/lib/chartisme/scan"
 import { senseSentence, type CurveSense } from "@/lib/chartisme/sense"
+import { ficheHref } from "@/lib/lexicon/fiche"
 
 /**
  * La même fenêtre, juste avant.
@@ -88,6 +90,26 @@ export function WindowCompare({
           Fenêtre étudiée · {senseSentence(sense)}
           {previous ? ` Précédente · ${senseSentence(previousSense)}` : ""}
         </p>
+        {ficheHref(sense?.symbol) || ficheHref(previousSense?.symbol) ? (
+          <p className="text-xs">
+            {ficheHref(sense?.symbol) ? (
+              <Link className="text-primary underline-offset-2 hover:underline" href={ficheHref(sense?.symbol)!}>
+                Fiche {sense?.symbol}
+              </Link>
+            ) : null}
+            {ficheHref(previousSense?.symbol) ? (
+              <>
+                {ficheHref(sense?.symbol) ? " · " : null}
+                <Link
+                  className="text-primary underline-offset-2 hover:underline"
+                  href={ficheHref(previousSense?.symbol)!}
+                >
+                  Fiche {previousSense?.symbol}
+                </Link>
+              </>
+            ) : null}
+          </p>
+        ) : null}
         {!previous ? (
           <p className="text-sm text-muted-foreground">
             Pas de fenêtre antérieure de {window.drawCount} tirages dans cette

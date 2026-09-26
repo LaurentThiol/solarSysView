@@ -336,6 +336,13 @@ const TABS: AddressEntry[] = [
     "demo=1|true|oui"
   ),
   tabEntry(
+    "/brain/dictionnaire?demo=1",
+    "Démo Dictionnaire",
+    "Visite guidée de la boucle d'apprentissage sur une courbe fixe. Rien n'est enregistré.",
+    "assistants",
+    "demo=1"
+  ),
+  tabEntry(
     "/brain/specialistes?demo=1",
     "Démo Spécialistes",
     "Visite guidée de l’atelier : nom, cible, traits, entraînement. Jamais une grille 5+2.",
@@ -442,6 +449,10 @@ const APIS: AddressEntry[] = [
     "grilles",
     "lookback=20|50, draws"
   ),
+  apiEntry("/api/brain/lexicon/cards", "GET · POST", "Dictionnaire · fiches", "Lister ou corriger une fiche de concept.", "assistants"),
+  apiEntry("/api/brain/lexicon/read", "POST", "Dictionnaire · lecture", "Demande 20/50/100 sur les six champs, relecture et horloges Réf.", "assistants", "weekday, era"),
+  apiEntry("/api/brain/lexicon/mode", "GET · POST", "Dictionnaire · automatique", "Interrupteur : une demande à chaque tirage nouveau.", "assistants"),
+  apiEntry("/api/brain/lexicon/help", "POST", "Dictionnaire · aide", "Question au modèle local. Le cloud n'écrit une note que si escalate et cloud_note sont posés.", "assistants"),
   apiEntry("/api/brain/specialists", "GET · POST", "Spécialistes", "Réseaux par série : lister ou entraîner.", "assistants", "era, weekday"),
   apiEntry("/api/brain/specialists/features", "GET", "Spécialistes · traits", "Catalogue des descripteurs utilisables.", "assistants"),
   apiEntry("/api/brain/specialists/{slug}", "GET", "Un spécialiste", "Fiche, scores 20/50/100, prévision t+1.", "assistants"),

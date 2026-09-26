@@ -18,6 +18,10 @@ export function deepLinkFor(input: {
   queryDate?: string | null
   axes?: string | string[] | null
 }): DeepLinkTarget {
+  const senseHandle = input.entry.handle.replace(/^@/, "")
+  if (senseHandle.startsWith("sense.")) {
+    return { href: `/brain/dictionnaire?fiche=${senseHandle}`, lab: "brain" }
+  }
   const preset = input.preset ?? "last_100"
   const variable = input.variable ?? input.entry.defaults.variable ?? "sum"
   const params = new URLSearchParams()

@@ -282,6 +282,20 @@ CREATE TABLE IF NOT EXISTS llm_usage (
 );
 CREATE INDEX IF NOT EXISTS llm_usage_created ON llm_usage (created_at DESC);
 CREATE INDEX IF NOT EXISTS llm_usage_surface_provider ON llm_usage (surface, provider, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS lexicon_cards (
+    id              TEXT PRIMARY KEY,
+    revision        INTEGER NOT NULL,
+    payload         JSONB NOT NULL,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS lexicon_readings (
+    id              TEXT PRIMARY KEY,
+    payload         JSONB NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS lexicon_readings_created ON lexicon_readings (created_at DESC);
 """
 
 _pool: ConnectionPool | None = None
@@ -1705,3 +1719,46 @@ def prune_llm_usage(days: int = 30) -> int:
             deleted = cur.rowcount
         conn.commit()
         return deleted
+
+
+def upsert_lexicon_card(card: dict[str, Any]) -> None:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO lexicon_cards (id, revision, payload, updated_at)
+                VALUES (%(id)s, %(revision)s, %(payload)s, now())
+                ON CONFLICT (id) DO UPDATE
+                   SET revision = EXCLUDED.revision,
+                       payload = EXCLUDED.payload,
+                       updated_at = now()
+                 WHERE lexicon_cards.revision <= EXCLUDED.revision
+                """,
+                {
+                    "id": card["id"],
+                    "revision": int(card["revision"]),
+                    "payload": Jsonb(card),
+                },
+            )
+        conn.commit()
+
+
+def list_lexicon_cards() -> list[dict[str, Any]]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT payload FROM lexicon_cards ORDER BY id")
+            return [dict(row["payload"]) for row in cur.fetchall()]
+
+
+def insert_lexicon_reading(reading: dict[str, Any]) -> None:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO lexicon_readings (id, payload)
+                VALUES (%(id)s, %(payload)s)
+                ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload
+                """,
+                {"id": reading["id"], "payload": Jsonb(reading)},
+            )
+        conn.commit()

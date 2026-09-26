@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 import { TitleHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,6 +13,7 @@ import {
   type CurveSense,
   type SenseName,
 } from "@/lib/chartisme/sense"
+import { ficheHref } from "@/lib/lexicon/fiche"
 
 /**
  * Le sens nommé au PR #167, développé.
@@ -180,9 +183,17 @@ export function SensePanel({
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             {named ? (
-              <Badge variant="outline" className={SENSE_BADGE[named.sense]}>
-                {named.symbol}
-              </Badge>
+              ficheHref(named.symbol) ? (
+                <Link href={ficheHref(named.symbol)!} className="inline-flex" title="Ouvrir la fiche">
+                  <Badge variant="outline" className={SENSE_BADGE[named.sense]}>
+                    {named.symbol}
+                  </Badge>
+                </Link>
+              ) : (
+                <Badge variant="outline" className={SENSE_BADGE[named.sense]}>
+                  {named.symbol}
+                </Badge>
+              )
             ) : null}
             <span className="text-xs text-muted-foreground">{where}</span>
           </div>

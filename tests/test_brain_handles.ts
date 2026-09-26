@@ -367,3 +367,12 @@ test("table lecture cites handles, flags, and refuses an empty table", () => {
   assert.match(text, /100 tirages/)
 })
 
+test("@sense.monte.05 opens the dictionary card", () => {
+  const parsed = parseHandle("@sense.monte.05")
+  assert.equal(parsed.error, null)
+  assert.equal(parsed.handle, "sense.monte.05")
+  const link = deepLinkFor({ entry: parsed.entry! })
+  assert.equal(link.href, "/brain/dictionnaire?fiche=sense.monte.05")
+  assert.equal(parseHandle("@sense.jambe.05").error != null, true)
+})
+

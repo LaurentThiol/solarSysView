@@ -581,6 +581,29 @@ function isTypingTarget(target: EventTarget | null) {
   )
 }
 
+function DraftCount() {
+  const [count, setCount] = useState<number | null>(null)
+  useEffect(() => {
+    let cancel = false
+    fetch("/api/brain/lexicon/cards", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { cards?: { status?: string }[] } | null) => {
+        if (cancel || !payload?.cards) return
+        setCount(payload.cards.filter((card) => card.status === "draft").length)
+      })
+      .catch(() => {})
+    return () => {
+      cancel = true
+    }
+  }, [])
+  if (!count) return null
+  return (
+    <span className="ml-2 rounded-full bg-primary/15 px-1.5 text-[10px] text-foreground tabular-nums">
+      {count}
+    </span>
+  )
+}
+
 function FamilyLinks({
   pathname,
   onNavigate,
@@ -604,13 +627,14 @@ function FamilyLinks({
                     href={entry.href}
                     aria-current={current ? "page" : undefined}
                     onClick={onNavigate}
-                    className={`block rounded-md px-3 py-2 text-sm ${
+                    className={`flex items-center rounded-md px-3 py-2 text-sm ${
                       current
                         ? "bg-muted text-foreground"
                         : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                     }`}
                   >
-                    {entry.label}
+                    <span className="min-w-0 flex-1">{entry.label}</span>
+                    {entry.href === "/brain/dictionnaire" ? <DraftCount /> : null}
                   </Link>
                 </HelpWrap>
               )

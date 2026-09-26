@@ -264,6 +264,31 @@ class LlmUsageIn(BaseModel):
     latency_ms: int | None = None
 
 
+class LexiconCardIn(BaseModel):
+    id: str
+    status: str | None = None
+    equation: str | None = None
+    keywords: list[str] | None = None
+    gloss: str | None = None
+    scope: str | None = None
+    source: str | None = None
+
+
+class LexiconModeIn(BaseModel):
+    automatic: bool = False
+
+
+class LexiconReadIn(BaseModel):
+    weekday: str | None = None
+    era: str = "current"
+
+
+class LexiconHelpIn(BaseModel):
+    reading_id: str | None = None
+    escalate: bool = False
+    cloud_note: str | None = None
+
+
 class BrainRetrieveIn(BaseModel):
     text: str
     k: int = Field(default=8, ge=1, le=20)
@@ -1387,6 +1412,81 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "Grille jouée introuvable")
         return {"ok": True}
 
+    @app.get("/api/brain/lexicon/cards")
+    def lexicon_cards() -> dict[str, Any]:
+        from synchro.lexicon.store import LexiconStore
+
+        cards = LexiconStore().load_cards()
+        return {"ok": True, "cards": cards}
+
+    @app.post("/api/brain/lexicon/cards")
+    def lexicon_save_card(payload: LexiconCardIn) -> dict[str, Any]:
+        from synchro.lexicon.store import LexiconStore
+
+        card = LexiconStore().update_card(payload.id, payload.model_dump(exclude={"id"}))
+        if card is None:
+            raise HTTPException(404, "Fiche introuvable")
+        return {"ok": True, "card": card}
+
+    @app.get("/api/brain/lexicon/mode")
+    def lexicon_mode() -> dict[str, Any]:
+        from synchro.lexicon.store import LexiconStore
+
+        return {"ok": True, **LexiconStore().load_mode()}
+
+    @app.post("/api/brain/lexicon/mode")
+    def lexicon_set_mode(payload: LexiconModeIn) -> dict[str, Any]:
+        from synchro.lexicon.store import LexiconStore
+
+        return {"ok": True, **LexiconStore().save_mode(payload.automatic)}
+
+    @app.get("/api/brain/lexicon/readings")
+    def lexicon_readings() -> dict[str, Any]:
+        from synchro.lexicon.store import LexiconStore
+
+        rows = LexiconStore().load_readings()
+        return {"ok": True, "readings": rows[-8:]}
+
+    @app.post("/api/brain/lexicon/read")
+    def lexicon_read(payload: LexiconReadIn) -> dict[str, Any]:
+        from synchro.lexicon.service import load_draws_for_read, prepare_reading, specialist_rows
+
+        try:
+            draws = load_draws_for_read(era=payload.era)
+        except Exception as exc:
+            raise HTTPException(503, f"Archive illisible: {exc}") from exc
+        reading = prepare_reading(
+            draws,
+            weekday=payload.weekday,
+            specialists=specialist_rows(),
+        )
+        return {"ok": True, "reading": reading}
+
+    @app.post("/api/brain/lexicon/help")
+    def lexicon_help(payload: LexiconHelpIn) -> dict[str, Any]:
+        from synchro.lexicon.service import answer_help
+        from synchro.lexicon.store import LexiconStore
+
+        store = LexiconStore()
+        rows = store.load_readings()
+        reading = None
+        if payload.reading_id:
+            reading = next((row for row in rows if row.get("id") == payload.reading_id), None)
+        elif rows:
+            reading = rows[-1]
+        if reading is None:
+            raise HTTPException(404, "Aucune demande à relire")
+        result = answer_help(
+            reading,
+            escalate=payload.escalate,
+            cloud_note=payload.cloud_note,
+            store=store,
+        )
+        if result.get("note"):
+            reading = {**reading, "cloud_note": result["note"]}
+            store.save_reading(reading)
+        return result
+
     @app.get("/api/brain/status")
     def brain_status() -> dict[str, Any]:
         from synchro import brain as brain_mod
@@ -2272,7 +2372,24 @@ def run_ensure() -> dict[str, Any]:
         raise HTTPException(502, f"Synchro FDJ impossible: {exc}") from exc
     if result.get("upserted"):
         _chartisme_auto_cycle()
+        _lexicon_auto_cycle()
     return result
+
+
+def _lexicon_auto_cycle() -> None:
+    """Une demande 20/50/100 si le dictionnaire est en automatique.
+
+    Non fatale : une synchro de tirages aboutit même si la lecture échoue.
+    """
+    try:
+        from synchro.lexicon.service import load_draws_for_read, run_if_automatic, specialist_rows
+
+        run_if_automatic(
+            load_draws_for_read(era="current"),
+            specialists=specialist_rows(),
+        )
+    except Exception:
+        return
 
 
 def _chartisme_auto_cycle() -> None:

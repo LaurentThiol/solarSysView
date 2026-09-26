@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { BacktestPanel } from "@/components/chartisme/backtest-panel"
@@ -70,6 +71,7 @@ import {
   senseSentence,
   seriesSigma,
 } from "@/lib/chartisme/sense"
+import { ficheHref } from "@/lib/lexicon/fiche"
 import {
   alongsideIndex,
   evaluateRules,
@@ -1018,6 +1020,17 @@ export function ChartismeLab() {
 
               <p className="text-xs text-muted-foreground" title={SENSE_TITLE}>
                 {senseRead.scope} · {senseSentence(senseRead.named)}
+                {ficheHref(senseRead.named?.symbol) ? (
+                  <>
+                    {" · "}
+                    <Link
+                      href={ficheHref(senseRead.named?.symbol)!}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      Fiche
+                    </Link>
+                  </>
+                ) : null}
               </p>
 
               <div className="flex flex-wrap items-center gap-2">

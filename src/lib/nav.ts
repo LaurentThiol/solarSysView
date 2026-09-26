@@ -147,7 +147,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     home: "/brain",
     help: {
       title: "Assistants",
-      body: "Brain lit les fiches épinglées. Les Spécialistes publient une prévision de série nommée. IA lit une capture. Réf date des cycles physiques.",
+      body: "Brain lit les fiches épinglées. Le Dictionnaire tient les concepts confirmés à la main. Les Spécialistes publient une prévision de série nommée. IA lit une capture. Réf date des cycles physiques.",
     },
     items: [
       {
@@ -164,6 +164,14 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         help: {
           title: "Spécialistes",
           body: "Un petit réseau par série (parité, somme…). Entraîné sur l’ère formule, noté 20/50/100. Le décompte d’archive suit le jour ; l’entraînement API reste borné au même weekday si Mardi ou Vendredi est choisi. Jamais une grille 5+2. Démo guidée avec pastilles explicatives.",
+        },
+      },
+      {
+        href: "/brain/dictionnaire",
+        label: "Dictionnaire",
+        help: {
+          title: "Dictionnaire",
+          body: "Fiches de concepts : vignette, équation, mots-clés, portée. Neuf sens de fenêtre sont semés depuis le code. Un brouillon du modèle local se confirme à la main. Lecture 20/50/100 et démo guidée.",
         },
       },
       {

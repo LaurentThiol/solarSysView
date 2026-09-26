@@ -51,8 +51,39 @@ function parseN(raw: string | undefined): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+const SENSE_HANDLE = /^@sense\.(monte|baisse|stable)\.(05|1|sup)$/
+
 export function parseHandle(raw: string, ctx: HandleContext = {}): ParsedHandle {
   const text = raw.trim()
+  const sense = SENSE_HANDLE.exec(text)
+  if (sense) {
+    const handle = `sense.${sense[1]}.${sense[2]}`
+    const entry: CatalogEntry = {
+      id: `lexicon/${handle}`,
+      handle,
+      aliases: [`${sense[1]}:${sense[2]}`],
+      lab: "chartisme",
+      family: "sens",
+      kind: "figure",
+      label: `${sense[1]}:${sense[2]}`,
+      units: "fenêtre",
+      reading: "Sens de fenêtre. La fiche confirmée est dans le dictionnaire.",
+      defaults: {},
+    }
+    return {
+      raw: text,
+      lab: "chartisme",
+      handle,
+      variable: null,
+      n: null,
+      curveId: null,
+      readingId: null,
+      drawDate: null,
+      entry,
+      ambiguous: [],
+      error: null,
+    }
+  }
   const empty: ParsedHandle = {
     raw: text,
     lab: null,
