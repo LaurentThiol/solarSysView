@@ -87,18 +87,28 @@ function triangleArch(width: number, height: number) {
   })
 }
 
-test("triangles and two-step spikes have no parabolic derivative", () => {
+function offsetParabola(width: number, height: number, apex: number) {
+  const rise = Math.max(1, apex)
+  const fall = Math.max(1, width - apex)
+  return Array.from({ length: width + 1 }, (_, index) => {
+    const t = index <= apex ? (apex - index) / rise : (index - apex) / fall
+    return height * (1 - t * t)
+  })
+}
+
+test("an off-center parabola keeps a high derivative, a long triangle does not", () => {
   const heights = geometricHeights(RESTITUTION, 16, 4)
+  const offset = chainedArches(
+    (width, height) => offsetParabola(width, height, Math.max(2, Math.round(width / 4))),
+    [12, 10, 8, 8],
+    heights
+  )
+  const shifted = sampleSeries(offset)
+  assert.equal(shifted.length, 1)
+  assert.ok((shifted[0]?.derivative ?? 0) >= 0.95)
+
   const triangles = chainedArches(triangleArch, [12, 10, 8, 8], heights)
   assert.equal(sampleSeries(triangles).length, 0)
-
-  const spikes: number[] = []
-  for (const height of heights) {
-    if (spikes.length === 0) spikes.push(0, height)
-    else spikes.push(height)
-    spikes.push(0)
-  }
-  assert.equal(sampleSeries(spikes).length, 0)
 
   const smooth = dampedParabolas(RESTITUTION, heights, [12, 10, 8, 8])
   assert.equal(

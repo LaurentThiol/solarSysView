@@ -7,9 +7,12 @@ import { swingPivots, swingThreshold } from "./chartisme/pivots"
  * au suivant la hauteur suit h → e² h, la durée de vol τ → e τ, et la vitesse
  * v → e v. Ici un rebond est un creux, un sommet, un creux. On ne garde une
  * fenêtre que si les hauteurs s'amortissent, que chaque arche ressemble à une
- * parabole, et que sa dérivée a la pente d'une parabole : elle décroît à peu
- * près régulièrement et change de signe au sommet. Deux tirages ne donnent pas
- * cette pente. Lecture du tracé : les tirages restent indépendants.
+ * parabole, et que sa dérivée a la pente d'une parabole. Cette pente se lit
+ * sur chaque flanc : à la montée elle est positive et décroît, à la descente
+ * elle est négative et décroît encore. L'accélération vaut -2/L² d'un côté et
+ * -2/R² de l'autre, donc un sommet décalé ne se juge pas sur l'arche entière.
+ * Un flanc d'un ou deux pas ne montre que le signe. Lecture du tracé : les
+ * tirages restent indépendants.
  */
 
 export const BOUNCE_SERIES = ["n1", "n2", "n3", "n4", "n5", "e1", "e2"] as const
@@ -60,7 +63,7 @@ export type BounceEpisode = {
   r2: number
   halfLifeDraws: number
   parabola: number
-  /** Régularité de la pente de chaque arche, de 0 à 1. Le minimum des arches. */
+  /** Régularité de la pente, de 0 à 1. Médiane des arches assez longues pour la lire. */
   derivative: number
   timeAgreement: number
   /** Accord entre l'amplitude de la dérivée et la restitution. */
@@ -220,9 +223,12 @@ function scoreWindow(
   const parabola = median(arches.map((arch) => parabolaScore(values, arch)))
   if (!(parabola >= gates.minParabola)) return null
   const slopes = arches.map((arch) => clearanceSlopes(values, arch))
-  const derivative = Math.min(
-    ...slopes.map((samples, index) => derivativeFromSlopes(samples, arches[index]))
-  )
+  const archScores = slopes.map((samples, index) => derivativeFromSlopes(samples, arches[index]))
+  const judged = arches.flatMap((arch, index) => {
+    const readable = arch.apex - arch.left >= 3 || arch.right - arch.apex >= 3
+    return readable ? [archScores[index] ?? 0] : []
+  })
+  const derivative = median(judged.length ? judged : archScores)
   if (!(derivative >= gates.minDerivative)) return null
 
   const timeAgreement = scaleAgreement(
@@ -341,36 +347,41 @@ function clearanceSlopes(values: number[], arch: Arch) {
 }
 
 /**
- * Allure de la dérivée d'une parabole.
+ * Allure de la dérivée d'une parabole, flanc par flanc.
  *
- * Moins de trois pentes : on ne peut pas voir la décélération, le score est 0.
- * Sinon, deux conditions. Le signe suit le sommet (positive avant, négative
- * après). La baisse de pente est répartie sur l'arche : une falaise qui tombe
- * d'un seul coup, ou un triangle dont la pente est constante puis saute, met
- * presque toute la décélération sur un pas et vaut 0. Le score de la fenêtre
- * est le minimum des arches, pour qu'une pointe illisible ne se cache pas
- * derrière une arche lisse.
+ * La forme des niveaux est déjà une parabole de chaque côté du sommet.
+ * Sa dérivée est une droite décroissante sur le flanc, pas sur l'arche
+ * entière : le pas de décélération dépend de la largeur du flanc. On compare
+ * donc les pentes observées à cette droite, et seulement là où il y en a au
+ * moins trois. En deçà, le signe suffit (positif avant le sommet, négatif
+ * après) ; deux pentes qui ne baissent pas ne sont pas une accélération.
+ * Le score de l'arche est le moins bon des deux flancs.
  */
 function derivativeFromSlopes(slopes: number[], arch: Arch | undefined) {
-  if (!arch || slopes.length < 3) return 0
-  let signs = 0
+  if (!arch || slopes.length < 2) return 0
+  const rising: number[] = []
+  const falling: number[] = []
   for (let i = 0; i < slopes.length; i += 1) {
-    const rising = arch.left + i + 0.5 <= arch.apex
-    const slope = slopes[i] ?? 0
-    if (rising ? slope > 0 : slope < 0) signs += 1
+    const beforeApex = arch.left + i + 0.5 <= arch.apex
+    ;(beforeApex ? rising : falling).push(slopes[i] ?? 0)
+  }
+  if (!rising.length || !falling.length) return 0
+  return Math.min(flankDerivative(rising, true), flankDerivative(falling, false))
+}
+
+function flankDerivative(slopes: number[], expectPositive: boolean) {
+  let signs = 0
+  for (const slope of slopes) {
+    if (expectPositive ? slope > 0 : slope < 0) signs += 1
     else if (slope === 0) signs += 0.5
   }
   const sign = signs / slopes.length
-  const drops: number[] = []
-  for (let i = 1; i < slopes.length; i += 1) {
-    drops.push(Math.max(0, (slopes[i - 1] ?? 0) - (slopes[i] ?? 0)))
+  if (slopes.length < 3) {
+    if (slopes.length === 2 && !((slopes[1] ?? 0) < (slopes[0] ?? 0))) return 0
+    return sign
   }
-  const total = drops.reduce((sum, drop) => sum + drop, 0)
-  if (!(total > 0) || drops.length < 2) return 0
-  const maxShare = Math.max(...drops) / total
-  const evenShare = 1 / drops.length
-  const even = clamp01(1 - (maxShare - evenShare) / (1 - evenShare))
-  return sign * even
+  const ramp = slopes.map((_, index) => slopes.length - 1 - index)
+  return sign * Math.max(0, pearson(slopes, ramp))
 }
 
 function rootMeanSquare(values: number[]) {

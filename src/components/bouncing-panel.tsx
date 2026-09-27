@@ -54,7 +54,7 @@ const SLIDER_HELP = {
   },
   derivative: {
     title: "Dérivée des arches",
-    body: "Pente de chaque rebond, lue au-dessus de la corde. Elle doit baisser d’un tirage à l’autre et passer de positive à négative au sommet, comme la dérivée d’une parabole. Vers la droite, cette baisse doit être plus régulière. Deux tirages ne suffisent pas à lire une pente.",
+    body: "Pente de chaque flanc, lue au-dessus de la corde. Avant le sommet elle est positive et elle décroît, après elle est négative et elle décroît encore, comme la dérivée d’une parabole. Vers la droite, cette droite doit être plus nette. Un flanc d’un ou deux tirages ne montre que le signe.",
   },
   damping: {
     title: "Amortissement exigé",
@@ -176,8 +176,8 @@ export function BouncingPanel({
         </CardTitle>
         <p className="text-xs text-muted-foreground">
           n1 à n5 et e1, e2 sur la fenêtre affichée. Vers la droite, chaque curseur
-          resserre la recherche. La dérivée écarte les pointes dont la pente ne suit
-          pas une parabole. Une arche qui s’amortit décrit le tracé, elle ne dit
+          resserre la recherche. La dérivée se lit de chaque côté du sommet : elle
+          doit décroître comme celle d’une parabole. Une arche qui s’amortit décrit le tracé, elle ne dit
           rien du tirage suivant.
         </p>
       </CardHeader>
