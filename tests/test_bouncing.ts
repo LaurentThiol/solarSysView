@@ -56,11 +56,61 @@ test("a damped bouncing series is found and restitution is recovered", () => {
   assert.ok(episode.bounces >= 3)
   assert.ok(Math.abs(episode.restitution - RESTITUTION) <= 0.05)
   assert.ok(episode.r2 >= 0.55)
+  assert.ok(episode.derivative >= 0.95)
+  assert.ok(episode.velocityAgreement > 0.4)
   assert.ok(episode.heightRatio < 1)
   assert.ok(Number.isFinite(episode.halfLifeDraws) && episode.halfLifeDraws > 0)
   assert.equal(episode.envelope.length, episode.bounces)
   assert.ok(episode.fromDate)
   assert.ok(episode.toDate)
+})
+
+function chainedArches(
+  shape: (width: number, height: number) => number[],
+  widths: number[],
+  heights: number[]
+) {
+  const values: number[] = []
+  for (let bounce = 0; bounce < widths.length; bounce += 1) {
+    const arch = shape(widths[bounce] ?? 0, heights[bounce] ?? 0)
+    if (bounce === 0) values.push(...arch)
+    else values.push(...arch.slice(1))
+  }
+  return values
+}
+
+function triangleArch(width: number, height: number) {
+  const apex = Math.floor(width / 2)
+  return Array.from({ length: width + 1 }, (_, index) => {
+    const t = index <= apex ? index / apex : (width - index) / (width - apex)
+    return height * t
+  })
+}
+
+test("triangles and two-step spikes have no parabolic derivative", () => {
+  const heights = geometricHeights(RESTITUTION, 16, 4)
+  const triangles = chainedArches(triangleArch, [12, 10, 8, 8], heights)
+  assert.equal(sampleSeries(triangles).length, 0)
+
+  const spikes: number[] = []
+  for (const height of heights) {
+    if (spikes.length === 0) spikes.push(0, height)
+    else spikes.push(height)
+    spikes.push(0)
+  }
+  assert.equal(sampleSeries(spikes).length, 0)
+
+  const smooth = dampedParabolas(RESTITUTION, heights, [12, 10, 8, 8])
+  assert.equal(
+    findBounces({ values: smooth, dates: datesFor(smooth.length) }, "n3", {
+      minDerivative: 0.9,
+    }).length,
+    1
+  )
+  const rounded = smooth.map((value) => Math.round(value))
+  const discrete = findBounces({ values: rounded, dates: datesFor(rounded.length) }, "n3")
+  assert.equal(discrete.length, 1)
+  assert.ok((discrete[0]?.derivative ?? 0) >= 0.6)
 })
 
 test("constant amplitude, growing bounces and a flat series are rejected", () => {
@@ -127,6 +177,7 @@ test("evolution exposes the bouncing tab", () => {
   assert.match(view, /ariaLabel="Rebonds minimum"/)
   assert.match(view, /ariaLabel="Ajustement des hauteurs"/)
   assert.match(view, /ariaLabel="Forme des arches"/)
+  assert.match(view, /ariaLabel="Dérivée des arches"/)
   assert.match(view, /ariaLabel="Amortissement exigé"/)
   assert.match(view, /ariaLabel="Amplitude minimale"/)
   assert.match(view, /type="range"/)

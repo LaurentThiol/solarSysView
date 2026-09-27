@@ -71,7 +71,7 @@ const CHART_TABS = [
     label: "Bouncing",
     help: {
       title: "Bouncing",
-      body: "Cherche, sur n1…n5 et e1, e2, les passages où la courbe fait des arches de plus en plus basses, comme une balle qui s’amortit. Les curseurs resserrent la recherche vers la droite. Lecture du tracé, pas un pronostic.",
+      body: "Cherche, sur n1…n5 et e1, e2, les passages où la courbe fait des arches de plus en plus basses, comme une balle qui s’amortit. La dérivée de chaque arche doit suivre celle d’une parabole. Les curseurs resserrent la recherche vers la droite. Lecture du tracé, pas un pronostic.",
     },
   },
 ] as const

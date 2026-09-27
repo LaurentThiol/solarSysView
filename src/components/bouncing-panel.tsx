@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils"
 const HELP: HelpCopy = {
   title: "Bouncing",
   wide: true,
-  body: "Cherche, sur n1…n5 et e1, e2, les passages où la courbe fait des arches de plus en plus basses, comme une balle qui s’amortit. e est la restitution : chaque rebond garde cette fraction de la hauteur précédente. Les curseurs resserrent la recherche vers la droite. Le bandeau colore l’épisode, le trait plein le suit, les pointillés sont les sommets théoriques. Lecture du tracé, pas un pronostic.",
+  body: "Cherche, sur n1…n5 et e1, e2, les passages où la courbe fait des arches de plus en plus basses, comme une balle qui s’amortit. e est la restitution : chaque rebond garde cette fraction de la hauteur précédente. La dérivée de l’arche, sa pente, doit décroître régulièrement et changer de signe au sommet. Les curseurs resserrent la recherche vers la droite. Le bandeau colore l’épisode, le trait plein le suit, les pointillés sont les sommets théoriques. Lecture du tracé, pas un pronostic.",
 }
 
 const SLIDER_HELP = {
@@ -51,6 +51,10 @@ const SLIDER_HELP = {
   shape: {
     title: "Forme des arches",
     body: "Ressemblance de chaque rebond avec une parabole. Vers la droite, les zigzags anguleux sont écartés.",
+  },
+  derivative: {
+    title: "Dérivée des arches",
+    body: "Pente de chaque rebond, lue au-dessus de la corde. Elle doit baisser d’un tirage à l’autre et passer de positive à négative au sommet, comme la dérivée d’une parabole. Vers la droite, cette baisse doit être plus régulière. Deux tirages ne suffisent pas à lire une pente.",
   },
   damping: {
     title: "Amortissement exigé",
@@ -95,7 +99,7 @@ function formatHalfLife(value: number) {
 }
 
 function episodeLine(episode: BounceEpisode) {
-  return `${episode.series} · ${episode.bounces} rebonds · e ≈ ${formatRatio(episode.restitution)} · hauteurs ×${formatRatio(episode.heightRatio)} · R² ${formatRatio(episode.r2)} · ${formatDay(episode.fromDate)} → ${formatDay(episode.toDate)}`
+  return `${episode.series} · ${episode.bounces} rebonds · e ≈ ${formatRatio(episode.restitution)} · hauteurs ×${formatRatio(episode.heightRatio)} · R² ${formatRatio(episode.r2)} · dérivée ${formatRatio(episode.derivative)} · ${formatDay(episode.fromDate)} → ${formatDay(episode.toDate)}`
 }
 
 function chartRows(points: DrawSeriesPoint[], episode: BounceEpisode) {
@@ -116,6 +120,7 @@ function isDefaultQuery(query: BounceQuery) {
     query.minBounces === DEFAULT_BOUNCE_QUERY.minBounces &&
     query.minR2 === DEFAULT_BOUNCE_QUERY.minR2 &&
     query.minParabola === DEFAULT_BOUNCE_QUERY.minParabola &&
+    query.minDerivative === DEFAULT_BOUNCE_QUERY.minDerivative &&
     query.maxRestitution === DEFAULT_BOUNCE_QUERY.maxRestitution &&
     query.swingScale === DEFAULT_BOUNCE_QUERY.swingScale
   )
@@ -171,7 +176,8 @@ export function BouncingPanel({
         </CardTitle>
         <p className="text-xs text-muted-foreground">
           n1 à n5 et e1, e2 sur la fenêtre affichée. Vers la droite, chaque curseur
-          resserre la recherche. Une arche qui s’amortit décrit le tracé, elle ne dit
+          resserre la recherche. La dérivée écarte les pointes dont la pente ne suit
+          pas une parabole. Une arche qui s’amortit décrit le tracé, elle ne dit
           rien du tirage suivant.
         </p>
       </CardHeader>
@@ -286,6 +292,17 @@ function SeveritySliders({
           onChange={(value) => onChange({ minParabola: roundTo(value, 0.05) })}
         />
         <SliderField
+          label="Dérivée des arches"
+          help={SLIDER_HELP.derivative}
+          ariaLabel="Dérivée des arches"
+          min={0.2}
+          max={0.9}
+          step={0.05}
+          value={query.minDerivative}
+          display={formatRatio(query.minDerivative)}
+          onChange={(value) => onChange({ minDerivative: roundTo(value, 0.05) })}
+        />
+        <SliderField
           label="Amortissement exigé"
           help={SLIDER_HELP.damping}
           ariaLabel="Amortissement exigé"
@@ -374,7 +391,8 @@ function BounceChart({
       <p className="text-sm tabular-nums">
         {episode.series} · e {formatRatio(episode.restitution)} · hauteurs ×
         {formatRatio(episode.heightRatio)} · R² {formatRatio(episode.r2)} · forme{" "}
-        {formatRatio(episode.parabola)} · demi-vie {formatHalfLife(episode.halfLifeDraws)} tirages
+        {formatRatio(episode.parabola)} · dérivée {formatRatio(episode.derivative)} · demi-vie{" "}
+        {formatHalfLife(episode.halfLifeDraws)} tirages
       </p>
       <ChartContainer config={chartConfig} className="aspect-auto h-64 w-full">
         <ComposedChart data={rows} margin={{ left: 4, right: 8, top: 8 }}>

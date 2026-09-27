@@ -425,7 +425,11 @@ function bounceSummary(bounce: BounceCapture) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-  return `Bouncing · ${bounce.series} · e ${restitution} · ${bounce.bounces} rebonds · ${bounce.from ?? "?"} → ${bounce.to ?? "?"}`
+  const derivative = bounce.derivative.toLocaleString("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return `Bouncing · ${bounce.series} · e ${restitution} · dérivée ${derivative} · ${bounce.bounces} rebonds · ${bounce.from ?? "?"} → ${bounce.to ?? "?"}`
 }
 
 export function packEvolution(input: {

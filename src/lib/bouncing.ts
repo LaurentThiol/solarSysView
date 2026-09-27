@@ -4,10 +4,12 @@ import { swingPivots, swingThreshold } from "./chartisme/pivots"
  * Atténuation façon balle qui rebondit, sur n1…n5 et e1, e2.
  *
  * Une balle de restitution e (0 < e < 1) touche, monte, retombe. D'un rebond
- * au suivant la hauteur suit h → e² h, et la durée de vol τ → e τ. Ici un
- * rebond est un creux, un sommet, un creux. On ne garde une fenêtre que si
- * les hauteurs s'amortissent et que chaque arche ressemble à une parabole.
- * Lecture du tracé : les tirages restent indépendants.
+ * au suivant la hauteur suit h → e² h, la durée de vol τ → e τ, et la vitesse
+ * v → e v. Ici un rebond est un creux, un sommet, un creux. On ne garde une
+ * fenêtre que si les hauteurs s'amortissent, que chaque arche ressemble à une
+ * parabole, et que sa dérivée a la pente d'une parabole : elle décroît à peu
+ * près régulièrement et change de signe au sommet. Deux tirages ne donnent pas
+ * cette pente. Lecture du tracé : les tirages restent indépendants.
  */
 
 export const BOUNCE_SERIES = ["n1", "n2", "n3", "n4", "n5", "e1", "e2"] as const
@@ -25,6 +27,7 @@ export type BounceQuery = {
   minBounces: number
   minR2: number
   minParabola: number
+  minDerivative: number
   maxRestitution: number
   swingScale: number
 }
@@ -33,6 +36,7 @@ export const DEFAULT_BOUNCE_QUERY: BounceQuery = {
   minBounces: MIN_BOUNCES,
   minR2: 0.55,
   minParabola: 0.7,
+  minDerivative: 0.4,
   maxRestitution: 0.92,
   swingScale: 1,
 }
@@ -56,7 +60,11 @@ export type BounceEpisode = {
   r2: number
   halfLifeDraws: number
   parabola: number
+  /** Régularité de la pente de chaque arche, de 0 à 1. Le minimum des arches. */
+  derivative: number
   timeAgreement: number
+  /** Accord entre l'amplitude de la dérivée et la restitution. */
+  velocityAgreement: number
   score: number
   envelope: BouncePoint[]
   impacts: BouncePoint[]
@@ -70,6 +78,7 @@ export type BounceCapture = {
   from: string | null
   to: string | null
   score: number
+  derivative: number
 }
 
 type BounceSample = { date: string } & Record<BounceSeriesId, number>
@@ -96,6 +105,7 @@ export function bounceCaptureOf(episode: BounceEpisode): BounceCapture {
     from: episode.fromDate,
     to: episode.toDate,
     score: episode.score,
+    derivative: episode.derivative,
   }
 }
 
@@ -138,6 +148,7 @@ function resolveQuery(query?: Partial<BounceQuery>): BounceQuery {
     minBounces: clampInt(merged.minBounces, MIN_BOUNCES, MAX_BOUNCES),
     minR2: clamp01(merged.minR2),
     minParabola: clamp01(merged.minParabola),
+    minDerivative: clamp01(merged.minDerivative),
     maxRestitution: Math.min(0.99, Math.max(E_MIN, merged.maxRestitution)),
     swingScale: Math.min(4, Math.max(1, merged.swingScale)),
   }
@@ -208,12 +219,26 @@ function scoreWindow(
   if (!fit || !(fit.slope < 0) || fit.r2 < gates.minR2) return null
   const parabola = median(arches.map((arch) => parabolaScore(values, arch)))
   if (!(parabola >= gates.minParabola)) return null
+  const slopes = arches.map((arch) => clearanceSlopes(values, arch))
+  const derivative = Math.min(
+    ...slopes.map((samples, index) => derivativeFromSlopes(samples, arches[index]))
+  )
+  if (!(derivative >= gates.minDerivative)) return null
 
-  const timeAgreement = durationAgreement(
+  const timeAgreement = scaleAgreement(
     checked.restitution,
     arches.map((arch) => arch.duration)
   )
-  const score = 0.55 * fit.r2 + 0.25 * parabola + 0.2 * timeAgreement
+  const velocityAgreement = scaleAgreement(
+    checked.restitution,
+    slopes.map((samples) => rootMeanSquare(samples))
+  )
+  const score =
+    0.45 * fit.r2 +
+    0.2 * parabola +
+    0.2 * derivative +
+    0.075 * timeAgreement +
+    0.075 * velocityAgreement
   const first = arches[0]
   const last = arches[arches.length - 1]
   if (!first || !last) return null
@@ -249,7 +274,9 @@ function scoreWindow(
     r2: fit.r2,
     halfLifeDraws: halfLife(arches, heights),
     parabola,
+    derivative,
     timeAgreement,
+    velocityAgreement,
     score,
     envelope,
     impacts,
@@ -276,18 +303,81 @@ function heightLaw(heights: number[], maxRestitution: number): { restitution: nu
   return { restitution }
 }
 
-function durationAgreement(restitution: number, durations: number[]) {
-  if (durations.length < 2) return 0
+/**
+ * Accord entre les rapports successifs d'une grandeur et la restitution.
+ * 0 si la grandeur ne décroît pas. La durée de vol et l'amplitude de la
+ * dérivée suivent e ; la hauteur, elle, suit e² et n'entre pas ici.
+ */
+function scaleAgreement(restitution: number, samples: number[]) {
+  if (samples.length < 2) return 0
   const ratios: number[] = []
-  for (let i = 0; i < durations.length - 1; i += 1) {
-    const prev = durations[i] ?? 0
-    const next = durations[i + 1] ?? 0
+  for (let i = 0; i < samples.length - 1; i += 1) {
+    const prev = samples[i] ?? 0
+    const next = samples[i + 1] ?? 0
     if (!(prev > 0)) return 0
     ratios.push(next / prev)
   }
-  const eTau = median(ratios)
-  if (!(eTau < 1)) return 0
-  return clamp01(1 - Math.abs(eTau - restitution) / 0.25)
+  const ratio = median(ratios)
+  if (!(ratio < 1)) return 0
+  return clamp01(1 - Math.abs(ratio - restitution) / 0.25)
+}
+
+/**
+ * Différences premières de la hauteur au-dessus de la corde.
+ * C'est la vitesse du rebond, le plancher en moins.
+ */
+function clearanceSlopes(values: number[], arch: Arch) {
+  const slopes: number[] = []
+  const yLeft = values[arch.left] ?? 0
+  const yRight = values[arch.right] ?? 0
+  for (let index = arch.left; index < arch.right; index += 1) {
+    const base = chordAt(arch.left, yLeft, arch.right, yRight, index)
+    const nextBase = chordAt(arch.left, yLeft, arch.right, yRight, index + 1)
+    const height = (values[index] ?? 0) - base
+    const nextHeight = (values[index + 1] ?? 0) - nextBase
+    slopes.push(nextHeight - height)
+  }
+  return slopes
+}
+
+/**
+ * Allure de la dérivée d'une parabole.
+ *
+ * Moins de trois pentes : on ne peut pas voir la décélération, le score est 0.
+ * Sinon, deux conditions. Le signe suit le sommet (positive avant, négative
+ * après). La baisse de pente est répartie sur l'arche : une falaise qui tombe
+ * d'un seul coup, ou un triangle dont la pente est constante puis saute, met
+ * presque toute la décélération sur un pas et vaut 0. Le score de la fenêtre
+ * est le minimum des arches, pour qu'une pointe illisible ne se cache pas
+ * derrière une arche lisse.
+ */
+function derivativeFromSlopes(slopes: number[], arch: Arch | undefined) {
+  if (!arch || slopes.length < 3) return 0
+  let signs = 0
+  for (let i = 0; i < slopes.length; i += 1) {
+    const rising = arch.left + i + 0.5 <= arch.apex
+    const slope = slopes[i] ?? 0
+    if (rising ? slope > 0 : slope < 0) signs += 1
+    else if (slope === 0) signs += 0.5
+  }
+  const sign = signs / slopes.length
+  const drops: number[] = []
+  for (let i = 1; i < slopes.length; i += 1) {
+    drops.push(Math.max(0, (slopes[i - 1] ?? 0) - (slopes[i] ?? 0)))
+  }
+  const total = drops.reduce((sum, drop) => sum + drop, 0)
+  if (!(total > 0) || drops.length < 2) return 0
+  const maxShare = Math.max(...drops) / total
+  const evenShare = 1 / drops.length
+  const even = clamp01(1 - (maxShare - evenShare) / (1 - evenShare))
+  return sign * even
+}
+
+function rootMeanSquare(values: number[]) {
+  if (!values.length) return 0
+  let sum = 0
+  for (const value of values) sum += value * value
+  return Math.sqrt(sum / values.length)
 }
 
 function halfLife(arches: Arch[], heights: number[]) {
