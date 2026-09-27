@@ -1,4 +1,4 @@
-import { anchorsToGeometry, windowTooShort } from "./place"
+import { anchorsToGeometry, figureWindowTooShort } from "./place"
 import type { ChartAnchor, ChartSketch, SketchHandle, SketchReading } from "./types"
 
 export function anchorsAfterMove(
@@ -77,7 +77,7 @@ export function moveSketchHandle(
 ): ChartSketch | null {
   const { start, mid, end } = anchorsAfterMove(sketch, handle, next)
   const { left, right } = sketchSpan(start, end, mid)
-  if (windowTooShort(left, right)) return null
+  if (figureWindowTooShort(sketch.figure, left, right)) return null
   const moved = sketchWithMovedHandle(sketch, handle, next, values, dates, reading)
   if (moved.points.length < 2) return null
   return moved
