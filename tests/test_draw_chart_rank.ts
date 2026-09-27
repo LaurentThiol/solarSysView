@@ -6,6 +6,7 @@ import {
   chartYDomain,
   modeOffersRank1,
   splitRank1Axis,
+  weekdaySplitSeries,
 } from "../src/lib/draw-chart-rank.ts"
 
 test("1er rang is offered on eachNumber and sumNumbers only", () => {
@@ -39,6 +40,17 @@ test("splitRank1Axis uses the right axis when 1er rang is mixed with another ser
   assert.equal(splitRank1Axis("sumNumbers", ["rank1"]), false)
   assert.equal(splitRank1Axis("sumNumbers", ["sumNumbers"]), false)
   assert.equal(splitRank1Axis("sumStars", ["sumStars", "rank1"]), false)
+})
+
+test("mardi and vendredi follow a visible series and drop n1 once it is hidden", () => {
+  assert.equal(
+    weekdaySplitSeries(["n1", "n2", "n3", "n4", "n5", "rank1"]),
+    "n1"
+  )
+  assert.equal(weekdaySplitSeries(["n2", "n3", "n4", "n5", "rank1"]), "n2")
+  assert.equal(weekdaySplitSeries(["n1"]), "n1")
+  assert.equal(weekdaySplitSeries(["rank1"]), null)
+  assert.equal(weekdaySplitSeries([]), null)
 })
 
 test("y domain isolates 1er rang on 0–1 and keeps the sum on 15–auto", () => {

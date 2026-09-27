@@ -21,6 +21,11 @@ export function splitRank1Axis(mode: string, visibleKeys: readonly string[]): bo
   )
 }
 
+/** Première série encore affichée, hors 1er rang. Null si plus aucune : mardi / vendredi ne restent pas collés à une série masquée. */
+export function weekdaySplitSeries<K extends string>(visibleKeys: readonly K[]): K | null {
+  return visibleKeys.find((key) => key !== "rank1") ?? null
+}
+
 export function chartYDomain(
   mode: string,
   visibleKeys: readonly string[]

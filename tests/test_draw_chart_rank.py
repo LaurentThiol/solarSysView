@@ -29,6 +29,9 @@ def test_sum_numbers_wires_rank1_like_each_number() -> None:
 
     assert 'from "@/lib/draw-chart-rank"' in chart
     assert "appendRank1Key" in chart
+    assert "weekdaySplitSeries(visibleKeys)" in chart
+    assert "showDayLines && splitKey" in chart
+    assert 'keys.find((key) => key !== "rank1")' not in chart
     assert 'keys.includes("rank1")' in chart
     assert 'mode === "eachNumber" || mode === "sumNumbers"' in lib
     assert "sur « Somme des numéros » et « Chaque numéro »" in readme
