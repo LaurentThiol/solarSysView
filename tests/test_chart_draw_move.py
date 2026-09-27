@@ -9,6 +9,18 @@ MOVE = (ROOT / "src/lib/chart-draw/move.ts").read_text(encoding="utf-8")
 MAGNET = (ROOT / "src/lib/chart-draw/magnet.ts").read_text(encoding="utf-8")
 
 
+def test_second_click_fixes_the_free_segment() -> None:
+    hook = (ROOT / "src/components/chart-draw/use-sketch-chart.ts").read_text(encoding="utf-8")
+    place = (ROOT / "src/lib/chart-draw/place.ts").read_text(encoding="utf-8")
+    for source in (CHART, hook):
+        assert "clickCanPlace" in source
+        assert "priorPointer" in source
+        assert "figureWindowTooShort" in source
+        assert "Le segment déjà posé reste peint" in source
+    assert "export function clickCanPlace" in place
+    assert "return isFreeFigure(figure) ? 2 : MIN_SKETCH_BARS" in place
+
+
 def test_free_segment_offers_a_parallel_line() -> None:
     hook = (ROOT / "src/components/chart-draw/use-sketch-chart.ts").read_text(encoding="utf-8")
     place = (ROOT / "src/lib/chart-draw/place.ts").read_text(encoding="utf-8")
