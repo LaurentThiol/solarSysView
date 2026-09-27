@@ -13,6 +13,7 @@ import {
 import {
   DRAFT_KEY,
   channelLabel,
+  isFreeFigure,
   sketchDataKey,
   type AxisScales,
   type ChartSketch,
@@ -73,6 +74,7 @@ export function SketchPlotLayers({
   live,
   draftStart,
   draftMid,
+  draftFigure,
   showMedian,
   onScales,
 }: {
@@ -87,6 +89,7 @@ export function SketchPlotLayers({
   live: LiveCursor | null
   draftStart: ChartSketch["start"] | null
   draftMid: ChartSketch["mid"] | null | undefined
+  draftFigure: string
   showMedian: boolean
   onScales: (scales: AxisScales) => void
 }) {
@@ -188,7 +191,7 @@ export function SketchPlotLayers({
             key={sketch.id}
             dataKey={sketchDataKey(sketch.id)}
             yAxisId={yId}
-            type="monotone"
+            type={isFreeFigure(sketch.figure) ? "linear" : "monotone"}
             stroke="var(--chart-4)"
             strokeWidth={2}
             strokeDasharray="6 3"
@@ -282,7 +285,7 @@ export function SketchPlotLayers({
         <Line
           dataKey={DRAFT_KEY}
           yAxisId={targetAxisId}
-          type="monotone"
+          type={isFreeFigure(draftFigure) ? "linear" : "monotone"}
           stroke="var(--chart-4)"
           strokeWidth={2}
           strokeDasharray="2 3"
