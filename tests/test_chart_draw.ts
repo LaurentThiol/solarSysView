@@ -46,6 +46,9 @@ import {
   fitTemplateToWindow,
   remapSketch,
   sampleTemplate,
+  clickCanPlace,
+  figureMinBars,
+  figureWindowTooShort,
   windowTooShort,
 } from "../src/lib/chart-draw/place"
 import { FREE_PARALLEL_HINT, placementHint } from "../src/lib/chart-draw/placement-hint"
@@ -800,6 +803,30 @@ test("a window shorter than 8 bars is rejected", () => {
   assert.equal(windowTooShort(0, 7), false)
 })
 
+test("the second free click can lock the segment already under the cursor", () => {
+  assert.equal(clickCanPlace({ hasStart: false, snapped: false, offCurve: false }), false)
+  assert.equal(clickCanPlace({ hasStart: false, snapped: true, offCurve: false }), true)
+  assert.equal(clickCanPlace({ hasStart: true, snapped: false, offCurve: false }), true)
+  assert.equal(clickCanPlace({ hasStart: true, snapped: false, offCurve: true }), true)
+  assert.equal(figureMinBars(FREE_FIGURE), 2)
+  assert.equal(figureMinBars("ete"), 8)
+  assert.equal(figureWindowTooShort(FREE_FIGURE, 0, 1), false)
+  assert.equal(figureWindowTooShort(FREE_FIGURE, 4, 4), true)
+  assert.equal(figureWindowTooShort("ete", 0, 5), true)
+  assert.equal(figureWindowTooShort("ete", 0, 7), false)
+  const chart = readFileSync(new URL("../src/components/draw-chart.tsx", import.meta.url), "utf8")
+  const hook = readFileSync(
+    new URL("../src/components/chart-draw/use-sketch-chart.ts", import.meta.url),
+    "utf8"
+  )
+  for (const source of [chart, hook]) {
+    assert.match(source, /clickCanPlace/)
+    assert.match(source, /priorPointer/)
+    assert.match(source, /figureWindowTooShort/)
+    assert.match(source, /Le segment déjà posé reste peint/)
+  }
+})
+
 test("evolution chart wires handle pickup and rebuild", () => {
   const chart = readFileSync(new URL("../src/components/draw-chart.tsx", import.meta.url), "utf8")
   const help = readFileSync(
@@ -895,15 +922,33 @@ test("moving a free-handle rebuilds the straight segment", () => {
   assert.equal(movedStart.end.actual, 40)
   assert.equal(movedStart.points.at(-1)?.actual, 40)
 
+  const shortened = moveSketchHandle(
+    sketch,
+    "end",
+    {
+      index: 3,
+      date: dates[3],
+      seriesKey: "sumNumbers",
+      actual: 8,
+      snapped: true,
+      kind: "sample",
+    },
+    values,
+    dates
+  )
+  assert.ok(shortened)
+  assert.equal(shortened.end.index, 3)
+  assert.equal(shortened.points.at(-1)?.actual, 8)
+
   assert.equal(
     moveSketchHandle(
       sketch,
       "end",
       {
-        index: 3,
-        date: dates[3],
+        index: 1,
+        date: dates[1],
         seriesKey: "sumNumbers",
-        actual: 8,
+        actual: 6,
         snapped: true,
         kind: "sample",
       },

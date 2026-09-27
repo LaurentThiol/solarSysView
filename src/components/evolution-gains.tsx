@@ -1107,6 +1107,7 @@ export function EvolutionGains({
                     live={sketch.draw.live}
                     draftStart={sketch.draw.draft?.start ?? null}
                     draftMid={sketch.draw.draft?.mid}
+                    draftFigure={sketch.draw.figure}
                     showMedian={sketch.draw.showMedian}
                     onScales={sketch.onScales}
                   />

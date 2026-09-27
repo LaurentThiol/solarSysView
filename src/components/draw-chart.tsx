@@ -54,9 +54,12 @@ import {
   anchorsToGeometry,
   buildSketchGeometry,
   channelLabel,
+  clickCanPlace,
   cursorReleasesMagnet,
   drawingStartHint,
   extremaIndices,
+  figureMinBars,
+  figureWindowTooShort,
   invertLinear,
   isMagneted,
   liveToAnchor,
@@ -72,6 +75,7 @@ import {
   pixelDistance,
   placementHint,
   previewGeometry,
+  tooShortHint,
   readTooltipIndex,
   readWindow,
   remapSketch,
@@ -81,7 +85,6 @@ import {
   sketchWithMovedHandle,
   swingTouches,
   valueFromPixelY,
-  windowTooShort,
   type AxisScales,
   type ChartAnchor,
   type ChartSketch,
@@ -479,8 +482,8 @@ function pointerPixel(state: ChartPointerState, event?: PointerLike) {
   return null
 }
 
-function chartSvg(event: PointerLike): SVGSVGElement | null {
-  const node = event.currentTarget
+function chartSvg(event?: PointerLike | null): SVGSVGElement | null {
+  const node = event?.currentTarget
   if (node instanceof SVGSVGElement) return node
   if (node instanceof SVGElement) return node.ownerSVGElement
   if (node instanceof Element) return node.querySelector("svg")
@@ -800,9 +803,7 @@ function SeriesTooltip({
 export function DrawChart({ draws }: { draws: Draw[] }) {
   const draw = useChartDrawOptional()
   const drawRef = useRef(draw)
-  useLayoutEffect(() => {
-    drawRef.current = draw
-  })
+  drawRef.current = draw
   const scalesRef = useRef<AxisScales>({ x: null, y: null, invertY: null })
   const onScales = useCallback((scales: AxisScales) => {
     scalesRef.current = scales
@@ -1067,10 +1068,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   ])
   const draftPoints = draftGeometry?.points ?? []
   const draftBand = draftGeometry?.band
-  const paintedSketches = useMemo(() => {
-    if (!parallelOf) return displaySketches
-    return displaySketches.filter((sketch) => sketch.id !== parallelOf)
-  }, [displaySketches, parallelOf])
+  // Le segment déjà posé reste peint pendant la parallèle : le 2e clic l’a fixé.
+  const paintedSketches = displaySketches
   const previewBand = movingSketch
     ? displaySketches.find((item) => item.id === movingSketch.id)?.band
     : draftBand
@@ -1112,7 +1111,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
         liveToAnchor(draftLive)
       )
       const { left, right } = sketchSpan(start, end, mid)
-      if (windowTooShort(left, right)) return null
+      if (figureWindowTooShort(movingSketch.figure, left, right)) return null
       const values = seriesValuesOf(series, movingSketch.seriesKey as SeriesKey)
       return readWindow(values, dates, left, right, previewBand)
     }
@@ -1121,7 +1120,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       if (draftMid) indexes.push(draftMid.index)
       const left = Math.min(...indexes)
       const right = Math.max(...indexes)
-      if (windowTooShort(left, right)) return null
+      if (figureWindowTooShort(draftFigure, left, right)) return null
       const values = seriesValuesOf(series, targetKey)
       return readWindow(values, dates, left, right, draftBand)
     }
@@ -1132,6 +1131,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     draftStart,
     draftMid,
     draftLive,
+    draftFigure,
     draftBand,
     previewBand,
     series,
@@ -1553,21 +1553,24 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
         liveToAnchor(live)
       )
       const { left, right } = sketchSpan(start, end, mid)
-      shortWindow = left !== right && windowTooShort(left, right)
+      shortWindow =
+        left !== right && figureWindowTooShort(sketch.figure, left, right)
     }
+    const hintFigure = sketch?.figure ?? current.figure
     setHint(
       placementHint({
         live,
         startIndex: current.draft?.start?.index ?? null,
         midIndex: current.draft?.mid?.index ?? null,
-        rails: isRailFigure(sketch?.figure ?? current.figure),
-        free: isFreeFigure(sketch?.figure ?? current.figure),
+        rails: isRailFigure(hintFigure),
+        free: isFreeFigure(hintFigure),
         parallel:
           Boolean(current.draft?.parallelOf) ||
           Boolean(move?.handle === "end" && sketch && isFreeFigure(sketch.figure) && sketch.mid),
         moving: move?.handle ?? null,
         hoverHandle: hoveredHandle?.handle ?? null,
         shortWindow,
+        minBars: figureMinBars(hintFigure),
       })
     )
   }
@@ -1591,20 +1594,6 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       )
       return false
     }
-    if (!live.snapped && !live.offCurve) {
-      setHint(
-        placementHint({
-          live,
-          startIndex: current.draft?.start?.index ?? null,
-          midIndex: current.draft?.mid?.index ?? null,
-          rails: isRailFigure(sketch.figure),
-          free: isFreeFigure(sketch.figure),
-          parallel: move.handle === "end" && isFreeFigure(sketch.figure) && Boolean(sketch.mid),
-          moving: move.handle,
-        })
-      )
-      return false
-    }
     const values = seriesValues(sketch.seriesKey as SeriesKey)
     const nextAnchor = liveToAnchor({ ...live, seriesKey: sketch.seriesKey })
     const { start, mid, end } = anchorsAfterMove(sketch, move.handle, nextAnchor)
@@ -1615,10 +1604,10 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       nextAnchor,
       values,
       dates,
-      windowTooShort(left, right) ? null : undefined
+      figureWindowTooShort(sketch.figure, left, right) ? null : undefined
     )
     if (!next) {
-      setHint("Au moins 8 tirages pour refermer la figure.")
+      setHint(tooShortHint(sketch.figure))
       return false
     }
     current.addSketch({
@@ -1680,6 +1669,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       ignoreClickRef.current = false
       return
     }
+    const priorPointer = lastPointerRef.current
     rememberPointer(state, event)
     if (movingRef.current) {
       commitMove(state, event)
@@ -1690,7 +1680,21 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       beginMove(hit)
       return
     }
-    const live = liveFromPointer(state, event)
+    let live = liveFromPointer(state, event)
+    const hasStart = Boolean(current.draft?.start)
+    if (hasStart && priorPointer) {
+      const preview = liveFromPointer(priorPointer.state, priorPointer.event)
+      const clickAnchored = Boolean(live && (live.snapped || live.offCurve))
+      const previewLocks = preview
+        ? clickCanPlace({
+            hasStart,
+            snapped: preview.snapped,
+            offCurve: preview.offCurve,
+          })
+        : false
+      // Le clic fige le segment déjà sous le curseur, pas un index perdu.
+      if (preview && previewLocks && !clickAnchored) live = preview
+    }
     if (!live) {
       setHint(
         magnet.releases(event)
@@ -1699,7 +1703,13 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       )
       return
     }
-    if (!live.snapped && !live.offCurve) {
+    if (
+      !clickCanPlace({
+        hasStart,
+        snapped: live.snapped,
+        offCurve: live.offCurve,
+      })
+    ) {
       setHint(
         placementHint({
           live,
@@ -1708,6 +1718,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           rails: isRailFigure(current.figure),
           free: isFreeFigure(current.figure),
           parallel: Boolean(current.draft?.parallelOf),
+          minBars: figureMinBars(current.figure),
         })
       )
       return
@@ -1749,8 +1760,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
       const end = makeAnchor()
       const left = Math.min(start.index, mid.index, end.index)
       const right = Math.max(start.index, mid.index, end.index)
-      if (windowTooShort(left, right)) {
-        setHint("Au moins 8 tirages pour refermer la figure.")
+      if (figureWindowTooShort(current.figure, left, right)) {
+        setHint(tooShortHint(current.figure))
         return
       }
       const values = seriesValues(start.seriesKey as SeriesKey)
@@ -1802,8 +1813,8 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     }
     const left = Math.min(start.index, mid?.index ?? live.index, live.index)
     const right = Math.max(start.index, mid?.index ?? live.index, live.index)
-    if (windowTooShort(left, right)) {
-      setHint("Au moins 8 tirages pour refermer la figure.")
+    if (figureWindowTooShort(current.figure, left, right)) {
+      setHint(tooShortHint(current.figure))
       return
     }
     const values = seriesValues(targetKey)
@@ -2421,7 +2432,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       key={sketch.id}
                       dataKey={sketchDataKey(sketch.id)}
                       yAxisId={axisId}
-                      type="monotone"
+                      type={isFreeFigure(sketch.figure) ? "linear" : "monotone"}
                       stroke="var(--chart-4)"
                       strokeWidth={2}
                       strokeDasharray="6 3"
@@ -2515,7 +2526,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                   <Line
                     dataKey={DRAFT_KEY}
                     yAxisId={plotAxisId(targetKey, splitRank1)}
-                    type="monotone"
+                    type={isFreeFigure(draftFigure) ? "linear" : "monotone"}
                     stroke="var(--chart-4)"
                     strokeWidth={2}
                     strokeDasharray="2 3"
