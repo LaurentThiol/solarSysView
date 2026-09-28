@@ -22,7 +22,9 @@ from synchro.brain_specialists.features import FEATURE_IDS, FEATURES, series_mat
 
 QUESTIONS = ("shape", "series", "balls", "chartisme")
 SHAPE_LABELS = ("sum_high", "parity_high", "n1_low")
-SERIES_CHOICES = ("parity", "sum", "spread", "n1")
+SERIES_CHOICES = ("parity", "sum", "spread", "n1", "n2", "n3", "n4", "n5", "e1", "e2")
+GAP_SERIES = ("g1", "g2", "g3", "g4")
+STAR_TARGETS = ("e1", "e2")
 DEFAULT_CURVES = ("sum", "spread", "parity", "n1")
 SHAPE_SERIES = (
     "sum",
@@ -278,10 +280,27 @@ def build_shape(
     return packed
 
 
+def _star_pools(draws: Sequence[dict[str, Any]]) -> set[int]:
+    """Une urne manquante compte comme 12, la formule actuelle."""
+    pools: set[int] = set()
+    for row in draws:
+        raw = row.get("star_pool")
+        pools.add(int(raw) if raw is not None else 12)
+    return pools
+
+
 def build_series(draws: list[dict[str, Any]], *, series: str = "parity") -> dict[str, Any]:
-    if series not in ("parity", "sum", "spread", "n1", "n2", "n3", "n4", "n5", "g1", "g2", "g3", "g4"):
+    if series not in SERIES_CHOICES and series not in GAP_SERIES:
         raise ValueError(f"Série inconnue: {series}.")
     rows = ordered_draws(draws)
+    if series in STAR_TARGETS:
+        pools = _star_pools(rows)
+        if len(pools) > 1:
+            listed = ", ".join(str(pool) for pool in sorted(pools))
+            raise ValueError(
+                "e1 et e2 se lisent sur une seule urne d'étoiles. "
+                f"Ces tirages mélangent les urnes {listed}."
+            )
     values = _values(rows, series)
     names = list(FEATURE_IDS)
     matrix = series_matrix(values.tolist(), names)

@@ -43,7 +43,7 @@ const DEMO_DRAFT: DecisionDraft = {
   label_phrase: "parité ≥ 3",
 }
 
-const OTHER = (["n2", "n3", "n4", "n5", "g1", "g2", "g3", "g4"] as const).filter((item) =>
+const OTHER = (["n2", "n3", "n4", "n5", "e1", "e2", "g1", "g2", "g3", "g4"] as const).filter((item) =>
   (VARIABLE_NAMES as readonly string[]).includes(item)
 )
 

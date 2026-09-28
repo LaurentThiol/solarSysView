@@ -25,6 +25,8 @@ test("labels keep retard for a ball and never for a lag", () => {
   assert.equal(featureLabel("sum.step"), "somme · pas")
   assert.equal(featureLabel("sum.last"), "somme · dernière")
   assert.equal(featureLabel("n1.slope"), "n1 · pente")
+  assert.equal(featureLabel("e1.last"), "e1 · dernière")
+  assert.equal(featureLabel("e2.z20"), "e2 · z20")
   assert.equal(featureLabel("ball.delay"), "boule · retard")
   assert.equal(featureLabel("sum.last").includes("retard"), false)
   assert.equal(featureLabel("sum.step").includes("retard"), false)

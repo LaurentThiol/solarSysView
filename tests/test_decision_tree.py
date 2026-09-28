@@ -107,6 +107,48 @@ def test_feature_labels_reserve_retard_for_balls() -> None:
     assert feature_label("ball.delay") == "boule · retard"
 
 
+def _rank_draws(n: int, *, pools: list[int] | None = None) -> list[dict]:
+    rows = []
+    for index in range(n):
+        pool = 12 if pools is None else pools[index % len(pools)]
+        rows.append(
+            {
+                "draw_date": date(2016, 1, 1) + timedelta(days=index),
+                "numbers": [1 + (index % 5), 10, 20, 30, 40],
+                "stars": [1 + (index % 3), 8],
+                "star_pool": pool,
+                "weekday": "mardi" if index % 2 == 0 else "vendredi",
+            }
+        )
+    return rows
+
+
+def test_series_catalog_offers_ranks_and_stars() -> None:
+    from synchro.decision_tree.questions import build_series, catalog
+
+    questions = {item["id"]: item for item in catalog()["questions"]}
+    offered = questions["series"]["series"]
+    for name in ("n2", "n3", "n4", "n5", "e1", "e2"):
+        assert name in offered
+    assert "g1" not in offered
+
+    draws = _rank_draws(8)
+    n3 = build_series(draws, series="n3")
+    assert n3["question"] == "series"
+    assert n3["label"] == "n3"
+    assert n3["class_names"] == ["n3 basse", "n3 haute"]
+    e1 = build_series(draws, series="e1")
+    assert e1["label"] == "e1"
+    assert e1["class_names"] == ["e1 basse", "e1 haute"]
+    assert build_series(draws, series="g1")["label"] == "g1"
+
+    with pytest.raises(ValueError, match="urne"):
+        build_series(_rank_draws(8, pools=[9, 12]), series="e2")
+    assert build_series(_rank_draws(8, pools=[9, 12]), series="n5")["label"] == "n5"
+    with pytest.raises(ValueError, match="Série inconnue"):
+        build_series(draws, series="star_sum")
+
+
 def test_json_walker_and_chartisme_rows() -> None:
     from synchro.decision_tree.predict import predict_row
     from synchro.decision_tree.questions import chartisme_matrix

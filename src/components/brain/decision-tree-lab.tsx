@@ -102,7 +102,7 @@ const HELP = {
   },
   serie: {
     title: "Une série",
-    body: "L’arbre ne lit que les indicateurs de cette série, et pose la même question binaire que le spécialiste. Un clic sur une carte de Spécialistes lance cette portée.",
+    body: "L’arbre ne lit que les indicateurs de cette série, et pose la même question binaire que le spécialiste. Les pastilles vont de la parité à n5, plus e1 et e2. e1 et e2 restent sur la formule actuelle : tout l’historique mélange plusieurs urnes d’étoiles. Un clic sur une carte de Spécialistes lance cette portée.",
   },
   balls: {
     title: "Boules",
@@ -258,7 +258,15 @@ const SERIES = [
   { id: "sum", label: "somme" },
   { id: "spread", label: "étendue" },
   { id: "n1", label: "n1" },
+  { id: "n2", label: "n2" },
+  { id: "n3", label: "n3" },
+  { id: "n4", label: "n4" },
+  { id: "n5", label: "n5" },
+  { id: "e1", label: "e1" },
+  { id: "e2", label: "e2" },
 ] as const
+
+const STAR_SERIES = new Set(["e1", "e2"])
 
 const CURVES = ["sum", "spread", "parity", "n1"] as const
 
@@ -611,7 +619,9 @@ export function DecisionTreeLab() {
       : card === "chartisme"
         ? "l’objectif de la figure est-il atteint ?"
         : scope === "series"
-          ? `cette série sera-t-elle haute au tirage t ?`
+          ? series === "parity"
+            ? "la parité du tirage t sera-t-elle ≥ 3 ?"
+            : `${SERIES.find((item) => item.id === series)?.label ?? series} du tirage t sera-t-elle haute ?`
           : label === "parity_high"
             ? "le tirage t aura-t-il une parité ≥ 3 ?"
             : label === "n1_low"
@@ -650,7 +660,11 @@ export function DecisionTreeLab() {
             <select
               className="rounded-md border border-border bg-background px-2 py-1"
               value={era}
-              onChange={(event) => setEra(event.target.value as "current" | "all")}
+              onChange={(event) => {
+                const next = event.target.value as "current" | "all"
+                setEra(next)
+                if (next === "all" && STAR_SERIES.has(series)) setSeries("n1")
+              }}
             >
               <option value="current">{ERA_LABELS.current}</option>
               <option value="all">{ERA_LABELS.all}</option>
@@ -769,19 +783,25 @@ export function DecisionTreeLab() {
             ) : (
               <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Série">
                 <HelpTip {...HELP.serie} />
-                {SERIES.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={cn(
-                      "rounded-full border px-2.5 py-1 text-xs",
-                      series === item.id ? "border-primary/50 bg-primary/15" : "border-border text-muted-foreground"
-                    )}
-                    onClick={() => setSeries(item.id)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+                {SERIES.map((item) => {
+                  const closed = era === "all" && STAR_SERIES.has(item.id)
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      disabled={closed}
+                      title={closed ? "Formule actuelle seulement : une seule urne d’étoiles." : undefined}
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-xs",
+                        series === item.id ? "border-primary/50 bg-primary/15" : "border-border text-muted-foreground",
+                        closed && "cursor-not-allowed opacity-40"
+                      )}
+                      onClick={() => setSeries(item.id)}
+                    >
+                      {item.label}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>

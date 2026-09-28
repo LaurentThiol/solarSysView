@@ -40,6 +40,8 @@ const SERIES_FR: Record<string, string> = {
   g2: "g2",
   g3: "g3",
   g4: "g4",
+  e1: "e1",
+  e2: "e2",
 }
 
 const MEASURE_FR: Record<string, string> = {
