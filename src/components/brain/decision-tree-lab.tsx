@@ -60,6 +60,29 @@ const HELP = {
       { label: "Suite", text: "Spécialiste, chances vers Jeux, ou règle chartiste. Rien n’est écrit en silence." },
     ],
   },
+  bandeau: {
+    title: "Seuil de flux",
+    wide: true,
+    body: "Ce bandeau dit comment un seuil est reconnu, et quand le labo conclut qu’il n’y en a pas.",
+    items: [
+      {
+        label: "Flux",
+        text: "Chaque tirage alimente une série : somme, rangs (n1…n5, étoiles), retards de boules, ou figures. L’arbre voit l’état de ce flux juste avant le tirage t, et une étiquette binaire sur le tirage suivant : somme haute ou basse, boule sortie ou absente, objectif de figure atteint ou non.",
+      },
+      {
+        label: "Hypothèse nulle",
+        text: "L’indépendance est le nul du test. Sous ce nul, l’ordre chronologique ne porte aucune structure prédictive. L’arbre est ajusté sur l’ordre réel, noté sur le contrôle (les 100 derniers tirages, exactitude équilibrée), puis la recherche est rejouée après destruction de l’ordre. Les tirages sont mélangés et le tableau reconstruit. Pour les figures, les étiquettes sont mélangées sur la même courbe, sans nouveau balayage. 99 fois, 49 pour les boules.",
+      },
+      {
+        label: "Dépasser le nul",
+        text: "Un seuil compte s’il tient sur l’ordre réel et s’efface une fois l’ordre détruit. p est (1 + nombre de remaniements au moins aussi bons) / (1 + N). Le flux est reconnu si p ≤ 0,05. Le verdict s’écrit « Le flux porte un seuil », avec le score de contrôle, la moyenne sur l’ordre détruit, et ce p.",
+      },
+      {
+        label: "Aucun seuil",
+        text: "Quand le score réel reste dans la fourchette des remaniements (p > 0,05), le verdict est « Aucun seuil de flux sur cette question ». L’arbre peut encore dessiner des coupures : ce sont celles du même genre que sur l’ordre détruit. Ce n’est pas une conclusion d’indépendance. Le journal revoit ensuite ce p par Benjamini–Hochberg sur toutes les lectures de la même ère.",
+      },
+    ],
+  },
   archive: {
     title: "Archive",
     body: "Formule actuelle par défaut. « Tout l’historique » mélange les anciennes formules d’étoiles : elles sortent alors du tableau, parce que leur pool a changé. Le filtre Jour est le même que sur Spécialistes.",
@@ -635,8 +658,11 @@ export function DecisionTreeLab() {
         </div>
       </section>
 
-      <p className="rounded-xl border border-primary/20 bg-primary/8 px-3 py-2 text-xs leading-5 text-muted-foreground">
-        Les tirages sont dans des flux (somme, rangs, retards, figures). L’indépendance n’est que l’hypothèse nulle : un seuil qui tient sur l’ordre réel et disparaît quand on détruit l’ordre la dépasse. Si rien ne dépasse ce nul, aucun seuil de flux n’est visible sur cette question.
+      <p className="flex items-start gap-2 rounded-xl border border-primary/20 bg-primary/8 px-3 py-2 text-xs leading-5 text-muted-foreground">
+        <span className="min-w-0 flex-1">
+          Les tirages sont dans des flux (somme, rangs, retards, figures). L’indépendance n’est que l’hypothèse nulle : un seuil qui tient sur l’ordre réel et disparaît quand on détruit l’ordre la dépasse. Si rien ne dépasse ce nul, aucun seuil de flux n’est visible sur cette question.
+        </span>
+        <HelpTip {...HELP.bandeau} className="mt-0.5" />
       </p>
 
       {apiDown ? (
