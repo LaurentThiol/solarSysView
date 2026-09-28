@@ -245,6 +245,15 @@ export function RulesPanel({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRules(loadRules())
     setFirings(loadFirings())
+    try {
+      const raw = sessionStorage.getItem("synchro.chartisme.rule-draft")
+      if (raw) {
+        setDraft(normalizeRule(JSON.parse(raw) as Record<string, unknown>))
+        sessionStorage.removeItem("synchro.chartisme.rule-draft")
+      }
+    } catch {
+      /* brouillon illisible */
+    }
   }, [])
 
   function persist(next: ChartismeRule[]) {

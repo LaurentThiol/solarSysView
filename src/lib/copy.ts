@@ -222,6 +222,41 @@ export const GLOSSARY: GlossaryEntry[] = [
     group: "assistants",
     text: "Dans Réf : rotation de Carrington (~27,3 j) et cycle de Schwabe (~11 ans, minima SILSO). Le flux X GOES et les éruptions passent par SunPy (Fido), en catalogue, sans télécharger le TimeSeries.",
   },
+  {
+    term: "Gini",
+    group: "assistants",
+    text: "Critère de coupure d’un arbre decisionTree. Il mesure le mélange des deux classes de part et d’autre d’un seuil. La recherche le compare à l’entropie sur l’apprentissage seul.",
+  },
+  {
+    term: "Entropie",
+    group: "assistants",
+    text: "Autre critère de coupure, plus sensible aux classes rares. decisionTree le choisit, ou Gini, sans regarder le contrôle.",
+  },
+  {
+    term: "Seuil",
+    group: "assistants",
+    text: "Valeur où le flux se coupe, juste avant le tirage t. Le dessin et la liste écrivent le même nombre, à deux décimales (162.50).",
+  },
+  {
+    term: "Feuille",
+    group: "assistants",
+    text: "Bout d’un arbre : une classe, un effectif d’apprentissage et un effectif de contrôle. Le numéro est celui du dessin.",
+  },
+  {
+    term: "Remaniement",
+    group: "assistants",
+    text: "Nul de decisionTree : on détruit l’ordre des tirages, puis on rejoue caractéristiques, étiquettes, recherche et score. Cela annule le retour à la moyenne des pas et des lags.",
+  },
+  {
+    term: "p",
+    group: "assistants",
+    text: "Pour une lecture decisionTree : (1 + remaniements au moins aussi bons) / (1 + N). Le flux est reconnu si p ≤ 0,05. Le journal affiche aussi le p corrigé sur l’ère.",
+  },
+  {
+    term: "Contrôle",
+    group: "assistants",
+    text: "Derniers tirages tenus hors de la recherche (100, ou 30 % si la série est courte). Ils notent le verdict et chaque feuille. Ils ne choisissent pas la profondeur.",
+  },
 ]
 
 export function foldGlossaryQuery(value: string) {

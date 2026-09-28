@@ -63,6 +63,7 @@ export type SpecialistRecord = {
   reason?: string | null
   last_forecast?: SpecialistForecast | null
   forecast?: SpecialistForecast | null
+  origin?: string | null
   disclaimer?: string
   from_date?: string | null
   to_date?: string | null
@@ -81,6 +82,7 @@ export type SpecialistTrainInput = {
   era?: "current" | "all"
   hidden?: number
   epochs?: number
+  origin?: string | null
 }
 
 const DEFAULT_FEATURES: SpecialistFeature[] = [

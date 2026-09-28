@@ -57,6 +57,9 @@ export function deepLinkFor(input: {
   if (input.entry.lab === "morpho") {
     return { href: "/morpho", lab: "morpho" }
   }
+  if (input.entry.kind === "tree") {
+    return { href: `/brain/decision-tree?lecture=${input.entry.handle}`, lab: "brain" }
+  }
   if (input.entry.lab === "specialist") {
     return { href: "/brain/specialistes", lab: "brain" }
   }

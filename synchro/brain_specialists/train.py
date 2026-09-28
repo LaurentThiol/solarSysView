@@ -254,6 +254,7 @@ def train_specialist(
     force: bool = False,
     root: Path | None = None,
     abstain: float = DEFAULT_ABSTAIN,
+    origin: str | None = None,
 ) -> dict[str, Any]:
     label = (name or "").strip()
     if not label:
@@ -367,6 +368,7 @@ def train_specialist(
             seed=seed,
             abstain=abstain,
             last_forecast=None,
+            origin=(origin or "").strip() or None,
         )
         return payload
 
@@ -403,6 +405,7 @@ def train_specialist(
         "mean": mean_all.tolist(),
         "std": std_all.tolist(),
         "disclaimer": DISCLAIMER,
+        "origin": (origin or "").strip() or None,
     }
     report = {
         "slug": slug,
@@ -456,6 +459,7 @@ def train_specialist(
         abstain=abstain,
         last_forecast=last_forecast,
         forced=bool(force and skill <= 0),
+        origin=(origin or "").strip() or None,
     )
 
 
@@ -492,6 +496,7 @@ def _public_record(**kwargs: Any) -> dict[str, Any]:
         "abstain": kwargs["abstain"],
         "last_forecast": kwargs.get("last_forecast"),
         "disclaimer": DISCLAIMER,
+        "origin": kwargs.get("origin"),
     }
 
 
@@ -654,6 +659,7 @@ def list_specialists(*, root: Path | None = None) -> list[dict[str, Any]]:
                 "skill_100": ((report.get("windows") or {}).get("100") or {}).get("skill"),
                 "verdict": report.get("verdict"),
                 "last_forecast": report.get("last_forecast"),
+                "origin": config.get("origin"),
                 "from_date": report.get("from_date"),
                 "to_date": report.get("to_date"),
                 "disclaimer": DISCLAIMER,

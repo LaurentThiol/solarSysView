@@ -357,6 +357,19 @@ const TABS: AddressEntry[] = [
     "demo=1|specialistes"
   ),
   tabEntry(
+    "/brain/decision-tree",
+    "decisionTree",
+    "Seuils du flux. L’indépendance n’est que le nul, rejoué sur l’ordre détruit.",
+    "assistants"
+  ),
+  tabEntry(
+    "/brain/decision-tree?demo=1",
+    "Démo decisionTree",
+    "Visite guidée : question, lecture, verdict, arbre, suite.",
+    "assistants",
+    "demo=1"
+  ),
+  tabEntry(
     "/analyse?variable=sum&preset=last_100&x=20&jour=mardi",
     "Analyse · recette fenêtre",
     "Ouvre Analyse sur la somme des numéros, 100 derniers mardis, période X = 20.",
@@ -465,6 +478,12 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/brain/specialists/{slug}", "GET", "Un spécialiste", "Fiche, scores 20/50/100, prévision t+1.", "assistants"),
   apiEntry("/api/brain/specialists/{slug}/infer", "POST", "Spécialiste · inférer", "Calcule la prévision de série nommée.", "assistants", "era, weekday"),
   apiEntry("/api/brain/specialists/{slug}", "DELETE", "Spécialiste · supprimer", "Retire un réseau enregistré.", "assistants"),
+  apiEntry("/api/brain/decision-tree/status", "GET", "decisionTree · statut", "scikit-learn, dtreeviz et dot.", "assistants"),
+  apiEntry("/api/brain/decision-tree", "GET · POST", "decisionTree", "Journal des lectures, ou lance une lecture (renvoie une tâche).", "assistants", "question, era, weekday"),
+  apiEntry("/api/brain/decision-tree/jobs/{id}", "GET · DELETE", "decisionTree · tâche", "Étape, remaniements k/N, ou annulation.", "assistants"),
+  apiEntry("/api/brain/decision-tree/{slug}", "GET", "decisionTree · lecture", "Verdict, règles, dessin.", "assistants"),
+  apiEntry("/api/brain/decision-tree/{slug}/predict", "POST", "decisionTree · cas", "Classe le dernier état du flux.", "assistants"),
+  apiEntry("/api/brain/decision-tree/{slug}/draft", "POST", "decisionTree · brouillon", "Brouillon de spécialiste ou règle chartiste, non enregistré.", "assistants"),
   apiEntry("/api/ref/catalog", "GET", "Réf · catalogue", "Cycles physiques candidats, hors lunaire et solaire déjà calculés.", "assistants"),
   apiEntry("/api/ref/phases", "GET", "Réf · phases", "Cycles à phase locale et séries mesurées (sans horloge inventée).", "assistants"),
   apiEntry(

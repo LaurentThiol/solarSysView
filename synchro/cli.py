@@ -65,6 +65,25 @@ def main(argv: list[str] | None = None) -> int:
     specialist.add_argument("--epochs", type=int, default=80)
     specialist.add_argument("--hidden", type=int, default=16)
 
+    tree = sub.add_parser(
+        "decision-tree",
+        help="decisionTree : seuils du flux, preuve par remaniement, dessin",
+    )
+    tree.add_argument("action", choices=("read", "list", "show", "predict"))
+    tree.add_argument(
+        "--question",
+        default="shape",
+        choices=("shape", "series", "balls", "chartisme"),
+    )
+    tree.add_argument("--label", default=None)
+    tree.add_argument("--series", default=None)
+    tree.add_argument("--era", default="current", choices=("current", "all"))
+    tree.add_argument("--depth", type=int, default=4)
+    tree.add_argument("--criterion", default=None, choices=("gini", "entropy"))
+    tree.add_argument("--permutations", type=int, default=None)
+    tree.add_argument("--slug", default=None)
+    tree.add_argument("--seed", type=int, default=0)
+
     args = parser.parse_args(argv)
 
     if args.command == "init-db":
@@ -111,6 +130,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "specialist":
         return run_specialist(args)
+
+    if args.command == "decision-tree":
+        return run_decision_tree(args)
 
     if args.command == "serve":
         settings = get_settings()
@@ -330,6 +352,95 @@ def run_specialist(args: argparse.Namespace) -> int:
     if record.get("reason"):
         print(f"  {record['reason']}")
     return 0 if record.get("saved") or record.get("reason") else 1
+
+
+def run_decision_tree(args: argparse.Namespace) -> int:
+    try:
+        from synchro.decision_tree import list_readings, load_reading, predict_latest, read_flux
+    except ImportError:
+        print(
+            "decisionTree : scikit-learn absent. Relance ./launch (installation automatique) "
+            "ou ./launch install-decision-tree.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.action == "list":
+        items = list_readings()
+        if not items:
+            print("Aucune lecture dans .brain/decision-tree/")
+            return 0
+        for item in items:
+            mark = "flux" if item.get("beats_independence") else "aucun"
+            print(
+                f"{item.get('slug')}  {item.get('question')}  {mark}  "
+                f"p={item.get('p')}  p*={item.get('p_adjusted')}"
+            )
+        return 0
+
+    if args.action == "show":
+        if not args.slug:
+            print("--slug obligatoire pour show", file=sys.stderr)
+            return 1
+        try:
+            report = load_reading(args.slug)
+        except FileNotFoundError:
+            print("Lecture introuvable", file=sys.stderr)
+            return 1
+        print(report.get("verdict_text") or "")
+        for rule in report.get("rules") or []:
+            path = " ET ".join(step.get("text", "") for step in rule.get("path") or [])
+            print(
+                f"  feuille {rule.get('node')}  {path}  → {rule.get('class_name')}  "
+                f"apprentissage {rule.get('train_rate')} n={rule.get('train_n')}  "
+                f"contrôle {rule.get('holdout_rate')} n={rule.get('holdout_n')}"
+            )
+        return 0
+
+    if args.action == "predict":
+        if not args.slug:
+            print("--slug obligatoire pour predict", file=sys.stderr)
+            return 1
+        try:
+            report = load_reading(args.slug, with_svg=False)
+        except FileNotFoundError:
+            print("Lecture introuvable", file=sys.stderr)
+            return 1
+        pred = predict_latest(report)
+        print(report.get("verdict_text") or "")
+        print(f"feuille {pred.get('leaf')} → {pred.get('class_name')}  {pred.get('proba')}")
+        for step in pred.get("path") or []:
+            print(f"  {step.get('text')}")
+        return 0
+
+    db.init_db()
+    draws = [db.serialize_draw(row) for row in db.all_draws(era=args.era)]
+    if not draws:
+        print("Aucun tirage en base.", file=sys.stderr)
+        return 1
+    try:
+        report = read_flux(
+            draws,
+            args.question,
+            label=args.label,
+            series=args.series,
+            include_stars=args.era != "all",
+            max_depth=args.depth,
+            criterion=args.criterion,
+            permutations=args.permutations,
+            seed=args.seed,
+            era=args.era,
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(report.get("verdict_text") or "")
+    print(
+        f"slug {report.get('slug')}  critère {report.get('criterion')}  "
+        f"profondeur {report.get('max_depth')}  "
+        f"apprentissage {report.get('train_n')}  contrôle {report.get('holdout_n')}"
+    )
+    return 0
 
 
 if __name__ == "__main__":

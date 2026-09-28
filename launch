@@ -54,11 +54,12 @@ Usage:
   ./launch logs            Dernières lignes des journaux (.run/)
   ./launch logs -f         Suit les journaux (autre terminal)
   ./launch update          Contrôle GitHub et tire origin (ff-only), puis réinstalle si besoin
-  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM / chartisme / harmo / Ollama
+  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM / chartisme / harmo / decisionTree / Ollama
   ./launch install         Installe uniquement les dépendances
   ./launch install-vlm     Installe Moondream via torch (optionnel si ollama pull moondream)
   ./launch install-chartisme  Installe les réseaux du chartisme (torch + torch-geometric)
   ./launch install-harmo      Installe les extras Harmo (PyWavelets, ssqueezepy, librosa)
+  ./launch install-decision-tree  Répare decisionTree (scikit-learn, dtreeviz, dot). Le démarrage l'installe déjà.
   ./launch chartisme-train    Entraîne les réseaux du chartisme (options passées au CLI)
   ./launch brain-specialist-train  Entraîne un spécialiste Brain (options passées au CLI)
   ./launch shortcut        Installe un raccourci bureau / menu applications
@@ -651,6 +652,76 @@ else:
 ' "$body" 2>/dev/null || true
 }
 
+ensure_graphviz_dot() {
+  if command -v dot >/dev/null 2>&1; then
+    ok "decisionTree : dot présent."
+    return 0
+  fi
+  info "decisionTree : installation de Graphviz (dot)…"
+  if command -v apt-get >/dev/null 2>&1; then
+    if [[ "$(id -u)" -eq 0 ]]; then
+      apt-get update -qq && apt-get install -y graphviz || true
+    elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+      sudo -n apt-get update -qq && sudo -n apt-get install -y graphviz || true
+    fi
+  elif command -v brew >/dev/null 2>&1; then
+    brew install graphviz || true
+  fi
+  if command -v dot >/dev/null 2>&1; then
+    ok "decisionTree : dot installé."
+  else
+    warn "decisionTree : dot absent — l'arbre s'affichera en texte. apt install graphviz ou brew install graphviz."
+  fi
+}
+
+ensure_decision_tree() {
+  local venv py req stamp hash need=0
+  venv="$ROOT/.venv"
+  py="$venv/bin/python"
+  req="$ROOT/requirements-decision-tree.txt"
+  [[ -f "$req" ]] || return 0
+  [[ -x "$py" ]] || return 0
+  stamp="$venv/.synchro-decision-tree.cksum"
+  hash="$(file_hash "$req")"
+  if [[ "$FORCE_INSTALL" -eq 1 || ! -f "$stamp" || "$(cat "$stamp" 2>/dev/null)" != "$hash" ]]; then
+    need=1
+  fi
+  if ! "$py" -c 'import sklearn, dtreeviz' >/dev/null 2>&1; then
+    need=1
+  fi
+  if [[ "$need" -eq 1 ]]; then
+    info "Installation decisionTree (scikit-learn, dtreeviz)…"
+    if "$py" -m pip install -r "$req"; then
+      printf '%s\n' "$hash" >"$stamp"
+      ok "decisionTree : paquets Python prêts."
+    else
+      warn "decisionTree : pip a échoué — ./launch install-decision-tree. Le reste de Synchro démarre."
+    fi
+  else
+    ok "decisionTree : paquets Python déjà installés."
+  fi
+  ensure_graphviz_dot
+}
+
+decision_tree_doctor() {
+  local py="$ROOT/.venv/bin/python"
+  if [[ ! -x "$py" ]]; then
+    printf '%sdecisionTree : pas de venv — ./launch install%s\n' "$C_DIM" "$C_RESET"
+    return 0
+  fi
+  if "$py" -c 'import sklearn, dtreeviz, graphviz' >/dev/null 2>&1; then
+    ok "decisionTree : scikit-learn + dtreeviz"
+  else
+    printf '%sdecisionTree : paquets Python absents — seront installés au prochain ./launch%s\n' \
+      "$C_DIM" "$C_RESET"
+  fi
+  if command -v dot >/dev/null 2>&1; then
+    ok "decisionTree : dot (Graphviz)"
+  else
+    warn "decisionTree : dot absent — l'arbre s'affiche en texte (./launch installe Graphviz s'il peut)"
+  fi
+}
+
 ensure_install() {
   local py venv req_hash stamp npm_hash npm_stamp lockfile
   py="$(require_python)"
@@ -680,6 +751,8 @@ ensure_install() {
   else
     ok "API déjà installée (requirements inchangés)."
   fi
+
+  ensure_decision_tree
 
   lockfile="$ROOT/package-lock.json"
   npm_stamp="$ROOT/node_modules/.synchro-lock.cksum"
@@ -1021,6 +1094,14 @@ cmd_install_chartisme() {
   fi
   ok "Réseaux prêts. Entraînement : ./launch chartisme-train (quelques minutes sur processeur)."
   info "L'onglet Chartisme marche sans : détecteurs géométriques et ressemblance DTW n'ont besoin de rien."
+}
+
+cmd_install_decision_tree() {
+  local py
+  py="$(require_python)"
+  ensure_venv "$py" "$ROOT/.venv"
+  FORCE_INSTALL=1
+  ensure_decision_tree
 }
 
 cmd_install_harmo() {
@@ -1500,6 +1581,7 @@ cmd_doctor() {
   vlm_doctor
   chartisme_doctor
   harmo_doctor
+  decision_tree_doctor
   ollama_doctor
   if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     ok "Git : $(git -C "$ROOT" rev-parse --short HEAD) ($(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?'))"
@@ -1716,7 +1798,7 @@ CMD="start"
 PASSTHROUGH=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    start|stop|status|update|shortcut|help|doctor|install|install-vlm|install-chartisme|install-harmo|restart|-h|--help)
+    start|stop|status|update|shortcut|help|doctor|install|install-vlm|install-chartisme|install-harmo|install-decision-tree|restart|-h|--help)
       CMD="$1"
       shift
       ;;
@@ -1753,6 +1835,7 @@ case "$CMD" in
   install-vlm) cmd_install_vlm ;;
   install-chartisme) cmd_install_chartisme ;;
   install-harmo) cmd_install_harmo ;;
+  install-decision-tree) cmd_install_decision_tree ;;
   chartisme-train) cmd_chartisme_train "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" ;;
   brain-specialist-train) cmd_brain_specialist_train "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" ;;
   shortcut) cmd_shortcut ;;

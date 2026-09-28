@@ -1,4 +1,4 @@
-.PHONY: help install install-vlm install-chartisme install-harmo start stop restart status logs update doctor shortcut test \
+.PHONY: help install install-vlm install-chartisme install-harmo install-decision-tree start stop restart status logs update doctor shortcut test \
 	sync ensure serve export chartisme-export chartisme-scan chartisme-train chartisme-report
 
 help:
@@ -17,6 +17,10 @@ install-chartisme:
 # Extras Harmo — optionnels : l'onglet marche avec numpy/scipy seuls
 install-harmo:
 	./launch install-harmo
+
+# decisionTree — scikit-learn, dtreeviz, dot. ./launch l'installe déjà tout seul.
+install-decision-tree:
+	./launch install-decision-tree
 
 # Un seul terminal : install si besoin, API + UI, vérifications /api/alive, Ctrl+C = tout arrêter
 start:

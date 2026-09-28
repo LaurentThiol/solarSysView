@@ -27,6 +27,22 @@ export const DEMO_SPECIALIST_STEPS = [
     body: "Un petit réseau par question : parité, somme, étendue… Il prévoit t+1 de cette série, avec σ et un score vs hasard. Ce n’est jamais une grille 5+2.",
   },
   {
+    id: "flux",
+    label: "Flux",
+    hint: "Quatre cartes, puis une confirmation",
+    target: "spec-flux-cards",
+    title: "Carte Parité",
+    body: "Parité, Somme, Étendue et n1 lancent une lecture du flux sur cette seule série. La démo commence par la parité. L’atelier manuel reste replié.",
+  },
+  {
+    id: "confirm",
+    label: "Confirmation",
+    hint: "Nom, indicateurs, consignes",
+    target: "spec-flux-confirm",
+    title: "Confirmation",
+    body: "La carte montre le verdict, les indicateurs allumés et les consignes déjà écrites. Seul le nom se corrige avant d’entraîner.",
+  },
+  {
     id: "name",
     label: "Nom",
     hint: "Devient @specialist.paire-impair",

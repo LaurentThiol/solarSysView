@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import { BrainCircuit, FlaskConical, Loader2 } from "lucide-react"
 
 import { DemoTourBar, SpecialistDemoPopup } from "@/components/brain/brain-demo"
+import { SpecialistFluxCards } from "@/components/brain/specialist-flux"
 import { SpecialistCard, SpecialistGlyph } from "@/components/brain/specialist-card"
 import { HelpTip, HelpWrap, LabelHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
@@ -15,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { VARIABLE_LABELS, VARIABLE_NAMES, type VariableName } from "@/lib/analysis"
 import type { CatalogEntry } from "@/lib/brain/catalog"
 import type { WeekdayScope } from "@/lib/weekday-scope"
+import type { DecisionDraft } from "@/lib/brain/decision-tree"
 import {
   DEMO_SPECIALIST,
   DEMO_SPECIALIST_NOTE,
@@ -132,10 +134,7 @@ export function BrainSpecialists({
   const [inferring, setInferring] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [last, setLast] = useState<SpecialistRecord | null>(null)
-  const [ready, setReady] = useState(() => specialistIndex().length > 0)
-  const [atelierForced, setAtelierForced] = useState<boolean | null>(() =>
-    specialistIndex().length > 0 ? false : null
-  )
+  const [atelierForced, setAtelierForced] = useState(false)
   const [demoStep, setDemoStep] = useState<SpecialistDemoStepId | null>(null)
   const [demoRunning, setDemoRunning] = useState(false)
   const [demoDone, setDemoDone] = useState(false)
@@ -148,7 +147,9 @@ export function BrainSpecialists({
   const pathname = usePathname()
   const dedicated = pathname.includes("specialistes")
 
-  const atelierOpen = demoRunning || (atelierForced ?? (ready && items.length === 0))
+  const lateDemo =
+    demoRunning && demoStep != null && demoStep !== "intro" && demoStep !== "flux" && demoStep !== "confirm"
+  const atelierOpen = lateDemo || atelierForced
   const beating = beatsChanceCount(items)
   const targetOptions = useMemo(() => {
     const seen = new Set<string>()
@@ -181,17 +182,13 @@ export function BrainSpecialists({
   onIndexRef.current = onIndex
 
   const refresh = useCallback(async () => {
-    try {
-      const listed = await listSpecialists()
-      setItems(listed.items)
-      onIndexRef.current?.(listed.items)
-      if (listed.error && !listed.items.length) setError(listed.error)
-      const nextFeatures = await listSpecialistFeatures()
-      setFeatures(nextFeatures)
-      return listed.items
-    } finally {
-      setReady(true)
-    }
+    const listed = await listSpecialists()
+    setItems(listed.items)
+    onIndexRef.current?.(listed.items)
+    if (listed.error && !listed.items.length) setError(listed.error)
+    const nextFeatures = await listSpecialistFeatures()
+    setFeatures(nextFeatures)
+    return listed.items
   }, [])
 
   useEffect(() => {
@@ -282,7 +279,7 @@ export function BrainSpecialists({
     setDemoDone(false)
     setDemoWaiting(false)
     setError(null)
-    setAtelierForced(true)
+    setAtelierForced(false)
 
     const begin = (step: SpecialistDemoStepId) => {
       setDemoStep(step)
@@ -307,7 +304,14 @@ export function BrainSpecialists({
       begin("intro")
       if (!(await ask("intro"))) return
 
+      begin("flux")
+      if (!(await ask("flux"))) return
+
+      begin("confirm")
+      if (!(await ask("confirm"))) return
+
       begin("name")
+      setAtelierForced(true)
       setName(DEMO_SPECIALIST.name)
       if (!(await ask("name"))) return
 
@@ -443,7 +447,22 @@ export function BrainSpecialists({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <DemoTourBar
+          <SpecialistFluxCards
+            era={era}
+            weekday={weekday}
+            demoStep={demoStep}
+            onOpenAtelier={(draft: DecisionDraft) => {
+              setName(draft.name)
+              setTarget((draft.target as VariableName) || "parity")
+              setTask("binary")
+              setHorizon("value")
+              setPicked(draft.indicators.length ? draft.indicators : [...DEFAULT_INDICATORS])
+              setInstructions(draft.instructions)
+              setAtelierForced(true)
+            }}
+          />
+
+          <DemoTourBar
           title="Démo Spécialistes"
           help={{
             title: "Démo Spécialistes",

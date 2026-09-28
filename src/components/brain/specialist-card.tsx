@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Loader2, Pin, RefreshCw, Trash2 } from "lucide-react"
 
 import { HelpTip } from "@/components/help"
@@ -241,6 +242,14 @@ export function SpecialistCard({
             ) : null}
           </div>
           <p className="truncate font-mono text-[11px] text-primary">{handle}</p>
+          {record.origin ? (
+            <Link
+              className="text-[11px] text-primary underline-offset-2 hover:underline"
+              href={`/brain/decision-tree?lecture=${encodeURIComponent(record.origin)}`}
+            >
+              issu de decisionTree · voir l’arbre
+            </Link>
+          ) : null}
           <Badge variant="outline" className="mt-1">
             {targetLabel(record.target)}
           </Badge>

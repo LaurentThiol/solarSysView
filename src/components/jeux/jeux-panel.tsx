@@ -67,6 +67,8 @@ import {
   listGrids,
   listPool,
   parseStoredSpec,
+  readTreeChanceHandoff,
+  clearTreeChanceHandoff,
   poolSlotRestricted,
   samplePool,
   storedToPoolSpecs,
@@ -393,10 +395,12 @@ export function JeuxPanel() {
   const [sampleOn, setSampleOn] = useState(false)
   const [proposals, setProposals] = useState<CombinationGrid[]>([])
   const [consignNote, setConsignNote] = useState<string | null>(null)
+  const [treeHandoff, setTreeHandoff] = useState<ReturnType<typeof readTreeChanceHandoff>>(null)
 
   useEffect(() => {
     const id = window.setTimeout(() => {
       setSpec(readStored())
+      setTreeHandoff(readTreeChanceHandoff())
       setReady(true)
     }, 0)
     return () => window.clearTimeout(id)
@@ -642,6 +646,36 @@ export function JeuxPanel() {
             Pronostic
           </Link>
           . Le compteur les applique ; les curseurs d’ici ne les affichent pas.
+        </p>
+      ) : null}
+      {treeHandoff ? (
+        <p className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/8 px-3 py-2 text-xs leading-5">
+          <span>
+            Chances proposées par decisionTree
+            {treeHandoff.phrase ? ` · ${treeHandoff.phrase}` : ""}. Rien n’est appliqué tant que vous ne le demandez pas.
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              setSpec((prev) => ({ ...prev, numberChance: treeHandoff.numberChance }))
+              clearTreeChanceHandoff()
+              setTreeHandoff(null)
+            }}
+          >
+            Appliquer les chances
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              clearTreeChanceHandoff()
+              setTreeHandoff(null)
+            }}
+          >
+            Ignorer
+          </Button>
         </p>
       ) : null}
       <WeekdayScopeControl value={weekday} onChange={setWeekday} />

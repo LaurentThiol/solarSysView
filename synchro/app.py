@@ -325,6 +325,19 @@ class BrainSpecialistIn(BaseModel):
     force: bool = False
     era: str = "current"
     abstain: float = Field(default=0.45, ge=0.0, le=1.0)
+    origin: str | None = None
+
+
+class DecisionTreeIn(BaseModel):
+    question: str = "shape"
+    label: str | None = None
+    series: str | None = None
+    era: str = "current"
+    curves: list[str] | None = None
+    max_depth: int = Field(default=4, ge=2, le=4)
+    criterion: str | None = None
+    permutations: int | None = Field(default=None, ge=0, le=199)
+    seed: int = 0
 
 
 def _json(value: Any) -> Any:
@@ -1701,6 +1714,7 @@ def create_app() -> FastAPI:
                 seed=payload.seed,
                 force=payload.force,
                 abstain=payload.abstain,
+                origin=payload.origin,
             )
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -1764,6 +1778,193 @@ def create_app() -> FastAPI:
         if not deleted:
             raise HTTPException(404, "Spécialiste introuvable")
         return {"ok": True, "slug": slug}
+
+    def _decision_draws(era: str) -> tuple[list[dict[str, Any]], str, str | None]:
+        draws, source = _specialist_draws(era)
+        from synchro.weekday import request_weekday
+
+        return draws, source, request_weekday()
+
+    def _decision_tree_unavailable(exc: ImportError) -> HTTPException:
+        return HTTPException(
+            503,
+            "scikit-learn absent. Relance ./launch (installation automatique) "
+            "ou ./launch install-decision-tree.",
+        )
+
+    @app.get("/api/brain/decision-tree/status")
+    def decision_tree_status() -> dict[str, Any]:
+        import shutil
+
+        sklearn_ok = True
+        dtreeviz_ok = True
+        try:
+            import sklearn  # noqa: F401
+        except ImportError:
+            sklearn_ok = False
+        try:
+            import dtreeviz  # noqa: F401
+        except ImportError:
+            dtreeviz_ok = False
+        return {
+            "ok": True,
+            "sklearn": sklearn_ok,
+            "dtreeviz": dtreeviz_ok,
+            "dot": shutil.which("dot") is not None,
+        }
+
+    @app.get("/api/brain/decision-tree/catalog")
+    def decision_tree_catalog() -> dict[str, Any]:
+        from synchro.decision_tree.questions import catalog
+
+        return {"ok": True, **catalog()}
+
+    @app.get("/api/brain/decision-tree")
+    def decision_tree_list() -> dict[str, Any]:
+        try:
+            from synchro.decision_tree import list_readings
+        except ImportError as exc:
+            raise _decision_tree_unavailable(exc) from exc
+
+        return {"ok": True, "items": list_readings()}
+
+    @app.post("/api/brain/decision-tree")
+    def decision_tree_start(payload: DecisionTreeIn) -> dict[str, Any]:
+        from synchro.decision_tree import start_job
+        from synchro.decision_tree.jobs import BusyReading
+
+        if payload.question not in {"shape", "series", "balls", "chartisme"}:
+            raise HTTPException(400, "Question inconnue.")
+        draws, source, weekday = _decision_draws(payload.era)
+        try:
+            job = start_job(
+                draws,
+                question=payload.question,
+                label=payload.label,
+                series=payload.series,
+                include_stars=payload.era != "all",
+                curves=payload.curves,
+                max_depth=payload.max_depth,
+                criterion=payload.criterion,
+                permutations=payload.permutations,
+                seed=payload.seed,
+                era=payload.era if payload.era in {"current", "all"} else "current",
+                weekday=weekday,
+            )
+        except ImportError as exc:
+            raise _decision_tree_unavailable(exc) from exc
+        except BusyReading as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        job["source"] = source
+        return _json(job)
+
+    @app.get("/api/brain/decision-tree/jobs/{job_id}")
+    def decision_tree_job(job_id: str) -> dict[str, Any]:
+        from synchro.decision_tree import job_status
+
+        job = job_status(job_id)
+        if job is None:
+            raise HTTPException(404, "Lecture introuvable")
+        return _json(job)
+
+    @app.delete("/api/brain/decision-tree/jobs/{job_id}")
+    def decision_tree_cancel(job_id: str) -> dict[str, Any]:
+        from synchro.decision_tree import cancel_job, job_status
+
+        if job_status(job_id) is None:
+            raise HTTPException(404, "Lecture introuvable")
+        cancel_job(job_id)
+        return {"ok": True, "id": job_id, "status": "cancelled"}
+
+    def _decision_tree_picture(slug: str, name: str) -> dict[str, Any]:
+        try:
+            from synchro.decision_tree import load_reading
+        except ImportError as exc:
+            raise _decision_tree_unavailable(exc) from exc
+        try:
+            report = load_reading(slug)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "Lecture introuvable") from exc
+        return {
+            "ok": True,
+            "slug": slug,
+            "engine": report.get("drawing"),
+            "svg": report.get(name),
+            "text": report.get("tree_text"),
+        }
+
+    @app.get("/api/brain/decision-tree/{slug}/tree.svg")
+    def decision_tree_tree_svg(slug: str) -> dict[str, Any]:
+        return _json(_decision_tree_picture(slug, "tree_svg"))
+
+    @app.get("/api/brain/decision-tree/{slug}/case.svg")
+    def decision_tree_case_svg(slug: str) -> dict[str, Any]:
+        return _json(_decision_tree_picture(slug, "case_svg"))
+
+    @app.get("/api/brain/decision-tree/{slug}")
+    def decision_tree_get(slug: str) -> dict[str, Any]:
+        from synchro.brain_specialists import list_specialists
+
+        try:
+            from synchro.decision_tree import load_reading
+        except ImportError as exc:
+            raise _decision_tree_unavailable(exc) from exc
+        try:
+            report = load_reading(slug)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "Lecture introuvable") from exc
+        try:
+            produced = [
+                item for item in list_specialists() if item.get("origin") == report.get("slug")
+            ]
+        except Exception:
+            produced = []
+        report["specialists"] = [
+            {"slug": item["slug"], "name": item["name"], "handle": item["handle"]}
+            for item in produced
+        ]
+        return _json(report)
+
+    @app.post("/api/brain/decision-tree/{slug}/predict")
+    def decision_tree_predict(slug: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        try:
+            from synchro.decision_tree import load_reading, predict_latest
+        except ImportError as exc:
+            raise _decision_tree_unavailable(exc) from exc
+
+        try:
+            report = load_reading(slug, with_svg=False)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "Lecture introuvable") from exc
+        row = None
+        if isinstance(payload, dict) and isinstance(payload.get("x"), list):
+            row = payload["x"]
+        try:
+            return _json(predict_latest(report, row))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.post("/api/brain/decision-tree/{slug}/draft")
+    def decision_tree_draft(slug: str) -> dict[str, Any]:
+        try:
+            from synchro.decision_tree import load_reading
+        except ImportError as exc:
+            raise _decision_tree_unavailable(exc) from exc
+
+        try:
+            report = load_reading(slug, with_svg=False)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "Lecture introuvable") from exc
+        return _json(
+            {
+                "ok": True,
+                "drafts": report.get("drafts") or [],
+                "chartisme_rules": report.get("chartisme_rules") or [],
+                "ball_scores": report.get("ball_scores") or [],
+            }
+        )
 
     @app.post("/api/sync")
     def sync() -> dict[str, Any]:

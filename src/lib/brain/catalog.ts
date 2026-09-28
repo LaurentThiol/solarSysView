@@ -5,7 +5,7 @@ import { MOTIF_IDS, MOTIF_LABELS } from "@/lib/morpho/lexicon"
 
 export type BrainLab = "analyse" | "chartisme" | "harmo" | "morpho" | "combinaisons" | "specialist"
 
-export type CatalogKind = "indicator" | "variable" | "figure" | "spectrum" | "motif" | "grid" | "specialist" | "analog"
+export type CatalogKind = "indicator" | "variable" | "figure" | "spectrum" | "motif" | "grid" | "specialist" | "analog" | "tree"
 
 export type CatalogEntry = {
   id: string

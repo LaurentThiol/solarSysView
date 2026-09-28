@@ -52,6 +52,35 @@ export const DEFAULT_CHANCE = 100
 
 export const HANDOFF_KEY = "synchro.jeux.handoff"
 export const SESSION_KEY = "synchro.jeux.spec"
+export const TREE_CHANCE_KEY = "synchro.jeux.tree-chances"
+
+export type TreeChanceHandoff = {
+  slug: string
+  phrase: string
+  numberChance: number[]
+}
+
+export function readTreeChanceHandoff(): TreeChanceHandoff | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = sessionStorage.getItem(TREE_CHANCE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<TreeChanceHandoff>
+    if (!parsed || !Array.isArray(parsed.numberChance)) return null
+    return {
+      slug: String(parsed.slug ?? ""),
+      phrase: String(parsed.phrase ?? ""),
+      numberChance: parsed.numberChance.map((value) => Number(value)),
+    }
+  } catch {
+    return null
+  }
+}
+
+export function clearTreeChanceHandoff() {
+  if (typeof window === "undefined") return
+  sessionStorage.removeItem(TREE_CHANCE_KEY)
+}
 
 export type PoolKind = "numbers" | "stars"
 
