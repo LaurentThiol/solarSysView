@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils"
 
 const HELP = {
   title: "Tableau",
-  body: "Le flux est ce tableau. Une ligne est l’état juste avant le tirage t ; la bande de droite est l’étiquette sur ce tirage. Les teintes vont du minimum au maximum de chaque colonne. Le trait doré ouvre le contrôle. Lire le flux fait couper ce tableau par un arbre.",
+  body: "Le flux est ce tableau. Une ligne est l’état juste avant le tirage t ; la bande de droite est l’étiquette sur ce tirage. Les teintes vont du minimum au maximum de chaque colonne. Le trait doré ouvre le contrôle. Une mesure retirée sort du tableau. En fenêtres apprises, chaque indicateur y apparaît à sa période habituelle : la lecture peut en retenir une autre. Lire le flux fait couper ce tableau par un arbre.",
 }
 
 type Layout = {
@@ -323,7 +323,10 @@ export function QuestionTablePanel({
   weekday,
   enabled = true,
 }: {
-  input: Pick<DecisionQuestionInput, "question" | "label" | "series" | "era" | "curves">
+  input: Pick<
+    DecisionQuestionInput,
+    "question" | "label" | "series" | "era" | "curves" | "indicators" | "label_cut" | "windows"
+  >
   weekday: WeekdayScope
   enabled?: boolean
 }) {
@@ -341,7 +344,7 @@ export function QuestionTablePanel({
     const timer = window.setTimeout(() => {
       const payload = JSON.parse(key) as Pick<
         DecisionQuestionInput,
-        "question" | "label" | "series" | "era" | "curves"
+        "question" | "label" | "series" | "era" | "curves" | "indicators" | "label_cut" | "windows"
       >
       setInflight(key)
       void loadQuestionTable(payload, weekday, controller.signal)

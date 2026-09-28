@@ -18,7 +18,14 @@ import numpy as np
 
 from synchro.analysis.common import numbers_of, ordered_draws, stars_of, weekday_of
 from synchro.analysis.variables import series as extract_series
-from synchro.brain_specialists.features import FEATURE_IDS, FEATURES, series_matrix, warmup_needed
+from synchro.brain_specialists.features import FEATURES
+from synchro.decision_tree.measures import (
+    MEASURE_CATALOG,
+    catalog_measures,
+    feature_matrix,
+    parse_feature_name,
+    resolve_measures,
+)
 
 QUESTIONS = ("shape", "series", "balls", "chartisme")
 SHAPE_LABELS = ("sum_high", "parity_high", "n1_low")
@@ -66,12 +73,8 @@ SERIES_FR = {
     "hit": "sorties",
 }
 
-MEASURE_FR = {
-    "last": "dernière",
-    "step": "pas",
-    "slope": "pente",
-    "z20": "z20",
-}
+MEASURE_FR = {spec["id"]: str(spec["shown"]) for spec in MEASURE_CATALOG}
+MEASURE_FR.update({spec["stem"]: str(spec["label"]) for spec in MEASURE_CATALOG})
 
 LABEL_FR = {
     "sum_high": "somme haute",
@@ -89,6 +92,15 @@ QUESTION_FR = {
 
 def feature_label(name: str, *, series: str | None = None) -> str:
     """Libellé court « série · mesure ». Jamais « retard » pour un lag."""
+    if "@" in name:
+        info = parse_feature_name(name)
+        left = str(info.get("series") or series or "")
+        title = SERIES_FR.get(left, left)
+        period = info.get("period")
+        measure = str(info.get("label") or name)
+        if title:
+            return f"{title} · {measure} {period}"
+        return f"{measure} {period}"
     if name in FEATURES and series:
         base = str(FEATURES[name]["label"])
         return f"{SERIES_FR.get(series, series)} · {base}"
@@ -123,17 +135,27 @@ def feature_label(name: str, *, series: str | None = None) -> str:
     return name
 
 
-def class_names(question: str, label: str) -> list[str]:
+def _parity_k(threshold: float | None) -> int:
+    if threshold is None:
+        return 3
+    return int(round(float(threshold)))
+
+
+def class_names(question: str, label: str, *, threshold: float | None = None) -> list[str]:
     if question == "balls":
         return ["absente", "boule sortie"]
     if question == "chartisme":
         return ["invalidé", "atteint"]
-    if label == "parity_high":
-        return ["parité < 3", "parité ≥ 3"]
+    if label in {"parity_high", "parity"}:
+        k = _parity_k(threshold)
+        return [f"parité < {k}", f"parité ≥ {k}"]
     if label == "n1_low":
         return ["n1 haut", "n1 bas"]
-    if label == "sum_high":
+    if label in {"sum_high", "sum"}:
         return ["somme basse", "somme haute"]
+    if question == "series":
+        title = SERIES_FR.get(label, label)
+        return [f"{title} basse", f"{title} haute"]
     return ["basse", "haute"]
 
 
@@ -142,19 +164,75 @@ def label_phrase(question: str, label: str, *, threshold: float | None = None) -
         return "la boule sort au tirage t"
     if question == "chartisme":
         return "l'objectif de la figure est atteint"
-    if label == "parity_high":
-        return "le tirage t a au moins 3 numéros pairs"
+    if label in {"parity_high", "parity"}:
+        k = _parity_k(threshold)
+        if question == "series" or label == "parity":
+            return f"la parité du tirage t est ≥ {k}"
+        return f"le tirage t a au moins {k} numéros pairs"
     if label == "n1_low":
         cut = f"{threshold:.2f}" if threshold is not None else "la médiane"
         return f"n1 du tirage t est bas (≤ {cut})"
     cut = f"{threshold:.2f}" if threshold is not None else "la médiane"
-    series = SERIES_FR.get(label.replace("_high", "").replace("_low", ""), "la série")
     if question == "series":
-        series = SERIES_FR.get(label, series)
-        if label == "parity":
-            return "la parité du tirage t est ≥ 3"
+        series = SERIES_FR.get(label, label)
         return f"{series} du tirage t est haute (≥ {cut})"
     return f"la somme du tirage t est haute (≥ {cut})"
+
+
+def cut_text(
+    question: str,
+    label: str,
+    threshold: float,
+    sense: str,
+    n_candidates: int,
+) -> str:
+    """Phrase du verdict : la coupe retenue, et combien ont été essayées."""
+    op = "≤" if sense == "le" else "≥"
+    if label in {"parity", "parity_high"}:
+        title = "parité"
+        shown = str(_parity_k(threshold))
+    elif label == "n1_low":
+        title = "n1"
+        shown = f"{float(threshold):.2f}"
+    elif question == "series":
+        title = SERIES_FR.get(label, label)
+        shown = f"{float(threshold):.2f}"
+    else:
+        title = "somme"
+        shown = f"{float(threshold):.2f}"
+    return (
+        f"Coupe apprise : {title} {op} {shown}, "
+        f"choisie parmi {int(n_candidates)} sur l'apprentissage."
+    )
+
+
+def cut_candidates(raw_train: np.ndarray, kind: str) -> list[float]:
+    """Candidats de coupe, calculés sur l'apprentissage seul."""
+    if kind in {"parity", "parity_high"}:
+        return [2.0, 3.0, 4.0]
+    finite = np.asarray(raw_train, dtype=float)
+    finite = finite[np.isfinite(finite)]
+    if finite.size == 0:
+        return [0.0]
+    values = np.quantile(finite, (0.3, 0.4, 0.5, 0.6, 0.7))
+    out: list[float] = []
+    for value in values:
+        number = float(value)
+        if any(abs(number - previous) <= 1e-9 for previous in out):
+            continue
+        out.append(number)
+    return out or [0.0]
+
+
+def binarize(raw: np.ndarray, threshold: float, sense: str) -> np.ndarray:
+    data = np.asarray(raw, dtype=float)
+    if sense == "le":
+        return (data <= float(threshold)).astype(float)
+    return (data >= float(threshold)).astype(float)
+
+
+def label_sense(kind: str) -> str:
+    return "le" if kind in {"n1_low"} else "ge"
 
 
 def _values(draws: list[dict[str, Any]], name: str) -> np.ndarray:
@@ -162,36 +240,15 @@ def _values(draws: list[dict[str, Any]], name: str) -> np.ndarray:
     return np.array([float(v) for v in payload["values"]], dtype=float)
 
 
-def _shape_columns(
-    draws: list[dict[str, Any]], names: Sequence[str]
-) -> tuple[list[str], np.ndarray]:
-    from synchro.brain_specialists.features import slope, zscore
-
-    columns: list[np.ndarray] = []
-    labels: list[str] = []
-    for name in names:
-        values = _values(draws, name).tolist()
-        last = np.array(values, dtype=float)
-        step = np.full(len(values), np.nan)
-        if len(values) > 1:
-            step[1:] = np.diff(values)
-        slope_col = np.array(
-            [np.nan if v is None else float(v) for v in slope(values, 10)], dtype=float
-        )
-        z_col = np.array(
-            [np.nan if v is None else float(v) for v in zscore(values, 20)], dtype=float
-        )
-        for measure, col in (
-            ("last", last),
-            ("step", step),
-            ("slope", slope_col),
-            ("z20", z_col),
-        ):
-            labels.append(f"{name}.{measure}")
-            columns.append(col)
-    if not columns:
-        return [], np.zeros((len(draws), 0))
-    return labels, np.column_stack(columns)
+def _flux_matrix(
+    draws: list[dict[str, Any]],
+    names: Sequence[str],
+    measures: Sequence[str],
+    *,
+    windows: str,
+) -> tuple[list[str], np.ndarray, int]:
+    series_values = {name: _values(draws, name) for name in names}
+    return feature_matrix(series_values, measures, mode=windows, n_draws=len(draws))
 
 
 def _binary_from_raw(
@@ -222,10 +279,12 @@ def _rows_from_aligned(
     *,
     kind: str,
     warmup: int,
+    label_cut: str = "fixed",
 ) -> dict[str, Any]:
     xs: list[np.ndarray] = []
     raws: list[float] = []
     used_dates: list[str] = []
+    width = features.shape[1] if features.ndim == 2 else 0
     for t in range(warmup, len(raw_next) - 1):
         row = features[t]
         target = raw_next[t + 1]
@@ -234,19 +293,30 @@ def _rows_from_aligned(
         xs.append(row)
         raws.append(float(target))
         used_dates.append(dates[t + 1])
-    x = np.vstack(xs) if xs else np.zeros((0, features.shape[1]))
+    x = np.vstack(xs) if xs else np.zeros((0, width))
     raw = np.array(raws, dtype=float)
     cut = holdout_cut(len(raw)) if len(raw) else 0
-    y, threshold, sense = _binary_from_raw(raw, kind=kind, train_end=cut)
+    y, specialist_threshold, sense = _binary_from_raw(raw, kind=kind, train_end=cut)
+    learned = label_cut == "learned"
     return {
         "x": x,
         "y": y,
         "raw": raw,
         "dates": used_dates,
-        "threshold": threshold,
+        "threshold": None if learned else specialist_threshold,
+        "specialist_threshold": specialist_threshold,
         "sense": sense,
+        "kind": kind,
+        "label_cut": "learned" if learned else "fixed",
         "cut_hint": cut,
     }
+
+
+def _check_mode(label_cut: str, windows: str) -> None:
+    if label_cut not in {"learned", "fixed"}:
+        raise ValueError(f"Coupe inconnue: {label_cut}. Choisir learned ou fixed.")
+    if windows not in {"learned", "fixed"}:
+        raise ValueError(f"Fenêtres inconnues: {windows}. Choisir learned ou fixed.")
 
 
 def build_shape(
@@ -254,26 +324,35 @@ def build_shape(
     *,
     label: str = "sum_high",
     include_stars: bool = True,
+    measures: Sequence[str] | None = None,
+    label_cut: str = "learned",
+    windows: str = "learned",
 ) -> dict[str, Any]:
     if label not in SHAPE_LABELS:
         raise ValueError(f"Étiquette inconnue: {label}. Choisir parmi {SHAPE_LABELS}.")
+    _check_mode(label_cut, windows)
+    chosen = resolve_measures(measures, question="shape")
     rows = ordered_draws(draws)
     names = list(SHAPE_SERIES)
     if include_stars:
         names.extend(STAR_SERIES)
-    feature_names, matrix = _shape_columns(rows, names)
+    feature_names, matrix, warmup = _flux_matrix(rows, names, chosen, windows=windows)
     target_name = {"sum_high": "sum", "parity_high": "parity", "n1_low": "n1"}[label]
     raw = _values(rows, target_name)
     dates = [str(p["date"]) for p in extract_series(rows, target_name)["points"]]
-    packed = _rows_from_aligned(matrix, raw, dates, kind=label, warmup=20)
+    packed = _rows_from_aligned(
+        matrix, raw, dates, kind=label, warmup=warmup, label_cut=label_cut
+    )
     packed.update(
         {
             "question": "shape",
             "label": label,
             "series": None,
             "feature_names": feature_names,
-            "class_names": class_names("shape", label),
-            "class_weight": None,
+            "measures": chosen,
+            "window_mode": windows,
+            "class_names": class_names("shape", label, threshold=packed.get("specialist_threshold")),
+            "class_weight": "balanced" if label_cut == "learned" else None,
             "null": "shuffle_draws",
         }
     )
@@ -289,9 +368,18 @@ def _star_pools(draws: Sequence[dict[str, Any]]) -> set[int]:
     return pools
 
 
-def build_series(draws: list[dict[str, Any]], *, series: str = "parity") -> dict[str, Any]:
+def build_series(
+    draws: list[dict[str, Any]],
+    *,
+    series: str = "parity",
+    measures: Sequence[str] | None = None,
+    label_cut: str = "learned",
+    windows: str = "learned",
+) -> dict[str, Any]:
     if series not in SERIES_CHOICES and series not in GAP_SERIES:
         raise ValueError(f"Série inconnue: {series}.")
+    _check_mode(label_cut, windows)
+    chosen = resolve_measures(measures, question="series")
     rows = ordered_draws(draws)
     if series in STAR_TARGETS:
         pools = _star_pools(rows)
@@ -302,26 +390,22 @@ def build_series(draws: list[dict[str, Any]], *, series: str = "parity") -> dict
                 f"Ces tirages mélangent les urnes {listed}."
             )
     values = _values(rows, series)
-    names = list(FEATURE_IDS)
-    matrix = series_matrix(values.tolist(), names)
+    feature_names, matrix, warmup = _flux_matrix(rows, [series], chosen, windows=windows)
     dates = [str(p["date"]) for p in extract_series(rows, series)["points"]]
     kind = "parity" if series == "parity" else series
     packed = _rows_from_aligned(
-        matrix, values, dates, kind=kind, warmup=warmup_needed(names)
+        matrix, values, dates, kind=kind, warmup=warmup, label_cut=label_cut
     )
-    if series == "parity":
-        names_cls = class_names("series", "parity_high")
-    else:
-        title = SERIES_FR.get(series, series)
-        names_cls = [f"{title} basse", f"{title} haute"]
     packed.update(
         {
             "question": "series",
             "label": series,
             "series": series,
-            "feature_names": names,
-            "class_names": names_cls,
-            "class_weight": None,
+            "feature_names": feature_names,
+            "measures": chosen,
+            "window_mode": windows,
+            "class_names": class_names("series", series, threshold=packed.get("specialist_threshold")),
+            "class_weight": "balanced" if label_cut == "learned" else None,
             "null": "shuffle_draws",
         }
     )
@@ -527,13 +611,29 @@ def build_question(
     include_stars: bool = True,
     curves: Sequence[str] | None = None,
     chartisme_records: Sequence[dict[str, Any]] | None = None,
+    measures: Sequence[str] | None = None,
+    label_cut: str = "learned",
+    windows: str = "learned",
 ) -> dict[str, Any]:
     if question not in QUESTIONS:
         raise ValueError(f"Question inconnue: {question}.")
     if question == "shape":
-        return build_shape(draws, label=label or "sum_high", include_stars=include_stars)
+        return build_shape(
+            draws,
+            label=label or "sum_high",
+            include_stars=include_stars,
+            measures=measures,
+            label_cut=label_cut,
+            windows=windows,
+        )
     if question == "series":
-        return build_series(draws, series=series or "parity")
+        return build_series(
+            draws,
+            series=series or "parity",
+            measures=measures,
+            label_cut=label_cut,
+            windows=windows,
+        )
     if question == "balls":
         return build_balls(draws)
     if chartisme_records is not None:
@@ -547,6 +647,7 @@ def feature_labels(names: Sequence[str], *, series: str | None = None) -> dict[s
 
 def catalog() -> dict[str, Any]:
     return {
+        "measures": catalog_measures(),
         "questions": [
             {
                 "id": "shape",
@@ -605,23 +706,56 @@ def band_edges(n: int, cut: int, limit: int = 64) -> list[tuple[int, int]]:
     return chunks(0, cut, train_bins) + chunks(cut, n, hold_bins)
 
 
+def _default_period_index(names: Sequence[str]) -> list[int]:
+    """Une colonne par série et indicateur : la période habituelle, sinon la plus proche.
+
+    La recherche apprise construit toute la grille. Le tableau, lui, reste lisible.
+    """
+    groups: dict[tuple[Any, ...], list[tuple[int, dict[str, Any]]]] = {}
+    order: list[tuple[Any, ...]] = []
+    for index, name in enumerate(names):
+        info = parse_feature_name(name)
+        key = info["group"] if info.get("series") else ("raw", index, name)
+        if key not in groups:
+            order.append(key)
+            groups[key] = []
+        groups[key].append((index, info))
+    keep: list[int] = []
+    for key in order:
+        rows = groups[key]
+        plain = next((index for index, info in rows if not info.get("scaled")), None)
+        if plain is not None:
+            keep.append(plain)
+            continue
+
+        def distance(item: tuple[int, dict[str, Any]]) -> int:
+            info = item[1]
+            default = info.get("default")
+            period = info.get("period")
+            if default is None or period is None:
+                return 10**9
+            return abs(int(period) - int(default))
+
+        keep.append(min(rows, key=distance)[0])
+    return keep
+
+
 def _feature_meta(name: str, series: str | None) -> dict[str, str]:
     label = feature_label(name, series=series)
     group = "mesure"
-    measure = label
+    measure = label.split(" · ", 1)[-1] if " · " in label else label
     if name.startswith("ball."):
         group = "boule"
-        measure = label.split(" · ", 1)[-1]
     elif name.startswith("curve_"):
         group = "courbe"
-        measure = label.split(" · ", 1)[-1]
     elif name.startswith("figure_"):
         group = "figure"
         measure = name[7:] or label
     elif "." in name:
-        left, right = name.split(".", 1)
+        left = name.split(".", 1)[0]
+        if "@" in left:
+            left = left.split("@", 1)[0]
         group = SERIES_FR.get(left, left)
-        measure = MEASURE_FR.get(right, right)
     elif series:
         group = SERIES_FR.get(series, series)
         measure = label.split(" · ", 1)[-1] if " · " in label else label
@@ -654,6 +788,11 @@ def picture(packed: dict[str, Any], *, limit: int = 64, tail: int = 8) -> dict[s
     raw = np.asarray(packed.get("raw", y), dtype=float).reshape(-1)
     if x.ndim == 1:
         x = x.reshape(-1, 1)
+    if packed.get("window_mode") == "learned" and names:
+        keep = _default_period_index(names)
+        if x.ndim == 2 and x.shape[1] == len(names):
+            x = x[:, keep]
+        names = [names[index] for index in keep]
     if x.size == 0:
         x = np.zeros((0, len(names)))
     n = int(y.shape[0])
@@ -757,6 +896,9 @@ def _picture_key(
     series: str | None,
     include_stars: bool,
     curves: Sequence[str] | None,
+    measures: Sequence[str] | None,
+    label_cut: str,
+    windows: str,
 ) -> tuple[Any, ...]:
     count = len(draws)
     probe = 0
@@ -776,6 +918,9 @@ def _picture_key(
         series,
         bool(include_stars),
         tuple(curves or ()),
+        tuple(measures) if measures is not None else None,
+        label_cut,
+        windows,
         count,
         head,
         last,
@@ -792,8 +937,15 @@ def question_picture(
     include_stars: bool = True,
     curves: Sequence[str] | None = None,
     chartisme_records: Sequence[dict[str, Any]] | None = None,
+    measures: Sequence[str] | None = None,
+    label_cut: str = "learned",
+    windows: str = "learned",
 ) -> dict[str, Any]:
-    """Tableau de `build_question`, mis en image. Le cache évite de le refabriquer."""
+    """Tableau de `build_question`, mis en image. Le cache évite de le refabriquer.
+
+    En fenêtres apprises, l'image ne garde qu'une période par indicateur.
+    La recherche, elle, essaie toute la grille.
+    """
     key = _picture_key(
         draws,
         question,
@@ -801,6 +953,9 @@ def question_picture(
         series=series,
         include_stars=include_stars,
         curves=curves,
+        measures=measures,
+        label_cut=label_cut,
+        windows=windows,
     )
     if chartisme_records is None and key in _PICTURES:
         return _PICTURES[key]
@@ -812,6 +967,9 @@ def question_picture(
         include_stars=include_stars,
         curves=curves,
         chartisme_records=chartisme_records,
+        measures=measures,
+        label_cut=label_cut,
+        windows=windows,
     )
     view = picture(packed)
     if chartisme_records is None:

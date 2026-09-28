@@ -334,6 +334,9 @@ class DecisionTreeIn(BaseModel):
     series: str | None = None
     era: str = "current"
     curves: list[str] | None = None
+    indicators: list[str] | None = None
+    label_cut: str = "learned"
+    windows: str = "learned"
     max_depth: int = Field(default=4, ge=2, le=4)
     criterion: str | None = None
     permutations: int | None = Field(default=None, ge=0, le=199)
@@ -1844,6 +1847,17 @@ def create_app() -> FastAPI:
         if payload.question not in {"shape", "series", "balls", "chartisme"}:
             raise HTTPException(400, "Question inconnue.")
         draws, source, weekday = _decision_draws(payload.era)
+        if payload.label_cut not in {"learned", "fixed"}:
+            raise HTTPException(400, "Coupe inconnue.")
+        if payload.windows not in {"learned", "fixed"}:
+            raise HTTPException(400, "Fenêtres inconnues.")
+        if payload.indicators:
+            from synchro.decision_tree.measures import validate_measures
+
+            try:
+                validate_measures(payload.indicators)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
         try:
             view = dict(
                 question_picture(
@@ -1853,6 +1867,9 @@ def create_app() -> FastAPI:
                     series=payload.series,
                     include_stars=payload.era != "all",
                     curves=payload.curves,
+                    measures=payload.indicators,
+                    label_cut=payload.label_cut,
+                    windows=payload.windows,
                 )
             )
         except ValueError as exc:
@@ -1880,6 +1897,17 @@ def create_app() -> FastAPI:
 
         if payload.question not in {"shape", "series", "balls", "chartisme"}:
             raise HTTPException(400, "Question inconnue.")
+        if payload.label_cut not in {"learned", "fixed"}:
+            raise HTTPException(400, "Coupe inconnue.")
+        if payload.windows not in {"learned", "fixed"}:
+            raise HTTPException(400, "Fenêtres inconnues.")
+        if payload.indicators:
+            from synchro.decision_tree.measures import validate_measures
+
+            try:
+                validate_measures(payload.indicators)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
         draws, source, weekday = _decision_draws(payload.era)
         try:
             job = start_job(
@@ -1889,6 +1917,9 @@ def create_app() -> FastAPI:
                 series=payload.series,
                 include_stars=payload.era != "all",
                 curves=payload.curves,
+                indicators=payload.indicators,
+                label_cut=payload.label_cut,
+                windows=payload.windows,
                 max_depth=payload.max_depth,
                 criterion=payload.criterion,
                 permutations=payload.permutations,

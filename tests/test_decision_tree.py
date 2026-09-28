@@ -95,6 +95,45 @@ def test_shape_picture_is_the_question_table() -> None:
     cached = question_picture(rows, "shape", label="parity_high", include_stars=False)
     assert cached is again
     assert again["rows"] == view["rows"]
+    narrow = question_picture(
+        rows,
+        "shape",
+        label="parity_high",
+        include_stars=False,
+        measures=["last"],
+        windows="fixed",
+    )
+    narrow_names = [item["name"] for item in narrow["features"]]
+    assert narrow_names
+    assert all(name.endswith(".last") for name in narrow_names)
+
+
+def test_picture_shows_the_usual_period_while_the_search_keeps_the_grid() -> None:
+    from synchro.decision_tree.questions import build_shape, picture
+
+    rng = np.random.default_rng(11)
+    rows = []
+    for index in range(420):
+        numbers = sorted(int(n) for n in rng.choice(np.arange(1, 51), size=5, replace=False))
+        rows.append(
+            {
+                "draw_date": date(2016, 1, 1) + timedelta(days=index),
+                "numbers": numbers,
+                "stars": [1, 2],
+                "star_pool": 12,
+                "weekday": "mardi" if index % 2 == 0 else "vendredi",
+            }
+        )
+    packed = build_shape(rows, measures=["last", "z20", "rsi"], windows="learned")
+    assert any("@" in name for name in packed["feature_names"])
+    view = picture(packed)
+    names = [item["name"] for item in view["features"]]
+    assert "sum.z20" in names
+    assert "sum.rsi" in names
+    assert "sum.last" in names
+    assert not any("@" in name for name in names)
+    assert not any(name.endswith(".step") for name in names)
+    assert view["columns"] == len(names)
 
 
 def test_feature_labels_reserve_retard_for_balls() -> None:
@@ -580,6 +619,231 @@ def test_launch_installs_decision_tree_without_blocking(tmp_path: Path) -> None:
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_scaled_feature_labels_keep_retard_for_balls() -> None:
+    from synchro.decision_tree.questions import feature_label
+
+    assert feature_label("sum.zscore@13") == "somme · z-score 13"
+    assert feature_label("sum.rsi@9") == "somme · RSI 9"
+    assert feature_label("spread.range@13") == "étendue · amplitude 13"
+    assert "retard" not in feature_label("sum.zscore@13")
+    assert "retard" not in feature_label("sum.rsi")
+
+
+def test_parity_candidates_and_fixed_median() -> None:
+    from synchro.decision_tree.questions import (
+        build_shape,
+        class_names,
+        cut_candidates,
+        holdout_cut,
+        label_phrase,
+    )
+
+    raw = np.array([0, 1, 2, 3, 4, 5] * 20, dtype=float)
+    assert cut_candidates(raw, "parity") == [2.0, 3.0, 4.0]
+    assert cut_candidates(raw, "parity_high") == [2.0, 3.0, 4.0]
+    assert label_phrase("shape", "parity_high", threshold=4) == "le tirage t a au moins 4 numéros pairs"
+    assert class_names("shape", "parity_high", threshold=4) == ["parité < 4", "parité ≥ 4"]
+    rng = np.random.default_rng(8)
+    draws = _draws(90, rng, lambda index: [1, 2, 3, 4, 5 + (index % 20)])
+    packed = build_shape(
+        draws,
+        measures=["last"],
+        windows="fixed",
+        label_cut="fixed",
+        include_stars=False,
+    )
+    cut = holdout_cut(len(packed["raw"]))
+    assert packed["label_cut"] == "fixed"
+    assert packed["threshold"] == pytest.approx(float(np.median(packed["raw"][:cut])))
+
+
+def test_window_grid_respects_floor_and_cap() -> None:
+    from synchro.decision_tree.measures import periods_for
+
+    assert periods_for("z20", "learned", 100) == [8]
+    assert min(periods_for("z20", "learned", 2000)) >= 8
+    assert periods_for("z20", "learned", 200) == [8, 13]
+    assert periods_for("z20", "fixed", 200) == [20]
+    assert periods_for("last", "learned", 2000) == [None]
+    assert 34 in periods_for("slope", "learned", 2000)
+    assert periods_for("macd", "learned", 2000) == [13, 26, 39]
+    assert periods_for("macd", "learned", 200) == [13]
+
+
+def test_vectorized_measures_match_the_reference() -> None:
+    from synchro.brain_specialists.features import series_matrix
+    from synchro.decision_tree.measures import (
+        MEASURE_CATALOG,
+        compute_column,
+        periods_for,
+        reference_column,
+    )
+
+    values = np.random.default_rng(1).normal(size=220)
+    listed = values.tolist()
+    for spec in MEASURE_CATALOG:
+        for period in periods_for(spec["id"], "learned", 5000):
+            got = compute_column(values, spec["id"], period)
+            ref = reference_column(listed, spec["id"], period)
+            assert np.allclose(got, ref, equal_nan=True, rtol=1e-6, atol=1e-6), spec["id"]
+    matrix = series_matrix(listed, ["lag1", "zscore", "slope", "rsi", "range8"])
+    paired = {
+        0: ("last", None),
+        1: ("z20", 20),
+        2: ("slope", 10),
+        3: ("rsi", 14),
+        4: ("range8", 8),
+    }
+    for column, (measure, period) in paired.items():
+        got = compute_column(values, measure, period)
+        assert np.allclose(got, matrix[:, column], equal_nan=True, rtol=1e-6, atol=1e-6)
+
+
+def test_shape_catalog_names_rsi_and_rejects_unknown() -> None:
+    from synchro.decision_tree.questions import build_shape
+
+    rng = np.random.default_rng(9)
+    draws = _draws(80, rng, lambda index: [1, 2, 3, 4, 6 + (index % 10)])
+    packed = build_shape(
+        draws,
+        measures=["rsi", "last"],
+        windows="fixed",
+        label_cut="fixed",
+        include_stars=False,
+    )
+    assert "sum.rsi" in packed["feature_names"]
+    assert "n1.rsi" in packed["feature_names"]
+    with pytest.raises(ValueError, match="Indicateur inconnu"):
+        build_shape(draws, measures=["nope"])
+
+
+def test_holdout_does_not_choose_the_label_cut() -> None:
+    pytest.importorskip("sklearn")
+    from synchro.decision_tree.search import fit_holdout
+
+    rng = np.random.default_rng(11)
+    raw = rng.normal(size=360)
+    y = (raw >= np.median(raw)).astype(float)
+    x = ((raw >= np.quantile(raw, 0.7)).astype(float) + rng.normal(scale=0.05, size=360)).reshape(-1, 1)
+    kwargs = dict(
+        raw=raw,
+        label_cut="learned",
+        label_kind="sum",
+        label_sense="ge",
+        max_depth=2,
+        criteria=("gini",),
+        seed=0,
+        class_weight="balanced",
+    )
+    first = fit_holdout(x, y, **kwargs)
+    q70 = float(np.quantile(raw[: first["cut"]], 0.7))
+    assert first["label_threshold"] == pytest.approx(q70)
+    y_fixed = (raw >= np.median(raw[: first["cut"]])).astype(float)
+    fixed = fit_holdout(x, y_fixed, max_depth=2, criteria=("gini",), seed=0)
+    assert first["holdout_score"] > fixed["holdout_score"]
+    flipped = raw.copy()
+    flipped[first["cut"] :] += 50
+    second = fit_holdout(x, y, **{**kwargs, "raw": flipped})
+    assert second["label_threshold"] == pytest.approx(first["label_threshold"])
+
+
+def test_learned_cut_is_replayed_in_each_permutation() -> None:
+    pytest.importorskip("sklearn")
+    from synchro.decision_tree.search import prove
+
+    rng = np.random.default_rng(12)
+    raw = rng.normal(size=80)
+    x = np.column_stack([raw, rng.normal(size=80)])
+    y = (raw > 0).astype(float)
+    proof = prove(
+        x,
+        y,
+        raw=raw,
+        label_cut="learned",
+        label_kind="sum",
+        label_sense="ge",
+        rebuild=lambda gen: (x, gen.permutation(raw)),
+        permutations=3,
+        seed=0,
+        max_depth=2,
+        criteria=("gini",),
+        class_weight="balanced",
+        null="shuffle_draws",
+    )
+    assert proof["permutations"] == 3
+    assert proof["permutation_fits"] == 3 * proof["search_fits"]
+
+
+def test_window_follows_the_scale_of_the_signal() -> None:
+    pytest.importorskip("sklearn")
+    from synchro.decision_tree.measures import compute_column
+    from synchro.decision_tree.windows import select_windows
+
+    rng = np.random.default_rng(0)
+    base = rng.normal(size=420)
+    periods = (5, 8, 20, 34)
+    names = ["sum.sma@5", "sum.sma@8", "sum.sma", "sum.sma@34"]
+    columns = [compute_column(base, "sma", period) for period in periods]
+    matrix = np.column_stack(columns)
+    finite = np.isfinite(matrix).all(axis=1)
+    matrix = matrix[finite]
+    short = select_windows(matrix, columns[0][finite], names, train_end=len(matrix) - 80, min_leaf=20)
+    assert short[1][0]["period"] == 5
+    flipped = columns[0][finite].copy()
+    flipped[len(matrix) - 80 :] *= -1
+    again = select_windows(matrix, flipped, names, train_end=len(matrix) - 80, min_leaf=20)
+    assert again[1][0]["period"] == 5
+    long = select_windows(matrix, columns[-1][finite], names, train_end=len(matrix), min_leaf=20)
+    assert long[1][0]["period"] == 34
+    tied = np.column_stack([base[:300], base[:300], base[:300]])
+    flat = select_windows(
+        tied,
+        rng.normal(size=300),
+        ["sum.sma@5", "sum.sma", "sum.sma@34"],
+        train_end=300,
+        min_leaf=15,
+    )
+    assert flat[1][0]["period"] == 20
+    assert flat[1][0]["kept"] == "sum.sma"
+
+
+def test_draft_keeps_rsi_and_mentions_a_different_window() -> None:
+    from synchro.decision_tree.draft import draft_specialists
+
+    report = {
+        "question": "shape",
+        "label": "sum_high",
+        "label_cut": "learned",
+        "threshold": 160.0,
+        "specialist_threshold": 140.0,
+        "series": None,
+        "slug": "shape-rsi",
+        "windows": [
+            {
+                "label": "somme · RSI",
+                "period": 9,
+                "default": 14,
+                "kept": "sum.rsi@9",
+                "changed": True,
+            }
+        ],
+        "rules": [
+            {
+                "positive": True,
+                "weak": False,
+                "class_name": "somme haute",
+                "path": [{"feature": "sum.rsi@9", "text": "somme · RSI 9 > 60.00"}],
+            }
+        ],
+    }
+    drafts = {item["target"]: item for item in draft_specialists(report)}
+    assert drafts["sum"]["indicators"] == ["rsi"]
+    assert "160.00" in drafts["sum"]["instructions"]
+    assert "140.00" in drafts["sum"]["instructions"]
+    assert "somme · RSI sur 9" in drafts["sum"]["instructions"]
+    assert "le spécialiste sur 14" in drafts["sum"]["instructions"]
 
 
 def test_rule_view_node() -> None:

@@ -68,7 +68,7 @@ const HELP = {
     items: [
       {
         label: "Flux",
-        text: "Chaque tirage alimente une série : somme, rangs (n1…n5, étoiles), retards de boules, ou figures. L’arbre voit l’état de ce flux juste avant le tirage t, et une étiquette binaire sur le tirage suivant : somme haute ou basse, boule sortie ou absente, objectif de figure atteint ou non.",
+        text: "Chaque tirage alimente une série : somme, rangs (n1…n5, étoiles), retards de boules, ou figures. L’arbre voit l’état de ce flux juste avant le tirage t, et une étiquette binaire sur le tirage suivant : somme haute ou basse, boule sortie ou absente, objectif de figure atteint ou non. Pour le flux, la coupe de cette étiquette est cherchée sur l’apprentissage (quantiles, ou 2, 3, 4 pairs), puis rejouée à chaque remaniement.",
       },
       {
         label: "Hypothèse nulle",
@@ -94,11 +94,11 @@ const HELP = {
   },
   portee: {
     title: "Portée",
-    body: "Toutes les séries : dernière valeur, pas, pente et z20 de la somme, de l’étendue, de la parité, de n1–n5 et de g1–g4. Une série : les quinze indicateurs de cette seule série. L’étiquette est alors la même que le spécialiste binaire (parité ≥ 3, sinon au-dessus de la médiane d’apprentissage).",
+    body: "Toutes les séries : le catalogue d’indicateurs (dernière, pas, pente, z-score, RSI, MACD, moyennes…). Une série : les mêmes, sur cette série seule, sans le pas. La fenêtre de chaque indicateur et la coupe de l’étiquette sont choisies sur l’apprentissage.",
   },
   forme: {
     title: "Forme demandée",
-    body: "Ce que l’on demande au tirage t quand la portée est « toutes les séries ». Somme haute et parité ≥ 3 coïncident avec le spécialiste binaire. n1 bas est l’inverse de la forme haute que le spécialiste apprend : le brouillon le dit.",
+    body: "Ce que l’on demande au tirage t. Somme haute, parité, n1 bas. La coupe n’est plus figée : l’apprentissage choisit le quantile, ou 2, 3 ou 4 pairs. Le spécialiste binaire reste sur la médiane ou parité ≥ 3. Le brouillon le dit quand l’arbre s’en écarte. n1 bas reste l’inverse de la forme haute du spécialiste.",
   },
   serie: {
     title: "Une série",
@@ -114,7 +114,19 @@ const HELP = {
   },
   reglages: {
     title: "Réglages",
-    body: "Profondeur maximale, critère, nombre de remaniements, et courbes des figures. Repliés : la recherche choisit déjà profondeur, critère et plancher de feuille dans l’apprentissage. Vous n’avez rien à régler pour lancer une lecture.",
+    body: "Profondeur, critère, remaniements, coupe, fenêtres, indicateurs, et courbes des figures. Repliés : la recherche choisit déjà profondeur, critère, coupe et fenêtres dans l’apprentissage. Vous n’avez rien à régler pour lancer une lecture.",
+  },
+  coupe: {
+    title: "Coupe",
+    body: "Où l’étiquette bascule. Apprise : quantiles 30 à 70 % sur l’apprentissage seul, ou 2, 3, 4 pour la parité. La validation temporelle garde la meilleure. Fixe : la médiane, ou parité ≥ 3, comme le spécialiste. Le contrôle ne vote pas. Chaque remaniement rejoue ce choix.",
+  },
+  fenetres: {
+    title: "Fenêtres",
+    body: "Combien de tirages entre dans l’indicateur. Trop court, il est bruité. Trop long, il lisse et retarde : le retard vaut environ (période − 1) / 2 tirages. L’apprentissage note chaque fenêtre et ne quitte la période habituelle que si une autre fait mieux d’au moins un écart-type. Z-score, Bollinger et CCI ne descendent pas sous 8. Plafond 34, ou moins si l’archive est courte. Fixes : RSI 14, z-score 20, pente 10, et les autres périodes du catalogue.",
+  },
+  indicateurs: {
+    title: "Indicateurs",
+    body: "Mesures lues sur chaque série du flux. Tout le catalogue, ou seulement les quatre d’origine (dernière, pas, pente, z20). Une mesure retirée sort du tableau. Boules et Figures ont leurs propres mesures.",
   },
   profondeur: {
     title: "Profondeur",
@@ -270,6 +282,34 @@ const STAR_SERIES = new Set(["e1", "e2"])
 
 const CURVES = ["sum", "spread", "parity", "n1"] as const
 
+const FLUX_MEASURES = [
+  { id: "last", label: "dernière", family: "Mémoire" },
+  { id: "step", label: "pas", family: "Mémoire" },
+  { id: "lag2", label: "lag 2", family: "Mémoire" },
+  { id: "lag3", label: "lag 3", family: "Mémoire" },
+  { id: "slope", label: "pente", family: "Tendance" },
+  { id: "rsi", label: "RSI", family: "Momentum" },
+  { id: "macd", label: "MACD", family: "Momentum" },
+  { id: "macd_hist", label: "MACD hist", family: "Momentum" },
+  { id: "stoch", label: "stochastique", family: "Momentum" },
+  { id: "cci", label: "CCI", family: "Momentum" },
+  { id: "sma", label: "SMA", family: "Moyennes" },
+  { id: "ema", label: "EMA", family: "Moyennes" },
+  { id: "z20", label: "z-score", family: "Volatilité" },
+  { id: "bollinger", label: "Bollinger", family: "Volatilité" },
+  { id: "atr", label: "ATR", family: "Volatilité" },
+  { id: "range8", label: "amplitude", family: "Volatilité" },
+] as const
+
+const MEASURE_FAMILIES = ["Mémoire", "Tendance", "Momentum", "Moyennes", "Volatilité"] as const
+const LEGACY_MEASURES = ["last", "step", "slope", "z20"]
+
+function formatLag(period: number) {
+  const lag = (period - 1) / 2
+  const text = Number.isInteger(lag) ? String(lag) : lag.toFixed(1).replace(".", ",")
+  return `retard ${text}`
+}
+
 function treeEntry(reading: DecisionReading): CatalogEntry {
   return {
     id: `tree/${reading.slug}`,
@@ -293,7 +333,10 @@ function questionPayload(
   curves: string[],
   depth: number,
   criterion: string,
-  permutations: string
+  permutations: string,
+  labelCut: string,
+  windowsMode: string,
+  indicators: string[]
 ): DecisionQuestionInput {
   const perm = permutations.trim() ? Number(permutations) : null
   const base = {
@@ -304,8 +347,91 @@ function questionPayload(
   }
   if (card === "balls") return { ...base, question: "balls" }
   if (card === "chartisme") return { ...base, question: "chartisme", curves }
-  if (scope === "series") return { ...base, question: "series", series }
-  return { ...base, question: "shape", label }
+  let picked = scope === "series" ? indicators.filter((id) => id !== "step") : indicators
+  if (!picked.length) {
+    picked = FLUX_MEASURES.map((item) => item.id).filter((id) => scope === "shape" || id !== "step")
+  }
+  const learned = { indicators: picked, label_cut: labelCut, windows: windowsMode }
+  if (scope === "series") return { ...base, ...learned, question: "series", series }
+  return { ...base, ...learned, question: "shape", label }
+}
+
+function WindowChoices({
+  reading,
+  open,
+  onToggle,
+}: {
+  reading: DecisionReading
+  open: boolean
+  onToggle: () => void
+}) {
+  const windows = reading.windows ?? []
+  const used = new Set(
+    (reading.rules ?? []).flatMap((rule) =>
+      (rule.path ?? []).map((split) => split.feature).filter((feature): feature is string => Boolean(feature))
+    )
+  )
+  const usedRows = windows.filter((item) => used.has(item.kept))
+  const changed = windows.filter((item) => item.changed)
+  const primary = usedRows.length ? usedRows : changed
+  const rows = open ? windows : primary.length ? primary : windows.slice(0, 8)
+  const learned = reading.window_mode !== "fixed"
+  const maxScore = Math.max(
+    0.001,
+    ...rows.flatMap((item) => (item.scores ?? []).map((score) => Math.max(0, score.score)))
+  )
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="inline-flex items-center gap-1 text-xs font-medium">
+        Fenêtres choisies
+        <HelpTip {...HELP.fenetres} />
+      </p>
+      {!usedRows.length && changed.length ? (
+        <p className="text-[11px] text-muted-foreground">
+          L’arbre n’a pas coupé sur une fenêtre. Périodes quand même choisies.
+        </p>
+      ) : null}
+      <ul className="flex flex-col gap-1.5">
+        {rows.map((item) => (
+          <li key={`${item.kept}-${item.period}`} className="flex flex-wrap items-end justify-between gap-2 text-xs">
+            <span>
+              {item.label}
+              {item.changed ? ` · ${item.period} (défaut ${item.default})` : ` · ${item.period}`}
+              {` · ${formatLag(item.period)}`}
+            </span>
+            {learned && (item.scores ?? []).length > 1 ? (
+              <span className="flex items-end gap-0.5" aria-hidden>
+                {(item.scores ?? []).map((score) => {
+                  const height = Math.max(8, Math.round((Math.max(0, score.score) / maxScore) * 24))
+                  const chosen = score.period === item.period
+                  return (
+                    <span key={score.period} className="flex w-4 flex-col items-center">
+                      <span className="flex h-6 items-end">
+                        <span
+                          className={cn("w-full rounded-sm", chosen ? "bg-primary" : "bg-primary/35")}
+                          style={{ height }}
+                        />
+                      </span>
+                      <span className="text-[9px] text-muted-foreground">{score.period}</span>
+                    </span>
+                  )
+                })}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {open || windows.length > rows.length ? (
+        <button
+          type="button"
+          className="self-start text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+          onClick={onToggle}
+        >
+          {open ? "Fenêtres de l’arbre" : `Toutes les fenêtres (${windows.length})`}
+        </button>
+      ) : null}
+    </div>
+  )
 }
 
 export function DecisionTreeTitle() {
@@ -332,6 +458,10 @@ export function DecisionTreeLab() {
   const [depth, setDepth] = useState(4)
   const [criterion, setCriterion] = useState("auto")
   const [permutations, setPermutations] = useState("")
+  const [labelCut, setLabelCut] = useState<"learned" | "fixed">("learned")
+  const [windowsMode, setWindowsMode] = useState<"learned" | "fixed">("learned")
+  const [indicators, setIndicators] = useState<string[]>(FLUX_MEASURES.map((item) => item.id))
+  const [windowsOpen, setWindowsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [status, setStatus] = useState<DecisionStatus & { api?: boolean } | null>(null)
   const [journal, setJournal] = useState<DecisionReading[]>([])
@@ -367,7 +497,8 @@ export function DecisionTreeLab() {
   const openLeaf = rules.find((rule) => rule.node === leaf) ?? rules[0]
   const duration = expectedDuration(
     card === "flux" ? (scope === "series" ? "series" : "shape") : card,
-    permutations.trim() ? Number(permutations) : null
+    permutations.trim() ? Number(permutations) : null,
+    card === "flux" ? { labelCut, windows: windowsMode } : { labelCut: "fixed", windows: "fixed" }
   )
 
   const refreshJournal = useCallback(async () => {
@@ -416,7 +547,7 @@ export function DecisionTreeLab() {
     cancelRef.current = { cancelled: false, id: "" }
     const nextCard = override?.card ?? card
     const payload = {
-      ...questionPayload(nextCard, scope, label, series, curves, depth, criterion, permutations),
+      ...questionPayload(nextCard, scope, label, series, curves, depth, criterion, permutations, labelCut, windowsMode, indicators),
       era,
       ...override,
     }
@@ -757,7 +888,12 @@ export function DecisionTreeLab() {
                     "rounded-full border px-2.5 py-1 text-xs",
                     scope === id ? "border-primary/50 bg-primary/15" : "border-border text-muted-foreground"
                   )}
-                  onClick={() => setScope(id)}
+                  onClick={() => {
+                    setScope(id)
+                    if (id === "series") {
+                      setIndicators((prev) => (prev.some((item) => item !== "step") ? prev : FLUX_MEASURES.map((item) => item.id)))
+                    }
+                  }}
                 >
                   {text}
                 </button>
@@ -807,15 +943,31 @@ export function DecisionTreeLab() {
           </div>
         ) : null}
         <QuestionTablePanel
-          input={
-            card === "balls"
-              ? { question: "balls", era }
-              : card === "chartisme"
-                ? { question: "chartisme", era, curves }
-                : scope === "series"
-                  ? { question: "series", era, series }
-                  : { question: "shape", era, label }
-          }
+          input={(() => {
+            const asked = questionPayload(
+              card,
+              scope,
+              label,
+              series,
+              curves,
+              depth,
+              criterion,
+              permutations,
+              labelCut,
+              windowsMode,
+              indicators
+            )
+            return {
+              question: asked.question,
+              label: asked.label,
+              series: asked.series,
+              era,
+              curves: asked.curves,
+              indicators: asked.indicators,
+              label_cut: asked.label_cut,
+              windows: asked.windows,
+            }
+          })()}
           weekday={weekday}
           enabled={!apiDown}
         />
@@ -848,6 +1000,62 @@ export function DecisionTreeLab() {
               <LabelHelp label="N" help={HELP.n} row>
                 <Input value={permutations} placeholder={card === "balls" ? "49" : "99"} onChange={(event) => setPermutations(event.target.value)} />
               </LabelHelp>
+              {card === "flux" ? (
+                <>
+                  <LabelHelp label="Coupe" help={HELP.coupe}>
+                    <select className="rounded-md border border-border bg-background px-2 py-1" value={labelCut} onChange={(event) => setLabelCut(event.target.value as "learned" | "fixed")}>
+                      <option value="learned">apprise</option>
+                      <option value="fixed">fixe (médiane)</option>
+                    </select>
+                  </LabelHelp>
+                  <LabelHelp label="Fenêtres" help={HELP.fenetres}>
+                    <select className="rounded-md border border-border bg-background px-2 py-1" value={windowsMode} onChange={(event) => setWindowsMode(event.target.value as "learned" | "fixed")}>
+                      <option value="learned">apprises</option>
+                      <option value="fixed">fixes</option>
+                    </select>
+                  </LabelHelp>
+                  <div className="flex flex-col gap-2 sm:col-span-3">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <HelpTip {...HELP.indicateurs} />
+                      <button type="button" className="rounded-full border border-border px-2 py-1" onClick={() => setIndicators(FLUX_MEASURES.map((item) => item.id))}>
+                        Tout
+                      </button>
+                      <button type="button" className="rounded-full border border-border px-2 py-1" onClick={() => setIndicators([...LEGACY_MEASURES])}>
+                        4 mesures
+                      </button>
+                    </div>
+                    {MEASURE_FAMILIES.map((family) => (
+                      <div key={family} className="flex flex-wrap items-center gap-1">
+                        <span className="w-20 text-muted-foreground">{family}</span>
+                        {FLUX_MEASURES.filter((item) => item.family === family).map((item) => {
+                          const hidden = scope === "series" && item.id === "step"
+                          if (hidden) return null
+                          const on = indicators.includes(item.id)
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className={cn("rounded-full border px-2 py-1", on ? "border-primary/50 bg-primary/15" : "border-border text-muted-foreground")}
+                              onClick={() =>
+                                setIndicators((prev) => {
+                                  if (prev.includes(item.id)) {
+                                    const next = prev.filter((id) => id !== item.id)
+                                    const visible = scope === "series" ? next.filter((id) => id !== "step") : next
+                                    return visible.length ? next : prev
+                                  }
+                                  return [...prev, item.id]
+                                })
+                              }
+                            >
+                              {item.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
               {card === "chartisme" ? (
                 <div className="flex flex-wrap items-center gap-1 sm:col-span-3">
                   <HelpTip {...HELP.courbes} />
@@ -934,6 +1142,14 @@ export function DecisionTreeLab() {
                 </Badge>
               ) : null}
             </div>
+            {shown.cut_text ? <p className="text-xs text-muted-foreground">{shown.cut_text}</p> : null}
+            {(shown.windows ?? []).length ? (
+              <WindowChoices
+                reading={shown}
+                open={windowsOpen}
+                onToggle={() => setWindowsOpen((value) => !value)}
+              />
+            ) : null}
           </section>
 
           <section data-demo="tree-drawing" className="flex flex-col gap-3 xl:flex-row">

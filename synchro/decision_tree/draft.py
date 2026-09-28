@@ -5,24 +5,57 @@ from __future__ import annotations
 from typing import Any
 
 from synchro.brain_specialists.features import FEATURE_IDS
+from synchro.decision_tree.measures import parse_feature_name
 from synchro.decision_tree.questions import SERIES_FR, label_phrase
-
-_MEASURE_TO_INDICATOR = {"last": "lag1", "slope": "slope", "z20": "zscore"}
 
 
 def _split_feature(name: str, series: str | None) -> tuple[str | None, str | None, str | None]:
     """Retourne (série, indicateur ou None, texte de contexte)."""
-    if name in FEATURE_IDS:
+    if name in FEATURE_IDS and "@" not in name and "." not in name:
         return series, name, None
     if name.startswith("ball.") or name.startswith("curve_") or name.startswith("figure_"):
         return None, None, None
-    if "." not in name:
-        return None, None, None
-    left, measure = name.split(".", 1)
-    indicator = _MEASURE_TO_INDICATOR.get(measure)
-    if indicator is None:
+    info = parse_feature_name(name)
+    left = info.get("series") or series
+    indicator = info.get("indicator")
+    if indicator:
+        return left, str(indicator), None
+    if left and (info.get("measure_id") == "step" or "." in name or "@" in name):
         return left, None, name
-    return left, indicator, None
+    return None, None, None
+
+
+def _cut_note(report: dict[str, Any]) -> str:
+    if report.get("label_cut") != "learned":
+        return ""
+    learned = report.get("threshold")
+    specialist = report.get("specialist_threshold")
+    if learned is None or specialist is None:
+        return ""
+    if abs(float(learned) - float(specialist)) <= 1e-6:
+        return ""
+    return (
+        f" Le spécialiste binaire apprend la coupe {float(specialist):.2f} ; "
+        f"l'arbre a coupé à {float(learned):.2f}."
+    )
+
+
+def _window_note(report: dict[str, Any]) -> str:
+    used: set[str] = set()
+    for rule in report.get("rules") or []:
+        for split in rule.get("path") or []:
+            used.add(str(split.get("feature") or ""))
+    notes: list[str] = []
+    for item in report.get("windows") or []:
+        if not item.get("changed") or item.get("kept") not in used:
+            continue
+        notes.append(
+            f"l'arbre lit {item.get('label')} sur {item.get('period')}, "
+            f"le spécialiste sur {item.get('default')}"
+        )
+    if not notes:
+        return ""
+    return " Fenêtres : " + " ; ".join(notes) + "."
 
 
 def draft_specialists(report: dict[str, Any]) -> list[dict[str, Any]]:
@@ -79,6 +112,8 @@ def draft_specialists(report: dict[str, Any]) -> list[dict[str, Any]]:
             + (" ".join(lines) if lines else "Aucune feuille positive tenue au contrôle.")
             + extra
             + note
+            + _cut_note(report)
+            + _window_note(report)
         )
         drafts.append(
             {

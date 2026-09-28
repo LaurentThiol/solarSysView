@@ -30,6 +30,10 @@ test("labels keep retard for a ball and never for a lag", () => {
   assert.equal(featureLabel("ball.delay"), "boule · retard")
   assert.equal(featureLabel("sum.last").includes("retard"), false)
   assert.equal(featureLabel("sum.step").includes("retard"), false)
+  assert.equal(featureLabel("sum.zscore@13"), "somme · z-score 13")
+  assert.equal(featureLabel("sum.rsi@9"), "somme · RSI 9")
+  assert.equal(featureLabel("spread.range@13"), "étendue · amplitude 13")
+  assert.equal(featureLabel("sum.zscore@13").includes("retard"), false)
 })
 
 test("thresholds match the drawing and the leaf line", () => {

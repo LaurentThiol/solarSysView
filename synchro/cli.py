@@ -81,6 +81,9 @@ def main(argv: list[str] | None = None) -> int:
     tree.add_argument("--depth", type=int, default=4)
     tree.add_argument("--criterion", default=None, choices=("gini", "entropy"))
     tree.add_argument("--permutations", type=int, default=None)
+    tree.add_argument("--indicators", default=None, help="mesures séparées par des virgules")
+    tree.add_argument("--cut", default="learned", choices=("learned", "fixed"))
+    tree.add_argument("--windows", default="learned", choices=("learned", "fixed"))
     tree.add_argument("--slug", default=None)
     tree.add_argument("--seed", type=int, default=0)
 
@@ -419,12 +422,18 @@ def run_decision_tree(args: argparse.Namespace) -> int:
         print("Aucun tirage en base.", file=sys.stderr)
         return 1
     try:
+        indicators = None
+        if args.indicators:
+            indicators = [item.strip() for item in str(args.indicators).split(",") if item.strip()]
         report = read_flux(
             draws,
             args.question,
             label=args.label,
             series=args.series,
             include_stars=args.era != "all",
+            indicators=indicators,
+            label_cut=args.cut,
+            windows=args.windows,
             max_depth=args.depth,
             criterion=args.criterion,
             permutations=args.permutations,
@@ -435,6 +444,8 @@ def run_decision_tree(args: argparse.Namespace) -> int:
         print(str(exc), file=sys.stderr)
         return 1
     print(report.get("verdict_text") or "")
+    if report.get("cut_text"):
+        print(report["cut_text"])
     print(
         f"slug {report.get('slug')}  critère {report.get('criterion')}  "
         f"profondeur {report.get('max_depth')}  "

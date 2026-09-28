@@ -67,7 +67,27 @@ export type DecisionReading = {
   to_date?: string | null
   created_at?: string
   threshold?: number | null
+  specialist_threshold?: number | null
+  sense?: string | null
+  label_cut?: string | null
+  cut_text?: string | null
+  cut_scores?: { threshold: number; share?: number | null; cv_score?: number | null; chosen?: boolean }[] | null
+  window_mode?: string | null
+  windows?: DecisionWindow[] | null
+  indicators?: string[] | null
   error?: string
+}
+
+export type DecisionWindow = {
+  series?: string | null
+  measure?: string | null
+  label: string
+  period: number
+  default?: number | null
+  kept: string
+  changed?: boolean
+  lag?: number | null
+  scores?: { period: number; score: number }[]
 }
 
 export type DecisionJob = {
@@ -95,6 +115,9 @@ export type DecisionQuestionInput = {
   series?: string | null
   era?: "current" | "all"
   curves?: string[] | null
+  indicators?: string[] | null
+  label_cut?: string | null
+  windows?: string | null
   max_depth?: number
   criterion?: string | null
   permutations?: number | null
@@ -156,7 +179,10 @@ export async function loadDecisionReading(slug: string): Promise<DecisionReading
 }
 
 export async function loadQuestionTable(
-  input: Pick<DecisionQuestionInput, "question" | "label" | "series" | "era" | "curves">,
+  input: Pick<
+    DecisionQuestionInput,
+    "question" | "label" | "series" | "era" | "curves" | "indicators" | "label_cut" | "windows"
+  >,
   scope?: WeekdayScope | null,
   signal?: AbortSignal
 ): Promise<QuestionTable> {

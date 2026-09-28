@@ -40,6 +40,7 @@ const SERIES_FR: Record<string, string> = {
   g2: "g2",
   g3: "g3",
   g4: "g4",
+  star_sum: "somme étoiles",
   e1: "e1",
   e2: "e2",
 }
@@ -49,6 +50,20 @@ const MEASURE_FR: Record<string, string> = {
   step: "pas",
   slope: "pente",
   z20: "z20",
+  zscore: "z-score",
+  lag2: "lag 2",
+  lag3: "lag 3",
+  rsi: "RSI",
+  macd: "MACD",
+  macd_hist: "MACD hist",
+  bollinger: "Bollinger",
+  sma: "SMA",
+  ema: "EMA",
+  atr: "ATR",
+  stoch: "stochastique",
+  cci: "CCI",
+  range8: "amplitude",
+  range: "amplitude",
 }
 
 const BALL_FR: Record<string, string> = {
@@ -62,6 +77,13 @@ const BALL_FR: Record<string, string> = {
 
 /** « retard » est réservé au retard d'une boule. Un lag s'appelle « dernière ». */
 export function featureLabel(name: string): string {
+  if (name.includes("@")) {
+    const [body, period] = name.split("@")
+    const [series, measure] = body.split(".")
+    const label = MEASURE_FR[measure] ?? measure
+    const title = SERIES_FR[series] ?? series
+    return `${title} · ${label} ${period}`
+  }
   if (name.startsWith("ball.")) {
     const measure = BALL_FR[name.slice(5)] ?? name.slice(5)
     return `boule · ${measure}`
@@ -167,9 +189,19 @@ export function primaryFollowUp(question: string, beats: boolean): FollowUpId {
   return "rule"
 }
 
-export function expectedDuration(question: string, permutations: number | null): string {
+export function expectedDuration(
+  question: string,
+  permutations: number | null,
+  options?: { labelCut?: string | null; windows?: string | null }
+): string {
   if (question === "balls") return "souvent une à deux minutes"
   if (question === "chartisme") return "souvent une minute"
+  const learned =
+    (options?.labelCut ?? "learned") === "learned" || (options?.windows ?? "learned") === "learned"
+  if ((question === "shape" || question === "series") && learned) {
+    if ((permutations ?? 99) >= 49) return "souvent une à trois minutes"
+    return "souvent moins d'une minute"
+  }
   if ((permutations ?? 99) >= 99) return "souvent moins d'une minute"
   return "quelques secondes"
 }

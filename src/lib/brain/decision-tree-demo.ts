@@ -134,6 +134,33 @@ export const DEMO_TREE_READING = {
   specialists: [] as { slug: string; name: string; handle: string }[],
   draw_count: 400,
   created_at: "2026-09-01T12:00:00+00:00",
+  threshold: 140,
+  sense: "ge",
+  label_cut: "learned",
+  cut_text: "Coupe apprise : somme ≥ 140.00, choisie parmi 5 sur l'apprentissage.",
+  cut_scores: [
+    { threshold: 120, share: 0.7, cv_score: 0.52, chosen: false },
+    { threshold: 140, share: 0.5, cv_score: 0.61, chosen: true },
+  ],
+  window_mode: "learned",
+  indicators: ["last", "step", "slope", "z20"],
+  windows: [
+    {
+      series: "sum",
+      measure: "zscore",
+      label: "somme · z-score",
+      period: 13,
+      default: 20,
+      kept: "sum.zscore@13",
+      changed: true,
+      lag: 6,
+      scores: [
+        { period: 8, score: 0.02 },
+        { period: 13, score: 0.11 },
+        { period: 20, score: 0.04 },
+      ],
+    },
+  ],
 }
 
 export function decisionTreeDemoWantsStart(search: string, pathname = "") {

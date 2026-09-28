@@ -10,10 +10,18 @@ import numpy as np
 from synchro.decision_tree.draft import chartisme_rules, draft_specialists
 from synchro.decision_tree.drawing import render_trees
 from synchro.decision_tree.predict import predict_row
-from synchro.decision_tree.questions import build_question, feature_labels, label_phrase
+from synchro.decision_tree.questions import (
+    build_question,
+    class_names,
+    cut_text,
+    feature_labels,
+    label_phrase,
+    label_sense,
+)
 from synchro.decision_tree.rules import dump_tree, export_rules
 from synchro.decision_tree.search import ReadingCancelled, prove
 from synchro.decision_tree.store import new_slug, save_reading
+from synchro.decision_tree.windows import describe_windows
 
 Progress = Callable[[str, int, int], None]
 
@@ -57,6 +65,10 @@ def read_flux(
     include_stars: bool = True,
     curves: Sequence[str] | None = None,
     chartisme_records: Sequence[dict[str, Any]] | None = None,
+    indicators: Sequence[str] | None = None,
+    measures: Sequence[str] | None = None,
+    label_cut: str = "learned",
+    windows: str = "learned",
     max_depth: int = 4,
     criterion: str | None = None,
     permutations: int | None = None,
@@ -71,6 +83,10 @@ def read_flux(
             on_progress(stage, k, n)
 
     tick("tableau", 0, 1)
+    chosen_measures = indicators if indicators is not None else measures
+    flux = question in {"shape", "series"}
+    cut_mode = label_cut if flux else "fixed"
+    window_mode = windows if flux else "fixed"
     table = build_question(
         draws,
         question,
@@ -79,12 +95,16 @@ def read_flux(
         include_stars=include_stars,
         curves=curves,
         chartisme_records=chartisme_records,
+        measures=chosen_measures,
+        label_cut=cut_mode,
+        windows=window_mode,
     )
     names = list(table["feature_names"])
-    labels = feature_labels(names, series=table.get("series"))
     criteria = (criterion,) if criterion in {"gini", "entropy"} else ("gini", "entropy")
     n_perm = int(permutations) if permutations is not None else (49 if question == "balls" else 99)
     null = str(table.get("null") or "shuffle_draws")
+    learned_label = bool(flux and table.get("label_cut") == "learned")
+    learned_windows = bool(flux and table.get("window_mode") == "learned")
 
     def rebuild(rng: np.random.Generator):
         order = rng.permutation(len(draws))
@@ -97,7 +117,12 @@ def read_flux(
             include_stars=include_stars,
             curves=curves,
             chartisme_records=None if question != "chartisme" else chartisme_records,
+            measures=table.get("measures"),
+            label_cut=cut_mode,
+            windows=window_mode,
         )
+        if learned_label or learned_windows:
+            return again["x"], again["y"], again["raw"]
         return again["x"], again["y"]
 
     proof = prove(
@@ -111,15 +136,35 @@ def read_flux(
         class_weight=table.get("class_weight"),
         null=null,
         progress=tick,
+        raw=table.get("raw") if learned_label or learned_windows else None,
+        label_cut="learned" if learned_label else None,
+        label_kind=str(table.get("kind") or table.get("label") or ""),
+        label_sense=str(table.get("sense") or label_sense(str(table.get("kind") or ""))),
+        feature_names=names if learned_windows else None,
+        window_mode="learned" if learned_windows else None,
     )
     fitted = proof["fitted"]
     clf = fitted["clf"]
+    index = fitted.get("feature_index")
+    if index is not None:
+        names = [names[int(i)] for i in index]
+        latest_row = [float(table["x"][-1, int(i)]) for i in index] if len(table["x"]) else []
+    else:
+        latest_row = table["x"][-1].tolist() if len(table["x"]) else []
+    labels = feature_labels(names, series=table.get("series"))
     names_fr = [labels[name] for name in names]
+    threshold = fitted.get("label_threshold")
+    if threshold is None:
+        threshold = table.get("threshold")
+    sense = str(table.get("sense") or "ge")
+    classes = class_names(question, str(table.get("label") or ""), threshold=threshold)
+    if not flux:
+        classes = list(table["class_names"])
     rules = export_rules(
         clf,
         names,
         labels,
-        list(table["class_names"]),
+        classes,
         fitted["x_train"],
         fitted["y_train"],
         fitted["x_test"],
@@ -127,8 +172,17 @@ def read_flux(
         null_mean=float(proof["null_mean"]),
     )
     tree = dump_tree(clf)
-    latest_row = table["x"][-1].tolist() if len(table["x"]) else []
     latest_date = table["dates"][-1] if table.get("dates") else None
+    phrase = label_phrase(question, str(table.get("label") or ""), threshold=threshold)
+    n_cuts = len(fitted.get("cut_scores") or [])
+    learned_cut = (
+        cut_text(question, str(table.get("label") or ""), float(threshold), sense, n_cuts)
+        if learned_label and threshold is not None
+        else None
+    )
+    window_rows = fitted.get("windows")
+    if window_rows is None and flux:
+        window_rows = describe_windows(names)
     tick("dessin", 0, 1)
     slug = new_slug(question, str(table.get("label") or question))
     from synchro.decision_tree.store import reading_dir
@@ -140,14 +194,11 @@ def read_flux(
         fitted["x_train"],
         fitted["y_train"],
         names_fr,
-        list(table["class_names"]),
+        classes,
         case=latest_row or None,
-        title=label_phrase(question, str(table.get("label") or ""), threshold=table.get("threshold")),
+        title=phrase,
         tree_path=directory / "tree.svg",
         case_path=directory / "case.svg",
-    )
-    phrase = label_phrase(
-        question, str(table.get("label") or ""), threshold=table.get("threshold")
     )
     beats = bool(proof["beats_independence"])
     text = verdict_text(
@@ -157,7 +208,7 @@ def read_flux(
         beats,
     )
     ball_scores = _ball_scores(table, tree, names)
-    case = _case_prediction(tree, names, labels, list(table["class_names"]), question, latest_row)
+    case = _case_prediction(tree, names, labels, classes, question, latest_row)
     report: dict[str, Any] = {
         "ok": True,
         "slug": slug,
@@ -182,14 +233,21 @@ def read_flux(
         "cv_score": fitted["params"]["cv_score"],
         "train_n": int(fitted["cut"]),
         "holdout_n": int(len(fitted["y_test"])),
-        "class_names": list(table["class_names"]),
+        "class_names": classes,
         "feature_names": names,
         "feature_labels": labels,
         "rules": rules,
         "tree": tree,
         "latest": {"x": [round(float(v), 6) for v in latest_row], "date": latest_date},
-        "threshold": table.get("threshold"),
-        "sense": table.get("sense"),
+        "threshold": None if threshold is None else float(threshold),
+        "specialist_threshold": table.get("specialist_threshold"),
+        "sense": sense if flux else table.get("sense"),
+        "label_cut": table.get("label_cut") if flux else None,
+        "cut_text": learned_cut,
+        "cut_scores": fitted.get("cut_scores"),
+        "window_mode": table.get("window_mode") if flux else None,
+        "windows": window_rows or [],
+        "indicators": list(table.get("measures") or []) if flux else None,
         "draw_count": len(draws),
         "from_date": table["dates"][0] if table.get("dates") else None,
         "to_date": table["dates"][-1] if table.get("dates") else None,
