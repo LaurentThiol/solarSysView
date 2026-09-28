@@ -171,7 +171,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "decisionTree",
         help: {
           title: "decisionTree",
-          body: "Un arbre cherche un seuil sur le flux (somme, rangs, retards, figures). L’indépendance n’est que le nul : on détruit l’ordre des tirages et on rejoue le calcul. Le dessin montre chaque coupure.",
+          body: "Un arbre cherche où le flux se coupe, juste avant le tirage t : somme, rangs, retards, figures. L’indépendance n’est que l’hypothèse nulle. On détruit l’ordre des tirages et on rejoue caractéristiques, étiquettes, recherche et score. Un seuil qui tient sur l’ordre réel et disparaît sur l’ordre détruit est un seuil de flux. S’il ne dépasse pas ce nul, aucun seuil n’est visible — ce n’est pas une conclusion d’indépendance. Le dessin montre chaque coupure. La suite mène vers un spécialiste, Jeux ou une règle chartiste, sans rien écrire en silence.",
         },
       },
       {
@@ -238,10 +238,23 @@ export function navGroupForPath(pathname: string): NavGroup {
 }
 
 export function pageTitleForPath(pathname: string): string {
+  return pageNavItem(pathname)?.label ?? "Synchro"
+}
+
+export function pageHelpForPath(pathname: string): NavHelp {
+  return (
+    pageNavItem(pathname)?.help ?? {
+      title: "Synchro",
+      body: "Archives EuroMillions FDJ. Le menu ouvre Tirage, les laboratoires, les grilles et les assistants.",
+    }
+  )
+}
+
+function pageNavItem(pathname: string): NavItem | null {
   for (const group of NAV_GROUPS) {
     for (const item of group.items) {
-      if (isNavItemActive(pathname, item.href)) return item.label
+      if (isNavItemActive(pathname, item.href)) return item
     }
   }
-  return "Synchro"
+  return null
 }

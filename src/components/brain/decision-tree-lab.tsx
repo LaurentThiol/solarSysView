@@ -7,7 +7,7 @@ import { GitBranch, Loader2, Pin, Shapes, CircleDot } from "lucide-react"
 
 import { DemoPopup, DemoTourBar } from "@/components/brain/brain-demo"
 import { NullScoreHistogram, ReadingProgress, TreeViewport } from "@/components/brain/decision-tree-frame"
-import { HelpTip } from "@/components/help"
+import { HelpTip, HelpWrap, LabelHelp } from "@/components/help"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -51,33 +51,154 @@ import { useWeekdayScope } from "@/lib/use-weekday-scope"
 import { cn } from "@/lib/utils"
 
 const HELP = {
+  page: {
+    title: "decisionTree",
+    body: "Un arbre cherche où le flux se coupe, juste avant le tirage t. L’indépendance n’est que l’hypothèse nulle : on détruit l’ordre des tirages et on rejoue tout le calcul. Un seuil qui tient ici et disparaît sur l’ordre détruit est un seuil de flux. S’il ne dépasse pas ce nul, aucun seuil n’est visible — ce n’est pas une conclusion d’indépendance.",
+    items: [
+      { label: "Question", text: "Flux, Boules ou Figures. Rien ne se lance sans « Lire le flux »." },
+      { label: "Verdict", text: "Le score sur le contrôle, face à la moyenne des remaniements, et le p." },
+      { label: "Suite", text: "Spécialiste, chances vers Jeux, ou règle chartiste. Rien n’est écrit en silence." },
+    ],
+  },
+  archive: {
+    title: "Archive",
+    body: "Formule actuelle par défaut. « Tout l’historique » mélange les anciennes formules d’étoiles : elles sortent alors du tableau, parce que leur pool a changé. Le filtre Jour est le même que sur Spécialistes.",
+  },
+  flux: {
+    title: "Flux",
+    body: "Une ligne est l’état du flux juste avant le tirage t. Les pastilles demandent si ce tirage a une somme haute, au moins 3 pairs, ou un n1 bas. Défaut : somme haute.",
+  },
+  portee: {
+    title: "Portée",
+    body: "Toutes les séries : dernière valeur, pas, pente et z20 de la somme, de l’étendue, de la parité, de n1–n5 et de g1–g4. Une série : les quinze indicateurs de cette seule série. L’étiquette est alors la même que le spécialiste binaire (parité ≥ 3, sinon au-dessus de la médiane d’apprentissage).",
+  },
+  forme: {
+    title: "Forme demandée",
+    body: "Ce que l’on demande au tirage t quand la portée est « toutes les séries ». Somme haute et parité ≥ 3 coïncident avec le spécialiste binaire. n1 bas est l’inverse de la forme haute que le spécialiste apprend : le brouillon le dit.",
+  },
+  serie: {
+    title: "Une série",
+    body: "L’arbre ne lit que les indicateurs de cette série, et pose la même question binaire que le spécialiste. Un clic sur une carte de Spécialistes lance cette portée.",
+  },
+  balls: {
+    title: "Boules",
+    body: "Une ligne est une boule, juste avant le tirage t : son retard, ses sorties sur 20 et 50 tirages, la dernière valeur, le RSI et le z20 de ce retard. L’étiquette est : elle sort au tirage t. Les classes sont rééquilibrées (une sortie pour beaucoup d’absences). Le mot « retard » ne désigne que ce retard de boule.",
+  },
+  figures: {
+    title: "Figures",
+    body: "Une ligne est une figure dont le breakout est tranché : objectif atteint, ou figure invalidée. L’arbre lit la confiance, l’activité, la longueur, la direction, la courbe et le jour. Le nul ne rejoue pas un nouveau balayage : ce sont des départs tirés au hasard sur la même courbe.",
+  },
+  reglages: {
+    title: "Réglages",
+    body: "Profondeur maximale, critère, nombre de remaniements, et courbes des figures. Repliés : la recherche choisit déjà profondeur, critère et plancher de feuille dans l’apprentissage. Vous n’avez rien à régler pour lancer une lecture.",
+  },
+  profondeur: {
+    title: "Profondeur",
+    body: "Plafond de coupures successives : 2, 3 ou 4. La validation temporelle, dans l’apprentissage seul, choisit la profondeur parmi ce plafond. Le contrôle ne vote pas.",
+  },
   gini: {
     title: "Gini",
-    body: "Critère de coupure : à quel point un seuil mélange les deux classes. Plus il est bas dans une branche, plus la branche est pure.",
+    body: "Critère de coupure : à quel point un seuil mélange les deux classes. Plus il est bas dans une branche, plus la branche est pure. « Gini ou entropie » laisse la recherche choisir sur l’apprentissage seul.",
   },
   entropy: {
     title: "Entropie",
-    body: "Autre critère de coupure, plus sensible aux classes rares. La recherche choisit Gini ou entropie sur l’apprentissage seul.",
+    body: "Autre critère de coupure, plus sensible aux classes rares. La recherche le compare à Gini sans regarder le contrôle.",
+  },
+  n: {
+    title: "N",
+    body: "Nombre de fois où l’ordre des tirages est détruit et où tout le calcul est rejoué. 99 par défaut, 49 pour les boules. Laissez vide pour garder ce défaut.",
+  },
+  courbes: {
+    title: "Courbes",
+    body: "Séries sur lesquelles les figures sont lues. Défaut : somme, étendue, parité, n1. Une courbe retirée sort du tableau.",
+  },
+  lire: {
+    title: "Lire le flux",
+    body: "Construit le tableau, cherche l’arbre, rejoue les remaniements, puis dessine. La durée attendue est sous le bouton. Échap ou Annuler arrête. Une seule lecture à la fois.",
+  },
+  annuler: {
+    title: "Annuler",
+    body: "Arrête la lecture en cours. Le calcul déjà fait n’est pas gardé. Échap fait la même chose.",
+  },
+  lecture: {
+    title: "Lecture",
+    body: "Quatre étapes réelles : le tableau du flux, la recherche de l’arbre, chaque remaniement (k/N), puis le dessin. La barre ne simule pas une attente.",
+  },
+  verdict: {
+    title: "Verdict",
+    body: "Une phrase, puis l’histogramme des scores obtenus quand l’ordre est détruit. Le trait est le score réel, sur le contrôle. Le flux est reconnu si p ≤ 0,05.",
+  },
+  histogramme: {
+    title: "Histogramme du nul",
+    body: "Chaque barre compte des remaniements dont le score tombe dans la même tranche. La barre marquée est celle du score réel. S’il est dans le tas, le seuil ne dépasse pas le nul.",
+  },
+  apprentissage: {
+    title: "Apprentissage",
+    body: "Tirages sur lesquels l’arbre a été cherché. Les histogrammes du dessin montrent cet apprentissage. L’effectif de contrôle est à part, dans la liste des feuilles.",
   },
   seuil: {
     title: "Seuil",
-    body: "Valeur de coupure sur une mesure du flux, juste avant le tirage t. Le même nombre, à deux décimales, est dans le dessin et dans la liste.",
+    body: "Valeur de coupure sur une mesure du flux, juste avant le tirage t. Le même nombre, à deux décimales, est dans le dessin et dans la liste (162.50).",
   },
   feuille: {
     title: "Feuille",
-    body: "Bout de l’arbre : une classe, un effectif d’apprentissage et un effectif de contrôle. Le numéro est celui du dessin.",
+    body: "Bout de l’arbre : une classe, un effectif d’apprentissage et un effectif de contrôle. Le numéro est celui du dessin. Les flèches haut et bas parcourent la liste. Une feuille dont le contrôle tombe sous la moyenne du nul est grisée.",
   },
   remaniement: {
     title: "Remaniement",
-    body: "On détruit l’ordre des tirages et on rejoue tout le calcul. Ce nul annule le retour à la moyenne des pas et des lags.",
+    body: "On détruit l’ordre des tirages et on rejoue caractéristiques, étiquettes, recherche et score. Ce nul annule le retour à la moyenne des pas et des lags. On ne compare jamais à un taux fixe (50 %, 5/50).",
   },
   p: {
     title: "p",
-    body: "Part des remaniements au moins aussi bons que la lecture réelle, plus un. Le flux est reconnu si p ≤ 0,05. Le journal corrige ensuite par Benjamini–Hochberg.",
+    body: "(1 + nombre de remaniements au moins aussi bons que la lecture) / (1 + N). Le flux est reconnu si p ≤ 0,05.",
+  },
+  pcorrige: {
+    title: "p corrigé",
+    body: "Le p revu par Benjamini–Hochberg sur toutes les lectures de la même ère, y compris celles sans seuil. Une démonstration doit encore tenir après cette correction.",
   },
   controle: {
     title: "Contrôle",
-    body: "Les 100 derniers tirages (ou 30 % si la série est courte). Ils ne servent qu’une fois, au verdict et sur chaque feuille. Ils ne choisissent pas la profondeur.",
+    body: "Les 100 derniers tirages (ou 30 % si la série est courte). Ils ne servent qu’une fois, au verdict et sur chaque feuille. Ils ne choisissent pas la profondeur. C’est le même découpage que le score 20/50/100 des spécialistes.",
+  },
+  dessin: {
+    title: "Dessin",
+    body: "Chaque nœud montre l’histogramme empilé des deux classes arrivées là, avec un trait à la coupure. Les feuilles sont des barres d’effectifs, pas un camembert. Glisser déplace, Ctrl + molette zoome. Sans le programme dot, le même arbre s’écrit en texte.",
+  },
+  cas: {
+    title: "Prochain tirage",
+    body: "Le dernier état du flux, classé par l’arbre déjà lu. La feuille atteinte et sa probabilité. « Chemin seul » ne garde que les branches de ce cas.",
+  },
+  chemin: {
+    title: "Chemin seul",
+    body: "Le dessin du prochain tirage ne montre plus que le chemin suivi, avec la valeur du cas sur chaque histogramme.",
+  },
+  train: {
+    title: "Entraîner ce spécialiste",
+    body: "Le brouillon reprend la série, la forme binaire (la même étiquette que l’arbre) et seulement les indicateurs que l’arbre utilise. Le nom se corrige. Entraîner lance le réseau. Boules et Figures ne deviennent pas des spécialistes.",
+  },
+  jeux: {
+    title: "Envoyer vers Jeux",
+    body: "Propose une chance par boule, colorée selon la probabilité de sortie. Jeux affiche la provenance. Rien n’est écrit dans la spec tant que vous n’avez pas cliqué « Appliquer les chances ».",
+  },
+  regle: {
+    title: "Préparer la règle",
+    body: "Ouvre le panneau des règles chartistes, prérempli par la feuille qui tient au contrôle. La règle n’est pas enregistrée.",
+  },
+  retry: {
+    title: "Essayer une autre question",
+    body: "Le seuil n’a pas dépassé le nul. Deux autres questions sont proposées. L’atelier des spécialistes reste accessible, en second plan.",
+  },
+  pin: {
+    title: "Épingler à Brain",
+    body: "Pose @tree.<lecture> sur la table de Brain, comme un spécialiste. Sans épingle, Brain ne cite pas cette lecture.",
+  },
+  export: {
+    title: "Exporter",
+    body: "Télécharge les règles en JSON, et le dessin SVG quand il existe. Les seuils sont les mêmes nombres que dans la liste.",
+  },
+  journal: {
+    title: "Journal",
+    body: "Toutes les lectures, y compris les verdicts sans seuil. Le rail coloré marque un seuil reconnu. Le p corrigé est celui de l’ère. Une lecture est périmée quand l’ère, le jour ou de nouveaux tirages l’ont dépassée : Relire la refait.",
   },
 }
 
@@ -153,6 +274,15 @@ function questionPayload(
   if (card === "chartisme") return { ...base, question: "chartisme", curves }
   if (scope === "series") return { ...base, question: "series", series }
   return { ...base, question: "shape", label }
+}
+
+export function DecisionTreeTitle() {
+  return (
+    <span className="inline-flex items-center gap-2">
+      decisionTree
+      <HelpTip {...HELP.page} />
+    </span>
+  )
 }
 
 export function DecisionTreeLab() {
@@ -480,7 +610,10 @@ export function DecisionTreeLab() {
       />
       <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-primary/30 bg-card/50 px-3 py-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold tracking-tight">decisionTree</p>
+          <p className="inline-flex items-center gap-1 text-sm font-semibold tracking-tight">
+            decisionTree
+            <HelpTip {...HELP.page} />
+          </p>
           <p className="text-[11px] text-muted-foreground">
             {loading ? "tirages…" : `${draws.length} tirages · ${source}`}
           </p>
@@ -489,6 +622,7 @@ export function DecisionTreeLab() {
           <WeekdayScopeControl value={weekday} onChange={setWeekday} compact />
           <label className="flex items-center gap-1 text-xs">
             Archive
+            <HelpTip {...HELP.archive} />
             <select
               className="rounded-md border border-border bg-background px-2 py-1"
               value={era}
@@ -541,28 +675,34 @@ export function DecisionTreeLab() {
           {QUESTIONS.map((item) => {
             const on = card === item.id
             const Icon = item.icon
+            const help = item.id === "flux" ? HELP.flux : item.id === "balls" ? HELP.balls : HELP.figures
             return (
-              <button
-                key={item.id}
-                type="button"
-                aria-label={item.title}
-                className={cn(
-                  "rounded-2xl border px-3 py-3 text-left",
-                  on ? "border-primary/50 bg-primary/10" : "border-border bg-card/40"
-                )}
-                onClick={() => setCard(item.id)}
-              >
-                <Icon className="size-4 text-primary" />
-                <p className="mt-2 text-sm font-medium">{item.title}</p>
-                <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{item.sentence}</p>
-              </button>
+              <div key={item.id} className="relative">
+                <button
+                  type="button"
+                  aria-label={item.title}
+                  className={cn(
+                    "h-full w-full rounded-2xl border px-3 py-3 pr-8 text-left",
+                    on ? "border-primary/50 bg-primary/10" : "border-border bg-card/40"
+                  )}
+                  onClick={() => setCard(item.id)}
+                >
+                  <Icon className="size-4 text-primary" />
+                  <p className="mt-2 text-sm font-medium">{item.title}</p>
+                  <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{item.sentence}</p>
+                </button>
+                <span className="absolute top-2 right-2">
+                  <HelpTip {...help} />
+                </span>
+              </div>
             )
           })}
         </div>
         <p className="text-sm text-foreground">{phrase}</p>
         {card === "flux" ? (
           <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap gap-1" role="group" aria-label="Portée">
+            <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Portée">
+              <HelpTip {...HELP.portee} />
               {(
                 [
                   ["shape", "toutes les séries"],
@@ -583,7 +723,8 @@ export function DecisionTreeLab() {
               ))}
             </div>
             {scope === "shape" ? (
-              <div className="flex flex-wrap gap-1" role="group" aria-label="Forme">
+              <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Forme">
+                <HelpTip {...HELP.forme} />
                 {SHAPE_PILLS.map((item) => (
                   <button
                     key={item.id}
@@ -599,7 +740,8 @@ export function DecisionTreeLab() {
                 ))}
               </div>
             ) : (
-              <div className="flex flex-wrap gap-1" role="group" aria-label="Série">
+              <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Série">
+                <HelpTip {...HELP.serie} />
                 {SERIES.map((item) => (
                   <button
                     key={item.id}
@@ -618,19 +760,21 @@ export function DecisionTreeLab() {
           </div>
         ) : null}
         <div>
-          <button type="button" className="text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => setSettingsOpen((open) => !open)}>
-            {settingsOpen ? "Replier les réglages" : "Réglages"}
-          </button>
+          <span className="inline-flex items-center gap-1">
+            <button type="button" className="text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => setSettingsOpen((open) => !open)}>
+              {settingsOpen ? "Replier les réglages" : "Réglages"}
+            </button>
+            <HelpTip {...HELP.reglages} />
+          </span>
           {settingsOpen ? (
             <div className="mt-2 grid gap-2 rounded-xl border border-border p-3 text-xs sm:grid-cols-3">
-              <label className="flex flex-col gap-1">
-                Profondeur max
+              <LabelHelp label="Profondeur max" help={HELP.profondeur}>
                 <select className="rounded-md border border-border bg-background px-2 py-1" value={depth} onChange={(event) => setDepth(Number(event.target.value))}>
                   <option value={2}>2</option>
                   <option value={3}>3</option>
                   <option value={4}>4</option>
                 </select>
-              </label>
+              </LabelHelp>
               <label className="flex items-center gap-1">
                 Critère
                 <HelpTip {...HELP.gini} />
@@ -641,13 +785,12 @@ export function DecisionTreeLab() {
                   <option value="entropy">entropie</option>
                 </select>
               </label>
-              <label className="flex items-center gap-1">
-                N
-                <HelpTip {...HELP.remaniement} />
+              <LabelHelp label="N" help={HELP.n} row>
                 <Input value={permutations} placeholder={card === "balls" ? "49" : "99"} onChange={(event) => setPermutations(event.target.value)} />
-              </label>
+              </LabelHelp>
               {card === "chartisme" ? (
-                <div className="flex flex-wrap gap-1 sm:col-span-3">
+                <div className="flex flex-wrap items-center gap-1 sm:col-span-3">
+                  <HelpTip {...HELP.courbes} />
                   {CURVES.map((name) => {
                     const on = curves.includes(name)
                     return (
@@ -667,21 +810,29 @@ export function DecisionTreeLab() {
           ) : null}
         </div>
         <div>
-          <Button type="button" disabled={running || Boolean(noSklearn) || apiDown} onClick={() => void read()}>
-            {running ? <Loader2 className="animate-spin" /> : <GitBranch />}
-            Lire le flux
-          </Button>
+          <HelpWrap help={HELP.lire}>
+            <Button type="button" disabled={running || Boolean(noSklearn) || apiDown} onClick={() => void read()}>
+              {running ? <Loader2 className="animate-spin" /> : <GitBranch />}
+              Lire le flux
+            </Button>
+          </HelpWrap>
           <p className="mt-1 text-[11px] text-muted-foreground">Durée attendue : {duration}.</p>
         </div>
       </section>
 
       {running || stage ? (
         <section className="flex flex-col gap-2">
+          <p className="inline-flex items-center gap-1 text-xs font-medium">
+            Lecture
+            <HelpTip {...HELP.lecture} />
+          </p>
           <ReadingProgress stage={stage} k={k} n={n} running={running} />
           {running ? (
-            <Button type="button" size="sm" variant="outline" onClick={() => void stop()}>
-              Annuler
-            </Button>
+            <HelpWrap help={HELP.annuler}>
+              <Button type="button" size="sm" variant="outline" onClick={() => void stop()}>
+                Annuler
+              </Button>
+            </HelpWrap>
           ) : null}
         </section>
       ) : null}
@@ -691,26 +842,46 @@ export function DecisionTreeLab() {
       {shown ? (
         <>
           <section data-demo="tree-verdict" className="flex flex-col gap-3 rounded-2xl border border-border bg-card/40 p-3">
-            <p className="text-base leading-6">{shown.verdict_text}</p>
-            <NullScoreHistogram scores={shown.null_scores ?? []} real={shown.holdout_score ?? 0} />
+            <p className="inline-flex items-start gap-1 text-base leading-6">
+              <span>{shown.verdict_text}</span>
+              <HelpTip {...HELP.verdict} />
+            </p>
+            <div className="flex items-start gap-1">
+              <div className="min-w-0 flex-1">
+                <NullScoreHistogram scores={shown.null_scores ?? []} real={shown.holdout_score ?? 0} />
+              </div>
+              <HelpTip {...HELP.histogramme} />
+            </div>
             <div className="flex flex-wrap gap-1.5 text-[11px]">
               <Badge variant="outline">
                 {shown.criterion === "entropy" ? "entropie" : "Gini"} <HelpTip {...(shown.criterion === "entropy" ? HELP.entropy : HELP.gini)} />
               </Badge>
-              <Badge variant="outline">profondeur {shown.max_depth}</Badge>
-              <Badge variant="outline">apprentissage {shown.train_n}</Badge>
+              <Badge variant="outline">
+                profondeur {shown.max_depth} <HelpTip {...HELP.profondeur} />
+              </Badge>
+              <Badge variant="outline">
+                apprentissage {shown.train_n} <HelpTip {...HELP.apprentissage} />
+              </Badge>
               <Badge variant="outline">
                 contrôle {shown.holdout_n} <HelpTip {...HELP.controle} />
               </Badge>
               <Badge variant="outline">
                 p = {formatP(shown.p)} <HelpTip {...HELP.p} />
               </Badge>
-              {shown.p_adjusted != null ? <Badge variant="outline">p corrigé {formatP(shown.p_adjusted)}</Badge> : null}
+              {shown.p_adjusted != null ? (
+                <Badge variant="outline">
+                  p corrigé {formatP(shown.p_adjusted)} <HelpTip {...HELP.pcorrige} />
+                </Badge>
+              ) : null}
             </div>
           </section>
 
           <section data-demo="tree-drawing" className="flex flex-col gap-3 xl:flex-row">
             <div className="min-w-0 xl:w-2/3">
+              <p className="mb-1 inline-flex items-center gap-1 text-xs font-medium">
+                Dessin
+                <HelpTip {...HELP.dessin} />
+              </p>
               <TreeViewport
                 svg={shown.tree_svg}
                 text={shown.tree_text}
@@ -773,7 +944,10 @@ export function DecisionTreeLab() {
           </section>
 
           <section data-demo="tree-next" className="flex flex-col gap-3 rounded-2xl border border-border p-3">
-            <p className="text-sm font-medium">Prochain tirage</p>
+            <p className="inline-flex items-center gap-1 text-sm font-medium">
+              Prochain tirage
+              <HelpTip {...HELP.cas} />
+            </p>
             {shown.case ? (
               <p className="text-sm">
                 Feuille {shown.case.leaf}
@@ -794,15 +968,18 @@ export function DecisionTreeLab() {
                   <label className="flex items-center gap-2 text-xs">
                     <input type="checkbox" checked={pathOnly} onChange={(event) => setPathOnly(event.target.checked)} />
                     chemin seul
+                    <HelpTip {...HELP.chemin} />
                   </label>
                 ) : null}
               </>
             ) : null}
             {follow === "retry" ? (
               <div className="flex flex-col gap-2">
-                <Button type="button" onClick={() => document.querySelector("[data-demo=tree-question]")?.scrollIntoView({ behavior: "smooth" })}>
-                  Essayer une autre question
-                </Button>
+                <HelpWrap help={HELP.retry}>
+                  <Button type="button" onClick={() => document.querySelector("[data-demo=tree-question]")?.scrollIntoView({ behavior: "smooth" })}>
+                    Essayer une autre question
+                  </Button>
+                </HelpWrap>
                 <div className="flex flex-wrap gap-1.5">
                   {(shown.suggestions ?? []).map((item) => (
                     <Button
@@ -827,16 +1004,17 @@ export function DecisionTreeLab() {
             ) : null}
             {follow === "train" || follow === "train-many" ? (
               <div className="flex flex-col gap-2">
-                <label className="text-xs">
-                  Nom
-                  <Input className="mt-1" value={trainName} onChange={(event) => setTrainName(event.target.value)} />
-                </label>
+                <LabelHelp label="Nom" help={HELP.train}>
+                  <Input value={trainName} onChange={(event) => setTrainName(event.target.value)} />
+                </LabelHelp>
                 <div className="flex flex-wrap gap-1.5">
                   {(shown.drafts ?? []).map((draft) => (
-                    <Button key={draft.target} type="button" disabled={training} onClick={() => void trainDraft(draft)}>
-                      {training ? <Loader2 className="animate-spin" /> : null}
-                      {follow === "train" ? "Entraîner ce spécialiste" : `Entraîner ${draft.name}`}
-                    </Button>
+                    <HelpWrap key={draft.target} help={HELP.train}>
+                      <Button type="button" disabled={training} onClick={() => void trainDraft(draft)}>
+                        {training ? <Loader2 className="animate-spin" /> : null}
+                        {follow === "train" ? "Entraîner ce spécialiste" : `Entraîner ${draft.name}`}
+                      </Button>
+                    </HelpWrap>
                   ))}
                 </div>
               </div>
@@ -855,15 +1033,19 @@ export function DecisionTreeLab() {
                     </span>
                   ))}
                 </div>
-                <Button type="button" onClick={sendJeux}>
-                  Envoyer vers Jeux
-                </Button>
+                <HelpWrap help={HELP.jeux}>
+                  <Button type="button" onClick={sendJeux}>
+                    Envoyer vers Jeux
+                  </Button>
+                </HelpWrap>
               </div>
             ) : null}
             {follow === "rule" ? (
-              <Button type="button" onClick={prepareRule}>
-                Préparer la règle
-              </Button>
+              <HelpWrap help={HELP.regle}>
+                <Button type="button" onClick={prepareRule}>
+                  Préparer la règle
+                </Button>
+              </HelpWrap>
             ) : null}
             {beats ? null : (
               <Button type="button" variant="outline" onClick={() => openAtelier()}>
@@ -871,13 +1053,17 @@ export function DecisionTreeLab() {
               </Button>
             )}
             <div className="flex flex-wrap gap-1.5">
-              <Button type="button" size="sm" variant="outline" onClick={() => pin(shown)}>
-                <Pin />
-                Épingler à Brain
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={exportReading}>
-                Exporter
-              </Button>
+              <HelpWrap help={HELP.pin}>
+                <Button type="button" size="sm" variant="outline" onClick={() => pin(shown)}>
+                  <Pin />
+                  Épingler à Brain
+                </Button>
+              </HelpWrap>
+              <HelpWrap help={HELP.export}>
+                <Button type="button" size="sm" variant="outline" onClick={exportReading}>
+                  Exporter
+                </Button>
+              </HelpWrap>
               {(shown.specialists ?? []).map((item) => (
                 <Link key={item.slug} className="text-xs text-primary underline-offset-2 hover:underline" href="/brain/specialistes">
                   {item.name}
@@ -896,7 +1082,10 @@ export function DecisionTreeLab() {
       {journalReady && journal.length ? (
         <section className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium">Journal</p>
+            <p className="inline-flex items-center gap-1 text-sm font-medium">
+              Journal
+              <HelpTip {...HELP.journal} />
+            </p>
             <select className="rounded-md border border-border bg-background px-2 py-1 text-xs" value={filterQ} onChange={(event) => setFilterQ(event.target.value)} aria-label="Filtrer par question">
               <option value="all">Toutes les questions</option>
               <option value="shape">Flux</option>

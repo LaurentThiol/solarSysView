@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react"
 
 import { ReadingProgress, TreeViewport } from "@/components/brain/decision-tree-frame"
 import { SpecialistGlyph } from "@/components/brain/specialist-card"
+import { HelpTip } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { VARIABLE_LABELS, VARIABLE_NAMES, type VariableName } from "@/lib/analysis"
@@ -132,6 +133,13 @@ export function SpecialistFluxCards({
 
   return (
     <div className="flex flex-col gap-3">
+      <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        Quatre séries, ou une autre. Un clic lit le flux de cette seule série, avec la même question binaire que le spécialiste.
+        <HelpTip
+          title="Cartes de flux"
+          body="Parité, Somme, Étendue et n1 lancent decisionTree sur cette série. Si un seuil tient, la carte de confirmation montre les indicateurs allumés et les consignes déjà écrites. Seul le nom se corrige avant d’entraîner. Un verdict sans seuil laisse les autres cartes, et l’atelier manuel reste replié."
+        />
+      </p>
       <div
         data-demo="spec-flux-cards"
         className={cn("grid gap-2 sm:grid-cols-2 xl:grid-cols-5", specialistDemoHighlight(demoStep ?? null, ["flux"]))}

@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { DecisionTreeLab } from "@/components/brain/decision-tree-lab"
+import { DecisionTreeLab, DecisionTreeTitle } from "@/components/brain/decision-tree-lab"
 import { PageShell } from "@/components/page-shell"
 
 export const metadata: Metadata = {
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default function DecisionTreePage() {
   return (
     <PageShell
-      title="decisionTree"
+      title={<DecisionTreeTitle />}
       subtitle="Un seuil sur le flux, tenu contre l’ordre détruit. Pas une grille 5+2."
     >
       <Suspense fallback={null}>

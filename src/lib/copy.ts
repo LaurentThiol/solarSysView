@@ -257,6 +257,36 @@ export const GLOSSARY: GlossaryEntry[] = [
     group: "assistants",
     text: "Derniers tirages tenus hors de la recherche (100, ou 30 % si la série est courte). Ils notent le verdict et chaque feuille. Ils ne choisissent pas la profondeur.",
   },
+  {
+    term: "decisionTree",
+    group: "assistants",
+    text: "Assistant qui cherche un seuil sur le flux, juste avant le tirage t. Une ligne du tableau est l’état du flux (somme, rangs, retard d’une boule, figure). L’indépendance n’est que l’hypothèse nulle : on détruit l’ordre des tirages et on rejoue tout le calcul. Le dessin montre chaque coupure. La suite propose un spécialiste, des chances vers Jeux, ou une règle chartiste — rien n’est écrit tant que vous ne le demandez pas.",
+  },
+  {
+    term: "Question de flux",
+    group: "assistants",
+    text: "Ce que decisionTree demande au tirage t. Flux : somme haute, parité ≥ 3 pairs, ou n1 bas, sur toutes les séries ou sur une seule. Boules : la boule sort-elle. Figures : l’objectif de la figure est-il atteint. Le mot « retard » est réservé au retard d’une boule ; un pas ou un lag ne s’appelle pas retard.",
+  },
+  {
+    term: "Profondeur",
+    group: "assistants",
+    text: "Nombre maximal de coupures successives de l’arbre (2, 3 ou 4). La recherche la choisit par validation temporelle, dans l’apprentissage seul. Le contrôle ne sert pas à la choisir.",
+  },
+  {
+    term: "Apprentissage",
+    group: "assistants",
+    text: "Tirages sur lesquels l’arbre est cherché et dessiné. Les histogrammes de dtreeviz montrent cet apprentissage. Le contrôle, tenu à part, note ensuite chaque feuille.",
+  },
+  {
+    term: "p corrigé",
+    group: "assistants",
+    text: "p de decisionTree revu par Benjamini–Hochberg sur toutes les lectures de la même ère, y compris les verdicts sans seuil. Une démonstration doit encore tenir après cette correction.",
+  },
+  {
+    term: "Chemin",
+    group: "assistants",
+    text: "Suite de coupures de la racine jusqu’à une feuille. « Chemin seul » ne garde que les branches du prochain tirage. Le numéro de feuille est le même dans le dessin et dans la liste.",
+  },
 ]
 
 export function foldGlossaryQuery(value: string) {

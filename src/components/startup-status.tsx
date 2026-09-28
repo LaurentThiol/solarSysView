@@ -7,11 +7,11 @@ import { createPortal } from "react-dom"
 import { LogOut, Menu, X } from "lucide-react"
 
 import { CaptureButton } from "@/components/capture"
-import { AddressButton, GlossaryButton, HelpModeToggle, HelpWrap, WithHelp } from "@/components/help"
+import { AddressButton, GlossaryButton, HelpModeToggle, HelpTip, HelpWrap, WithHelp } from "@/components/help"
 import { SITE_HEADER_SLOT_ID } from "@/components/site-header-slot"
 import { StatusPill, worstStatusTone, type StatusTone } from "@/components/status-pill"
 import { Button } from "@/components/ui/button"
-import { isNavItemActive, pageTitleForPath, NAV_GROUPS } from "@/lib/nav"
+import { isNavItemActive, pageHelpForPath, pageTitleForPath, NAV_GROUPS } from "@/lib/nav"
 import { isLocalHost } from "@/lib/api-base"
 import { formatSyncStamp } from "@/lib/draws"
 import { localLlmOffMessage } from "@/lib/ia/local-url"
@@ -648,7 +648,7 @@ function FamilyLinks({
 
 export function SiteHeader() {
   const pathname = usePathname()
-  const current = { label: pageTitleForPath(pathname) }
+  const current = { label: pageTitleForPath(pathname), help: pageHelpForPath(pathname) }
   const headerRef = useRef<HTMLElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [portalReady, setPortalReady] = useState(false)
@@ -747,9 +747,10 @@ export function SiteHeader() {
         <span className="hidden h-4 w-px shrink-0 bg-border sm:block" aria-hidden />
         <p
           aria-current="page"
-          className="min-w-0 max-w-[8.5rem] truncate text-sm font-medium text-foreground sm:max-w-[14rem]"
+          className="relative z-30 inline-flex min-w-0 max-w-[10rem] items-center gap-1 text-sm font-medium text-foreground sm:max-w-[16rem]"
         >
-          {current.label}
+          <span className="truncate">{current.label}</span>
+          <HelpTip {...current.help} />
         </p>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
           <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
