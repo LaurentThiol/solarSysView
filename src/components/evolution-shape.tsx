@@ -62,6 +62,7 @@ const chartConfig = {
   d2: { label: DECADE_LABELS[2], color: "var(--chart-3)" },
   d3: { label: DECADE_LABELS[3], color: "var(--chart-4)" },
   d4: { label: DECADE_LABELS[4], color: "var(--chart-5)" },
+  decadeOccupied: { label: "Observées", color: "var(--foreground)" },
   sma: { label: "SMA", color: "var(--chart-2)" },
   bbUpper: { label: "Bollinger +", color: "var(--chart-5)" },
   bbLower: { label: "Bollinger −", color: "var(--chart-5)" },
@@ -77,6 +78,7 @@ type SeriesKey =
   | "d2"
   | "d3"
   | "d4"
+  | "decadeOccupied"
 
 type ChartPoint = ReturnType<typeof toDrawSeries>[number] &
   Record<string, number | string | null>
@@ -84,7 +86,7 @@ type ChartPoint = ReturnType<typeof toDrawSeries>[number] &
 const VIEW_KEYS: Record<ShapeView, SeriesKey[]> = {
   spread: ["spread", "starSpread"],
   consecutive: ["consecutive", "starConsecutive"],
-  decades: ["d0", "d1", "d2", "d3", "d4"],
+  decades: ["d0", "d1", "d2", "d3", "d4", "decadeOccupied"],
 }
 
 const TITLE_HELP: HelpCopy = {
@@ -94,7 +96,7 @@ const TITLE_HELP: HelpCopy = {
 
 • Étendue = max − min des 5 numéros (4 à 49). Les étoiles : e2 − e1 (1 à 11).
 • Consécutifs = paires (n, n+1). 0 à 4 pour les numéros, 0 ou 1 pour les étoiles.
-• Décennies = combien de boules dans 1–10, 11–20, …, 41–50.
+• Décennies = combien de boules dans 1–10, 11–20, …, 41–50. Observées = combien de ces bandes le tirage touche, de 1 (cinq boules dans la même décennie) à 5 (une boule par décennie).
 
 SMA et Bollinger (optionnels) lissent ou encadrent chaque courbe visible. Maj+clic isole une série. Descriptif : chaque tirage reste indépendant.
 
@@ -103,7 +105,7 @@ Quand la fenêtre mêle mardi et vendredi, la première courbe visible se dédou
 
 const VIEW_HELP: HelpCopy = {
   title: "Lecture",
-  body: "Étendue et consécutifs superposent numéros et étoiles. Décennies : une courbe par bande de 10. SMA et Bollinger s’appliquent à chaque courbe visible.",
+  body: "Étendue et consécutifs superposent numéros et étoiles. Décennies : une courbe par bande de 10, plus Observées (bandes touchées par le tirage, de 1 à 5). SMA et Bollinger s’appliquent à chaque courbe visible.",
 }
 
 const SMA_HELP: HelpCopy = {
@@ -452,7 +454,7 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
                     dataKey={key}
                     type="linear"
                     stroke={`var(--color-${key})`}
-                    strokeWidth={2}
+                    strokeWidth={key === "decadeOccupied" ? 2.75 : 2}
                     dot={false}
                     name={chartConfig[key].label}
                   />
@@ -634,7 +636,7 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
             </div>
             {multiSeries && (showSma || showBb) && visible.length > 2 ? (
               <p className="mt-2 text-center text-xs text-muted-foreground">
-                Maj+clic sur une décennie pour n’afficher que sa SMA / bande.
+                Maj+clic sur une courbe pour n’afficher que sa SMA / bande.
               </p>
             ) : null}
             <ul className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-center text-xs tabular-nums text-muted-foreground">
