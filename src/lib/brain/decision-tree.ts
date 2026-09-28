@@ -2,6 +2,7 @@ import type { WeekdayScope } from "@/lib/weekday-scope"
 import { weekdayApiFromBrowser, weekdayApiValue } from "@/lib/weekday-scope"
 
 import type { TreeRule } from "./decision-tree-view"
+import type { QuestionTable } from "./question-table-view"
 
 export type DecisionDraft = {
   name: string
@@ -150,6 +151,23 @@ export async function listDecisionReadings(): Promise<{ ok: boolean; items: Deci
 export async function loadDecisionReading(slug: string): Promise<DecisionReading> {
   const response = await fetch(`/api/brain/decision-tree/${encodeURIComponent(slug)}`, { cache: "no-store" })
   const body = (await readJson(response)) as DecisionReading
+  if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`)
+  return body
+}
+
+export async function loadQuestionTable(
+  input: Pick<DecisionQuestionInput, "question" | "label" | "series" | "era" | "curves">,
+  scope?: WeekdayScope | null,
+  signal?: AbortSignal
+): Promise<QuestionTable> {
+  const response = await fetch(withWeekday("/api/brain/decision-tree/tableau", scope), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+    cache: "no-store",
+    signal,
+  })
+  const body = (await readJson(response)) as QuestionTable
   if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`)
   return body
 }

@@ -171,7 +171,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "decisionTree",
         help: {
           title: "decisionTree",
-          body: "Un arbre cherche où le flux se coupe, juste avant le tirage t : somme, rangs, retards, figures. L’indépendance n’est que l’hypothèse nulle. On détruit l’ordre des tirages et on rejoue caractéristiques, étiquettes, recherche et score. Un seuil qui tient sur l’ordre réel et disparaît sur l’ordre détruit est un seuil de flux. S’il ne dépasse pas ce nul, aucun seuil n’est visible — ce n’est pas une conclusion d’indépendance. Le dessin montre chaque coupure. La suite mène vers un spécialiste, Jeux ou une règle chartiste, sans rien écrire en silence.",
+          body: "Le flux est le tableau montré avant la lecture : une ligne est l’état juste avant le tirage t. Un arbre cherche ensuite où ce tableau se coupe (somme, rangs, retards, figures). L’indépendance n’est que l’hypothèse nulle. On détruit l’ordre des tirages et on rejoue caractéristiques, étiquettes, recherche et score. Un seuil qui tient sur l’ordre réel et disparaît sur l’ordre détruit est un seuil de flux. S’il ne dépasse pas ce nul, aucun seuil n’est visible — ce n’est pas une conclusion d’indépendance. Le dessin montre chaque coupure. La suite mène vers un spécialiste, Jeux ou une règle chartiste, sans rien écrire en silence.",
         },
       },
       {

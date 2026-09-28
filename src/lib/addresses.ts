@@ -479,6 +479,14 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/brain/specialists/{slug}/infer", "POST", "Spécialiste · inférer", "Calcule la prévision de série nommée.", "assistants", "era, weekday"),
   apiEntry("/api/brain/specialists/{slug}", "DELETE", "Spécialiste · supprimer", "Retire un réseau enregistré.", "assistants"),
   apiEntry("/api/brain/decision-tree/status", "GET", "decisionTree · statut", "scikit-learn, dtreeviz et dot.", "assistants"),
+  apiEntry(
+    "/api/brain/decision-tree/tableau",
+    "POST",
+    "decisionTree · tableau",
+    "Image du tableau que la question fabrique, avant que l’arbre le coupe.",
+    "assistants",
+    "question, label, series, era, curves, weekday"
+  ),
   apiEntry("/api/brain/decision-tree", "GET · POST", "decisionTree", "Journal des lectures, ou lance une lecture (renvoie une tâche).", "assistants", "question, era, weekday"),
   apiEntry("/api/brain/decision-tree/jobs/{id}", "GET · DELETE", "decisionTree · tâche", "Étape, remaniements k/N, ou annulation.", "assistants"),
   apiEntry("/api/brain/decision-tree/{slug}", "GET", "decisionTree · lecture", "Verdict, règles, dessin.", "assistants"),

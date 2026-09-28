@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { GitBranch, Loader2, Pin, Shapes, CircleDot } from "lucide-react"
 
 import { DemoPopup, DemoTourBar } from "@/components/brain/brain-demo"
+import { QuestionTablePanel } from "@/components/brain/question-table"
 import { NullScoreHistogram, ReadingProgress, TreeViewport } from "@/components/brain/decision-tree-frame"
 import { HelpTip, HelpWrap, LabelHelp } from "@/components/help"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
@@ -55,7 +56,7 @@ const HELP = {
     title: "decisionTree",
     body: "Un arbre cherche où le flux se coupe, juste avant le tirage t. L’indépendance n’est que l’hypothèse nulle : on détruit l’ordre des tirages et on rejoue tout le calcul. Un seuil qui tient ici et disparaît sur l’ordre détruit est un seuil de flux. S’il ne dépasse pas ce nul, aucun seuil n’est visible — ce n’est pas une conclusion d’indépendance.",
     items: [
-      { label: "Question", text: "Flux, Boules ou Figures. Rien ne se lance sans « Lire le flux »." },
+      { label: "Question", text: "Flux, Boules ou Figures. Le tableau s’affiche tout de suite. Rien ne se lance sans « Lire le flux »." },
       { label: "Verdict", text: "Le score sur le contrôle, face à la moyenne des remaniements, et le p." },
       { label: "Suite", text: "Spécialiste, chances vers Jeux, ou règle chartiste. Rien n’est écrit en silence." },
     ],
@@ -89,7 +90,7 @@ const HELP = {
   },
   flux: {
     title: "Flux",
-    body: "Une ligne est l’état du flux juste avant le tirage t. Les pastilles demandent si ce tirage a une somme haute, au moins 3 pairs, ou un n1 bas. Défaut : somme haute.",
+    body: "Le flux est le tableau : une ligne est l’état juste avant le tirage t. Les pastilles choisissent l’étiquette de ce tirage — somme haute, au moins 3 pairs, ou un n1 bas. Défaut : somme haute.",
   },
   portee: {
     title: "Portée",
@@ -137,7 +138,7 @@ const HELP = {
   },
   lire: {
     title: "Lire le flux",
-    body: "Construit le tableau, cherche l’arbre, rejoue les remaniements, puis dessine. La durée attendue est sous le bouton. Échap ou Annuler arrête. Une seule lecture à la fois.",
+    body: "Fait couper le tableau par un arbre, rejoue les remaniements, puis dessine. La durée attendue est sous le bouton. Échap ou Annuler arrête. Une seule lecture à la fois.",
   },
   annuler: {
     title: "Annuler",
@@ -785,6 +786,19 @@ export function DecisionTreeLab() {
             )}
           </div>
         ) : null}
+        <QuestionTablePanel
+          input={
+            card === "balls"
+              ? { question: "balls", era }
+              : card === "chartisme"
+                ? { question: "chartisme", era, curves }
+                : scope === "series"
+                  ? { question: "series", era, series }
+                  : { question: "shape", era, label }
+          }
+          weekday={weekday}
+          enabled={!apiDown}
+        />
         <div>
           <span className="inline-flex items-center gap-1">
             <button type="button" className="text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => setSettingsOpen((open) => !open)}>

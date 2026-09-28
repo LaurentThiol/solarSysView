@@ -5,7 +5,7 @@ export const DEMO_TREE_STEPS = [
     hint: "Flux, boules ou figures",
     target: "tree-question",
     title: "Question",
-    body: "Trois questions. Flux demande si le tirage t porte une forme (somme haute, parité, n1). Boules et figures posent la leur. Rien ne se lance sans « Lire le flux ».",
+    body: "Le tableau est déjà là : une ligne est l’état juste avant le tirage t. Flux, boules ou figures changent ses colonnes et son étiquette. « Lire le flux » le fait couper par un arbre.",
   },
   {
     id: "lecture",

@@ -450,7 +450,21 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
+def _warm_decision_tree() -> None:
+    """Charge le paquet une fois, dans un seul fil, avant les requêtes.
+
+    La page ouvre le journal et le tableau ensemble. Deux imports simultanés
+    du paquet se bloquent sur `questions`.
+    """
+    try:
+        from synchro.decision_tree import list_readings  # noqa: F401
+        from synchro.decision_tree.questions import question_picture  # noqa: F401
+    except ImportError:
+        return
+
+
 def create_app() -> FastAPI:
+    _warm_decision_tree()
     app = FastAPI(title="Synchro", version="0.1.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
@@ -1780,10 +1794,13 @@ def create_app() -> FastAPI:
         return {"ok": True, "slug": slug}
 
     def _decision_draws(era: str) -> tuple[list[dict[str, Any]], str, str | None]:
-        draws, source = _specialist_draws(era)
+        from synchro.brain_specialists.train import normalize_draws
         from synchro.weekday import request_weekday
 
-        return draws, source, request_weekday()
+        draws, source = _specialist_draws(era)
+        # Le snapshot JSON porte `date`, Neon porte `draw_date`. Le tableau
+        # exige `draw_date`.
+        return normalize_draws(draws), source, request_weekday()
 
     def _decision_tree_unavailable(exc: ImportError) -> HTTPException:
         return HTTPException(
@@ -1818,6 +1835,34 @@ def create_app() -> FastAPI:
         from synchro.decision_tree.questions import catalog
 
         return {"ok": True, **catalog()}
+
+    @app.post("/api/brain/decision-tree/tableau")
+    def decision_tree_table(payload: DecisionTreeIn) -> dict[str, Any]:
+        """Image du tableau que la question fabrique, avant toute coupure."""
+        from synchro.decision_tree.questions import question_picture
+
+        if payload.question not in {"shape", "series", "balls", "chartisme"}:
+            raise HTTPException(400, "Question inconnue.")
+        draws, source, weekday = _decision_draws(payload.era)
+        try:
+            view = dict(
+                question_picture(
+                    draws,
+                    payload.question,
+                    label=payload.label,
+                    series=payload.series,
+                    include_stars=payload.era != "all",
+                    curves=payload.curves,
+                )
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        view["ok"] = True
+        view["source"] = source
+        view["era"] = payload.era if payload.era in {"current", "all"} else "current"
+        view["weekday"] = weekday
+        view["draw_count"] = len(draws)
+        return _json(view)
 
     @app.get("/api/brain/decision-tree")
     def decision_tree_list() -> dict[str, Any]:

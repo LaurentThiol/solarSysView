@@ -9,6 +9,7 @@ export const runtime = "nodejs"
 function timeoutFor(path: string[], method: string) {
   if (path[0] === "status") return 6_000
   if (path.includes("retrieve")) return 30_000
+  if (path.includes("tableau")) return 90_000
   if (path.includes("specialists") && method === "POST") return ENSURE_TIMEOUT_MS
   return HEALTH_TIMEOUT_MS
 }

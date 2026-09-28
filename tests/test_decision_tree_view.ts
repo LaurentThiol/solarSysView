@@ -13,6 +13,13 @@ import {
   ruleCuts,
   splitText,
 } from "../src/lib/brain/decision-tree-view.ts"
+import {
+  columnExtent,
+  columnGroups,
+  formatCell,
+  tableSummary,
+  unitScale,
+} from "../src/lib/brain/question-table-view.ts"
 
 test("labels keep retard for a ball and never for a lag", () => {
   assert.equal(featureLabel("sum.step"), "somme · pas")
@@ -59,4 +66,44 @@ test("stale readings, follow-up and ball chances", () => {
   const hist = nullHistogram([0.4, 0.5, 0.6], 0.7, 4)
   assert.equal(hist.bins.reduce((sum, bin) => sum + bin.count, 0), 3)
   assert.equal(hist.realAt, 3)
+})
+
+test("question table groups columns and scales each one", () => {
+  const groups = columnGroups([
+    { name: "sum.last", label: "somme · dernière", group: "somme", measure: "dernière" },
+    { name: "sum.step", label: "somme · pas", group: "somme", measure: "pas" },
+    { name: "n1.z20", label: "n1 · z20", group: "n1", measure: "z20" },
+  ])
+  assert.deepEqual(groups, [
+    { label: "somme", span: 2 },
+    { label: "n1", span: 1 },
+  ])
+  const bands = [
+    { values: [10, null] },
+    { values: [30, 1] },
+  ]
+  assert.deepEqual(columnExtent(bands, 0), { min: 10, max: 30 })
+  assert.equal(unitScale(20, columnExtent(bands, 0)), 0.5)
+  assert.equal(unitScale(null, columnExtent(bands, 0)), null)
+  assert.equal(unitScale(4, { min: 4, max: 4 }), 0.5)
+  assert.equal(formatCell(162.5), "162.50")
+  assert.equal(formatCell(0.082), "0.082")
+  assert.equal(formatCell(null), "—")
+  const summary = tableSummary({
+    question: "shape",
+    phrase: "la somme du tirage t est haute",
+    class_names: ["somme basse", "somme haute"],
+    rows: 12,
+    columns: 2,
+    train_n: 8,
+    holdout_n: 4,
+    from_date: "2024-01-01",
+    to_date: "2024-03-01",
+    features: [],
+    bands: [],
+    cut_band: 1,
+    tail: [],
+  })
+  assert.match(summary, /12 lignes, 2 colonnes/)
+  assert.match(summary, /4 dernières lignes/)
 })

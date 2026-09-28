@@ -13,6 +13,90 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_picture_keeps_the_holdout_on_a_band_edge() -> None:
+    from synchro.decision_tree.questions import band_edges, holdout_cut, picture
+
+    edges = band_edges(1200, 1199, 64)
+    assert edges[0][0] == 0
+    assert edges[-1][1] == 1200
+    assert sum(end - start for start, end in edges) == 1200
+    assert all(right == nxt for (_, right), (nxt, _) in zip(edges, edges[1:]))
+    assert any(start == 1199 for start, _ in edges)
+    assert len(edges) <= 64
+
+    n, width = 250, 3
+    matrix = np.arange(n * width, dtype=float).reshape(n, width)
+    labels = (np.arange(n) % 2).astype(float)
+    packed = {
+        "question": "shape",
+        "label": "sum_high",
+        "series": None,
+        "x": matrix,
+        "y": labels,
+        "raw": labels * 10,
+        "dates": [f"2020-01-{(index % 28) + 1:02d}" for index in range(n)],
+        "feature_names": ["sum.last", "sum.step", "n1.z20"],
+        "class_names": ["somme basse", "somme haute"],
+        "threshold": 140.0,
+        "sense": "ge",
+    }
+    view = picture(packed, limit=10)
+    cut = holdout_cut(n)
+    assert view["rows"] == n
+    assert view["columns"] == 3
+    assert view["train_n"] == cut
+    assert view["holdout_n"] == n - cut
+    assert view["bands"][0]["start"] == 0
+    assert view["bands"][-1]["end"] == n
+    assert view["bands"][view["cut_band"]]["start"] == cut
+    assert all(view["bands"][i]["end"] == view["bands"][i + 1]["start"] for i in range(len(view["bands"]) - 1))
+    start, end = view["bands"][0]["start"], view["bands"][0]["end"]
+    assert view["bands"][0]["values"][0] == round(float(matrix[start:end, 0].mean()), 4)
+    assert view["tail"][-1]["date"] == packed["dates"][-1]
+    assert view["tail"][-1]["holdout"] is True
+    assert view["features"][0] == {
+        "name": "sum.last",
+        "label": "somme · dernière",
+        "group": "somme",
+        "measure": "dernière",
+    }
+    assert "somme" in view["phrase"]
+    assert "retard" not in view["features"][0]["label"]
+
+
+def test_shape_picture_is_the_question_table() -> None:
+    from synchro.decision_tree.questions import build_shape, holdout_cut, picture, question_picture
+
+    rng = np.random.default_rng(7)
+    rows = []
+    for index in range(90):
+        numbers = sorted(int(n) for n in rng.choice(np.arange(1, 51), size=5, replace=False))
+        rows.append(
+            {
+                "draw_date": date(2016, 1, 1) + timedelta(days=index),
+                "numbers": numbers,
+                "stars": [1, 2],
+                "star_pool": 12,
+                "weekday": "mardi" if index % 2 == 0 else "vendredi",
+            }
+        )
+    packed = build_shape(rows, label="parity_high", include_stars=False)
+    view = picture(packed)
+    assert view["question"] == "shape"
+    assert view["rows"] == len(packed["y"])
+    assert view["rows"] > 0
+    assert view["train_n"] == holdout_cut(len(packed["y"]))
+    assert view["bands"][view["cut_band"]]["start"] == view["train_n"]
+    names = [item["name"] for item in view["features"]]
+    assert "parity.last" in names
+    assert "sum.step" in names
+    assert not any(name.startswith(("star_", "e1", "e2")) for name in names)
+    again = question_picture(rows, "shape", label="parity_high", include_stars=False)
+    cached = question_picture(rows, "shape", label="parity_high", include_stars=False)
+    assert cached is again
+    assert again["rows"] == view["rows"]
+
+
 def test_feature_labels_reserve_retard_for_balls() -> None:
     from synchro.decision_tree.questions import feature_label
 
@@ -370,6 +454,7 @@ def test_menu_addresses_and_page() -> None:
     assert special < tree < dictionary
     assert "/brain/decision-tree" in addresses
     assert "/api/brain/decision-tree" in addresses
+    assert "/api/brain/decision-tree/tableau" in addresses
     assert "decisionTree" in page
 
 

@@ -1,5 +1,11 @@
 """Questions du flux : état juste avant le tirage t, étiquette sur t+1.
 
+« Flux » n'est pas un objet que l'on rédige. C'est le tableau que
+`build_question` fabrique, puis que `read_flux` fait couper par un arbre.
+`picture` en donne une image : les lignes regroupées, la coupure
+apprentissage / contrôle sur une frontière, les huit dernières lignes
+en nombres exacts.
+
 Les libellés sont partagés par le dessin, le panneau et la CLI. « Retard »
 reste le retard d'une boule : un lag s'appelle « dernière ».
 """
@@ -550,6 +556,250 @@ def catalog() -> dict[str, Any]:
             },
         ]
     }
+
+
+def band_edges(n: int, cut: int, limit: int = 64) -> list[tuple[int, int]]:
+    """Blocs contigus [début, fin) qui couvrent 0..n, coupure sur une frontière."""
+    if n <= 0:
+        return []
+    cut = min(max(int(cut), 0), n)
+    if n <= limit:
+        return [(index, index + 1) for index in range(n)]
+
+    def chunks(start: int, end: int, bins: int) -> list[tuple[int, int]]:
+        length = end - start
+        if length <= 0 or bins <= 0:
+            return []
+        bins = min(int(bins), length)
+        edges = [start + (index * length) // bins for index in range(bins + 1)]
+        edges[-1] = end
+        return [
+            (edges[index], edges[index + 1])
+            for index in range(bins)
+            if edges[index + 1] > edges[index]
+        ]
+
+    if cut <= 0 or cut >= n:
+        return chunks(0, n, limit)
+    hold_bins = max(1, min(n - cut, max(1, limit - max(1, int(round(limit * cut / n))))))
+    train_bins = max(1, min(cut, limit - hold_bins))
+    return chunks(0, cut, train_bins) + chunks(cut, n, hold_bins)
+
+
+def _feature_meta(name: str, series: str | None) -> dict[str, str]:
+    label = feature_label(name, series=series)
+    group = "mesure"
+    measure = label
+    if name.startswith("ball."):
+        group = "boule"
+        measure = label.split(" · ", 1)[-1]
+    elif name.startswith("curve_"):
+        group = "courbe"
+        measure = label.split(" · ", 1)[-1]
+    elif name.startswith("figure_"):
+        group = "figure"
+        measure = name[7:] or label
+    elif "." in name:
+        left, right = name.split(".", 1)
+        group = SERIES_FR.get(left, left)
+        measure = MEASURE_FR.get(right, right)
+    elif series:
+        group = SERIES_FR.get(series, series)
+        measure = label.split(" · ", 1)[-1] if " · " in label else label
+    return {"name": name, "label": label, "group": group, "measure": measure}
+
+
+def _round_num(value: Any, digits: int = 4) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number or number in {float("inf"), float("-inf")}:
+        return None
+    return round(number, digits)
+
+
+def _column_mean(column: np.ndarray) -> float | None:
+    finite = column[np.isfinite(column)]
+    if finite.size == 0:
+        return None
+    return round(float(finite.mean()), 4)
+
+
+def picture(packed: dict[str, Any], *, limit: int = 64, tail: int = 8) -> dict[str, Any]:
+    """Image du tableau : blocs de lignes, coupure du contrôle, dernières lignes."""
+    names = [str(name) for name in packed.get("feature_names") or []]
+    series = packed.get("series")
+    x = np.asarray(packed.get("x"), dtype=float)
+    y = np.asarray(packed.get("y"), dtype=float).reshape(-1)
+    raw = np.asarray(packed.get("raw", y), dtype=float).reshape(-1)
+    if x.ndim == 1:
+        x = x.reshape(-1, 1)
+    if x.size == 0:
+        x = np.zeros((0, len(names)))
+    n = int(y.shape[0])
+    if x.shape[0] != n:
+        n = min(n, int(x.shape[0]))
+        x = x[:n]
+        y = y[:n]
+    if raw.shape[0] < n:
+        padded = np.full(n, np.nan)
+        padded[: raw.shape[0]] = raw
+        raw = padded
+    else:
+        raw = raw[:n]
+    if x.shape[1] != len(names):
+        width = min(int(x.shape[1]), len(names)) if names else int(x.shape[1])
+        names = names[:width] or [f"c{index}" for index in range(width)]
+        x = x[:, : len(names)]
+    dates = [str(item) for item in (packed.get("dates") or [])]
+    if len(dates) < n:
+        dates = dates + [""] * (n - len(dates))
+    ball_ids = packed.get("ball_ids")
+    cut = holdout_cut(n) if n else 0
+    edges = band_edges(n, cut, limit)
+    bands: list[dict[str, Any]] = []
+    for start, end in edges:
+        bands.append(
+            {
+                "start": start,
+                "end": end,
+                "n": end - start,
+                "from": dates[start],
+                "to": dates[end - 1],
+                "holdout": start >= cut,
+                "y": _column_mean(y[start:end]),
+                "values": [_column_mean(x[start:end, index]) for index in range(len(names))],
+            }
+        )
+    cut_band = next((index for index, band in enumerate(bands) if band["holdout"]), None)
+    tail_rows: list[dict[str, Any]] = []
+    begin = max(0, n - max(int(tail), 0))
+    for index in range(begin, n):
+        ball = None
+        if isinstance(ball_ids, list) and index < len(ball_ids):
+            ball = int(ball_ids[index])
+        tail_rows.append(
+            {
+                "index": index,
+                "date": dates[index],
+                "ball": ball,
+                "y": _round_num(y[index], 0),
+                "raw": _round_num(raw[index] if index < len(raw) else None),
+                "holdout": index >= cut,
+                "values": [_round_num(x[index, column]) for column in range(len(names))],
+            }
+        )
+    question = str(packed.get("question") or "")
+    label = packed.get("label")
+    threshold = packed.get("threshold")
+    threshold_num = _round_num(threshold, 6) if threshold is not None else None
+    open_rows: list[dict[str, Any]] = []
+    latest = packed.get("latest_by_ball") or {}
+    if isinstance(latest, dict) and latest:
+        for ball in sorted(latest, key=lambda item: int(item)):
+            row = np.asarray(latest[ball], dtype=float).reshape(-1)
+            open_rows.append(
+                {
+                    "ball": int(ball),
+                    "values": [_round_num(row[index]) if index < row.size else None for index in range(len(names))],
+                }
+            )
+    return {
+        "question": question,
+        "label": None if label is None else str(label),
+        "series": None if series is None else str(series),
+        "phrase": label_phrase(question, str(label or ""), threshold=threshold_num),
+        "class_names": [str(name) for name in (packed.get("class_names") or [])],
+        "rows": n,
+        "columns": len(names),
+        "train_n": cut if n else 0,
+        "holdout_n": max(0, n - cut),
+        "threshold": threshold_num,
+        "sense": packed.get("sense"),
+        "from_date": dates[0] if n else None,
+        "to_date": dates[n - 1] if n else None,
+        "features": [_feature_meta(name, None if series is None else str(series)) for name in names],
+        "bands": bands,
+        "cut_band": cut_band,
+        "tail": tail_rows,
+        "open": {"rows": open_rows} if open_rows else None,
+    }
+
+
+_PICTURES: dict[tuple[Any, ...], dict[str, Any]] = {}
+
+
+def _picture_key(
+    draws: list[dict[str, Any]],
+    question: str,
+    *,
+    label: str | None,
+    series: str | None,
+    include_stars: bool,
+    curves: Sequence[str] | None,
+) -> tuple[Any, ...]:
+    count = len(draws)
+    probe = 0
+    if count:
+        step = max(1, count // 16)
+        for index in range(0, count, step):
+            numbers = draws[index].get("numbers") or [0]
+            probe = (probe * 131 + int(numbers[0] or 0)) % 1_000_003
+    def _stamp_date(draw: dict[str, Any]) -> str:
+        return str(draw.get("draw_date") or draw.get("date") or "")
+
+    head = _stamp_date(draws[0]) if count else ""
+    last = _stamp_date(draws[-1]) if count else ""
+    return (
+        question,
+        label,
+        series,
+        bool(include_stars),
+        tuple(curves or ()),
+        count,
+        head,
+        last,
+        probe,
+    )
+
+
+def question_picture(
+    draws: list[dict[str, Any]],
+    question: str,
+    *,
+    label: str | None = None,
+    series: str | None = None,
+    include_stars: bool = True,
+    curves: Sequence[str] | None = None,
+    chartisme_records: Sequence[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Tableau de `build_question`, mis en image. Le cache évite de le refabriquer."""
+    key = _picture_key(
+        draws,
+        question,
+        label=label,
+        series=series,
+        include_stars=include_stars,
+        curves=curves,
+    )
+    if chartisme_records is None and key in _PICTURES:
+        return _PICTURES[key]
+    packed = build_question(
+        draws,
+        question,
+        label=label,
+        series=series,
+        include_stars=include_stars,
+        curves=curves,
+        chartisme_records=chartisme_records,
+    )
+    view = picture(packed)
+    if chartisme_records is None:
+        _PICTURES[key] = view
+        while len(_PICTURES) > 8:
+            _PICTURES.pop(next(iter(_PICTURES)))
+    return view
 
 
 def draw_numbers(draw: dict[str, Any]) -> list[int]:
