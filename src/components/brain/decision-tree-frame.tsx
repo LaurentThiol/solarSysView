@@ -92,10 +92,14 @@ export function TreeViewport({
   svg,
   text,
   label,
+  compact = false,
+  fallbackHint = true,
 }: {
   svg?: string | null
   text?: string | null
   label: string
+  compact?: boolean
+  fallbackHint?: boolean
 }) {
   const frame = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
@@ -123,15 +127,18 @@ export function TreeViewport({
         <pre className="max-h-[28rem] overflow-auto rounded-xl bg-[#f4f1ea] p-3 font-mono text-[12px] leading-5 text-[#2a2824]">
           {text || "Arbre indisponible."}
         </pre>
-        <p className="text-[11px] text-muted-foreground">
-          Sans <span className="font-mono">dot</span>, le dessin dtreeviz n’est pas possible. Relance <span className="font-mono">./launch</span> : il tente d’installer Graphviz. Réparation : <span className="font-mono">./launch install-decision-tree</span>.
-        </p>
+        {fallbackHint ? (
+          <p className="text-[11px] text-muted-foreground">
+            Sans <span className="font-mono">dot</span>, le dessin dtreeviz n’est pas possible. Relance <span className="font-mono">./launch</span> : il tente d’installer Graphviz. Réparation : <span className="font-mono">./launch install-decision-tree</span>.
+          </p>
+        ) : null}
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-2">
+      {compact ? null : (
       <div className="flex flex-wrap gap-1.5">
         <Button size="xs" variant="outline" type="button" onClick={fit}>
           Ajuster
@@ -153,9 +160,13 @@ export function TreeViewport({
           Plein écran
         </Button>
       </div>
+      )}
       <div
         ref={frame}
-        className="relative h-[28rem] overflow-hidden rounded-2xl bg-[#f4f1ea]"
+        className={cn(
+          "relative overflow-hidden rounded-2xl bg-[#f4f1ea]",
+          compact ? "h-36" : "h-[28rem]"
+        )}
         aria-label={label}
         role="img"
         onWheel={(event) => {
@@ -184,9 +195,11 @@ export function TreeViewport({
           dangerouslySetInnerHTML={{ __html: safeSvg(svg) }}
         />
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        Glisser pour déplacer, Ctrl + molette pour zoomer. Les histogrammes montrent l’apprentissage. Le contrôle est dans la liste, feuille par feuille.
-      </p>
+      {compact ? null : (
+        <p className="text-[11px] text-muted-foreground">
+          Glisser pour déplacer, Ctrl + molette pour zoomer. Les histogrammes montrent l’apprentissage. Le contrôle est dans la liste, feuille par feuille.
+        </p>
+      )}
     </div>
   )
 }

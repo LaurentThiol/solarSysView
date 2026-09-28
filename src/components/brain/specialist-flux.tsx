@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 
-import { ReadingProgress } from "@/components/brain/decision-tree-frame"
+import { ReadingProgress, TreeViewport } from "@/components/brain/decision-tree-frame"
 import { SpecialistGlyph } from "@/components/brain/specialist-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -200,6 +200,9 @@ export function SpecialistFluxCards({
           )}
         >
           <p className="text-sm">{showDemo ? "Le flux porte un seuil sur la parité." : reading?.verdict_text}</p>
+          {reading?.case_svg && !showDemo ? (
+            <TreeViewport svg={reading.case_svg} label="Chemin du prochain tirage" compact fallbackHint={false} />
+          ) : null}
           <p className="text-[11px] text-muted-foreground">{draft.label_phrase}</p>
           <IndicatorRow features={features} picked={draft.indicators} />
           <label className="text-xs">

@@ -421,6 +421,7 @@ export function DecisionTreeLab() {
       setRunning(true)
       if (!(await ask("lecture"))) return
       setRunning(false)
+      setStage("fait")
       setReading(DEMO_TREE_READING)
       if (!(await ask("verdict"))) return
       if (!(await ask("arbre"))) return
@@ -544,6 +545,7 @@ export function DecisionTreeLab() {
               <button
                 key={item.id}
                 type="button"
+                aria-label={item.title}
                 className={cn(
                   "rounded-2xl border px-3 py-3 text-left",
                   on ? "border-primary/50 bg-primary/10" : "border-border bg-card/40"
@@ -710,20 +712,15 @@ export function DecisionTreeLab() {
           <section data-demo="tree-drawing" className="flex flex-col gap-3 xl:flex-row">
             <div className="min-w-0 xl:w-2/3">
               <TreeViewport
-                svg={pathOnly && shown.path_svg ? shown.path_svg : shown.tree_svg}
+                svg={shown.tree_svg}
                 text={shown.tree_text}
                 label={ariaTreeLabel(rules)}
+                fallbackHint={shown.slug !== "demo-flux"}
               />
               {!shown.tree_svg && shown.tree_text ? (
                 <Button type="button" size="sm" variant="outline" className="mt-2" onClick={() => void copyText(shown.tree_text || "")}>
                   Copier
                 </Button>
-              ) : null}
-              {shown.case_svg ? (
-                <label className="mt-2 flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked={pathOnly} onChange={(event) => setPathOnly(event.target.checked)} />
-                  chemin seul
-                </label>
               ) : null}
             </div>
             <div className="flex min-w-0 flex-col gap-2 xl:w-1/3">
@@ -777,13 +774,30 @@ export function DecisionTreeLab() {
 
           <section data-demo="tree-next" className="flex flex-col gap-3 rounded-2xl border border-border p-3">
             <p className="text-sm font-medium">Prochain tirage</p>
-            {shown.case_svg ? (
-              <TreeViewport svg={pathOnly && shown.path_svg ? shown.path_svg : shown.case_svg} label="Chemin du prochain tirage" />
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Feuille {openLeaf?.node ?? "—"} · {openLeaf?.class_name ?? shown.class_names?.[1] ?? ""}
+            {shown.case ? (
+              <p className="text-sm">
+                Feuille {shown.case.leaf}
+                {shown.case.class_name ? ` · ${shown.case.class_name}` : ""}
+                {shown.case.proba && shown.case.predicted != null && shown.case.proba[shown.case.predicted] != null
+                  ? ` · ${Math.round(shown.case.proba[shown.case.predicted] * 100)} %`
+                  : ""}
               </p>
-            )}
+            ) : null}
+            {shown.case_svg ? (
+              <>
+                <TreeViewport
+                  svg={pathOnly && shown.path_svg ? shown.path_svg : shown.case_svg}
+                  label="Chemin du prochain tirage"
+                  compact
+                />
+                {shown.path_svg ? (
+                  <label className="flex items-center gap-2 text-xs">
+                    <input type="checkbox" checked={pathOnly} onChange={(event) => setPathOnly(event.target.checked)} />
+                    chemin seul
+                  </label>
+                ) : null}
+              </>
+            ) : null}
             {follow === "retry" ? (
               <div className="flex flex-col gap-2">
                 <Button type="button" onClick={() => document.querySelector("[data-demo=tree-question]")?.scrollIntoView({ behavior: "smooth" })}>

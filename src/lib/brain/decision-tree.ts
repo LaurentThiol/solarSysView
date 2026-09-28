@@ -51,6 +51,12 @@ export type DecisionReading = {
   tree_text?: string | null
   latest?: { x?: number[]; date?: string | null }
   ball_scores?: { ball: number; proba: number; leaf: number }[]
+  case?: {
+    leaf: number
+    predicted?: number
+    class_name?: string
+    proba?: number[]
+  } | null
   drafts?: DecisionDraft[]
   chartisme_rules?: Record<string, unknown>[]
   suggestions?: { question?: string; label?: string; series?: string; text?: string }[]

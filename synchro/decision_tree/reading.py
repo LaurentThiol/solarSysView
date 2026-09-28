@@ -157,6 +157,7 @@ def read_flux(
         beats,
     )
     ball_scores = _ball_scores(table, tree, names)
+    case = _case_prediction(tree, names, labels, list(table["class_names"]), question, latest_row)
     report: dict[str, Any] = {
         "ok": True,
         "slug": slug,
@@ -201,6 +202,7 @@ def read_flux(
         "path_svg": drawn.get("path_svg"),
         "tree_text": drawn.get("tree_text"),
         "ball_scores": ball_scores,
+        "case": case,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     report["drafts"] = draft_specialists(report)
@@ -208,6 +210,31 @@ def read_flux(
     report["suggestions"] = _suggestions(question, str(table.get("label") or ""))
     save_reading(_sanitize(report), root=root)
     return _sanitize(report)
+
+
+def _case_prediction(
+    tree: dict[str, Any],
+    names: list[str],
+    labels: dict[str, str],
+    class_names: list[str],
+    question: str,
+    latest_row: list[float],
+) -> dict[str, Any] | None:
+    if not latest_row:
+        return None
+    try:
+        return predict_latest(
+            {
+                "tree": tree,
+                "latest": {"x": latest_row},
+                "feature_names": names,
+                "feature_labels": labels,
+                "class_names": class_names,
+                "question": question,
+            }
+        )
+    except ValueError:
+        return None
 
 
 def _ball_scores(table: dict[str, Any], tree: dict[str, Any], names: list[str]) -> list[dict[str, Any]]:

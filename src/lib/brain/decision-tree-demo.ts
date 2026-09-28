@@ -106,6 +106,12 @@ export const DEMO_TREE_READING = {
   tree_svg: null as string | null,
   case_svg: null as string | null,
   path_svg: null as string | null,
+  case: {
+    leaf: 4,
+    predicted: 1,
+    class_name: "somme haute",
+    proba: [0.36, 0.64],
+  },
   latest: { x: [20, 8], date: "2026-09-01" },
   ball_scores: [] as { ball: number; proba: number; leaf: number }[],
   drafts: [
