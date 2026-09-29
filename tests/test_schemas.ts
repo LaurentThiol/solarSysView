@@ -35,6 +35,26 @@ test("catalog reads the pronostic schemas in reading order", () => {
   assert.equal(findSchemaDoc(docs, "absent"), null)
 })
 
+test("catalog reads the decisionTree schemas in reading order", () => {
+  const { docs } = loadSchemaCatalog()
+  const ids = docs.map((doc) => doc.id)
+  assert.ok(ids.includes("decision-tree"))
+  const contexte = ids.indexOf("decision-tree/01-contexte")
+  const sortie = ids.indexOf("decision-tree/07-sortie-flux")
+  assert.ok(contexte > ids.indexOf("decision-tree"))
+  assert.ok(sortie > contexte)
+  assert.ok(ids.indexOf("decision-tree/04-lecture-flux") < ids.indexOf("decision-tree/06-recherche-flux"))
+  const doc = findSchemaDoc(docs, "decision-tree/01-contexte")
+  assert.equal(doc?.shortTitle, "Contexte")
+  assert.equal(doc?.meta.level, "C4 contexte")
+  const lecture = findSchemaDoc(docs, "decision-tree/04-lecture-flux")
+  assert.equal(lecture?.shortTitle, "Lecture — flux")
+  assert.equal(lecture?.meta.revision, "1")
+  const diagrams = lecture?.blocks.filter((block) => block.kind === "diagram") ?? []
+  assert.equal(diagrams.length, 2)
+  assert.equal(findSchemaDoc(docs, "pronostic/01-contexte")?.shortTitle, "Contexte")
+})
+
 test("relative schema links stay inside the reader", () => {
   assert.equal(resolveSchemaLink("", "pronostic/README.md"), "/schemas/pronostic")
   assert.equal(resolveSchemaLink("pronostic", "01-contexte.md"), "/schemas/pronostic/01-contexte")

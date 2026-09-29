@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 
 function moduleLabel(moduleId: string) {
   if (!moduleId) return "Méthode"
+  if (moduleId === "decision-tree") return "decisionTree"
   return moduleId.charAt(0).toUpperCase() + moduleId.slice(1)
 }
 

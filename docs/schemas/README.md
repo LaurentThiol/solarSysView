@@ -28,3 +28,4 @@ Le flux est le niveau qu’on modifie quand une fonction change. Le contexte et 
 ## Modules
 
 - [Pronostic](pronostic/README.md) — atelier `/pronostic` et historique `/pronostic?tab=historic`.
+- [decisionTree](decision-tree/README.md) — lecture `/brain/decision-tree`, fonction `read_flux`.
