@@ -19,7 +19,7 @@ import { SketchPlotLayers } from "@/components/chart-draw/sketch-layers"
 import { SketchToolbar } from "@/components/chart-draw/sketch-toolbar"
 import { useSketchChart } from "@/components/chart-draw/use-sketch-chart"
 import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
-import { WeekdayDot, WeekdaySplitLegend } from "@/components/weekday-split"
+import { WeekdaySeriesLines, WeekdaySplitLegend } from "@/components/weekday-split"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ChartContainer,
@@ -62,13 +62,14 @@ import {
   readOverlay,
   type BandPoint,
 } from "@/lib/draw-overlays"
+import { weekdaySplitKeys } from "@/lib/draw-chart-rank"
 import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
 import { cn } from "@/lib/utils"
 import {
-  WEEKDAY_LINE_COLOR,
   seriesHasBothWeekdays,
-  weekdayLineDash,
-  weekdaySplitFields,
+  weekdayDayLineCaption,
+  weekdayOverlayFieldsFor,
+  weekdaySeriesPhrase,
   type DrawWeekday,
 } from "@/lib/weekday-scope"
 
@@ -375,12 +376,13 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
 
   const series = useMemo(() => toDeltaSeries(toDrawSeries(draws)), [draws])
   const keys = DELTA_VIEW_KEYS[view]
-  const visible = keys.filter((key) => !hidden[key])
+  const visible = useMemo(() => keys.filter((key) => !hidden[key]), [keys, hidden])
   const deltaCount = Math.max(0, series.length - 1)
   const smaPeriod = overlayPeriodFor(deltaCount)
   const mixedDays = useMemo(() => seriesHasBothWeekdays(series), [series])
-  const splitKey = visible[0] ?? null
-  const showDayLines = mixedDays && splitKey != null
+  const splitKeys = useMemo(() => weekdaySplitKeys(visible), [visible])
+  const showDayLines = mixedDays && splitKeys.length > 0
+  const splitLabels = splitKeys.map((key) => String(chartConfig[key].label))
   const dualAxis = view === "sums"
   const seriesKey = keys.includes(targetKey) ? targetKey : (keys[0] ?? targetKey)
 
@@ -396,10 +398,13 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
 
   const chartData = useMemo(() => {
     let points: ChartPoint[] = series
-    if (showDayLines && splitKey) {
+    if (showDayLines && splitKeys.length > 0) {
       points = points.map((point) => ({
         ...point,
-        ...weekdaySplitFields(point.weekday, point[splitKey]),
+        ...weekdayOverlayFieldsFor(
+          point.weekday,
+          splitKeys.map((key) => ({ key, value: point[key] }))
+        ),
       }))
     }
     if (!smaPeriod) return points
@@ -409,7 +414,7 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
       points = mergeOverlays(points, key, abs)
     }
     return points
-  }, [series, smaPeriod, keys, overlayPacks, showDayLines, splitKey])
+  }, [series, smaPeriod, keys, overlayPacks, showDayLines, splitKeys])
 
   const domains = useMemo(() => {
     const collect = (key: DeltaKey) => {
@@ -926,39 +931,13 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
                       </Fragment>
                     ))
                   : null}
-                {showDayLines && splitKey ? (
-                  <>
-                    <Line
-                      yAxisId={axisOf(splitKey)}
-                      dataKey="overlayMardi"
-                      type="linear"
-                      stroke={WEEKDAY_LINE_COLOR.mardi}
-                      strokeWidth={2.75}
-                      strokeDasharray={weekdayLineDash("mardi")}
-                      connectNulls
-                      hide={!dayLine.mardi}
-                      dot={(props) => <WeekdayDot day="mardi" {...props} />}
-                      activeDot={(props) => <WeekdayDot day="mardi" {...props} />}
-                      isAnimationActive={false}
-                      legendType="none"
-                      name="Mardi"
-                    />
-                    <Line
-                      yAxisId={axisOf(splitKey)}
-                      dataKey="overlayVendredi"
-                      type="linear"
-                      stroke={WEEKDAY_LINE_COLOR.vendredi}
-                      strokeWidth={2.75}
-                      strokeDasharray={weekdayLineDash("vendredi")}
-                      connectNulls
-                      hide={!dayLine.vendredi}
-                      dot={(props) => <WeekdayDot day="vendredi" {...props} />}
-                      activeDot={(props) => <WeekdayDot day="vendredi" {...props} />}
-                      isAnimationActive={false}
-                      legendType="none"
-                      name="Vendredi"
-                    />
-                  </>
+                {showDayLines ? (
+                  <WeekdaySeriesLines
+                    seriesKeys={splitKeys}
+                    showMardi={dayLine.mardi}
+                    showVendredi={dayLine.vendredi}
+                    yAxisId={(key) => axisOf(key as DeltaKey)}
+                  />
                 ) : null}
                 {sketch.draw ? (
                   <SketchPlotLayers
@@ -981,9 +960,10 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
               </ComposedChart>
             </ChartContainer>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-              {showDayLines && splitKey ? (
+              {showDayLines ? (
                 <WeekdaySplitLegend
-                  metric={String(chartConfig[splitKey].label)}
+                  metric={weekdaySeriesPhrase(splitLabels)}
+                  seriesCount={splitKeys.length}
                   showMardi={dayLine.mardi}
                   showVendredi={dayLine.vendredi}
                   onToggle={(day: DrawWeekday) =>
@@ -1061,6 +1041,11 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
                 </button>
               ))}
             </div>
+            {showDayLines ? (
+              <p className="mt-2 text-center text-xs text-muted-foreground">
+                {weekdayDayLineCaption(splitLabels)}
+              </p>
+            ) : null}
             {view === "all" && visible.length > 2 ? (
               <p className="mt-2 text-center text-xs text-muted-foreground">
                 Les sommes écrasent n1–n5 et les étoiles. Maj+clic isole une courbe, ou passez par n1 à n5 / e1 et e2.

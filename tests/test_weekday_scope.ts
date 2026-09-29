@@ -10,7 +10,11 @@ import {
   weekdayApiFromSources,
   weekdayApiValue,
   weekdayFilterDay,
+  weekdayDayLineCaption,
   weekdayLineDash,
+  weekdayOverlayField,
+  weekdayOverlayFieldsFor,
+  weekdaySeriesPhrase,
   weekdaySplitFields,
 } from "../src/lib/weekday-scope.ts"
 import { NUMBER_SUM_SD, weekdayDivergence } from "../src/lib/weekday-divergence.ts"
@@ -64,6 +68,48 @@ test("weekday split keeps mardi and vendredi on their own curve", () => {
   assert.equal(WEEKDAY_LINE_COLOR.vendredi.includes("chart-4"), false)
   assert.equal(weekdayLineDash("mardi"), undefined)
   assert.equal(weekdayLineDash("vendredi"), "6 3")
+})
+
+test("weekday overlays keep one pair per series", () => {
+  assert.equal(weekdayOverlayField("mardi", "n2"), "overlayMardi_n2")
+  assert.equal(weekdayOverlayField("vendredi", "n2"), "overlayVendredi_n2")
+  assert.deepEqual(
+    weekdayOverlayFieldsFor("mardi", [
+      { key: "n1", value: 4 },
+      { key: "n2", value: 18 },
+    ]),
+    {
+      overlayMardi_n1: 4,
+      overlayVendredi_n1: null,
+      overlayMardi_n2: 18,
+      overlayVendredi_n2: null,
+    }
+  )
+  assert.deepEqual(
+    weekdayOverlayFieldsFor("vendredi", [
+      { key: "n1", value: 9 },
+      { key: "n3", value: null },
+    ]),
+    {
+      overlayMardi_n1: null,
+      overlayVendredi_n1: 9,
+      overlayMardi_n3: null,
+      overlayVendredi_n3: null,
+    }
+  )
+  assert.equal(weekdaySeriesPhrase([]), "")
+  assert.equal(weekdaySeriesPhrase(["n1"]), "n1")
+  assert.equal(weekdaySeriesPhrase(["n1", "n2"]), "n1 et n2")
+  assert.equal(weekdaySeriesPhrase(["n1", "n2", "n3", "n4", "n5"]), "n1, n2, n3, n4 et n5")
+  assert.equal(
+    weekdayDayLineCaption(["n1"]),
+    "Mardi (cyan) et vendredi (rose) : « n1 », soir par soir."
+  )
+  assert.equal(
+    weekdayDayLineCaption(["n1", "n2"]),
+    "Mardi (cyan) et vendredi (rose) : n1 et n2, chacun soir par soir."
+  )
+  assert.equal(weekdayDayLineCaption([]), "")
 })
 
 test("weekday API value is omitted for Tous and Synthèse", () => {

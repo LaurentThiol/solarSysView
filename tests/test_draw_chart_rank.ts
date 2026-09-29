@@ -6,6 +6,7 @@ import {
   chartYDomain,
   modeOffersRank1,
   splitRank1Axis,
+  weekdaySplitKeys,
   weekdaySplitSeries,
 } from "../src/lib/draw-chart-rank.ts"
 
@@ -42,11 +43,21 @@ test("splitRank1Axis uses the right axis when 1er rang is mixed with another ser
   assert.equal(splitRank1Axis("sumStars", ["sumStars", "rank1"]), false)
 })
 
-test("mardi and vendredi follow a visible series and drop n1 once it is hidden", () => {
-  assert.equal(
-    weekdaySplitSeries(["n1", "n2", "n3", "n4", "n5", "rank1"]),
-    "n1"
+test("mardi and vendredi follow every visible series and drop rank1", () => {
+  assert.deepEqual(
+    weekdaySplitKeys(["n1", "n2", "n3", "n4", "n5", "rank1"]),
+    ["n1", "n2", "n3", "n4", "n5"]
   )
+  assert.deepEqual(weekdaySplitKeys(["n2", "n3", "n4", "n5", "rank1"]), [
+    "n2",
+    "n3",
+    "n4",
+    "n5",
+  ])
+  assert.deepEqual(weekdaySplitKeys(["n1"]), ["n1"])
+  assert.deepEqual(weekdaySplitKeys(["rank1"]), [])
+  assert.deepEqual(weekdaySplitKeys([]), [])
+  assert.equal(weekdaySplitSeries(["n1", "n2", "n3", "n4", "n5", "rank1"]), "n1")
   assert.equal(weekdaySplitSeries(["n2", "n3", "n4", "n5", "rank1"]), "n2")
   assert.equal(weekdaySplitSeries(["n1"]), "n1")
   assert.equal(weekdaySplitSeries(["rank1"]), null)

@@ -47,6 +47,40 @@ export function weekdaySplitFields(
   }
 }
 
+/** Champ de donnée d’un soir pour une série. Une paire par série, pour ne pas écraser les autres n. */
+export function weekdayOverlayField(day: DrawWeekday, seriesKey: string): string {
+  return day === "mardi" ? `overlayMardi_${seriesKey}` : `overlayVendredi_${seriesKey}`
+}
+
+export function weekdayOverlayFieldsFor(
+  weekday: string | null | undefined,
+  series: readonly { key: string; value: number | null | undefined }[]
+): Record<string, number | null> {
+  const out: Record<string, number | null> = {}
+  for (const item of series) {
+    const split = weekdaySplitFields(weekday, item.value)
+    out[weekdayOverlayField("mardi", item.key)] = split.overlayMardi
+    out[weekdayOverlayField("vendredi", item.key)] = split.overlayVendredi
+  }
+  return out
+}
+
+/** « n1 », « n1 et n2 », « n1, n2, n3, n4 et n5 ». */
+export function weekdaySeriesPhrase(labels: readonly string[]): string {
+  if (labels.length === 0) return ""
+  if (labels.length === 1) return labels[0]
+  if (labels.length === 2) return `${labels[0]} et ${labels[1]}`
+  return `${labels.slice(0, -1).join(", ")} et ${labels[labels.length - 1]}`
+}
+
+export function weekdayDayLineCaption(labels: readonly string[]): string {
+  if (labels.length === 0) return ""
+  if (labels.length === 1) {
+    return `Mardi (cyan) et vendredi (rose) : « ${labels[0]} », soir par soir.`
+  }
+  return `Mardi (cyan) et vendredi (rose) : ${weekdaySeriesPhrase(labels)}, chacun soir par soir.`
+}
+
 export function asWeekdayScope(value: string | null | undefined): WeekdayScope | null {
   if (!value) return null
   const day = value.trim().toLowerCase()

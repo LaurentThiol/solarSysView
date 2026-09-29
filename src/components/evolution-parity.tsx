@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
 import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
-import { WeekdayDot, WeekdaySplitLegend } from "@/components/weekday-split"
+import { WeekdaySeriesLines, WeekdaySplitLegend } from "@/components/weekday-split"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ChartContainer,
@@ -25,10 +25,10 @@ import {
 } from "@/lib/draws"
 import { cn } from "@/lib/utils"
 import {
-  WEEKDAY_LINE_COLOR,
   seriesHasBothWeekdays,
-  weekdayLineDash,
-  weekdaySplitFields,
+  weekdayDayLineCaption,
+  weekdayOverlayFieldsFor,
+  weekdaySeriesPhrase,
   type DrawWeekday,
 } from "@/lib/weekday-scope"
 
@@ -96,8 +96,6 @@ const SUMMARY_HELP: HelpCopy = {
 type ChartPoint = ParityChartPoint & {
   smaNumbers: number | null
   smaStars: number | null
-  overlayMardi?: number | null
-  overlayVendredi?: number | null
 }
 
 function formatStat(value: number, digits = 1) {
@@ -253,9 +251,14 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
   const showNumbers = !hidden.numbers
   const showStars = !hidden.stars
   const mixedDays = useMemo(() => seriesHasBothWeekdays(points), [points])
-  const splitKey = showNumbers ? numberKey : showStars ? starKey : null
-  const splitLabel = showNumbers ? "numéros" : "étoiles"
-  const showDayLines = mixedDays && splitKey != null
+  const splitKeys = useMemo(() => {
+    const keys: Array<typeof numberKey | typeof starKey> = []
+    if (showNumbers) keys.push(numberKey)
+    if (showStars) keys.push(starKey)
+    return keys
+  }, [showNumbers, showStars, numberKey, starKey])
+  const splitLabels = splitKeys.map((key) => (key === numberKey ? "Numéros" : "Étoiles"))
+  const showDayLines = mixedDays && splitKeys.length > 0
 
   const chartData = useMemo(() => {
     const numberValues = points.map((point) => point[numberKey])
@@ -266,11 +269,14 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
       ...point,
       smaNumbers: smaPeriod ? (smaN[i] ?? null) : null,
       smaStars: smaPeriod ? (smaS[i] ?? null) : null,
-      ...(showDayLines && splitKey
-        ? weekdaySplitFields(point.weekday, point[splitKey])
+      ...(showDayLines
+        ? weekdayOverlayFieldsFor(
+            point.weekday,
+            splitKeys.map((key) => ({ key, value: point[key] }))
+          )
         : {}),
     }))
-  }, [points, numberKey, starKey, smaPeriod, showDayLines, splitKey])
+  }, [points, numberKey, starKey, smaPeriod, showDayLines, splitKeys])
 
   const numberStats = useMemo(
     () => summarizeParitySeries(points, "numbers"),
@@ -465,43 +471,19 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
                   />
                 ) : null}
                 {showDayLines ? (
-                  <>
-                    <Line
-                      dataKey="overlayMardi"
-                      type="linear"
-                      stroke={WEEKDAY_LINE_COLOR.mardi}
-                      strokeWidth={2.75}
-                      strokeDasharray={weekdayLineDash("mardi")}
-                      connectNulls
-                      hide={!dayLine.mardi}
-                      dot={(props) => <WeekdayDot day="mardi" {...props} />}
-                      activeDot={(props) => <WeekdayDot day="mardi" {...props} />}
-                      isAnimationActive={false}
-                      legendType="none"
-                      name="Mardi"
-                    />
-                    <Line
-                      dataKey="overlayVendredi"
-                      type="linear"
-                      stroke={WEEKDAY_LINE_COLOR.vendredi}
-                      strokeWidth={2.75}
-                      strokeDasharray={weekdayLineDash("vendredi")}
-                      connectNulls
-                      hide={!dayLine.vendredi}
-                      dot={(props) => <WeekdayDot day="vendredi" {...props} />}
-                      activeDot={(props) => <WeekdayDot day="vendredi" {...props} />}
-                      isAnimationActive={false}
-                      legendType="none"
-                      name="Vendredi"
-                    />
-                  </>
+                  <WeekdaySeriesLines
+                    seriesKeys={splitKeys}
+                    showMardi={dayLine.mardi}
+                    showVendredi={dayLine.vendredi}
+                  />
                 ) : null}
               </LineChart>
             </ChartContainer>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
               {showDayLines ? (
                 <WeekdaySplitLegend
-                  metric={splitLabel}
+                  metric={weekdaySeriesPhrase(splitLabels)}
+                  seriesCount={splitKeys.length}
                   showMardi={dayLine.mardi}
                   showVendredi={dayLine.vendredi}
                   onToggle={(day: DrawWeekday) =>
@@ -583,6 +565,11 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
                 </span>
               ))}
             </div>
+            {showDayLines ? (
+              <p className="mt-2 text-center text-xs text-muted-foreground">
+                {weekdayDayLineCaption(splitLabels)}
+              </p>
+            ) : null}
             <p className="mt-3 text-center text-xs text-muted-foreground">
               {view === "walk"
                 ? "Trait à 0 = équilibre pair / impair. Le cumul repart de 0 au premier tirage de la fenêtre."

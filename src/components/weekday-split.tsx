@@ -1,8 +1,13 @@
 "use client"
 
+import { Fragment } from "react"
+import { Line } from "recharts"
+
 import { HelpTip } from "@/components/help"
 import {
   WEEKDAY_LINE_COLOR,
+  weekdayLineDash,
+  weekdayOverlayField,
   type DrawWeekday,
 } from "@/lib/weekday-scope"
 import { cn } from "@/lib/utils"
@@ -15,11 +20,16 @@ type DotProps = {
 
 export function WeekdayDot({
   day,
+  seriesKey,
   cx,
   cy,
   payload,
-}: DotProps & { day: DrawWeekday }) {
-  const key = day === "mardi" ? "overlayMardi" : "overlayVendredi"
+}: DotProps & { day: DrawWeekday; seriesKey?: string }) {
+  const key = seriesKey
+    ? weekdayOverlayField(day, seriesKey)
+    : day === "mardi"
+      ? "overlayMardi"
+      : "overlayVendredi"
   const value = payload?.[key]
   if (
     typeof value !== "number" ||
@@ -43,13 +53,67 @@ export function WeekdayDot({
   )
 }
 
+/** Une paire mardi / vendredi par série visible. Le 1er rang n’est pas dans `seriesKeys`. */
+export function WeekdaySeriesLines({
+  seriesKeys,
+  showMardi,
+  showVendredi,
+  yAxisId,
+}: {
+  seriesKeys: readonly string[]
+  showMardi: boolean
+  showVendredi: boolean
+  yAxisId?: (key: string) => string | number
+}) {
+  return seriesKeys.map((key) => {
+    const axis = yAxisId?.(key)
+    const axisProps = axis == null ? {} : { yAxisId: axis }
+    return (
+      <Fragment key={`day-${key}`}>
+        <Line
+          {...axisProps}
+          dataKey={weekdayOverlayField("mardi", key)}
+          type="linear"
+          stroke={WEEKDAY_LINE_COLOR.mardi}
+          strokeWidth={2.75}
+          strokeDasharray={weekdayLineDash("mardi")}
+          connectNulls
+          hide={!showMardi}
+          dot={(props) => <WeekdayDot {...props} day="mardi" seriesKey={key} />}
+          activeDot={(props) => <WeekdayDot {...props} day="mardi" seriesKey={key} />}
+          isAnimationActive={false}
+          legendType="none"
+          name={`Mardi ${key}`}
+        />
+        <Line
+          {...axisProps}
+          dataKey={weekdayOverlayField("vendredi", key)}
+          type="linear"
+          stroke={WEEKDAY_LINE_COLOR.vendredi}
+          strokeWidth={2.75}
+          strokeDasharray={weekdayLineDash("vendredi")}
+          connectNulls
+          hide={!showVendredi}
+          dot={(props) => <WeekdayDot {...props} day="vendredi" seriesKey={key} />}
+          activeDot={(props) => <WeekdayDot {...props} day="vendredi" seriesKey={key} />}
+          isAnimationActive={false}
+          legendType="none"
+          name={`Vendredi ${key}`}
+        />
+      </Fragment>
+    )
+  })
+}
+
 export function WeekdaySplitLegend({
   metric,
+  seriesCount = 1,
   showMardi,
   showVendredi,
   onToggle,
 }: {
   metric: string
+  seriesCount?: number
   showMardi: boolean
   showVendredi: boolean
   onToggle: (day: DrawWeekday) => void
@@ -90,7 +154,11 @@ export function WeekdaySplitLegend({
       })}
       <HelpTip
         title="Mardi + vendredi"
-        body={`Courbes du soir sur « ${metric} ». Chaque mardi est relié au mardi suivant (trait plein, cyan) ; chaque vendredi au vendredi suivant (tirets, rose). Les deux soirs restent séparés. Cliquez pour masquer.`}
+        body={
+          seriesCount > 1
+            ? `Chaque série visible (${metric}) a ses deux courbes. Le mardi (trait plein, cyan) relie un soir au mardi suivant ; le vendredi (tirets, rose) fait de même de son côté. Les soirs ne se mélangent pas, et n1 ne porte pas les autres n. Cliquez pour masquer.`
+            : `Courbes du soir sur « ${metric} ». Chaque mardi est relié au mardi suivant (trait plein, cyan) ; chaque vendredi au vendredi suivant (tirets, rose). Les deux soirs restent séparés. Cliquez pour masquer.`
+        }
       />
     </span>
   )

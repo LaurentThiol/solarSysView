@@ -98,7 +98,7 @@ import {
   appendRank1Key,
   chartYDomain,
   splitRank1Axis,
-  weekdaySplitSeries,
+  weekdaySplitKeys,
 } from "@/lib/draw-chart-rank"
 import { cn } from "@/lib/utils"
 import {
@@ -117,12 +117,13 @@ import {
   type DrawSeriesPoint,
   type ValueRange,
 } from "@/lib/draws"
-import { WeekdayDot, WeekdaySplitLegend } from "@/components/weekday-split"
+import { WeekdaySeriesLines, WeekdaySplitLegend } from "@/components/weekday-split"
 import {
   WEEKDAY_LINE_COLOR,
   normalizeDrawWeekday,
-  weekdayLineDash,
-  weekdaySplitFields,
+  weekdayDayLineCaption,
+  weekdayOverlayFieldsFor,
+  weekdaySeriesPhrase,
   type DrawWeekday,
 } from "@/lib/weekday-scope"
 
@@ -388,18 +389,23 @@ function mergeOverlays(
 
 function withWeekdayOverlay(
   points: ChartPoint[],
-  yKey: SeriesKey | null,
+  yKeys: readonly SeriesKey[],
   enabled: boolean
 ): ChartPoint[] {
-  if (!enabled || yKey == null) return points
-  return points.map((point) => {
-    const raw = point[yKey]
-    const value = typeof raw === "number" && Number.isFinite(raw) ? raw : null
-    return {
-      ...point,
-      ...weekdaySplitFields(String(point.weekday ?? ""), value),
-    }
-  })
+  if (!enabled || yKeys.length === 0) return points
+  return points.map((point) => ({
+    ...point,
+    ...weekdayOverlayFieldsFor(
+      String(point.weekday ?? ""),
+      yKeys.map((key) => {
+        const raw = point[key]
+        return {
+          key,
+          value: typeof raw === "number" && Number.isFinite(raw) ? raw : null,
+        }
+      })
+    ),
+  }))
 }
 
 function plottedOf(
@@ -879,8 +885,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     return packs
   }, [series, keys, smaPeriod])
 
-  const splitKey = weekdaySplitSeries(visibleKeys)
-  const showDayLines = mixedDays && splitKey != null
+  const splitKeys = useMemo(() => weekdaySplitKeys(visibleKeys), [visibleKeys])
+  const showDayLines = mixedDays && splitKeys.length > 0
+  const splitLabels = splitKeys.map((key) => chartConfig[key].label)
 
   const chartData = useMemo(() => {
     let points: ChartPoint[] = series
@@ -916,16 +923,16 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
           sAbs.map((band) => mapBandPoint(band, (value) => relativeToRange(value, starRange)))
         )
       }
-      return withWeekdayOverlay(points, splitKey, showDayLines)
+      return withWeekdayOverlay(points, splitKeys, showDayLines)
     }
-    if (!smaPeriod) return withWeekdayOverlay(points, splitKey, showDayLines)
+    if (!smaPeriod) return withWeekdayOverlay(points, splitKeys, showDayLines)
     for (const key of keys) {
       const abs = overlayPacks[key]?.abs
       if (!abs) continue
       points = mergeOverlays(points, key, abs, abs)
     }
-    return withWeekdayOverlay(points, splitKey, showDayLines)
-  }, [series, smaPeriod, combined, scale, keys, overlayPacks, showDayLines, splitKey])
+    return withWeekdayOverlay(points, splitKeys, showDayLines)
+  }, [series, smaPeriod, combined, scale, keys, overlayPacks, showDayLines, splitKeys])
 
   const summaries = useMemo(() => {
     const items: { key: string; label: string; min: number; max: number; avg: number }[] =
@@ -2082,7 +2089,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               )}
             >
               <ComposedChart
-                key={`${mode}-${combined ? scale : "abs"}-${splitRank1 ? "split" : "one"}-${showDayLines ? splitKey : "plain"}`}
+                key={`${mode}-${combined ? scale : "abs"}-${splitRank1 ? "split" : "one"}-${showDayLines ? splitKeys.join("-") : "plain"}`}
                 accessibilityLayer
                 data={plotData}
                 margin={{
@@ -2300,39 +2307,13 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                       </Fragment>
                     ))
                   : null}
-                {showDayLines && splitKey ? (
-                  <>
-                    <Line
-                      dataKey="overlayMardi"
-                      yAxisId={plotAxisId(splitKey, splitRank1)}
-                      type="linear"
-                      stroke={WEEKDAY_LINE_COLOR.mardi}
-                      strokeWidth={2.75}
-                      strokeDasharray={weekdayLineDash("mardi")}
-                      connectNulls
-                      hide={!dayLine.mardi}
-                      dot={(props) => <WeekdayDot day="mardi" {...props} />}
-                      activeDot={(props) => <WeekdayDot day="mardi" {...props} />}
-                      isAnimationActive={false}
-                      legendType="none"
-                      name="Mardi"
-                    />
-                    <Line
-                      dataKey="overlayVendredi"
-                      yAxisId={plotAxisId(splitKey, splitRank1)}
-                      type="linear"
-                      stroke={WEEKDAY_LINE_COLOR.vendredi}
-                      strokeWidth={2.75}
-                      strokeDasharray={weekdayLineDash("vendredi")}
-                      connectNulls
-                      hide={!dayLine.vendredi}
-                      dot={(props) => <WeekdayDot day="vendredi" {...props} />}
-                      activeDot={(props) => <WeekdayDot day="vendredi" {...props} />}
-                      isAnimationActive={false}
-                      legendType="none"
-                      name="Vendredi"
-                    />
-                  </>
+                {showDayLines ? (
+                  <WeekdaySeriesLines
+                    seriesKeys={splitKeys}
+                    showMardi={dayLine.mardi}
+                    showVendredi={dayLine.vendredi}
+                    yAxisId={(key) => plotAxisId(key as SeriesKey, splitRank1)}
+                  />
                 ) : null}
                 {paintedSketches.map((sketch) => {
                   const seriesKey = sketch.seriesKey as SeriesKey
@@ -2664,9 +2645,10 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
               </ComposedChart>
             </ChartContainer>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-              {showDayLines && splitKey ? (
+              {showDayLines ? (
                 <WeekdaySplitLegend
-                  metric={chartConfig[splitKey].label}
+                  metric={weekdaySeriesPhrase(splitLabels)}
+                  seriesCount={splitKeys.length}
                   showMardi={dayLine.mardi}
                   showVendredi={dayLine.vendredi}
                   onToggle={(day: DrawWeekday) =>
@@ -2758,10 +2740,9 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                 (report).
               </p>
             ) : null}
-            {showDayLines && splitKey ? (
+            {showDayLines ? (
               <p className="mt-2 text-center text-xs text-muted-foreground">
-                Mardi (cyan) et vendredi (rose) : « {chartConfig[splitKey].label} », soir par
-                soir.
+                {weekdayDayLineCaption(splitLabels)}
               </p>
             ) : null}
             {combined ? (

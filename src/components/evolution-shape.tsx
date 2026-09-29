@@ -11,7 +11,7 @@ import {
 } from "recharts"
 
 import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
-import { WeekdayDot, WeekdaySplitLegend } from "@/components/weekday-split"
+import { WeekdaySeriesLines, WeekdaySplitLegend } from "@/components/weekday-split"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ChartContainer,
@@ -27,6 +27,7 @@ import {
   readOverlay,
   type BandPoint,
 } from "@/lib/draw-overlays"
+import { weekdaySplitKeys } from "@/lib/draw-chart-rank"
 import {
   type Draw,
   formatDrawDate,
@@ -37,10 +38,10 @@ import {
 import { DECADE_LABELS } from "@/lib/grid-shape"
 import { cn } from "@/lib/utils"
 import {
-  WEEKDAY_LINE_COLOR,
   seriesHasBothWeekdays,
-  weekdayLineDash,
-  weekdaySplitFields,
+  weekdayDayLineCaption,
+  weekdayOverlayFieldsFor,
+  weekdaySeriesPhrase,
   type DrawWeekday,
 } from "@/lib/weekday-scope"
 
@@ -238,12 +239,13 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
 
   const series = useMemo(() => toDrawSeries(draws), [draws])
   const keys = VIEW_KEYS[view]
-  const visible = keys.filter((key) => !hidden[key])
+  const visible = useMemo(() => keys.filter((key) => !hidden[key]), [keys, hidden])
   const smaPeriod = overlayPeriodFor(series.length)
   const multiSeries = view === "decades"
   const mixedDays = useMemo(() => seriesHasBothWeekdays(series), [series])
-  const splitKey = visible[0] ?? null
-  const showDayLines = mixedDays && splitKey != null
+  const splitKeys = useMemo(() => weekdaySplitKeys(visible), [visible])
+  const showDayLines = mixedDays && splitKeys.length > 0
+  const splitLabels = splitKeys.map((key) => String(chartConfig[key].label))
 
   const overlayPacks = useMemo(() => {
     const packs: Partial<
@@ -259,15 +261,20 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
 
   const chartData = useMemo(() => {
     let points: ChartPoint[] = series
-    if (showDayLines && splitKey) {
-      points = points.map((point) => {
-        const raw = point[splitKey]
-        const value = typeof raw === "number" ? raw : null
-        return {
-          ...point,
-          ...weekdaySplitFields(point.weekday, value),
-        }
-      })
+    if (showDayLines && splitKeys.length > 0) {
+      points = points.map((point) => ({
+        ...point,
+        ...weekdayOverlayFieldsFor(
+          point.weekday,
+          splitKeys.map((key) => {
+            const raw = point[key]
+            return {
+              key,
+              value: typeof raw === "number" && Number.isFinite(raw) ? raw : null,
+            }
+          })
+        ),
+      }))
     }
     if (!smaPeriod) return points
     for (const key of keys) {
@@ -276,7 +283,7 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
       points = mergeOverlays(points, key, abs)
     }
     return points
-  }, [series, smaPeriod, keys, overlayPacks, showDayLines, splitKey])
+  }, [series, smaPeriod, keys, overlayPacks, showDayLines, splitKeys])
 
   const summaries = useMemo(() => {
     return keys.map((key) => ({
@@ -518,44 +525,20 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
                       </Fragment>
                     ))
                   : null}
-                {showDayLines && splitKey ? (
-                  <>
-                    <Line
-                      dataKey="overlayMardi"
-                      type="linear"
-                      stroke={WEEKDAY_LINE_COLOR.mardi}
-                      strokeWidth={2.75}
-                      strokeDasharray={weekdayLineDash("mardi")}
-                      connectNulls
-                      hide={!dayLine.mardi}
-                      dot={(props) => <WeekdayDot day="mardi" {...props} />}
-                      activeDot={(props) => <WeekdayDot day="mardi" {...props} />}
-                      isAnimationActive={false}
-                      legendType="none"
-                      name="Mardi"
-                    />
-                    <Line
-                      dataKey="overlayVendredi"
-                      type="linear"
-                      stroke={WEEKDAY_LINE_COLOR.vendredi}
-                      strokeWidth={2.75}
-                      strokeDasharray={weekdayLineDash("vendredi")}
-                      connectNulls
-                      hide={!dayLine.vendredi}
-                      dot={(props) => <WeekdayDot day="vendredi" {...props} />}
-                      activeDot={(props) => <WeekdayDot day="vendredi" {...props} />}
-                      isAnimationActive={false}
-                      legendType="none"
-                      name="Vendredi"
-                    />
-                  </>
+                {showDayLines ? (
+                  <WeekdaySeriesLines
+                    seriesKeys={splitKeys}
+                    showMardi={dayLine.mardi}
+                    showVendredi={dayLine.vendredi}
+                  />
                 ) : null}
               </ComposedChart>
             </ChartContainer>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-              {showDayLines && splitKey ? (
+              {showDayLines ? (
                 <WeekdaySplitLegend
-                  metric={String(chartConfig[splitKey].label)}
+                  metric={weekdaySeriesPhrase(splitLabels)}
+                  seriesCount={splitKeys.length}
                   showMardi={dayLine.mardi}
                   showVendredi={dayLine.vendredi}
                   onToggle={(day: DrawWeekday) =>
@@ -634,6 +617,11 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
                 </button>
               ))}
             </div>
+            {showDayLines ? (
+              <p className="mt-2 text-center text-xs text-muted-foreground">
+                {weekdayDayLineCaption(splitLabels)}
+              </p>
+            ) : null}
             {multiSeries && (showSma || showBb) && visible.length > 2 ? (
               <p className="mt-2 text-center text-xs text-muted-foreground">
                 Maj+clic sur une courbe pour n’afficher que sa SMA / bande.
