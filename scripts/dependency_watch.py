@@ -15,6 +15,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -430,6 +431,28 @@ def _major_tag(ref: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _gather(labels: list, fn) -> list:
+    """Appels registre en parallèle, dans l'ordre d'entrée. Une erreur n'arrête pas le lot."""
+    if not labels:
+        return []
+
+    def call(label):
+        try:
+            return fn(label)
+        except Exception as exc:  # noqa: BLE001 — un registre en panne ne doit pas vider le rapport
+            return exc
+
+    if len(labels) == 1:
+        return [call(labels[0])]
+    results: list = [None] * len(labels)
+    workers = min(12, len(labels))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(call, label): index for index, label in enumerate(labels)}
+        for future in as_completed(futures):
+            results[futures[future]] = future.result()
+    return results
+
+
 def build_report(
     root: Path,
     *,
@@ -441,18 +464,47 @@ def build_report(
     moment = now or datetime.now(timezone.utc)
     updates: list[Update] = []
     errors: list[str] = []
-    watched = 0
 
     lock_path = root / "package-lock.json"
     lock = json.loads(lock_path.read_text(encoding="utf-8")) if lock_path.is_file() else {}
     eslint_locked = locked_npm_version(lock, "eslint")
+    deps = load_npm_deps(root)
+    reqs = load_requirements(root)
+    action_groups = load_actions(root)
 
-    for dep in load_npm_deps(root):
-        watched += 1
-        try:
-            meta = fetch_npm(dep.name)
-        except Exception as exc:  # noqa: BLE001 — un registre en panne ne doit pas vider le rapport
-            errors.append(f"npm {dep.name} : {exc}")
+    npm_names: list[str] = []
+    seen_npm: set[str] = set()
+    for dep in deps:
+        if dep.name not in seen_npm:
+            seen_npm.add(dep.name)
+            npm_names.append(dep.name)
+    for name in ESLINT_PLUGINS:
+        if name not in seen_npm:
+            seen_npm.add(name)
+            npm_names.append(name)
+    npm_results = dict(zip(npm_names, _gather(npm_names, fetch_npm), strict=True))
+
+    pypi_names: list[str] = []
+    seen_pypi: set[str] = set()
+    for req in reqs:
+        if req.name not in seen_pypi:
+            seen_pypi.add(req.name)
+            pypi_names.append(req.name)
+    pypi_results = dict(zip(pypi_names, _gather(pypi_names, fetch_pypi), strict=True))
+
+    release_names: list[str] = []
+    for action, ref in action_groups:
+        if _major_tag(ref) is None or action in release_names:
+            continue
+        release_names.append(action)
+    release_results = dict(zip(release_names, _gather(release_names, fetch_release), strict=True))
+
+    watched = len(deps) + len(ESLINT_PLUGINS) + len(reqs) + len({action for action, _ref in action_groups})
+
+    for dep in deps:
+        meta = npm_results[dep.name]
+        if isinstance(meta, Exception):
+            errors.append(f"npm {dep.name} : {meta}")
             continue
         row = _status_for_npm(dep, meta, locked_npm_version(lock, dep.name))
         if row:
@@ -460,40 +512,31 @@ def build_report(
 
     gate: list[GatePlugin] = []
     for name in ESLINT_PLUGINS:
-        watched += 1
-        try:
-            meta = fetch_npm(name)
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"npm {name} : {exc}")
-            gate.append(GatePlugin(name, None, None, None, str(exc)))
+        meta = npm_results[name]
+        if isinstance(meta, Exception):
+            errors.append(f"npm {name} : {meta}")
+            gate.append(GatePlugin(name, None, None, None, str(meta)))
             continue
         allows = range_allows_major(meta.peer_eslint, 10) if meta.peer_eslint else None
         gate.append(GatePlugin(name, meta.latest, meta.peer_eslint, allows))
 
-    for req in load_requirements(root):
-        watched += 1
-        try:
-            latest = fetch_pypi(req.name)
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"pip {req.name} ({req.manifest}) : {exc}")
+    for req in reqs:
+        latest = pypi_results[req.name]
+        if isinstance(latest, Exception):
+            errors.append(f"pip {req.name} ({req.manifest}) : {latest}")
             continue
         row = _status_for_pip(req, latest)
         if row:
             updates.append(row)
 
     actions: list[ActionUpdate] = []
-    seen_actions: set[str] = set()
-    for (action, ref), workflows in load_actions(root).items():
-        if action not in seen_actions:
-            seen_actions.add(action)
-            watched += 1
+    for (action, ref), workflows in action_groups.items():
         pinned_major = _major_tag(ref)
         if pinned_major is None:
             continue
-        try:
-            latest = fetch_release(action)
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"action {action} : {exc}")
+        latest = release_results[action]
+        if isinstance(latest, Exception):
+            errors.append(f"action {action} : {latest}")
             continue
         latest_major = _major_tag(latest)
         if latest_major is not None and latest_major > pinned_major:
@@ -687,13 +730,67 @@ def http_release(repo: str) -> str:
     return data["tag_name"]
 
 
-def main() -> int:
+def _update_row(item: Update) -> dict[str, str]:
+    return {
+        "source": item.source,
+        "name": item.name,
+        "requested": item.requested,
+        "current": item.current,
+        "latest": item.latest,
+        "status": item.status,
+    }
+
+
+def report_payload(report: Report) -> dict:
+    """Même découpage que le markdown, pour le tableau de bord admin."""
+    decisions = [_update_row(item) for item in report.updates if item.status != "verrou en retard"]
+    behind = [_update_row(item) for item in report.updates if item.status == "verrou en retard"]
+    for item in report.actions:
+        decisions.append(
+            {
+                "source": ", ".join(item.workflows),
+                "name": item.action,
+                "requested": item.pinned,
+                "current": item.pinned,
+                "latest": item.latest,
+                "status": "majeure d'action",
+            }
+        )
+    return {
+        "generated_at": report.generated_at,
+        "watched": report.watched,
+        "eslint_locked": report.eslint_locked,
+        "eslint10_ready": _gate_open(report.gate),
+        "gate": [
+            {
+                "name": item.name,
+                "version": item.version,
+                "peer": item.peer,
+                "allows_10": item.allows_10,
+                "error": item.error,
+            }
+            for item in report.gate
+        ],
+        "decisions": decisions,
+        "behind": behind,
+        "errors": list(report.errors),
+    }
+
+
+def emit(report: Report, json_mode: bool) -> str:
+    if json_mode:
+        return json.dumps(report_payload(report), ensure_ascii=False) + "\n"
+    return render(report)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
     root = Path(__file__).resolve().parents[1]
     if not (root / "package.json").is_file():
         print("package.json introuvable", file=sys.stderr)
         return 1
     report = build_report(root, fetch_npm=http_npm, fetch_pypi=http_pypi, fetch_release=http_release)
-    sys.stdout.write(render(report))
+    sys.stdout.write(emit(report, "--json" in args))
     return 0
 
 

@@ -149,6 +149,14 @@ def test_report_keeps_eslint_major_closed_and_lists_real_decisions(tmp_path: Pat
     assert "Pas encore" in text
     assert "9.39.5" in text
     assert "Rien cette semaine" not in text
+    payload = dw.report_payload(report)
+    assert payload["eslint10_ready"] is False
+    assert payload["eslint_locked"] == "9.39.5"
+    assert any(row["name"] == "eslint" for row in payload["decisions"])
+    assert any(row["name"] == "recharts" for row in payload["behind"])
+    assert "recharts" not in {row["name"] for row in payload["decisions"]}
+    parsed = json.loads(dw.emit(report, True))
+    assert parsed["watched"] == report.watched
 
 
 def test_report_says_when_eslint_10_is_ready(tmp_path: Path) -> None:
@@ -206,3 +214,16 @@ def test_action_major_and_fetch_errors_stay_in_the_report(tmp_path: Path) -> Non
     text = dw.render(report)
     assert "majeure d'action" in text
     assert "Lectures impossibles" in text
+
+
+def test_admin_dashboard_reads_the_same_report() -> None:
+    panel = (ROOT / "src/components/admin-panel.tsx").read_text(encoding="utf-8")
+    card = (ROOT / "src/components/admin-dependencies-card.tsx").read_text(encoding="utf-8")
+    route = (ROOT / "src/app/api/admin/dependencies/route.ts").read_text(encoding="utf-8")
+    addresses = (ROOT / "src/lib/addresses.ts").read_text(encoding="utf-8")
+    assert "AdminDependenciesCard" in panel
+    assert "eslint10_ready" in card
+    assert "À décider" in card
+    assert '["scripts/dependency_watch.py", "--json"]' in route
+    assert "isAuthenticated" in route
+    assert "/api/admin/dependencies" in addresses

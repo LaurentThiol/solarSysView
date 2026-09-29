@@ -5,7 +5,7 @@ import { PageShell } from "@/components/page-shell"
 
 export const metadata: Metadata = {
   title: "Admin — Synchro",
-  description: "Liens et secrets Neon, Google, OpenAI, Brave, plus contrôles Neon et GitHub.",
+  description: "Secrets, contrôles Neon et GitHub, suivi des bibliothèques.",
   robots: { index: false, follow: false },
 }
 
@@ -15,7 +15,8 @@ export default function AdminPage() {
       title="Admin"
       subtitle={
         <>
-          Liens des consoles, mots de passe et tests de connexion. Les secrets restent dans{" "}
+          Liens des consoles, mots de passe, tests de connexion, et suivi des bibliothèques. Les
+          secrets restent dans{" "}
           <code>.env</code> (jamais commités). En production Netlify, utilisez les variables
           d’environnement du site.
         </>

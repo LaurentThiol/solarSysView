@@ -214,7 +214,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Admin",
         help: {
           title: "Admin",
-          body: "Secrets Neon / API, tests de connexion, suivi des LLM locaux, mises à jour GitHub et synchro FDJ → Postgres.",
+          body: "Secrets Neon / API, tests de connexion, suivi des LLM locaux, mises à jour GitHub, tableau de bord des bibliothèques et synchro FDJ → Postgres.",
         },
       },
       {

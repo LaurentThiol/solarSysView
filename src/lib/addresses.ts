@@ -533,6 +533,14 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/admin/login", "POST", "Admin · login", "Session mot de passe (ADMIN_PASSWORD).", "systeme"),
   apiEntry("/api/admin/sync", "POST", "Admin · synchro FDJ", "Lance une synchro archive depuis l’UI Admin.", "systeme"),
   apiEntry("/api/admin/test", "POST", "Admin · test secret", "Vérifie Neon / API / un service.", "systeme"),
+  apiEntry(
+    "/api/admin/dependencies",
+    "GET",
+    "Admin · bibliothèques",
+    "Tableau de bord du suivi npm, pip et GitHub Actions. refresh=1 relit les registres.",
+    "systeme",
+    "refresh=1"
+  ),
   apiEntry("/api/sync", "POST", "Synchro FDJ", "Télécharge et upsert l’historique (API Python).", "systeme"),
   apiEntry("/api/sync/ensure", "POST", "Rattrapage FDJ", "N’ajoute que les tirages manquants récents.", "systeme"),
   apiEntry("/api/reload-env", "POST", "Recharger .env", "Relit les secrets et le pool Neon.", "systeme"),

@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 
 import { HelpTip, WithHelp } from "@/components/help"
+import { AdminDependenciesCard } from "@/components/admin-dependencies-card"
 import { AdminLlmCard } from "@/components/admin-llm-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -384,7 +385,7 @@ export function AdminPanel() {
           <WithHelp
             help={{
               title: "Entrer",
-              body: "Vérifie le mot de passe puis affiche les clés, Neon, GitHub et la synchro FDJ.",
+              body: "Vérifie le mot de passe puis affiche les clés, Neon, GitHub, les bibliothèques et la synchro FDJ.",
             }}
           >
             <Button type="button" onClick={() => void login()}>
@@ -535,6 +536,8 @@ export function AdminPanel() {
           </p>
         </CardContent>
       </Card>
+
+      <AdminDependenciesCard />
 
       <Card id="neon-status">
         <CardHeader className="border-b">
