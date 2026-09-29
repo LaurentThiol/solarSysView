@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { isTypingTarget } from "@/lib/help-overlay"
 import { liftDiagramContrast, prepareDiagramSource, SCHEMA_CANVAS, SCHEMA_MERMAID } from "@/lib/schemas/contrast"
+import { exportFramePng, schemaPngName } from "@/lib/schemas/export-frame"
 import { figureFromSource } from "@/lib/schemas/parse"
 import { refineSchemaSvg } from "@/lib/schemas/refine"
 import { cn } from "@/lib/utils"
@@ -24,7 +25,15 @@ function clampScale(value: number) {
   return Math.min(5, Math.max(0.15, value))
 }
 
-export function SchemaDiagram({ source, label }: { source: string; label: string }) {
+export function SchemaDiagram({
+  source,
+  label,
+  fileStem,
+}: {
+  source: string
+  label: string
+  fileStem: string
+}) {
   const reactId = useId().replace(/[^a-zA-Z0-9]/g, "")
   const figure = figureFromSource(0, label, source)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -42,6 +51,8 @@ export function SchemaDiagram({ source, label }: { source: string; label: string
   const [nativeFull, setNativeFull] = useState(false)
   const [fallbackFull, setFallbackFull] = useState(false)
   const [linksOpen, setLinksOpen] = useState(figure.links.length > 0)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
   const [trackedSource, setTrackedSource] = useState(source)
   const full = nativeFull || fallbackFull
 
@@ -109,6 +120,20 @@ export function SchemaDiagram({ source, label }: { source: string; label: string
       y: (frame.clientHeight - height) / 2,
     })
   }
+
+  const savePng = useCallback(async () => {
+    const frame = frameRef.current
+    if (!frame || exporting) return
+    setExporting(true)
+    setExportError(null)
+    try {
+      await exportFramePng(frame, schemaPngName(fileStem))
+    } catch (reason) {
+      setExportError(reason instanceof Error ? reason.message : "L’image n’a pas pu être enregistrée.")
+    } finally {
+      setExporting(false)
+    }
+  }, [exporting, fileStem])
 
   const toggleFull = useCallback(async () => {
     const node = stageRef.current
@@ -309,7 +334,15 @@ export function SchemaDiagram({ source, label }: { source: string; label: string
           >
             Liens{figure.links.length ? ` · ${figure.links.length}` : ""}
           </Button>
+          <Button size="xs" variant="outline" type="button" disabled={status !== "ready" || exporting} onClick={() => void savePng()}>
+            {exporting ? "Image…" : "PNG"}
+          </Button>
         </div>
+        {exportError ? (
+          <p className="px-3 py-2 text-sm text-foreground" role="alert">
+            {exportError}
+          </p>
+        ) : null}
         <div
           ref={frameRef}
           className={cn("relative touch-none overflow-hidden", full ? "min-h-0 flex-1" : "h-[min(68vh,36rem)]")}

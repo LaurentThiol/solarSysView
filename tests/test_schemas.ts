@@ -18,9 +18,11 @@ import {
   schemaIdFromSlug,
   splitSchema,
 } from "../src/lib/schemas/document.ts"
+import { schemaPngName } from "../src/lib/schemas/export-frame.ts"
 import { findSchemaDoc, loadSchemaCatalog } from "../src/lib/schemas/load.ts"
 import { NAV_GROUPS } from "../src/lib/nav.ts"
 import { figureFromSource } from "../src/lib/schemas/parse.ts"
+import { collectSchemaLabels, searchSchemaLabels } from "../src/lib/schemas/search.ts"
 
 const FIXTURE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 90">
   <text x="120" y="16">Pronostic, contexte</text>
@@ -173,4 +175,36 @@ test("mermaid fences stay in place between the prose", () => {
   const link = paragraph.inlines.find((item) => item.kind === "link")
   assert.equal(link?.kind, "link")
   if (link?.kind === "link") assert.equal(link.href, "/schemas/pronostic/02-conteneurs")
+})
+
+test("label search finds the eight pronostic cards without accents", () => {
+  const { docs } = loadSchemaCatalog()
+  const pronostic = docs.filter((doc) => doc.id.startsWith("pronostic/"))
+  assert.equal(pronostic.length, 8)
+  const records = collectSchemaLabels(
+    pronostic.map((doc) => ({
+      href: doc.href,
+      card: doc.shortTitle,
+      moduleLabel: "Pronostic",
+      diagrams: doc.blocks
+        .filter((block) => block.kind === "diagram")
+        .map((block) => ({ label: null, source: block.kind === "diagram" ? block.source : "" })),
+    }))
+  )
+  const fenetre = searchSchemaLabels(records, "fenetre")
+  const contexte = fenetre.flatMap((group) => group.cards).find((card) => card.href.endsWith("/01-contexte"))
+  assert.ok(contexte)
+  assert.ok(contexte.snippets.some((snippet) => snippet.toLowerCase().includes("fenêtre") || snippet.includes("Chercheur")))
+  const draws = searchSchemaLabels(records, "GET /api/draws")
+  assert.ok(draws.some((group) => group.cards.some((card) => card.snippets.some((snippet) => snippet.includes("GET /api/draws")))))
+  assert.deepEqual(searchSchemaLabels(records, "zzzz-absent"), [])
+  assert.deepEqual(searchSchemaLabels(records, "   "), [])
+  const moduleHits = searchSchemaLabels(records, "Pronostic")
+  assert.equal(moduleHits[0]?.cards.length, 8)
+})
+
+test("png export names stay in a file-safe stem", () => {
+  assert.equal(schemaPngName("pronostic/01-contexte"), "pronostic-01-contexte.png")
+  assert.equal(schemaPngName("Schéma 2"), "schema-2.png")
+  assert.equal(schemaPngName("///"), "schema.png")
 })

@@ -1,9 +1,11 @@
 import Link from "next/link"
 
 import { SchemaDiagram } from "@/components/schemas/schema-diagram"
+import { SchemaLabelSearch } from "@/components/schemas/schema-label-search"
 import { SchemaProse } from "@/components/schemas/schema-prose"
 import { parseInlines } from "@/lib/schemas/document"
 import type { SchemaDoc } from "@/lib/schemas/load"
+import { collectSchemaLabels, type SchemaSearchInput } from "@/lib/schemas/search"
 import { cn } from "@/lib/utils"
 
 function moduleLabel(moduleId: string) {
@@ -24,38 +26,58 @@ function groupsOf(docs: SchemaDoc[]) {
   }))
 }
 
+function searchInputs(docs: SchemaDoc[]): SchemaSearchInput[] {
+  return docs.map((doc) => {
+    const diagrams = doc.blocks.filter((block) => block.kind === "diagram")
+    return {
+      href: doc.href,
+      card: doc.shortTitle,
+      moduleLabel: moduleLabel(doc.moduleId),
+      diagrams: diagrams.map((block, index) => ({
+        label: diagrams.length > 1 ? `Schéma ${index + 1}` : null,
+        source: block.kind === "diagram" ? block.source : "",
+      })),
+    }
+  })
+}
+
 export function SchemaReader({ docs, current }: { docs: SchemaDoc[]; current: SchemaDoc }) {
   const groups = groupsOf(docs)
+  const labels = collectSchemaLabels(searchInputs(docs))
   const index = docs.findIndex((doc) => doc.id === current.id)
   const previous = index > 0 ? docs[index - 1] : null
   const next = index >= 0 && index < docs.length - 1 ? docs[index + 1] : null
 
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[16rem_minmax(0,1fr)]">
-      <nav aria-label="Sommaire des schémas" className="flex flex-col gap-4 lg:sticky lg:top-4">
-        {groups.map((group) => (
-          <div key={group.id || "methode"} className="flex flex-col gap-1">
-            <p className="px-2 text-xs tracking-wide text-muted-foreground uppercase">{group.label}</p>
-            <div className="flex flex-col gap-0.5 pl-4">
-              {group.docs.map((doc) => (
-                <Link
-                  key={doc.id || "methode"}
-                  href={doc.href}
-                  aria-current={doc.id === current.id ? "page" : undefined}
-                  className={cn(
-                    "rounded-md px-2 py-1 text-sm",
-                    doc.id === current.id
-                      ? "bg-accent text-foreground"
-                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-                  )}
-                >
-                  {doc.shortTitle}
-                </Link>
-              ))}
-            </div>
-          </div>
-        ))}
-      </nav>
+      <div className="lg:sticky lg:top-4">
+        <SchemaLabelSearch records={labels}>
+          <nav aria-label="Sommaire des schémas" className="flex flex-col gap-4">
+            {groups.map((group) => (
+              <div key={group.id || "methode"} className="flex flex-col gap-1">
+                <p className="px-2 text-xs tracking-wide text-muted-foreground uppercase">{group.label}</p>
+                <div className="flex flex-col gap-0.5 pl-4">
+                  {group.docs.map((doc) => (
+                    <Link
+                      key={doc.id || "methode"}
+                      href={doc.href}
+                      aria-current={doc.id === current.id ? "page" : undefined}
+                      className={cn(
+                        "rounded-md px-2 py-1 text-sm",
+                        doc.id === current.id
+                          ? "bg-accent text-foreground"
+                          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                      )}
+                    >
+                      {doc.shortTitle}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </nav>
+        </SchemaLabelSearch>
+      </div>
       <article className="min-w-0">
         <h2 className="text-xl font-semibold tracking-tight">{current.title}</h2>
         <p className="mt-2 font-mono text-xs text-muted-foreground">{current.sourcePath}</p>
@@ -71,6 +93,7 @@ export function SchemaReader({ docs, current }: { docs: SchemaDoc[]; current: Sc
                   key={`${current.id}-diagram-${blockIndex}`}
                   source={block.source}
                   label={diagramCount === 1 ? "Schéma" : `Schéma ${diagramCount}`}
+                  fileStem={diagramCount === 1 ? current.id || "schemas" : `${current.id || "schemas"}-${diagramCount}`}
                 />
               )
             }
