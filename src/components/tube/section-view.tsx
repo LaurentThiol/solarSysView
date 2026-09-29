@@ -17,6 +17,11 @@ const FORCE_BASE = (TOP + BOTTOM) / 2
 const PX_PER_SIGMA = 26
 const FORCE_CLAMP = 3.2
 
+/** Au centième : le rendu serveur et le navigateur n'ont pas toujours les mêmes derniers bits de Math.cos / tanh. */
+function px(value: number) {
+  return Math.round(value * 100) / 100
+}
+
 function Arrow({
   x1,
   y1,
@@ -51,17 +56,17 @@ function Arrow({
   return (
     <g opacity={opacity}>
       <line
-        x1={x1}
-        y1={y1}
-        x2={bx}
-        y2={by}
+        x1={px(x1)}
+        y1={px(y1)}
+        x2={px(bx)}
+        y2={px(by)}
         stroke={color}
         strokeWidth={width}
         strokeDasharray={dashed ? "4 3" : undefined}
         strokeLinecap="round"
       />
       <polygon
-        points={`${x2},${y2} ${bx - uy * wing},${by + ux * wing} ${bx + uy * wing},${by - ux * wing}`}
+        points={`${px(x2)},${px(y2)} ${px(bx - uy * wing)},${px(by + ux * wing)} ${px(bx + uy * wing)},${px(by - ux * wing)}`}
         fill={color}
       />
     </g>
@@ -72,7 +77,7 @@ function Arrow({
 export function MoonGlyph({ fraction, cx, cy, r }: { fraction: number; cx: number; cy: number; r: number }) {
   const f = ((fraction % 1) + 1) % 1
   const k = Math.cos(2 * Math.PI * f)
-  const rx = Math.max(0.01, r * Math.abs(k))
+  const rx = px(Math.max(0.01, r * Math.abs(k)))
   const waxing = f < 0.5
   const crescent = k > 0
   const outerSweep = waxing ? 1 : 0
@@ -95,11 +100,16 @@ export function SectionView({
 }) {
   const lo = Math.min(section.lower, section.deformedLower, section.sum) - 6
   const hi = Math.max(section.upper, section.deformedUpper, section.sum) + 6
-  const y = (value: number) => BOTTOM - ((value - lo) / (hi - lo || 1)) * (BOTTOM - TOP)
+  const y = (value: number) => px(BOTTOM - ((value - lo) / (hi - lo || 1)) * (BOTTOM - TOP))
   const drawColor = section.insideDeformed ? TUBE_COLORS.inside : TUBE_COLORS.outside
-  const stretch = section.widthFactor >= 1 ? FAMILY_COLORS.etirement : FAMILY_COLORS.compression
+  const stretch =
+    Math.abs(section.widthFactor - 1) < 0.001
+      ? TUBE_COLORS.deformed
+      : section.widthFactor > 1
+        ? FAMILY_COLORS.etirement
+        : FAMILY_COLORS.compression
   const forceY = (value: number) =>
-    FORCE_BASE - Math.max(-FORCE_CLAMP, Math.min(FORCE_CLAMP, value)) * PX_PER_SIGMA
+    px(FORCE_BASE - Math.max(-FORCE_CLAMP, Math.min(FORCE_CLAMP, value)) * PX_PER_SIGMA)
 
   return (
     <svg

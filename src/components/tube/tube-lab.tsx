@@ -183,7 +183,14 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function SectionFacts({ section, period }: { section: TubeSection; period: number }) {
-  const stretched = section.widthFactor >= 1
+  const neutral = Math.abs(section.widthFactor - 1) < 0.001
+  const stretched = section.widthFactor > 1
+  const widthLabel = neutral ? "Largeur" : stretched ? "Étirement" : "Compression"
+  const widthColor = neutral
+    ? undefined
+    : stretched
+      ? FAMILY_COLORS.etirement
+      : FAMILY_COLORS.compression
   return (
     <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
       <Fact label="Vecteur central (axe)">
@@ -200,10 +207,8 @@ function SectionFacts({ section, period }: { section: TubeSection; period: numbe
       <Fact label="Tube déformé">
         {formatPts(section.deformedLower)} → {formatPts(section.deformedUpper)}
       </Fact>
-      <Fact label={stretched ? "Étirement" : "Compression"}>
-        <span style={{ color: stretched ? FAMILY_COLORS.etirement : FAMILY_COLORS.compression }}>
-          largeur × {formatPts(section.widthFactor, 2)}
-        </span>{" "}
+      <Fact label={widthLabel}>
+        <span style={{ color: widthColor }}>largeur × {formatPts(section.widthFactor, 2)}</span>{" "}
         · force {formatSigned(section.strainDriver, 2)}
       </Fact>
       <Fact label="Cisaillement">
@@ -388,7 +393,7 @@ export function TubeLab() {
           ) : (
             <>
               <TubeChart sections={sections} domain={domain} hover={hover} onHover={setHover} />
-              <p className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
+              <p className="px-1 text-xs text-muted-foreground">
                 Contraintes appliquées : barres = largeur (
                 <span style={{ color: FAMILY_COLORS.etirement }}>étirement</span> /{" "}
                 <span style={{ color: FAMILY_COLORS.compression }}>compression</span>), trait ={" "}
