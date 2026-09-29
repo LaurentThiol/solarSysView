@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Line, XAxis, YAxis } from "recharts"
 
+import { HelpTip, HelpWrap, TitleHelp, type HelpCopy } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ChartContainer,
@@ -26,21 +27,113 @@ const MODULE_LABEL: Record<string, string> = {
 }
 
 const CLOCKS = [
-  { id: "lunar", label: "Lune", color: "var(--chart-2)" },
-  { id: "carrington", label: "Carrington", color: "var(--chart-3)" },
-  { id: "harmo", label: "Raie Harmo", color: "var(--chart-4)" },
-  { id: "harmo_court", label: "Cycle court", color: "var(--chart-5)" },
-  { id: "tropical", label: "Année", color: "var(--chart-5)" },
+  {
+    id: "lunar",
+    label: "Lune",
+    color: "var(--chart-2)",
+    help: "Mois synodique (~29,53 j). L’axe droit montre la phase, de 0 à 1.",
+  },
+  {
+    id: "carrington",
+    label: "Carrington",
+    color: "var(--chart-3)",
+    help: "Rotation solaire (~27,3 j). Phase calendaire, lue dans Réf.",
+  },
+  {
+    id: "harmo",
+    label: "Raie Harmo",
+    color: "var(--chart-4)",
+    help: "Période dominante de la courbe, estimée sur le passé puis tenue fixe.",
+  },
+  {
+    id: "harmo_court",
+    label: "Cycle court",
+    color: "var(--chart-5)",
+    help: "Phase de l’arche de 4 à 8 tirages. La période est la médiane de ces arches.",
+  },
+  {
+    id: "tropical",
+    label: "Année",
+    color: "var(--chart-5)",
+    help: "Année tropique (~365,24 j) : la saison, jour de l’année.",
+  },
 ] as const
 
 const MODULE_TRACES = [
-  { id: "occupancy", label: "Figure chartiste", color: "var(--chart-2)" },
-  { id: "court", label: "Cycle court", color: "var(--chart-3)" },
-  { id: "activity", label: "Activité", color: "var(--chart-3)" },
-  { id: "morpho", label: "Forme Morpho", color: "var(--chart-4)" },
-  { id: "relief", label: "Centroïde Relief", color: "var(--chart-5)" },
-  { id: "residual", label: "Résidu", color: "var(--chart-1)" },
+  {
+    id: "occupancy",
+    label: "Figure chartiste",
+    color: "var(--chart-2)",
+    help: "1 si le tirage est dans une arche de 9 à 120 tirages, ramené entre 0 et 1 sur la fenêtre.",
+  },
+  {
+    id: "court",
+    label: "Cycle court",
+    color: "var(--chart-3)",
+    help: "1 si l’arche de pivots dure de 4 à 8 tirages.",
+  },
+  {
+    id: "activity",
+    label: "Activité",
+    color: "var(--chart-3)",
+    help: "Valeur absolue de la variation de la cible, d’un tirage au précédent.",
+  },
+  {
+    id: "morpho",
+    label: "Forme Morpho",
+    color: "var(--chart-4)",
+    help: "Écart max − min des trous g1–g4 : forme du glyphe.",
+  },
+  {
+    id: "relief",
+    label: "Centroïde Relief",
+    color: "var(--chart-5)",
+    help: "Hauteur moyenne du profil n1 vers n5.",
+  },
+  {
+    id: "residual",
+    label: "Résidu",
+    color: "var(--chart-1)",
+    help: "Écart de la cible à la médiane des 8 tirages précédents, divisé par la demi-étendue.",
+  },
 ] as const
+
+const CLOCK_CHART_HELP = {
+  title: "Courbe et horloges",
+  body: "Axe gauche : la cible, dans son unité. Axe droit : phase de l’horloge, de 0 (début du cycle) à 1 (fin). Les deux axes ne partagent pas d’échelle. Une phase qui monte en même temps que la courbe dit un rythme commun.",
+} as const
+
+const MODULE_CHART_HELP = {
+  title: "Ce que les autres modules voient",
+  body: "Chaque tracé est ramené entre 0 et 1 sur la fenêtre, pour les comparer. Ce ne sont pas des horloges.",
+} as const
+
+const RIBBON_HELP = {
+  title: "Couverture dans l’archive",
+  body: "Chaque point est un tirage déjà passé. La bande va du quantile 10 % au quantile 90 % annoncé avant ce tirage. La médiane est le centre. Si la valeur archivée sort souvent de la bande, le modèle ne tient pas le tracé.",
+} as const
+
+const ATTENTION_FLATNESS =
+  "0 si la masse est plate, 1 si elle tient dans une seule phase. Le verrou se déclare à partir de 0,15."
+
+const ATTENTION_HELP: HelpCopy = {
+  title: "Attention repliée",
+  body: "Part de l’attention selon la phase du tirage regardé. 0 est le début du cycle, ½ son milieu.",
+  items: [
+    {
+      label: "Pas suivant",
+      text: "Premier pas de l’horizon seulement.",
+    },
+    {
+      label: "Tout l’horizon",
+      text: "Somme des pas de l’horizon.",
+    },
+    {
+      label: "Écart",
+      text: ATTENTION_FLATNESS,
+    },
+  ],
+}
 
 export function moduleLabel(module: string) {
   return MODULE_LABEL[module] ?? module
@@ -144,33 +237,35 @@ export function CycleOverlayChart({
     <div className="flex flex-col gap-4">
       <Card>
         <CardHeader className="gap-2">
-          <CardTitle>Courbe et horloges</CardTitle>
+          <CardTitle>
+            <TitleHelp help={CLOCK_CHART_HELP}>Courbe et horloges</TitleHelp>
+          </CardTitle>
           <p className="text-sm leading-6 text-muted-foreground">
-            Axe gauche : {targetLabel}, dans son unité. Axe droit : phase de l’horloge, de 0 (début du cycle) à 1
-            (fin). Les deux axes ne partagent pas d’échelle. Une phase qui monte en même temps que la courbe dit un
-            rythme commun, pas une cause.
+            Axe gauche : {targetLabel}, dans son unité. Axe droit : phase de 0 à 1. Les deux axes ne partagent pas
+            d’échelle.
           </p>
           <div className="flex flex-wrap gap-2">
             {CLOCKS.map((clock) => {
               const on = clocks.includes(clock.id)
               return (
-                <button
-                  key={clock.id}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() =>
-                    setClocks((current) =>
-                      current.includes(clock.id) ? current.filter((id) => id !== clock.id) : [...current, clock.id]
-                    )
-                  }
-                  className={
-                    on
-                      ? "rounded-full border border-foreground/30 bg-foreground/10 px-2.5 py-1 text-xs"
-                      : "rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
-                  }
-                >
-                  {clock.label}
-                </button>
+                <HelpWrap key={clock.id} help={{ title: clock.label, body: clock.help }}>
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      setClocks((current) =>
+                        current.includes(clock.id) ? current.filter((id) => id !== clock.id) : [...current, clock.id]
+                      )
+                    }
+                    className={
+                      on
+                        ? "rounded-full border border-foreground/30 bg-foreground/10 px-2.5 py-1 text-xs"
+                        : "rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                    }
+                  >
+                    {clock.label}
+                  </button>
+                </HelpWrap>
               )
             })}
           </div>
@@ -202,33 +297,35 @@ export function CycleOverlayChart({
       </Card>
       <Card>
         <CardHeader className="gap-2">
-          <CardTitle>Ce que les autres modules voient</CardTitle>
+          <CardTitle>
+            <TitleHelp help={MODULE_CHART_HELP}>Ce que les autres modules voient</TitleHelp>
+          </CardTitle>
           <p className="text-sm leading-6 text-muted-foreground">
-            Chaque tracé est ramené entre 0 et 1 sur la fenêtre, pour les comparer. Chartisme : occupation d’une figure
-            et activité. Morpho : écart des trous de la grille. Relief : centroïde n1→n5. Pronostic : résidu de la
-            courbe contre sa moyenne passée. Ce ne sont pas des horloges.
+            {MODULE_CHART_HELP.body} Chartisme : occupation d’une figure et activité. Morpho : écart des trous de la
+            grille. Relief : centroïde n1→n5. Pronostic : résidu de la courbe contre sa médiane passée.
           </p>
           <div className="flex flex-wrap gap-2">
             {MODULE_TRACES.map((trace) => {
               const on = modules.includes(trace.id)
               return (
-                <button
-                  key={trace.id}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() =>
-                    setModules((current) =>
-                      current.includes(trace.id) ? current.filter((id) => id !== trace.id) : [...current, trace.id]
-                    )
-                  }
-                  className={
-                    on
-                      ? "rounded-full border border-foreground/30 bg-foreground/10 px-2.5 py-1 text-xs"
-                      : "rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
-                  }
-                >
-                  {trace.label}
-                </button>
+                <HelpWrap key={trace.id} help={{ title: trace.label, body: trace.help }}>
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      setModules((current) =>
+                        current.includes(trace.id) ? current.filter((id) => id !== trace.id) : [...current, trace.id]
+                      )
+                    }
+                    className={
+                      on
+                        ? "rounded-full border border-foreground/30 bg-foreground/10 px-2.5 py-1 text-xs"
+                        : "rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                    }
+                  >
+                    {trace.label}
+                  </button>
+                </HelpWrap>
               )
             })}
           </div>
@@ -262,17 +359,21 @@ export function WeightChart({
   title,
   caption,
   rows,
+  help,
 }: {
   title: string
   caption: string
   rows: { id: string; label: string; value: number }[]
+  help?: HelpCopy
 }) {
   const config = { value: { label: "Poids", color: "var(--chart-1)" } } satisfies ChartConfig
   const data = rows.map((row) => ({ ...row, value: Number(row.value.toFixed(3)) }))
   return (
     <Card>
       <CardHeader className="gap-1">
-        <CardTitle>{title}</CardTitle>
+        <CardTitle>
+          <TitleHelp help={help ?? { title, body: caption }}>{title}</TitleHelp>
+        </CardTitle>
         <p className="text-sm text-muted-foreground">{caption}</p>
       </CardHeader>
       <CardContent>
@@ -308,12 +409,10 @@ export function RibbonChart({ fit }: { fit: CycleFit }) {
   return (
     <Card>
       <CardHeader className="gap-1">
-        <CardTitle>Couverture dans l’archive</CardTitle>
-        <p className="text-sm leading-6 text-muted-foreground">
-          Chaque point est un tirage déjà passé. La bande va du quantile 10 % au quantile 90 % annoncé avant ce
-          tirage. La médiane est le centre. Si la valeur archivée sort souvent de la bande, le modèle ne tient pas le
-          tracé. Ce n’est pas une prévision du prochain tirage.
-        </p>
+        <CardTitle>
+          <TitleHelp help={RIBBON_HELP}>Couverture dans l’archive</TitleHelp>
+        </CardTitle>
+        <p className="text-sm leading-6 text-muted-foreground">{RIBBON_HELP.body}</p>
       </CardHeader>
       <CardContent>
         <ChartContainer config={config} className="aspect-auto h-[260px] w-full">
@@ -362,15 +461,16 @@ export function AttentionChart({
     <Card>
       <CardHeader className="gap-1">
         <CardTitle>
-          {weightTitle(name)}{" "}
-          <span className="text-sm font-normal text-muted-foreground">
-            {locked ? "l’attention se groupe sur une phase" : "l’attention est répartie"} · écart {flatness.toFixed(2)}
+          <TitleHelp help={{ ...ATTENTION_HELP, title: weightTitle(name) }}>{weightTitle(name)}</TitleHelp>{" "}
+          <span className="inline-flex flex-wrap items-center gap-1 text-sm font-normal text-muted-foreground">
+            {locked ? "l’attention se groupe sur une phase" : "l’attention est répartie"}
+            · écart {flatness.toFixed(2)}
+            <HelpTip title="Écart" body={ATTENTION_FLATNESS} />
           </span>
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Part de l’attention selon la phase du tirage regardé. 0 est le début du cycle, ½ son milieu. « Pas suivant »
-          ne regarde que le premier pas de l’horizon ; « tout l’horizon » somme les pas. Une barre dominante veut dire
-          que le modèle revient toujours au même endroit du cycle.
+          {ATTENTION_HELP.body} « Pas suivant » ne regarde que le premier pas de l’horizon ; « tout l’horizon » somme
+          les pas. Une barre dominante veut dire que le modèle revient toujours au même endroit du cycle.
         </p>
       </CardHeader>
       <CardContent>

@@ -8,7 +8,7 @@ import {
   type ResolvedWindow,
   type WindowPreset,
 } from "@/lib/analysis-window"
-import { HelpTip, LabelHelp } from "@/components/help"
+import { HelpTip, LabelHelp, type HelpCopy } from "@/components/help"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { Input } from "@/components/ui/input"
 import { useWeekdayScope } from "@/lib/use-weekday-scope"
@@ -35,6 +35,8 @@ export function WindowBar({
   onLastN,
   onWarmup,
   onCompare,
+  warmupHelp,
+  footnote,
 }: {
   window: ResolvedWindow<{ date: string }>
   preset: WindowPreset
@@ -51,6 +53,10 @@ export function WindowBar({
   onLastN: (v: string) => void
   onWarmup: (v: number) => void
   onCompare: (v: boolean) => void
+  /** Remplace l’aide Analyse (EMA, χ²) quand la page lit le warmup autrement. */
+  warmupHelp?: HelpCopy
+  /** Remplace le rappel Analyse sous la barre. */
+  footnote?: string
 }) {
   const [weekday, setWeekday] = useWeekdayScope()
   const showLastN = preset.startsWith("last_") || lastN !== ""
@@ -131,10 +137,12 @@ export function WindowBar({
         ) : null}
         <LabelHelp
           label="Warmup"
-          help={{
-            title: "Warmup",
-            body: `Tirages situés juste avant la fenêtre (défaut ${DEFAULT_WARMUP}). Ils initialisent EMA, RSI, Ichimoku, sans entrer dans χ², Bayes ni le VWAP de fenêtre.`,
-          }}
+          help={
+            warmupHelp ?? {
+              title: "Warmup",
+              body: `Tirages situés juste avant la fenêtre (défaut ${DEFAULT_WARMUP}). Ils initialisent EMA, RSI, Ichimoku, sans entrer dans χ², Bayes ni le VWAP de fenêtre.`,
+            }
+          }
         >
           <Input
             type="number"
@@ -165,9 +173,8 @@ export function WindowBar({
       </div>
       <p className="text-sm text-foreground">{formatWindowBanner(window)}</p>
       <p className="text-xs text-muted-foreground">
-        Tous les onglets lisent ce jeu de tirages. Le warmup (défaut {DEFAULT_WARMUP})
-        alimente EMA / RSI / Ichimoku sans entrer dans χ², Bayes ni le VWAP de fenêtre.
-        X plus bas est la période des indicateurs, pas la plage calendaire.
+        {footnote ??
+          `Tous les onglets lisent ce jeu de tirages. Le warmup (défaut ${DEFAULT_WARMUP}) alimente EMA / RSI / Ichimoku sans entrer dans χ², Bayes ni le VWAP de fenêtre. X plus bas est la période des indicateurs, pas la plage calendaire.`}
       </p>
     </div>
   )
