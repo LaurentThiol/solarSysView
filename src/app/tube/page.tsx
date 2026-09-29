@@ -6,14 +6,14 @@ import { TubeLab } from "@/components/tube/tube-lab"
 export const metadata: Metadata = {
   title: "Tube — Synchro",
   description:
-    "Tube de flux 2D sur la somme des numéros EuroMillions : axe SMA, enveloppe, étirement, cisaillement et compression par N1–N5 et la lune.",
+    "Tube de flux sur la somme des numéros : gains appris, section asymétrique, ellipse somme × étendue ou parité, phases, retards et étoiles.",
 }
 
 export default function TubePage() {
   return (
     <PageShell
       title="Tube"
-      subtitle="Un flux, un axe, des vecteurs périphériques. Somme des numéros en 2D, déformée par N1–N5 et la lune."
+      subtitle="Somme des numéros. Gains appris sur le passé, section asymétrique, ellipse dans le plan somme × étendue."
       compact
     >
       <TubeLab />

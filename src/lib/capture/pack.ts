@@ -14,8 +14,10 @@ import {
   TUBE_FAMILIES,
   TUBE_FAMILY_LABELS,
   TUBE_SOURCE_LABELS,
+  type EllipseScore,
   type TubeNull,
   type TubeOptions,
+  type TubePlane,
   type TubeScore,
   type TubeSection,
 } from "@/lib/tube"
@@ -439,6 +441,10 @@ export function packTube(input: {
   score: TubeScore
   nullTest: TubeNull
   circular: boolean
+  learned?: boolean
+  block?: number
+  plane?: TubePlane
+  ellipse?: EllipseScore | null
 }): CaptureContext {
   const { options, score, nullTest } = input
   const pct = (value: number | null) => (value == null ? "?" : `${Math.round(value * 100)} %`)
@@ -451,10 +457,17 @@ export function packTube(input: {
     `Tube · somme des numéros · axe SMA ${options.period} · enveloppe ${options.envelope} ${pct(options.level)}`,
     `${score.n} sections · ${input.from ?? "?"} → ${input.to ?? "?"} · forces lues ${options.timing === "jour" ? "le jour même (circulaire)" : "la veille"}`,
     `Sources : ${options.sources.map((id) => TUBE_SOURCE_LABELS[id]).join(", ") || "aucune"} · ${gains}`,
+    input.learned
+      ? `Gains appris par blocs de ${input.block ?? "?"} : le bloc précédent règle le suivant. Premier bloc hors score.`
+      : "Gains réglés à la main : chaque curseur est un test de plus.",
+    input.plane
+      ? `Ellipse ${input.plane === "etendue" ? "somme × étendue" : "somme × parité"} · couverture ${pct(input.ellipse?.coverageDeformed ?? null)} · score ${pts(input.ellipse?.dssDeformed ?? null)}`
+      : "",
     `Couverture nominale ${pct(score.coverageNominal)} · déformée ${pct(score.coverageDeformed)} · score d’intervalle ${pts(score.scoreNominal)} → ${pts(score.scoreDeformed)}`,
     `Mélanges des dates : ${nullTest.asGood}/${nullTest.rounds} font au moins aussi bien (p ≈ ${nullTest.p == null ? "?" : roundish(nullTest.p, 3)})`,
   ]
   if (input.circular) summary.push("Lecture du jour même : les écarts N1–N5 contiennent le tirage, le score ne mesure rien.")
+  const lines = summary.filter((line) => line.length > 0)
   return {
     lab: "tube",
     tab: options.timing,
@@ -464,7 +477,7 @@ export function packTube(input: {
       to: input.to,
       source: input.source,
     },
-    summary,
+    summary: lines,
     tech: withinBudget({
       lab: "tube",
       source: input.source,
@@ -476,6 +489,10 @@ export function packTube(input: {
       score,
       null: nullTest,
       circular: input.circular,
+      learned: input.learned ?? false,
+      block: input.block ?? null,
+      plane: input.plane ?? null,
+      ellipse: input.ellipse ?? null,
       last: last
         ? {
             date: last.date,

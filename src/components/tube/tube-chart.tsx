@@ -19,7 +19,7 @@ import { FAMILY_COLORS, TUBE_COLORS } from "@/components/tube/palette"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
 import { readTooltipIndex } from "@/lib/chart-draw/magnet"
 import { formatShortDate } from "@/lib/draws"
-import { SUM_MEAN, type TubeSection } from "@/lib/tube"
+import { foldOnPhase, SUM_MEAN, type TubeSection } from "@/lib/tube"
 
 const SYNC_ID = "tube-flux"
 
@@ -35,6 +35,8 @@ type TubeRow = {
   width: number
   /** Glissement de la section, en % de la demi-largeur nominale. */
   shift: number
+  /** Part de largeur passée d'un côté à l'autre, en %. */
+  skew: number
 }
 
 function toRows(sections: readonly TubeSection[]): TubeRow[] {
@@ -48,6 +50,7 @@ function toRows(sections: readonly TubeSection[]): TubeRow[] {
     inside: s.insideDeformed,
     width: (s.widthFactor - 1) * 100,
     shift: s.halfWidth > 0 ? (s.shift / s.halfWidth) * 100 : 0,
+    skew: s.lowerHalf + s.upperHalf > 0 ? ((s.upperHalf - s.lowerHalf) / (s.lowerHalf + s.upperHalf)) * 100 : 0,
   }))
 }
 
@@ -62,6 +65,7 @@ const tubeConfig = {
 const strainConfig = {
   width: { label: "Largeur", color: FAMILY_COLORS.etirement },
   shift: { label: "Glissement", color: FAMILY_COLORS.cisaillement },
+  skew: { label: "Asymétrie", color: FAMILY_COLORS.asymetrie },
 } satisfies ChartConfig
 
 type HoverProps = {
@@ -115,6 +119,10 @@ function StrainTooltip({ active, payload }: { active?: boolean; payload?: Toolti
       <p style={{ color: FAMILY_COLORS.cisaillement }}>
         Cisaillement {shift >= 0 ? "+" : ""}
         {shift} % de demi-largeur
+      </p>
+      <p style={{ color: FAMILY_COLORS.asymetrie }}>
+        Asymétrie {Math.round(row.skew) >= 0 ? "+" : ""}
+        {Math.round(row.skew)} % vers le haut
       </p>
     </div>
   )
@@ -323,7 +331,116 @@ export function StrainChart({
           activeDot={{ r: 3.5, fill: "var(--color-shift)" }}
           isAnimationActive={false}
         />
+        <Line
+          dataKey="skew"
+          type="linear"
+          stroke="var(--color-skew)"
+          strokeWidth={1.5}
+          strokeDasharray="4 3"
+          dot={false}
+          activeDot={{ r: 3.5, fill: "var(--color-skew)" }}
+          isAnimationActive={false}
+        />
         <ChartTooltip cursor={{ fill: "var(--muted)", fillOpacity: 0.4 }} content={<StrainTooltip />} />
+      </ComposedChart>
+    </ChartContainer>
+  )
+}
+
+const phaseConfig = {
+  deformed: { label: "Tube déformé", color: TUBE_COLORS.deformed },
+  nominal: { label: "Tube nominal", color: TUBE_COLORS.nominal },
+  sum: { label: "Somme moyenne", color: TUBE_COLORS.inside },
+} satisfies ChartConfig
+
+function phaseTick(value: number) {
+  if (value < 0.06) return "Nouvelle"
+  if (Math.abs(value - 0.25) < 0.06) return "Quartier"
+  if (Math.abs(value - 0.5) < 0.06) return "Pleine"
+  if (Math.abs(value - 0.75) < 0.06) return "Quartier"
+  if (value > 0.94) return "Nouvelle"
+  return ""
+}
+
+export function PhaseChart({ sections }: { sections: readonly TubeSection[] }) {
+  const rows = foldOnPhase(sections, 12)
+    .filter((bin) => bin.count > 0 && bin.lower != null && bin.upper != null && bin.deformedLower != null && bin.deformedUpper != null)
+    .map((bin) => ({
+      phase: bin.mid,
+      sum: bin.sum,
+      nominal: [bin.lower, bin.upper] as [number, number],
+      deformed: [bin.deformedLower, bin.deformedUpper] as [number, number],
+      center: bin.center,
+      count: bin.count,
+    }))
+  if (rows.length < 2) return null
+  return (
+    <ChartContainer config={phaseConfig} className="aspect-auto h-[220px] w-full">
+      <ComposedChart data={rows} margin={{ left: 4, right: 12, top: 10, bottom: 0 }}>
+        <CartesianGrid vertical={false} />
+        <XAxis
+          dataKey="phase"
+          type="number"
+          domain={[0, 1]}
+          ticks={[0, 0.25, 0.5, 0.75, 1]}
+          tickFormatter={phaseTick}
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+        />
+        <YAxis width={36} tickLine={false} axisLine={false} tick={{ fontSize: 10 }} />
+        <Area
+          dataKey="nominal"
+          type="linear"
+          stroke="var(--color-nominal)"
+          strokeDasharray="4 3"
+          fill="var(--color-nominal)"
+          fillOpacity={0.06}
+          isAnimationActive={false}
+          activeDot={false}
+        />
+        <Area
+          dataKey="deformed"
+          type="linear"
+          stroke="var(--color-deformed)"
+          fill="var(--color-deformed)"
+          fillOpacity={0.2}
+          isAnimationActive={false}
+          activeDot={false}
+        />
+        <Line
+          dataKey="center"
+          type="linear"
+          stroke="var(--color-deformed)"
+          strokeWidth={2}
+          dot={false}
+          isAnimationActive={false}
+        />
+        <Line
+          dataKey="sum"
+          type="linear"
+          stroke="var(--color-sum)"
+          strokeWidth={1.5}
+          dot={{ r: 3, fill: "var(--color-sum)" }}
+          isAnimationActive={false}
+        />
+        <ChartTooltip
+          content={({ active, payload }) => {
+            const row = payload?.[0]?.payload as (typeof rows)[number] | undefined
+            if (!active || !row) return null
+            return (
+              <div className="grid gap-0.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
+                <p className="font-medium text-foreground">Phase {formatPoints(row.phase)}</p>
+                <p className="text-muted-foreground">
+                  {row.count} tirages · somme moyenne {formatPoints(row.sum ?? 0)}
+                </p>
+                <p className="text-muted-foreground tabular-nums">
+                  Tube {formatPoints(row.deformed[0])} → {formatPoints(row.deformed[1])}
+                </p>
+              </div>
+            )
+          }}
+        />
       </ComposedChart>
     </ChartContainer>
   )

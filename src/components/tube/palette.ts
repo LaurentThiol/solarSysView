@@ -4,6 +4,7 @@ export const FAMILY_COLORS: Record<TubeFamily, string> = {
   etirement: "var(--chart-4)",
   cisaillement: "var(--chart-5)",
   compression: "var(--chart-2)",
+  asymetrie: "var(--chart-3)",
 }
 
 export const TUBE_COLORS = {

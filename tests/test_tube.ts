@@ -6,22 +6,35 @@ import { suggestionsFor } from "../src/lib/capture/suggestions"
 import { allNavItems, NAV_GROUPS } from "../src/lib/nav"
 import {
   applyGains,
+  ASYM_REACH,
   buildTube,
+  COV_SUM_PARITY,
+  COV_SUM_SPREAD,
   DEFAULT_TUBE_OPTIONS,
+  foldOnPhase,
+  fortnightFraction,
   intervalScore,
+  learnTube,
   lunarFraction,
   lunarPhaseLabel,
   lunarVector,
   OPENING_SIGMA,
+  PARITY_VARIANCE,
   RANK_SIGMAS,
   rankCovariance,
+  scoreLearned,
   sectionDrivers,
+  sectionEllipse,
+  SKEW_SIGMA,
+  SPREAD_MEAN,
+  SPREAD_VARIANCE,
   SUM_MEAN,
   SUM_VARIANCE,
   TUBE_RANKS,
   TUBE_SOURCES,
   tubeDomain,
   tubeFrame,
+  tubeLearnedNull,
   tubeNull,
   tubeScore,
   type TubeDraw,
@@ -29,8 +42,8 @@ import {
   type TubeOptions,
 } from "../src/lib/tube"
 
-const ZERO: TubeGains = { etirement: 0, cisaillement: 0, compression: 0 }
-const FULL: TubeGains = { etirement: 1, cisaillement: 1, compression: 1 }
+const ZERO: TubeGains = { etirement: 0, cisaillement: 0, compression: 0, asymetrie: 0 }
+const FULL: TubeGains = { etirement: 1, cisaillement: 1, compression: 1, asymetrie: 1 }
 
 function syntheticDraws(count: number, seed = 7): TubeDraw[] {
   let state = seed
@@ -63,6 +76,22 @@ test("exact moments of a uniform 5/50 draw", () => {
   for (let i = 1; i <= 5; i += 1) for (let j = 1; j <= 5; j += 1) total += rankCovariance(i, j)
   assert.ok(Math.abs(total - SUM_VARIANCE) < 1e-9)
   assert.ok(Math.abs(OPENING_SIGMA ** 2 - 127.5) < 1e-9)
+  assert.ok(SKEW_SIGMA > 0)
+  assert.equal(SPREAD_MEAN, 34)
+  let spreadVariance = 0
+  let covSumSpread = 0
+  const spreadWeights = [-1, 0, 0, 0, 1]
+  for (let i = 1; i <= 5; i += 1) {
+    for (let j = 1; j <= 5; j += 1) {
+      const cov = rankCovariance(i, j)
+      spreadVariance += spreadWeights[i - 1] * spreadWeights[j - 1] * cov
+      covSumSpread += spreadWeights[j - 1] * cov
+    }
+  }
+  assert.ok(Math.abs(SPREAD_VARIANCE - spreadVariance) < 1e-9)
+  assert.ok(Math.abs(COV_SUM_SPREAD - covSumSpread) < 1e-9)
+  assert.ok(Math.abs(PARITY_VARIANCE - 4.591836734693878) < 1e-9)
+  assert.ok(Math.abs(COV_SUM_PARITY - 2.295918367346939) < 1e-9)
 })
 
 test("lunar fraction follows synchro/ref/cycles.py", () => {
@@ -169,15 +198,21 @@ test("each family moves only its own part of the section", () => {
 test("sources pick which peripheral vectors push", () => {
   const frame = tubeFrame(syntheticDraws(30), options())
   const section = frame.sections[5]
-  assert.deepEqual(sectionDrivers(section, []), { shear: 0, strain: 0 })
+  assert.deepEqual(sectionDrivers(section, []), { shear: 0, strain: 0, skew: 0 })
   const moon = sectionDrivers(section, ["lune"])
   assert.equal(moon.shear, section.drift)
   assert.equal(moon.strain, section.tide)
+  assert.equal(moon.skew, 0)
   const median = sectionDrivers(section, ["n3"])
   assert.equal(median.strain, 0)
   assert.ok(Math.abs(median.shear - Math.tanh(section.translation.n3)) < 1e-12)
+  assert.ok(Math.abs(median.skew - Math.tanh(section.skew.n3)) < 1e-12)
   const both = sectionDrivers(section, ["n3", "lune"])
   assert.ok(Math.abs(both.shear - (median.shear + moon.shear) / 2) < 1e-12)
+  assert.equal(both.skew, median.skew)
+  const tide = sectionDrivers(section, ["vive-eau"])
+  assert.equal(tide.strain, section.phases["vive-eau"].tide)
+  assert.equal(tide.skew, 0)
 })
 
 test("interval score charges width and misses", () => {
@@ -201,7 +236,7 @@ test("date shuffles are reproducible and neutral without deformation", () => {
   const b = tubeNull(frame, TUBE_SOURCES, FULL, { rounds: 49, seed: 3 })
   assert.deepEqual(a, b)
   assert.ok(a.p != null && a.p > 0 && a.p <= 1)
-  const observed = tubeScore(buildTube(draws, options({ gains: FULL })).sections, 0.9).scoreDeformed
+  const observed = tubeScore(buildTube(draws, options({ gains: FULL, sources: TUBE_SOURCES })).sections, 0.9).scoreDeformed
   assert.ok(Math.abs((a.observed ?? 0) - (observed ?? 0)) < 1e-9)
   const idle = tubeNull(frame, TUBE_SOURCES, ZERO, { rounds: 19 })
   assert.equal(idle.p, 1)
@@ -212,6 +247,99 @@ test("domain stays inside the 15–240 sum range", () => {
   const [lo, hi] = tubeDomain(sections)
   assert.ok(lo >= 15 && hi <= 240 && lo < hi)
   assert.deepEqual(tubeDomain([]), [15, 240])
+})
+
+test("asymmetry moves the halves and keeps the width", () => {
+  const frame = tubeFrame(syntheticDraws(40), options())
+  const section = frame.sections[8]
+  const drivers = { shear: 0, strain: 0, skew: 1 }
+  const skewed = applyGains(section, drivers, { ...ZERO, asymetrie: 1 })
+  assert.equal(skewed.shift, 0)
+  assert.equal(skewed.widthFactor, 1)
+  assert.equal(skewed.deformedCenter, section.center)
+  const half = section.halfWidth
+  assert.ok(Math.abs(skewed.upperHalf - half * (1 + ASYM_REACH)) < 1e-9)
+  assert.ok(Math.abs(skewed.lowerHalf - half * (1 - ASYM_REACH)) < 1e-9)
+  assert.ok(Math.abs(skewed.deformedUpper - skewed.deformedLower - (section.upper - section.lower)) < 1e-9)
+  const idle = applyGains(section, drivers, ZERO)
+  assert.equal(idle.deformedLower, section.lower)
+  assert.equal(idle.deformedUpper, section.upper)
+})
+
+test("delays and stars read before the draw they score", () => {
+  const draws = syntheticDraws(36).map((draw, i) => ({ ...draw, stars: [1 + (i % 11), 12] }))
+  const frame = tubeFrame(draws, options({ period: 8, timing: "veille" }))
+  const last = draws.length - 1
+  const tweaked = draws.map((draw, i) =>
+    i === last ? { ...draw, numbers: [1, 2, 3, 4, 5], stars: [3, 4] } : draw
+  )
+  const a = tubeFrame(draws, options({ period: 8, timing: "veille" })).sections.at(-1)!
+  const b = tubeFrame(tweaked, options({ period: 8, timing: "veille" })).sections.at(-1)!
+  assert.equal(a.delayShear, b.delayShear)
+  assert.equal(a.delayStrain, b.delayStrain)
+  assert.equal(a.starShear, b.starShear)
+  assert.equal(a.starStrain, b.starStrain)
+  const day = tubeFrame(tweaked, options({ period: 8, timing: "jour" })).sections.at(-1)!
+  assert.notEqual(day.starShear, frame.sections.at(-1)!.starShear)
+  assert.equal(day.delayShear, a.delayShear)
+})
+
+test("learned gains use only the previous block", () => {
+  const draws = syntheticDraws(70, 3)
+  const frame = tubeFrame(draws, options({ period: 5 }))
+  const learned = learnTube(frame, ["n1", "n2", "n3", "n4", "n5"], 20)
+  assert.equal(learned.blockGains[0], null)
+  assert.equal(learned.blockGains[19], null)
+  assert.ok(learned.blockGains[20])
+  assert.equal(learned.blockGains[21], learned.blockGains[20])
+  const score = scoreLearned(learned, 0.9)
+  assert.equal(score.n, frame.sections.length - 20)
+
+  const ranks = ["n1", "n2", "n3", "n4", "n5"] as const
+  const learnedRanks = learnTube(frame, ranks, 20)
+  const tweaked = draws.map((draw, i) =>
+    i === frame.sections[25].index ? { ...draw, numbers: [10, 20, 30, 40, 50] } : draw
+  )
+  const again = learnTube(tubeFrame(tweaked, options({ period: 5 })), ranks, 20)
+  assert.deepEqual(again.blockGains[20], learnedRanks.blockGains[20])
+  const held = tubeLearnedNull(frame, ["lune"], 20, { rounds: 9, seed: 5 })
+  const repeat = tubeLearnedNull(frame, ["lune"], 20, { rounds: 9, seed: 5 })
+  assert.deepEqual(held, repeat)
+  assert.ok(held.p != null && held.p > 0 && held.p <= 1)
+})
+
+test("ellipse at zero gains is the nominal covariance", () => {
+  const { sections } = buildTube(syntheticDraws(40), options({ gains: ZERO }))
+  const pair = sectionEllipse(sections[4], "etendue", 0.9)
+  assert.ok(Math.abs(pair.nominal.c00 - sections[4].spreadPlane.vxx) < 1e-8)
+  assert.ok(Math.abs(pair.deformed.c00 - pair.nominal.c00) < 1e-8)
+  assert.ok(Math.abs(pair.deformed.c01 - pair.nominal.c01) < 1e-8)
+  assert.ok(Math.abs(pair.deformed.det - pair.nominal.det) < 1e-6)
+  assert.ok(pair.deformed.det > 0)
+  assert.ok(Math.abs(pair.chi2 + 2 * Math.log(0.1)) < 1e-12)
+  const center = sectionEllipse(
+    {
+      ...sections[4],
+      sum: sections[4].center,
+      parityPlane: { ...sections[4].parityPlane, y: sections[4].parityPlane.center },
+    },
+    "parite",
+    0.9
+  )
+  assert.ok(center.mahalanobisNominal < 1e-8)
+  assert.equal(center.insideNominal, true)
+})
+
+test("folded tube bins the lunar phase", () => {
+  const { sections } = buildTube(syntheticDraws(80), options({ gains: ZERO }))
+  const bins = foldOnPhase(sections, 12)
+  assert.equal(bins.length, 12)
+  assert.equal(
+    bins.reduce((total, bin) => total + bin.count, 0),
+    sections.length
+  )
+  assert.ok(bins.every((bin, index) => bin.mid > index / 12 && bin.mid < (index + 1) / 12))
+  assert.ok(Math.abs(fortnightFraction("2024-04-08")) < 0.03 || Math.abs(fortnightFraction("2024-04-08") - 1) < 0.03)
 })
 
 test("Tube is a Lecture page with its own capture lab", () => {

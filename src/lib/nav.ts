@@ -85,7 +85,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Tube",
         help: {
           title: "Tube",
-          body: "Tube de flux 2D sur la somme des numéros : axe SMA (vecteur central), enveloppe à 80/90/95 % (vecteurs périphériques). Les écarts N1–N5 à leur SMA et la lune l’étirent, le cisaillent ou le compriment, un curseur par famille. Score d’intervalle contre le tube nominal et contre des dates mélangées. Décrit le flux, pas le prochain tirage.",
+          body: "Tube de flux sur la somme : axe SMA, enveloppe, ellipse somme × étendue ou parité. N1–N5, la lune, d’autres phases, les retards et les étoiles l’étirent, le cisaillent, le compriment ou le rendent asymétrique. Gains appris bloc par bloc, jugés contre des dates mélangées. Décrit le flux, pas le prochain tirage.",
         },
       },
       {

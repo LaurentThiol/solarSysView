@@ -5,41 +5,53 @@ import { useDeferredValue, useMemo, useState, type ReactNode } from "react"
 import { OverlayToggle } from "@/components/analysis/shared"
 import { useRegisterCapture } from "@/components/capture"
 import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
+import { EllipseStrip, EllipseView } from "@/components/tube/ellipse-view"
 import { FAMILY_COLORS, TUBE_COLORS } from "@/components/tube/palette"
 import { SectionView } from "@/components/tube/section-view"
-import { StrainChart, TubeChart } from "@/components/tube/tube-chart"
+import { PhaseChart, StrainChart, TubeChart } from "@/components/tube/tube-chart"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { packTube } from "@/lib/capture/pack"
 import { INDEPENDENCE_DISCLAIMER } from "@/lib/capture/snapshot"
-import { formatDrawDate, formatShortDate, takeLastDraws } from "@/lib/draws"
+import { formatDrawDate, takeLastDraws } from "@/lib/draws"
 import { RANK_RGB, rgbCssOf } from "@/lib/relief"
 import {
   DEFAULT_TUBE_OPTIONS,
   SUM_SIGMA,
+  TUBE_BLOCKS,
   TUBE_FAMILIES,
   TUBE_FAMILY_LABELS,
   TUBE_LEVELS,
   TUBE_PERIODS,
+  TUBE_PHASES,
   TUBE_RANKS,
   TUBE_SAMPLES,
   TUBE_SOURCE_LABELS,
   TUBE_SOURCES,
+  ZERO_GAINS,
   deformTube,
+  ellipseScore,
+  learnTube,
   lunarIllumination,
   lunarPhaseLabel,
+  scoreLearned,
+  sectionEllipse,
   tubeDomain,
   tubeFrame,
+  tubeLearnedNull,
   tubeNull,
   tubeScore,
   tubeStrainSummary,
+  type EllipseScore,
+  type TubeBlock,
+  type TubeSample,
   type TubeEnvelope,
   type TubeFamily,
   type TubeGains,
   type TubeLevel,
   type TubeNull,
-  type TubeSample,
+  type TubePlane,
   type TubeScore,
   type TubeSection,
   type TubeSource,
@@ -61,12 +73,47 @@ const TIMING_LABELS: Record<TubeTiming, string> = {
 const SOURCE_HELP: Record<TubeSource, HelpCopy> = {
   n1: { title: "N1", body: "Plus petit numéro du tirage, en bas de la section. Son écart à sa SMA pousse le bas du tube." },
   n2: { title: "N2", body: "Deuxième numéro, entre le bas et l’axe." },
-  n3: { title: "N3", body: "Numéro médian, sur l’axe. Il pèse dans la translation (cisaillement), pas dans l’ouverture." },
+  n3: {
+    title: "N3",
+    body: "Numéro médian. Il pèse dans la translation, et c’est lui qui ouvre l’asymétrie : N3 contre N1 et N5. Son poids dans l’ouverture symétrique est nul.",
+  },
   n4: { title: "N4", body: "Quatrième numéro, entre l’axe et le haut." },
   n5: { title: "N5", body: "Plus grand numéro, en haut de la section. Son écart à sa SMA pousse le haut du tube." },
   lune: {
     title: "Lune",
-    body: "Phase à la date du tirage, connue d’avance. Marée cos 2θ : étire aux syzygies (nouvelle et pleine lune, vive-eau), comprime aux quartiers (morte-eau). sin θ : glisse vers le haut en lune croissante, vers le bas en décroissante. Ce sens est une convention, pas une mesure.",
+    body: "Phase synodique à la date du tirage, connue d’avance. Marée cos 2θ : étire aux syzygies, comprime aux quartiers. sin θ : glisse vers le haut en lune croissante. Convention, pas une mesure.",
+  },
+  "vive-eau": {
+    title: "Vive-eau",
+    body: "Quinzaine du registre Cycles. Phase 0 à la nouvelle et à la pleine lune. cos 2πf étire en vive-eau et comprime en morte-eau. C’est la marée de la lune, sans sa dérive synodique.",
+  },
+  anomalistique: {
+    title: "Anomalistique",
+    body: "0 au périgée, 0,5 à l’apogée. cos 2πf étire au périgée, sin 2πf cisaille. Convention de sens, comme la lune.",
+  },
+  draconitique: {
+    title: "Draconitique",
+    body: "0 au nœud ascendant, 0,5 au nœud descendant. Même lecture cos / sin qu’une phase du registre.",
+  },
+  tropique: {
+    title: "Année tropique",
+    body: "0 à l’équinoxe de mars. La phase est connue à la date du tirage. cos étire à l’équinoxe de mars, comprime à celui de septembre.",
+  },
+  nodal: {
+    title: "Nodal",
+    body: "Cycle de 18,6 ans du nœud ascendant. Lent : sur la formule actuelle il bouge peu. Une force presque constante ne bat pas un mélange de dates.",
+  },
+  carrington: {
+    title: "Carrington",
+    body: "Rotation solaire moyenne, 27,28 jours. Phase locale du registre, pas le flux F10.7 mesuré.",
+  },
+  retards: {
+    title: "Retards",
+    body: "État de la grille avant le tirage t, jamais les numéros de t. Haut (26–50) contre bas (1–25) : cisaillement. Extrêmes (1–10 et 41–50) contre le milieu (16–35) : étirement. Échelle : 4 tirages.",
+  },
+  etoiles: {
+    title: "Étoiles",
+    body: "Somme et étendue des deux étoiles, écart à leur SMA. La veille : le tirage t − 1, connu avant t. Le jour même : les étoiles de t, qui ne sont pas la somme, mais qui sortent avec elle.",
   },
 }
 
@@ -81,7 +128,11 @@ const FAMILY_HELP: Record<TubeFamily, HelpCopy> = {
   },
   compression: {
     title: "Compression",
-    body: "Quand la grille se resserre (N1, N2 montent, N4, N5 descendent) ou en morte-eau, la section rétrécit. 100 % : largeur divisée par deux au plus fort de la force.",
+    body: "Quand la grille se resserre (N1, N2 montent, N4, N5 descendent) ou en morte-eau, la section rétrécit. 100 % : largeur divisée par deux au plus fort de la force. Dans l’ellipse, c’est l’autre valeur propre : le petit axe, à l’inverse de l’étirement.",
+  },
+  asymetrie: {
+    title: "Asymétrie",
+    body: "N3 contre les extrêmes. 100 % et force maximale : la demi-largeur haute vaut 1,75 fois la nominale et la basse 0,25, ou l’inverse. La largeur totale ne change pas. Positif : N3 haut par rapport à N1 et N5, le haut de la section s’allonge.",
   },
 }
 
@@ -139,10 +190,12 @@ function ChoiceRow<T extends string | number>({
 function GainSlider({
   family,
   value,
+  disabled,
   onChange,
 }: {
   family: TubeFamily
   value: number
+  disabled?: boolean
   onChange: (value: number) => void
 }) {
   const label = TUBE_FAMILY_LABELS[family]
@@ -166,7 +219,8 @@ function GainSlider({
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
         aria-label={`${label} : part des vecteurs périphériques appliquée`}
-        className="accent-primary"
+        className="accent-primary disabled:opacity-60"
+        disabled={disabled}
         style={{ accentColor: FAMILY_COLORS[family] }}
       />
     </label>
@@ -217,6 +271,12 @@ function SectionFacts({ section, period }: { section: TubeSection; period: numbe
         </span>{" "}
         · force {formatSigned(section.shearDriver, 2)}
       </Fact>
+      <Fact label="Asymétrie">
+        <span style={{ color: FAMILY_COLORS.asymetrie }}>
+          bas {formatPts(section.lowerHalf)} · haut {formatPts(section.upperHalf)}
+        </span>{" "}
+        · force {formatSigned(section.skewDriver, 2)}
+      </Fact>
       <Fact label="Lune">
         {lunarPhaseLabel(section.moonFraction)} · {formatPct(lunarIllumination(section.moonFraction))}{" "}
         éclairée · marée {formatSigned(section.tide, 2)}
@@ -239,26 +299,31 @@ function verdict({
   nullTest,
   circular,
   idle,
+  learned,
 }: {
   score: TubeScore
   nullTest: TubeNull
   circular: boolean
   idle: boolean
+  learned: boolean
 }) {
-  if (!score.n) return "Pas assez de tirages pour poser une section."
+  if (!score.n) return learned ? "Pas assez de blocs : le premier sert à apprendre, le suivant à juger." : "Pas assez de tirages pour poser une section."
   if (idle) return "Aucune force appliquée : le tube déformé est le tube nominal."
   if (circular) {
     return "Forces lues le jour même : la somme des écarts N1–N5 est l’écart de la somme à sa SMA, donc le tirage t déforme son propre tube. Le score est circulaire et ne mesure rien. Repassez sur « La veille »."
   }
   const gain = score.gain ?? 0
   const share = nullTest.rounds ? `${nullTest.asGood} mélanges sur ${nullTest.rounds}` : "aucun mélange"
+  const rule = learned
+    ? "Règle fixée d’avance : les gains du bloc précédent, appliqués au suivant, puis la même règle sur des dates mélangées."
+    : "Réglage à la main : chaque position de curseur est un test de plus."
   if (gain > 0 && nullTest.p != null && nullTest.p <= 0.05) {
-    return `Le score d’intervalle baisse de ${formatPct(gain)} et seuls ${share} font aussi bien. À refaire sur une autre fenêtre avant d’y croire : chaque réglage essayé est un test de plus.`
+    return `Le score d’intervalle baisse de ${formatPct(gain)} et seuls ${share} font aussi bien. ${rule}`
   }
   if (gain > 0) {
-    return `Le score baisse de ${formatPct(gain)}, mais ${share} font au moins aussi bien : rien qui se distingue du hasard.`
+    return `Le score baisse de ${formatPct(gain)}, mais ${share} font au moins aussi bien. ${rule}`
   }
-  return `La déformation dégrade le score de ${formatPct(-gain)} (${share} font au moins aussi bien). Le tube nominal reste le meilleur sur cette fenêtre.`
+  return `La déformation dégrade le score de ${formatPct(-gain)} (${share} font au moins aussi bien). ${rule}`
 }
 
 function ScoreCard({
@@ -266,6 +331,8 @@ function ScoreCard({
   nullTest,
   circular,
   idle,
+  learned,
+  ellipse,
   stretched,
   compressed,
 }: {
@@ -273,6 +340,8 @@ function ScoreCard({
   nullTest: TubeNull
   circular: boolean
   idle: boolean
+  learned: boolean
+  ellipse: EllipseScore | null
   stretched: number
   compressed: number
 }) {
@@ -283,7 +352,7 @@ function ScoreCard({
           <TitleHelp
             help={{
               title: "Score du tube",
-              body: "Couverture : part des tirages dans le tube (le tube nominal « hasard » en couvre environ le niveau choisi). Score d’intervalle : largeur + 2/α × dépassement, moyenne sur les sections ; plus bas = mieux, élargir se paie. Mélanges : mêmes déformations, dates tirées au hasard, 199 fois. Si l’ordre réel ne bat pas les mélanges, le calendrier des forces n’apporte rien.",
+              body: "Couverture : part des tirages dans le tube. Score d’intervalle : largeur + 2/α × dépassement, plus bas = mieux. Gains appris : grille sur le bloc précédent, appliquée au suivant ; le premier bloc ne compte pas. Le nul relance cette règle après mélange des dates. À la main, les mélanges gardent les curseurs et ne mélangent que les dates : chaque curseur est un test de plus. L’ellipse a son score (log dét + distance), elle n’est pas ce que l’apprentissage minimise.",
               wide: true,
             }}
           >
@@ -311,9 +380,15 @@ function ScoreCard({
           <Fact label="Gain au score">
             {score.gain == null ? "—" : `${score.gain >= 0 ? "+" : "−"}${formatPct(Math.abs(score.gain), 1)}`}
           </Fact>
+          {ellipse ? (
+            <Fact label="Ellipse (couverture · score)">
+              {formatPct(ellipse.coverageNominal)} → {formatPct(ellipse.coverageDeformed)} ·{" "}
+              {formatPts(ellipse.dssNominal, 2)} → {formatPts(ellipse.dssDeformed, 2)}
+            </Fact>
+          ) : null}
         </dl>
         <p className={`text-sm leading-6 ${circular ? "text-destructive" : "text-muted-foreground"}`}>
-          {verdict({ score, nullTest, circular, idle })}
+          {verdict({ score, nullTest, circular, idle, learned })}
         </p>
         <p className="text-xs text-muted-foreground">{INDEPENDENCE_DISCLAIMER}</p>
       </CardContent>
@@ -324,53 +399,101 @@ function ScoreCard({
 export function TubeLab() {
   const [weekday, setWeekday] = useWeekdayScope()
   const { draws: archive, source, loading } = useDraws("current", weekday)
-  const [sample, setSample] = useState<TubeSample>(100)
+  const [sample, setSample] = useState<TubeSample | "formule">("formule")
   const [period, setPeriod] = useState<number>(DEFAULT_TUBE_OPTIONS.period)
   const [level, setLevel] = useState<TubeLevel>(DEFAULT_TUBE_OPTIONS.level)
   const [envelope, setEnvelope] = useState<TubeEnvelope>(DEFAULT_TUBE_OPTIONS.envelope)
   const [timing, setTiming] = useState<TubeTiming>(DEFAULT_TUBE_OPTIONS.timing)
   const [sources, setSources] = useState<TubeSource[]>([...DEFAULT_TUBE_OPTIONS.sources])
   const [gains, setGains] = useState<TubeGains>(DEFAULT_TUBE_OPTIONS.gains)
+  const [gainMode, setGainMode] = useState<"manuel" | "appris">("appris")
+  const [block, setBlock] = useState<TubeBlock>(40)
+  const [plane, setPlane] = useState<TubePlane>("etendue")
   const [hover, setHover] = useState<number | null>(null)
 
-  const chronological = useMemo(
-    () => [...takeLastDraws(archive, sample + period)].sort((a, b) => a.date.localeCompare(b.date)),
-    [archive, sample, period]
-  )
+  const chronological = useMemo(() => {
+    const pool = sample === "formule" ? archive : takeLastDraws(archive, sample + period)
+    return [...pool]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((draw) => ({
+        date: draw.date,
+        weekday: draw.weekday,
+        numbers: draw.numbers,
+        stars: draw.stars,
+      }))
+  }, [archive, sample, period])
   const frame = useMemo(
     () => tubeFrame(chronological, { period, level, envelope, timing }),
     [chronological, period, level, envelope, timing]
   )
-  const sections = useMemo(() => deformTube(frame, sources, gains), [frame, sources, gains])
-  const score = useMemo(() => tubeScore(sections, level), [sections, level])
-  const strain = useMemo(() => tubeStrainSummary(sections), [sections])
+  const learned = useMemo(
+    () => (gainMode === "appris" ? learnTube(frame, sources, block) : null),
+    [gainMode, frame, sources, block]
+  )
+  const sections = useMemo(
+    () => (learned ? learned.sections : deformTube(frame, sources, gains)),
+    [learned, frame, sources, gains]
+  )
+  const scoredSections = useMemo(
+    () => (learned ? sections.slice(block) : sections),
+    [learned, sections, block]
+  )
+  const score = useMemo(
+    () => (learned ? scoreLearned(learned, level) : tubeScore(sections, level)),
+    [learned, sections, level]
+  )
+  const strain = useMemo(() => tubeStrainSummary(scoredSections), [scoredSections])
   const domain = useMemo(() => tubeDomain(sections), [sections])
+  const ellipses = useMemo(
+    () => sections.map((section) => sectionEllipse(section, plane, level)),
+    [sections, plane, level]
+  )
+  const ellipse = useMemo(
+    () => ellipseScore(learned ? ellipses.slice(block) : ellipses),
+    [ellipses, learned, block]
+  )
   const deferredSources = useDeferredValue(sources)
   const deferredGains = useDeferredValue(gains)
+  const deferredBlock = useDeferredValue(block)
+  const deferredMode = useDeferredValue(gainMode)
   const nullTest = useMemo(
-    () => tubeNull(frame, deferredSources, deferredGains),
-    [frame, deferredSources, deferredGains]
+    () =>
+      deferredMode === "appris"
+        ? tubeLearnedNull(frame, deferredSources, deferredBlock)
+        : tubeNull(frame, deferredSources, deferredGains),
+    [deferredMode, frame, deferredSources, deferredBlock, deferredGains]
   )
 
   const activeSources = useMemo(() => new Set(sources), [sources])
   const circular = timing === "jour" && TUBE_RANKS.some((rank) => activeSources.has(rank))
-  const idle = sources.length === 0 || TUBE_FAMILIES.every((family) => gains[family] === 0)
-  const shown = (hover != null ? sections[hover] : null) ?? sections[sections.length - 1] ?? null
+  const shownIndex = hover ?? sections.length - 1
+  const shownGains = learned ? (learned.blockGains[shownIndex] ?? ZERO_GAINS) : gains
+  const idle =
+    sources.length === 0 ||
+    (learned
+      ? learned.blockGains.slice(block).every((row) => row == null || TUBE_FAMILIES.every((family) => row[family] === 0))
+      : TUBE_FAMILIES.every((family) => gains[family] === 0))
+  const shown = sections[shownIndex] ?? null
+  const shownEllipse = ellipses[shownIndex] ?? null
   const from = sections[0]?.date ?? null
   const to = sections[sections.length - 1]?.date ?? null
-  const short = sections.length < sample
+  const short = sample !== "formule" && sections.length < sample
 
   useRegisterCapture(() =>
     packTube({
       source,
-      sample,
-      from,
+      sample: sample === "formule" ? score.n : sample,
+      from: scoredSections[0]?.date ?? from,
       to,
-      options: { period, level, envelope, timing, sources, gains },
-      sections,
+      options: { period, level, envelope, timing, sources, gains: shownGains },
+      sections: scoredSections,
       score,
       nullTest,
       circular,
+      learned: gainMode === "appris",
+      block,
+      plane,
+      ellipse,
     })
   )
 
@@ -394,12 +517,21 @@ export function TubeLab() {
             <>
               <TubeChart sections={sections} domain={domain} hover={hover} onHover={setHover} />
               <p className="px-1 text-xs text-muted-foreground">
-                Contraintes appliquées : barres = largeur (
+                Contraintes : barres = largeur (
                 <span style={{ color: FAMILY_COLORS.etirement }}>étirement</span> /{" "}
                 <span style={{ color: FAMILY_COLORS.compression }}>compression</span>), trait ={" "}
-                <span style={{ color: FAMILY_COLORS.cisaillement }}>cisaillement</span>, en %.
+                <span style={{ color: FAMILY_COLORS.cisaillement }}>cisaillement</span>, tirets ={" "}
+                <span style={{ color: FAMILY_COLORS.asymetrie }}>asymétrie</span>.
               </p>
               <StrainChart sections={sections} hover={hover} onHover={setHover} />
+              <p className="px-1 pt-2 text-xs text-muted-foreground">
+                Tube replié sur la phase lunaire. L’axe horizontal est la phase, pas le temps : chaque point est la moyenne des sections qui tombent dans la même douzième de lunaison.
+              </p>
+              <PhaseChart sections={sections} />
+              <p className="px-1 pt-2 text-xs text-muted-foreground">
+                Sections dans le plan somme × {plane === "etendue" ? "étendue" : "parité"}. Verticale = somme, horizontale = le second axe, ramené à une largeur lisible. L’ellipse exacte est dans l’inspecteur.
+              </p>
+              <EllipseStrip sections={sections} pairs={ellipses} hover={hover} />
             </>
           )}
         </CardContent>
@@ -419,11 +551,11 @@ export function TubeLab() {
             label="Échantillon"
             help={{
               title: "Échantillon",
-              body: "Nombre de sections du tube, dans la formule actuelle. Les p tirages d’avant servent à poser la première section. Sans Neon, l’archive JSON de l’année est plus courte.",
+              body: "Formule : tous les tirages de la formule actuelle (Neon s’il répond, sinon le fichier de l’année). 50 à 400 : la fin de cette archive. Les p tirages d’avant posent la première section.",
             }}
             value={sample}
-            options={TUBE_SAMPLES}
-            format={(n) => String(n)}
+            options={[...TUBE_SAMPLES, "formule"]}
+            format={(n) => (n === "formule" ? "Formule" : String(n))}
             onChange={setSample}
           />
           <ChoiceRow
@@ -470,6 +602,41 @@ export function TubeLab() {
             format={(id) => TIMING_LABELS[id]}
             onChange={setTiming}
           />
+          <ChoiceRow
+            label="Plan"
+            help={{
+              title: "Section dans un plan",
+              body: "L’ellipse vit dans (somme, étendue) ou (somme, parité). La covariance est celle de la loi 5/50, ou glissante. La matrice 2×2 étire un axe principal, comprime l’autre, et cisaille par le terme croisé. Le ruban du haut reste la marge sur la somme.",
+            }}
+            value={plane}
+            options={["etendue", "parite"] as const}
+            format={(id) => (id === "etendue" ? "Somme × étendue" : "Somme × parité")}
+            onChange={setPlane}
+          />
+          <ChoiceRow
+            label="Gains"
+            help={{
+              title: "Appris ou à la main",
+              body: "Appris : sur chaque bloc, la grille 0 / 50 / 100 % qui minimise le score d’intervalle du bloc précédent, appliquée au suivant. Le premier bloc est l’amorce, hors score. Le nul mélange les dates puis réapprend. À la main, chaque curseur est un test de plus.",
+            }}
+            value={gainMode}
+            options={["appris", "manuel"] as const}
+            format={(id) => (id === "appris" ? "Appris" : "À la main")}
+            onChange={setGainMode}
+          />
+          {gainMode === "appris" ? (
+            <ChoiceRow
+              label="Bloc"
+              help={{
+                title: "Taille du bloc",
+                body: "Nombre de sections apprises ensemble. Les gains d’un bloc viennent uniquement du bloc d’avant.",
+              }}
+              value={block}
+              options={TUBE_BLOCKS}
+              format={(n) => String(n)}
+              onChange={setBlock}
+            />
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -477,12 +644,34 @@ export function TubeLab() {
             Vecteurs périphériques
             <HelpTip
               title="Forces sur le flux"
-              body="N1–N5 : écart de chaque rang à sa SMA, réduit par l’écart-type du rang. Placés dans la section de bas (N1) en haut (N5). Deux modes : translation Σ écarts (cisaillement) et ouverture Σ position × écart (étirement ou compression). La lune ajoute sa marée et sa dérive. Rangs et lune actifs : moyenne des deux."
+              body="N1–N5 : trois modes. Translation (cisaillement), ouverture de N1 vers N5 (étirement ou compression), N3 contre les extrêmes (asymétrie). Chaque horloge ajoute une marée et une dérive. Retards : l’état de la grille avant t. Étoiles : somme et étendue. Les groupes actifs sont moyennés, sauf l’asymétrie, qui ne vient que des rangs."
               wide
             />
           </span>
           <div className="flex flex-wrap gap-2">
-            {TUBE_SOURCES.map((id) => (
+            {TUBE_RANKS.map((id) => (
+              <OverlayToggle
+                key={id}
+                label={TUBE_SOURCE_LABELS[id]}
+                on={activeSources.has(id)}
+                onClick={() => toggleSource(id)}
+                help={SOURCE_HELP[id]}
+              />
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["lune", ...TUBE_PHASES] as const).map((id) => (
+              <OverlayToggle
+                key={id}
+                label={TUBE_SOURCE_LABELS[id]}
+                on={activeSources.has(id)}
+                onClick={() => toggleSource(id)}
+                help={SOURCE_HELP[id]}
+              />
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["retards", "etoiles"] as const).map((id) => (
               <OverlayToggle
                 key={id}
                 label={TUBE_SOURCE_LABELS[id]}
@@ -499,28 +688,35 @@ export function TubeLab() {
             <GainSlider
               key={family}
               family={family}
-              value={gains[family]}
+              value={shownGains[family]}
+              disabled={gainMode === "appris"}
               onChange={(value) => setGains((current) => ({ ...current, [family]: value }))}
             />
           ))}
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => setGains({ etirement: 0, cisaillement: 0, compression: 0 })}
-          >
-            Gains à zéro
-          </Button>
+          {gainMode === "manuel" ? (
+            <Button type="button" size="sm" variant="outline" onClick={() => setGains(ZERO_GAINS)}>
+              Gains à zéro
+            </Button>
+          ) : (
+            <p className="max-w-sm text-xs leading-5 text-muted-foreground">
+              {learned?.blockGains[shownIndex] == null
+                ? "Bloc d’amorce : gains à zéro, hors score."
+                : "Gains du bloc précédent, figés pour celui-ci."}
+            </p>
+          )}
         </div>
 
         <p className="text-xs leading-5 text-muted-foreground">
           {sections.length
-            ? `${sections.length} sections · ${from ? formatShortDate(from) : "?"} → ${to ? formatShortDate(to) : "?"} · source ${source}${loading ? " · Neon…" : ""}`
+            ? `${sections.length} sections${learned ? ` · ${score.n} au score` : ""} · ${from ? formatDrawDate(from) : "?"} → ${to ? formatDrawDate(to) : "?"} · source ${source}${loading ? " · Neon…" : ""}`
             : loading
               ? "Chargement des tirages…"
               : "Aucune section."}
           {!loading && short && sections.length
             ? ` Échantillon ${sample} incomplet (archive : ${sections.length} sections après ${period} tirages d’amorce).`
+            : ""}
+          {!loading && source !== "neon" && sample === "formule"
+            ? " Neon n’a pas répondu : archive JSON, plus courte que la formule."
             : ""}
         </p>
       </div>
@@ -535,11 +731,14 @@ export function TubeLab() {
           <CardContent className="flex flex-col gap-3">
             {shown ? (
               <>
-                <SectionView section={shown} sources={activeSources} />
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                  <SectionView section={shown} sources={activeSources} />
+                  {shownEllipse ? <EllipseView section={shown} pair={shownEllipse} /> : null}
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  À gauche, le vecteur central et ses deux vecteurs périphériques δ±, avant puis
-                  après déformation. La flèche violette est le glissement (cisaillement). À droite, les
-                  forces : N1–N5 en σ au-dessus ou au-dessous de leur SMA, puis la lune.
+                  À gauche, le vecteur central et ses δ±, avant puis après déformation. Des demi-largeurs
+                  inégales sont l’asymétrie. À droite, N1–N5 et la lune. L’ellipse est la section dans le
+                  plan choisi : tirets = covariance nominale, plein = matrice 2×2.
                   {hover == null ? " Dernière section affichée." : ""}
                 </p>
                 <SectionFacts section={shown} period={period} />
@@ -554,6 +753,8 @@ export function TubeLab() {
           nullTest={nullTest}
           circular={circular}
           idle={idle}
+          learned={gainMode === "appris"}
+          ellipse={ellipse}
           stretched={strain.stretched}
           compressed={strain.compressed}
         />
@@ -583,10 +784,10 @@ export function TubeLab() {
           <div className="flex flex-col gap-1">
             <p className="text-foreground">3. Contraintes</p>
             <p>
-              Les écarts N1–N5 se lisent comme un champ de déplacement dans la section. Leur moyenne
-              fait glisser la section (cisaillement), leur pente de N1 à N5 l’ouvre (étirement) ou la
-              resserre (compression). Σ écarts N1–N5 = somme − SMA : lus le jour même, ils recopient
-              le tirage.
+              Quatre familles. La moyenne des écarts glisse la section, la pente de N1 à N5 l’ouvre ou
+              la resserre, N3 contre N1 et N5 rend les deux demi-largeurs inégales. Dans le plan, la
+              même force est une matrice 2×2 : valeurs propres pour l’étirement et la compression,
+              terme croisé pour le cisaillement. Les gains s’apprennent sur le bloc précédent.
             </p>
           </div>
         </CardContent>
