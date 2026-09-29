@@ -84,6 +84,14 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
       "Rappelle que ce n’est pas une prédiction : ce sont des sorties déjà tirées, posées en lignes de points.",
     ]
   }
+  if (lab === "tube") {
+    return [
+      "Le tube suit la somme des numéros : axe = SMA des p tirages précédents, largeur = enveloppe. Quelles sections sont étirées, comprimées ou cisaillées, et par quelles forces (N1–N5, lune) ?",
+      "Le tube déformé bat-il le tube nominal au score d’intervalle, et l’ordre réel bat-il les mélanges de dates ? Sinon, dis que la déformation ne lit rien.",
+      "Si les forces sont lues le jour même, rappelle que Σ des écarts N1–N5 = somme − SMA : le score est circulaire.",
+      "Rappelle que ce n’est pas une prédiction : chaque tirage EuroMillions est indépendant.",
+    ]
+  }
   if (lab === "brain") {
     return [
       "Lis les fiches du working set (@rsi, @adx, @specialist.*) : que décrivent-elles, et quel pronostic d’évolution (hypothèse) portent-elles ?",

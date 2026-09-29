@@ -11,6 +11,15 @@ import type { BaseRate } from "@/lib/chartisme/base-rate"
 import type { ScanHit } from "@/lib/chartisme/scan"
 import type { HarmoPeak, HarmoReport } from "@/lib/harmo"
 import {
+  TUBE_FAMILIES,
+  TUBE_FAMILY_LABELS,
+  TUBE_SOURCE_LABELS,
+  type TubeNull,
+  type TubeOptions,
+  type TubeScore,
+  type TubeSection,
+} from "@/lib/tube"
+import {
   downsampleSeries,
   lastFinite,
   lastFlag,
@@ -415,6 +424,81 @@ export function packRelief(input: {
       marker: input.marker ?? "boule",
       maxH: roundish(input.maxH, 3),
       recommended: input.recommended,
+      disclaimer: INDEPENDENCE_DISCLAIMER,
+    }),
+  }
+}
+
+export function packTube(input: {
+  source: string
+  sample: number
+  from: string | null
+  to: string | null
+  options: TubeOptions
+  sections: readonly TubeSection[]
+  score: TubeScore
+  nullTest: TubeNull
+  circular: boolean
+}): CaptureContext {
+  const { options, score, nullTest } = input
+  const pct = (value: number | null) => (value == null ? "?" : `${Math.round(value * 100)} %`)
+  const pts = (value: number | null) => (value == null ? "?" : String(roundish(value, 1)))
+  const last = input.sections[input.sections.length - 1] ?? null
+  const gains = TUBE_FAMILIES.map(
+    (family) => `${TUBE_FAMILY_LABELS[family]} ${Math.round(options.gains[family] * 100)} %`
+  ).join(" · ")
+  const summary = [
+    `Tube · somme des numéros · axe SMA ${options.period} · enveloppe ${options.envelope} ${pct(options.level)}`,
+    `${score.n} sections · ${input.from ?? "?"} → ${input.to ?? "?"} · forces lues ${options.timing === "jour" ? "le jour même (circulaire)" : "la veille"}`,
+    `Sources : ${options.sources.map((id) => TUBE_SOURCE_LABELS[id]).join(", ") || "aucune"} · ${gains}`,
+    `Couverture nominale ${pct(score.coverageNominal)} · déformée ${pct(score.coverageDeformed)} · score d’intervalle ${pts(score.scoreNominal)} → ${pts(score.scoreDeformed)}`,
+    `Mélanges des dates : ${nullTest.asGood}/${nullTest.rounds} font au moins aussi bien (p ≈ ${nullTest.p == null ? "?" : roundish(nullTest.p, 3)})`,
+  ]
+  if (input.circular) summary.push("Lecture du jour même : les écarts N1–N5 contiennent le tirage, le score ne mesure rien.")
+  return {
+    lab: "tube",
+    tab: options.timing,
+    archive: {
+      n: score.n,
+      from: input.from,
+      to: input.to,
+      source: input.source,
+    },
+    summary,
+    tech: withinBudget({
+      lab: "tube",
+      source: input.source,
+      sample: input.sample,
+      options: {
+        ...options,
+        sources: [...options.sources],
+      },
+      score,
+      null: nullTest,
+      circular: input.circular,
+      last: last
+        ? {
+            date: last.date,
+            sum: last.sum,
+            center: roundish(last.center, 2),
+            slope: roundish(last.slope, 2),
+            tube: [roundish(last.deformedLower, 1), roundish(last.deformedUpper, 1)],
+            nominal: [roundish(last.lower, 1), roundish(last.upper, 1)],
+            widthFactor: roundish(last.widthFactor, 3),
+            shift: roundish(last.shift, 2),
+            forces: last.forces.map((value) => roundish(value, 2)),
+            moonFraction: roundish(last.moonFraction, 3),
+          }
+        : null,
+      series: downsampleSeries(
+        input.sections.map((s) => ({
+          date: s.date,
+          sum: s.sum,
+          lower: roundish(s.deformedLower, 1),
+          upper: roundish(s.deformedUpper, 1),
+          inside: s.insideDeformed,
+        }))
+      ),
       disclaimer: INDEPENDENCE_DISCLAIMER,
     }),
   }

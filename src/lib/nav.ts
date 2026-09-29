@@ -53,7 +53,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     home: "/analyse",
     help: {
       title: "Lecture",
-      body: "Laboratoires qui décrivent l’archive : indicateurs, formes, relief, figures, harmoniques, cycles comparés.",
+      body: "Laboratoires qui décrivent l’archive : indicateurs, formes, relief, tube de flux, figures, harmoniques, cycles comparés.",
     },
     items: [
       {
@@ -78,6 +78,14 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         help: {
           title: "Relief",
           body: "Une ligne n1→n5 par tirage. Boule ou point. Zoom plus serré à 100/200. Calque rangs dans le temps, surfaces optionnelles. Tiges masquables. Le glyphe 5×10 reste Morpho.",
+        },
+      },
+      {
+        href: "/tube",
+        label: "Tube",
+        help: {
+          title: "Tube",
+          body: "Tube de flux 2D sur la somme des numéros : axe SMA (vecteur central), enveloppe à 80/90/95 % (vecteurs périphériques). Les écarts N1–N5 à leur SMA et la lune l’étirent, le cisaillent ou le compriment, un curseur par famille. Score d’intervalle contre le tube nominal et contre des dates mélangées. Décrit le flux, pas le prochain tirage.",
         },
       },
       {
