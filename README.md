@@ -75,6 +75,8 @@ Deux onglets.
 
 ## Pronostic (`/pronostic`)
 
+Schémas fonctionnels Mermaid, à faire évoluer avec le code : [`docs/schemas/pronostic`](docs/schemas/pronostic/README.md).
+
 Deux onglets.
 
 **Atelier** — composeur d’hypothèses 5+2 : trois couches modulables (**somme**, **rangs + parité**, **espaces n1–n5 / e1–e2**) se resserrent. Le bandeau affiche le nombre exact de grilles restantes (cascade univers → couches). Les espaces peuvent se chevaucher ; un numéro n’est pris qu’une fois (`n1 < n2 < …`). Un **proposeur** lit la fenêtre (20 / 50 / 100 / année) avec une formule réglable (`min/max ± k·σ`, moyenne ± k·σ, percentiles) ; un walk-forward mesure la couverture. **Appliquer** n’est jamais silencieux. On peut importer un forecast Spécialiste (somme / parité) et **envoyer vers Jeux**. Ce n’est pas P(prochain tirage) : la loi officielle reste uniforme.
