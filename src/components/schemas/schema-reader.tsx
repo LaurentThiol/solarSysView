@@ -36,21 +36,23 @@ export function SchemaReader({ docs, current }: { docs: SchemaDoc[]; current: Sc
         {groups.map((group) => (
           <div key={group.id || "methode"} className="flex flex-col gap-1">
             <p className="px-2 text-xs tracking-wide text-muted-foreground uppercase">{group.label}</p>
-            {group.docs.map((doc) => (
-              <Link
-                key={doc.id || "methode"}
-                href={doc.href}
-                aria-current={doc.id === current.id ? "page" : undefined}
-                className={cn(
-                  "rounded-md px-2 py-1 text-sm",
-                  doc.id === current.id
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-                )}
-              >
-                {doc.shortTitle}
-              </Link>
-            ))}
+            <div className="flex flex-col gap-0.5 pl-4">
+              {group.docs.map((doc) => (
+                <Link
+                  key={doc.id || "methode"}
+                  href={doc.href}
+                  aria-current={doc.id === current.id ? "page" : undefined}
+                  className={cn(
+                    "rounded-md px-2 py-1 text-sm",
+                    doc.id === current.id
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                  )}
+                >
+                  {doc.shortTitle}
+                </Link>
+              ))}
+            </div>
           </div>
         ))}
       </nav>
