@@ -1,0 +1,59 @@
+# Suivi des bibliothèques.
+# Mineures et correctifs : une pull request groupée par écosystème.
+# Majeures : une pull request chacune.
+# La majeure d'eslint est ignorée. ESLint 10 casse encore le lint Next tant
+# que eslint-plugin-react, eslint-plugin-jsx-a11y et eslint-plugin-import
+# n'acceptent pas ESLint 10. Le workflow « Suivi des bibliothèques » le dit
+# dans l'issue du même nom, et indique quand retirer cet ignore.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "Dépendances"
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: eslint
+        update-types:
+          - version-update:semver-major
+
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "Dépendances"
+    groups:
+      pip-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "Dépendances"

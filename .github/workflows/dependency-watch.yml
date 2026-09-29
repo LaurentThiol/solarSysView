@@ -1,0 +1,57 @@
+name: Suivi des bibliothèques
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Lundi 08:00 heure de Paris en hiver, 09:00 en été. Dependabot, lui, part à 08:00 Paris.
+    - cron: "0 7 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/dependency-watch.yml"
+      - ".github/dependabot.yml"
+      - "scripts/dependency_watch.py"
+      - "package.json"
+      - "package-lock.json"
+      - "requirements*.txt"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dependency-watch
+  cancel-in-progress: true
+
+jobs:
+  rapport:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Lire les registres
+        run: python scripts/dependency_watch.py > "$RUNNER_TEMP/dependency-watch.md"
+      - name: Résumé
+        run: cat "$RUNNER_TEMP/dependency-watch.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Mettre à jour l'issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/dependency-watch.md"
+          gh label create dependencies \
+            --color 0366d6 \
+            --description "Mises à jour de bibliothèques" \
+            || true
+          number="$(gh issue list --state open --limit 100 --json number,body \
+            --jq '[.[] | select(.body != null and (.body | contains("<!-- dependency-watch -->")))][0].number')"
+          if [ -n "$number" ] && [ "$number" != "null" ]; then
+            gh issue edit "$number" --body-file "$report"
+          else
+            gh issue create \
+              --title "Suivi des bibliothèques" \
+              --label dependencies \
+              --body-file "$report"
+          fi
