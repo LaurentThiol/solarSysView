@@ -2,6 +2,7 @@
 
 export const CHART_DRAW_HOSTS = [
   "evolution",
+  "delta",
   "gains",
   "shape",
   "parity",

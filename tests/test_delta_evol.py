@@ -46,5 +46,9 @@ def test_delta_evol_block_follows_the_time_chart() -> None:
     assert "mélange" in block
     assert "Hasard théorique" in block
     assert "Cohérence des variations" in block
+    assert "Dessin libre" in block
+    assert "useSketchChart" in block
+    assert 'host="delta"' in panel
     assert "DeltaEvol" in readme
+    assert "dessin libre chartiste sur ces écarts" in readme
     assert "écarts n − n−1" in panel

@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useMemo, useState } from "react"
+import { Fragment, useCallback, useMemo, useState } from "react"
 import {
   Area,
   Bar,
@@ -14,6 +14,10 @@ import {
   YAxis,
 } from "recharts"
 
+import { CoordHud } from "@/components/chart-draw/coord-hud"
+import { SketchPlotLayers } from "@/components/chart-draw/sketch-layers"
+import { SketchToolbar } from "@/components/chart-draw/sketch-toolbar"
+import { useSketchChart } from "@/components/chart-draw/use-sketch-chart"
 import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
 import { WeekdayDot, WeekdaySplitLegend } from "@/components/weekday-split"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,6 +26,8 @@ import {
   ChartTooltip,
   type ChartConfig,
 } from "@/components/ui/chart"
+import { isRailFigure } from "@/lib/chartisme/catalog"
+import { FREE_SEGMENT_KEPT_HINT, channelLabel, drawingStartHint } from "@/lib/chart-draw"
 import { isOrderRankKey, rankStepLaw, type OrderRankKey } from "@/lib/delta-chance"
 import {
   coherenceLabel,
@@ -102,6 +108,8 @@ const TITLE_HELP: HelpCopy = {
 • La ligne 0 est la base. Au-dessus, la série a monté ; en dessous, elle a baissé.
 
 SMA et Bollinger (optionnels) lissent ou encadrent ces écarts, pas les niveaux. Maj+clic isole une série. Les sommes vivent sur une autre échelle que n1–n5 : Sommes les sépare (Δ somme n à gauche, Δ somme E à droite). Tout les superpose et laisse les sommes écraser les rangs.
+
+Dessin libre chartiste sur ces écarts : figure de la table ou segment, comme sur les gains. Lecture du tracé, pas un signal.
 
 n1 et n5 du même signe : la grille glisse. Signes opposés : elle s’étire (l’étendue grandit) ou se resserre. L’histogramme situe le dernier pas parmi ceux de la série. |Δ| est comparé à un mélange des mêmes valeurs : une ampleur dans la fourchette est celle de ces nombres remis au hasard, pas un signal.
 
@@ -363,6 +371,7 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
   const [showSma, setShowSma] = useState(true)
   const [showBb, setShowBb] = useState(false)
   const [dayLine, setDayLine] = useState({ mardi: true, vendredi: true })
+  const [targetKey, setTargetKey] = useState<DeltaKey>("sumNumbers")
 
   const series = useMemo(() => toDeltaSeries(toDrawSeries(draws)), [draws])
   const keys = DELTA_VIEW_KEYS[view]
@@ -373,6 +382,7 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
   const splitKey = visible[0] ?? null
   const showDayLines = mixedDays && splitKey != null
   const dualAxis = view === "sums"
+  const seriesKey = keys.includes(targetKey) ? targetKey : (keys[0] ?? targetKey)
 
   const overlayPacks = useMemo(() => {
     const packs: Partial<Record<DeltaKey, { abs: BandPoint[]; values: Array<number | null> }>> = {}
@@ -539,10 +549,46 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
     })
   }, [series, visible, starPool])
 
+  const seriesValues = useCallback(
+    (key: DeltaKey) =>
+      series.map((point) => {
+        const value = point[key]
+        return typeof value === "number" && Number.isFinite(value) ? value : Number.NaN
+      }),
+    [series]
+  )
+
+  const plotAxisId = useCallback(
+    (key: string) => (dualAxis && key === "sumStars" ? "right" : "left"),
+    [dualAxis]
+  )
+
+  const sketch = useSketchChart({
+    enabled: series.length >= 2,
+    points: chartData,
+    keys,
+    targetKey: seriesKey,
+    seriesLabel: (key) => chartConfig[key].label,
+    seriesValues,
+    axisId: plotAxisId,
+  })
+
+  const plotData = useMemo(
+    () => sketch.mergeSketchFields(chartData),
+    [sketch, chartData]
+  )
+
   function changeView(next: DeltaView) {
     if (next === view) return
     setView(next)
     setHidden({})
+    const nextKeys = DELTA_VIEW_KEYS[next]
+    if (!nextKeys.includes(targetKey)) {
+      const fallback = nextKeys[0]
+      if (fallback) setTargetKey(fallback)
+    }
+    sketch.clearMove()
+    sketch.draw?.cancelDraft()
   }
 
   function toggleSeries(key: DeltaKey, solo: boolean) {
@@ -616,15 +662,111 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
           </p>
         ) : (
           <>
+            {sketch.draw ? (
+              <div className="mb-3 flex flex-col gap-2">
+                <SketchToolbar
+                  drawing={sketch.drawing}
+                  figure={sketch.draw.figure}
+                  seriesKey={seriesKey}
+                  seriesOptions={keys.map((key) => ({
+                    value: key,
+                    label: chartConfig[key].label,
+                  }))}
+                  sketches={sketch.draw.sketches}
+                  dates={sketch.dates}
+                  canUndo={Boolean(
+                    sketch.draw.draft?.start || sketch.draw.draft?.mid || sketch.moving
+                  )}
+                  showMedian={sketch.draw.showMedian}
+                  onShowMedian={sketch.draw.setShowMedian}
+                  freeArrival={sketch.freeArrival}
+                  onFreeArrival={sketch.setFreeArrival}
+                  onToggle={() => {
+                    if (hidden[seriesKey]) {
+                      setHidden((current) => ({ ...current, [seriesKey]: false }))
+                    }
+                    sketch.startDrawing()
+                  }}
+                  onFigure={(figure) => {
+                    sketch.clearMove()
+                    sketch.draw?.setFigure(figure)
+                  }}
+                  onSeries={(key) => {
+                    setTargetKey(key as DeltaKey)
+                    sketch.draw?.cancelDraft()
+                    sketch.clearMove()
+                    sketch.setHint(
+                      sketch.draw?.draft?.parallelOf
+                        ? FREE_SEGMENT_KEPT_HINT
+                        : drawingStartHint(sketch.draw?.figure ?? "")
+                    )
+                  }}
+                  onCancel={() => {
+                    if (sketch.moving) {
+                      sketch.clearMove()
+                      sketch.draw?.cancelDraft()
+                      sketch.setHint(
+                        "Déplacement annulé. Clique un point pour le reprendre, ou un départ."
+                      )
+                      return
+                    }
+                    const pendingParallel = Boolean(sketch.draw?.draft?.parallelOf)
+                    sketch.draw?.cancelDraft()
+                    if (pendingParallel) sketch.setHint(FREE_SEGMENT_KEPT_HINT)
+                  }}
+                  onClear={() => {
+                    sketch.clearMove()
+                    sketch.draw?.clearSketches()
+                  }}
+                  onRemove={(id) => {
+                    if (sketch.moving?.sketchId === id) sketch.clearMove()
+                    sketch.draw?.removeSketch(id)
+                  }}
+                />
+                {sketch.drawing ? (
+                  <CoordHud
+                    live={sketch.draw.live}
+                    start={sketch.hudStart}
+                    mid={sketch.hudMid}
+                    end={sketch.hudEnd}
+                    rails={
+                      isRailFigure(sketch.draw.figure) || Boolean(sketch.draw.draft?.parallelOf)
+                    }
+                    figureLabel={channelLabel(sketch.draw.figure, sketch.previewBand)}
+                    seriesLabel={chartConfig[seriesKey].label}
+                    reading={sketch.draftReading}
+                    drawCount={series.length}
+                    hint={sketch.hint}
+                  />
+                ) : null}
+              </div>
+            ) : null}
             <ChartContainer
               config={chartConfig}
-              className="aspect-auto h-[220px] w-full sm:h-[280px] lg:h-[340px]"
+              className={cn(
+                "aspect-auto h-[220px] w-full sm:h-[280px] lg:h-[340px]",
+                sketch.drawing && sketch.moving && "cursor-grabbing",
+                sketch.drawing && !sketch.moving && "cursor-crosshair"
+              )}
             >
               <ComposedChart
                 key={`${view}-${showDayLines ? "mix" : "one"}-${dualAxis ? "dual" : "one"}`}
                 accessibilityLayer
-                data={chartData}
+                data={plotData}
                 margin={{ left: 4, right: dualAxis ? 8 : 8, top: 8, bottom: 4 }}
+                onMouseDown={(state, event) => {
+                  if (!sketch.drawing) return
+                  sketch.onChartPointerDown(state, event)
+                }}
+                onMouseMove={(state, event) => {
+                  if (!sketch.drawing) return
+                  sketch.onChartMove(state, event)
+                }}
+                onClick={(state, event) => {
+                  if (!sketch.drawing) return
+                  sketch.onChartClick(state, event)
+                }}
+                onMouseLeave={() => sketch.onChartLeave()}
               >
                 <CartesianGrid vertical={false} />
                 <XAxis
@@ -662,14 +804,19 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
                   strokeDasharray="4 4"
                 />
                 <ChartTooltip
+                  cursor={sketch.drawing ? false : undefined}
                   content={
-                    <DeltaTooltip
-                      keys={keys}
-                      hidden={hidden}
-                      smaPeriod={smaPeriod}
-                      showSma={smaOn}
-                      showBb={bbOn}
-                    />
+                    sketch.drawing ? (
+                      () => null
+                    ) : (
+                      <DeltaTooltip
+                        keys={keys}
+                        hidden={hidden}
+                        smaPeriod={smaPeriod}
+                        showSma={smaOn}
+                        showBb={bbOn}
+                      />
+                    )
                   }
                 />
                 {bbOn && visible.length === 1
@@ -812,6 +959,24 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
                       name="Vendredi"
                     />
                   </>
+                ) : null}
+                {sketch.draw ? (
+                  <SketchPlotLayers
+                    sketches={sketch.displaySketches}
+                    draftBand={sketch.draftBand}
+                    hasDraftLine={sketch.draftPoints.length > 0}
+                    targetAxisId={sketch.targetAxisId}
+                    axisId={plotAxisId}
+                    drawing={sketch.drawing}
+                    moving={sketch.moving}
+                    hoveredHandle={sketch.hoveredHandle}
+                    live={sketch.draw.live}
+                    draftStart={sketch.draw.draft?.start ?? null}
+                    draftMid={sketch.draw.draft?.mid}
+                    draftFigure={sketch.draw.figure}
+                    showMedian={sketch.draw.showMedian}
+                    onScales={sketch.onScales}
+                  />
                 ) : null}
               </ComposedChart>
             </ChartContainer>

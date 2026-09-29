@@ -85,7 +85,7 @@ const PERIODS: { id: DrawWindow; label: string; full: string }[] = [
   { id: "all", label: "Tout", full: ERA_LABELS.all },
 ]
 
-function GainsSketchBridge({
+function SketchBridge({
   onSketches,
 }: {
   onSketches: (sketches: ChartSketch[]) => void
@@ -233,6 +233,7 @@ function EvolutionContent() {
   const [weekday, setWeekday] = useWeekdayScope()
   const { draws, source, loading } = useDraws(period, weekday)
   const { sketches, chartMeta } = useChartDraw()
+  const [deltaSketches, setDeltaSketches] = useState<ChartSketch[]>([])
   const [gainsSketches, setGainsSketches] = useState<ChartSketch[]>([])
   const lastWindow = isLastWindow(period)
   const archive = useMemo(() => {
@@ -327,7 +328,7 @@ function EvolutionContent() {
       from: bounds.from,
       to: bounds.to,
       drawCount: filtered.length,
-      sketches: [...sketches, ...gainsSketches],
+      sketches: [...sketches, ...deltaSketches, ...gainsSketches],
       chartMeta,
       bounce: chartTab === "bouncing" ? bounceCapture : null,
     })
@@ -456,10 +457,13 @@ function EvolutionContent() {
         </PillTabPanel>
       </section>
 
-      <EvolutionDelta draws={filtered} />
+      <ChartDrawProvider host="delta">
+        <SketchBridge onSketches={setDeltaSketches} />
+        <EvolutionDelta draws={filtered} />
+      </ChartDrawProvider>
 
       <ChartDrawProvider host="gains">
-        <GainsSketchBridge onSketches={setGainsSketches} />
+        <SketchBridge onSketches={setGainsSketches} />
         <EvolutionGains draws={filtered} history={archive} />
       </ChartDrawProvider>
 
