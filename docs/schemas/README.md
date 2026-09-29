@@ -2,7 +2,7 @@
 
 Source des schémas Mermaid du logiciel. On les fait évoluer avec le code, fonction par fonction.
 
-Chaque fichier Markdown est un schéma : un en-tête, un bloc `mermaid`, les ancres de code, et un journal de révision. GitHub affiche le bloc. Pour retravailler le dessin, coller le bloc dans [mermaid.live](https://mermaid.live).
+Chaque fichier Markdown est un schéma : un en-tête, un bloc `mermaid`, les ancres de code, et un journal de révision. Le lecteur du logiciel est **Système → Schémas** (`/schemas`) : il lit ces fichiers. GitHub affiche aussi le bloc. Pour retravailler le dessin, coller le bloc dans [mermaid.live](https://mermaid.live).
 
 ## Niveaux
 

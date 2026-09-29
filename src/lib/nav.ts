@@ -206,7 +206,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     home: "/admin",
     help: {
       title: "Système",
-      body: "Secrets, synchro FDJ et mises à jour. Capture et Aide restent des outils du bandeau.",
+      body: "Secrets, synchro FDJ, mises à jour et schémas fonctionnels. Capture et Aide restent des outils du bandeau.",
     },
     items: [
       {
@@ -215,6 +215,14 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         help: {
           title: "Admin",
           body: "Secrets Neon / API, tests de connexion, suivi des LLM locaux, mises à jour GitHub et synchro FDJ → Postgres.",
+        },
+      },
+      {
+        href: "/schemas",
+        label: "Schémas",
+        help: {
+          title: "Schémas",
+          body: "Lecteur des schémas Mermaid versionnés dans docs/schemas. Contexte, conteneurs, composants, flux et filtres, dans l’ordre de lecture du module.",
         },
       },
     ],

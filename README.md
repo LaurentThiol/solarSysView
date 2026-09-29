@@ -75,7 +75,7 @@ Deux onglets.
 
 ## Pronostic (`/pronostic`)
 
-Schémas fonctionnels Mermaid, à faire évoluer avec le code : [`docs/schemas/pronostic`](docs/schemas/pronostic/README.md).
+Schémas fonctionnels Mermaid, lus dans **Système → Schémas** (`/schemas`) et versionnés dans [`docs/schemas/pronostic`](docs/schemas/pronostic/README.md).
 
 Deux onglets.
 
