@@ -75,7 +75,7 @@ Deux onglets.
 
 ## Pronostic (`/pronostic`)
 
-Schémas fonctionnels Mermaid, lus dans **Système → Schémas** (`/schemas`) et versionnés dans [`docs/schemas/pronostic`](docs/schemas/pronostic/README.md).
+Schémas fonctionnels Mermaid, lus dans **Système → Schémas** (`/schemas`, contraste, zoom, plein écran) et versionnés dans [`docs/schemas/pronostic`](docs/schemas/pronostic/README.md).
 
 Deux onglets.
 
@@ -278,7 +278,7 @@ En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, défini
 
 ## Interface web (Next.js)
 
-App Next.js : menu burger (raccourci **g**), pages groupées — **Archive** (Tirage `/tirage`, Évolution `/evolution`), **Lecture** (Analyse `/analyse`, Morpho `/morpho`, Relief `/relief`, Chartisme `/chartisme`, Harmo `/harmo`), **Grilles** (Combinaisons `/combinaisons`, Jeux `/jeux`), **Assistants** (Brain `/brain`, Spécialistes `/brain/specialistes`, decisionTree `/brain/decision-tree`, IA `/ia`) et **Système** (Admin `/admin`). Le nom de la page courante reste à côté de Synchro. Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
+App Next.js : menu burger (raccourci **g**), pages groupées — **Archive** (Tirage `/tirage`, Évolution `/evolution`), **Lecture** (Analyse `/analyse`, Morpho `/morpho`, Relief `/relief`, Chartisme `/chartisme`, Harmo `/harmo`), **Grilles** (Combinaisons `/combinaisons`, Pronostic `/pronostic`, Jeux `/jeux`), **Assistants** (Brain `/brain`, Spécialistes `/brain/specialistes`, decisionTree `/brain/decision-tree`, IA `/ia`) et **Système** (Admin `/admin`, Schémas `/schemas`). Le nom de la page courante reste à côté de Synchro. Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install

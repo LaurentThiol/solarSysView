@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 import { WindowBar } from "@/components/analysis/window-bar"
@@ -608,7 +609,11 @@ export function PronosticLab() {
         de lecture sur l’univers 5+2. L’atelier compte les grilles restantes.
         L’historique note chaque tirage passé avec une marge, compte la mise
         en grilles, et peut comparer un comité de réseaux à la moyenne.
-        Ce n’est pas P(grille).
+        Ce n’est pas P(grille).{" "}
+        <Link href="/schemas/pronostic" className="font-medium text-foreground underline decoration-foreground/50 underline-offset-4">
+          Ouvrir le schéma
+        </Link>
+        .
       </p>
       <PillTabs
         idPrefix="pronostic"

@@ -42,6 +42,7 @@ export function PageShell({
   children,
   footer = true,
   compact = false,
+  wide = false,
   className,
 }: {
   title?: ReactNode
@@ -52,6 +53,7 @@ export function PageShell({
   children: ReactNode
   footer?: boolean
   compact?: boolean
+  wide?: boolean
   className?: string
 }) {
   const intro = subtitle ?? description
@@ -62,7 +64,8 @@ export function PageShell({
       {hasIntro ? (
         <div
           className={cn(
-            "mx-auto w-full min-w-0 max-w-6xl px-4 sm:px-6",
+            "mx-auto w-full min-w-0 px-4 sm:px-6",
+            wide ? "max-w-[92rem]" : "max-w-6xl",
             compact ? "pt-3 pb-0" : "pt-6 sm:pt-8 pb-0"
           )}
         >
@@ -85,7 +88,8 @@ export function PageShell({
       <main
         id="contenu"
         className={cn(
-          "mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 pb-12 sm:px-6",
+          "mx-auto w-full min-w-0 flex-1 px-4 pb-12 sm:px-6",
+          wide ? "max-w-[92rem]" : "max-w-6xl",
           hasIntro ? "pt-6" : "pt-6"
         )}
       >

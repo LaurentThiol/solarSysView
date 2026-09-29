@@ -222,7 +222,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Schémas",
         help: {
           title: "Schémas",
-          body: "Lecteur des schémas Mermaid versionnés dans docs/schemas. Contexte, conteneurs, composants, flux et filtres, dans l’ordre de lecture du module.",
+          body: "Lecteur des schémas Mermaid versionnés dans docs/schemas. Texte éclairci, liens en toutes lettres, zoom et plein écran. Contexte, conteneurs, composants, flux et filtres, dans l’ordre de lecture du module.",
         },
       },
     ],

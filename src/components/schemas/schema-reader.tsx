@@ -29,7 +29,6 @@ export function SchemaReader({ docs, current }: { docs: SchemaDoc[]; current: Sc
   const index = docs.findIndex((doc) => doc.id === current.id)
   const previous = index > 0 ? docs[index - 1] : null
   const next = index >= 0 && index < docs.length - 1 ? docs[index + 1] : null
-  let diagramCount = 0
 
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[16rem_minmax(0,1fr)]">
@@ -64,7 +63,9 @@ export function SchemaReader({ docs, current }: { docs: SchemaDoc[]; current: Sc
         <div className="mt-6">
           {current.blocks.map((block, blockIndex) => {
             if (block.kind === "diagram") {
-              diagramCount += 1
+              const diagramCount = current.blocks
+                .slice(0, blockIndex + 1)
+                .filter((item) => item.kind === "diagram").length
               return (
                 <SchemaDiagram
                   key={`${current.id}-diagram-${blockIndex}`}

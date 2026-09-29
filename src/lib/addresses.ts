@@ -1,5 +1,6 @@
 import { JEUX_JOURNAL_LABEL, JEUX_JOURNAL_TAB, foldGlossaryQuery } from "./copy.ts"
 import { NAV_GROUPS } from "./nav.ts"
+import { SCHEMA_DOCS } from "./schemas/parse.ts"
 
 export const ADDRESS_KIND_LABELS = {
   page: "Page",
@@ -284,6 +285,9 @@ const TABS: AddressEntry[] = [
   ),
   ...OVERLAYS,
   tabEntry("/jeux?tab=solutions", "Jeux · Solutions", "Décompte exact des grilles 5+2 sous contraintes. Ce n’est pas un pronostic.", "grilles"),
+  ...SCHEMA_DOCS.map((doc) =>
+    tabEntry(`/schemas/pronostic/${doc.id}`, `Schémas · ${doc.label}`, doc.text, "systeme")
+  ),
   tabEntry(
     "/pronostic?tab=historic",
     "Pronostic · Historique",

@@ -10,12 +10,12 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
-    "@huggingface/transformers": "^4.3.0",
+    "@huggingface/transformers": "^4.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "html-to-image": "^1.11.13",
     "lucide-react": "^1.39.0",
-    "mermaid": "^11.17.2",
+    "mermaid": "^12.0.0",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -33,10 +33,5 @@
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
     "typescript": "^5"
-  },
-  "allowScripts": {
-    "onnxruntime-node@1.30.0": true,
-    "protobufjs@7.6.6": true,
-    "unrs-resolver@1.12.2": true
   }
 }

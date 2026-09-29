@@ -30,6 +30,7 @@ export default async function SchemasPage({ params }: { params: Promise<Params> 
   return (
     <PageShell
       title="Schémas"
+      wide
       subtitle="Lecteur des schémas Mermaid du dépôt. Le dessin affiché est celui du fichier, dans l’ordre de lecture du module."
     >
       <SchemaReader docs={loadSchemaCatalog().docs} current={doc} />

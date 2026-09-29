@@ -1,6 +1,6 @@
 # Pronostic — schémas
 
-Atelier `/pronostic` et historique `/pronostic?tab=historic`.
+Atelier `/pronostic` et historique `/pronostic?tab=historic`. Lecture dans l’application : `/schemas/pronostic`.
 
 L’atelier resserre l’univers 5+2 (2 118 760 combinaisons de numéros × 66 combinaisons d’étoiles = 139 838 160 grilles) par des couches, puis compte les grilles restantes. L’historique note les 100 derniers tirages de la série affichée, avec une marge annoncée ou choisie après coup, et peut confronter un comité de réseaux à la moyenne de fenêtre. Le nombre affiché est une mise en grilles. La loi officielle du tirage reste uniforme.
 
