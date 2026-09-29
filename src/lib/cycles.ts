@@ -105,6 +105,21 @@ export type CycleStatus = {
   disclaimer?: string
 }
 
+/** Une ligne par tirage. La date reste ISO : elle est la clé d'abscisse, pas le libellé. */
+export function cycleChartRows(
+  dates: string[],
+  series: Record<string, Array<number | null> | undefined>,
+) {
+  return dates.map((date, index) => {
+    const row: Record<string, string | number | null> = { date }
+    for (const [key, values] of Object.entries(series)) {
+      const value = values?.[index]
+      row[key] = value == null ? null : value
+    }
+    return row
+  })
+}
+
 export function cyclesQuery(params: Record<string, string | number | boolean | null | undefined>) {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {

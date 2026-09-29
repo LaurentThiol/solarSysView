@@ -14,7 +14,8 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { VARIABLE_LABELS, type VariableName } from "@/lib/analysis"
-import type { CycleChannel, CycleFit, CyclePanel, CycleSignature } from "@/lib/cycles"
+import { cycleChartRows, type CycleChannel, type CycleFit, type CyclePanel, type CycleSignature } from "@/lib/cycles"
+import { formatDrawDate, formatShortDate } from "@/lib/draws"
 
 const MODULE_LABEL: Record<string, string> = {
   analyse: "Analyse",
@@ -100,7 +101,7 @@ const MODULE_TRACES = [
 
 const CLOCK_CHART_HELP = {
   title: "Courbe et horloges",
-  body: "Axe gauche : la cible, dans son unité. Axe droit : phase de l’horloge, de 0 (début du cycle) à 1 (fin). Les deux axes ne partagent pas d’échelle. Une phase qui monte en même temps que la courbe dit un rythme commun.",
+  body: "Axe gauche : la cible, dans son unité. Axe droit : phase de l’horloge, de 0 (début du cycle) à 1 (fin). Les deux axes ne partagent pas d’échelle. L’abscisse est un tirage, affiché en jour/mois. Une phase qui monte en même temps que la courbe dit un rythme commun.",
 } as const
 
 const MODULE_CHART_HELP = {
@@ -191,15 +192,11 @@ function unit(values: Array<number | null> | undefined) {
 }
 
 function rowsOf(panel: CyclePanel) {
-  const dates = panel.dates ?? []
-  const series = panel.series ?? {}
-  return dates.map((date, index) => {
-    const row: Record<string, string | number | null> = { date: date.slice(5) }
-    for (const [key, values] of Object.entries(series)) {
-      row[key] = values[index] ?? null
-    }
-    return row
-  })
+  return cycleChartRows(panel.dates ?? [], panel.series ?? {})
+}
+
+function axisTooltip(value: unknown) {
+  return formatDrawDate(String(value ?? ""))
 }
 
 export function CycleOverlayChart({
@@ -216,11 +213,7 @@ export function CycleOverlayChart({
     const dates = panel.dates ?? []
     const series = panel.series ?? {}
     const scaled = Object.fromEntries(MODULE_TRACES.map((trace) => [trace.id, unit(series[trace.id])]))
-    return dates.map((date, index) => {
-      const row: Record<string, string | number | null> = { date: date.slice(5) }
-      for (const trace of MODULE_TRACES) row[trace.id] = scaled[trace.id]?.[index] ?? null
-      return row
-    })
+    return cycleChartRows(dates, scaled)
   }, [panel])
 
   const clockConfig = {
@@ -242,7 +235,7 @@ export function CycleOverlayChart({
           </CardTitle>
           <p className="text-sm leading-6 text-muted-foreground">
             Axe gauche : {targetLabel}, dans son unité. Axe droit : phase de 0 à 1. Les deux axes ne partagent pas
-            d’échelle.
+            d’échelle. L’abscisse est un tirage, affiché en jour/mois.
           </p>
           <div className="flex flex-wrap gap-2">
             {CLOCKS.map((clock) => {
@@ -274,10 +267,10 @@ export function CycleOverlayChart({
           <ChartContainer config={clockConfig} className="aspect-auto h-[280px] w-full">
             <ComposedChart data={data} margin={{ left: 4, right: 8, top: 8 }}>
               <CartesianGrid vertical={false} />
-              <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} />
+              <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} tickFormatter={formatShortDate} />
               <YAxis yAxisId="curve" width={40} tickLine={false} axisLine={false} />
               <YAxis yAxisId="phase" orientation="right" domain={[0, 1]} width={28} tickLine={false} axisLine={false} />
-              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartTooltip content={<ChartTooltipContent labelFormatter={axisTooltip} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Line yAxisId="curve" type="monotone" dataKey="target" stroke="var(--color-target)" dot={false} strokeWidth={2} />
               {CLOCKS.filter((clock) => clocks.includes(clock.id)).map((clock) => (
@@ -334,9 +327,9 @@ export function CycleOverlayChart({
           <ChartContainer config={moduleConfig} className="aspect-auto h-[200px] w-full">
             <ComposedChart data={moduleData} margin={{ left: 4, right: 8, top: 8 }}>
               <CartesianGrid vertical={false} />
-              <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} />
+              <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} tickFormatter={formatShortDate} />
               <YAxis domain={[0, 1]} width={28} tickLine={false} axisLine={false} />
-              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartTooltip content={<ChartTooltipContent labelFormatter={axisTooltip} />} />
               <ChartLegend content={<ChartLegendContent />} />
               {MODULE_TRACES.filter((trace) => modules.includes(trace.id)).map((trace) => (
                 <Line
@@ -394,7 +387,7 @@ export function WeightChart({
 export function RibbonChart({ fit }: { fit: CycleFit }) {
   const ribbon = fit.ribbon ?? []
   const data = ribbon.map((row) => ({
-    date: row.date.slice(5),
+    date: row.date,
     réel: row.y,
     médiane: row.q50,
     base: row.q10,
@@ -418,9 +411,9 @@ export function RibbonChart({ fit }: { fit: CycleFit }) {
         <ChartContainer config={config} className="aspect-auto h-[260px] w-full">
           <ComposedChart data={data} margin={{ left: 4, right: 8, top: 8 }}>
             <CartesianGrid vertical={false} />
-            <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={24} />
+            <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={24} tickFormatter={formatShortDate} />
             <YAxis width={40} tickLine={false} axisLine={false} />
-            <ChartTooltip content={<ChartTooltipContent />} />
+            <ChartTooltip content={<ChartTooltipContent labelFormatter={axisTooltip} />} />
             <ChartLegend content={<ChartLegendContent />} />
             <Area type="monotone" dataKey="base" stackId="band" stroke="none" fill="transparent" legendType="none" />
             <Area type="monotone" dataKey="bande" stackId="band" stroke="none" fill="var(--color-bande)" fillOpacity={0.35} />
