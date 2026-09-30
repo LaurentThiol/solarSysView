@@ -167,15 +167,15 @@ export const HELP = {
   },
   filterAll: {
     title: "Tous",
-    body: "Affiche les 50 numéros sur la grille, pairs et impairs.",
+    body: "Affiche les 50 numéros du tableau, pairs et impairs.",
   },
   filterEven: {
     title: "Pairs",
-    body: "Met en avant les numéros pairs (2, 4, … 50). Les impairs restent visibles en filigrane.",
+    body: "Ne garde que les numéros pairs (2, 4, … 50). Le détail de la boule déjà choisie reste affiché.",
   },
   filterOdd: {
     title: "Impairs",
-    body: "Met en avant les numéros impairs. Les pairs restent visibles en filigrane.",
+    body: "Ne garde que les numéros impairs. Le détail de la boule déjà choisie reste affiché.",
   },
 } satisfies Record<string, HelpCopy>
 

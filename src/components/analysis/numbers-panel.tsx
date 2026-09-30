@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react"
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
-import { HeatClock, HeatClockLegend } from "@/components/heat-clock"
-import { HelpTip, TitleHelp, WithHelp } from "@/components/help"
+import { FrequencyTable } from "@/components/frequency-table"
+import { TitleHelp, WithHelp } from "@/components/help"
 import {
   ChartContainer,
   ChartTooltip,
@@ -25,10 +25,8 @@ import {
   series,
 } from "@/lib/analysis"
 import { formatDrawDate, formatShortDate } from "@/lib/draws"
-import { cn } from "@/lib/utils"
 
 type Filter = "all" | "even" | "odd"
-type SortKey = "value" | "count" | "delayDraws"
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "Tous" },
@@ -54,24 +52,13 @@ export function NumbersPanel({
   onAnalyze: (variable: Extract<VariableName, "hit" | "delay">, n: number) => void
 }) {
   const [filter, setFilter] = useState<Filter>("all")
-  const [sortKey, setSortKey] = useState<SortKey>("value")
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
   const board = useMemo(() => ballBoard(draws), [draws])
-  const maxCount = useMemo(
-    () => Math.max(0, ...board.balls.map((row) => row.count)),
-    [board.balls]
-  )
   const selected = board.balls.find((row) => row.value === ball) ?? board.balls[6]
-  const visible = useMemo(() => {
-    const rows = board.balls.filter((row) => matchesFilter(row, filter))
-    const dir = sortDir === "asc" ? 1 : -1
-    return [...rows].sort((a, b) => {
-      if (sortKey === "value") return (a.value - b.value) * dir
-      if (sortKey === "count") return (a.count - b.count || a.value - b.value) * dir
-      return (a.delayDraws - b.delayDraws || a.value - b.value) * dir
-    })
-  }, [board.balls, filter, sortKey, sortDir])
+  const visible = useMemo(
+    () => board.balls.filter((row) => matchesFilter(row, filter)),
+    [board.balls, filter]
+  )
 
   const hitSeries = useMemo(
     () => (selected ? series(draws, "hit", selected.value).points : []),
@@ -89,15 +76,6 @@ export function NumbersPanel({
         .slice(0, 8),
     [draws, selected]
   )
-
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((current) => (current === "asc" ? "desc" : "asc"))
-      return
-    }
-    setSortKey(key)
-    setSortDir(key === "value" ? "asc" : "desc")
-  }
 
   if (draws.length === 0 || !selected) {
     return <p className="text-sm text-muted-foreground">Aucun tirage dans la fenêtre.</p>
@@ -121,15 +99,14 @@ export function NumbersPanel({
             <TitleHelp
               help={{
                 title: "Grille 1–50",
-                body: "Cliquez un numéro pour le détail (sorties, retard, IC). Horloge : 6 h = l’attendu, plein = 2× l’attendu, rouge = surchauffe (au-delà du tour). L’anneau or = pair, bleu = impair. Les filtres Tous / Pairs / Impairs n’effacent pas la grille, ils atténuent l’autre camp.",
+                body: "Tableau triable par Numéro, P/I, Sorties, Δ, Retard et Attendu. Cliquez un numéro pour le détail (sorties, retard, IC). La barre compare les sorties à l’attendu : le trait est la loi, le rouge dépasse 2×. Or = pair, bleu = impair. Les filtres Pairs / Impairs retirent l’autre camp du tableau.",
               }}
             >
               Grille 1–50
             </TitleHelp>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Cliquez un numéro pour le détail. 6 h = attendu, plein = 2×, rouge = surchauffe.
-            Anneau or = pair, bleu = impair.
+            Cliquez un en-tête pour trier, un numéro pour le détail. Le trait de la barre est l’attendu.
           </p>
           <div className="flex flex-wrap gap-2">
             {FILTERS.map((item) => (
@@ -150,37 +127,16 @@ export function NumbersPanel({
           </div>
         </CardHeader>
         <CardContent className="min-w-0">
-          <div className="euromillions-ball-grid">
-            {board.balls.map((row) => {
-              const muted = !matchesFilter(row, filter)
-              return (
-                <button
-                  key={row.value}
-                  type="button"
-                  aria-pressed={row.value === selected.value}
-                  aria-label={`Numéro ${row.value}, ${row.even ? "pair" : "impair"}, ${row.count} sortie${row.count === 1 ? "" : "s"}`}
-                  title={`Sélectionner ${row.value} (${row.even ? "pair" : "impair"}, ${row.count} sortie${row.count === 1 ? "" : "s"})`}
-                  onClick={() => onSelectBall(row.value)}
-                  className={cn(
-                    "w-full min-w-0 max-w-full rounded-full p-0",
-                    row.value === selected.value && "ring-2 ring-primary ring-offset-1 ring-offset-background",
-                    muted && "opacity-25"
-                  )}
-                >
-                  <HeatClock
-                    value={row.count}
-                    peak={maxCount}
-                    even={row.even}
-                    expected={board.expected}
-                    className="w-full text-[10px] sm:text-sm"
-                  >
-                    {row.value}
-                  </HeatClock>
-                </button>
-              )
-            })}
-          </div>
-          <HeatClockLegend showExpected />
+          <FrequencyTable
+            items={visible}
+            expected={board.expected}
+            caption="Tableau des numéros 1 à 50"
+            selected={new Set([selected.value])}
+            onPick={onSelectBall}
+            ariaLabel={(row) =>
+              `Numéro ${row.value}, ${row.value % 2 === 0 ? "pair" : "impair"}, ${row.count} sortie${row.count === 1 ? "" : "s"}, retard ${row.delayDraws}`
+            }
+          />
         </CardContent>
       </Card>
 
@@ -312,95 +268,6 @@ export function NumbersPanel({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <TitleHelp
-              help={{
-                title: "Tableau des 50 numéros",
-                body: "Cliquez N°, Sorties ou Retard pour trier. Cliquez un numéro pour le sélectionner (même action que la grille).",
-              }}
-            >
-              Tableau des 50 numéros
-            </TitleHelp>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-muted-foreground">
-                  <th className="py-1 pr-3">
-                    <span className="inline-flex items-center gap-1">
-                      <button type="button" className="hover:text-foreground" onClick={() => toggleSort("value")}>
-                        N°
-                      </button>
-                      <HelpTip
-                        title="Trier par numéro"
-                        body="Cliquez pour trier 1→50 ou 50→1. Un second clic inverse le sens."
-                      />
-                    </span>
-                  </th>
-                  <th className="py-1 pr-3">P/I</th>
-                  <th className="py-1 pr-3">
-                    <span className="inline-flex items-center gap-1">
-                      <button type="button" className="hover:text-foreground" onClick={() => toggleSort("count")}>
-                        Sorties
-                      </button>
-                      <HelpTip
-                        title="Trier par sorties"
-                        body="Nombre de fois où la boule est sortie dans la fenêtre. Cliquez pour trier, recliquez pour inverser."
-                      />
-                    </span>
-                  </th>
-                  <th className="py-1 pr-3">Δ attendu</th>
-                  <th className="py-1">
-                    <span className="inline-flex items-center gap-1">
-                      <button type="button" className="hover:text-foreground" onClick={() => toggleSort("delayDraws")}>
-                        Retard
-                      </button>
-                      <HelpTip
-                        title="Trier par retard"
-                        body="Tirages depuis la dernière sortie. Un retard élevé ne change pas la chance au tirage suivant."
-                      />
-                    </span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((row) => (
-                  <tr
-                    key={row.value}
-                    className={cn(
-                      "border-t border-border",
-                      row.value === selected.value && "bg-primary/10"
-                    )}
-                  >
-                    <td className="py-1 pr-3">
-                      <button
-                        type="button"
-                        className="tabular-nums font-medium hover:underline"
-                        title={`Sélectionner le numéro ${row.value}`}
-                        onClick={() => onSelectBall(row.value)}
-                      >
-                        {row.value}
-                      </button>
-                    </td>
-                    <td className="py-1 pr-3 text-muted-foreground">
-                      {row.even ? "pair" : "impair"}
-                    </td>
-                    <td className="py-1 pr-3 tabular-nums">{row.count}</td>
-                    <td className="py-1 pr-3 tabular-nums">
-                      {formatStat(row.count - row.expected, 1)}
-                    </td>
-                    <td className="py-1 tabular-nums">{row.delayDraws}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

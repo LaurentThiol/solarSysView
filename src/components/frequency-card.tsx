@@ -2,6 +2,7 @@
 
 import { Sparkles } from "lucide-react"
 
+import { ExpectedMeter } from "@/components/expected-meter"
 import { TitleHelp, type HelpCopy } from "@/components/help"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { type FrequencyItem } from "@/lib/draws"
@@ -23,6 +24,9 @@ export function FrequencyCard({
   showDelay = false,
   noneLabel,
   help,
+  meterExpected,
+  meterOf = "count",
+  meterLabel = "Attendu",
 }: {
   title: string
   items: FrequencyItem[]
@@ -33,6 +37,9 @@ export function FrequencyCard({
   showDelay?: boolean
   noneLabel?: string
   help: HelpCopy
+  meterExpected?: number
+  meterOf?: "count" | "delay"
+  meterLabel?: string
 }) {
   const label = star ? "Étoile" : "Numéro"
   return (
@@ -59,6 +66,7 @@ export function FrequencyCard({
             {noneLabel ?? "Aucun élément au-dessus du seuil."}
           </p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <caption className="sr-only">
               {title}, rangé par ordre décroissant
@@ -71,6 +79,9 @@ export function FrequencyCard({
                   <th className="py-1 pr-2 text-right font-normal">Retard</th>
                 ) : null}
                 <th className="py-1 text-right font-normal">Sorties</th>
+                {meterExpected != null ? (
+                  <th className="py-1 pl-3 font-normal">{meterLabel}</th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -93,10 +104,21 @@ export function FrequencyCard({
                   <td className="py-1.5 text-right text-muted-foreground tabular-nums">
                     {item.count}×
                   </td>
+                  {meterExpected != null ? (
+                    <td className="py-1.5 pl-3">
+                      <ExpectedMeter
+                        value={meterOf === "delay" ? item.delayDraws : item.count}
+                        expected={meterExpected}
+                        even={item.value % 2 === 0}
+                        label={`${label} ${item.value}`}
+                      />
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </CardContent>
     </Card>

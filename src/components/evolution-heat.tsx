@@ -1,44 +1,9 @@
 "use client"
 
-import { HeatClock, HeatClockLegend } from "@/components/heat-clock"
+import { FrequencyTable } from "@/components/frequency-table"
 import { TitleHelp } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { type FrequencyItem } from "@/lib/draws"
-
-function HeatGrid({
-  items,
-  className,
-  expected,
-  star,
-}: {
-  items: FrequencyItem[]
-  className: string
-  expected?: number
-  star?: boolean
-}) {
-  const maxCount = Math.max(0, ...items.map((item) => item.count))
-  return (
-    <div className={className}>
-      {items.map((item) => (
-        <div
-          key={`${star ? "s" : "n"}-${item.value}`}
-          title={`${star ? "Étoile" : "Numéro"} ${item.value} : ${item.count}× · retard ${item.delayDraws}`}
-          className="min-w-0"
-        >
-          <HeatClock
-            value={item.count}
-            peak={maxCount}
-            even={item.value % 2 === 0}
-            expected={expected}
-            className="w-full text-[10px] sm:text-xs"
-          >
-            {item.value}
-          </HeatClock>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 export function EvolutionHeat({
   numbers,
@@ -61,7 +26,7 @@ export function EvolutionHeat({
             <TitleHelp
               help={{
                 title: "Grille 1–50",
-                body: "Chaque boule est une horloge : 6 h = l’attendu, plein = 2× l’attendu. Au-delà du tour, l’anneau passe au rouge (surchauffe). Or = pair, bleu = impair. Le trait marque 6 h. Beaucoup d’horloges restent sous 6 h : c’est normal.",
+                body: "Tableau triable : Numéro, P/I, Sorties, Δ, Retard, Attendu. La barre est le total de sorties, le trait est l’attendu (N × 5/50), le × est le rapport. Or = pair, bleu = impair. Rouge = plus de 2× l’attendu. Beaucoup de barres s’arrêtent avant le trait : c’est normal.",
               }}
             >
               Grille 1–50
@@ -72,14 +37,11 @@ export function EvolutionHeat({
           {empty ? (
             <p className="text-sm text-muted-foreground">Aucun tirage à colorer.</p>
           ) : (
-            <>
-              <HeatGrid
-                items={numbers}
-                className="euromillions-ball-grid"
-                expected={expectedNumbers}
-              />
-              <HeatClockLegend showExpected={expectedNumbers != null} />
-            </>
+            <FrequencyTable
+              items={numbers}
+              expected={expectedNumbers}
+              caption="Fréquences des numéros 1 à 50"
+            />
           )}
         </CardContent>
       </Card>
@@ -89,7 +51,7 @@ export function EvolutionHeat({
             <TitleHelp
               help={{
                 title: "Étoiles 1–12",
-                body: "Même horloge que la grille 1–50 (6 h = attendu, plein = 2×, rouge = surchauffe), sur le pool actuel de 12 étoiles. Attendu ≈ 3,3× sur 20 tirages, ≈ 8,3× sur 50.",
+                body: "Même tableau que la grille 1–50, sur le pool actuel de 12 étoiles. Attendu ≈ 3,3× sur 20 tirages, ≈ 8,3× sur 50. Le trait marque cette loi.",
               }}
             >
               Étoiles 1–12
@@ -100,15 +62,14 @@ export function EvolutionHeat({
           {empty ? (
             <p className="text-sm text-muted-foreground">Aucun tirage à colorer.</p>
           ) : (
-            <>
-              <HeatGrid
-                items={stars}
-                className="grid grid-cols-6 gap-1 sm:grid-cols-12"
-                expected={expectedStars}
-                star
-              />
-              <HeatClockLegend showExpected={expectedStars != null} />
-            </>
+            <FrequencyTable
+              items={stars}
+              expected={expectedStars}
+              noun="Étoile"
+              shortNoun="★"
+              caption="Fréquences des étoiles 1 à 12"
+              scroll={false}
+            />
           )}
         </CardContent>
       </Card>

@@ -7,11 +7,10 @@ import { Pencil } from "lucide-react"
 import { WindowBar } from "@/components/analysis/window-bar"
 import {
   Disclaimer,
-  OverlayToggle,
   formatStat,
 } from "@/components/analysis/shared"
 import { DrawBalls } from "@/components/draw-balls"
-import { HeatClock, HeatClockLegend } from "@/components/heat-clock"
+import { FrequencyTable } from "@/components/frequency-table"
 import {
   HelpWrap,
   LabelHelp,
@@ -87,18 +86,15 @@ import {
   meanPrizeByRank,
   numberFrequencyTable,
   starFrequencyTable,
-  type FrequencyItem,
 } from "@/lib/draws"
 import { useDraws } from "@/lib/use-draws"
 import { useWeekdayScope } from "@/lib/use-weekday-scope"
 import { weekdayFilterDay } from "@/lib/weekday-scope"
 import { WeekdaySynthesisCard } from "@/components/weekday-synthesis-card"
-import { cn } from "@/lib/utils"
 
 const SESSION_KEY = "synchro.combinaisons.grids"
 const OFFICIAL_TABLE_KEY = "synchro.combinaisons.officialTable"
 
-type Intensity = "count" | "delay"
 type SavedGrid = CombinationGrid & {
   id: number | string
   label: string
@@ -128,19 +124,11 @@ const HELP = {
   },
   numbers: {
     title: "Grille 1–50",
-    body: "Cliquez pour ajouter ou retirer un numéro (5 max). Chaque case montre le total de sorties (×) et le retard (R) dans la fenêtre.",
+    body: "Cliquez une ligne pour ajouter ou retirer un numéro (5 max). Les en-têtes trient : Numéro, P/I, Sorties, Δ, Retard, Attendu. La barre compare les sorties à l’attendu (N × 5/50) : le trait est la loi, le rouge dépasse 2×. Le tri ne change pas la sélection.",
   },
   stars: {
     title: "Étoiles 1–12",
-    body: "Cliquez pour ajouter ou retirer une étoile (2 max). Même overlay : total de sorties et retard.",
-  },
-  intensityCount: {
-    title: "Horloge · totaux",
-    body: "Chaque boule est une horloge : 6 h = l’attendu, plein = 2× l’attendu. Au-delà du tour, l’anneau passe au rouge (surchauffe). L’anneau or = pair, bleu = impair. Cela ne change pas la sélection, seulement le rendu.",
-  },
-  intensityDelay: {
-    title: "Horloge · retards",
-    body: "Même horloge, remplie selon le retard (tirages depuis la dernière sortie). Plein = plus longtemps absent. Cela ne change pas la sélection.",
+    body: "Cliquez une ligne pour ajouter ou retirer une étoile (2 max). Même tableau : sorties, retard, et barre contre l’attendu N × 2/12.",
   },
   selection: {
     title: "Sélection",
@@ -458,67 +446,6 @@ function friendlyGridsError(raw?: string) {
   return text
 }
 
-function BallPicker({
-  items,
-  selected,
-  intensity,
-  expected,
-  onToggle,
-  ariaLabel,
-}: {
-  items: FrequencyItem[]
-  selected: Set<number>
-  intensity: Intensity
-  expected?: number
-  onToggle: (value: number) => void
-  ariaLabel: string
-}) {
-  const peak = Math.max(
-    1,
-    ...items.map((item) => (intensity === "count" ? item.count : item.delayDraws))
-  )
-  return (
-    <div
-      className={cn(
-        items.length > 12 ? "euromillions-ball-grid" : "grid grid-cols-6 gap-1 sm:grid-cols-12"
-      )}
-      role="group"
-      aria-label={ariaLabel}
-    >
-      {items.map((item) => {
-        const on = selected.has(item.value)
-        const metric = intensity === "count" ? item.count : item.delayDraws
-        return (
-          <button
-            key={item.value}
-            type="button"
-            aria-pressed={on}
-            aria-label={`Boule ${item.value}, ${item.count} sorties, retard ${item.delayDraws}`}
-            onClick={() => onToggle(item.value)}
-            className={cn(
-              "flex w-full min-w-0 flex-col items-center gap-0.5 rounded-md px-0.5 py-0.5 text-[10px] leading-tight tabular-nums sm:text-xs",
-              on && "ring-2 ring-primary ring-offset-1 ring-offset-background"
-            )}
-          >
-            <HeatClock
-              value={metric}
-              peak={peak}
-              even={item.value % 2 === 0}
-              expected={intensity === "count" ? expected : undefined}
-              className="w-full text-[10px] sm:text-xs"
-            >
-              {item.value}
-            </HeatClock>
-            <span className="text-[9px] text-muted-foreground sm:text-[10px]">
-              {item.count}× · R{item.delayDraws}
-            </span>
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 function SavedGridItem({
   item,
   rate,
@@ -672,7 +599,6 @@ export function CombinaisonsPanel() {
   const [compareOn, setCompareOn] = useState(false)
   const [numbers, setNumbers] = useState<number[]>([])
   const [stars, setStars] = useState<number[]>([])
-  const [intensity, setIntensity] = useState<Intensity>("count")
   const [strategy, setStrategy] = useState<CombinationStrategy>("balanced")
   const [proposeCount, setProposeCount] = useState("5")
   const [sumMinMode, setSumMinMode] = useState<SumBoundMode>("auto")
@@ -1127,47 +1053,34 @@ export function CombinaisonsPanel() {
           <CardTitle>
             <TitleHelp help={HELP.numbers}>Composeur 5 + 2</TitleHelp>
           </CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <OverlayToggle
-              label="Totaux"
-              on={intensity === "count"}
-              onClick={() => setIntensity("count")}
-              help={HELP.intensityCount}
-            />
-            <OverlayToggle
-              label="Retards"
-              on={intensity === "delay"}
-              onClick={() => setIntensity("delay")}
-              help={HELP.intensityDelay}
-            />
-          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <BallPicker
+          <FrequencyTable
             items={numberStats}
-            selected={numberSet}
-            intensity={intensity}
             expected={windowCards.expected}
-            onToggle={toggleNumber}
-            ariaLabel="Numéros 1 à 50"
+            caption="Numéros 1 à 50"
+            selected={numberSet}
+            onPick={toggleNumber}
+            isDisabled={(value) => numbers.length >= 5 && !numberSet.has(value)}
+            disabledReason="5 numéros déjà choisis"
           />
           <div>
             <p className="mb-2 text-xs text-muted-foreground">
               <TitleHelp help={HELP.stars}>Étoiles</TitleHelp>
             </p>
-            <BallPicker
+            <FrequencyTable
               items={starStats}
-              selected={starSet}
-              intensity={intensity}
               expected={windowCards.expectedStars}
-              onToggle={toggleStar}
-              ariaLabel="Étoiles 1 à 12"
+              noun="Étoile"
+              shortNoun="★"
+              caption="Étoiles 1 à 12"
+              selected={starSet}
+              onPick={toggleStar}
+              isDisabled={(value) => stars.length >= 2 && !starSet.has(value)}
+              disabledReason="2 étoiles déjà choisies"
+              scroll={false}
             />
           </div>
-          <HeatClockLegend
-            fillLabel={intensity === "count" ? undefined : "retard court → long"}
-            showExpected={intensity === "count"}
-          />
           <div>
             <p className="mb-2 text-xs text-muted-foreground">
               <TitleHelp help={HELP.selection}>

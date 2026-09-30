@@ -478,9 +478,10 @@ function EvolutionContent() {
           empty={filtered.length === 0}
           expected={expectedN}
           noneLabel={`Aucune boule au-dessus de l’attendu (${formatStat(expectedN)}×).`}
+          meterExpected={expectedN}
           help={{
             title: "Numéros les plus sortis",
-            body: "Tableau décroissant des boules 1–50 sorties plus souvent que l’attendu dans la fenêtre (2× sur 20 tirages, 5× sur 50). À fréquence égale, la plus récemment vue est devant. Fréquence observée, pas une prédiction.",
+            body: "Tableau décroissant des boules 1–50 sorties plus souvent que l’attendu dans la fenêtre (2× sur 20 tirages, 5× sur 50). La barre compare ce total au trait de la loi. À fréquence égale, la plus récemment vue est devant. Fréquence observée, pas une prédiction.",
           }}
         />
         <FrequencyCard
@@ -489,10 +490,13 @@ function EvolutionContent() {
           empty={filtered.length === 0}
           expectedHint={`Retard attendu ${expectedNDelay} tirages`}
           showDelay
+          meterExpected={expectedNDelay}
+          meterOf="delay"
+          meterLabel="Attente"
           noneLabel={`Aucun numéro au-delà du retard attendu (${expectedNDelay} tirages).`}
           help={{
             title: "Numéros en retard",
-            body: "Tableau décroissant du retard (tirages depuis la dernière sortie), mesuré à la fin de la fenêtre sur tout l’historique connu — pas seulement les 20 ou 50 derniers. Seuls les retards plus longs que l’attente géométrique (10 tirages) sont listés, hors boules déjà classées « plus sorties ». Un retard n’augmente pas la chance au tirage suivant.",
+            body: "Tableau décroissant du retard (tirages depuis la dernière sortie), mesuré à la fin de la fenêtre sur tout l’historique connu — pas seulement les 20 ou 50 derniers. Le trait de la barre est l’attente géométrique (10 tirages). Seuls les retards plus longs sont listés, hors boules déjà classées « plus sorties ». Un retard n’augmente pas la chance au tirage suivant.",
           }}
         />
         <FrequencyCard
@@ -501,10 +505,11 @@ function EvolutionContent() {
           empty={filtered.length === 0}
           star
           expected={expectedS}
+          meterExpected={expectedS}
           noneLabel={`Aucune étoile au-dessus de l’attendu (${formatStat(expectedS)}×).`}
           help={{
             title: "Étoiles les plus sorties",
-            body: "Tableau décroissant des étoiles 1–12 sorties plus souvent que l’attendu (≈ 3,3× sur 20 tirages, ≈ 8,3× sur 50). Une étoile à 6× n’apparaît pas aussi « en retard ».",
+            body: "Tableau décroissant des étoiles 1–12 sorties plus souvent que l’attendu (≈ 3,3× sur 20 tirages, ≈ 8,3× sur 50). La barre compare ce total au trait de la loi. Une étoile à 6× n’apparaît pas aussi « en retard ».",
           }}
         />
         <FrequencyCard
@@ -514,10 +519,13 @@ function EvolutionContent() {
           star
           expectedHint={`Retard attendu ${expectedSDelay} tirages`}
           showDelay
+          meterExpected={expectedSDelay}
+          meterOf="delay"
+          meterLabel="Attente"
           noneLabel={`Aucune étoile au-delà du retard attendu (${expectedSDelay} tirages).`}
           help={{
             title: "Étoiles en retard",
-            body: "Tableau décroissant du retard des étoiles, avec le même regard historique que les numéros. Seuls les retards plus longs que l’attente (6 tirages sur 12 ★) sont listés, hors étoiles déjà classées « plus sorties ». Descriptif, pas un signal jouable.",
+            body: "Tableau décroissant du retard des étoiles, avec le même regard historique que les numéros. Le trait est l’attente (6 tirages sur 12 ★). Seuls les retards plus longs sont listés, hors étoiles déjà classées « plus sorties ». Descriptif, pas un signal jouable.",
           }}
         />
       </section>
