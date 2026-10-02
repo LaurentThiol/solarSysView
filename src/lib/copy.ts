@@ -42,6 +42,7 @@ export const TAB_LABELS: Record<string, string> = {
   acoustique: "Acoustique",
   tf: "Temps-fréquence",
   tests: "Tests",
+  couple: "Couple",
   lunaire: "Lunaire",
   solaire: "Solaire",
   autres: "Autres",

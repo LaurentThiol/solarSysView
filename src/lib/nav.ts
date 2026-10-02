@@ -53,7 +53,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     home: "/analyse",
     help: {
       title: "Lecture",
-      body: "Laboratoires qui décrivent l’archive : indicateurs, formes, relief, figures, harmoniques, cycles comparés.",
+      body: "Laboratoires qui décrivent l’archive : indicateurs, formes, relief, figures, harmoniques, cycles comparés, proximité des boules.",
     },
     items: [
       {
@@ -102,6 +102,14 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         help: {
           title: "Harmo",
           body: "Étude harmonique des séries de tirages : mélange réseau / mécanique / acoustique, FFT, STFT, Hilbert. Unités en cycles/tirage, pas des hertz. Le choix du jour (Tous, Mardi, Vendredi, Synthèse) reste sous le bandeau, comme Évolution. Décrit le tracé, pas le prochain tirage.",
+        },
+      },
+      {
+        href: "/next",
+        label: "Next",
+        help: {
+          title: "Next",
+          body: "Lecture des tirages réalisés, du plus récent au plus ancien. Couple place les 50 boules selon le poids de leurs co-sorties : 20, 50, 100, 200, année civile ou année n−1.",
         },
       },
     ],

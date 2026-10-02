@@ -75,6 +75,13 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
       "Sépare description du glyphe et anticipation P(forme suivante | contexte).",
     ]
   }
+  if (lab === "next") {
+    return [
+      "Décris le schéma : quelles boules sont proches parce qu’elles sont sorties ensemble récemment dans cette fenêtre ?",
+      "Le poids suit la lecture du plus récent au plus ancien. Que change un autre espace (20, 50, 100, 200, année, année n−1) ?",
+      "Rappelle que ces distances décrivent les tirages déjà réalisés de la fenêtre.",
+    ]
+  }
   if (lab === "relief") {
     return [
       "Chaque ligne est un tirage : cinq points n1→n5, la hauteur est la valeur 1–50. Lis le profil du plus récent (halo or).",
