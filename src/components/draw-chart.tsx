@@ -97,6 +97,8 @@ import { isRailFigure } from "@/lib/chartisme/catalog"
 import {
   appendRank1Key,
   chartYDomain,
+  keepRank1Choice,
+  rank1HiddenDefault,
   splitRank1Axis,
   weekdaySplitKeys,
 } from "@/lib/draw-chart-rank"
@@ -208,7 +210,7 @@ const TITLE_HELP: Record<DrawChartMode, HelpCopy> = {
   },
   sumNumbers: {
     title: "Évolution dans le temps",
-    body: "Chaque point est un tirage. Sur 20 ou 50 tirages la courbe se lit mieux. SMA et Bollinger (optionnels) décrivent la somme ; ce n’est pas un signal de jeu.\n\nLa ligne « 1er rang » (si l’archive a les gagnants) se lit sur l’axe de droite : 0 s’il y a au moins un gagnant du jackpot, +1 sinon (report). Maj+clic l’isole sur 0–1.",
+    body: "Chaque point est un tirage. Sur 20 ou 50 tirages la courbe se lit mieux. SMA et Bollinger (optionnels) décrivent la somme ; ce n’est pas un signal de jeu.\n\nLa ligne « 1er rang » (si l’archive a les gagnants) se lit sur l’axe de droite : 0 s’il y a au moins un gagnant du jackpot, +1 sinon (report). Le choix est éteint par défaut. Maj+clic l’isole sur 0–1.",
   },
   eachNumber: {
     title: "n1 à n5 — statistiques d’ordre",
@@ -219,7 +221,7 @@ n1 = plus petit, n2 = 2ᵉ plus petit, n3 = médian, n4 = 2ᵉ plus grand, n5 = 
 
 Chaque point est un tirage, en ordre chronologique. L’axe Y va de 1 à 50.
 
-La ligne « 1er rang » (si l’archive a les gagnants) se lit sur l’axe de droite : 0 s’il y a au moins un gagnant du jackpot, +1 sinon (report). Maj+clic l’isole sur 0–1.
+La ligne « 1er rang » (si l’archive a les gagnants) se lit sur l’axe de droite : 0 s’il y a au moins un gagnant du jackpot, +1 sinon (report). Le choix est éteint par défaut. Maj+clic l’isole sur 0–1.
 
 SMA et Bollinger sont optionnels, une courbe à la fois (la série visible). Maj+clic sur un n l’isole pour lire sa bande. Lissage descriptif, pas une prédiction.
 
@@ -285,7 +287,7 @@ const SERIES_HELP: Record<SeriesKey, HelpCopy> = {
   },
   rank1: {
     title: "Gagnant 1er rang",
-    body: "0 s’il y a au moins un gagnant du jackpot (rang 1, total Europe, France comprise). +1 s’il n’y en a aucun (report). Cliquez pour masquer. Maj+clic : cette courbe seule (échelle 0–1).",
+    body: "0 s’il y a au moins un gagnant du jackpot (rang 1, total Europe, France comprise). +1 s’il n’y en a aucun (report). Désactivé par défaut. Cliquez pour l’afficher. Maj+clic : cette courbe seule (échelle 0–1).",
   },
 }
 
@@ -294,7 +296,7 @@ const SERIES_SELECT_HELP: HelpCopy = {
   wide: true,
   body: `Sommes superposées (échelle relative 0–100 %), somme des 5 numéros, chacune des 5 boules, somme des 2 étoiles, ou chaque étoile. L’axe Y s’adapte (0–100 %, 1–50 ou 1–12).
 
-« Chaque numéro » trace n1 à n5 : les 5 boules triées du plus petit au plus grand, pas l’ordre de sortie. « Somme des numéros » et « Chaque numéro » superposent la ligne 1er rang (0 = gagnant, +1 = pas gagnant) quand l’archive la porte. « Chaque étoile » fait de même pour e1 < e2. SMA et Bollinger s’appliquent à chaque courbe visible.`,
+« Chaque numéro » trace n1 à n5 : les 5 boules triées du plus petit au plus grand, pas l’ordre de sortie. « Somme des numéros » et « Chaque numéro » superposent la ligne 1er rang (0 = gagnant, +1 = pas gagnant) quand l’archive la porte. Le choix est éteint par défaut. « Chaque étoile » fait de même pour e1 < e2. SMA et Bollinger s’appliquent à chaque courbe visible.`,
 }
 
 const SUMMARY_HELP: HelpCopy = {
@@ -904,7 +906,7 @@ export function DrawChart({
   const [mode, setMode] = useState<DrawChartMode>("sumBoth")
   const [appliedCoupleTick, setAppliedCoupleTick] = useState(0)
   const [scale, setScale] = useState<RelativeScale>("theory")
-  const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({})
+  const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>(rank1HiddenDefault)
   const [showSma, setShowSma] = useState(true)
   const [showBb, setShowBb] = useState(false)
   const [dayLine, setDayLine] = useState({ mardi: true, vendredi: true })
@@ -1957,7 +1959,7 @@ export function DrawChart({
     const enteringSums = isRankMode(mode) && !isRankMode(next)
     clearMove()
     setMode(next)
-    setHidden({})
+    setHidden(rank1HiddenDefault())
     setTargetKey(MODE_KEYS[next][0])
     if (leavingSums && isRankMode(next)) {
       setShowSma(false)
@@ -1973,7 +1975,7 @@ export function DrawChart({
       const alreadySolo =
         !hidden[key] && keys.every((item) => item === key || hidden[item])
       if (alreadySolo) {
-        setHidden({})
+        setHidden((current) => keepRank1Choice(current))
         return
       }
       setHidden(Object.fromEntries(keys.map((item) => [item, item !== key])))
@@ -1995,7 +1997,7 @@ export function DrawChart({
   if (couple && coupleTick > 0 && coupleTick !== appliedCoupleTick && orderedCouple(couple)) {
     setAppliedCoupleTick(coupleTick)
     setMode("eachNumber")
-    setHidden({})
+    setHidden(keepRank1Choice(hidden))
     setTargetKey("n1")
     setShowSma(false)
     setShowBb(false)

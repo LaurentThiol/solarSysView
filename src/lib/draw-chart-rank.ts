@@ -13,6 +13,21 @@ export function appendRank1Key<K extends string>(
   return [...keys, "rank1"]
 }
 
+/** Le choix « 1er rang » est proposé, éteint tant qu’on ne clique pas la pastille. */
+export function rank1HiddenDefault(): { rank1: true } {
+  return { rank1: true }
+}
+
+/**
+ * Réaffiche les courbes du mode sans rallumer « 1er rang ».
+ * `false` explicite : la pastille a été allumée, on la laisse.
+ */
+export function keepRank1Choice(
+  current: Partial<Record<string, boolean>>
+): { rank1: boolean } {
+  return { rank1: current.rank1 !== false }
+}
+
 export function splitRank1Axis(mode: string, visibleKeys: readonly string[]): boolean {
   return (
     modeOffersRank1(mode) &&

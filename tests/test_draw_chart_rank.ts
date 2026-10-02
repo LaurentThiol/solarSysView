@@ -4,7 +4,9 @@ import test from "node:test"
 import {
   appendRank1Key,
   chartYDomain,
+  keepRank1Choice,
   modeOffersRank1,
+  rank1HiddenDefault,
   splitRank1Axis,
   weekdaySplitKeys,
   weekdaySplitSeries,
@@ -16,6 +18,13 @@ test("1er rang is offered on eachNumber and sumNumbers only", () => {
   assert.equal(modeOffersRank1("sumBoth"), false)
   assert.equal(modeOffersRank1("sumStars"), false)
   assert.equal(modeOffersRank1("eachStar"), false)
+})
+
+test("1er rang stays off by default and a couple focus does not turn it back on", () => {
+  assert.deepEqual(rank1HiddenDefault(), { rank1: true })
+  assert.deepEqual(keepRank1Choice({}), { rank1: true })
+  assert.deepEqual(keepRank1Choice({ rank1: true, n2: true }), { rank1: true })
+  assert.deepEqual(keepRank1Choice({ rank1: false, n1: true }), { rank1: false })
 })
 
 test("appendRank1Key adds the overlay when the archive has winners", () => {
