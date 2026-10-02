@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 
 import { useRegisterCapture } from "@/components/capture"
 import { HelpTip, LabelHelp } from "@/components/help"
-import { CouplePlane, CoupleStress, CoupleVolume } from "@/components/next/couple-view"
+import { CoupleStress, CoupleVolume } from "@/components/next/couple-view"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { Button } from "@/components/ui/button"
 import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
@@ -208,10 +208,7 @@ export function NextLab() {
         <div className="flex justify-end">
           <CoupleStress stress={schema.stress} />
         </div>
-        <div className="grid gap-4 xl:grid-cols-2">
-          <CouplePlane schema={schema} active={active} onSelect={selectBall} />
-          <CoupleVolume schema={schema} active={active} onSelect={selectBall} />
-        </div>
+        <CoupleVolume schema={schema} active={active} onSelect={selectBall} />
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(16rem,0.8fr)]">
           <section className="min-w-0 rounded-xl border border-border bg-card/40 p-3" aria-label="Couples">

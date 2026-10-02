@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { HelpTip } from "@/components/help"
 import { Button } from "@/components/ui/button"
@@ -18,36 +18,6 @@ import {
   zoomToward,
   type Camera,
 } from "@/lib/relief/project"
-import { cn } from "@/lib/utils"
-
-type LayoutPoint = BallPoint & { px: number; py: number }
-
-function planeLayout(points: readonly BallPoint[]): LayoutPoint[] {
-  const active = points.filter((point) => point.appearances > 0)
-  if (!active.length) return []
-  let minX = Infinity
-  let maxX = -Infinity
-  let minY = Infinity
-  let maxY = -Infinity
-  for (const point of active) {
-    minX = Math.min(minX, point.x)
-    maxX = Math.max(maxX, point.x)
-    minY = Math.min(minY, point.y)
-    maxY = Math.max(maxY, point.y)
-  }
-  const spanX = Math.max(maxX - minX, 1e-9)
-  const spanY = Math.max(maxY - minY, 1e-9)
-  const span = Math.max(spanX, spanY)
-  const pad = 8
-  const size = 100 - pad * 2
-  const ox = (span - spanX) / 2
-  const oy = (span - spanY) / 2
-  return active.map((point) => ({
-    ...point,
-    px: pad + ((point.x - minX + ox) / span) * size,
-    py: pad + ((maxY - point.y + oy) / span) * size,
-  }))
-}
 
 function worldOf(points: readonly BallPoint[]) {
   const active = points.filter((point) => point.appearances > 0)
@@ -82,133 +52,6 @@ function worldOf(points: readonly BallPoint[]) {
 function edgeStrength(link: CoupleLink, maxAffinity: number) {
   if (maxAffinity <= 0) return 0.35
   return 0.28 + 0.72 * (link.affinity / maxAffinity)
-}
-
-export function CouplePlane({
-  schema,
-  active,
-  onSelect,
-}: {
-  schema: CoupleSchema
-  active: readonly number[]
-  onSelect: (ball: number | null) => void
-}) {
-  const titleId = useId()
-  const laid = useMemo(() => planeLayout(schema.points), [schema.points])
-  const at = useMemo(() => new Map(laid.map((point) => [point.ball, point])), [laid])
-  const activeSet = useMemo(() => new Set(active), [active])
-  const maxAffinity = schema.edges[0]?.affinity ?? 0
-  const incident = useMemo(() => {
-    const keys = new Set<string>()
-    for (const ball of active) {
-      for (const link of linksTouching(schema.links, ball)) keys.add(`${link.a}-${link.b}`)
-    }
-    return keys
-  }, [active, schema.links])
-
-  return (
-    <figure className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-card/40 p-3">
-      <figcaption id={titleId} className="text-sm font-medium">
-        Plan
-      </figcaption>
-      {laid.length === 0 ? (
-        <p className="py-16 text-center text-sm text-muted-foreground">Aucune boule sortie dans cette fenêtre.</p>
-      ) : (
-        <svg
-          viewBox="0 0 100 100"
-          className="h-[28rem] w-full touch-manipulation text-foreground"
-          role="group"
-          aria-labelledby={titleId}
-        >
-          <rect width="100" height="100" fill="transparent" onClick={() => onSelect(null)} />
-          {schema.edges.map((link) => {
-            const key = `${link.a}-${link.b}`
-            if (incident.has(key)) return null
-            const left = at.get(link.a)
-            const right = at.get(link.b)
-            if (!left || !right) return null
-            return (
-              <line
-                key={key}
-                x1={left.px}
-                y1={left.py}
-                x2={right.px}
-                y2={right.py}
-                className="stroke-foreground"
-                strokeOpacity={edgeStrength(link, maxAffinity) * 0.55}
-                strokeWidth={0.22 + edgeStrength(link, maxAffinity) * 0.35}
-              />
-            )
-          })}
-          {schema.links.map((link) => {
-            const key = `${link.a}-${link.b}`
-            if (!incident.has(key)) return null
-            const left = at.get(link.a)
-            const right = at.get(link.b)
-            if (!left || !right) return null
-            return (
-              <line
-                key={`hot-${key}`}
-                x1={left.px}
-                y1={left.py}
-                x2={right.px}
-                y2={right.py}
-                className="stroke-primary"
-                strokeOpacity={0.95}
-                strokeWidth={0.7}
-              />
-            )
-          })}
-          {laid.map((point) => {
-            const on = activeSet.has(point.ball)
-            return (
-              <g key={point.ball}>
-                <circle
-                  cx={point.px}
-                  cy={point.py}
-                  r={on ? 3.5 : 2.7}
-                  className={on ? "fill-primary" : "fill-foreground"}
-                />
-                <text
-                  x={point.px}
-                  y={point.py}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontSize={on ? 2.5 : 2.15}
-                  className={cn(
-                    "pointer-events-none font-medium",
-                    on ? "fill-primary-foreground" : "fill-background"
-                  )}
-                >
-                  {point.ball}
-                </text>
-                <circle
-                  cx={point.px}
-                  cy={point.py}
-                  r={4.2}
-                  fill="transparent"
-                  className="cursor-pointer"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Boule ${point.ball}`}
-                  aria-pressed={on}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onSelect(point.ball)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return
-                    event.preventDefault()
-                    onSelect(point.ball)
-                  }}
-                />
-              </g>
-            )
-          })}
-        </svg>
-      )}
-    </figure>
-  )
 }
 
 export function CoupleVolume({
