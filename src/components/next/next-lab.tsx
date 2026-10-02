@@ -5,7 +5,9 @@ import { useMemo, useState } from "react"
 import { useRegisterCapture } from "@/components/capture"
 import { HelpTip, LabelHelp } from "@/components/help"
 import { CoupleStress, CoupleVolume } from "@/components/next/couple-view"
+import { SiteHeaderSlot } from "@/components/site-header-slot"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import { WINDOW_PRESET_LABELS, resolveWindow } from "@/lib/analysis-window"
@@ -46,6 +48,20 @@ const SHORT_LABEL: Record<NextWindowPreset, string> = {
   last_200: "200",
   year: "Année",
   year_n1: "Année n−1",
+}
+
+const REVERSE_HELP = {
+  title: "reverse",
+  body: "L’archive va du plus ancien au plus récent. Ici la lecture part du dernier tirage de la fenêtre : le rang 0 est le plus récent, et le poids décroît jusqu’au plus ancien.",
+} as const
+
+function ReverseIndicator({ help = false }: { help?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1" data-next-reverse>
+      <Badge aria-label="reverse, lecture du plus récent vers le plus ancien">reverse</Badge>
+      {help ? <HelpTip {...REVERSE_HELP} /> : null}
+    </span>
+  )
 }
 
 function dateList(dates: readonly string[]) {
@@ -98,7 +114,7 @@ export function NextLab() {
     lab: "next",
     tab,
     summary: [
-      formatCoupleReading(schema),
+      `reverse · ${formatCoupleReading(schema)}`,
       schema.stress == null ? "Stress —" : `Stress ${schema.stress.toFixed(3)}`,
       schema.edges
         .slice(0, 5)
@@ -156,6 +172,16 @@ export function NextLab() {
 
   return (
     <div className="flex flex-col gap-4" data-next-lab>
+      <SiteHeaderSlot>
+        <div className="border-t border-border/80" role="status">
+          <div className="mx-auto flex w-full max-w-[92rem] items-center gap-2 px-[max(1rem,env(safe-area-inset-left))] py-1.5 pr-[max(1rem,env(safe-area-inset-right))] sm:px-6">
+            <ReverseIndicator help />
+            <p className="min-w-0 text-xs text-muted-foreground">
+              Lecture du plus récent vers le plus ancien.
+            </p>
+          </div>
+        </div>
+      </SiteHeaderSlot>
       <PillTabs idPrefix="next" label="Next" value={tab} onValueChange={setTab} items={TABS} />
       <PillTabPanel idPrefix="next" tab={tab} className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
@@ -184,9 +210,12 @@ export function NextLab() {
               </div>
             </LabelHelp>
           </div>
-          <p className="text-sm text-foreground">
-            {formatCoupleReading(schema)} · {WINDOW_PRESET_LABELS[preset]} ·{" "}
-            {source === "neon" ? "Neon" : "JSON local"}
+          <p className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+            <ReverseIndicator />
+            <span>
+              {formatCoupleReading(schema)} · {WINDOW_PRESET_LABELS[preset]} ·{" "}
+              {source === "neon" ? "Neon" : "JSON local"}
+            </span>
           </p>
           <p className="inline-flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
             {schema.drawCount

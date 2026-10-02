@@ -150,3 +150,11 @@ test("Next sits in Lecture with a Couple address", () => {
   assert.equal(labFromPath("/next"), "next")
   assert.equal(labLabel("next"), "Next")
 })
+
+test("Couple shows a reverse indicator for the reading order", () => {
+  const source = readFileSync(new URL("../src/components/next/next-lab.tsx", import.meta.url), "utf8")
+  assert.match(source, /data-next-reverse/)
+  assert.match(source, />reverse</)
+  assert.match(source, /Lecture du plus récent vers le plus ancien/)
+  assert.match(source, /role="status"/)
+})
