@@ -114,20 +114,6 @@ Carte 3D des tirages : **une ligne de cinq points = un tirage**. Les points sont
 
 Lecture **Profils 3D** ou **Plan**. Marqueurs **boule** (défaut à 20/50) ou **point** (défaut à 100/200, plus lisible quand ça s’entasse). Calques optionnels : **rangs dans le temps** (n1 relié à n1 d’un tirage au suivant, comme Évolution) et **tiges** (rappel vertical sol → point, masquable). Glisser fait tourner ; **Maj+glisser** déplace ; molette zoome vers le curseur. À 100/200 la vue d’accueil cadre les tirages récents de plus près. Ce n’est pas un pronostic : le voisinage sur la carte est un choix de mise en page.
 
-## Tube (`/tube`)
-
-Essai de modélisation d’un flux par un **tube déformable** sur la **somme des cinq numéros** (formule actuelle, filtre jour commun). Tout est calculé dans le navigateur (`src/lib/tube/`). L’échantillon **Formule** prend toute l’ère renvoyée par Neon, sinon le fichier de l’année.
-
-- **Vecteur central** — l’axe est la SMA des *p* sommes qui **précèdent** le tirage (*p* = 5 / 10 / 20). Sa hauteur est l’intensité du flux, sa pente d’une section à l’autre la direction.
-- **Vecteurs périphériques du tube** — δ± = ± z·σ·√(1 + 1/p) autour de l’axe, au niveau 80 / 90 / 95 %. Enveloppe **Hasard** (σ = 30,92, loi exacte d’un tirage 5/50) ou **Glissante** (écart-type des *p* sommes précédentes). L’enveloppe relie les sommets de section en section (polygone), pas une enveloppe convexe.
-- **Forces** — écarts de N1…N5 à leur SMA, la **lune**, et d’autres phases du registre Cycles (**vive-eau**, anomalistique, draconitique, tropique, nodal, Carrington), les **retards** de la grille avant le tirage, et les **étoiles** (somme et étendue, la veille ou le jour même). Trois modes sur les rangs : **translation** (cisaillement), **ouverture** (étirement ou compression), **N3 contre les extrêmes** (asymétrie : demi-largeur haute ≠ basse, largeur totale inchangée). Les horloges ajoutent une marée cos 2πf et une dérive sin 2πf. Le sens est une convention.
-- **Ellipse** — section dans le plan (somme, étendue) ou (somme, parité), covariance de la loi ou glissante. La déformation est une matrice 2×2 dans la base principale : les valeurs propres portent l’étirement et la compression, le terme croisé le cisaillement. Le ruban du temps reste la marge sur la somme. Un second tracé replie le tube sur la **phase lunaire**.
-- **Gains appris** — grille 0 / 50 / 100 % par famille, choisie sur le bloc précédent (20 / 40 / 80 sections) et appliquée au suivant. Le premier bloc est hors score. Le nul mélange les dates des forces puis **réapprend** avec la même règle. Le mode à la main reste disponible : chaque curseur y est un test de plus.
-- **Forces lues la veille** (défaut) : chaque section ne lit que les tirages d’avant. **Le jour même** : Σ écarts N1–N5 = somme − SMA, le score est circulaire. Les retards sont toujours l’état d’avant t.
-- **Score** — couverture, largeur et **score d’intervalle** (largeur + 2/α × dépassement, plus bas = mieux), puis les mélanges. L’ellipse a en plus un score de Dawid–Sebastiani (log dét + distance) ; ce n’est pas lui que l’apprentissage minimise.
-
-Graphique du tube, bande des quatre contraintes, tube replié sur la phase, sections elliptiques le long du temps, inspecteur (δ±, ellipse, N1–N5, disque lunaire). Capture IA branchée. Décrit le flux, pas le prochain tirage.
-
 ## Chartisme (`/chartisme`)
 
 Les **18 figures chartistes** de la table de référence (tête & épaules et son inverse, doubles / triples sommets et creux, biseaux, triangles, rectangle, canal, drapeau / fanion, tasse avec anse, diamant, broadening top) cherchées sur les courbes du logiciel : somme, écart, pairs, retard et sorties de chaque boule, retard et sorties de chaque étoile — 142 courbes exportées de l’archive. Le **Glossaire** du bandeau (`?glossaire=chartisme`, aussi `courbes` ou `figures`) en donne le dessin d’école et le contexte : une entrée par type de courbe, une par figure.
@@ -292,7 +278,7 @@ En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, défini
 
 ## Interface web (Next.js)
 
-App Next.js : menu burger (raccourci **g**), pages groupées — **Archive** (Tirage `/tirage`, Évolution `/evolution`), **Lecture** (Analyse `/analyse`, Morpho `/morpho`, Relief `/relief`, Tube `/tube`, Chartisme `/chartisme`, Harmo `/harmo`), **Grilles** (Combinaisons `/combinaisons`, Pronostic `/pronostic`, Jeux `/jeux`), **Assistants** (Brain `/brain`, Spécialistes `/brain/specialistes`, decisionTree `/brain/decision-tree`, IA `/ia`) et **Système** (Admin `/admin`, Schémas `/schemas`). Le nom de la page courante reste à côté de Synchro. Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
+App Next.js : menu burger (raccourci **g**), pages groupées — **Archive** (Tirage `/tirage`, Évolution `/evolution`), **Lecture** (Analyse `/analyse`, Morpho `/morpho`, Relief `/relief`, Chartisme `/chartisme`, Harmo `/harmo`), **Grilles** (Combinaisons `/combinaisons`, Pronostic `/pronostic`, Jeux `/jeux`), **Assistants** (Brain `/brain`, Spécialistes `/brain/specialistes`, decisionTree `/brain/decision-tree`, IA `/ia`) et **Système** (Admin `/admin`, Schémas `/schemas`). Le nom de la page courante reste à côté de Synchro. Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install
