@@ -98,6 +98,50 @@ export function partnerOf(link: CoupleLink, ball: number): number {
   return link.a === ball ? link.b : link.a
 }
 
+export const COUPLE_SORT_KEYS = ["pair", "count", "weight", "ago"] as const
+
+export type CoupleSortKey = (typeof COUPLE_SORT_KEYS)[number]
+export type CoupleSortDir = "asc" | "desc"
+
+/** Premier clic : numéros et ancienneté croissants, compte et poids décroissants. */
+export function defaultCoupleSortDir(key: CoupleSortKey): CoupleSortDir {
+  return key === "pair" || key === "ago" ? "asc" : "desc"
+}
+
+function coupleSortPrimary(link: CoupleLink, key: CoupleSortKey): number {
+  if (key === "count") return link.count
+  if (key === "weight") return link.affinity
+  if (key === "ago") return link.ago
+  return 0
+}
+
+/**
+ * Tri d’une colonne du tableau Couples.
+ * À égalité : plus fort poids, puis plus grand compte, puis plus petit couple.
+ */
+export function compareCoupleLinks(
+  left: CoupleLink,
+  right: CoupleLink,
+  key: CoupleSortKey,
+  dir: CoupleSortDir
+): number {
+  const sign = dir === "asc" ? 1 : -1
+  const primary =
+    key === "pair"
+      ? left.a - right.a || left.b - right.b
+      : coupleSortPrimary(left, key) - coupleSortPrimary(right, key)
+  if (primary !== 0) return primary * sign
+  return right.affinity - left.affinity || right.count - left.count || left.a - right.a || left.b - right.b
+}
+
+export function sortCoupleLinks(
+  links: readonly CoupleLink[],
+  key: CoupleSortKey,
+  dir: CoupleSortDir
+): CoupleLink[] {
+  return [...links].sort((left, right) => compareCoupleLinks(left, right, key, dir))
+}
+
 function ballsOf(numbers: readonly number[] | undefined): number[] {
   if (!numbers) return []
   const seen = new Set<number>()
@@ -220,13 +264,7 @@ export function coupleSchema(
     }
   }
 
-  const links = [...pairs.values()].sort(
-    (left, right) =>
-      right.affinity - left.affinity ||
-      right.count - left.count ||
-      left.a - right.a ||
-      left.b - right.b
-  )
+  const links = sortCoupleLinks([...pairs.values()], "weight", "desc")
   const limit = Number.isFinite(edgeLimit) ? Math.max(0, Math.trunc(edgeLimit)) : COUPLE_EDGE_LIMIT
   const edges = links.slice(0, limit)
 

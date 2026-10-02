@@ -15,11 +15,14 @@ import { WINDOW_PRESET_LABELS, resolveWindow } from "@/lib/analysis-window"
 import {
   NEXT_WINDOW_PRESETS,
   coupleSchema,
+  defaultCoupleSortDir,
   formatCoupleAgo,
   formatCoupleReading,
   linksTouching,
   partnerOf,
+  sortCoupleLinks,
   type CoupleLink,
+  type CoupleSortKey,
   type NextWindowPreset,
 } from "@/lib/next/couple"
 import { NEXT_FIELD_HELP } from "@/lib/next/help"
@@ -49,6 +52,18 @@ const SHORT_LABEL: Record<NextWindowPreset, string> = {
   year_n1: "Année n−1",
 }
 
+const COUPLE_COLUMNS: {
+  key: CoupleSortKey
+  label: string
+  help: (typeof NEXT_FIELD_HELP)[keyof typeof NEXT_FIELD_HELP]
+  pad: boolean
+}[] = [
+  { key: "pair", label: "Couple", help: NEXT_FIELD_HELP.pair, pad: true },
+  { key: "count", label: "Compte", help: NEXT_FIELD_HELP.count, pad: true },
+  { key: "weight", label: "Poids", help: NEXT_FIELD_HELP.weight, pad: true },
+  { key: "ago", label: "Dernière co-sortie", help: NEXT_FIELD_HELP.ago, pad: false },
+]
+
 const REVERSE_HELP = {
   title: "reverse",
   body: "L’archive va du plus ancien au plus récent. Ici la lecture part du dernier tirage de la fenêtre : le rang 0 est le plus récent, et le poids décroît jusqu’au plus ancien.",
@@ -77,6 +92,8 @@ export function NextLab() {
   const [selected, setSelected] = useState<number | null>(null)
   const [pinned, setPinned] = useState<string | null>(null)
   const [coupleTick, setCoupleTick] = useState(0)
+  const [sortKey, setSortKey] = useState<CoupleSortKey>("weight")
+  const [sortDir, setSortDir] = useState(defaultCoupleSortDir("weight"))
 
   const archive = useMemo(
     () => [...draws].sort((left, right) => left.date.localeCompare(right.date)),
@@ -115,6 +132,19 @@ export function NextLab() {
   const touched = selected == null ? [] : linksTouching(schema.links, selected)
   const selectedPoint = schema.points.find((point) => point.ball === selected)
   const absent = schema.points.filter((point) => point.appearances === 0).map((point) => point.ball)
+  const sortedLinks = useMemo(
+    () => sortCoupleLinks(schema.links, sortKey, sortDir),
+    [schema.links, sortDir, sortKey]
+  )
+
+  function toggleCoupleSort(key: CoupleSortKey) {
+    if (sortKey === key) {
+      setSortDir((current) => (current === "asc" ? "desc" : "asc"))
+      return
+    }
+    setSortKey(key)
+    setSortDir(defaultCoupleSortDir(key))
+  }
 
   useRegisterCapture(() => ({
     lab: "next",
@@ -268,39 +298,52 @@ export function NextLab() {
                   <HelpTip {...NEXT_FIELD_HELP.observed} />
                 </p>
               </div>
-              <p className="text-xs text-muted-foreground">Un clic relie le couple dans Chaque numéro.</p>
+              <p className="text-xs text-muted-foreground">
+                Un clic sur un en-tête trie la colonne. Un clic sur une ligne relie le couple dans Chaque numéro.
+              </p>
             </div>
             {schema.links.length === 0 ? (
               <p className="py-8 text-sm text-muted-foreground">Aucune co-sortie dans cette fenêtre.</p>
             ) : (
-              <div className="max-h-[32rem] overflow-auto">
+              <div
+                className="max-h-[32rem] overflow-auto"
+                data-couple-sort-key={sortKey}
+                data-couple-sort-dir={sortDir}
+              >
                 <table className="w-full text-left text-sm">
                   <thead className="sticky top-0 bg-card">
                     <tr className="text-xs text-muted-foreground">
-                      <th className="py-1 pr-3 font-medium" scope="col">
-                        <TitleHelp help={NEXT_FIELD_HELP.pair} className="whitespace-nowrap">
-                          Couple
-                        </TitleHelp>
-                      </th>
-                      <th className="py-1 pr-3 font-medium" scope="col">
-                        <TitleHelp help={NEXT_FIELD_HELP.count} className="whitespace-nowrap">
-                          Compte
-                        </TitleHelp>
-                      </th>
-                      <th className="py-1 pr-3 font-medium" scope="col">
-                        <TitleHelp help={NEXT_FIELD_HELP.weight} className="whitespace-nowrap">
-                          Poids
-                        </TitleHelp>
-                      </th>
-                      <th className="py-1 font-medium" scope="col">
-                        <TitleHelp help={NEXT_FIELD_HELP.ago} className="whitespace-nowrap">
-                          Dernière co-sortie
-                        </TitleHelp>
-                      </th>
+                      {COUPLE_COLUMNS.map((column) => {
+                        const active = sortKey === column.key
+                        return (
+                          <th
+                            key={column.key}
+                            className={cn("py-1 font-medium", column.pad && "pr-3")}
+                            scope="col"
+                            aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                          >
+                            <TitleHelp help={column.help} className="whitespace-nowrap">
+                              <button
+                                type="button"
+                                className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 font-medium text-inherit hover:text-foreground"
+                                onClick={() => toggleCoupleSort(column.key)}
+                              >
+                                {column.label}
+                                <span
+                                  aria-hidden
+                                  className={cn("w-3 text-[10px] leading-none", !active && "opacity-40")}
+                                >
+                                  {active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+                                </span>
+                              </button>
+                            </TitleHelp>
+                          </th>
+                        )
+                      })}
                     </tr>
                   </thead>
                   <tbody>
-                    {schema.links.map((link) => {
+                    {sortedLinks.map((link) => {
                       const key = `${link.a}-${link.b}`
                       const on = pinned === key || (selected != null && (link.a === selected || link.b === selected))
                       return (

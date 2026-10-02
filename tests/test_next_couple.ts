@@ -7,11 +7,16 @@ import {
   COUPLE_EDGE_LIMIT,
   coupleRankWeight,
   coupleSchema,
+  defaultCoupleSortDir,
   formatCoupleAgo,
   linksTouching,
   NEXT_WINDOW_PRESETS,
   pointDistance,
+  sortCoupleLinks,
   type BallPoint,
+  type CoupleLink,
+  type CoupleSortDir,
+  type CoupleSortKey,
 } from "../src/lib/next/couple.ts"
 import { NEXT_FIELD_HELP } from "../src/lib/next/help.ts"
 import { ADDRESSES } from "../src/lib/addresses.ts"
@@ -81,6 +86,41 @@ test("affinity sums observed co-draws from newest to oldest", () => {
   assert.equal(schema.links.find((link) => link.a === 1 && link.b === 8), undefined)
   assert.equal(schema.links[0].a, 1)
   assert.equal(schema.links[0].b, 2)
+})
+
+function coupleLink(
+  partial: Pick<CoupleLink, "a" | "b" | "count" | "affinity" | "ago">
+): CoupleLink {
+  return { ...partial, dates: [] }
+}
+
+test("couple columns sort each field and keep the weight tie break", () => {
+  const links = [
+    coupleLink({ a: 2, b: 4, count: 2, affinity: 5, ago: 1 }),
+    coupleLink({ a: 1, b: 3, count: 2, affinity: 9, ago: 0 }),
+    coupleLink({ a: 1, b: 2, count: 1, affinity: 9, ago: 3 }),
+    coupleLink({ a: 8, b: 9, count: 4, affinity: 4, ago: 2 }),
+  ]
+  const order = (key: CoupleSortKey, dir: CoupleSortDir) =>
+    sortCoupleLinks(links, key, dir).map((link) => `${link.a}-${link.b}`)
+
+  assert.deepEqual(order("weight", "desc"), ["1-3", "1-2", "2-4", "8-9"])
+  assert.deepEqual(order("weight", "asc"), ["8-9", "2-4", "1-3", "1-2"])
+  assert.deepEqual(order("count", "desc"), ["8-9", "1-3", "2-4", "1-2"])
+  assert.deepEqual(order("count", "asc"), ["1-2", "1-3", "2-4", "8-9"])
+  assert.deepEqual(order("pair", "asc"), ["1-2", "1-3", "2-4", "8-9"])
+  assert.deepEqual(order("pair", "desc"), ["8-9", "2-4", "1-3", "1-2"])
+  assert.deepEqual(order("ago", "asc"), ["1-3", "2-4", "8-9", "1-2"])
+  assert.deepEqual(order("ago", "desc"), ["1-2", "8-9", "2-4", "1-3"])
+  assert.deepEqual(
+    links.map((link) => `${link.a}-${link.b}`),
+    ["2-4", "1-3", "1-2", "8-9"]
+  )
+  assert.equal(defaultCoupleSortDir("weight"), "desc")
+  assert.equal(defaultCoupleSortDir("count"), "desc")
+  assert.equal(defaultCoupleSortDir("pair"), "asc")
+  assert.equal(defaultCoupleSortDir("ago"), "asc")
+  assert.deepEqual(sortCoupleLinks([], "pair", "asc"), [])
 })
 
 test("duplicate and out-of-range numbers count once", () => {
@@ -201,6 +241,20 @@ test("every Next field has online help wired in the Couple tab", () => {
   const view = readFileSync(new URL("../src/components/next/couple-view.tsx", import.meta.url), "utf8")
   for (const key of LAB_HELP_KEYS) assert.match(lab, new RegExp(`NEXT_FIELD_HELP\\.${key}\\b`), key)
   for (const key of VIEW_HELP_KEYS) assert.match(view, new RegExp(`NEXT_FIELD_HELP\\.${key}\\b`), key)
+})
+
+test("Couples table headers sort each column", () => {
+  const source = readFileSync(new URL("../src/components/next/next-lab.tsx", import.meta.url), "utf8")
+  assert.match(source, /sortCoupleLinks/)
+  assert.match(source, /toggleCoupleSort/)
+  assert.match(source, /aria-sort/)
+  assert.match(source, /data-couple-sort-key/)
+  assert.match(source, /data-couple-sort-dir/)
+  assert.match(NEXT_FIELD_HELP.couples.body, /en-tête/)
+  assert.match(NEXT_FIELD_HELP.weight.body, /ordre de départ/)
+  assert.match(NEXT_FIELD_HELP.pair.body, /plus petit numéro/)
+  assert.match(NEXT_FIELD_HELP.count.body, /plus grands comptes/)
+  assert.match(NEXT_FIELD_HELP.ago.body, /plus récentes/)
 })
 
 test("Couple shows a reverse indicator for the reading order", () => {
