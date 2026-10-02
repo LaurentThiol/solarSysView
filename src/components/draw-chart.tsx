@@ -117,6 +117,13 @@ import {
   type DrawSeriesPoint,
   type ValueRange,
 } from "@/lib/draws"
+import {
+  coupleNumberLinks,
+  formatCoupleChartLink,
+  orderedCouple,
+  type CoupleChartLink,
+  type CoupleNumberLink,
+} from "@/lib/next/couple-chart"
 import { WeekdaySeriesLines, WeekdaySplitLegend } from "@/components/weekday-split"
 import {
   WEEKDAY_LINE_COLOR,
@@ -538,6 +545,55 @@ function scaleInvertY(
   return invertLinear((value) => yScale(value) ?? Number.NaN, pixel, lo, hi)
 }
 
+function CoupleLinkMarks({ marks }: { marks: readonly CoupleNumberLink[] }) {
+  const xScale = useXAxisScale()
+  const yScale = useYAxisScale()
+  if (!xScale || !yScale || marks.length === 0) return null
+  return (
+    <g pointerEvents="none" data-couple-links={marks.length}>
+      {marks.map((mark) => {
+        const x = xScale(mark.date, { position: "middle" })
+        const yLow = yScale(mark.low)
+        const yHigh = yScale(mark.high)
+        if (
+          x == null ||
+          yLow == null ||
+          yHigh == null ||
+          !Number.isFinite(x) ||
+          !Number.isFinite(yLow) ||
+          !Number.isFinite(yHigh)
+        ) {
+          return null
+        }
+        return (
+          <g key={`${mark.date}-${mark.low}-${mark.high}`}>
+            <line
+              x1={x}
+              x2={x}
+              y1={yLow}
+              y2={yHigh}
+              stroke="var(--background)"
+              strokeWidth={6}
+              strokeLinecap="round"
+            />
+            <line
+              x1={x}
+              x2={x}
+              y1={yLow}
+              y2={yHigh}
+              stroke="var(--primary)"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+            />
+            <circle cx={x} cy={yLow} r={4.5} fill="var(--primary)" stroke="var(--background)" strokeWidth={1.5} />
+            <circle cx={x} cy={yHigh} r={4.5} fill="var(--primary)" stroke="var(--background)" strokeWidth={1.5} />
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
 function MagnetHalo({
   live,
   plotted,
@@ -717,6 +773,7 @@ function SeriesTooltip({
   showSma,
   showBb,
   combined,
+  coupleLinks,
 }: {
   active?: boolean
   payload?: Array<{
@@ -730,6 +787,7 @@ function SeriesTooltip({
   showSma: boolean
   showBb: boolean
   combined: boolean
+  coupleLinks?: readonly CoupleNumberLink[]
 }) {
   if (combined) {
     return (
@@ -747,10 +805,16 @@ function SeriesTooltip({
   if (!active || !payload?.length) return null
   const point = payload[0]?.payload
   if (!point) return null
+  const coupleHere = coupleLinks?.find((item) => item.date === point.date)
 
   return (
     <div className="grid min-w-0 max-w-[min(18rem,calc(100vw-2rem))] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
       <div className="font-medium">{formatDrawDate(String(label ?? point.date))}</div>
+      {coupleHere ? (
+        <p className="font-medium text-primary">
+          Lien {coupleHere.low}–{coupleHere.high} · {coupleHere.lowKey}–{coupleHere.highKey}
+        </p>
+      ) : null}
       <div className="grid gap-1.5">
         {keys
           .filter((key) => !hidden[key])
@@ -806,7 +870,17 @@ function SeriesTooltip({
   )
 }
 
-export function DrawChart({ draws }: { draws: Draw[] }) {
+export function DrawChart({
+  draws,
+  couple = null,
+  coupleTick = 0,
+}: {
+  draws: Draw[]
+  /** Couple à relier dans la vue « Chaque numéro ». */
+  couple?: CoupleChartLink | null
+  /** Incrémenté à chaque clic de couple pour ramener la vue sur Chaque numéro. */
+  coupleTick?: number
+}) {
   const draw = useChartDrawOptional()
   const drawRef = useRef(draw)
   drawRef.current = draw
@@ -828,6 +902,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   } | null>(null)
   const magnet = useMagnetHold(Boolean(draw?.drawing))
   const [mode, setMode] = useState<DrawChartMode>("sumBoth")
+  const [appliedCoupleTick, setAppliedCoupleTick] = useState(0)
   const [scale, setScale] = useState<RelativeScale>("theory")
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({})
   const [showSma, setShowSma] = useState(true)
@@ -845,6 +920,11 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
   const dragRef = useRef<{ startX: number; startY: number; dragged: boolean } | null>(null)
 
   const series = useMemo(() => toDrawSeries(draws), [draws])
+  const coupleOrdered = couple ? orderedCouple(couple) : null
+  const coupleMarks = useMemo(
+    () => (couple && mode === "eachNumber" ? coupleNumberLinks(series, couple) : []),
+    [couple, mode, series]
+  )
   const mixedDays = useMemo(() => {
     let mardi = false
     let vendredi = false
@@ -1912,6 +1992,15 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
     return `var(--color-${key})`
   }
 
+  if (couple && coupleTick > 0 && coupleTick !== appliedCoupleTick && orderedCouple(couple)) {
+    setAppliedCoupleTick(coupleTick)
+    setMode("eachNumber")
+    setHidden({})
+    setTargetKey("n1")
+    setShowSma(false)
+    setShowBb(false)
+  }
+
   const useCustomTooltip =
     combined || showSma || showBb || rankMode || keys.includes("rank1")
 
@@ -2169,6 +2258,7 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                         showSma={showSma && smaPeriod > 0}
                         showBb={showBb && smaPeriod > 0}
                         combined={combined}
+                        coupleLinks={coupleMarks}
                       />
                     ) : (
                       <ChartTooltipContent
@@ -2623,6 +2713,37 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     </Fragment>
                   )
                 })}
+                {coupleOrdered && mode === "eachNumber" ? (
+                  <>
+                    <ReferenceLine
+                      y={coupleOrdered.low}
+                      stroke="var(--primary)"
+                      strokeDasharray="4 4"
+                      strokeOpacity={0.7}
+                      ifOverflow="hidden"
+                      label={{
+                        value: String(coupleOrdered.low),
+                        position: "insideBottomRight",
+                        fill: "var(--primary)",
+                        fontSize: 11,
+                      }}
+                    />
+                    <ReferenceLine
+                      y={coupleOrdered.high}
+                      stroke="var(--primary)"
+                      strokeDasharray="4 4"
+                      strokeOpacity={0.7}
+                      ifOverflow="hidden"
+                      label={{
+                        value: String(coupleOrdered.high),
+                        position: "insideTopRight",
+                        fill: "var(--primary)",
+                        fontSize: 11,
+                      }}
+                    />
+                    <CoupleLinkMarks marks={coupleMarks} />
+                  </>
+                ) : null}
                 <MagnetHalo
                   live={draw?.drawing ? draw.live : null}
                   plotted={
@@ -2655,6 +2776,15 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                     setDayLine((current) => ({ ...current, [day]: !current[day] }))
                   }
                 />
+              ) : null}
+              {couple && mode === "eachNumber" ? (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/15 px-2 py-1 text-xs"
+                  data-couple-chart-link={formatCoupleChartLink(couple, coupleMarks.length)}
+                >
+                  <span className="h-3 w-0.5 shrink-0 rounded-full bg-primary" />
+                  Lien {coupleOrdered ? `${coupleOrdered.low}–${coupleOrdered.high}` : ""}
+                </span>
               ) : null}
               {smaPeriod > 0 ? (
                 <>
@@ -2729,6 +2859,22 @@ export function DrawChart({ draws }: { draws: Draw[] }) {
                 </span>
               ))}
             </div>
+            {couple && mode === "eachNumber" ? (
+              <p className="mt-2 text-center text-xs text-muted-foreground" data-couple-chart-caption>
+                {formatCoupleChartLink(couple, coupleMarks.length)} Les traits verticaux joignent les deux boules sur chaque tirage où elles sortent ensemble.
+              </p>
+            ) : couple && coupleOrdered ? (
+              <p className="mt-2 text-center text-xs text-muted-foreground" data-couple-chart-caption>
+                Couple {coupleOrdered.low}–{coupleOrdered.high} se lit dans Chaque numéro.{" "}
+                <button
+                  type="button"
+                  className="underline-offset-2 hover:underline"
+                  onClick={() => changeMode("eachNumber")}
+                >
+                  Afficher le lien
+                </button>
+              </p>
+            ) : null}
             {rankMode && (showSma || showBb) && visibleKeys.length > 2 ? (
               <p className="mt-2 text-center text-xs text-muted-foreground">
                 Maj+clic sur un n pour n’afficher que sa SMA / bande.

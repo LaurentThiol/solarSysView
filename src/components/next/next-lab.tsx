@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 
 import { useRegisterCapture } from "@/components/capture"
+import { DrawChart } from "@/components/draw-chart"
 import { HelpTip, LabelHelp } from "@/components/help"
 import { CoupleStress, CoupleVolume } from "@/components/next/couple-view"
 import { SiteHeaderSlot } from "@/components/site-header-slot"
@@ -77,6 +78,7 @@ export function NextLab() {
   const [preset, setPreset] = useState<NextWindowPreset>("last_50")
   const [selected, setSelected] = useState<number | null>(null)
   const [pinned, setPinned] = useState<string | null>(null)
+  const [coupleTick, setCoupleTick] = useState(0)
 
   const archive = useMemo(
     () => [...draws].sort((left, right) => left.date.localeCompare(right.date)),
@@ -106,6 +108,12 @@ export function NextLab() {
     }
     return [...balls]
   }, [pinned, selected])
+  const pinnedCouple = useMemo(() => {
+    if (!pinned) return null
+    const [left, right] = pinned.split("-").map((value) => Number(value))
+    if (!Number.isInteger(left) || !Number.isInteger(right)) return null
+    return { a: left, b: right }
+  }, [pinned])
   const touched = selected == null ? [] : linksTouching(schema.links, selected)
   const selectedPoint = schema.points.find((point) => point.ball === selected)
   const absent = schema.points.filter((point) => point.appearances === 0).map((point) => point.ball)
@@ -115,6 +123,7 @@ export function NextLab() {
     tab,
     summary: [
       `reverse · ${formatCoupleReading(schema)}`,
+      pinned ? `Lien ${pinned} dans Chaque numéro` : "",
       schema.stress == null ? "Stress —" : `Stress ${schema.stress.toFixed(3)}`,
       schema.edges
         .slice(0, 5)
@@ -168,6 +177,10 @@ export function NextLab() {
   function selectLink(link: CoupleLink) {
     setSelected(link.a)
     setPinned(`${link.a}-${link.b}`)
+    setCoupleTick((tick) => tick + 1)
+    requestAnimationFrame(() => {
+      document.getElementById("next-evolution")?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    })
   }
 
   return (
@@ -222,6 +235,7 @@ export function NextLab() {
               ? `Le plus récent pèse ${schema.drawCount}, le plus ancien pèse 1.`
               : "Le plus récent pèse n, le plus ancien pèse 1."}{" "}
             Le poids d’un couple est la somme de ces poids sur les tirages où les deux boules sortent ensemble.
+            Un clic dans Couples relie ces deux boules dans la vue Chaque numéro.
             <HelpTip
               title="Lecture à l’envers"
               body="Rang 0 : tirage le plus récent de la fenêtre. « Il y a k tirages » compte les tirages plus récents que la dernière co-sortie. Les boules absentes de la fenêtre ne sont pas dessinées."
@@ -239,13 +253,20 @@ export function NextLab() {
         </div>
         <CoupleVolume schema={schema} active={active} onSelect={selectBall} />
 
+        <div id="next-evolution" className="min-w-0 scroll-mt-24">
+          <DrawChart draws={resolved.work} couple={pinnedCouple} coupleTick={coupleTick} />
+        </div>
+
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(16rem,0.8fr)]">
           <section className="min-w-0 rounded-xl border border-border bg-card/40 p-3" aria-label="Couples">
-            <div className="mb-2 flex items-baseline justify-between gap-2">
-              <h2 className="text-sm font-medium">Couples</h2>
-              <p className="text-xs tabular-nums text-muted-foreground" data-couple-count={schema.links.length}>
-                {schema.links.length} observé{schema.links.length > 1 ? "s" : ""}
-              </p>
+            <div className="mb-2 flex flex-col gap-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <h2 className="text-sm font-medium">Couples</h2>
+                <p className="text-xs tabular-nums text-muted-foreground" data-couple-count={schema.links.length}>
+                  {schema.links.length} observé{schema.links.length > 1 ? "s" : ""}
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">Un clic relie le couple dans Chaque numéro.</p>
             </div>
             {schema.links.length === 0 ? (
               <p className="py-8 text-sm text-muted-foreground">Aucune co-sortie dans cette fenêtre.</p>
@@ -279,6 +300,7 @@ export function NextLab() {
                               type="button"
                               className="tabular-nums underline-offset-2 hover:underline"
                               aria-pressed={pinned === key}
+                              title="Relier ce couple dans Chaque numéro"
                               onClick={() => selectLink(link)}
                             >
                               {link.a}–{link.b}
@@ -299,7 +321,7 @@ export function NextLab() {
           <aside className="min-w-0 rounded-xl border border-border bg-card/40 p-3" aria-label="Boule choisie">
             {selected == null || !selectedPoint ? (
               <p className="text-sm text-muted-foreground">
-                Choisissez une boule sur le schéma, ou un couple dans la liste. Les dates de co-sortie se lisent de la plus récente à la plus ancienne.
+                Choisissez une boule sur le schéma, ou un couple dans la liste. Le couple choisi est relié dans Chaque numéro. Les dates de co-sortie se lisent de la plus récente à la plus ancienne.
               </p>
             ) : (
               <div className="flex flex-col gap-3">

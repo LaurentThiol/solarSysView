@@ -310,7 +310,7 @@ const TABS: AddressEntry[] = [
   tabEntry(
     "/next?tab=couple",
     "Next · Couple",
-    "Schéma 3D des boules 1–50. Le poids d’un couple est la somme des co-sorties, du tirage le plus récent au plus ancien, sur 20, 50, 100, 200, l’année civile ou l’année n−1.",
+    "Schéma 3D des boules 1–50. Le poids d’un couple est la somme des co-sorties, du tirage le plus récent au plus ancien, sur 20, 50, 100, 200, l’année civile ou l’année n−1. Un clic dans Couples relie ce couple dans Chaque numéro.",
     "lecture",
     "tab=couple"
   ),
