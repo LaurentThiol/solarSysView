@@ -109,7 +109,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Next",
         help: {
           title: "Next",
-          body: "Lecture des tirages réalisés, du plus récent au plus ancien. Couple place les 50 boules selon le poids de leurs co-sorties ; Triple fait de même pour les triplets, trois boules du même tirage. Fenêtres : 20, 50, 100, 200, année civile ou année n−1. Le graphique Évolution dans le temps reprend la même base ; un clic dans Couples ou Triplets relie ce lien dans Chaque numéro.",
+          body: "Lecture des tirages réalisés, du plus récent au plus ancien. Couple place les 50 boules selon le poids de leurs co-sorties ; Triple fait de même pour les triplets, trois boules du même tirage. Fenêtres : 20, 50, 100, 200, année civile ou année n−1. Le graphique Évolution dans le temps reprend la même base ; un clic dans Couples ou Triplets relie ce lien dans Chaque numéro. pronosticNext pose le total, les pairs, les décennies et n1–n5 : un champ sans borne reste OFF, puis donne la chance de chaque grille d’après ces lectures reverse, couples et triples compris.",
         },
       },
     ],

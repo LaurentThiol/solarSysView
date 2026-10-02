@@ -1,11 +1,12 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 
 import { useRegisterCapture } from "@/components/capture"
 import { DrawChart } from "@/components/draw-chart"
 import { HelpTip, HelpWrap, LabelHelp, TitleHelp } from "@/components/help"
 import { CoupleStress, CoupleVolume } from "@/components/next/couple-view"
+import { PronosticNextPanel } from "@/components/next/pronostic-next"
 import { TripleReading } from "@/components/next/triple-view"
 import { SiteHeaderSlot } from "@/components/site-header-slot"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
@@ -26,7 +27,9 @@ import {
   type CoupleSortKey,
   type NextWindowPreset,
 } from "@/lib/next/couple"
+import type { CaptureContext } from "@/lib/capture/snapshot"
 import { NEXT_FIELD_HELP } from "@/lib/next/help"
+import { PRONOSTIC_NEXT_HELP } from "@/lib/next/pronostic-help"
 import { NEXT_TRIPLE_FIELD_HELP } from "@/lib/next/triple-help"
 import { formatTripleKey, tripleSchema, type TripleLink } from "@/lib/next/triple"
 import { useDraws } from "@/lib/use-draws"
@@ -45,6 +48,11 @@ const TABS = [
     id: "triple",
     label: "Triple",
     help: NEXT_TRIPLE_FIELD_HELP.tab,
+  },
+  {
+    id: "pronosticNext",
+    label: "pronosticNext",
+    help: PRONOSTIC_NEXT_HELP.tab,
   },
 ] as const
 
@@ -96,6 +104,10 @@ export function NextLab() {
   const [weekday, setWeekday] = useWeekdayScope()
   const { draws, source } = useDraws("current", weekday)
   const [tab, setTab] = useLabTab(TAB_IDS, "couple")
+  const pronosticCapture = useRef<CaptureContext | null>(null)
+  const keepPronosticCapture = useCallback((context: CaptureContext) => {
+    pronosticCapture.current = context
+  }, [])
   const [preset, setPreset] = useState<NextWindowPreset>("last_50")
   const [selected, setSelected] = useState<number | null>(null)
   const [pinned, setPinned] = useState<string | null>(null)
@@ -166,6 +178,7 @@ export function NextLab() {
   }
 
   useRegisterCapture(() => {
+    if (tab === "pronosticNext" && pronosticCapture.current) return pronosticCapture.current
     const reading = tab === "triple" ? triples : schema
     const pinnedLabel = tab === "triple" ? triplePinned : pinned
     const edges =
@@ -286,6 +299,7 @@ export function NextLab() {
         </div>
       </SiteHeaderSlot>
       <PillTabs idPrefix="next" label="Next" value={tab} onValueChange={setTab} items={TABS} />
+      {tab === "couple" || tab === "triple" ? (
       <PillTabPanel idPrefix="next" tab={tab} className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
@@ -518,6 +532,21 @@ export function NextLab() {
         </div>
           </>
         )}
+      </PillTabPanel>
+      ) : null}
+      <PillTabPanel
+        idPrefix="next"
+        tab="pronosticNext"
+        className={cn("flex flex-col gap-4", tab !== "pronosticNext" && "hidden")}
+      >
+        <PronosticNextPanel
+          active={tab === "pronosticNext"}
+          draws={archive}
+          source={source}
+          weekday={weekday}
+          onWeekday={selectWeekday}
+          onCapture={keepPronosticCapture}
+        />
       </PillTabPanel>
     </div>
   )

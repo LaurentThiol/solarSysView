@@ -322,6 +322,13 @@ const TABS: AddressEntry[] = [
     "tab=triple"
   ),
   tabEntry(
+    "/next?tab=pronosticNext",
+    "Next · pronosticNext",
+    "Curseurs sur le total, les pairs, les décennies et n1 à n5. Un champ sans borne reste OFF. Les solutions reçoivent une chance lue à l’envers sur 20, 50, 100 et 200 tirages, avec les couples et les triples. Le tirage officiel reste uniforme.",
+    "lecture",
+    "tab=pronosticNext"
+  ),
+  tabEntry(
     "/ref?tab=lunaire",
     "Réf · Lunaire",
     "Mois synodique : âge, éclairement, quartiers et calendrier du mois.",

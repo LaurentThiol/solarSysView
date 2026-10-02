@@ -81,6 +81,7 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
       "Sur Triple, quels triplets portent le plus fort poids, et quelles trois boules le clic relie dans Chaque numéro ?",
       "Le poids suit la lecture du plus récent au plus ancien. Que change un autre espace (20, 50, 100, 200, année, année n−1) ?",
       "Rappelle que ces distances décrivent les tirages déjà réalisés de la fenêtre.",
+      "pronosticNext : quelles grilles passent les curseurs actifs (total, pairs, décennies, n1–n5), et quelle chance reverse 20/50/100/200 — couples et triples — portent-elles ? Un champ OFF ne filtre pas.",
     ]
   }
   if (lab === "relief") {
