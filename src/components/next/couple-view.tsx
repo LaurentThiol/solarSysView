@@ -1,16 +1,16 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 
-import { HelpTip } from "@/components/help"
+import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import {
-  COUPLE_EDGE_LIMIT,
   linksTouching,
   type BallPoint,
   type CoupleLink,
   type CoupleSchema,
 } from "@/lib/next/couple"
+import { NEXT_FIELD_HELP } from "@/lib/next/help"
 import {
   clampCamera,
   DEFAULT_CAMERA,
@@ -63,6 +63,7 @@ export function CoupleVolume({
   active: readonly number[]
   onSelect: (ball: number | null) => void
 }) {
+  const titleId = useId()
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const cameraRef = useRef<Camera>(DEFAULT_CAMERA)
@@ -200,17 +201,24 @@ export function CoupleVolume({
   }
 
   return (
-    <figure className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-card/40 p-3">
+    <figure
+      aria-labelledby={titleId}
+      className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-card/40 p-3"
+    >
       <figcaption className="flex items-center justify-between gap-2 text-sm font-medium">
-        <span>Volume</span>
-        <Button
-          type="button"
-          size="xs"
-          variant="outline"
-          onClick={() => setCamera(DEFAULT_CAMERA)}
-        >
-          Recadrer
-        </Button>
+        <TitleHelp help={NEXT_FIELD_HELP.volume}>
+          <span id={titleId}>Volume</span>
+        </TitleHelp>
+        <HelpWrap help={NEXT_FIELD_HELP.frame}>
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            onClick={() => setCamera(DEFAULT_CAMERA)}
+          >
+            Recadrer
+          </Button>
+        </HelpWrap>
       </figcaption>
       {world.length === 0 ? (
         <p className="flex h-[28rem] items-center justify-center text-center text-sm text-muted-foreground">
@@ -273,10 +281,7 @@ export function CoupleStress({ stress }: { stress: number | null }) {
   return (
     <p className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground">
       Stress {label}
-      <HelpTip
-        title="Stress"
-        body={`Écart entre les distances du volume (3 axes) et les distances observées 1/(1+poids). 0 serait un dessin exact de cette matrice. Les ${COUPLE_EDGE_LIMIT} traits sont les couples de plus fort poids dans la fenêtre.`}
-      />
+      <HelpTip {...NEXT_FIELD_HELP.stress} />
     </p>
   )
 }

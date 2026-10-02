@@ -4,14 +4,18 @@ import test from "node:test"
 
 import {
   classicalMds,
+  COUPLE_EDGE_LIMIT,
   coupleRankWeight,
   coupleSchema,
   formatCoupleAgo,
   linksTouching,
+  NEXT_WINDOW_PRESETS,
   pointDistance,
   type BallPoint,
 } from "../src/lib/next/couple.ts"
+import { NEXT_FIELD_HELP } from "../src/lib/next/help.ts"
 import { ADDRESSES } from "../src/lib/addresses.ts"
+import { WEEKDAY_SCOPE_OPTIONS } from "../src/lib/weekday-scope.ts"
 import { labFromPath, labLabel } from "../src/lib/capture/snapshot.ts"
 import { NAV_GROUPS } from "../src/lib/nav.ts"
 
@@ -149,6 +153,54 @@ test("Next sits in Lecture with a Couple address", () => {
   assert.match(tab?.text ?? "", /plus récent au plus ancien/)
   assert.equal(labFromPath("/next"), "next")
   assert.equal(labLabel("next"), "Next")
+})
+
+const LAB_HELP_KEYS = [
+  "tab",
+  "jour",
+  "space",
+  "summary",
+  "reading",
+  "absent",
+  "couples",
+  "observed",
+  "pair",
+  "count",
+  "weight",
+  "ago",
+  "ball",
+  "appearances",
+  "clear",
+] as const
+
+const VIEW_HELP_KEYS = ["volume", "frame", "stress"] as const
+
+test("every Next field has online help wired in the Couple tab", () => {
+  const keys = [...LAB_HELP_KEYS, ...VIEW_HELP_KEYS]
+  assert.deepEqual(Object.keys(NEXT_FIELD_HELP).sort(), [...keys].sort())
+  for (const key of keys) {
+    const help = NEXT_FIELD_HELP[key]
+    assert.ok(help.title.trim().length > 1, key)
+    assert.ok(help.body.trim().length > 40, key)
+    assert.doesNotMatch(`${help.title}\n${help.body}`, /pronostic|probabilit/i, key)
+    const items = "items" in help ? help.items : []
+    for (const item of items) {
+      assert.ok(item.label.trim().length > 0, key)
+      assert.ok(item.text.trim().length > 12, `${key}:${item.label}`)
+    }
+  }
+  assert.deepEqual(
+    NEXT_FIELD_HELP.jour.items?.map((item) => item.label),
+    WEEKDAY_SCOPE_OPTIONS.map((item) => item.label)
+  )
+  assert.equal(NEXT_FIELD_HELP.space.items?.length, NEXT_WINDOW_PRESETS.length)
+  assert.match(NEXT_FIELD_HELP.volume.body, new RegExp(String(COUPLE_EDGE_LIMIT)))
+  assert.match(NEXT_FIELD_HELP.stress.body, new RegExp(String(COUPLE_EDGE_LIMIT)))
+
+  const lab = readFileSync(new URL("../src/components/next/next-lab.tsx", import.meta.url), "utf8")
+  const view = readFileSync(new URL("../src/components/next/couple-view.tsx", import.meta.url), "utf8")
+  for (const key of LAB_HELP_KEYS) assert.match(lab, new RegExp(`NEXT_FIELD_HELP\\.${key}\\b`), key)
+  for (const key of VIEW_HELP_KEYS) assert.match(view, new RegExp(`NEXT_FIELD_HELP\\.${key}\\b`), key)
 })
 
 test("Couple shows a reverse indicator for the reading order", () => {

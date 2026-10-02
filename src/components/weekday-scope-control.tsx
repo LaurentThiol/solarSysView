@@ -1,6 +1,6 @@
 "use client"
 
-import { HelpTip } from "@/components/help"
+import { HelpTip, type HelpCopy } from "@/components/help"
 import { cn } from "@/lib/utils"
 import {
   WEEKDAY_SCOPE_HELP,
@@ -13,12 +13,14 @@ export function WeekdayScopeControl({
   onChange,
   compact = false,
   inline = false,
+  help = WEEKDAY_SCOPE_HELP,
 }: {
   value: WeekdayScope
   onChange: (value: WeekdayScope) => void
   compact?: boolean
   /** Libellé à côté des pastilles, pour tenir dans le bandeau. */
   inline?: boolean
+  help?: HelpCopy
 }) {
   return (
     <div
@@ -30,7 +32,7 @@ export function WeekdayScopeControl({
     >
       <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
         Jour
-        <HelpTip {...WEEKDAY_SCOPE_HELP} />
+        <HelpTip {...help} />
       </span>
       <div
         className={cn("flex max-w-full gap-1.5", inline ? "flex-wrap sm:flex-nowrap" : "flex-wrap")}

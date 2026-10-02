@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 
 import { useRegisterCapture } from "@/components/capture"
 import { DrawChart } from "@/components/draw-chart"
-import { HelpTip, LabelHelp } from "@/components/help"
+import { HelpTip, HelpWrap, LabelHelp, TitleHelp } from "@/components/help"
 import { CoupleStress, CoupleVolume } from "@/components/next/couple-view"
 import { SiteHeaderSlot } from "@/components/site-header-slot"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
@@ -22,6 +22,7 @@ import {
   type CoupleLink,
   type NextWindowPreset,
 } from "@/lib/next/couple"
+import { NEXT_FIELD_HELP } from "@/lib/next/help"
 import { useDraws } from "@/lib/use-draws"
 import { useLabTab } from "@/lib/use-lab-tab"
 import { useWeekdayScope } from "@/lib/use-weekday-scope"
@@ -32,10 +33,7 @@ const TABS = [
   {
     id: "couple",
     label: "Couple",
-    help: {
-      title: "Couple",
-      body: "Place les boules 1–50 selon le poids de leurs co-sorties dans la fenêtre, lu du tirage le plus récent au plus ancien.",
-    },
+    help: NEXT_FIELD_HELP.tab,
   },
 ] as const
 
@@ -199,14 +197,12 @@ export function NextLab() {
       <PillTabPanel idPrefix="next" tab={tab} className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
-            <WeekdayScopeControl value={weekday} onChange={selectWeekday} />
-            <LabelHelp
-              label="Espace"
-              help={{
-                title: "Espace temporel",
-                body: "20, 50, 100 ou 200 derniers tirages, l’année civile du dernier tirage chargé, ou l’année civile précédente. La lecture commence par le tirage le plus récent.",
-              }}
-            >
+            <WeekdayScopeControl
+              value={weekday}
+              onChange={selectWeekday}
+              help={NEXT_FIELD_HELP.jour}
+            />
+            <LabelHelp label="Espace" help={NEXT_FIELD_HELP.space}>
               <div className="flex flex-wrap gap-1" role="group" aria-label="Espace temporel">
                 {NEXT_WINDOW_PRESETS.map((item) => (
                   <Button
@@ -229,6 +225,7 @@ export function NextLab() {
               {formatCoupleReading(schema)} · {WINDOW_PRESET_LABELS[preset]} ·{" "}
               {source === "neon" ? "Neon" : "JSON local"}
             </span>
+            <HelpTip {...NEXT_FIELD_HELP.summary} />
           </p>
           <p className="inline-flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
             {schema.drawCount
@@ -236,14 +233,13 @@ export function NextLab() {
               : "Le plus récent pèse n, le plus ancien pèse 1."}{" "}
             Le poids d’un couple est la somme de ces poids sur les tirages où les deux boules sortent ensemble.
             Un clic dans Couples relie ces deux boules dans la vue Chaque numéro.
-            <HelpTip
-              title="Lecture à l’envers"
-              body="Rang 0 : tirage le plus récent de la fenêtre. « Il y a k tirages » compte les tirages plus récents que la dernière co-sortie. Les boules absentes de la fenêtre ne sont pas dessinées."
-            />
+            <HelpTip {...NEXT_FIELD_HELP.reading} />
           </p>
           {absent.length ? (
             <p className="text-xs text-muted-foreground">
-              Absentes ({absent.length}) : {absent.join(", ")}
+              <TitleHelp help={NEXT_FIELD_HELP.absent}>Absentes ({absent.length})</TitleHelp>
+              {" : "}
+              {absent.join(", ")}
             </p>
           ) : null}
         </div>
@@ -260,10 +256,16 @@ export function NextLab() {
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(16rem,0.8fr)]">
           <section className="min-w-0 rounded-xl border border-border bg-card/40 p-3" aria-label="Couples">
             <div className="mb-2 flex flex-col gap-1">
-              <div className="flex items-baseline justify-between gap-2">
-                <h2 className="text-sm font-medium">Couples</h2>
-                <p className="text-xs tabular-nums text-muted-foreground" data-couple-count={schema.links.length}>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-medium">
+                  <TitleHelp help={NEXT_FIELD_HELP.couples}>Couples</TitleHelp>
+                </h2>
+                <p
+                  className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
+                  data-couple-count={schema.links.length}
+                >
                   {schema.links.length} observé{schema.links.length > 1 ? "s" : ""}
+                  <HelpTip {...NEXT_FIELD_HELP.observed} />
                 </p>
               </div>
               <p className="text-xs text-muted-foreground">Un clic relie le couple dans Chaque numéro.</p>
@@ -276,16 +278,24 @@ export function NextLab() {
                   <thead className="sticky top-0 bg-card">
                     <tr className="text-xs text-muted-foreground">
                       <th className="py-1 pr-3 font-medium" scope="col">
-                        Couple
+                        <TitleHelp help={NEXT_FIELD_HELP.pair} className="whitespace-nowrap">
+                          Couple
+                        </TitleHelp>
                       </th>
                       <th className="py-1 pr-3 font-medium" scope="col">
-                        Compte
+                        <TitleHelp help={NEXT_FIELD_HELP.count} className="whitespace-nowrap">
+                          Compte
+                        </TitleHelp>
                       </th>
                       <th className="py-1 pr-3 font-medium" scope="col">
-                        Poids
+                        <TitleHelp help={NEXT_FIELD_HELP.weight} className="whitespace-nowrap">
+                          Poids
+                        </TitleHelp>
                       </th>
                       <th className="py-1 font-medium" scope="col">
-                        Dernière co-sortie
+                        <TitleHelp help={NEXT_FIELD_HELP.ago} className="whitespace-nowrap">
+                          Dernière co-sortie
+                        </TitleHelp>
                       </th>
                     </tr>
                   </thead>
@@ -319,23 +329,34 @@ export function NextLab() {
           </section>
 
           <aside className="min-w-0 rounded-xl border border-border bg-card/40 p-3" aria-label="Boule choisie">
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-medium">
+                  <TitleHelp help={NEXT_FIELD_HELP.ball}>
+                    {selectedPoint ? `Boule ${selected}` : "Boule"}
+                  </TitleHelp>
+                </h2>
+                {selectedPoint ? (
+                  <p className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground">
+                    {selectedPoint.appearances} sortie{selectedPoint.appearances > 1 ? "s" : ""} dans la fenêtre
+                    <HelpTip {...NEXT_FIELD_HELP.appearances} />
+                  </p>
+                ) : null}
+              </div>
+              {selectedPoint ? (
+                <HelpWrap help={NEXT_FIELD_HELP.clear}>
+                  <Button type="button" size="xs" variant="outline" onClick={() => selectBall(null)}>
+                    Effacer
+                  </Button>
+                </HelpWrap>
+              ) : null}
+            </div>
             {selected == null || !selectedPoint ? (
               <p className="text-sm text-muted-foreground">
                 Choisissez une boule sur le schéma, ou un couple dans la liste. Le couple choisi est relié dans Chaque numéro. Les dates de co-sortie se lisent de la plus récente à la plus ancienne.
               </p>
             ) : (
               <div className="flex flex-col gap-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h2 className="text-sm font-medium">Boule {selected}</h2>
-                    <p className="text-xs tabular-nums text-muted-foreground">
-                      {selectedPoint.appearances} sortie{selectedPoint.appearances > 1 ? "s" : ""} dans la fenêtre
-                    </p>
-                  </div>
-                  <Button type="button" size="xs" variant="outline" onClick={() => selectBall(null)}>
-                    Effacer
-                  </Button>
-                </div>
                 {touched.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Aucune co-sortie dans la fenêtre.</p>
                 ) : (
