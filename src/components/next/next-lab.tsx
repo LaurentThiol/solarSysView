@@ -6,6 +6,7 @@ import { useRegisterCapture } from "@/components/capture"
 import { DrawChart } from "@/components/draw-chart"
 import { HelpTip, HelpWrap, LabelHelp, TitleHelp } from "@/components/help"
 import { CoupleStress, CoupleVolume } from "@/components/next/couple-view"
+import { TripleReading } from "@/components/next/triple-view"
 import { SiteHeaderSlot } from "@/components/site-header-slot"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { Badge } from "@/components/ui/badge"
@@ -26,6 +27,8 @@ import {
   type NextWindowPreset,
 } from "@/lib/next/couple"
 import { NEXT_FIELD_HELP } from "@/lib/next/help"
+import { NEXT_TRIPLE_FIELD_HELP } from "@/lib/next/triple-help"
+import { formatTripleKey, tripleSchema, type TripleLink } from "@/lib/next/triple"
 import { useDraws } from "@/lib/use-draws"
 import { useLabTab } from "@/lib/use-lab-tab"
 import { useWeekdayScope } from "@/lib/use-weekday-scope"
@@ -37,6 +40,11 @@ const TABS = [
     id: "couple",
     label: "Couple",
     help: NEXT_FIELD_HELP.tab,
+  },
+  {
+    id: "triple",
+    label: "Triple",
+    help: NEXT_TRIPLE_FIELD_HELP.tab,
   },
 ] as const
 
@@ -92,6 +100,9 @@ export function NextLab() {
   const [selected, setSelected] = useState<number | null>(null)
   const [pinned, setPinned] = useState<string | null>(null)
   const [coupleTick, setCoupleTick] = useState(0)
+  const [tripleSelected, setTripleSelected] = useState<number | null>(null)
+  const [triplePinned, setTriplePinned] = useState<string | null>(null)
+  const [tripleTick, setTripleTick] = useState(0)
   const [sortKey, setSortKey] = useState<CoupleSortKey>("weight")
   const [sortDir, setSortDir] = useState(defaultCoupleSortDir("weight"))
 
@@ -108,10 +119,12 @@ export function NextLab() {
       }),
     [archive, preset, weekday]
   )
-  const schema = useMemo(
-    () => coupleSchema(resolved.work.map((draw) => ({ date: draw.date, numbers: draw.numbers }))),
+  const windowDraws = useMemo(
+    () => resolved.work.map((draw) => ({ date: draw.date, numbers: draw.numbers })),
     [resolved]
   )
+  const schema = useMemo(() => coupleSchema(windowDraws), [windowDraws])
+  const triples = useMemo(() => tripleSchema(windowDraws), [windowDraws])
   const active = useMemo(() => {
     const balls = new Set<number>()
     if (selected != null) balls.add(selected)
@@ -129,6 +142,12 @@ export function NextLab() {
     if (!Number.isInteger(left) || !Number.isInteger(right)) return null
     return { a: left, b: right }
   }, [pinned])
+  const pinnedTriple = useMemo(() => {
+    if (!triplePinned) return null
+    const [a, b, c] = triplePinned.split("-").map((value) => Number(value))
+    if (!Number.isInteger(a) || !Number.isInteger(b) || !Number.isInteger(c)) return null
+    return { a, b, c }
+  }, [triplePinned])
   const touched = selected == null ? [] : linksTouching(schema.links, selected)
   const selectedPoint = schema.points.find((point) => point.ball === selected)
   const absent = schema.points.filter((point) => point.appearances === 0).map((point) => point.ball)
@@ -146,40 +165,61 @@ export function NextLab() {
     setSortDir(defaultCoupleSortDir(key))
   }
 
-  useRegisterCapture(() => ({
-    lab: "next",
-    tab,
-    summary: [
-      `reverse · ${formatCoupleReading(schema)}`,
-      pinned ? `Lien ${pinned} dans Chaque numéro` : "",
-      schema.stress == null ? "Stress —" : `Stress ${schema.stress.toFixed(3)}`,
-      schema.edges
-        .slice(0, 5)
-        .map((link) => `${link.a}–${link.b} (${link.affinity})`)
-        .join(", "),
-    ].filter((line) => line.length > 0),
-    tech: {
-      preset,
-      weekday,
-      drawCount: schema.drawCount,
-      newest: schema.newest,
-      oldest: schema.oldest,
-      stress: schema.stress,
-      edges: schema.edges.slice(0, 12).map((link) => ({
-        a: link.a,
-        b: link.b,
-        count: link.count,
-        affinity: link.affinity,
-        ago: link.ago,
-      })),
-    },
-    archive: {
-      n: schema.drawCount,
-      from: schema.oldest,
-      to: schema.newest,
-      source,
-    },
-  }))
+  useRegisterCapture(() => {
+    const reading = tab === "triple" ? triples : schema
+    const pinnedLabel = tab === "triple" ? triplePinned : pinned
+    const edges =
+      tab === "triple"
+        ? triples.edges
+            .slice(0, 5)
+            .map((link) => `${link.a}–${link.b}–${link.c} (${link.affinity})`)
+            .join(", ")
+        : schema.edges
+            .slice(0, 5)
+            .map((link) => `${link.a}–${link.b} (${link.affinity})`)
+            .join(", ")
+    return {
+      lab: "next",
+      tab,
+      summary: [
+        `reverse · ${formatCoupleReading(reading)}`,
+        pinnedLabel ? `Lien ${pinnedLabel} dans Chaque numéro` : "",
+        reading.stress == null ? "Stress —" : `Stress ${reading.stress.toFixed(3)}`,
+        edges,
+      ].filter((line) => line.length > 0),
+      tech: {
+        preset,
+        weekday,
+        drawCount: reading.drawCount,
+        newest: reading.newest,
+        oldest: reading.oldest,
+        stress: reading.stress,
+        edges:
+          tab === "triple"
+            ? triples.edges.slice(0, 12).map((link) => ({
+                a: link.a,
+                b: link.b,
+                c: link.c,
+                count: link.count,
+                affinity: link.affinity,
+                ago: link.ago,
+              }))
+            : schema.edges.slice(0, 12).map((link) => ({
+                a: link.a,
+                b: link.b,
+                count: link.count,
+                affinity: link.affinity,
+                ago: link.ago,
+              })),
+      },
+      archive: {
+        n: reading.drawCount,
+        from: reading.oldest,
+        to: reading.newest,
+        source,
+      },
+    }
+  })
 
   function selectBall(ball: number | null) {
     setPinned(null)
@@ -194,12 +234,34 @@ export function NextLab() {
     setPreset(next)
     setSelected(null)
     setPinned(null)
+    setTripleSelected(null)
+    setTriplePinned(null)
   }
 
   function selectWeekday(next: WeekdayScope) {
     setWeekday(next)
     setSelected(null)
     setPinned(null)
+    setTripleSelected(null)
+    setTriplePinned(null)
+  }
+
+  function selectTripleBall(ball: number | null) {
+    setTriplePinned(null)
+    if (ball == null) {
+      setTripleSelected(null)
+      return
+    }
+    setTripleSelected((prev) => (prev === ball ? null : ball))
+  }
+
+  function selectTripleLink(link: TripleLink) {
+    setTripleSelected(link.a)
+    setTriplePinned(formatTripleKey(link))
+    setTripleTick((value) => value + 1)
+    requestAnimationFrame(() => {
+      document.getElementById("next-evolution")?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    })
   }
 
   function selectLink(link: CoupleLink) {
@@ -261,8 +323,17 @@ export function NextLab() {
             {schema.drawCount
               ? `Le plus récent pèse ${schema.drawCount}, le plus ancien pèse 1.`
               : "Le plus récent pèse n, le plus ancien pèse 1."}{" "}
-            Le poids d’un couple est la somme de ces poids sur les tirages où les deux boules sortent ensemble.
-            Un clic dans Couples relie ces deux boules dans la vue Chaque numéro.
+            {tab === "triple" ? (
+              <>
+                Le poids d’un triplet est la somme de ces poids sur les tirages où les trois boules sortent ensemble.
+                Un clic dans Triplets relie ces trois boules dans la vue Chaque numéro.
+              </>
+            ) : (
+              <>
+                Le poids d’un couple est la somme de ces poids sur les tirages où les deux boules sortent ensemble.
+                Un clic dans Couples relie ces deux boules dans la vue Chaque numéro.
+              </>
+            )}
             <HelpTip {...NEXT_FIELD_HELP.reading} />
           </p>
           {absent.length ? (
@@ -274,6 +345,19 @@ export function NextLab() {
           ) : null}
         </div>
 
+        {tab === "triple" ? (
+          <TripleReading
+            schema={triples}
+            draws={resolved.work}
+            selected={tripleSelected}
+            pinned={triplePinned}
+            pinnedTriple={pinnedTriple}
+            tick={tripleTick}
+            onSelectBall={selectTripleBall}
+            onSelectLink={selectTripleLink}
+          />
+        ) : (
+          <>
         <div className="flex justify-end">
           <CoupleStress stress={schema.stress} />
         </div>
@@ -432,6 +516,8 @@ export function NextLab() {
             )}
           </aside>
         </div>
+          </>
+        )}
       </PillTabPanel>
     </div>
   )

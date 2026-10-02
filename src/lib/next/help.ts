@@ -19,7 +19,7 @@ export const NEXT_FIELD_HELP = {
   },
   jour: {
     title: "Jour de tirage",
-    body: "EuroMillions ne tire que le mardi et le vendredi. Le filtre s’applique avant l’espace : 50 derniers vendredis, ce sont 50 vendredis. Changer de jour retire la boule choisie et le couple épinglé.",
+    body: "EuroMillions ne tire que le mardi et le vendredi. Le filtre s’applique avant l’espace : 50 derniers vendredis, ce sont 50 vendredis. Changer de jour retire la boule choisie et le lien épinglé, couple ou triplet.",
     items: [
       {
         label: "Tous",
@@ -41,7 +41,7 @@ export const NEXT_FIELD_HELP = {
   },
   space: {
     title: "Espace temporel",
-    body: "La lecture commence par le tirage le plus récent de l’espace choisi. Changer d’espace retire la boule choisie et le couple épinglé.",
+    body: "La lecture commence par le tirage le plus récent de l’espace choisi. Changer d’espace retire la boule choisie et le lien épinglé, couple ou triplet.",
     items: [
       {
         label: "20",

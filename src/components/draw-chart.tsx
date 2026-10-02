@@ -126,6 +126,13 @@ import {
   type CoupleChartLink,
   type CoupleNumberLink,
 } from "@/lib/next/couple-chart"
+import {
+  formatTripleChartLink,
+  orderedTriple,
+  tripleNumberLinks,
+  type TripleChartLink,
+  type TripleNumberLink,
+} from "@/lib/next/triple-chart"
 import { WeekdaySeriesLines, WeekdaySplitLegend } from "@/components/weekday-split"
 import {
   WEEKDAY_LINE_COLOR,
@@ -547,6 +554,56 @@ function scaleInvertY(
   return invertLinear((value) => yScale(value) ?? Number.NaN, pixel, lo, hi)
 }
 
+function TripleLinkMarks({ marks }: { marks: readonly TripleNumberLink[] }) {
+  const xScale = useXAxisScale()
+  const yScale = useYAxisScale()
+  if (!xScale || !yScale || marks.length === 0) return null
+  return (
+    <g pointerEvents="none" data-triple-links={marks.length}>
+      {marks.map((mark) => {
+        const x = xScale(mark.date, { position: "middle" })
+        const ys = mark.balls.map((ball) => yScale(ball))
+        if (x == null || !Number.isFinite(x) || ys.some((y) => y == null || !Number.isFinite(y))) return null
+        const yLow = ys[0] as number
+        const yHigh = ys[2] as number
+        return (
+          <g key={`${mark.date}-${mark.balls.join("-")}`}>
+            <line
+              x1={x}
+              x2={x}
+              y1={yLow}
+              y2={yHigh}
+              stroke="var(--background)"
+              strokeWidth={6}
+              strokeLinecap="round"
+            />
+            <line
+              x1={x}
+              x2={x}
+              y1={yLow}
+              y2={yHigh}
+              stroke="var(--primary)"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+            />
+            {ys.map((y, index) => (
+              <circle
+                key={mark.balls[index]}
+                cx={x}
+                cy={y as number}
+                r={4.5}
+                fill="var(--primary)"
+                stroke="var(--background)"
+                strokeWidth={1.5}
+              />
+            ))}
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
 function CoupleLinkMarks({ marks }: { marks: readonly CoupleNumberLink[] }) {
   const xScale = useXAxisScale()
   const yScale = useYAxisScale()
@@ -776,6 +833,7 @@ function SeriesTooltip({
   showBb,
   combined,
   coupleLinks,
+  tripleLinks,
 }: {
   active?: boolean
   payload?: Array<{
@@ -790,6 +848,7 @@ function SeriesTooltip({
   showBb: boolean
   combined: boolean
   coupleLinks?: readonly CoupleNumberLink[]
+  tripleLinks?: readonly TripleNumberLink[]
 }) {
   if (combined) {
     return (
@@ -808,6 +867,7 @@ function SeriesTooltip({
   const point = payload[0]?.payload
   if (!point) return null
   const coupleHere = coupleLinks?.find((item) => item.date === point.date)
+  const tripleHere = tripleLinks?.find((item) => item.date === point.date)
 
   return (
     <div className="grid min-w-0 max-w-[min(18rem,calc(100vw-2rem))] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
@@ -815,6 +875,11 @@ function SeriesTooltip({
       {coupleHere ? (
         <p className="font-medium text-primary">
           Lien {coupleHere.low}–{coupleHere.high} · {coupleHere.lowKey}–{coupleHere.highKey}
+        </p>
+      ) : null}
+      {tripleHere ? (
+        <p className="font-medium text-primary">
+          Lien {tripleHere.balls.join("–")} · {tripleHere.keys.join("–")}
         </p>
       ) : null}
       <div className="grid gap-1.5">
@@ -876,12 +941,18 @@ export function DrawChart({
   draws,
   couple = null,
   coupleTick = 0,
+  triple = null,
+  tripleTick = 0,
 }: {
   draws: Draw[]
   /** Couple à relier dans la vue « Chaque numéro ». */
   couple?: CoupleChartLink | null
   /** Incrémenté à chaque clic de couple pour ramener la vue sur Chaque numéro. */
   coupleTick?: number
+  /** Triplet à relier dans la vue « Chaque numéro ». */
+  triple?: TripleChartLink | null
+  /** Incrémenté à chaque clic de triplet pour ramener la vue sur Chaque numéro. */
+  tripleTick?: number
 }) {
   const draw = useChartDrawOptional()
   const drawRef = useRef(draw)
@@ -905,6 +976,7 @@ export function DrawChart({
   const magnet = useMagnetHold(Boolean(draw?.drawing))
   const [mode, setMode] = useState<DrawChartMode>("sumBoth")
   const [appliedCoupleTick, setAppliedCoupleTick] = useState(0)
+  const [appliedTripleTick, setAppliedTripleTick] = useState(0)
   const [scale, setScale] = useState<RelativeScale>("theory")
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>(rank1HiddenDefault)
   const [showSma, setShowSma] = useState(true)
@@ -926,6 +998,11 @@ export function DrawChart({
   const coupleMarks = useMemo(
     () => (couple && mode === "eachNumber" ? coupleNumberLinks(series, couple) : []),
     [couple, mode, series]
+  )
+  const tripleOrdered = triple ? orderedTriple(triple) : null
+  const tripleMarks = useMemo(
+    () => (triple && mode === "eachNumber" ? tripleNumberLinks(series, triple) : []),
+    [triple, mode, series]
   )
   const mixedDays = useMemo(() => {
     let mardi = false
@@ -2003,6 +2080,15 @@ export function DrawChart({
     setShowBb(false)
   }
 
+  if (triple && tripleTick > 0 && tripleTick !== appliedTripleTick && orderedTriple(triple)) {
+    setAppliedTripleTick(tripleTick)
+    setMode("eachNumber")
+    setHidden(keepRank1Choice(hidden))
+    setTargetKey("n1")
+    setShowSma(false)
+    setShowBb(false)
+  }
+
   const useCustomTooltip =
     combined || showSma || showBb || rankMode || keys.includes("rank1")
 
@@ -2261,6 +2347,7 @@ export function DrawChart({
                         showBb={showBb && smaPeriod > 0}
                         combined={combined}
                         coupleLinks={coupleMarks}
+                        tripleLinks={tripleMarks}
                       />
                     ) : (
                       <ChartTooltipContent
@@ -2746,6 +2833,32 @@ export function DrawChart({
                     <CoupleLinkMarks marks={coupleMarks} />
                   </>
                 ) : null}
+                {tripleOrdered && mode === "eachNumber" ? (
+                  <>
+                    {tripleOrdered.balls.map((ball, index) => (
+                      <ReferenceLine
+                        key={ball}
+                        y={ball}
+                        stroke="var(--primary)"
+                        strokeDasharray="4 4"
+                        strokeOpacity={0.7}
+                        ifOverflow="hidden"
+                        label={{
+                          value: String(ball),
+                          position:
+                            index === 0
+                              ? "insideBottomRight"
+                              : index === tripleOrdered.balls.length - 1
+                                ? "insideTopRight"
+                                : "insideRight",
+                          fill: "var(--primary)",
+                          fontSize: 11,
+                        }}
+                      />
+                    ))}
+                    <TripleLinkMarks marks={tripleMarks} />
+                  </>
+                ) : null}
                 <MagnetHalo
                   live={draw?.drawing ? draw.live : null}
                   plotted={
@@ -2786,6 +2899,15 @@ export function DrawChart({
                 >
                   <span className="h-3 w-0.5 shrink-0 rounded-full bg-primary" />
                   Lien {coupleOrdered ? `${coupleOrdered.low}–${coupleOrdered.high}` : ""}
+                </span>
+              ) : null}
+              {triple && mode === "eachNumber" ? (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/15 px-2 py-1 text-xs"
+                  data-triple-chart-link={formatTripleChartLink(triple, tripleMarks.length)}
+                >
+                  <span className="h-3 w-0.5 shrink-0 rounded-full bg-primary" />
+                  Lien {tripleOrdered ? tripleOrdered.balls.join("–") : ""}
                 </span>
               ) : null}
               {smaPeriod > 0 ? (
@@ -2868,6 +2990,22 @@ export function DrawChart({
             ) : couple && coupleOrdered ? (
               <p className="mt-2 text-center text-xs text-muted-foreground" data-couple-chart-caption>
                 Couple {coupleOrdered.low}–{coupleOrdered.high} se lit dans Chaque numéro.{" "}
+                <button
+                  type="button"
+                  className="underline-offset-2 hover:underline"
+                  onClick={() => changeMode("eachNumber")}
+                >
+                  Afficher le lien
+                </button>
+              </p>
+            ) : null}
+            {triple && mode === "eachNumber" ? (
+              <p className="mt-2 text-center text-xs text-muted-foreground" data-triple-chart-caption>
+                {formatTripleChartLink(triple, tripleMarks.length)} Les traits verticaux joignent les trois boules sur chaque tirage où elles sortent ensemble.
+              </p>
+            ) : triple && tripleOrdered ? (
+              <p className="mt-2 text-center text-xs text-muted-foreground" data-triple-chart-caption>
+                Triple {tripleOrdered.balls.join("–")} se lit dans Chaque numéro.{" "}
                 <button
                   type="button"
                   className="underline-offset-2 hover:underline"

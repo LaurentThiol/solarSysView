@@ -42,7 +42,7 @@ test("Next chart highlights the couple chosen in the table", () => {
   assert.match(lab, /id="next-evolution"/)
   assert.match(lab, /couple=\{pinnedCouple\}/)
   assert.match(lab, /coupleTick=\{coupleTick\}/)
-  assert.match(lab, /Un clic relie le couple dans Chaque numéro/)
+  assert.match(lab, /relie le couple dans Chaque numéro/)
   assert.match(chart, /Chaque numéro/)
   assert.match(chart, /setMode\("eachNumber"\)/)
   assert.match(chart, /keepRank1Choice\(hidden\)/)

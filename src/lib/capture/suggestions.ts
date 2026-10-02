@@ -78,6 +78,7 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   if (lab === "next") {
     return [
       "Décris le schéma : quelles boules sont proches parce qu’elles sont sorties ensemble récemment dans cette fenêtre ?",
+      "Sur Triple, quels triplets portent le plus fort poids, et quelles trois boules le clic relie dans Chaque numéro ?",
       "Le poids suit la lecture du plus récent au plus ancien. Que change un autre espace (20, 50, 100, 200, année, année n−1) ?",
       "Rappelle que ces distances décrivent les tirages déjà réalisés de la fenêtre.",
     ]

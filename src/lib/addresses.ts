@@ -315,6 +315,13 @@ const TABS: AddressEntry[] = [
     "tab=couple"
   ),
   tabEntry(
+    "/next?tab=triple",
+    "Next · Triple",
+    "Schéma 3D des boules 1–50. Le poids d’un triplet est la somme des co-sorties à trois, du tirage le plus récent au plus ancien, sur 20, 50, 100, 200, l’année civile ou l’année n−1. Un clic dans Triplets relie ce triplet dans Chaque numéro.",
+    "lecture",
+    "tab=triple"
+  ),
+  tabEntry(
     "/ref?tab=lunaire",
     "Réf · Lunaire",
     "Mois synodique : âge, éclairement, quartiers et calendrier du mois.",
