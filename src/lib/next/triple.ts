@@ -83,6 +83,56 @@ export function othersOf(link: TripleLink, ball: number): [number, number] {
   return [rest[0] ?? link.a, rest[1] ?? link.b]
 }
 
+export const TRIPLE_SORT_KEYS = ["trio", "count", "weight", "ago"] as const
+
+export type TripleSortKey = (typeof TRIPLE_SORT_KEYS)[number]
+export type TripleSortDir = "asc" | "desc"
+
+/** Premier clic : numéros et ancienneté croissants, compte et poids décroissants. */
+export function defaultTripleSortDir(key: TripleSortKey): TripleSortDir {
+  return key === "trio" || key === "ago" ? "asc" : "desc"
+}
+
+function tripleSortPrimary(link: TripleLink, key: TripleSortKey): number {
+  if (key === "count") return link.count
+  if (key === "weight") return link.affinity
+  if (key === "ago") return link.ago
+  return 0
+}
+
+/**
+ * Tri d’une colonne du tableau Triplets.
+ * À égalité : plus fort poids, puis plus grand compte, puis plus petit triplet.
+ */
+export function compareTripleLinks(
+  left: TripleLink,
+  right: TripleLink,
+  key: TripleSortKey,
+  dir: TripleSortDir
+): number {
+  const sign = dir === "asc" ? 1 : -1
+  const primary =
+    key === "trio"
+      ? left.a - right.a || left.b - right.b || left.c - right.c
+      : tripleSortPrimary(left, key) - tripleSortPrimary(right, key)
+  if (primary !== 0) return primary * sign
+  return (
+    right.affinity - left.affinity ||
+    right.count - left.count ||
+    left.a - right.a ||
+    left.b - right.b ||
+    left.c - right.c
+  )
+}
+
+export function sortTripleLinks(
+  links: readonly TripleLink[],
+  key: TripleSortKey,
+  dir: TripleSortDir
+): TripleLink[] {
+  return [...links].sort((left, right) => compareTripleLinks(left, right, key, dir))
+}
+
 export function tripleSchema(
   draws: readonly TripleDraw[],
   edgeLimit = TRIPLE_EDGE_LIMIT
@@ -134,14 +184,7 @@ export function tripleSchema(
     }
   }
 
-  const links = [...triples.values()].sort(
-    (left, right) =>
-      right.affinity - left.affinity ||
-      right.count - left.count ||
-      left.a - right.a ||
-      left.b - right.b ||
-      left.c - right.c
-  )
+  const links = sortTripleLinks([...triples.values()], "weight", "desc")
   const limit = Number.isFinite(edgeLimit) ? Math.max(0, Math.trunc(edgeLimit)) : TRIPLE_EDGE_LIMIT
   const edges = links.slice(0, limit)
 

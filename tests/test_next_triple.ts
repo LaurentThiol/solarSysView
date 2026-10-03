@@ -7,10 +7,15 @@ import { ADDRESSES } from "../src/lib/addresses.ts"
 import { NEXT_TRIPLE_FIELD_HELP } from "../src/lib/next/triple-help.ts"
 import {
   TRIPLE_EDGE_LIMIT,
+  defaultTripleSortDir,
   formatTripleKey,
   othersOf,
+  sortTripleLinks,
   tripleSchema,
   triplesTouching,
+  type TripleLink,
+  type TripleSortDir,
+  type TripleSortKey,
 } from "../src/lib/next/triple.ts"
 
 function point(schema: { points: BallPoint[] }, ball: number) {
@@ -56,6 +61,41 @@ test("affinity sums observed triple co-draws from newest to oldest", () => {
   assert.equal(schema.links[0].b, 2)
   assert.equal(schema.links[0].c, 3)
   assert.equal(triplesTouching(schema.links, 1)[0].ago, 0)
+})
+
+function tripleLink(
+  partial: Pick<TripleLink, "a" | "b" | "c" | "count" | "affinity" | "ago">
+): TripleLink {
+  return { ...partial, dates: [] }
+}
+
+test("triple columns sort each field and keep the weight tie break", () => {
+  const links = [
+    tripleLink({ a: 2, b: 4, c: 6, count: 2, affinity: 5, ago: 1 }),
+    tripleLink({ a: 1, b: 3, c: 5, count: 2, affinity: 9, ago: 0 }),
+    tripleLink({ a: 1, b: 2, c: 3, count: 1, affinity: 9, ago: 3 }),
+    tripleLink({ a: 8, b: 9, c: 10, count: 4, affinity: 4, ago: 2 }),
+  ]
+  const order = (key: TripleSortKey, dir: TripleSortDir) =>
+    sortTripleLinks(links, key, dir).map((link) => formatTripleKey(link))
+
+  assert.deepEqual(order("weight", "desc"), ["1-3-5", "1-2-3", "2-4-6", "8-9-10"])
+  assert.deepEqual(order("weight", "asc"), ["8-9-10", "2-4-6", "1-3-5", "1-2-3"])
+  assert.deepEqual(order("count", "desc"), ["8-9-10", "1-3-5", "2-4-6", "1-2-3"])
+  assert.deepEqual(order("count", "asc"), ["1-2-3", "1-3-5", "2-4-6", "8-9-10"])
+  assert.deepEqual(order("trio", "asc"), ["1-2-3", "1-3-5", "2-4-6", "8-9-10"])
+  assert.deepEqual(order("trio", "desc"), ["8-9-10", "2-4-6", "1-3-5", "1-2-3"])
+  assert.deepEqual(order("ago", "asc"), ["1-3-5", "2-4-6", "8-9-10", "1-2-3"])
+  assert.deepEqual(order("ago", "desc"), ["1-2-3", "8-9-10", "2-4-6", "1-3-5"])
+  assert.deepEqual(
+    links.map((link) => formatTripleKey(link)),
+    ["2-4-6", "1-3-5", "1-2-3", "8-9-10"]
+  )
+  assert.equal(defaultTripleSortDir("weight"), "desc")
+  assert.equal(defaultTripleSortDir("count"), "desc")
+  assert.equal(defaultTripleSortDir("trio"), "asc")
+  assert.equal(defaultTripleSortDir("ago"), "asc")
+  assert.deepEqual(sortTripleLinks([], "trio", "asc"), [])
 })
 
 test("duplicate and short draws do not invent a triple", () => {
@@ -145,7 +185,21 @@ test("every Triple field has online help wired in the Triple tab", () => {
   assert.match(lab, /id: "triple"/)
   for (const key of PANEL_HELP_KEYS) assert.match(view, new RegExp(`NEXT_TRIPLE_FIELD_HELP\\.${key}\\b`), key)
   for (const key of VIEW_HELP_KEYS) assert.match(view, new RegExp(`NEXT_TRIPLE_FIELD_HELP\\.${key}\\b`), key)
-  assert.match(view, /Un clic relie le triplet dans Chaque numéro/)
+  assert.match(view, /relie le triplet dans Chaque numéro/)
   assert.match(view, /triple=\{pinnedTriple\}/)
   assert.match(view, /tripleTick=\{tick\}/)
+})
+
+test("Triplets table headers sort each column", () => {
+  const source = readFileSync(new URL("../src/components/next/triple-view.tsx", import.meta.url), "utf8")
+  assert.match(source, /sortTripleLinks/)
+  assert.match(source, /toggleTripleSort/)
+  assert.match(source, /aria-sort/)
+  assert.match(source, /data-triple-sort-key/)
+  assert.match(source, /data-triple-sort-dir/)
+  assert.match(NEXT_TRIPLE_FIELD_HELP.triples.body, /en-tête/)
+  assert.match(NEXT_TRIPLE_FIELD_HELP.weight.body, /ordre de départ/)
+  assert.match(NEXT_TRIPLE_FIELD_HELP.trio.body, /plus petit numéro/)
+  assert.match(NEXT_TRIPLE_FIELD_HELP.count.body, /plus grands comptes/)
+  assert.match(NEXT_TRIPLE_FIELD_HELP.ago.body, /plus récentes/)
 })

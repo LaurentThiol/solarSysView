@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 
 import { DrawChart } from "@/components/draw-chart"
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
@@ -9,14 +9,29 @@ import { Button } from "@/components/ui/button"
 import { formatCoupleAgo } from "@/lib/next/couple"
 import { NEXT_TRIPLE_FIELD_HELP } from "@/lib/next/triple-help"
 import {
+  defaultTripleSortDir,
   formatTripleKey,
   othersOf,
+  sortTripleLinks,
   triplesTouching,
   type TripleLink,
   type TripleSchema,
+  type TripleSortKey,
 } from "@/lib/next/triple"
 import type { Draw } from "@/lib/draws"
 import { cn } from "@/lib/utils"
+
+const TRIPLE_COLUMNS: {
+  key: TripleSortKey
+  label: string
+  help: (typeof NEXT_TRIPLE_FIELD_HELP)[keyof typeof NEXT_TRIPLE_FIELD_HELP]
+  pad: boolean
+}[] = [
+  { key: "trio", label: "Triplet", help: NEXT_TRIPLE_FIELD_HELP.trio, pad: true },
+  { key: "count", label: "Compte", help: NEXT_TRIPLE_FIELD_HELP.count, pad: true },
+  { key: "weight", label: "Poids", help: NEXT_TRIPLE_FIELD_HELP.weight, pad: true },
+  { key: "ago", label: "Dernière co-sortie", help: NEXT_TRIPLE_FIELD_HELP.ago, pad: false },
+]
 
 function segmentsOf(links: readonly TripleLink[]): VolumeSegment[] {
   const map = new Map<string, VolumeSegment>()
@@ -120,8 +135,23 @@ export function TripleReading({
     }
     return [...balls]
   }, [pinnedTriple, selected])
+  const [sortKey, setSortKey] = useState<TripleSortKey>("weight")
+  const [sortDir, setSortDir] = useState(defaultTripleSortDir("weight"))
   const touched = selected == null ? [] : triplesTouching(schema.links, selected)
   const selectedPoint = schema.points.find((point) => point.ball === selected)
+  const sortedLinks = useMemo(
+    () => sortTripleLinks(schema.links, sortKey, sortDir),
+    [schema.links, sortDir, sortKey]
+  )
+
+  function toggleTripleSort(key: TripleSortKey) {
+    if (sortKey === key) {
+      setSortDir((current) => (current === "asc" ? "desc" : "asc"))
+      return
+    }
+    setSortKey(key)
+    setSortDir(defaultTripleSortDir(key))
+  }
 
   return (
     <>
@@ -149,39 +179,52 @@ export function TripleReading({
                 <HelpTip {...NEXT_TRIPLE_FIELD_HELP.observed} />
               </p>
             </div>
-            <p className="text-xs text-muted-foreground">Un clic relie le triplet dans Chaque numéro.</p>
+            <p className="text-xs text-muted-foreground">
+              Un clic sur un en-tête trie la colonne. Un clic sur une ligne relie le triplet dans Chaque numéro.
+            </p>
           </div>
           {schema.links.length === 0 ? (
             <p className="py-8 text-sm text-muted-foreground">Aucune co-sortie dans cette fenêtre.</p>
           ) : (
-            <div className="max-h-[32rem] overflow-auto">
+            <div
+              className="max-h-[32rem] overflow-auto"
+              data-triple-sort-key={sortKey}
+              data-triple-sort-dir={sortDir}
+            >
               <table className="w-full text-left text-sm">
                 <thead className="sticky top-0 bg-card">
                   <tr className="text-xs text-muted-foreground">
-                    <th className="py-1 pr-3 font-medium" scope="col">
-                      <TitleHelp help={NEXT_TRIPLE_FIELD_HELP.trio} className="whitespace-nowrap">
-                        Triplet
-                      </TitleHelp>
-                    </th>
-                    <th className="py-1 pr-3 font-medium" scope="col">
-                      <TitleHelp help={NEXT_TRIPLE_FIELD_HELP.count} className="whitespace-nowrap">
-                        Compte
-                      </TitleHelp>
-                    </th>
-                    <th className="py-1 pr-3 font-medium" scope="col">
-                      <TitleHelp help={NEXT_TRIPLE_FIELD_HELP.weight} className="whitespace-nowrap">
-                        Poids
-                      </TitleHelp>
-                    </th>
-                    <th className="py-1 font-medium" scope="col">
-                      <TitleHelp help={NEXT_TRIPLE_FIELD_HELP.ago} className="whitespace-nowrap">
-                        Dernière co-sortie
-                      </TitleHelp>
-                    </th>
+                    {TRIPLE_COLUMNS.map((column) => {
+                      const active = sortKey === column.key
+                      return (
+                        <th
+                          key={column.key}
+                          className={cn("py-1 font-medium", column.pad && "pr-3")}
+                          scope="col"
+                          aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                        >
+                          <TitleHelp help={column.help} className="whitespace-nowrap">
+                            <button
+                              type="button"
+                              className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 font-medium text-inherit hover:text-foreground"
+                              onClick={() => toggleTripleSort(column.key)}
+                            >
+                              {column.label}
+                              <span
+                                aria-hidden
+                                className={cn("w-3 text-[10px] leading-none", !active && "opacity-40")}
+                              >
+                                {active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+                              </span>
+                            </button>
+                          </TitleHelp>
+                        </th>
+                      )
+                    })}
                   </tr>
                 </thead>
                 <tbody>
-                  {schema.links.map((link) => {
+                  {sortedLinks.map((link) => {
                     const key = formatTripleKey(link)
                     const on =
                       pinned === key ||
