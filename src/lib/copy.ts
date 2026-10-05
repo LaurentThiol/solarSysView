@@ -105,6 +105,11 @@ export const GLOSSARY: GlossaryEntry[] = [
     text: "Preset de fenêtre : l’année civile qui précède celle du dernier tirage, du 1er janvier au 31 décembre.",
   },
   {
+    term: "Annuel",
+    group: "fenetre",
+    text: "Onglet Évolution : trois années n, n−1 et n−2 en barres verticales, somme des 5 numéros. Les mois ont la même largeur, un trait ferme chaque mois, un trait horizontal marque 128. Δ compare les moyennes de mois. Ce n’est pas la fenêtre « année civile » : les trois années restent entières, le filtre jour s’applique. Lecture d’archive, pas un pronostic.",
+  },
+  {
     term: "Formule actuelle (12 ★)",
     group: "fenetre",
     text: "Tirages depuis le pool d’étoiles 1–12 (2016). « Tout l’historique » mélange aussi les anciennes formules (1–9 puis 1–11).",

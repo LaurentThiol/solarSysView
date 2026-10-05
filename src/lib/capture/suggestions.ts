@@ -32,6 +32,13 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
     ]
   }
   if (lab === "evolution") {
+    if (tab === "annuel") {
+      return [
+        "Compare les sommes des numéros de n, n−1 et n−2 : quels mois s’écartent de 128, et le Δ de moyenne dit-il autre chose qu’un mois court ?",
+        "Le trait de fin de mois aligne-t-il les trois années, y compris en février ?",
+        "Rappelle que chaque tirage est indépendant : une barre haute ne change pas la suivante.",
+      ]
+    }
     return [
       "Résume la courbe affichée : niveau, pente récente, SMA / Bollinger s’ils sont visibles, écarts n − n−1 (DeltaEvol) s’ils sont à l’écran, gains FR/EU (log, mardi/vendredi, longueur de report, masse empilée), pair/impair, forme (étendue, consécutifs, décennies).",
       "S’il y a une annotation chartiste : colle-t-elle à la courbe, ou est-ce une projection ? Compare au départ, à l’arrivée et à la lecture géométrique jointe.",

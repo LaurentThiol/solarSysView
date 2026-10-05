@@ -42,7 +42,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Évolution",
         help: {
           title: "Évolution",
-          body: "Courbes dans le temps, gains FR/EU (log, jour mardi/vendredi/synthèse, report, masse empilée, dessin chartiste), suivi pair/impair, forme de la grille, classements. Accès protégé par mot de passe admin.",
+          body: "Courbes dans le temps, Annuel (somme des numéros sur n, n−1 et n−2, trait en fin de mois), gains FR/EU (log, jour mardi/vendredi/synthèse, report, masse empilée, dessin chartiste), suivi pair/impair, forme de la grille, classements. Accès protégé par mot de passe admin.",
         },
       },
     ],

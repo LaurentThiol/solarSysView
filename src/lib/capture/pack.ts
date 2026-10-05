@@ -443,6 +443,8 @@ export function packEvolution(input: {
   sketches: ChartSketch[]
   chartMeta?: EvolutionChartMeta | null
   bounce?: BounceCapture | null
+  tab?: string | null
+  reading?: string | null
 }): CaptureContext {
   const drawings = input.sketches.map(compactSketch)
   const summary = [
@@ -452,20 +454,22 @@ export function packEvolution(input: {
     }`,
     input.bounce
       ? bounceSummary(input.bounce)
-      : input.chartMeta
-        ? `Série ${input.chartMeta.modeLabel}${
-            input.chartMeta.showSma ? ` · SMA ${input.chartMeta.smaPeriod}` : ""
-          }${input.chartMeta.showBb ? " · Bollinger" : ""}`
-        : "Courbe d’évolution",
+      : input.reading
+        ? input.reading
+        : input.chartMeta
+          ? `Série ${input.chartMeta.modeLabel}${
+              input.chartMeta.showSma ? ` · SMA ${input.chartMeta.smaPeriod}` : ""
+            }${input.chartMeta.showBb ? " · Bollinger" : ""}`
+          : "Courbe d’évolution",
   ]
   if (drawings.length) {
     summary.push(...drawingSummaryLines(input.sketches))
-  } else {
+  } else if (!input.reading) {
     summary.push("Aucune annotation chartiste posée sur la courbe.")
   }
   return {
     lab: "evolution",
-    tab: input.bounce ? "bouncing" : (input.chartMeta?.mode ?? input.period),
+    tab: input.tab ?? (input.bounce ? "bouncing" : (input.chartMeta?.mode ?? input.period)),
     archive: {
       n: input.drawCount,
       from: input.from,

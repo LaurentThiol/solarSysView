@@ -9,6 +9,7 @@ import { SiteHeaderSlot } from "@/components/site-header-slot"
 import { useRegisterCapture } from "@/components/capture"
 import { BouncingPanel } from "@/components/bouncing-panel"
 import { DrawChart } from "@/components/draw-chart"
+import { EvolutionAnnual } from "@/components/evolution-annual"
 import { EvolutionDelta } from "@/components/evolution-delta"
 import { EvolutionGains } from "@/components/evolution-gains"
 import { EvolutionHeat } from "@/components/evolution-heat"
@@ -55,7 +56,7 @@ import { useDraws, type DrawWindow } from "@/lib/use-draws"
 import { useWeekdayScope } from "@/lib/use-weekday-scope"
 import type { WeekdayScope } from "@/lib/weekday-scope"
 
-const EVOLUTION_CHART_TABS = ["courbes", "bouncing"] as const
+const EVOLUTION_CHART_TABS = ["courbes", "bouncing", "annuel"] as const
 
 const CHART_TABS = [
   {
@@ -72,6 +73,14 @@ const CHART_TABS = [
     help: {
       title: "Bouncing",
       body: "Cherche, sur n1…n5 et e1, e2, les passages où la courbe fait des arches de plus en plus basses, comme une balle qui s’amortit. La dérivée de chaque arche doit suivre celle d’une parabole. Les curseurs resserrent la recherche vers la droite. Lecture du tracé, pas un pronostic.",
+    },
+  },
+  {
+    id: "annuel",
+    label: "Annuel",
+    help: {
+      title: "Annuel",
+      body: "Somme des 5 numéros sur trois années civiles, n, n−1 et n−2, en barres verticales alignées. Un trait ferme chaque mois. La fenêtre 20 / 50 / année ne coupe pas ces trois années ; le filtre jour, oui.",
     },
   },
 ] as const
@@ -331,6 +340,11 @@ function EvolutionContent() {
       sketches: [...sketches, ...deltaSketches, ...gainsSketches],
       chartMeta,
       bounce: chartTab === "bouncing" ? bounceCapture : null,
+      tab: chartTab,
+      reading:
+        chartTab === "annuel"
+          ? "Annuel · somme des 5 numéros · n, n−1, n−2 · trait de fin de mois"
+          : null,
     })
   )
 
@@ -444,7 +458,9 @@ function EvolutionContent() {
           items={CHART_TABS}
         />
         <PillTabPanel idPrefix="evolution-chart" tab={chartTab}>
-          {chartTab === "bouncing" ? (
+          {chartTab === "annuel" ? (
+            <EvolutionAnnual weekday={weekday} />
+          ) : chartTab === "bouncing" ? (
             <BouncingPanel
               draws={filtered}
               onEpisode={onBounce}
@@ -541,8 +557,8 @@ function EvolutionContent() {
       <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
         Chaque tirage est indépendant. Les fréquences, la SMA, les bandes de
         Bollinger, les écarts n − n−1, le cumul pair/impair, les totaux de
-        gagnants, la longueur de report et la masse empilée décrivent la fenêtre
-        choisie, elles ne prédisent pas le prochain tirage.
+        gagnants, la longueur de report, la masse empilée et les barres annuelles
+        décrivent l’archive, elles ne prédisent pas le prochain tirage.
       </p>
     </div>
   )
