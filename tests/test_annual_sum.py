@@ -35,7 +35,8 @@ def test_annual_tab_is_wired() -> None:
     assert "EvolutionAnnual" in panel
     assert "data-annual-pants" in view
     assert "data-month-end" in view
-    assert "data-annual-synthese" in view
+    assert 'data-annual-synthese="continu"' in view
+    assert "trait continu" in view
     assert "aria-pressed" in view
     assert "mardi + vendredi" in view
     assert "ne tire pas le mercredi" in glossary

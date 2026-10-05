@@ -27,7 +27,7 @@ Les mois descendent, de janvier à décembre, et ont la même hauteur. Le jour p
 
 Le trait vertical est la moyenne théorique, 128. L’échelle est commune et resserrée sur les sommes observées : elle ne part pas de 0, pour que l’écart se voie. Elle ne bouge pas quand un soir s’éteint.
 
-Mardi (cyan) et vendredi (rose) se sélectionnent ici. Le bandeau ne fait que poser le premier choix : les deux soirs restent chargés, l’autre jour se rallume d’un clic. Synthèse trace, pour chaque mois, la moyenne des sommes du mardi et du vendredi ensemble — le chiffre du mois suit alors cette moyenne, même si une soirée est masquée. EuroMillions ne tire pas le mercredi : il n’y a pas de série mercredi.
+Mardi (cyan) et vendredi (rose) se sélectionnent ici. Le bandeau ne fait que poser le premier choix : les deux soirs restent chargés, l’autre jour se rallume d’un clic. Synthèse trace un trait continu qui passe par la somme de chaque tirage, mardi et vendredi, de janvier à décembre. Chaque point est un jour de tirage. Le chiffre à droite du mois reste la moyenne de ces tirages, même si une soirée est masquée. EuroMillions ne tire pas le mercredi : il n’y a pas de série mercredi.
 
 « en cours » : l’année n n’a pas encore de tirage en décembre. Δ, à droite, compare les moyennes de mois affichées (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. La fenêtre 20 / 50 / année ne coupe pas ces trois années.
 
@@ -69,24 +69,9 @@ type MonthReadout = {
   count: number
 }
 
-type SyntheseMark = {
-  month: number
-  label: string
-  mean: number | null
-  count: number
-}
-
 type Tip =
   | { kind: "bar"; bar: AnnualBar; year: number }
-  | {
-      kind: "synthese"
-      year: number
-      month: number
-      label: string
-      mean: number
-      count: number
-      x: number
-    }
+  | { kind: "synthese"; bar: AnnualBar; year: number }
 
 function picksFor(scope: WeekdayScope): DayPicks {
   if (scope === "mardi") return { mardi: true, vendredi: false, synthese: false }
@@ -121,8 +106,8 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
     () => model.lanes.map((lane) => monthReadout(lane, picks)),
     [model.lanes, picks]
   )
-  const marks = useMemo(
-    () => model.lanes.map((lane) => (picks.synthese ? syntheseMarks(lane) : [])),
+  const lines = useMemo(
+    () => model.lanes.map((lane) => (picks.synthese ? synthesePoints(lane) : [])),
     [model.lanes, picks.synthese]
   )
   const localGap =
@@ -147,7 +132,7 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
         </CardTitle>
         <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
           Barres horizontales. n, n−1 et n−2 sont en tête. Mardi et vendredi se choisissent.
-          Synthèse ajoute la moyenne mensuelle des deux soirs. Trait horizontal en fin de mois,
+          Synthèse relie chaque tirage par un trait continu. Trait horizontal en fin de mois,
           trait vertical à 128.
         </p>
       </CardHeader>
@@ -229,10 +214,9 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
                 yMax={model.yMax}
                 bars={visibleBars(lane, picks)}
                 readout={readouts[index] ?? []}
-                marks={marks[index] ?? []}
+                points={lines[index] ?? []}
                 loading={archive.loading && lane.bars.length === 0}
-                activeDate={tip?.kind === "bar" && tip.year === lane.year ? tip.bar.date : null}
-                activeMonth={tip?.kind === "synthese" && tip.year === lane.year ? tip.month : null}
+                activeDate={tip && tip.year === lane.year ? tip.bar.date : null}
                 onHover={(next) =>
                   setTip((current) => (sameTip(current, next) ? current : next))
                 }
@@ -300,8 +284,8 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
               <line
                 x1={LABEL_W}
                 x2={LABEL_W + COLS_W}
-                y1={yTime(tip.kind === "bar" ? tip.bar.x : tip.x)}
-                y2={yTime(tip.kind === "bar" ? tip.bar.x : tip.x)}
+                y1={yTime(tip.bar.x)}
+                y2={yTime(tip.bar.x)}
                 stroke="var(--foreground)"
                 strokeOpacity={0.35}
                 pointerEvents="none"
@@ -320,7 +304,7 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
           ) : (
             <span className="text-muted-foreground">
               {picks.synthese
-                ? "Survolez une barre ou la synthèse pour lire la date, la moyenne et l’écart à 128."
+                ? "Survolez une barre ou le trait continu pour lire la date, les numéros et l’écart à 128."
                 : "Survolez une barre pour lire la date, les numéros et l’écart à 128."}
             </span>
           )}
@@ -396,10 +380,9 @@ function YearColumn({
   yMax,
   bars,
   readout,
-  marks,
+  points,
   loading,
   activeDate,
-  activeMonth,
   onHover,
 }: {
   lane: AnnualLane
@@ -408,10 +391,9 @@ function YearColumn({
   yMax: number
   bars: readonly AnnualBar[]
   readout: readonly MonthReadout[]
-  marks: readonly SyntheseMark[]
+  points: readonly AnnualBar[]
   loading: boolean
   activeDate: string | null
-  activeMonth: number | null
   onHover: (tip: Tip) => void
 }) {
   const left = colLeft(index)
@@ -458,34 +440,39 @@ function YearColumn({
           </rect>
         )
       })}
-      {marks.map((mark) => {
-        if (mark.mean == null || mark.count === 0) return null
-        const y = yTime((mark.month - 0.5) / 12)
-        const end = sumX(index, mark.mean, yMin, yMax)
-        const highlighted = activeMonth === mark.month
-        return (
-          <g
-            key={`synthese-${mark.month}`}
-            data-annual-synthese={mark.month}
-            data-annual-synthese-mean={Math.round(mark.mean)}
-          >
-            <line
-              x1={origin}
-              x2={end}
-              y1={y}
-              y2={y}
+      {points.length > 0 ? (
+        <g data-annual-synthese="continu" pointerEvents="none">
+          {points.length > 1 ? (
+            <polyline
+              points={points
+                .map((bar) => `${sumX(index, bar.sum, yMin, yMax)},${yTime(bar.x)}`)
+                .join(" ")}
+              fill="none"
               stroke="var(--foreground)"
-              strokeDasharray="2 2"
-              strokeWidth={highlighted ? 1.8 : 1.15}
+              strokeWidth={1.7}
+              strokeLinejoin="round"
+              strokeLinecap="round"
             />
-            <circle cx={end} cy={y} r={highlighted ? 4 : 3.1} fill="var(--foreground)" />
-            <title>
-              Synthèse · {mark.label} · {lane.year} · moyenne {formatInt(mark.mean)} · {mark.count}{" "}
-              tirages · mardi + vendredi
-            </title>
-          </g>
-        )
-      })}
+          ) : null}
+          {points.map((bar) => {
+            const highlighted = activeDate === bar.date
+            return (
+              <circle
+                key={bar.date}
+                data-annual-synthese-point={bar.date}
+                cx={sumX(index, bar.sum, yMin, yMax)}
+                cy={yTime(bar.x)}
+                r={highlighted ? 3.6 : 2.2}
+                fill="var(--foreground)"
+              >
+                <title>
+                  Synthèse · {formatDrawDate(bar.date)} · somme {formatInt(bar.sum)} · mardi + vendredi
+                </title>
+              </circle>
+            )
+          })}
+        </g>
+      ) : null}
       {lane.months.map((month, monthIndex) => {
         const mean = readout[monthIndex]?.mean ?? null
         return (
@@ -509,7 +496,7 @@ function YearColumn({
         fill="transparent"
         style={{ cursor: "crosshair" }}
         onPointerMove={(event) => {
-          const next = nearestTip(event, lane, bars, marks)
+          const next = nearestTip(event, lane, bars, points)
           if (next) onHover(next)
         }}
       />
@@ -543,15 +530,17 @@ function Detail({ bar, year }: { bar: AnnualBar; year: number }) {
 }
 
 function SyntheseDetail({ tip }: { tip: Extract<Tip, { kind: "synthese" }> }) {
-  const draws = tip.count > 1 ? "tirages" : "tirage"
+  const numbers = [...tip.bar.numbers].sort((a, b) => a - b).join(" ")
   return (
     <>
       <span className="text-foreground">Synthèse</span>
-      <span className="text-muted-foreground"> · {tip.label} · {tip.year} · moyenne </span>
-      <span className="text-foreground">{formatInt(tip.mean)}</span>
+      <span className="text-muted-foreground"> · {formatDrawDate(tip.bar.date)} · {tip.year} · </span>
+      <span className="text-foreground">{numbers}</span>
+      <span className="text-muted-foreground"> · somme </span>
+      <span className="text-foreground">{formatInt(tip.bar.sum)}</span>
       <span className="text-muted-foreground">
         {" "}
-        · {tip.count} {draws} · mardi + vendredi · écart {signedGap(tip.mean)} à 128
+        · écart {signedGap(tip.bar.sum)} à 128 · mardi + vendredi
       </span>
     </>
   )
@@ -597,10 +586,10 @@ function BarSwatch({ color, muted }: { color: string; muted: boolean }) {
 
 function SyntheseSwatch({ muted }: { muted: boolean }) {
   return (
-    <span className="inline-flex items-center gap-0.5" style={{ opacity: muted ? 0.35 : 1 }}>
-      <span className="inline-block h-px w-3 border-t border-dashed border-foreground" />
-      <span className="inline-block size-1.5 rounded-full bg-foreground" />
-    </span>
+    <span
+      className="inline-block h-0.5 w-4 rounded-full bg-foreground"
+      style={{ opacity: muted ? 0.35 : 1 }}
+    />
   )
 }
 
@@ -690,7 +679,7 @@ function nearestTip(
   event: React.PointerEvent<SVGRectElement>,
   lane: AnnualLane,
   bars: readonly AnnualBar[],
-  marks: readonly SyntheseMark[]
+  points: readonly AnnualBar[]
 ): Tip | null {
   const svg = event.currentTarget.ownerSVGElement
   const matrix = svg?.getScreenCTM()
@@ -709,30 +698,19 @@ function nearestTip(
       bestBarDist = dist
     }
   }
-  let bestMark: SyntheseMark | null = null
-  let bestMarkDist = 1 / 24
-  for (const mark of marks) {
-    if (mark.mean == null || mark.count === 0) continue
-    const dist = Math.abs((mark.month - 0.5) / 12 - unit)
-    if (dist < bestMarkDist) {
-      bestMark = mark
-      bestMarkDist = dist
+  let bestPoint: AnnualBar | null = null
+  let bestPointDist = 0.02
+  for (const bar of points) {
+    const dist = Math.abs(bar.x - unit)
+    if (dist < bestPointDist) {
+      bestPoint = bar
+      bestPointDist = dist
     }
   }
-  if (bestBar && (!bestMark || bestBarDist <= bestMarkDist)) {
+  if (bestBar && (!bestPoint || bestBarDist <= bestPointDist)) {
     return { kind: "bar", bar: bestBar, year: lane.year }
   }
-  if (bestMark?.mean != null) {
-    return {
-      kind: "synthese",
-      year: lane.year,
-      month: bestMark.month,
-      label: bestMark.label,
-      mean: bestMark.mean,
-      count: bestMark.count,
-      x: (bestMark.month - 0.5) / 12,
-    }
-  }
+  if (bestPoint) return { kind: "synthese", bar: bestPoint, year: lane.year }
   return null
 }
 
@@ -755,12 +733,8 @@ function monthReadout(lane: AnnualLane, picks: DayPicks): MonthReadout[] {
   return ANNUAL_MONTHS.map((item) => annualMonthMean(lane.bars, item.month, days))
 }
 
-function syntheseMarks(lane: AnnualLane): SyntheseMark[] {
-  return ANNUAL_MONTHS.map((item) => ({
-    month: item.month,
-    label: item.label,
-    ...annualMonthMean(lane.bars, item.month, ["mardi", "vendredi"]),
-  }))
+function synthesePoints(lane: AnnualLane): AnnualBar[] {
+  return lane.bars.filter((bar) => bar.weekday === "mardi" || bar.weekday === "vendredi")
 }
 
 function visibleBars(lane: AnnualLane, picks: DayPicks): AnnualBar[] {
@@ -779,7 +753,7 @@ function pairDelta(newer: MonthReadout | undefined, older: MonthReadout | undefi
 function sameTip(current: Tip | null, next: Tip): boolean {
   if (!current || current.year !== next.year || current.kind !== next.kind) return false
   if (current.kind === "bar" && next.kind === "bar") return current.bar.date === next.bar.date
-  if (current.kind === "synthese" && next.kind === "synthese") return current.month === next.month
+  if (current.kind === "synthese" && next.kind === "synthese") return current.bar.date === next.bar.date
   return false
 }
 
