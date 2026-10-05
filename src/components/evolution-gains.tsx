@@ -8,6 +8,7 @@ import { SketchPlotLayers } from "@/components/chart-draw/sketch-layers"
 import { SketchToolbar } from "@/components/chart-draw/sketch-toolbar"
 import { useSketchChart } from "@/components/chart-draw/use-sketch-chart"
 import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
+import { MonthEndMarks } from "@/components/month-end-marks"
 import { WeekdayDot, WeekdaySplitLegend } from "@/components/weekday-split"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -63,6 +64,7 @@ import {
   weekdaySplitFields,
   type DrawWeekday,
 } from "@/lib/weekday-scope"
+import { withMonthEndNote } from "@/lib/month-end"
 import { cn } from "@/lib/utils"
 
 type GainsView = "winners" | "jackpot" | "mass" | "stack" | "report"
@@ -742,7 +744,7 @@ export function EvolutionGains({
       <CardHeader className="gap-4">
         <div className="flex flex-col gap-3">
           <CardTitle className="text-base font-medium">
-            <TitleHelp help={TITLE_HELP}>Évolution dans le temps · gains</TitleHelp>
+            <TitleHelp help={withMonthEndNote(TITLE_HELP)}>Évolution dans le temps · gains</TitleHelp>
           </CardTitle>
           <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
             <div className="flex flex-col gap-1">
@@ -913,6 +915,7 @@ export function EvolutionGains({
                 onMouseLeave={() => sketch.onChartLeave()}
               >
                 <CartesianGrid vertical={false} />
+                <MonthEndMarks dates={series.map((point) => point.date)} />
                 <XAxis
                   dataKey="date"
                   tickLine={false}

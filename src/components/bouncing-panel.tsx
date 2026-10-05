@@ -12,6 +12,7 @@ import {
 } from "recharts"
 
 import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
+import { MonthEndMarks } from "@/components/month-end-marks"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -31,6 +32,7 @@ import {
   type BounceQuery,
 } from "@/lib/bouncing"
 import { formatShortDate, toDrawSeries, type Draw, type DrawSeriesPoint } from "@/lib/draws"
+import { withMonthEndNote } from "@/lib/month-end"
 import { cn } from "@/lib/utils"
 
 const HELP: HelpCopy = {
@@ -172,7 +174,7 @@ export function BouncingPanel({
     <Card>
       <CardHeader>
         <CardTitle>
-          <TitleHelp help={HELP}>Atténuation</TitleHelp>
+          <TitleHelp help={withMonthEndNote(HELP)}>Atténuation</TitleHelp>
         </CardTitle>
         <p className="text-xs text-muted-foreground">
           n1 à n5 et e1, e2 sur la fenêtre affichée. Vers la droite, chaque curseur
@@ -397,6 +399,7 @@ function BounceChart({
       <ChartContainer config={chartConfig} className="aspect-auto h-64 w-full">
         <ComposedChart data={rows} margin={{ left: 4, right: 8, top: 8 }}>
           <CartesianGrid vertical={false} />
+          <MonthEndMarks dates={points.map((point) => point.date)} />
           <XAxis
             dataKey="date"
             tickLine={false}

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
 import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
+import { MonthEndMarks } from "@/components/month-end-marks"
 import { WeekdaySeriesLines, WeekdaySplitLegend } from "@/components/weekday-split"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -23,6 +24,7 @@ import {
   summarizeParitySeries,
   toParityChart,
 } from "@/lib/draws"
+import { withMonthEndNote } from "@/lib/month-end"
 import { cn } from "@/lib/utils"
 import {
   seriesHasBothWeekdays,
@@ -304,7 +306,7 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
       <CardHeader className="gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-base font-medium">
-            <TitleHelp help={TITLE_HELP}>Suivi pair / impair</TitleHelp>
+            <TitleHelp help={withMonthEndNote(TITLE_HELP)}>Suivi pair / impair</TitleHelp>
           </CardTitle>
           <div className="flex flex-col gap-1">
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -350,6 +352,7 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
                 margin={{ left: 4, right: 8, top: 8, bottom: 4 }}
               >
                 <CartesianGrid vertical={false} />
+                <MonthEndMarks dates={points.map((point) => point.date)} />
                 <XAxis
                   dataKey="date"
                   tickLine={false}

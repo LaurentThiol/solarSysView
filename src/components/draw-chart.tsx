@@ -21,6 +21,7 @@ import { SketchToolbar } from "@/components/chart-draw/sketch-toolbar"
 import { useMagnetHold } from "@/components/chart-draw/use-magnet-hold"
 import { CurveName } from "@/components/chartisme/curve-thumb"
 import { HelpTip, LabelHelp, TitleHelp, type HelpCopy } from "@/components/help"
+import { MonthEndMarks } from "@/components/month-end-marks"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ChartContainer,
@@ -119,6 +120,7 @@ import {
   type DrawSeriesPoint,
   type ValueRange,
 } from "@/lib/draws"
+import { withMonthEndNote } from "@/lib/month-end"
 import {
   coupleNumberLinks,
   formatCoupleChartLink,
@@ -2097,7 +2099,7 @@ export function DrawChart({
       <CardHeader className="gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-base font-medium">
-            <TitleHelp help={TITLE_HELP[mode]}>
+            <TitleHelp help={withMonthEndNote(TITLE_HELP[mode])}>
               Évolution dans le temps
             </TitleHelp>
           </CardTitle>
@@ -2295,6 +2297,7 @@ export function DrawChart({
                 }}
               >
                 <CartesianGrid vertical={false} />
+                <MonthEndMarks dates={series.map((point) => point.date)} />
                 <XAxis
                   dataKey="date"
                   tickLine={false}

@@ -19,6 +19,7 @@ import { SketchPlotLayers } from "@/components/chart-draw/sketch-layers"
 import { SketchToolbar } from "@/components/chart-draw/sketch-toolbar"
 import { useSketchChart } from "@/components/chart-draw/use-sketch-chart"
 import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
+import { MonthEndMarks } from "@/components/month-end-marks"
 import { WeekdaySeriesLines, WeekdaySplitLegend } from "@/components/weekday-split"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -64,6 +65,7 @@ import {
 } from "@/lib/draw-overlays"
 import { weekdaySplitKeys } from "@/lib/draw-chart-rank"
 import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
+import { withMonthEndNote } from "@/lib/month-end"
 import { cn } from "@/lib/utils"
 import {
   seriesHasBothWeekdays,
@@ -632,7 +634,7 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
       <CardHeader className="gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-base font-medium">
-            <TitleHelp help={TITLE_HELP}>DeltaEvol</TitleHelp>
+            <TitleHelp help={withMonthEndNote(TITLE_HELP)}>DeltaEvol</TitleHelp>
           </CardTitle>
           <div className="flex flex-col gap-1">
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -774,6 +776,7 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
                 onMouseLeave={() => sketch.onChartLeave()}
               >
                 <CartesianGrid vertical={false} />
+                <MonthEndMarks dates={series.map((point) => point.date)} yAxisId="left" />
                 <XAxis
                   dataKey="date"
                   tickLine={false}
@@ -1089,6 +1092,7 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
                 >
                   <ComposedChart data={coherence.points} margin={{ left: 4, right: 8, top: 8, bottom: 4 }}>
                     <CartesianGrid vertical={false} />
+                    <MonthEndMarks dates={coherence.points.map((point) => point.date)} />
                     <XAxis
                       dataKey="date"
                       tickLine={false}

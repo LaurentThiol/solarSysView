@@ -4,6 +4,7 @@ import { useMemo } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
 import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
+import { MonthEndMarks } from "@/components/month-end-marks"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatCompactCount, formatCompactEuro, formatShortDate, type Draw } from "@/lib/draws"
@@ -15,6 +16,7 @@ import {
   type DivergenceAxisId,
   type RunningSumStdPoint,
 } from "@/lib/weekday-divergence"
+import { withMonthEndNote } from "@/lib/month-end"
 import { WEEKDAY_LINE_COLOR, weekdayLineDash } from "@/lib/weekday-scope"
 import { synthesizeWeekdays, type WeekdaySynthesisSide } from "@/lib/weekday-synthesis"
 
@@ -264,7 +266,7 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
     <Card className="min-w-0">
       <CardHeader className="pb-2">
         <CardTitle className="text-base">
-          <TitleHelp help={DIVERGENCE_HELP}>Divergence</TitleHelp>
+          <TitleHelp help={withMonthEndNote(DIVERGENCE_HELP)}>Divergence</TitleHelp>
         </CardTitle>
         <p className="text-xs text-muted-foreground">
           Δ = moyenne du mardi − moyenne du vendredi. Les pastilles détaillent chaque champ.
@@ -344,6 +346,7 @@ function DivergenceBlock({ draws }: { draws: Draw[] }) {
             <ChartContainer config={divergenceConfig} className="aspect-auto h-40 w-full">
               <LineChart data={report.runningSumStd} margin={{ left: 4, right: 8, top: 8, bottom: 4 }}>
                 <CartesianGrid vertical={false} />
+                <MonthEndMarks dates={report.runningSumStd.map((point) => point.date)} />
                 <XAxis
                   dataKey="date"
                   tickLine={false}
