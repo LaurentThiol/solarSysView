@@ -326,6 +326,7 @@ test("count floor hides co-draws seen once and keeps the heavier ones", () => {
   assert.match(lab, /linksAtLeast/)
   assert.match(lab, /data-couple-shown/)
   assert.match(lab, /data-link-count/)
+  assert.match(lab, /opacity-60/)
   assert.match(lab, /NEXT_FIELD_HELP\.minCount/)
 })
 

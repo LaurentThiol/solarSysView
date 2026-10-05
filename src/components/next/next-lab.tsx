@@ -469,6 +469,7 @@ export function NextLab() {
                     {visibleLinks.map((link) => {
                       const key = `${link.a}-${link.b}`
                       const on = pinned === key || (selected != null && (link.a === selected || link.b === selected))
+                      const quiet = link.count === 1 && pinned !== key
                       return (
                         <tr
                           key={key}
@@ -476,7 +477,7 @@ export function NextLab() {
                           className={cn(
                             "border-t border-border",
                             on && "bg-primary/15",
-                            link.count === 1 && !on && "text-muted-foreground"
+                            quiet && "text-muted-foreground opacity-60"
                           )}
                         >
                           <td className="py-1 pr-3">
@@ -549,7 +550,8 @@ export function NextLab() {
                             type="button"
                             className={cn(
                               "w-full rounded-lg border border-transparent px-2 py-1.5 text-left text-sm hover:bg-muted/60",
-                              pinned === key && "border-border bg-primary/15"
+                              pinned === key && "border-border bg-primary/15",
+                              link.count === 1 && pinned !== key && "text-muted-foreground opacity-60"
                             )}
                             aria-pressed={pinned === key}
                             onClick={() => selectLink(link)}

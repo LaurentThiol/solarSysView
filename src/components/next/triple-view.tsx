@@ -253,6 +253,7 @@ export function TripleReading({
                     const on =
                       pinned === key ||
                       (selected != null && (link.a === selected || link.b === selected || link.c === selected))
+                    const quiet = link.count === 1 && pinned !== key
                     return (
                       <tr
                         key={key}
@@ -260,7 +261,7 @@ export function TripleReading({
                         className={cn(
                           "border-t border-border",
                           on && "bg-primary/15",
-                          link.count === 1 && !on && "text-muted-foreground"
+                          quiet && "text-muted-foreground opacity-60"
                         )}
                       >
                         <td className="py-1 pr-3">
@@ -333,7 +334,8 @@ export function TripleReading({
                           type="button"
                           className={cn(
                             "w-full rounded-lg border border-transparent px-2 py-1.5 text-left text-sm hover:bg-muted/60",
-                            pinned === key && "border-border bg-primary/15"
+                            pinned === key && "border-border bg-primary/15",
+                            link.count === 1 && pinned !== key && "text-muted-foreground opacity-60"
                           )}
                           aria-pressed={pinned === key}
                           onClick={() => onSelectLink(link)}

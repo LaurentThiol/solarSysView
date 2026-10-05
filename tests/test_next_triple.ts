@@ -211,6 +211,7 @@ test("Triplets list uses the same count floor as Couples", () => {
   assert.match(source, /linksAtLeast/)
   assert.match(source, /data-triple-shown/)
   assert.match(source, /data-link-count/)
+  assert.match(source, /opacity-60/)
   assert.match(source, /NEXT_TRIPLE_FIELD_HELP\.minCount/)
   assert.match(NEXT_TRIPLE_FIELD_HELP.minCount.body, /une seule fois/)
   assert.match(NEXT_TRIPLE_FIELD_HELP.triples.body, /sélecteur Compte/)
