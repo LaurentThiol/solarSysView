@@ -35,6 +35,10 @@ def test_annual_tab_is_wired() -> None:
     assert "EvolutionAnnual" in panel
     assert "data-annual-pants" in view
     assert "data-month-end" in view
+    assert "data-annual-synthese" in view
+    assert "aria-pressed" in view
+    assert "mardi + vendredi" in view
+    assert "ne tire pas le mercredi" in glossary
     assert "Annuel" in page
     assert 'term: "Annuel"' in glossary
     assert "Annuel · somme des 5 numéros" in pack or "reading" in pack

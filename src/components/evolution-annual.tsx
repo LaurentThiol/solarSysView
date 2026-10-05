@@ -6,6 +6,7 @@ import { TitleHelp, type HelpCopy } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ANNUAL_MONTHS,
+  annualMonthMean,
   annualPants,
   THEORETICAL_NUMBER_SUM,
   type AnnualBar,
@@ -14,18 +15,21 @@ import {
 } from "@/lib/annual-sum"
 import { newestCalendarYear } from "@/lib/analysis-window"
 import { DRAWS, formatDrawDate, type Draw } from "@/lib/draws"
-import { filterDrawsByWeekday, WEEKDAY_LINE_COLOR, type WeekdayScope } from "@/lib/weekday-scope"
+import { cn } from "@/lib/utils"
+import { WEEKDAY_LINE_COLOR, type WeekdayScope } from "@/lib/weekday-scope"
 
 const TITLE_HELP: HelpCopy = {
   title: "Annuel",
   wide: true,
   body: `Graphique horizontal. Les années n, n−1 et n−2 sont en tête, côte à côte. Chaque barre part vers la droite : c’est la somme des 5 numéros d’un tirage.
 
-Les mois descendent, de janvier à décembre, et ont la même hauteur. Le jour place la barre dans le mois, donc une fin de mois tombe au même endroit sur les trois années — février bissextile compris. Le trait horizontal ferme le mois. Le chiffre à droite de la colonne est la moyenne des sommes de ce mois.
+Les mois descendent, de janvier à décembre, et ont la même hauteur. Le jour place la barre dans le mois, donc une fin de mois tombe au même endroit sur les trois années — février bissextile compris. Le trait horizontal ferme le mois. Le chiffre à droite de la colonne est la moyenne des sommes de ce mois, pour les soirs laissés allumés.
 
-Le trait vertical est la moyenne théorique, 128. L’échelle est commune et resserrée sur les sommes observées : elle ne part pas de 0, pour que l’écart se voie.
+Le trait vertical est la moyenne théorique, 128. L’échelle est commune et resserrée sur les sommes observées : elle ne part pas de 0, pour que l’écart se voie. Elle ne bouge pas quand un soir s’éteint.
 
-Mardi en cyan, vendredi en rose. « en cours » : l’année n n’a pas encore de tirage en décembre. Δ, à droite, compare les moyennes de mois (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. Le filtre jour du bandeau s’applique ; la fenêtre 20 / 50 / année ne coupe pas ces trois années.
+Mardi (cyan) et vendredi (rose) se sélectionnent ici. Le bandeau ne fait que poser le premier choix : les deux soirs restent chargés, l’autre jour se rallume d’un clic. Synthèse trace, pour chaque mois, la moyenne des sommes du mardi et du vendredi ensemble — le chiffre du mois suit alors cette moyenne, même si une soirée est masquée. EuroMillions ne tire pas le mercredi : il n’y a pas de série mercredi.
+
+« en cours » : l’année n n’a pas encore de tirage en décembre. Δ, à droite, compare les moyennes de mois affichées (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. La fenêtre 20 / 50 / année ne coupe pas ces trois années.
 
 Lecture d’archive. Les tirages restent indépendants.`,
 }
@@ -54,33 +58,80 @@ const MEAN_GUTTER = 32
 const COLS_W = VB_W - LABEL_W - DELTA_W - PAD_R
 const COL_W = (COLS_W - 2 * COL_GAP) / 3
 
-type Tip = {
-  bar: AnnualBar
-  year: number
+type DayPicks = {
+  mardi: boolean
+  vendredi: boolean
+  synthese: boolean
+}
+
+type MonthReadout = {
+  mean: number | null
+  count: number
+}
+
+type SyntheseMark = {
+  month: number
+  label: string
+  mean: number | null
+  count: number
+}
+
+type Tip =
+  | { kind: "bar"; bar: AnnualBar; year: number }
+  | {
+      kind: "synthese"
+      year: number
+      month: number
+      label: string
+      mean: number
+      count: number
+      x: number
+    }
+
+function picksFor(scope: WeekdayScope): DayPicks {
+  if (scope === "mardi") return { mardi: true, vendredi: false, synthese: false }
+  if (scope === "vendredi") return { mardi: false, vendredi: true, synthese: false }
+  if (scope === "synthese") return { mardi: true, vendredi: true, synthese: true }
+  return { mardi: true, vendredi: true, synthese: false }
 }
 
 export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
   const archive = useAnnualArchive()
-  const filtered = useMemo(
-    () => filterDrawsByWeekday(archive.draws, weekday),
-    [archive.draws, weekday]
-  )
   const model = useMemo(
     () =>
       annualPants(
-        filtered.map((draw) => ({
+        archive.draws.map((draw) => ({
           date: draw.date,
           weekday: draw.weekday,
           numbers: draw.numbers,
         })),
         archive.anchor
       ),
-    [filtered, archive.anchor]
+    [archive.draws, archive.anchor]
   )
+  const [picks, setPicks] = useState<DayPicks>(() => picksFor(weekday))
   const [tip, setTip] = useState<Tip | null>(null)
-  const days = useMemo(() => weekdaysPresent(model.lanes), [model.lanes])
+  const [seededWeekday, setSeededWeekday] = useState(weekday)
+  if (seededWeekday !== weekday) {
+    setSeededWeekday(weekday)
+    setPicks(picksFor(weekday))
+    setTip(null)
+  }
+  const readouts = useMemo(
+    () => model.lanes.map((lane) => monthReadout(lane, picks)),
+    [model.lanes, picks]
+  )
+  const marks = useMemo(
+    () => model.lanes.map((lane) => (picks.synthese ? syntheseMarks(lane) : [])),
+    [model.lanes, picks.synthese]
+  )
   const localGap =
     archive.source === "json" && model.lanes.slice(1).every((lane) => lane.bars.length === 0)
+  const nothingOn = !picks.mardi && !picks.vendredi && !picks.synthese
+  function togglePick(key: keyof DayPicks) {
+    setPicks((current) => ({ ...current, [key]: !current[key] }))
+    setTip(null)
+  }
   const summary = model.lanes
     .map((lane) => {
       const mean = lane.mean == null ? "sans tirage" : `moyenne ${formatInt(lane.mean)}`
@@ -95,18 +146,33 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
           <TitleHelp help={TITLE_HELP}>Somme des numéros</TitleHelp>
         </CardTitle>
         <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
-          Barres horizontales. n, n−1 et n−2 sont en tête. Trait horizontal en fin de mois,
-          trait vertical à 128. Le chiffre en bout de colonne est la moyenne du mois.
+          Barres horizontales. n, n−1 et n−2 sont en tête. Mardi et vendredi se choisissent.
+          Synthèse ajoute la moyenne mensuelle des deux soirs. Trait horizontal en fin de mois,
+          trait vertical à 128.
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {days.has("mardi") ? (
-            <LegendSwatch color={WEEKDAY_LINE_COLOR.mardi} label="Mardi" />
-          ) : null}
-          {days.has("vendredi") ? (
-            <LegendSwatch color={WEEKDAY_LINE_COLOR.vendredi} label="Vendredi" />
-          ) : null}
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Jours du graphique annuel">
+            <DayToggle
+              pressed={picks.mardi}
+              label="Mardi"
+              onClick={() => togglePick("mardi")}
+              swatch={<BarSwatch color={WEEKDAY_LINE_COLOR.mardi} muted={!picks.mardi} />}
+            />
+            <DayToggle
+              pressed={picks.vendredi}
+              label="Vendredi"
+              onClick={() => togglePick("vendredi")}
+              swatch={<BarSwatch color={WEEKDAY_LINE_COLOR.vendredi} muted={!picks.vendredi} />}
+            />
+            <DayToggle
+              pressed={picks.synthese}
+              label="Synthèse"
+              onClick={() => togglePick("synthese")}
+              swatch={<SyntheseSwatch muted={!picks.synthese} />}
+            />
+          </div>
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block h-3 w-px border-l border-dashed border-muted-foreground" />
             Moyenne 128
@@ -161,14 +227,14 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
                 index={index}
                 yMin={model.yMin}
                 yMax={model.yMax}
+                bars={visibleBars(lane, picks)}
+                readout={readouts[index] ?? []}
+                marks={marks[index] ?? []}
                 loading={archive.loading && lane.bars.length === 0}
-                active={tip?.year === lane.year ? tip.bar.date : null}
-                onHover={(bar) =>
-                  setTip((current) =>
-                    current?.year === lane.year && current.bar.date === bar.date
-                      ? current
-                      : { bar, year: lane.year }
-                  )
+                activeDate={tip?.kind === "bar" && tip.year === lane.year ? tip.bar.date : null}
+                activeMonth={tip?.kind === "synthese" && tip.year === lane.year ? tip.month : null}
+                onHover={(next) =>
+                  setTip((current) => (sameTip(current, next) ? current : next))
                 }
               />
             ))}
@@ -195,43 +261,47 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
               </g>
             ))}
 
-            {model.deltas[0] && model.deltas[1]
-              ? ANNUAL_MONTHS.map((month, index) => (
-                  <g key={`delta-${month.month}`} data-annual-delta={month.month}>
-                    <text
-                      x={LABEL_W + COLS_W + 4}
-                      y={yTime((month.month - 0.5) / 12) - 1}
-                      fill={deltaFill(model.deltas[0][index]?.delta ?? null)}
-                      fontSize="10"
-                    >
-                      <title>
-                        {DELTA_TITLE[0]} · {month.label} · {model.deltas[0][index]?.newerCount ?? 0}{" "}
-                        tirages contre {model.deltas[0][index]?.olderCount ?? 0}
-                      </title>
-                      {formatDelta(model.deltas[0][index]?.delta ?? null)}
-                    </text>
-                    <text
-                      x={LABEL_W + COLS_W + 4}
-                      y={yTime((month.month - 0.5) / 12) + 12}
-                      fill={deltaFill(model.deltas[1][index]?.delta ?? null)}
-                      fontSize="10"
-                    >
-                      <title>
-                        {DELTA_TITLE[1]} · {month.label} · {model.deltas[1][index]?.newerCount ?? 0}{" "}
-                        tirages contre {model.deltas[1][index]?.olderCount ?? 0}
-                      </title>
-                      {formatDelta(model.deltas[1][index]?.delta ?? null)}
-                    </text>
-                  </g>
-                ))
+            {readouts[0] && readouts[1] && readouts[2]
+              ? ANNUAL_MONTHS.map((month, index) => {
+                  const newer = pairDelta(readouts[0][index], readouts[1][index])
+                  const older = pairDelta(readouts[1][index], readouts[2][index])
+                  return (
+                    <g key={`delta-${month.month}`} data-annual-delta={month.month}>
+                      <text
+                        x={LABEL_W + COLS_W + 4}
+                        y={yTime((month.month - 0.5) / 12) - 1}
+                        fill={deltaFill(newer)}
+                        fontSize="10"
+                      >
+                        <title>
+                          {DELTA_TITLE[0]} · {month.label} · {readouts[0][index]?.count ?? 0} tirages
+                          contre {readouts[1][index]?.count ?? 0}
+                        </title>
+                        {formatDelta(newer)}
+                      </text>
+                      <text
+                        x={LABEL_W + COLS_W + 4}
+                        y={yTime((month.month - 0.5) / 12) + 12}
+                        fill={deltaFill(older)}
+                        fontSize="10"
+                      >
+                        <title>
+                          {DELTA_TITLE[1]} · {month.label} · {readouts[1][index]?.count ?? 0} tirages
+                          contre {readouts[2][index]?.count ?? 0}
+                        </title>
+                        {formatDelta(older)}
+                      </text>
+                    </g>
+                  )
+                })
               : null}
 
             {tip ? (
               <line
                 x1={LABEL_W}
                 x2={LABEL_W + COLS_W}
-                y1={yTime(tip.bar.x)}
-                y2={yTime(tip.bar.x)}
+                y1={yTime(tip.kind === "bar" ? tip.bar.x : tip.x)}
+                y2={yTime(tip.kind === "bar" ? tip.bar.x : tip.x)}
                 stroke="var(--foreground)"
                 strokeOpacity={0.35}
                 pointerEvents="none"
@@ -241,15 +311,23 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
         </div>
 
         <p data-annual-detail aria-live="polite" className="min-h-10 text-sm leading-5 tabular-nums">
-          {tip ? <Detail bar={tip.bar} year={tip.year} /> : (
+          {nothingOn ? (
+            <span className="text-muted-foreground">Aucun soir sélectionné.</span>
+          ) : tip?.kind === "bar" ? (
+            <Detail bar={tip.bar} year={tip.year} />
+          ) : tip?.kind === "synthese" ? (
+            <SyntheseDetail tip={tip} />
+          ) : (
             <span className="text-muted-foreground">
-              Survolez une barre pour lire la date, les numéros et l’écart à 128.
+              {picks.synthese
+                ? "Survolez une barre ou la synthèse pour lire la date, la moyenne et l’écart à 128."
+                : "Survolez une barre pour lire la date, les numéros et l’écart à 128."}
             </span>
           )}
         </p>
         <p className="text-xs leading-5 text-muted-foreground">
-          Δ n : moyenne du mois de n moins celle de n−1. Δ n−1 : n−1 moins n−2. Positif, la
-          moyenne la plus récente est plus haute.{" "}
+          Δ suit les moyennes affichées : les soirs allumés, ou mardi + vendredi si Synthèse est
+          allumée. Positif, la moyenne la plus récente est plus haute.{" "}
           {archive.source === "neon" ? "Source Neon." : "Source fichier local."}
           {localGap
             ? " n−1 et n−2 restent vides tant que l’archive distante ne répond pas."
@@ -316,17 +394,25 @@ function YearColumn({
   index,
   yMin,
   yMax,
+  bars,
+  readout,
+  marks,
   loading,
-  active,
+  activeDate,
+  activeMonth,
   onHover,
 }: {
   lane: AnnualLane
   index: number
   yMin: number
   yMax: number
+  bars: readonly AnnualBar[]
+  readout: readonly MonthReadout[]
+  marks: readonly SyntheseMark[]
   loading: boolean
-  active: string | null
-  onHover: (bar: AnnualBar) => void
+  activeDate: string | null
+  activeMonth: number | null
+  onHover: (tip: Tip) => void
 }) {
   const left = colLeft(index)
   const origin = left + 4
@@ -348,10 +434,10 @@ function YearColumn({
         strokeDasharray="4 3"
         strokeOpacity={0.8}
       />
-      {lane.bars.map((bar) => {
+      {bars.map((bar) => {
         const y = yTime(bar.x)
         const end = sumX(index, bar.sum, yMin, yMax)
-        const highlighted = active === bar.date
+        const highlighted = activeDate === bar.date
         return (
           <rect
             key={bar.date}
@@ -364,6 +450,7 @@ function YearColumn({
             stroke={highlighted ? "var(--foreground)" : "none"}
             strokeWidth={highlighted ? 1 : 0}
             data-annual-bar={bar.date}
+            data-annual-weekday={bar.weekday}
           >
             <title>
               {formatDrawDate(bar.date)} · somme {formatInt(bar.sum)}
@@ -371,18 +458,49 @@ function YearColumn({
           </rect>
         )
       })}
-      {lane.months.map((month) => (
-        <text
-          key={month.month}
-          x={left + COL_W - 6}
-          y={yTime(month.month / 12) - 5}
-          textAnchor="end"
-          fill="var(--muted-foreground)"
-          fontSize="10"
-        >
-          {month.mean == null ? "—" : formatInt(month.mean)}
-        </text>
-      ))}
+      {marks.map((mark) => {
+        if (mark.mean == null || mark.count === 0) return null
+        const y = yTime((mark.month - 0.5) / 12)
+        const end = sumX(index, mark.mean, yMin, yMax)
+        const highlighted = activeMonth === mark.month
+        return (
+          <g
+            key={`synthese-${mark.month}`}
+            data-annual-synthese={mark.month}
+            data-annual-synthese-mean={Math.round(mark.mean)}
+          >
+            <line
+              x1={origin}
+              x2={end}
+              y1={y}
+              y2={y}
+              stroke="var(--foreground)"
+              strokeDasharray="2 2"
+              strokeWidth={highlighted ? 1.8 : 1.15}
+            />
+            <circle cx={end} cy={y} r={highlighted ? 4 : 3.1} fill="var(--foreground)" />
+            <title>
+              Synthèse · {mark.label} · {lane.year} · moyenne {formatInt(mark.mean)} · {mark.count}{" "}
+              tirages · mardi + vendredi
+            </title>
+          </g>
+        )
+      })}
+      {lane.months.map((month, monthIndex) => {
+        const mean = readout[monthIndex]?.mean ?? null
+        return (
+          <text
+            key={month.month}
+            x={left + COL_W - 6}
+            y={yTime(month.month / 12) - 5}
+            textAnchor="end"
+            fill="var(--muted-foreground)"
+            fontSize="10"
+          >
+            {mean == null ? "—" : formatInt(mean)}
+          </text>
+        )
+      })}
       <rect
         x={left}
         y={HEADER_H}
@@ -391,8 +509,8 @@ function YearColumn({
         fill="transparent"
         style={{ cursor: "crosshair" }}
         onPointerMove={(event) => {
-          const bar = nearestBar(event, lane)
-          if (bar) onHover(bar)
+          const next = nearestTip(event, lane, bars, marks)
+          if (next) onHover(next)
         }}
       />
       {lane.bars.length === 0 ? (
@@ -424,11 +542,64 @@ function Detail({ bar, year }: { bar: AnnualBar; year: number }) {
   )
 }
 
-function LegendSwatch({ color, label }: { color: string; label: string }) {
+function SyntheseDetail({ tip }: { tip: Extract<Tip, { kind: "synthese" }> }) {
+  const draws = tip.count > 1 ? "tirages" : "tirage"
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="inline-block h-3 w-1.5 rounded-[1px]" style={{ background: color }} />
+    <>
+      <span className="text-foreground">Synthèse</span>
+      <span className="text-muted-foreground"> · {tip.label} · {tip.year} · moyenne </span>
+      <span className="text-foreground">{formatInt(tip.mean)}</span>
+      <span className="text-muted-foreground">
+        {" "}
+        · {tip.count} {draws} · mardi + vendredi · écart {signedGap(tip.mean)} à 128
+      </span>
+    </>
+  )
+}
+
+function DayToggle({
+  pressed,
+  label,
+  onClick,
+  swatch,
+}: {
+  pressed: boolean
+  label: string
+  onClick: () => void
+  swatch: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs",
+        pressed
+          ? "border-primary bg-primary/15 text-foreground"
+          : "border-border text-muted-foreground hover:text-foreground"
+      )}
+    >
+      {swatch}
       {label}
+    </button>
+  )
+}
+
+function BarSwatch({ color, muted }: { color: string; muted: boolean }) {
+  return (
+    <span
+      className="inline-block h-3 w-1.5 rounded-[1px]"
+      style={{ background: color, opacity: muted ? 0.35 : 1 }}
+    />
+  )
+}
+
+function SyntheseSwatch({ muted }: { muted: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-0.5" style={{ opacity: muted ? 0.35 : 1 }}>
+      <span className="inline-block h-px w-3 border-t border-dashed border-foreground" />
+      <span className="inline-block size-1.5 rounded-full bg-foreground" />
     </span>
   )
 }
@@ -515,25 +686,54 @@ function sumX(index: number, sum: number, yMin: number, yMax: number) {
   return colLeft(index) + 4 + t * (COL_W - 8 - MEAN_GUTTER)
 }
 
-function nearestBar(event: React.PointerEvent<SVGRectElement>, lane: AnnualLane): AnnualBar | null {
+function nearestTip(
+  event: React.PointerEvent<SVGRectElement>,
+  lane: AnnualLane,
+  bars: readonly AnnualBar[],
+  marks: readonly SyntheseMark[]
+): Tip | null {
   const svg = event.currentTarget.ownerSVGElement
   const matrix = svg?.getScreenCTM()
-  if (!svg || !matrix || lane.bars.length === 0) return null
+  if (!svg || !matrix) return null
   const point = svg.createSVGPoint()
   point.x = event.clientX
   point.y = event.clientY
   const local = point.matrixTransform(matrix.inverse())
   const unit = (local.y - HEADER_H) / PLOT_H
-  let best: AnnualBar | null = null
-  let bestDist = 0.02
-  for (const bar of lane.bars) {
+  let bestBar: AnnualBar | null = null
+  let bestBarDist = 0.02
+  for (const bar of bars) {
     const dist = Math.abs(bar.x - unit)
-    if (dist < bestDist) {
-      best = bar
-      bestDist = dist
+    if (dist < bestBarDist) {
+      bestBar = bar
+      bestBarDist = dist
     }
   }
-  return best
+  let bestMark: SyntheseMark | null = null
+  let bestMarkDist = 1 / 24
+  for (const mark of marks) {
+    if (mark.mean == null || mark.count === 0) continue
+    const dist = Math.abs((mark.month - 0.5) / 12 - unit)
+    if (dist < bestMarkDist) {
+      bestMark = mark
+      bestMarkDist = dist
+    }
+  }
+  if (bestBar && (!bestMark || bestBarDist <= bestMarkDist)) {
+    return { kind: "bar", bar: bestBar, year: lane.year }
+  }
+  if (bestMark?.mean != null) {
+    return {
+      kind: "synthese",
+      year: lane.year,
+      month: bestMark.month,
+      label: bestMark.label,
+      mean: bestMark.mean,
+      count: bestMark.count,
+      x: (bestMark.month - 0.5) / 12,
+    }
+  }
+  return null
 }
 
 function barFill(weekday: string) {
@@ -542,14 +742,45 @@ function barFill(weekday: string) {
   return "var(--chart-1)"
 }
 
-function weekdaysPresent(lanes: AnnualLane[]) {
-  const days = new Set<string>()
-  for (const lane of lanes) {
-    for (const bar of lane.bars) {
-      if (bar.weekday === "mardi" || bar.weekday === "vendredi") days.add(bar.weekday)
-    }
-  }
-  return days
+function readoutDays(picks: DayPicks): readonly string[] | undefined {
+  if (picks.synthese) return ["mardi", "vendredi"]
+  if (picks.mardi && picks.vendredi) return undefined
+  if (picks.mardi) return ["mardi"]
+  if (picks.vendredi) return ["vendredi"]
+  return []
+}
+
+function monthReadout(lane: AnnualLane, picks: DayPicks): MonthReadout[] {
+  const days = readoutDays(picks)
+  return ANNUAL_MONTHS.map((item) => annualMonthMean(lane.bars, item.month, days))
+}
+
+function syntheseMarks(lane: AnnualLane): SyntheseMark[] {
+  return ANNUAL_MONTHS.map((item) => ({
+    month: item.month,
+    label: item.label,
+    ...annualMonthMean(lane.bars, item.month, ["mardi", "vendredi"]),
+  }))
+}
+
+function visibleBars(lane: AnnualLane, picks: DayPicks): AnnualBar[] {
+  return lane.bars.filter((bar) => {
+    if (bar.weekday === "mardi") return picks.mardi
+    if (bar.weekday === "vendredi") return picks.vendredi
+    return false
+  })
+}
+
+function pairDelta(newer: MonthReadout | undefined, older: MonthReadout | undefined): number | null {
+  if (newer?.mean == null || older?.mean == null) return null
+  return newer.mean - older.mean
+}
+
+function sameTip(current: Tip | null, next: Tip): boolean {
+  if (!current || current.year !== next.year || current.kind !== next.kind) return false
+  if (current.kind === "bar" && next.kind === "bar") return current.bar.date === next.bar.date
+  if (current.kind === "synthese" && next.kind === "synthese") return current.month === next.month
+  return false
 }
 
 function formatInt(value: number) {

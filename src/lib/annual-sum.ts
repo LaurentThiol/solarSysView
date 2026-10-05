@@ -127,6 +127,27 @@ export function annualYDomain(
   return { min: lo, max: hi }
 }
 
+/**
+ * Moyenne des sommes d’un mois.
+ * Sans `days` : tous les tirages du mois.
+ * Tableau vide : aucun soir, moyenne absente.
+ * Sinon : seulement les soirs nommés (mardi, vendredi).
+ */
+export function annualMonthMean(
+  bars: readonly { month: number; sum: number; weekday?: string }[],
+  month: number,
+  days?: readonly string[]
+): { mean: number | null; count: number } {
+  const allowed = days == null ? null : new Set(days)
+  const values: number[] = []
+  for (const bar of bars) {
+    if (bar.month !== month || !Number.isFinite(bar.sum)) continue
+    if (allowed && !allowed.has(String(bar.weekday ?? ""))) continue
+    values.push(bar.sum)
+  }
+  return { mean: average(values), count: values.length }
+}
+
 export function monthMeanDeltas(newer: AnnualLane, older: AnnualLane): MonthDelta[] {
   return ANNUAL_MONTHS.map((item, index) => {
     const left = newer.months[index]

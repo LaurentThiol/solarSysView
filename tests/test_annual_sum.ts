@@ -5,6 +5,7 @@ import test from "node:test"
 import {
   ANNUAL_MONTHS,
   annualBarX,
+  annualMonthMean,
   annualPants,
   annualYDomain,
   monthEndX,
@@ -122,6 +123,25 @@ test("duplicate dates keep the last draw, and the scale holds 128", () => {
   assert.equal(monthMeanDeltas(pants.lanes[0], pants.lanes[1])[4]?.delta, null)
 })
 
+test("month mean follows the selected evenings", () => {
+  const bars = [
+    { month: 1, sum: 100, weekday: "mardi" },
+    { month: 1, sum: 140, weekday: "vendredi" },
+    { month: 1, sum: 50, weekday: "mardi" },
+    { month: 2, sum: 10, weekday: "vendredi" },
+  ]
+  assert.deepEqual(annualMonthMean(bars, 1), { mean: (100 + 140 + 50) / 3, count: 3 })
+  assert.deepEqual(annualMonthMean(bars, 1, ["mardi"]), { mean: 75, count: 2 })
+  assert.deepEqual(annualMonthMean(bars, 1, ["vendredi"]), { mean: 140, count: 1 })
+  assert.deepEqual(annualMonthMean(bars, 1, ["mardi", "vendredi"]), {
+    mean: (100 + 140 + 50) / 3,
+    count: 3,
+  })
+  assert.deepEqual(annualMonthMean(bars, 1, []), { mean: null, count: 0 })
+  assert.deepEqual(annualMonthMean(bars, 3, ["mardi"]), { mean: null, count: 0 })
+  assert.equal(annualMonthMean(bars, 2, ["mardi"]).count, 0)
+})
+
 test("evolution exposes the annual submenu", () => {
   const panel = readFileSync(new URL("../src/components/evolution-panel.tsx", import.meta.url), "utf8")
   const view = readFileSync(new URL("../src/components/evolution-annual.tsx", import.meta.url), "utf8")
@@ -136,5 +156,13 @@ test("evolution exposes the annual submenu", () => {
   assert.doesNotMatch(view, /l’une sous l’autre/)
   assert.match(view, /THEORETICAL_NUMBER_SUM/)
   assert.match(view, /Survolez une barre/)
+  assert.match(view, /aria-pressed/)
+  assert.match(view, /data-annual-synthese/)
+  assert.match(view, /Aucun soir sélectionné/)
+  assert.match(view, /mardi \+ vendredi/)
+  assert.match(view, /ne tire pas le mercredi/)
+  assert.doesNotMatch(view, /filterDrawsByWeekday/)
   assert.match(page, /Annuel/)
+  const glossary = readFileSync(new URL("../src/lib/copy.ts", import.meta.url), "utf8")
+  assert.match(glossary, /EuroMillions ne tire pas le mercredi/)
 })
