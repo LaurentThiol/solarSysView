@@ -39,14 +39,14 @@ export type AnnualBar = {
   numbers: number[]
   month: number
   day: number
-  /** 0 à l’origine de l’année, 1 à la fin. Centre du jour dans un mois de largeur 1/12. */
+  /** 0 au 1er janvier, 1 au 31 décembre. Centre du jour dans un mois de hauteur égale. */
   x: number
 }
 
 export type MonthMark = {
   month: number
   label: string
-  /** Abscisse du trait de fin de mois. */
+  /** Position du trait de fin de mois, 0 au 1er janvier et 1 au 31 décembre. */
   x: number
   mean: number | null
   count: number

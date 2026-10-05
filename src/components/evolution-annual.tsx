@@ -11,7 +11,6 @@ import {
   type AnnualBar,
   type AnnualLane,
   type AnnualRole,
-  type MonthDelta,
 } from "@/lib/annual-sum"
 import { newestCalendarYear } from "@/lib/analysis-window"
 import { DRAWS, formatDrawDate, type Draw } from "@/lib/draws"
@@ -20,13 +19,13 @@ import { filterDrawsByWeekday, WEEKDAY_LINE_COLOR, type WeekdayScope } from "@/l
 const TITLE_HELP: HelpCopy = {
   title: "Annuel",
   wide: true,
-  body: `Trois lignes de barres verticales, années n, n−1 et n−2, l’une sous l’autre. Chaque barre est la somme des 5 numéros d’un tirage.
+  body: `Graphique horizontal. Les années n, n−1 et n−2 sont en tête, côte à côte. Chaque barre part vers la droite : c’est la somme des 5 numéros d’un tirage.
 
-Les mois ont la même largeur. Le jour place la barre dans le mois, donc une fin de mois tombe au même endroit sur les trois années — février bissextile compris. Le trait vertical ferme le mois. Le chiffre dessous est la moyenne des sommes de ce mois.
+Les mois descendent, de janvier à décembre, et ont la même hauteur. Le jour place la barre dans le mois, donc une fin de mois tombe au même endroit sur les trois années — février bissextile compris. Le trait horizontal ferme le mois. Le chiffre à droite de la colonne est la moyenne des sommes de ce mois.
 
-Le trait horizontal est la moyenne théorique, 128. L’échelle est commune et resserrée sur les sommes observées : elle ne part pas de 0, pour que l’écart se voie.
+Le trait vertical est la moyenne théorique, 128. L’échelle est commune et resserrée sur les sommes observées : elle ne part pas de 0, pour que l’écart se voie.
 
-Mardi en cyan, vendredi en rose. « en cours » : l’année n n’a pas encore de tirage en décembre. Δ compare les moyennes de mois (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. Le filtre jour du bandeau s’applique ; la fenêtre 20 / 50 / année ne coupe pas ces trois années.
+Mardi en cyan, vendredi en rose. « en cours » : l’année n n’a pas encore de tirage en décembre. Δ, à droite, compare les moyennes de mois (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. Le filtre jour du bandeau s’applique ; la fenêtre 20 / 50 / année ne coupe pas ces trois années.
 
 Lecture d’archive. Les tirages restent indépendants.`,
 }
@@ -37,24 +36,23 @@ const ROLE_LABEL: Record<AnnualRole, string> = {
   "n-2": "n−2",
 }
 
-const DELTA_LABEL = ["Δ n", "Δ n−1"] as const
 const DELTA_TITLE = [
   "Moyenne du mois : n moins n−1",
   "Moyenne du mois : n−1 moins n−2",
 ] as const
 
 const VB_W = 980
-const PAD_L = 72
-const PAD_R = 14
-const PAD_T = 22
-const LANE_H = 112
-const MEAN_H = 16
-const LANE_GAP = 12
-const DELTA_H = 18
-const PAD_B = 6
-const LANE_BLOCK = LANE_H + MEAN_H + LANE_GAP
-const PLOT_W = VB_W - PAD_L - PAD_R
-const VB_H = PAD_T + 3 * LANE_BLOCK + 6 + 2 * DELTA_H + PAD_B
+const LABEL_W = 46
+const DELTA_W = 46
+const PAD_R = 8
+const HEADER_H = 50
+const MONTH_H = 56
+const PLOT_H = ANNUAL_MONTHS.length * MONTH_H
+const VB_H = HEADER_H + PLOT_H + 8
+const COL_GAP = 18
+const MEAN_GUTTER = 32
+const COLS_W = VB_W - LABEL_W - DELTA_W - PAD_R
+const COL_W = (COLS_W - 2 * COL_GAP) / 3
 
 type Tip = {
   bar: AnnualBar
@@ -97,8 +95,8 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
           <TitleHelp help={TITLE_HELP}>Somme des numéros</TitleHelp>
         </CardTitle>
         <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
-          Barres verticales étroites, trois années en parallèle. Trait vertical en fin de mois,
-          trait horizontal à 128. Le chiffre sous le trait est la moyenne du mois.
+          Barres horizontales. n, n−1 et n−2 sont en tête. Trait horizontal en fin de mois,
+          trait vertical à 128. Le chiffre en bout de colonne est la moyenne du mois.
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -110,11 +108,11 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
             <LegendSwatch color={WEEKDAY_LINE_COLOR.vendredi} label="Vendredi" />
           ) : null}
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block h-px w-6 border-t border-dashed border-muted-foreground" />
+            <span className="inline-block h-3 w-px border-l border-dashed border-muted-foreground" />
             Moyenne 128
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block h-3 w-px bg-border" />
+            <span className="inline-block h-px w-6 bg-foreground/30" />
             Fin de mois
           </span>
           {archive.loading ? <span>Chargement des trois années…</span> : null}
@@ -123,30 +121,44 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
         <div className="overflow-x-auto">
           <svg
             viewBox={`0 0 ${VB_W} ${VB_H}`}
-            className="h-auto w-full min-w-[720px]"
+            data-annual-orientation="horizontal"
+            className="h-auto w-full min-w-[760px]"
             role="img"
-            aria-label={`Somme des 5 numéros, trois années. ${summary}`}
+            aria-label={`Somme des 5 numéros, trois années en tête. ${summary}`}
             style={{ fontFamily: "inherit" }}
             onPointerLeave={() => setTip(null)}
           >
-            {ANNUAL_MONTHS.map((month) => (
-              <text
-                key={month.month}
-                x={xOf((month.month - 0.5) / 12)}
-                y={14}
-                textAnchor="middle"
-                fill="var(--muted-foreground)"
-                fontSize="11"
-              >
-                {month.label}
-              </text>
+            {model.lanes.map((lane, index) => (
+              <YearHead key={lane.role} lane={lane} index={index} yMin={model.yMin} yMax={model.yMax} />
             ))}
+            <text x={LABEL_W + COLS_W + 4} y={16} fill="var(--muted-foreground)" fontSize="10">
+              <title>{DELTA_TITLE[0]}</title>
+              Δ n
+            </text>
+            <text x={LABEL_W + COLS_W + 4} y={30} fill="var(--muted-foreground)" fontSize="10">
+              <title>{DELTA_TITLE[1]}</title>
+              Δ n−1
+            </text>
+
+            {ANNUAL_MONTHS.map((month) =>
+              month.month % 2 === 0 ? (
+                <rect
+                  key={month.month}
+                  x={LABEL_W}
+                  y={yTime((month.month - 1) / 12)}
+                  width={COLS_W}
+                  height={MONTH_H}
+                  fill="var(--muted)"
+                  opacity={0.4}
+                />
+              ) : null
+            )}
 
             {model.lanes.map((lane, index) => (
-              <Lane
+              <YearColumn
                 key={lane.role}
                 lane={lane}
-                top={PAD_T + index * LANE_BLOCK}
+                index={index}
                 yMin={model.yMin}
                 yMax={model.yMax}
                 loading={archive.loading && lane.bars.length === 0}
@@ -161,27 +173,70 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
               />
             ))}
 
+            {ANNUAL_MONTHS.map((month) => (
+              <g key={month.month}>
+                <text
+                  x={4}
+                  y={yTime((month.month - 0.5) / 12) + 4}
+                  fill="var(--muted-foreground)"
+                  fontSize="11"
+                >
+                  {month.label}
+                </text>
+                <line
+                  data-month-end={month.month}
+                  x1={LABEL_W}
+                  x2={LABEL_W + COLS_W}
+                  y1={yTime(month.month / 12)}
+                  y2={yTime(month.month / 12)}
+                  stroke="var(--foreground)"
+                  strokeOpacity={0.28}
+                />
+              </g>
+            ))}
+
+            {model.deltas[0] && model.deltas[1]
+              ? ANNUAL_MONTHS.map((month, index) => (
+                  <g key={`delta-${month.month}`} data-annual-delta={month.month}>
+                    <text
+                      x={LABEL_W + COLS_W + 4}
+                      y={yTime((month.month - 0.5) / 12) - 1}
+                      fill={deltaFill(model.deltas[0][index]?.delta ?? null)}
+                      fontSize="10"
+                    >
+                      <title>
+                        {DELTA_TITLE[0]} · {month.label} · {model.deltas[0][index]?.newerCount ?? 0}{" "}
+                        tirages contre {model.deltas[0][index]?.olderCount ?? 0}
+                      </title>
+                      {formatDelta(model.deltas[0][index]?.delta ?? null)}
+                    </text>
+                    <text
+                      x={LABEL_W + COLS_W + 4}
+                      y={yTime((month.month - 0.5) / 12) + 12}
+                      fill={deltaFill(model.deltas[1][index]?.delta ?? null)}
+                      fontSize="10"
+                    >
+                      <title>
+                        {DELTA_TITLE[1]} · {month.label} · {model.deltas[1][index]?.newerCount ?? 0}{" "}
+                        tirages contre {model.deltas[1][index]?.olderCount ?? 0}
+                      </title>
+                      {formatDelta(model.deltas[1][index]?.delta ?? null)}
+                    </text>
+                  </g>
+                ))
+              : null}
+
             {tip ? (
               <line
-                x1={xOf(tip.bar.x)}
-                x2={xOf(tip.bar.x)}
-                y1={PAD_T}
-                y2={PAD_T + 3 * LANE_BLOCK - LANE_GAP}
+                x1={LABEL_W}
+                x2={LABEL_W + COLS_W}
+                y1={yTime(tip.bar.x)}
+                y2={yTime(tip.bar.x)}
                 stroke="var(--foreground)"
                 strokeOpacity={0.35}
                 pointerEvents="none"
               />
             ) : null}
-
-            {model.deltas.map((row, index) => (
-              <DeltaRow
-                key={DELTA_LABEL[index]}
-                row={row}
-                label={DELTA_LABEL[index]}
-                title={DELTA_TITLE[index]}
-                top={PAD_T + 3 * LANE_BLOCK + 4 + index * DELTA_H}
-              />
-            ))}
           </svg>
         </div>
 
@@ -205,9 +260,60 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
   )
 }
 
-function Lane({
+function YearHead({
   lane,
-  top,
+  index,
+  yMin,
+  yMax,
+}: {
+  lane: AnnualLane
+  index: number
+  yMin: number
+  yMax: number
+}) {
+  const left = colLeft(index)
+  const ticks =
+    index === 0
+      ? [yMin, THEORETICAL_NUMBER_SUM, yMax].filter(
+          (value, tickIndex, all) => all.indexOf(value) === tickIndex
+        )
+      : []
+  return (
+    <g data-annual-head={lane.role}>
+      <text
+        x={left + COL_W / 2}
+        y={16}
+        textAnchor="middle"
+        fill="var(--foreground)"
+        fontSize="13"
+        fontWeight={600}
+      >
+        {ROLE_LABEL[lane.role]} {lane.year}
+        {lane.partial ? " · en cours" : ""}
+      </text>
+      {ticks.map((value) => {
+        const atMin = value === yMin
+        const atMax = value === yMax
+        return (
+          <text
+            key={value}
+            x={atMin ? left + 4 : atMax ? left + COL_W - MEAN_GUTTER : sumX(index, value, yMin, yMax)}
+            y={36}
+            textAnchor={atMin ? "start" : atMax ? "end" : "middle"}
+            fill="var(--muted-foreground)"
+            fontSize="10"
+          >
+            {formatInt(value)}
+          </text>
+        )
+      })}
+    </g>
+  )
+}
+
+function YearColumn({
+  lane,
+  index,
   yMin,
   yMax,
   loading,
@@ -215,16 +321,17 @@ function Lane({
   onHover,
 }: {
   lane: AnnualLane
-  top: number
+  index: number
   yMin: number
   yMax: number
   loading: boolean
   active: string | null
   onHover: (bar: AnnualBar) => void
 }) {
-  const dayW = PLOT_W / 12 / 31
-  const barW = Math.max(3.5, dayW * 0.9)
-  const baseline = yOf(top, yMin, yMin, yMax)
+  const left = colLeft(index)
+  const origin = left + 4
+  const thick = Math.max(3.2, (MONTH_H / 31) * 0.85)
+  const meanX = sumX(index, THEORETICAL_NUMBER_SUM, yMin, yMax)
 
   return (
     <g
@@ -232,65 +339,26 @@ function Lane({
       data-annual-role={lane.role}
       data-annual-partial={lane.partial ? "true" : "false"}
     >
-      {ANNUAL_MONTHS.map((month) =>
-        month.month % 2 === 0 ? (
-          <rect
-            key={month.month}
-            x={xOf((month.month - 1) / 12)}
-            y={top}
-            width={PLOT_W / 12}
-            height={LANE_H}
-            fill="var(--muted)"
-            opacity={0.45}
-          />
-        ) : null
-      )}
       <line
-        x1={PAD_L}
-        x2={VB_W - PAD_R}
-        y1={yOf(top, THEORETICAL_NUMBER_SUM, yMin, yMax)}
-        y2={yOf(top, THEORETICAL_NUMBER_SUM, yMin, yMax)}
+        x1={meanX}
+        x2={meanX}
+        y1={HEADER_H}
+        y2={HEADER_H + PLOT_H}
         stroke="var(--muted-foreground)"
         strokeDasharray="4 3"
         strokeOpacity={0.8}
       />
-      {[yMin, THEORETICAL_NUMBER_SUM, yMax]
-        .filter((value, index, all) => all.indexOf(value) === index)
-        .map((value) => (
-          <text
-            key={value}
-            x={PAD_L - 8}
-            y={yOf(top, value, yMin, yMax) + 3}
-            textAnchor="end"
-            fill="var(--muted-foreground)"
-            fontSize="10"
-          >
-            {formatInt(value)}
-          </text>
-        ))}
-      <text x={8} y={top + 16} fill="var(--foreground)" fontSize="13" fontWeight={600}>
-        {ROLE_LABEL[lane.role]}
-      </text>
-      <text x={8} y={top + 32} fill="var(--muted-foreground)" fontSize="11">
-        {lane.year}
-      </text>
-      {lane.partial ? (
-        <text x={8} y={top + 46} fill="var(--muted-foreground)" fontSize="10">
-          en cours
-        </text>
-      ) : null}
-
       {lane.bars.map((bar) => {
-        const y = yOf(top, bar.sum, yMin, yMax)
-        const height = Math.max(1, baseline - y)
+        const y = yTime(bar.x)
+        const end = sumX(index, bar.sum, yMin, yMax)
         const highlighted = active === bar.date
         return (
           <rect
             key={bar.date}
-            x={xOf(bar.x) - barW / 2}
-            y={y}
-            width={barW}
-            height={height}
+            x={origin}
+            y={y - thick / 2}
+            width={Math.max(1, end - origin)}
+            height={thick}
             rx={0.6}
             fill={barFill(bar.weekday)}
             stroke={highlighted ? "var(--foreground)" : "none"}
@@ -303,35 +371,23 @@ function Lane({
           </rect>
         )
       })}
-
       {lane.months.map((month) => (
-        <g key={month.month}>
-          <line
-            data-month-end={month.month}
-            x1={xOf(month.x)}
-            x2={xOf(month.x)}
-            y1={top}
-            y2={top + LANE_H}
-            stroke="var(--foreground)"
-            strokeOpacity={0.28}
-          />
-          <text
-            x={xOf((month.month - 0.5) / 12)}
-            y={top + LANE_H + 12}
-            textAnchor="middle"
-            fill="var(--muted-foreground)"
-            fontSize="10"
-          >
-            {month.mean == null ? "—" : formatInt(month.mean)}
-          </text>
-        </g>
+        <text
+          key={month.month}
+          x={left + COL_W - 6}
+          y={yTime(month.month / 12) - 5}
+          textAnchor="end"
+          fill="var(--muted-foreground)"
+          fontSize="10"
+        >
+          {month.mean == null ? "—" : formatInt(month.mean)}
+        </text>
       ))}
-
       <rect
-        x={PAD_L}
-        y={top}
-        width={PLOT_W}
-        height={LANE_H}
+        x={left}
+        y={HEADER_H}
+        width={COL_W}
+        height={PLOT_H}
         fill="transparent"
         style={{ cursor: "crosshair" }}
         onPointerMove={(event) => {
@@ -339,11 +395,10 @@ function Lane({
           if (bar) onHover(bar)
         }}
       />
-
       {lane.bars.length === 0 ? (
         <text
-          x={PAD_L + PLOT_W / 2}
-          y={top + LANE_H / 2}
+          x={left + COL_W / 2}
+          y={HEADER_H + PLOT_H / 2}
           textAnchor="middle"
           fill="var(--muted-foreground)"
           fontSize="12"
@@ -351,42 +406,6 @@ function Lane({
           {loading ? "chargement…" : "aucun tirage"}
         </text>
       ) : null}
-    </g>
-  )
-}
-
-function DeltaRow({
-  row,
-  label,
-  title,
-  top,
-}: {
-  row: MonthDelta[]
-  label: string
-  title: string
-  top: number
-}) {
-  return (
-    <g data-annual-delta={label}>
-      <text x={8} y={top + 12} fill="var(--muted-foreground)" fontSize="11">
-        <title>{title}</title>
-        {label}
-      </text>
-      {row.map((cell) => (
-        <text
-          key={cell.month}
-          x={xOf((cell.month - 0.5) / 12)}
-          y={top + 12}
-          textAnchor="middle"
-          fill={deltaFill(cell.delta)}
-          fontSize="11"
-        >
-          <title>
-            {cell.label} · {cell.newerCount} tirages contre {cell.olderCount}
-          </title>
-          {formatDelta(cell.delta)}
-        </text>
-      ))}
     </g>
   )
 }
@@ -482,15 +501,18 @@ async function fetchDrawYear(year: number | null): Promise<{ year: number | null
   }
 }
 
-function xOf(unit: number) {
-  return PAD_L + unit * PLOT_W
+function colLeft(index: number) {
+  return LABEL_W + index * (COL_W + COL_GAP)
 }
 
-function yOf(top: number, value: number, yMin: number, yMax: number) {
+function yTime(unit: number) {
+  return HEADER_H + unit * PLOT_H
+}
+
+function sumX(index: number, sum: number, yMin: number, yMax: number) {
   const span = yMax - yMin || 1
-  const inner = LANE_H - 8
-  const t = (value - yMin) / span
-  return top + 4 + (1 - t) * inner
+  const t = Math.min(1, Math.max(0, (sum - yMin) / span))
+  return colLeft(index) + 4 + t * (COL_W - 8 - MEAN_GUTTER)
 }
 
 function nearestBar(event: React.PointerEvent<SVGRectElement>, lane: AnnualLane): AnnualBar | null {
@@ -501,7 +523,7 @@ function nearestBar(event: React.PointerEvent<SVGRectElement>, lane: AnnualLane)
   point.x = event.clientX
   point.y = event.clientY
   const local = point.matrixTransform(matrix.inverse())
-  const unit = (local.x - PAD_L) / PLOT_W
+  const unit = (local.y - HEADER_H) / PLOT_H
   let best: AnnualBar | null = null
   let bestDist = 0.02
   for (const bar of lane.bars) {

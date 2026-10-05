@@ -107,7 +107,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Annuel",
     group: "fenetre",
-    text: "Onglet Évolution : trois années n, n−1 et n−2 en barres verticales, somme des 5 numéros. Les mois ont la même largeur, un trait ferme chaque mois, un trait horizontal marque 128. Δ compare les moyennes de mois. Ce n’est pas la fenêtre « année civile » : les trois années restent entières, le filtre jour s’applique. Lecture d’archive, pas un pronostic.",
+    text: "Onglet Évolution : barres horizontales de la somme des 5 numéros. Les années n, n−1 et n−2 sont en tête, côte à côte. Les mois descendent, un trait horizontal ferme chaque mois, un trait vertical marque 128. Δ compare les moyennes de mois. Ce n’est pas la fenêtre « année civile » : les trois années restent entières, le filtre jour s’applique. Lecture d’archive, pas un pronostic.",
   },
   {
     term: "Formule actuelle (12 ★)",

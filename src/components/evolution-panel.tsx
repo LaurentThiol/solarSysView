@@ -80,7 +80,7 @@ const CHART_TABS = [
     label: "Annuel",
     help: {
       title: "Annuel",
-      body: "Somme des 5 numéros sur trois années civiles, n, n−1 et n−2, en barres verticales alignées. Un trait ferme chaque mois. La fenêtre 20 / 50 / année ne coupe pas ces trois années ; le filtre jour, oui.",
+      body: "Somme des 5 numéros en barres horizontales. Les années n, n−1 et n−2 sont en tête. Un trait horizontal ferme chaque mois. La fenêtre 20 / 50 / année ne coupe pas ces trois années ; le filtre jour, oui.",
     },
   },
 ] as const
