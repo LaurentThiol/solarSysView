@@ -23,6 +23,7 @@ import {
   type CatalogReport,
   type GoesReport,
   type LunarReport,
+  type SeasonState,
   type SolarReport,
 } from "@/lib/ref"
 import { useLabTab } from "@/lib/use-lab-tab"
@@ -41,7 +42,7 @@ const TABS = [
     label: "Solaire",
     help: {
       title: "Cycle solaire",
-      body: "Rotation de Carrington (~27,3 j) et cycle de Schwabe (~11 ans). Le flux X GOES se demande via SunPy, sans télécharger le TimeSeries.",
+      body: "Rotation de Carrington (~27,3 j), cycle de Schwabe (~11 ans) et solstices d’été et d’hiver. Le flux X GOES se demande via SunPy, sans télécharger le TimeSeries.",
     },
   },
   {
@@ -247,6 +248,7 @@ function SolarPanel() {
 
   const carr = report?.carrington
   const cycle = report?.schwabe
+  const seasons = report?.seasons
   return (
     <div className="flex flex-col gap-4">
       <label className="flex max-w-xs flex-col gap-1 text-xs text-muted-foreground">
@@ -298,6 +300,7 @@ function SolarPanel() {
           </Card>
         </div>
       ) : null}
+      {seasons ? <SeasonCard seasons={seasons} /> : null}
       <CycleCloud cycles={SOLAR_CYCLES} initial="carrington" labels={CYCLE_LABELS} />
       <Card>
         <CardHeader>
@@ -345,6 +348,72 @@ function SolarPanel() {
           {goes ? <GoesPreview report={goes} /> : null}
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function SeasonCard({ seasons }: { seasons: SeasonState }) {
+  const events = [
+    seasons.solstices.ete,
+    seasons.solstices.hiver,
+    seasons.equinoxes.mars,
+    seasons.equinoxes.septembre,
+  ].sort((a, b) => a.days - b.days)
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          {seasons.season_label}
+          <HelpTip
+            title="Solstices"
+            body="Longitude écliptique du Soleil. 90° : solstice d’été, vers le 21 juin. 270° : solstice d’hiver, vers le 21 décembre. Hémisphère nord. L’instant est en temps universel, à la minute."
+          />
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm">
+        <SeasonMeter fraction={seasons.fraction} />
+        <p className="text-xs text-muted-foreground">
+          Année tropique depuis l’équinoxe de mars. Les traits marquent le solstice d’été, l’équinoxe de septembre et le solstice d’hiver.
+        </p>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+          <Stat label="Longitude" value={`${seasons.longitude_deg.toFixed(1)}°`} />
+          <Stat label="Fraction" value={seasons.fraction.toFixed(3)} />
+          <Stat label="Hémisphère" value="Nord" />
+        </dl>
+        <ul className="grid gap-1">
+          {events.map((event) => (
+            <li key={event.id} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5 border-b border-border py-1">
+              <span className={event.kind === "solstice" ? "" : "text-muted-foreground"}>{event.label}</span>
+              <span className="text-right">
+                {event.date} · {event.time_utc} UTC
+                <span className="text-muted-foreground"> · {leadDays(event.days)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  )
+}
+
+function leadDays(days: number) {
+  if (days <= 0) return "ce jour"
+  if (days === 1) return "dans 1 j"
+  return `dans ${days} j`
+}
+
+function SeasonMeter({ fraction }: { fraction: number }) {
+  const marks = [0.25, 0.5, 0.75]
+  return (
+    <div className="relative h-1.5 overflow-hidden rounded-full bg-muted">
+      <div className="h-full bg-primary" style={{ width: `${Math.round(fraction * 100)}%` }} />
+      {marks.map((mark) => (
+        <span
+          key={mark}
+          className="absolute top-0 h-full w-px bg-foreground/40"
+          style={{ left: `${mark * 100}%` }}
+        />
+      ))}
     </div>
   )
 }

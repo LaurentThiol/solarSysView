@@ -37,6 +37,27 @@ export type SchwabeState = {
   note?: string
 }
 
+export type SeasonEvent = {
+  id: string
+  label: string
+  kind: "solstice" | "equinoxe"
+  longitude_deg: number
+  date: string
+  time_utc: string
+  instant: string
+  days: number
+}
+
+export type SeasonState = {
+  longitude_deg: number
+  fraction: number
+  season: string
+  season_label: string
+  hemisphere: "nord"
+  solstices: { ete: SeasonEvent; hiver: SeasonEvent }
+  equinoxes: { mars: SeasonEvent; septembre: SeasonEvent }
+}
+
 export type SolarReport = {
   ok: boolean
   title: string
@@ -44,6 +65,7 @@ export type SolarReport = {
   date: string
   carrington: CarringtonState
   schwabe: SchwabeState
+  seasons: SeasonState
   sunpy: { available: boolean; version?: string | null; hint?: string }
   error?: string
 }

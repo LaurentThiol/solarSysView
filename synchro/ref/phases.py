@@ -19,6 +19,7 @@ from synchro.ref.cycles import (
     julian_day,
     schwabe,
 )
+from synchro.ref.seasons import sun_longitude
 
 _J2000 = 2451545.0
 _ANOMALISTIC_DAYS = 27.554549878
@@ -84,11 +85,7 @@ def fortnight_fraction(day: date) -> float:
 
 def tropical_fraction(day: date) -> float:
     """Longitude écliptique du Soleil. 0 = équinoxe de mars."""
-    elapsed = _sun_days(day)
-    mean = 280.46646 + 0.98564736 * elapsed
-    anomaly = math.radians((357.52911 + 0.98560028 * elapsed) % 360.0)
-    longitude = mean + 1.9148 * math.sin(anomaly) + 0.0200 * math.sin(2.0 * anomaly)
-    return _frac_deg(longitude)
+    return _frac_deg(sun_longitude(julian_day(day)))
 
 
 def nodal_fraction(day: date) -> float:

@@ -1,8 +1,9 @@
 """Cycles physiques calculés sans réseau.
 
 Le lunaire suit le mois synodique moyen (Meeus). Le solaire local donne le
-numéro de rotation de Carrington et la place dans le cycle de Schwabe. Les
-flux GOES passent par SunPy, à part, parce qu'ils demandent un téléchargement.
+numéro de rotation de Carrington, la place dans le cycle de Schwabe et les
+solstices. Les flux GOES passent par SunPy, à part, parce qu'ils demandent
+un téléchargement.
 """
 
 from __future__ import annotations
@@ -219,6 +220,8 @@ def sunpy_status() -> dict[str, Any]:
 
 
 def solar_report(day: date | datetime | str | None = None) -> dict[str, Any]:
+    from synchro.ref.seasons import season_state
+
     when = _parse_day(day)
     return {
         "ok": True,
@@ -227,11 +230,13 @@ def solar_report(day: date | datetime | str | None = None) -> dict[str, Any]:
         "note": (
             "Carrington décrit la rotation des régions actives (~27,3 j). "
             "Schwabe décrit le cycle des taches (~11 ans). "
+            "Les solstices suivent la longitude écliptique, hémisphère nord. "
             "Les flux X GOES et les listes d'éruptions se demandent à part, via SunPy."
         ),
         "date": when.isoformat(),
         "carrington": carrington(when),
         "schwabe": schwabe(when),
+        "seasons": season_state(when),
         "sunpy": sunpy_status(),
     }
 

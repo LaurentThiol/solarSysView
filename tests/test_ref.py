@@ -30,6 +30,52 @@ def test_carrington_rotation_one_starts_on_the_anchor_day() -> None:
     assert modern["number"] == 2285
 
 
+def test_solstices_follow_the_published_utc_minute() -> None:
+    from datetime import datetime, timezone
+
+    from synchro.ref.seasons import season_state
+
+    published = (
+        (date(2024, 6, 1), "ete", "2024-06-20", "20:51"),
+        (date(2024, 6, 1), "hiver", "2024-12-21", "09:20"),
+        (date(2024, 6, 21), "ete", "2025-06-21", "02:42"),
+        (date(2025, 6, 22), "hiver", "2025-12-21", "15:03"),
+        (date(2026, 1, 1), "ete", "2026-06-21", "08:24"),
+        (date(2026, 6, 22), "hiver", "2026-12-21", "20:50"),
+        (date(2024, 3, 1), "mars", "2024-03-20", "03:06"),
+        (date(2024, 3, 21), "septembre", "2024-09-22", "12:44"),
+    )
+
+    def minutes(iso: str, hhmm: str) -> int:
+        year, month, day_ = (int(part) for part in iso.split("-"))
+        hour, minute = (int(part) for part in hhmm.split(":"))
+        moment = datetime(year, month, day_, hour, minute, tzinfo=timezone.utc)
+        return int(moment.timestamp() // 60)
+
+    for when, key, exp_date, exp_time in published:
+        state = season_state(when)
+        group = "solstices" if key in ("ete", "hiver") else "equinoxes"
+        event = state[group][key]
+        gap = abs(minutes(event["date"], event["time_utc"]) - minutes(exp_date, exp_time))
+        assert gap <= 1, (when, key, event["instant"], exp_date, exp_time)
+
+
+def test_season_changes_on_the_solstice_day() -> None:
+    from synchro.ref.seasons import season_state
+
+    before = season_state(date(2024, 6, 20))
+    assert before["season"] == "printemps"
+    assert before["solstices"]["ete"]["days"] == 0
+    assert before["solstices"]["ete"]["date"] == "2024-06-20"
+    after = season_state(date(2024, 6, 21))
+    assert after["season"] == "ete"
+    assert after["solstices"]["ete"]["date"] == "2025-06-21"
+    winter_noon = season_state(date(2024, 12, 21))
+    assert winter_noon["season"] == "hiver"
+    assert winter_noon["solstices"]["hiver"]["days"] == 0
+    assert season_state(date(2025, 1, 1))["season"] == "hiver"
+
+
 def test_schwabe_cycle_25_after_the_2019_minimum() -> None:
     state = schwabe(date(2024, 10, 1))
     assert state["cycle"] == 25
@@ -69,7 +115,11 @@ def test_ref_routes_serve_lunar_solar_and_catalog() -> None:
     assert len(body["month"]) == 30
     solar = client.get("/api/ref/solar", params={"date": "2024-06-20"})
     assert solar.status_code == 200
-    assert solar.json()["carrington"]["number"] == 2285
+    body = solar.json()
+    assert body["carrington"]["number"] == 2285
+    assert body["seasons"]["solstices"]["ete"]["date"] == "2024-06-20"
+    assert body["seasons"]["solstices"]["hiver"]["date"] == "2024-12-21"
+    assert body["seasons"]["season"] == "printemps"
     listed = client.get("/api/ref/catalog")
     assert listed.status_code == 200
     assert listed.json()["items"]

@@ -222,7 +222,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Cycle solaire",
     group: "assistants",
-    text: "Dans Réf : rotation de Carrington (~27,3 j) et cycle de Schwabe (~11 ans, minima SILSO). Le flux X GOES et les éruptions passent par SunPy (Fido), en catalogue, sans télécharger le TimeSeries.",
+    text: "Dans Réf : rotation de Carrington (~27,3 j), cycle de Schwabe (~11 ans, minima SILSO) et solstices d’été et d’hiver (hémisphère nord). Le flux X GOES et les éruptions passent par SunPy (Fido), en catalogue, sans télécharger le TimeSeries.",
   },
   {
     term: "Gini",

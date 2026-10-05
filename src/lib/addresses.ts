@@ -338,7 +338,7 @@ const TABS: AddressEntry[] = [
   tabEntry(
     "/ref?tab=solaire",
     "Réf · Solaire",
-    "Rotation de Carrington, cycle de Schwabe, catalogue GOES XRS ou éruptions via SunPy.",
+    "Rotation de Carrington, cycle de Schwabe, solstices d’été et d’hiver, catalogue GOES XRS ou éruptions via SunPy.",
     "assistants"
   ),
   tabEntry(
@@ -536,7 +536,7 @@ const APIS: AddressEntry[] = [
     "x, y, window=20|50|100"
   ),
   apiEntry("/api/ref/lunar", "GET", "Réf · lunaire", "Phase synodique, éclairement et mois civil pour une date UTC.", "assistants", "date=YYYY-MM-DD"),
-  apiEntry("/api/ref/solar", "GET", "Réf · solaire", "Carrington, Schwabe et disponibilité de SunPy.", "assistants", "date=YYYY-MM-DD"),
+  apiEntry("/api/ref/solar", "GET", "Réf · solaire", "Carrington, Schwabe, solstices et disponibilité de SunPy.", "assistants", "date=YYYY-MM-DD"),
   apiEntry(
     "/api/ref/solar/goes",
     "GET",
