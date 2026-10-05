@@ -4,6 +4,7 @@
  */
 
 import { COUPLE_EDGE_LIMIT } from "./couple.ts"
+import { MIN_COUNT_HELP } from "./min-count.ts"
 
 export type NextHelpCopy = {
   title: string
@@ -83,12 +84,13 @@ export const NEXT_FIELD_HELP = {
   },
   couples: {
     title: "Couples",
-    body: "Paires de boules 1–50 sorties ensemble au moins une fois dans la fenêtre. Au départ, la liste va du plus fort poids au plus faible, puis du plus grand compte au plus petit. Un clic sur un en-tête trie cette colonne ; un second clic inverse le sens. Cliquer une ligne choisit la boule la plus petite, épingle le couple, et le relie dans Chaque numéro.",
+    body: "Paires de boules 1–50 sorties ensemble au moins une fois dans la fenêtre. Au départ, la liste va du plus fort poids au plus faible, puis du plus grand compte au plus petit. Un clic sur un en-tête trie cette colonne ; un second clic inverse le sens. Cliquer une ligne choisit la boule la plus petite, épingle le couple, et le relie dans Chaque numéro. Le sélecteur Compte, sous le titre, retire les sorties en dessous du seuil.",
   },
   observed: {
     title: "Couples observés",
-    body: "Nombre de paires distinctes sorties ensemble au moins une fois. Une paire absente de la liste n’a aucune co-sortie dans la fenêtre.",
+    body: "Nombre de paires distinctes sorties ensemble au moins une fois. Quand le compte minimum en retire, le premier nombre est celui qui reste affiché, le second ce total. Une paire absente de ce total n’a aucune co-sortie dans la fenêtre.",
   },
+  minCount: MIN_COUNT_HELP,
   pair: {
     title: "Couple",
     body: "Les deux numéros, du plus petit au plus grand. Le bouton de la ligne épingle ce couple : le volume relie ses deux boules, et Chaque numéro trace le lien à chaque co-sortie. Un clic sur l’en-tête range les couples du plus petit numéro au plus grand. Un second clic inverse.",

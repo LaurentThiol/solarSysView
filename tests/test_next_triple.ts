@@ -158,6 +158,7 @@ const PANEL_HELP_KEYS = [
   "observed",
   "trio",
   "count",
+  "minCount",
   "weight",
   "ago",
   "ball",
@@ -202,4 +203,15 @@ test("Triplets table headers sort each column", () => {
   assert.match(NEXT_TRIPLE_FIELD_HELP.trio.body, /plus petit numéro/)
   assert.match(NEXT_TRIPLE_FIELD_HELP.count.body, /plus grands comptes/)
   assert.match(NEXT_TRIPLE_FIELD_HELP.ago.body, /plus récentes/)
+})
+
+test("Triplets list uses the same count floor as Couples", () => {
+  const source = readFileSync(new URL("../src/components/next/triple-view.tsx", import.meta.url), "utf8")
+  assert.match(source, /CountFloorControl/)
+  assert.match(source, /linksAtLeast/)
+  assert.match(source, /data-triple-shown/)
+  assert.match(source, /data-link-count/)
+  assert.match(source, /NEXT_TRIPLE_FIELD_HELP\.minCount/)
+  assert.match(NEXT_TRIPLE_FIELD_HELP.minCount.body, /une seule fois/)
+  assert.match(NEXT_TRIPLE_FIELD_HELP.triples.body, /sélecteur Compte/)
 })

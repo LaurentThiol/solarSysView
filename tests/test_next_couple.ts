@@ -19,6 +19,18 @@ import {
   type CoupleSortKey,
 } from "../src/lib/next/couple.ts"
 import { NEXT_FIELD_HELP } from "../src/lib/next/help.ts"
+import {
+  DEFAULT_MIN_COUNT,
+  MIN_COUNT_OPTIONS,
+  detailEmptyCopy,
+  hiddenCountCopy,
+  linksAtLeast,
+  listEmptyCopy,
+  minCountAria,
+  minCountFromParam,
+  minCountLabel,
+  observedLine,
+} from "../src/lib/next/min-count.ts"
 import { ADDRESSES } from "../src/lib/addresses.ts"
 import { WEEKDAY_SCOPE_OPTIONS } from "../src/lib/weekday-scope.ts"
 import { labFromPath, labLabel } from "../src/lib/capture/snapshot.ts"
@@ -206,6 +218,7 @@ const LAB_HELP_KEYS = [
   "observed",
   "pair",
   "count",
+  "minCount",
   "weight",
   "ago",
   "ball",
@@ -234,6 +247,12 @@ test("every Next field has online help wired in the Couple tab", () => {
     WEEKDAY_SCOPE_OPTIONS.map((item) => item.label)
   )
   assert.equal(NEXT_FIELD_HELP.space.items?.length, NEXT_WINDOW_PRESETS.length)
+  assert.deepEqual(
+    NEXT_FIELD_HELP.minCount.items?.map((item) => item.label),
+    MIN_COUNT_OPTIONS.map((item) => minCountLabel(item))
+  )
+  assert.match(NEXT_FIELD_HELP.minCount.body, /une seule fois/)
+  assert.match(NEXT_FIELD_HELP.minCount.body, /volume/)
   assert.match(NEXT_FIELD_HELP.volume.body, new RegExp(String(COUPLE_EDGE_LIMIT)))
   assert.match(NEXT_FIELD_HELP.stress.body, new RegExp(String(COUPLE_EDGE_LIMIT)))
 
@@ -255,6 +274,59 @@ test("Couples table headers sort each column", () => {
   assert.match(NEXT_FIELD_HELP.pair.body, /plus petit numéro/)
   assert.match(NEXT_FIELD_HELP.count.body, /plus grands comptes/)
   assert.match(NEXT_FIELD_HELP.ago.body, /plus récentes/)
+})
+
+test("count floor hides co-draws seen once and keeps the heavier ones", () => {
+  const links = [
+    coupleLink({ a: 1, b: 2, count: 1, affinity: 9, ago: 0 }),
+    coupleLink({ a: 3, b: 4, count: 2, affinity: 5, ago: 1 }),
+    coupleLink({ a: 5, b: 6, count: 5, affinity: 4, ago: 2 }),
+    coupleLink({ a: 7, b: 8, count: 3, affinity: 3, ago: 4 }),
+  ]
+  assert.deepEqual(
+    linksAtLeast(links, 1).map((link) => `${link.a}-${link.b}`),
+    ["1-2", "3-4", "5-6", "7-8"]
+  )
+  assert.deepEqual(
+    linksAtLeast(links, 2).map((link) => `${link.a}-${link.b}`),
+    ["3-4", "5-6", "7-8"]
+  )
+  assert.deepEqual(
+    linksAtLeast(links, 4).map((link) => `${link.a}-${link.b}`),
+    ["5-6"]
+  )
+  assert.equal(linksAtLeast(links, 2)[0], links[1])
+  assert.equal(DEFAULT_MIN_COUNT, 2)
+  assert.equal(minCountFromParam(null), 2)
+  assert.equal(minCountFromParam(""), 2)
+  assert.equal(minCountFromParam("1"), 1)
+  assert.equal(minCountFromParam("9"), 2)
+  assert.equal(minCountFromParam("5"), 2)
+  assert.equal(minCountFromParam("4"), 4)
+  assert.equal(minCountLabel(1), "Tous")
+  assert.equal(minCountLabel(2), "≥ 2")
+  assert.match(minCountAria(1), /une seule sortie/)
+  assert.equal(observedLine(3, 10, 2), "3 affichés · 10 observés")
+  assert.equal(observedLine(1, 4, 2), "1 affiché · 4 observés")
+  assert.equal(observedLine(4, 4, 2), "4 observés")
+  assert.equal(observedLine(4, 4, 1), "4 observés")
+  assert.match(listEmptyCopy("couple", 0, 2), /Aucune co-sortie/)
+  assert.match(listEmptyCopy("couple", 8, 2), /Aucun couple sorti au moins 2 fois/)
+  assert.match(listEmptyCopy("triplet", 8, 3), /Aucun triplet sorti au moins 3 fois/)
+  assert.equal(detailEmptyCopy(0, 2), "Aucune co-sortie dans la fenêtre.")
+  assert.match(detailEmptyCopy(4, 2), /au moins 2 fois/)
+  assert.equal(hiddenCountCopy(0, 2), null)
+  assert.equal(hiddenCountCopy(3, 1), null)
+  assert.match(hiddenCountCopy(3, 2) ?? "", /3 co-sorties masquées/)
+  assert.match(hiddenCountCopy(1, 4) ?? "", /1 co-sortie masquée/)
+
+  const lab = readFileSync(new URL("../src/components/next/next-lab.tsx", import.meta.url), "utf8")
+  assert.match(lab, /CountFloorControl/)
+  assert.match(lab, /useMinCount/)
+  assert.match(lab, /linksAtLeast/)
+  assert.match(lab, /data-couple-shown/)
+  assert.match(lab, /data-link-count/)
+  assert.match(lab, /NEXT_FIELD_HELP\.minCount/)
 })
 
 test("Couple shows a reverse indicator for the reading order", () => {

@@ -5,8 +5,17 @@ import { useMemo, useState } from "react"
 import { DrawChart } from "@/components/draw-chart"
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { BallVolume, type VolumeSegment } from "@/components/next/ball-volume"
+import { CountFloorControl } from "@/components/next/count-floor"
 import { Button } from "@/components/ui/button"
 import { formatCoupleAgo } from "@/lib/next/couple"
+import {
+  detailEmptyCopy,
+  hiddenCountCopy,
+  linksAtLeast,
+  listEmptyCopy,
+  observedLine,
+  type MinCount,
+} from "@/lib/next/min-count"
 import { NEXT_TRIPLE_FIELD_HELP } from "@/lib/next/triple-help"
 import {
   defaultTripleSortDir,
@@ -113,6 +122,8 @@ export function TripleReading({
   pinned,
   pinnedTriple,
   tick,
+  minCount,
+  onMinCount,
   onSelectBall,
   onSelectLink,
 }: {
@@ -122,6 +133,8 @@ export function TripleReading({
   pinned: string | null
   pinnedTriple: { a: number; b: number; c: number } | null
   tick: number
+  minCount: MinCount
+  onMinCount: (next: MinCount) => void
   onSelectBall: (ball: number | null) => void
   onSelectLink: (link: TripleLink) => void
 }) {
@@ -143,6 +156,9 @@ export function TripleReading({
     () => sortTripleLinks(schema.links, sortKey, sortDir),
     [schema.links, sortDir, sortKey]
   )
+  const visibleLinks = useMemo(() => linksAtLeast(sortedLinks, minCount), [minCount, sortedLinks])
+  const visibleTouched = linksAtLeast(touched, minCount)
+  const hiddenTouched = hiddenCountCopy(touched.length - visibleTouched.length, minCount)
 
   function toggleTripleSort(key: TripleSortKey) {
     if (sortKey === key) {
@@ -166,7 +182,7 @@ export function TripleReading({
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(16rem,0.8fr)]">
         <section className="min-w-0 rounded-xl border border-border bg-card/40 p-3" aria-label="Triplets">
-          <div className="mb-2 flex flex-col gap-1">
+          <div className="mb-2 flex flex-col gap-2">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-medium">
                 <TitleHelp help={NEXT_TRIPLE_FIELD_HELP.triples}>Triplets</TitleHelp>
@@ -174,17 +190,25 @@ export function TripleReading({
               <p
                 className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
                 data-triple-count={schema.links.length}
+                data-triple-shown={visibleLinks.length}
               >
-                {schema.links.length} observé{schema.links.length > 1 ? "s" : ""}
+                {observedLine(visibleLinks.length, schema.links.length, minCount)}
                 <HelpTip {...NEXT_TRIPLE_FIELD_HELP.observed} />
               </p>
             </div>
+            <CountFloorControl
+              value={minCount}
+              onChange={onMinCount}
+              help={NEXT_TRIPLE_FIELD_HELP.minCount}
+            />
             <p className="text-xs text-muted-foreground">
               Un clic sur un en-tête trie la colonne. Un clic sur une ligne relie le triplet dans Chaque numéro.
             </p>
           </div>
-          {schema.links.length === 0 ? (
-            <p className="py-8 text-sm text-muted-foreground">Aucune co-sortie dans cette fenêtre.</p>
+          {visibleLinks.length === 0 ? (
+            <p className="py-8 text-sm text-muted-foreground">
+              {listEmptyCopy("triplet", schema.links.length, minCount)}
+            </p>
           ) : (
             <div
               className="max-h-[32rem] overflow-auto"
@@ -224,13 +248,21 @@ export function TripleReading({
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedLinks.map((link) => {
+                  {visibleLinks.map((link) => {
                     const key = formatTripleKey(link)
                     const on =
                       pinned === key ||
                       (selected != null && (link.a === selected || link.b === selected || link.c === selected))
                     return (
-                      <tr key={key} className={cn("border-t border-border", on && "bg-primary/15")}>
+                      <tr
+                        key={key}
+                        data-link-count={link.count}
+                        className={cn(
+                          "border-t border-border",
+                          on && "bg-primary/15",
+                          link.count === 1 && !on && "text-muted-foreground"
+                        )}
+                      >
                         <td className="py-1 pr-3">
                           <button
                             type="button"
@@ -283,11 +315,16 @@ export function TripleReading({
             </p>
           ) : (
             <div className="flex flex-col gap-3">
-              {touched.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Aucune co-sortie dans la fenêtre.</p>
+              {visibleTouched.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {detailEmptyCopy(touched.length, minCount)}
+                </p>
               ) : (
                 <ul className="flex max-h-[28rem] flex-col gap-2 overflow-auto">
-                  {touched.map((link) => {
+                  {hiddenTouched ? (
+                    <li className="px-2 text-xs text-muted-foreground">{hiddenTouched}</li>
+                  ) : null}
+                  {visibleTouched.map((link) => {
                     const [left, right] = othersOf(link, selected)
                     const key = formatTripleKey(link)
                     return (

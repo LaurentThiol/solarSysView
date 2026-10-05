@@ -3,6 +3,7 @@
  * Chaque entrée est le texte du point d’exclamation.
  */
 
+import { MIN_COUNT_HELP } from "./min-count.ts"
 import { TRIPLE_EDGE_LIMIT } from "./triple.ts"
 
 export type NextTripleHelpCopy = {
@@ -19,12 +20,13 @@ export const NEXT_TRIPLE_FIELD_HELP = {
   },
   triples: {
     title: "Triplets",
-    body: "Triplets de boules 1–50 sortis ensemble au moins une fois dans la fenêtre. Au départ, la liste va du plus fort poids au plus faible, puis du plus grand compte au plus petit. Un clic sur un en-tête trie cette colonne ; un second clic inverse le sens. Cliquer une ligne choisit la boule la plus petite, épingle le triplet, et le relie dans Chaque numéro.",
+    body: "Triplets de boules 1–50 sortis ensemble au moins une fois dans la fenêtre. Au départ, la liste va du plus fort poids au plus faible, puis du plus grand compte au plus petit. Un clic sur un en-tête trie cette colonne ; un second clic inverse le sens. Cliquer une ligne choisit la boule la plus petite, épingle le triplet, et le relie dans Chaque numéro. Le sélecteur Compte, sous le titre, retire les sorties en dessous du seuil.",
   },
   observed: {
     title: "Triplets observés",
-    body: "Nombre de triplets distincts sortis ensemble au moins une fois. Un triplet absent de la liste n’a aucune co-sortie dans la fenêtre.",
+    body: "Nombre de triplets distincts sortis ensemble au moins une fois. Quand le compte minimum en retire, le premier nombre est celui qui reste affiché, le second ce total. Un triplet absent de ce total n’a aucune co-sortie dans la fenêtre.",
   },
+  minCount: MIN_COUNT_HELP,
   trio: {
     title: "Triplet",
     body: "Les trois numéros, du plus petit au plus grand. Le bouton de la ligne épingle ce triplet : le volume relie ses trois boules, et Chaque numéro trace le lien à chaque co-sortie. Un clic sur l’en-tête range les triplets du plus petit numéro au plus grand. Un second clic inverse.",

@@ -5,6 +5,7 @@ import { useCallback, useMemo, useRef, useState } from "react"
 import { useRegisterCapture } from "@/components/capture"
 import { DrawChart } from "@/components/draw-chart"
 import { HelpTip, HelpWrap, LabelHelp, TitleHelp } from "@/components/help"
+import { CountFloorControl } from "@/components/next/count-floor"
 import { CoupleStress, CoupleVolume } from "@/components/next/couple-view"
 import { PronosticNextPanel } from "@/components/next/pronostic-next"
 import { TripleReading } from "@/components/next/triple-view"
@@ -29,11 +30,19 @@ import {
 } from "@/lib/next/couple"
 import type { CaptureContext } from "@/lib/capture/snapshot"
 import { NEXT_FIELD_HELP } from "@/lib/next/help"
+import {
+  detailEmptyCopy,
+  hiddenCountCopy,
+  linksAtLeast,
+  listEmptyCopy,
+  observedLine,
+} from "@/lib/next/min-count"
 import { PRONOSTIC_NEXT_HELP } from "@/lib/next/pronostic-help"
 import { NEXT_TRIPLE_FIELD_HELP } from "@/lib/next/triple-help"
 import { formatTripleKey, tripleSchema, type TripleLink } from "@/lib/next/triple"
 import { useDraws } from "@/lib/use-draws"
 import { useLabTab } from "@/lib/use-lab-tab"
+import { useMinCount } from "@/lib/use-min-count"
 import { useWeekdayScope } from "@/lib/use-weekday-scope"
 import { weekdayFilterDay, type WeekdayScope } from "@/lib/weekday-scope"
 import { cn } from "@/lib/utils"
@@ -117,6 +126,7 @@ export function NextLab() {
   const [tripleTick, setTripleTick] = useState(0)
   const [sortKey, setSortKey] = useState<CoupleSortKey>("weight")
   const [sortDir, setSortDir] = useState(defaultCoupleSortDir("weight"))
+  const [minCount, setMinCount] = useMinCount()
 
   const archive = useMemo(
     () => [...draws].sort((left, right) => left.date.localeCompare(right.date)),
@@ -167,6 +177,9 @@ export function NextLab() {
     () => sortCoupleLinks(schema.links, sortKey, sortDir),
     [schema.links, sortDir, sortKey]
   )
+  const visibleLinks = useMemo(() => linksAtLeast(sortedLinks, minCount), [minCount, sortedLinks])
+  const visibleTouched = linksAtLeast(touched, minCount)
+  const hiddenTouched = hiddenCountCopy(touched.length - visibleTouched.length, minCount)
 
   function toggleCoupleSort(key: CoupleSortKey) {
     if (sortKey === key) {
@@ -197,6 +210,7 @@ export function NextLab() {
       summary: [
         `reverse · ${formatCoupleReading(reading)}`,
         pinnedLabel ? `Lien ${pinnedLabel} dans Chaque numéro` : "",
+        minCount <= 1 ? "Compte : tous" : `Compte ≥ ${minCount}`,
         reading.stress == null ? "Stress —" : `Stress ${reading.stress.toFixed(3)}`,
         edges,
       ].filter((line) => line.length > 0),
@@ -207,6 +221,7 @@ export function NextLab() {
         newest: reading.newest,
         oldest: reading.oldest,
         stress: reading.stress,
+        minCount,
         edges:
           tab === "triple"
             ? triples.edges.slice(0, 12).map((link) => ({
@@ -367,6 +382,8 @@ export function NextLab() {
             pinned={triplePinned}
             pinnedTriple={pinnedTriple}
             tick={tripleTick}
+            minCount={minCount}
+            onMinCount={setMinCount}
             onSelectBall={selectTripleBall}
             onSelectLink={selectTripleLink}
           />
@@ -383,7 +400,7 @@ export function NextLab() {
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(16rem,0.8fr)]">
           <section className="min-w-0 rounded-xl border border-border bg-card/40 p-3" aria-label="Couples">
-            <div className="mb-2 flex flex-col gap-1">
+            <div className="mb-2 flex flex-col gap-2">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-medium">
                   <TitleHelp help={NEXT_FIELD_HELP.couples}>Couples</TitleHelp>
@@ -391,17 +408,25 @@ export function NextLab() {
                 <p
                   className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
                   data-couple-count={schema.links.length}
+                  data-couple-shown={visibleLinks.length}
                 >
-                  {schema.links.length} observé{schema.links.length > 1 ? "s" : ""}
+                  {observedLine(visibleLinks.length, schema.links.length, minCount)}
                   <HelpTip {...NEXT_FIELD_HELP.observed} />
                 </p>
               </div>
+              <CountFloorControl
+                value={minCount}
+                onChange={setMinCount}
+                help={NEXT_FIELD_HELP.minCount}
+              />
               <p className="text-xs text-muted-foreground">
                 Un clic sur un en-tête trie la colonne. Un clic sur une ligne relie le couple dans Chaque numéro.
               </p>
             </div>
-            {schema.links.length === 0 ? (
-              <p className="py-8 text-sm text-muted-foreground">Aucune co-sortie dans cette fenêtre.</p>
+            {visibleLinks.length === 0 ? (
+              <p className="py-8 text-sm text-muted-foreground">
+                {listEmptyCopy("couple", schema.links.length, minCount)}
+              </p>
             ) : (
               <div
                 className="max-h-[32rem] overflow-auto"
@@ -441,11 +466,19 @@ export function NextLab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedLinks.map((link) => {
+                    {visibleLinks.map((link) => {
                       const key = `${link.a}-${link.b}`
                       const on = pinned === key || (selected != null && (link.a === selected || link.b === selected))
                       return (
-                        <tr key={key} className={cn("border-t border-border", on && "bg-primary/15")}>
+                        <tr
+                          key={key}
+                          data-link-count={link.count}
+                          className={cn(
+                            "border-t border-border",
+                            on && "bg-primary/15",
+                            link.count === 1 && !on && "text-muted-foreground"
+                          )}
+                        >
                           <td className="py-1 pr-3">
                             <button
                               type="button"
@@ -498,11 +531,16 @@ export function NextLab() {
               </p>
             ) : (
               <div className="flex flex-col gap-3">
-                {touched.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Aucune co-sortie dans la fenêtre.</p>
+                {visibleTouched.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {detailEmptyCopy(touched.length, minCount)}
+                  </p>
                 ) : (
                   <ul className="flex max-h-[28rem] flex-col gap-2 overflow-auto">
-                    {touched.map((link) => {
+                    {hiddenTouched ? (
+                      <li className="px-2 text-xs text-muted-foreground">{hiddenTouched}</li>
+                    ) : null}
+                    {visibleTouched.map((link) => {
                       const other = partnerOf(link, selected)
                       const key = `${link.a}-${link.b}`
                       return (
