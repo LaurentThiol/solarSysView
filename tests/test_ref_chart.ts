@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { phaseMeanCurve, trajectorySegments } from "../src/lib/ref-chart.ts"
+import { calendarAnchor, phaseMeanCurve, trajectorySegments } from "../src/lib/ref-chart.ts"
 import type { PlanePoint, TracePoint } from "../src/lib/ref.ts"
 
 function trace(phase: number, sum: number): TracePoint {
@@ -52,4 +52,22 @@ test("trajectory breaks when a phase wraps, and keeps the draw order", () => {
     segments[1].map((point) => point.x),
     [0.05, 0.15]
   )
+})
+
+const dates = ["2024-06-18", "2024-06-21", "2024-06-25"]
+
+test("calendar anchor sits on a draw that is the solstice day", () => {
+  const x = calendarAnchor("2024-06-21", dates, (day) => ({ "2024-06-18": 0, "2024-06-21": 30, "2024-06-25": 70 })[day])
+  assert.equal(x, 30)
+})
+
+test("calendar anchor interpolates a solstice between two draws", () => {
+  const x = calendarAnchor("2024-06-20", dates, (day) => ({ "2024-06-18": 0, "2024-06-21": 30, "2024-06-25": 70 })[day])
+  assert.equal(x, 20)
+})
+
+test("calendar anchor stays quiet outside the window", () => {
+  const xOf = (day: string) => ({ "2024-06-18": 0, "2024-06-21": 30, "2024-06-25": 70 })[day]
+  assert.equal(calendarAnchor("2024-06-17", dates, xOf), null)
+  assert.equal(calendarAnchor("2024-06-26", dates, xOf), null)
 })

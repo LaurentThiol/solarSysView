@@ -59,6 +59,13 @@ _MARKS: tuple[tuple[str, str, str, str, float], ...] = (
     ("septembre", "september", "equinoxe_septembre", "Équinoxe de septembre", 180.0),
 )
 
+_SHORT = {
+    "solstice_ete": "Été",
+    "solstice_hiver": "Hiver",
+    "equinoxe_mars": "Mars",
+    "equinoxe_septembre": "Sept.",
+}
+
 
 def sun_longitude(jd: float) -> float:
     """Longitude écliptique du Soleil, en degrés. 0 = équinoxe de mars."""
@@ -201,6 +208,36 @@ def _event(when: date, kind: str, event_id: str, label: str, longitude: float) -
         "instant": moment.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "days": (moment.date() - when).days,
     }
+
+
+def calendar_marks(start: date, end: date) -> list[dict[str, Any]]:
+    """Solstices et équinoxes dont la date civile tombe entre les deux bornes, incluses."""
+    if end < start:
+        start, end = end, start
+    seen: set[tuple[str, str]] = set()
+    marks: list[dict[str, Any]] = []
+    for year in range(start.year - 1, end.year + 2):
+        for _key, kind, event_id, label, _longitude in _MARKS:
+            moment = _round_minute(_jd_to_utc(_event_jd_utc(year, kind)))
+            day = moment.date()
+            if day < start or day > end:
+                continue
+            token = (event_id, day.isoformat())
+            if token in seen:
+                continue
+            seen.add(token)
+            marks.append(
+                {
+                    "id": event_id,
+                    "label": label,
+                    "short": _SHORT[event_id],
+                    "kind": "solstice" if event_id.startswith("solstice") else "equinoxe",
+                    "date": day.isoformat(),
+                    "time_utc": moment.strftime("%H:%M"),
+                }
+            )
+    marks.sort(key=lambda item: (item["date"], item["id"]))
+    return marks
 
 
 def season_state(day: date) -> dict[str, Any]:

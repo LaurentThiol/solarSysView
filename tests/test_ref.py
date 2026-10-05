@@ -60,6 +60,26 @@ def test_solstices_follow_the_published_utc_minute() -> None:
         assert gap <= 1, (when, key, event["instant"], exp_date, exp_time)
 
 
+def test_calendar_marks_keep_events_inside_the_draw_span() -> None:
+    from synchro.ref.plane import trace
+    from synchro.ref.seasons import calendar_marks
+
+    alone = calendar_marks(date(2024, 6, 20), date(2024, 6, 20))
+    assert [item["id"] for item in alone] == ["solstice_ete"]
+    assert calendar_marks(date(2024, 6, 21), date(2024, 6, 25)) == []
+
+    draws = [
+        {"draw_date": date(2024, 3, 1), "numbers": [1, 2, 3, 4, 5], "stars": [1, 2]},
+        {"draw_date": date(2024, 12, 31), "numbers": [6, 7, 8, 9, 10], "stars": [3, 4]},
+    ]
+    marks = {(item["id"], item["date"]) for item in trace(draws, "lunaire", 20)["calendar"]}
+    assert ("equinoxe_mars", "2024-03-20") in marks
+    assert ("solstice_ete", "2024-06-20") in marks
+    assert ("equinoxe_septembre", "2024-09-22") in marks
+    assert ("solstice_hiver", "2024-12-21") in marks
+    assert all(item[1][:4] == "2024" for item in marks)
+
+
 def test_season_changes_on_the_solstice_day() -> None:
     from synchro.ref.seasons import season_state
 

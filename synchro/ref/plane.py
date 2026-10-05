@@ -7,6 +7,7 @@ from typing import Any
 from synchro.analysis.common import as_date, iso, numbers_of, ordered_draws, stars_of
 from synchro.fdj import rank1_jackpot
 from synchro.ref.phases import PHASES, phase
+from synchro.ref.seasons import calendar_marks
 
 WINDOWS = (20, 50, 100)
 SCALES = ("sum", "star_sum", "n1", "n2", "n3", "n4", "n5", "e1", "e2")
@@ -80,6 +81,7 @@ def trace(draws: list[dict[str, Any]], cycle_id: str, window: int = 50) -> dict[
         point = _point(draw)
         point["phase"] = phase(cycle_id, point["date"])
         rows.append(point)
+    marks = calendar_marks(as_date(rows[0]["date"]), as_date(rows[-1]["date"])) if rows else []
     return {
         "ok": True,
         "cycle": cycle_id,
@@ -88,6 +90,7 @@ def trace(draws: list[dict[str, Any]], cycle_id: str, window: int = 50) -> dict[
         "short": short,
         "scales": list(SCALES),
         "points": rows,
+        "calendar": marks,
     }
 
 

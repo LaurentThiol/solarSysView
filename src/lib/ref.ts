@@ -160,6 +160,15 @@ export type DrawScalars = Record<ScaleId, number> & {
 
 export type TracePoint = DrawScalars & { phase: number }
 
+export type CalendarMark = {
+  id: string
+  label: string
+  short: string
+  kind: "solstice" | "equinoxe"
+  date: string
+  time_utc: string
+}
+
 export type TraceReport = {
   ok: boolean
   cycle: string
@@ -167,6 +176,7 @@ export type TraceReport = {
   count: number
   short: boolean
   points: TracePoint[]
+  calendar?: CalendarMark[]
   error?: string
 }
 

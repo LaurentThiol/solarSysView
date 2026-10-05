@@ -7,6 +7,7 @@ import {
   ComposedChart,
   Line,
   Scatter,
+  usePlotArea,
   useXAxisScale,
   useYAxisScale,
   XAxis,
@@ -18,11 +19,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { formatEuro } from "@/lib/draws"
 import { PillTabs } from "@/components/ui/pill-tabs"
-import { phaseMeanCurve, scaleLabel, trajectorySegments } from "@/lib/ref-chart"
+import { calendarAnchor, phaseMeanCurve, scaleLabel, trajectorySegments } from "@/lib/ref-chart"
 import {
   fetchPlane,
   fetchTrace,
   SCALES,
+  type CalendarMark,
   type PlanePoint,
   type PlaneReport,
   type ScaleId,
@@ -108,7 +110,7 @@ export function CycleCloud({
           Phase × tirage
           <HelpTip
             title="Nuage de phase"
-            body="La courbe suit les tirages dans l’ordre des dates : trait plein pour la grandeur, tirets pour la phase. Le nuage place la même grandeur contre la phase, avec la moyenne par tranche. Un losange marque un jackpot gagné (au moins un gagnant du rang 1, Europe, France comprise)."
+            body="La courbe suit les tirages dans l’ordre des dates : trait plein pour la grandeur, tirets pour la phase. Un trait vertical marque la date civile d’un solstice (plein) ou d’un équinoxe (pointillés), entre les tirages qui l’encadrent. Le nuage place la même grandeur contre la phase, avec la moyenne par tranche. Un losange marque un jackpot gagné (au moins un gagnant du rang 1, Europe, France comprise)."
           />
         </CardTitle>
       </CardHeader>
@@ -123,7 +125,12 @@ export function CycleCloud({
         ) : null}
         {report ? (
           <>
-            <DrawCurve points={points} scale={scale} phaseLabel={labels[cycle] ?? cycle} />
+            <DrawCurve
+              points={points}
+              scale={scale}
+              phaseLabel={labels[cycle] ?? cycle}
+              calendar={report.calendar ?? []}
+            />
             <PhaseScatter points={points} scale={scale} xLabel={labels[cycle] ?? cycle} />
           </>
         ) : error ? null : (
@@ -267,10 +274,12 @@ function DrawCurve({
   points,
   scale,
   phaseLabel,
+  calendar,
 }: {
   points: TracePoint[]
   scale: ScaleId
   phaseLabel: string
+  calendar: CalendarMark[]
 }) {
   const label = scaleLabel(scale)
   const rows = points.map((point) => ({ ...point, draw: point[scale] }))
@@ -280,7 +289,7 @@ function DrawCurve({
   return (
     <div className="flex flex-col gap-1">
       <p className="text-xs text-muted-foreground">
-        Courbe des tirages — {label}. Tirets : phase {phaseLabel}.
+        Courbe des tirages — {label}. Tirets : phase {phaseLabel}. Trait vertical plein : solstice. Pointillés : équinoxe.
       </p>
       <ChartContainer
         config={{
@@ -327,10 +336,52 @@ function DrawCurve({
             dot={false}
             isAnimationActive={false}
           />
+          <CalendarMarks dates={rows.map((row) => row.date)} marks={calendar} />
         </ComposedChart>
       </ChartContainer>
       <JackpotLegend points={points} />
     </div>
+  )
+}
+
+function CalendarMarks({ dates, marks }: { dates: string[]; marks: CalendarMark[] }) {
+  const xScale = useXAxisScale()
+  const plot = usePlotArea()
+  if (!xScale || !plot || !marks.length) return null
+  const top = plot.y
+  const bottom = plot.y + plot.height
+  return (
+    <g pointerEvents="none">
+      {marks.map((mark) => {
+        const x = calendarAnchor(mark.date, dates, (day) => xScale(day, { position: "middle" }))
+        if (x == null) return null
+        const solstice = mark.kind === "solstice"
+        return (
+          <g key={`${mark.id}-${mark.date}`}>
+            <line
+              x1={x}
+              x2={x}
+              y1={top}
+              y2={bottom}
+              stroke="var(--foreground)"
+              strokeOpacity={solstice ? 0.55 : 0.4}
+              strokeDasharray={solstice ? undefined : "2 3"}
+              strokeWidth={1}
+            />
+            <text
+              x={x}
+              y={top + 9}
+              textAnchor="middle"
+              fill="var(--foreground)"
+              fillOpacity={0.75}
+              fontSize={9}
+            >
+              {mark.short}
+            </text>
+          </g>
+        )
+      })}
+    </g>
   )
 }
 

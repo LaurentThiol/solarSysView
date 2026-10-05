@@ -195,7 +195,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Réf",
         help: {
           title: "Réf",
-          body: "Cycles physiques par sous-onglet, avec un nuage phase × tirage. Un losange marque un jackpot gagné (rang 1). La synthèse croise deux phases et colore le total, n1–n5 ou E1/E2 sur 20, 50 ou 100 tirages. Décrit une date, pas le prochain tirage.",
+          body: "Cycles physiques par sous-onglet, avec un nuage phase × tirage. Un trait vertical marque un solstice ou un équinoxe. Un losange marque un jackpot gagné (rang 1). La synthèse croise deux phases et colore le total, n1–n5 ou E1/E2 sur 20, 50 ou 100 tirages. Décrit une date, pas le prochain tirage.",
         },
       },
       {
