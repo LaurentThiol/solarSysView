@@ -144,7 +144,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "nextData",
         help: {
           title: "nextData",
-          body: "Deux grilles 5+2 pour le prochain tirage. Trois ans apprend sur n, n−1 et n−2, avec un poids plus fort sur les 50 ou 100 derniers. Fenêtre seule n’apprend que sur ces tirages. La base recompte les numéros, couples et triples sortis. Le retour compare la prévision au tirage déjà sorti. Ce n’est pas une probabilité de gain FDJ.",
+          body: "Deux grilles 5+2 pour le prochain tirage, lues par LightGBM et par CatBoost. Trois ans apprend sur n, n−1 et n−2, avec un poids plus fort sur les 50 ou 100 derniers. Fenêtre seule n’apprend que sur ces tirages. La base recompte les numéros, couples et triples sortis. Ce n’est pas une probabilité de gain FDJ.",
         },
       },
       {

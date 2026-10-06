@@ -25,5 +25,7 @@ test("the two trainings, the focus and the recounted base are explained", () => 
   assert.match(NEXTDATA_HELP.covariates.items?.map((item) => item.label).join(" ") ?? "", /Triples/)
   assert.match(NEXTDATA_HELP.tabBase.body, /1\/50/)
   assert.match(NEXTDATA_HELP.banner.body, /pas une probabilité de gain FDJ/)
+  assert.match(NEXTDATA_HELP.moteur.body, /CatBoost/)
+  assert.match(NEXTDATA_HELP.bibliotheque.body, /Jeux/)
   assert.match(nav, /Fenêtre seule/)
 })

@@ -58,6 +58,7 @@ def walk_forward(
     families: Iterable[str],
     *,
     estimators: int = 12,
+    libraries: tuple[str, ...] = ("lightgbm",),
 ) -> dict[str, Any]:
     rows = frame.rows
     steps: list[dict[str, Any]] = []
@@ -73,34 +74,44 @@ def walk_forward(
         step["persistence"] = _actual(previous)
         step["mean"] = {"sum": sum(float(row["sum"]) for row in prefix) / len(prefix)}
         failed = False
+        window = prefix[-frame.focus :]
+        base = recount(window, star_pool=frame.star_pool)
         for mode in MODES:
-            try:
-                moments, _importance, _engine = predict_moments(
-                    prefix,
-                    horizon,
-                    mode=mode,
-                    focus=frame.focus,
-                    families=families,
-                    estimators=estimators,
-                    quantiles=(0.5,),
-                )
-            except ValueError:
-                failed = True
+            for library in libraries:
+                key = mode if library == "lightgbm" else f"{mode}_catboost"
+                try:
+                    moments, _importance, _engine = predict_moments(
+                        prefix,
+                        horizon,
+                        mode=mode,
+                        focus=frame.focus,
+                        families=families,
+                        estimators=estimators,
+                        quantiles=(0.5,),
+                        library=library,
+                    )
+                except Exception:
+                    if library == "lightgbm":
+                        failed = True
+                    break
+                ranked = beam(moments, base, star_pool=frame.star_pool, radius=2)
+                if not ranked:
+                    if library == "lightgbm":
+                        failed = True
+                    break
+                packed = _pack(ranked[0]["numbers"], ranked[0]["stars"], moments["sum"]["mid"])
+                packed["sum_model"] = round(float(moments["sum"]["mid"]), 4)
+                step[key] = packed
+            if failed:
                 break
-            window = prefix[-frame.focus :]
-            base = recount(window, star_pool=frame.star_pool)
-            ranked = beam(moments, base, star_pool=frame.star_pool, radius=2)
-            if not ranked:
-                failed = True
-                break
-            packed = _pack(ranked[0]["numbers"], ranked[0]["stars"], moments["sum"]["mid"])
-            packed["sum_model"] = round(float(moments["sum"]["mid"]), 4)
-            step[mode] = packed
         if failed or any(mode not in step for mode in MODES):
             continue
         steps.append(step)
 
-    metrics = {mode: _metrics(steps, mode) for mode in MODES}
+    metric_keys = list(MODES)
+    if any("corpus_catboost" in step for step in steps):
+        metric_keys.extend(("corpus_catboost", "fenetre_catboost"))
+    metrics = {mode: _metrics(steps, mode) for mode in metric_keys}
     metrics["persistence"] = _metrics(steps, "persistence")
     metrics["mean"] = _sum_only(steps, "mean")
     best = "corpus"
@@ -185,7 +196,7 @@ def _public_step(step: dict[str, Any]) -> dict[str, Any]:
             kept[name] = None if value is None else round(float(value), 4)
         return kept
 
-    return {
+    published = {
         "date": step["date"],
         "actual": side(step["actual"]),
         "corpus": side(step["corpus"]),
@@ -193,3 +204,7 @@ def _public_step(step: dict[str, Any]) -> dict[str, Any]:
         "persistence": side(step["persistence"]),
         "mean": {"sum": round(float(step["mean"]["sum"]), 4)},
     }
+    for key in ("corpus_catboost", "fenetre_catboost"):
+        if step.get(key):
+            published[key] = side(step[key])
+    return published

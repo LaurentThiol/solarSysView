@@ -51,6 +51,8 @@ const CHART: ChartConfig = {
   actual: { label: "Sorti", color: "var(--foreground)" },
   corpus: { label: "Trois ans", color: "var(--chart-1)" },
   fenetre: { label: "Fenêtre seule", color: "var(--chart-2)" },
+  catCorpus: { label: "CatBoost trois ans", color: "var(--chart-3)" },
+  catFenetre: { label: "CatBoost fenêtre", color: "var(--chart-4)" },
 }
 
 type Band = { lo: number; mid: number; hi: number }
@@ -64,6 +66,7 @@ type ModePayload = {
   engine: string
   importance: { name: string; gain: number; family: string }[]
   chronos?: { available?: boolean; weight?: number; holdout_mae_chronos?: number; holdout_mae_lgb?: number } | null
+  catboost?: ModePayload | null
 }
 type StepSide = {
   numbers: number[]
@@ -88,6 +91,7 @@ type ForecastPayload = {
   next_date: string
   star_pool: number
   engine: string
+  catboost?: boolean
   best_mae_sum: "corpus" | "fenetre"
   modes: { corpus: ModePayload; fenetre: ModePayload }
   base: {
@@ -169,7 +173,13 @@ function SeriesChart({
   delta: boolean
   primary: "corpus" | "fenetre"
 }) {
-  const keys = [dataKey, `${dataKey}_corpus`, `${dataKey}_fenetre`]
+  const keys = [
+    dataKey,
+    `${dataKey}_corpus`,
+    `${dataKey}_fenetre`,
+    `${dataKey}_corpus_catboost`,
+    `${dataKey}_fenetre_catboost`,
+  ]
   const data = rows.map((row, index) => {
     const next = { ...row }
     if (!delta) return next
@@ -207,6 +217,8 @@ function SeriesChart({
           <Line type="monotone" dataKey={dataKey} name="Sorti" stroke="var(--color-actual)" dot={false} strokeWidth={1.6} connectNulls />
           <Line type="monotone" dataKey={`${dataKey}_corpus`} name="Trois ans" stroke="var(--color-corpus)" dot={false} strokeDasharray="5 3" strokeWidth={1.4} connectNulls />
           <Line type="monotone" dataKey={`${dataKey}_fenetre`} name="Fenêtre seule" stroke="var(--color-fenetre)" dot={false} strokeDasharray="2 3" strokeWidth={1.4} connectNulls />
+          <Line type="monotone" dataKey={`${dataKey}_corpus_catboost`} name="CatBoost trois ans" stroke="var(--color-catCorpus)" dot={false} strokeDasharray="1 3" strokeWidth={1.4} connectNulls />
+          <Line type="monotone" dataKey={`${dataKey}_fenetre_catboost`} name="CatBoost fenêtre" stroke="var(--color-catFenetre)" dot={false} strokeDasharray="6 2" strokeWidth={1.4} connectNulls />
         </LineChart>
       </ChartContainer>
     </div>
@@ -226,10 +238,12 @@ export function NextDataLab() {
     hint?: string | null
     darts?: boolean
     chronos?: boolean
+    catboost?: boolean
   } | null>(null)
   const [focus, setFocus] = useState<50 | 100>(50)
   const [years, setYears] = useState<string[]>(["n", "n-1", "n-2"])
   const [primary, setPrimary] = useState<"corpus" | "fenetre">("corpus")
+  const [library, setLibrary] = useState<"lightgbm" | "catboost">("lightgbm")
   const [weekday, setWeekday] = useState<"tous" | "mardi" | "vendredi">("tous")
   const [families, setFamilies] = useState<string[]>(FAMILIES.map((item) => item.id))
   const [withChronos, setWithChronos] = useState(false)
@@ -267,8 +281,16 @@ export function NextDataLab() {
     }
   }, [])
 
-  const marked = useMemo(() => new Set(report?.modes[primary].grid.numbers ?? []), [report, primary])
-  const markedStars = useMemo(() => new Set(report?.modes[primary].grid.stars ?? []), [report, primary])
+  const marked = useMemo(() => {
+    const block = report?.modes[primary]
+    const grid = library === "catboost" && block?.catboost ? block.catboost.grid : block?.grid
+    return new Set(grid?.numbers ?? [])
+  }, [report, primary, library])
+  const markedStars = useMemo(() => {
+    const block = report?.modes[primary]
+    const grid = library === "catboost" && block?.catboost ? block.catboost.grid : block?.grid
+    return new Set(grid?.stars ?? [])
+  }, [report, primary, library])
 
   function toggleYear(year: string) {
     setYears((current) => {
@@ -322,7 +344,8 @@ export function NextDataLab() {
   }
 
   function sendToJeux() {
-    const grid = report?.modes[primary].grid
+    const block = report?.modes[primary]
+    const grid = library === "catboost" && block?.catboost ? block.catboost.grid : block?.grid
     if (!grid) return
     const spec = defaultStoredSpec()
     const sum = grid.numbers.reduce((total, value) => total + value, 0)
@@ -390,6 +413,22 @@ export function NextDataLab() {
             <Button type="button" variant={primary === "fenetre" ? "default" : "outline"} onClick={() => setPrimary("fenetre")}>
               Fenêtre seule
             </Button>
+            <span className="ml-2 inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Bibliothèque
+              <HelpTip {...NEXTDATA_HELP.bibliotheque} />
+            </span>
+            <Button type="button" size="sm" variant={library === "lightgbm" ? "default" : "outline"} onClick={() => setLibrary("lightgbm")}>
+              LightGBM
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={library === "catboost" ? "default" : "outline"}
+              disabled={status?.catboost === false && !report?.catboost}
+              onClick={() => setLibrary("catboost")}
+            >
+              CatBoost
+            </Button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -404,7 +443,7 @@ export function NextDataLab() {
             ))}
             <HelpWrap help={NEXTDATA_HELP.moteur}>
               <Button type="button" size="sm" variant={withChronos ? "secondary" : "ghost"} onClick={() => setWithChronos((value) => !value)}>
-                {withChronos ? "Chronos inclus" : "LightGBM seul"}
+                {withChronos ? "Chronos inclus" : "Sans Chronos"}
               </Button>
             </HelpWrap>
             <HelpWrap help={NEXTDATA_HELP.delta}>
@@ -479,12 +518,23 @@ export function NextDataLab() {
                             </span>
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="flex flex-col gap-3">
-                          <ForecastBalls grid={block.grid} quantiles={block.quantiles} active={active} />
-                          <p className="text-xs text-muted-foreground">
-                            Moteur {block.engine === "darts" ? "Darts + chaîne" : "LightGBM"}.
-                            {block.chronos?.available ? ` Mélange Chronos : poids LightGBM ${block.blend_weight}.` : ""}
-                          </p>
+                        <CardContent className="flex flex-col gap-4">
+                          <div className={cn("flex flex-col gap-2 rounded-xl p-2", active && library === "lightgbm" && "bg-primary/5")}>
+                            <p className="text-xs font-medium text-muted-foreground">
+                              LightGBM{block.mae_sum != null ? ` · MAE somme ${block.mae_sum}` : ""}
+                              {block.engine === "darts" ? " · Darts" : ""}
+                              {block.chronos?.available ? ` · Chronos ${block.blend_weight}` : ""}
+                            </p>
+                            <ForecastBalls grid={block.grid} quantiles={block.quantiles} active={active && library === "lightgbm"} />
+                          </div>
+                          {block.catboost && (
+                            <div className={cn("flex flex-col gap-2 rounded-xl p-2", active && library === "catboost" && "bg-primary/5")}>
+                              <p className="text-xs font-medium text-muted-foreground">
+                                CatBoost{block.catboost.mae_sum != null ? ` · MAE somme ${block.catboost.mae_sum}` : ""}
+                              </p>
+                              <ForecastBalls grid={block.catboost.grid} quantiles={block.catboost.quantiles} active={active && library === "catboost"} />
+                            </div>
+                          )}
                           {active && (
                             <HelpWrap help={NEXTDATA_HELP.jeux}>
                               <Button type="button" variant="outline" onClick={sendToJeux}>
@@ -497,14 +547,20 @@ export function NextDataLab() {
                     )
                   })}
                 </div>
-                {report.modes[primary].alternates.length > 0 && (
+                {((library === "catboost" && report.modes[primary].catboost
+                  ? report.modes[primary].catboost.alternates
+                  : report.modes[primary].alternates) ?? []
+                ).length > 0 && (
                   <div className="flex flex-col gap-2">
                     <p className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Cinq suivantes · {MODE_LABEL[primary]}
+                      Cinq suivantes · {MODE_LABEL[primary]} · {library === "catboost" ? "CatBoost" : "LightGBM"}
                       <HelpTip {...NEXTDATA_HELP.suivantes} />
                     </p>
                     <ul className="flex flex-col gap-1 text-sm tabular-nums">
-                      {report.modes[primary].alternates.map((grid) => (
+                      {(library === "catboost" && report.modes[primary].catboost
+                        ? report.modes[primary].catboost.alternates
+                        : report.modes[primary].alternates
+                      ).map((grid) => (
                         <li key={grid.numbers.join("-") + grid.stars.join("-")}>
                           {grid.numbers.join(" ")} + {grid.stars.join(" ")}
                         </li>
@@ -625,8 +681,10 @@ export function NextDataLab() {
                     <tbody>
                       {(
                         [
-                          ["corpus", "Trois ans"],
-                          ["fenetre", "Fenêtre seule"],
+                          ["corpus", "LightGBM · trois ans"],
+                          ["fenetre", "LightGBM · fenêtre seule"],
+                          ["corpus_catboost", "CatBoost · trois ans"],
+                          ["fenetre_catboost", "CatBoost · fenêtre seule"],
                           ["persistence", "Persistance"],
                           ["mean", "Moyenne"],
                         ] as const
@@ -672,7 +730,8 @@ export function NextDataLab() {
                     <Card key={`${mode}-imp`}>
                       <CardHeader><CardTitle className="text-base"><TitleHelp help={NEXTDATA_HELP.poids}>Poids · {MODE_LABEL[mode]}</TitleHelp></CardTitle></CardHeader>
                       <CardContent>
-                        <ul className="flex flex-col gap-1 text-sm">
+                        <p className="mb-2 text-xs text-muted-foreground">LightGBM</p>
+                        <ul className="mb-4 flex flex-col gap-1 text-sm">
                           {report.modes[mode].importance.map((item) => (
                             <li key={item.name} className="flex justify-between gap-3 tabular-nums">
                               <span>{item.name} <span className="text-muted-foreground">{item.family}</span></span>
@@ -680,6 +739,19 @@ export function NextDataLab() {
                             </li>
                           ))}
                         </ul>
+                        {report.modes[mode].catboost && (
+                          <>
+                            <p className="mb-2 text-xs text-muted-foreground">CatBoost</p>
+                            <ul className="flex flex-col gap-1 text-sm">
+                              {report.modes[mode].catboost.importance.map((item) => (
+                                <li key={`cat-${item.name}`} className="flex justify-between gap-3 tabular-nums">
+                                  <span>{item.name} <span className="text-muted-foreground">{item.family}</span></span>
+                                  <span>{item.gain}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
                       </CardContent>
                     </Card>
                   ))}

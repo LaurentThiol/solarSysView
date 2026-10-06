@@ -143,6 +143,29 @@ def test_status_does_not_import_darts_or_torch() -> None:
     )
 
 
+def test_catboost_matches_the_lightgbm_reading() -> None:
+    pytest = __import__("pytest")
+    pytest.importorskip("catboost")
+    report = run_forecast(
+        _draws(36, seed=6),
+        focus=24,
+        estimators=4,
+        backtest_estimators=2,
+        with_chronos=False,
+    )
+    assert report["ok"] is True
+    assert report["catboost"] is True
+    for mode in ("corpus", "fenetre"):
+        cat = report["modes"][mode]["catboost"]
+        assert cat["engine"] == "catboost"
+        assert cat["grid"]["numbers"] == sorted(cat["grid"]["numbers"])
+        assert len(set(cat["grid"]["numbers"])) == 5
+        assert len(cat["grid"]["stars"]) == 2
+        assert cat["importance"]
+    assert report["backtest"]["metrics"]["corpus_catboost"]["mae"]["sum"] is not None
+    assert report["backtest"]["metrics"]["fenetre_catboost"]["mae"]["sum"] is not None
+
+
 def test_blend_keeps_lightgbm_when_chronos_is_absent() -> None:
     assert blend_mid(12.0, None, 0.2) == 12.0
     assert blend_mid(10.0, 0.0, 0.5) == 5.0

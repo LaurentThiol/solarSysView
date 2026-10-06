@@ -81,23 +81,31 @@ export const NEXTDATA_HELP = {
     ],
   },
   moteur: {
-    title: "LightGBM et Chronos",
+    title: "LightGBM, CatBoost et Chronos",
     wide: true,
-    body: "LightGBM lit les décalages des séries et les covariables cochées, puis enchaîne les rangs : n1, puis les écarts jusqu’à n5, puis e1 et l’écart d’étoiles. La grille est le voisin entier le mieux noté.",
+    body: "LightGBM et CatBoost lisent les mêmes décalages et les mêmes covariables, puis enchaînent les rangs de la même façon : n1, puis les écarts jusqu’à n5, puis e1 et l’écart d’étoiles. Chacun propose sa grille. Le voisin entier le mieux noté est affiché.",
     items: [
       {
-        label: "LightGBM seul",
-        text: "Réglage de départ. La page reste utilisable sans télécharger de modèle.",
+        label: "Sans Chronos",
+        text: "Réglage de départ. LightGBM et CatBoost partent sans modèle de fondation.",
+      },
+      {
+        label: "CatBoost",
+        text: "Même corpus, même focus, mêmes quantiles. Il complète LightGBM, il ne le remplace pas. Les deux grilles restent côte à côte. Il faut ./launch install-nextdata.",
       },
       {
         label: "Chronos inclus",
-        text: "Médiane zéro-shot sur la somme, la somme des étoiles et n1, pour chaque mode. Le mélange penche vers la lecture qui s’est moins trompée sur le dernier tirage. Le premier appel télécharge amazon/chronos-t5-small. Il faut ./launch install-nextdata.",
+        text: "Médiane zéro-shot sur la somme, la somme des étoiles et n1, mélangée à LightGBM. Le mélange penche vers la lecture qui s’est moins trompée sur le dernier tirage. CatBoost reste seul. Le premier appel télécharge amazon/chronos-t5-small.",
       },
       {
         label: "Darts",
-        text: "S’il est installé, il remplace la médiane temporelle du prochain pas. La chaîne des rangs reste LightGBM. Darts n’est pas chargé à l’ouverture de la page.",
+        text: "S’il est installé, il remplace la médiane temporelle LightGBM du prochain pas. La chaîne des rangs reste LightGBM. Darts n’est pas chargé à l’ouverture de la page.",
       },
     ],
+  },
+  bibliotheque: {
+    title: "Bibliothèque mise en avant",
+    body: "Choisit la grille envoyée vers Jeux : celle de LightGBM ou celle de CatBoost, pour le mode d’entraînement encadré. Les deux restent calculées. CatBoost absent : le bouton reste sur LightGBM.",
   },
   delta: {
     title: "Niveaux ou DeltaEvol",
@@ -106,7 +114,7 @@ export const NEXTDATA_HELP = {
   covariates: {
     title: "Covariables",
     wide: true,
-    body: "Cases cochées par défaut. Une famille éteinte sort de LightGBM. Les horloges sont connues avant le tirage. Le reste n’est connu qu’une fois les boules sorties : le modèle ne le voit que jusqu’au dernier tirage.",
+    body: "Cases cochées par défaut. Une famille éteinte sort de LightGBM et de CatBoost. Les horloges sont connues avant le tirage. Le reste n’est connu qu’une fois les boules sorties : les modèles ne le voient que jusqu’au dernier tirage.",
     items: [
       {
         label: "Calendrier",
@@ -242,6 +250,6 @@ export const NEXTDATA_HELP = {
   },
   poids: {
     title: "Poids des variables",
-    body: "Les quinze colonnes que LightGBM a le plus utilisées pour la somme et pour n1. Le nom dit le décalage : lag:sum:2 est la somme d’il y a deux tirages. La famille regroupe calendrier, lune, forme, décennies, delta, répétitions, couples, triples ou la série elle-même. Un gain élevé dit que la colonne a servi à couper les arbres, pas qu’elle annonce le prochain tirage à elle seule.",
+    body: "Les quinze colonnes les plus utilisées pour la somme et pour n1, une liste pour LightGBM et une pour CatBoost. Le nom dit le décalage : lag:sum:2 est la somme d’il y a deux tirages. La famille regroupe calendrier, lune, forme, décennies, delta, répétitions, couples, triples ou la série elle-même. Un gain élevé dit que la colonne a servi à couper les arbres, pas qu’elle annonce le prochain tirage à elle seule.",
   },
 } satisfies Record<string, HelpCopy>

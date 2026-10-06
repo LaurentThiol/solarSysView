@@ -6,6 +6,7 @@
 # avec le torch de Morpho, Chartisme et Cycles.
 u8darts>=0.30
 lightgbm>=4.3
+catboost>=1.2
 chronos-forecasting>=1.5
 torch>=2.6
 matplotlib>=3.8

@@ -1109,7 +1109,7 @@ cmd_install_nextdata() {
   local venv="$ROOT/.venv"
   SKIP_INSTALL=0
   ensure_install
-  info "Installation nextData (LightGBM via Darts, Chronos, torch, matplotlib)…"
+  info "Installation nextData (LightGBM, CatBoost, Darts, Chronos, torch, matplotlib)…"
   if ! "$venv/bin/python" -m pip install -r "$ROOT/requirements-nextdata.txt"; then
     die "pip install -r requirements-nextdata.txt a échoué. Voir ./launch doctor"
   fi
@@ -1121,6 +1121,9 @@ cmd_install_nextdata() {
       die "Sur Mac : brew install libomp — puis relancez ./launch install-nextdata"
     fi
     die "import lightgbm a échoué. Voir le message au-dessus."
+  fi
+  if ! MPLBACKEND=Agg "$venv/bin/python" -c 'import catboost' 2>/dev/null; then
+    warn "CatBoost ne se charge pas. LightGBM reste disponible."
   fi
   ok "nextData prêt. Grilles → nextData. Le premier Chronos télécharge amazon/chronos-t5-small."
 }
@@ -1254,6 +1257,11 @@ nextdata_doctor() {
   else
     printf '%snextData : Darts absent — la chaîne LightGBM directe reste disponible (./launch install-nextdata)%s\n' \
       "$C_DIM" "$C_RESET"
+  fi
+  if MPLBACKEND=Agg "$py" -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("catboost") else 1)'; then
+    ok "nextData : CatBoost installé (même lecture que LightGBM)"
+  else
+    printf '%snextData : CatBoost absent — ./launch install-nextdata%s\n' "$C_DIM" "$C_RESET"
   fi
   if MPLBACKEND=Agg "$py" -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("chronos") and importlib.util.find_spec("torch") else 1)'; then
     ok "nextData : Chronos + torch installés"

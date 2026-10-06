@@ -86,6 +86,7 @@ def dependency_status() -> dict[str, Any]:
         "chronos": _installed("chronos"),
         "torch": _installed("torch"),
         "matplotlib": _installed("matplotlib"),
+        "catboost": _installed("catboost"),
         "ready": error is None,
         "install": "./launch install-nextdata",
     }
@@ -210,6 +211,14 @@ def _clip(name: str, value: float) -> float:
     return float(min(hi, max(lo, value)))
 
 
+def catboost_import_error() -> str | None:
+    try:
+        import catboost  # noqa: F401
+    except Exception as exc:
+        return str(exc)
+    return None
+
+
 def _fit_one(
     x_train: np.ndarray,
     y_train: np.ndarray,
@@ -218,10 +227,28 @@ def _fit_one(
     *,
     alpha: float,
     estimators: int,
+    library: str = "lightgbm",
 ):
     fallback = float(np.average(y_train, weights=weights)) if len(y_train) else 0.0
     if len(y_train) < 8 or float(np.std(y_train)) < 1e-8:
         return fallback, None
+    row = np.nan_to_num(x_next.reshape(1, -1), nan=0.0)
+    if library == "catboost":
+        from catboost import CatBoostRegressor
+
+        model = CatBoostRegressor(
+            loss_function=f"Quantile:alpha={float(alpha)}",
+            iterations=int(estimators),
+            depth=4 if estimators >= 24 else 3,
+            learning_rate=0.08,
+            random_seed=42,
+            verbose=False,
+            allow_writing_files=False,
+            thread_count=1,
+        )
+        model.fit(x_train, y_train, sample_weight=weights)
+        pred = float(np.asarray(model.predict(row)).reshape(-1)[0])
+        return pred, model
     import lightgbm as lgb
 
     dataset = lgb.Dataset(x_train, label=y_train, weight=weights, free_raw_data=False)
@@ -241,7 +268,7 @@ def _fit_one(
         "verbose": -1,
     }
     booster = lgb.train(params, dataset, num_boost_round=int(estimators))
-    pred = float(booster.predict(x_next.reshape(1, -1))[0])
+    pred = float(booster.predict(row)[0])
     return pred, booster
 
 
@@ -265,6 +292,7 @@ def predict_moments(
     families: Iterable[str],
     estimators: int = 48,
     quantiles: tuple[float, ...] = (0.1, 0.5, 0.9),
+    library: str = "lightgbm",
 ) -> tuple[dict[str, dict[str, float]], list[dict[str, Any]], str]:
     """Médianes et quantiles du pas qui suit `rows`. La chaîne raffine les rangs."""
     n = len(rows)
@@ -309,7 +337,13 @@ def predict_moments(
         median_model = None
         for alpha in alphas:
             pred, model = _fit_one(
-                x_time, y, weights, x_next_arr, alpha=alpha, estimators=estimators
+                x_time,
+                y,
+                weights,
+                x_next_arr,
+                alpha=alpha,
+                estimators=estimators,
+                library=library,
             )
             found[alpha] = pred
             if alpha == 0.5:
@@ -349,7 +383,9 @@ def predict_moments(
         found = {}
         median_model = None
         for alpha in alphas:
-            pred, model = _fit_one(x_chain, y, w_chain, x_vec, alpha=alpha, estimators=estimators)
+            pred, model = _fit_one(
+                x_chain, y, w_chain, x_vec, alpha=alpha, estimators=estimators, library=library
+            )
             found[alpha] = pred
             if alpha == 0.5:
                 median_model = model
@@ -358,13 +394,15 @@ def predict_moments(
         if name == "n1" and median_model is not None:
             importance_models.append((median_model, chain_names))
 
-    return moments, _importance(importance_models), "lightgbm"
+    return moments, _importance(importance_models), library
 
 
 def _importance(models: list[tuple[Any, list[str]]], limit: int = 15) -> list[dict[str, Any]]:
     gains: dict[str, float] = {}
     for model, names in models:
-        if hasattr(model, "feature_importance"):
+        if hasattr(model, "get_feature_importance"):
+            values = model.get_feature_importance()
+        elif hasattr(model, "feature_importance"):
             values = model.feature_importance(importance_type="gain")
         else:
             values = getattr(model, "feature_importances_", None)
@@ -582,6 +620,10 @@ def run_forecast(
 
     base_rows = frame.rows[frame.focus_start :]
     base = recount(base_rows, star_pool=frame.star_pool)
+    libraries = ["lightgbm"]
+    catboost_error = catboost_import_error()
+    if catboost_error is None:
+        libraries.append("catboost")
     modes: dict[str, Any] = {}
     moment_book: dict[str, dict[str, dict[str, float]]] = {}
     engines: dict[str, str] = {}
@@ -594,6 +636,7 @@ def run_forecast(
                 focus=frame.focus,
                 families=families,
                 estimators=estimators,
+                library="lightgbm",
             )
         except ValueError as exc:
             return {"ok": False, "error": str(exc), **dependency_status()}
@@ -610,6 +653,31 @@ def run_forecast(
         moment_book[mode] = moments
         engines[mode] = engine
         modes[mode] = {"importance": importance, "engine": engine}
+        if "catboost" in libraries:
+            try:
+                cat_moments, cat_importance, _cat_engine = predict_moments(
+                    frame.rows,
+                    frame.horizon,
+                    mode=mode,
+                    focus=frame.focus,
+                    families=families,
+                    estimators=estimators,
+                    library="catboost",
+                )
+            except Exception as exc:
+                libraries = ["lightgbm"]
+                catboost_error = str(exc)
+                for built in modes.values():
+                    built.pop("catboost", None)
+                for key in ("corpus_catboost", "fenetre_catboost"):
+                    moment_book.pop(key, None)
+            else:
+                moment_book[f"{mode}_catboost"] = cat_moments
+                modes[mode]["catboost"] = {
+                    "importance": cat_importance,
+                    "engine": "catboost",
+                    "_moments": cat_moments,
+                }
 
     from synchro.nextdata.backtest import walk_forward
 
@@ -617,12 +685,14 @@ def run_forecast(
         frame,
         families,
         estimators=backtest_estimators,
+        libraries=tuple(libraries),
     )
     chronos_info: dict[str, Any] = {"used": False}
     if with_chronos:
         chronos_info = _blend_chronos(frame, moment_book, walked)
 
-    for mode, moments in moment_book.items():
+    for mode in ("corpus", "fenetre"):
+        moments = moment_book[mode]
         ranked = beam(moments, base, star_pool=frame.star_pool)
         if not ranked:
             return {"ok": False, "error": "Aucune grille entière n’a pu être projetée.", **dependency_status()}
@@ -639,6 +709,26 @@ def run_forecast(
                 "chronos": chronos_info.get(mode),
             }
         )
+        cat_block = modes[mode].get("catboost")
+        if cat_block and f"{mode}_catboost" in moment_book:
+            cat_ranked = beam(moment_book[f"{mode}_catboost"], base, star_pool=frame.star_pool)
+            if not cat_ranked:
+                return {"ok": False, "error": "CatBoost n’a pas produit de grille entière.", **dependency_status()}
+            cat_best = cat_ranked[0]
+            cat_metrics = walked["metrics"].get(f"{mode}_catboost") or {}
+            cat_block.pop("_moments", None)
+            cat_block.update(
+                {
+                    "grid": {
+                        "numbers": cat_best["numbers"],
+                        "stars": cat_best["stars"],
+                        "score": cat_best["score"],
+                    },
+                    "alternates": cat_ranked[1:],
+                    "quantiles": _rank_view(moment_book[f"{mode}_catboost"]),
+                    "mae_sum": (cat_metrics.get("mae") or {}).get("sum"),
+                }
+            )
 
     return {
         "ok": True,
@@ -653,6 +743,8 @@ def run_forecast(
         "star_pool": frame.star_pool,
         "anchor_year": frame.anchor_year,
         "engine": engines.get(mode_primary, "lightgbm"),
+        "catboost": catboost_error is None,
+        "catboost_error": catboost_error,
         "dependencies": dependency_status(),
         "modes": modes,
         "base": public_base(base),
@@ -731,10 +823,10 @@ def _chart(
             point[name] = round(float(row[name]), 4)
         step = by_date.get(row["date"])
         if step:
-            for mode in ("corpus", "fenetre"):
+            for mode in ("corpus", "fenetre", "corpus_catboost", "fenetre_catboost"):
                 side = step.get(mode) or {}
                 for name in level_names:
-                    if name in side:
+                    if name in side and side[name] is not None:
                         point[f"{name}_{mode}"] = side[name]
         points.append(point)
     forecast: dict[str, Any] = {
