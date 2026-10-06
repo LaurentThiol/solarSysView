@@ -28,7 +28,7 @@ async function proxy(request: NextRequest, path: string[]) {
     return NextResponse.json({ ok: false, error: "API locale non configurée" }, { status: 503 })
   }
   const search = request.nextUrl.search
-  const heavy = suffix === "forecast"
+  const heavy = suffix === "forecast" || suffix === "training"
   const timeout = heavy ? FORECAST_TIMEOUT_MS : HEALTH_TIMEOUT_MS
   try {
     const headers = new Headers()

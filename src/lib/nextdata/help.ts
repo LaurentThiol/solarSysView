@@ -253,3 +253,27 @@ export const NEXTDATA_HELP = {
     body: "Les quinze colonnes les plus utilisées pour la somme et pour n1, une liste pour LightGBM et une pour CatBoost. Le nom dit le décalage : lag:sum:2 est la somme d’il y a deux tirages. La famille regroupe calendrier, lune, forme, décennies, delta, répétitions, couples, triples ou la série elle-même. Un gain élevé dit que la colonne a servi à couper les arbres, pas qu’elle annonce le prochain tirage à elle seule.",
   },
 } satisfies Record<string, HelpCopy>
+
+export const NEXTDATA_TRAINING_HELP = {
+  banner: {
+    title: "nextDataTraining",
+    wide: true,
+    body: "Même réglage que nextData, mesuré sur les dix tirages d’avant. −1 cache seulement le dernier tirage et le prévoit. −10 se place dix tirages plus tôt et prévoit celui qui venait juste après.\n\nL’écart est prévu moins sorti. Au-dessus de zéro, la lecture était trop haute. Ce n’est pas une prévision à dix coups d’avance, et ce n’est pas une probabilité de gain FDJ.",
+  },
+  decalage: {
+    title: "Décalage −x",
+    body: "x va de 1 à 10. L’apprentissage s’arrête avant le tirage noté. Le tirage d’après la coupure est connu : on mesure l’écart, on ne le devine pas.",
+  },
+  somme: {
+    title: "Écart de somme",
+    body: "Chaque point est un décalage. Le trait est l’écart signé de la somme des cinq numéros. La persistance rejoue le tirage d’avant la coupure : c’est le repère. Un MAE de 12 ne dit rien si rejouer le dernier est à 8.",
+  },
+  rangs: {
+    title: "Écarts de rangs",
+    body: "Une case, un décalage et un rang. n1 est le plus petit numéro, n5 le plus grand. Le nombre est prévu moins sorti. Une case marquée d’un point : le numéro sorti tombe dans la bande 10–90 du modèle.",
+  },
+  boules: {
+    title: "Prévu et sorti",
+    body: "Pour chaque décalage : la date, les cinq numéros prévus par la lecture choisie, les cinq sortis, et combien sont communs. Les étoiles suivent le même compte, de 0 à 2.",
+  },
+} satisfies Record<string, HelpCopy>

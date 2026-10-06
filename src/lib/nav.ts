@@ -148,6 +148,14 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         },
       },
       {
+        href: "/nextdatatraining",
+        label: "nextDataTraining",
+        help: {
+          title: "nextDataTraining",
+          body: "Même réglage que nextData, reculé de 1 à 10 tirages. À chaque cran, le modèle ne voit pas le tirage qu’il prévoit. La courbe est l’écart entre cette prévision et le tirage sorti, à côté de la persistance. Ce n’est pas un ticket.",
+        },
+      },
+      {
         href: "/jeux",
         label: "Jeux",
         help: {

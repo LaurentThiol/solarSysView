@@ -166,6 +166,38 @@ def test_catboost_matches_the_lightgbm_reading() -> None:
     assert report["backtest"]["metrics"]["fenetre_catboost"]["mae"]["sum"] is not None
 
 
+def test_shift_hides_the_draw_it_scores(monkeypatch) -> None:
+    from synchro.nextdata.backtest import _covers, _signed, shift_report
+    from synchro.nextdata.forecast import predict_moments
+    from synchro.nextdata.panel import build_frame
+
+    assert _signed(12, 10) == 2
+    assert _signed(8, 10) == -2
+    assert _covers(10, {"lo": 9, "mid": 10, "hi": 11}) is True
+    assert _covers(12, {"lo": 9, "mid": 10, "hi": 11}) is False
+
+    draws = _draws(40, seed=8)
+    frame = build_frame(draws, focus=24)
+    seen: list[dict[str, str | int]] = []
+    real = predict_moments
+
+    def spy(rows, horizon, **kwargs):
+        seen.append({"n": len(rows), "last": rows[-1]["date"], "target": horizon[0]["date"]})
+        return real(rows, horizon, **kwargs)
+
+    monkeypatch.setattr("synchro.nextdata.backtest.predict_moments", spy)
+    report = shift_report(frame, ["forme"], estimators=2, libraries=("lightgbm",), quantiles=(0.5,))
+    assert [shift["x"] for shift in report["shifts"]] == list(range(1, 11))
+    assert report["shifts"][0]["date"] == frame.rows[-1]["date"]
+    assert all(str(item["last"]) < str(item["target"]) for item in seen)
+    assert any(item["n"] == len(frame.rows) - 1 for item in seen)
+    errors = report["shifts"][0]["readings"]["corpus"]["errors"]
+    assert isinstance(errors["sum"], float)
+    assert isinstance(errors["n1"], float)
+    assert "persistence" in report["summary"]
+    assert report["summary"]["corpus"]["mae_sum"] is not None
+
+
 def test_blend_keeps_lightgbm_when_chronos_is_absent() -> None:
     assert blend_mid(12.0, None, 0.2) == 12.0
     assert blend_mid(10.0, 0.0, 0.5) == 5.0

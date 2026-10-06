@@ -509,6 +509,14 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/brain/analogs", "POST", "Brain · analogie", "Voisins (dont Jumeaux) pour une fiche.", "assistants"),
   apiEntry("/api/nextdata/status", "GET", "nextData · statut", "Présence de LightGBM, Darts, Chronos et torch.", "grilles"),
   apiEntry(
+    "/api/nextdata/training",
+    "POST",
+    "nextDataTraining",
+    "Dix décalages −1 à −10 : écart signé entre la prévision et le tirage sorti.",
+    "grilles",
+    "focus=50|100"
+  ),
+  apiEntry(
     "/api/nextdata/forecast",
     "POST",
     "nextData · pronostic",

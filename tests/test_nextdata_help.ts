@@ -2,9 +2,10 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { NEXTDATA_HELP } from "../src/lib/nextdata/help.ts"
+import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "../src/lib/nextdata/help.ts"
 
 const lab = readFileSync(new URL("../src/components/nextdata/nextdata-lab.tsx", import.meta.url), "utf8")
+const training = readFileSync(new URL("../src/components/nextdata/training-lab.tsx", import.meta.url), "utf8")
 const nav = readFileSync(new URL("../src/lib/nav.ts", import.meta.url), "utf8")
 
 test("every nextData help entry is wired and says something", () => {
@@ -28,4 +29,14 @@ test("the two trainings, the focus and the recounted base are explained", () => 
   assert.match(NEXTDATA_HELP.moteur.body, /CatBoost/)
   assert.match(NEXTDATA_HELP.bibliotheque.body, /Jeux/)
   assert.match(nav, /Fenêtre seule/)
+})
+
+test("nextDataTraining explains the backward shift", () => {
+  for (const key of Object.keys(NEXTDATA_TRAINING_HELP)) {
+    assert.match(training, new RegExp(`NEXTDATA_TRAINING_HELP\\.${key}\\b`), key)
+    assert.ok(NEXTDATA_TRAINING_HELP[key as keyof typeof NEXTDATA_TRAINING_HELP].body.length > 40)
+  }
+  assert.match(NEXTDATA_TRAINING_HELP.banner.body, /pas une probabilité de gain FDJ/)
+  assert.match(NEXTDATA_TRAINING_HELP.decalage.body, /avant le tirage noté/)
+  assert.match(nav, /nextdatatraining/)
 })

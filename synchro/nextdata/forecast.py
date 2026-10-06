@@ -755,6 +755,60 @@ def run_forecast(
     }
 
 
+def run_training(
+    draws: list[dict[str, Any]],
+    *,
+    focus: int = 50,
+    years: Iterable[str] | None = None,
+    weekday: str | None = None,
+    covariates: Iterable[str] | None = None,
+    estimators: int = 16,
+) -> dict[str, Any]:
+    """Banc −1…−10. Même réglage que le pronostic, sans Chronos."""
+    if lightgbm_import_error():
+        status = dependency_status()
+        detail = status.get("hint") or status.get("lightgbm_error") or "LightGBM ne se charge pas."
+        return {
+            "ok": False,
+            "error": f"{detail} Sinon : ./launch install-nextdata.",
+            **status,
+        }
+    families = normalize_families(covariates)
+    try:
+        frame = build_frame(draws, years=years, focus=int(focus), weekday=weekday)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), **dependency_status()}
+    libraries = ["lightgbm"]
+    catboost_error = catboost_import_error()
+    if catboost_error is None:
+        libraries.append("catboost")
+    from synchro.nextdata.backtest import shift_report
+
+    try:
+        report = shift_report(
+            frame,
+            families,
+            estimators=estimators,
+            libraries=tuple(libraries),
+        )
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), **dependency_status()}
+    return {
+        "ok": True,
+        "focus": frame.focus,
+        "focus_requested": int(focus),
+        "years": frame.years,
+        "years_present": frame.years_present,
+        "weekday": frame.weekday,
+        "covariates": families,
+        "anchor_year": frame.anchor_year,
+        "catboost": catboost_error is None,
+        "catboost_error": catboost_error,
+        "dependencies": dependency_status(),
+        **report,
+    }
+
+
 def _blend_chronos(
     frame: Frame,
     moment_book: dict[str, dict[str, dict[str, float]]],

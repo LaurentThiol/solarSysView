@@ -6,12 +6,14 @@ import math
 from typing import Any, Iterable
 
 from synchro.nextdata.empirical import recount
-from synchro.nextdata.forecast import predict_moments
+from synchro.nextdata.forecast import _rank_view, predict_moments
 from synchro.nextdata.panel import Frame
 from synchro.nextdata.project import beam
 
 FIELDS = ("sum", "n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2")
 MODES = ("corpus", "fenetre")
+SHIFT_MAX = 10
+SHIFT_FIELDS = ("sum", "n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2")
 
 
 def _pack(numbers: list[int], stars: list[int], fallback_sum: float | None = None) -> dict[str, Any]:
@@ -208,3 +210,144 @@ def _public_step(step: dict[str, Any]) -> dict[str, Any]:
         if step.get(key):
             published[key] = side(step[key])
     return published
+
+
+def _signed(predicted: float | None, actual: float | None) -> float | None:
+    if predicted is None or actual is None:
+        return None
+    return round(float(predicted) - float(actual), 4)
+
+
+def _covers(actual: float | None, band: dict[str, float] | None) -> bool | None:
+    if actual is None or not band:
+        return None
+    return float(band["lo"]) <= float(actual) <= float(band["hi"])
+
+
+def _reading_key(mode: str, library: str) -> str:
+    return mode if library == "lightgbm" else f"{mode}_catboost"
+
+
+def shift_report(
+    frame: Frame,
+    families: Iterable[str],
+    *,
+    estimators: int = 12,
+    libraries: tuple[str, ...] = ("lightgbm",),
+    quantiles: tuple[float, ...] = (0.1, 0.5, 0.9),
+) -> dict[str, Any]:
+    """Dix coupures −1…−10. Chaque prévision n'apprend pas le tirage qu'elle note.
+
+    x = 1 cache le dernier tirage. x = 10 se place dix tirages plus tôt et
+    prévoit celui qui venait juste après. L'écart est prévu − sorti.
+    """
+    rows = frame.rows
+    shifts: list[dict[str, Any]] = []
+    for lag in range(1, SHIFT_MAX + 1):
+        if len(rows) - lag < 16:
+            break
+        prefix = rows[:-lag]
+        target = rows[-lag]
+        follower = rows[-lag + 1] if lag > 1 else frame.horizon[0]
+        horizon = [target, follower]
+        readings: dict[str, Any] = {}
+        previous = _actual(prefix[-1])
+        actual = _actual(target)
+        readings["persistence"] = _shift_side(previous, actual, None)
+        window = prefix[-frame.focus :]
+        base = recount(window, star_pool=frame.star_pool)
+        for mode in MODES:
+            for library in libraries:
+                key = _reading_key(mode, library)
+                try:
+                    moments, _importance, _engine = predict_moments(
+                        prefix,
+                        horizon,
+                        mode=mode,
+                        focus=frame.focus,
+                        families=families,
+                        estimators=estimators,
+                        quantiles=quantiles,
+                        library=library,
+                    )
+                except Exception:
+                    continue
+                ranked = beam(moments, base, star_pool=frame.star_pool, radius=1)
+                if not ranked:
+                    continue
+                packed = _pack(ranked[0]["numbers"], ranked[0]["stars"], moments["sum"]["mid"])
+                readings[key] = _shift_side(packed, actual, _rank_view(moments))
+        shifts.append(
+            {
+                "x": lag,
+                "label": f"−{lag}",
+                "date": target["date"],
+                "actual": _public_numbers(actual),
+                "readings": readings,
+            }
+        )
+    return {
+        "shifts": shifts,
+        "summary": _shift_summary(shifts),
+    }
+
+
+def _public_numbers(block: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "numbers": block.get("numbers") or [],
+        "stars": block.get("stars") or [],
+        "sum": block.get("sum"),
+        "n1": block.get("n1"),
+        "n2": block.get("n2"),
+        "n3": block.get("n3"),
+        "n4": block.get("n4"),
+        "n5": block.get("n5"),
+        "star_sum": block.get("star_sum"),
+        "e1": block.get("e1"),
+        "e2": block.get("e2"),
+    }
+
+
+def _shift_side(
+    predicted: dict[str, Any],
+    actual: dict[str, Any],
+    bands: dict[str, dict[str, float]] | None,
+) -> dict[str, Any]:
+    errors = {field: _signed(predicted.get(field), actual.get(field)) for field in SHIFT_FIELDS}
+    in_band = {field: _covers(actual.get(field), None if bands is None else bands.get(field)) for field in SHIFT_FIELDS}
+    numbers = predicted.get("numbers") or []
+    stars = predicted.get("stars") or []
+    return {
+        "numbers": numbers,
+        "stars": stars,
+        "errors": errors,
+        "in_band": in_band,
+        "hits_numbers": _hits(numbers, actual.get("numbers") or []) if numbers else None,
+        "hits_stars": _hits(stars, actual.get("stars") or []) if stars else None,
+    }
+
+
+def _shift_summary(shifts: list[dict[str, Any]]) -> dict[str, Any]:
+    keys: set[str] = set()
+    for shift in shifts:
+        keys.update(shift["readings"])
+    summary: dict[str, Any] = {}
+    for key in sorted(keys):
+        sum_errors = [
+            shift["readings"][key]["errors"]["sum"]
+            for shift in shifts
+            if key in shift["readings"] and shift["readings"][key]["errors"].get("sum") is not None
+        ]
+        number_hits = [
+            shift["readings"][key]["hits_numbers"]
+            for shift in shifts
+            if key in shift["readings"] and shift["readings"][key].get("hits_numbers") is not None
+        ]
+        summary[key] = {
+            "mae_sum": None if not sum_errors else round(sum(abs(value) for value in sum_errors) / len(sum_errors), 4),
+            "hits_numbers": None
+            if not number_hits
+            else round(sum(float(value) for value in number_hits) / len(number_hits), 4),
+            "count": len(sum_errors),
+        }
+    return summary
