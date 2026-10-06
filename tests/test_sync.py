@@ -56,7 +56,7 @@ def test_expected_friday_at_publish_is_today() -> None:
     assert expected_last_draw_date(now) == date(2026, 8, 28)
 
 
-def test_expected_wednesday_is_tuesday() -> None:
+def test_expected_day_after_tuesday_is_tuesday() -> None:
     now = datetime(2026, 9, 2, 14, 0, tzinfo=PARIS)
     assert expected_last_draw_date(now) == date(2026, 9, 1)
 

@@ -586,7 +586,7 @@ def run_confrontation(
 ) -> dict[str, Any]:
     """Trois séries : mixte (mardi + vendredi), mardi seul, vendredi seul.
 
-    Un tirage sans jour ne compte que dans le mixte. Il n’y a pas de série du mercredi.
+    Un tirage sans jour ne compte que dans le mixte.
     Chaque tête et le global ne s’ajustent que sur les `lookback` situations d’avant.
     Les trois séries tournent en parallèle dès que l’archive est assez longue.
     """

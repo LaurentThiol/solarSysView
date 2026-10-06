@@ -39,7 +39,7 @@ def test_annual_tab_is_wired() -> None:
     assert "trait continu" in view
     assert "aria-pressed" in view
     assert "mardi + vendredi" in view
-    assert "ne tire pas le mercredi" in glossary
+    assert "Mardi et vendredi se sélectionnent" in glossary
     assert "Annuel" in page
     assert 'term: "Annuel"' in glossary
     assert "Annuel · somme des 5 numéros" in pack or "reading" in pack

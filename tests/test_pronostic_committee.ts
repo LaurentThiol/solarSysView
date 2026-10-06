@@ -103,7 +103,6 @@ test("a point forecast counts one grid and does not need three hits", () => {
   assert.equal(scored.scopes.mardi.rows.length, 0)
   const sentence = confrontationSentence(scored, 1)
   assert.match(sentence, /Pas assez de tirages du mardi/)
-  assert.match(sentence, /mercredi/)
   assert.match(sentence, /Mardi \+ vendredi mélange/)
 })
 
@@ -221,7 +220,6 @@ test("historic tab names both automatic rates and the absent python banner", () 
   assert.match(logic, /Le comité reprend la moyenne/)
   assert.match(logic, /mélange les mardis et les vendredis/)
   assert.match(logic, /Mardi \+ vendredi/)
-  assert.doesNotMatch(committee, /mercredi seul/)
 })
 
 function axesOf(numbers: number[], stars: number[]): CommitteeAxis[] {

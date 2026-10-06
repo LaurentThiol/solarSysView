@@ -52,7 +52,7 @@ flowchart LR
 | `planAxes` | Vecteur z | Deux axes choisis, défaut = ordre des rangs | Nuage et carré ±k·σ | Plan |
 | `lookbackComite` | Choix historique | 50 reste 50 | 20 ou 50 envoyés à Python | 100 et choisi avant deviennent 20 |
 | `tiragePropre` | Corps POST | 5 numéros distincts dans 1–50, 2 étoiles distinctes dans 1–12 | Tirage du comité | Python. Le reste est écarté |
-| `series` | Tirages propres | Jour mardi, vendredi, ou aucun | Trois calculs séparés. Sans jour = mixte seul | Comité. Pas de mercredi |
+| `series` | Tirages propres | Jour mardi, vendredi, ou aucun | Trois calculs séparés. Sans jour = mixte seul | Comité |
 | `assezTete` | Fenêtre d’un axe | Au moins 4 points et variance | Réseau de la tête | Sinon moyenne |
 | `porte` | Erreurs d’avant | Médiane réseau inférieure ou égale à la moyenne, sur au plus 10 essais | Tête gardée | Sinon moyenne. Égalité : le réseau reste |
 | `global` | Onze décisions | Au moins une tête gardée, et 8 exemples | Centres réécrits | Sinon moyenne, bouton Préparer inactif |

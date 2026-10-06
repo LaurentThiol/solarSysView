@@ -107,7 +107,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Annuel",
     group: "fenetre",
-    text: "Onglet Évolution : barres horizontales de la somme des 5 numéros. Les années n, n−1 et n−2 sont en tête, côte à côte. Mardi et vendredi se sélectionnent sur le graphique ; Synthèse relie la somme de chaque tirage, mardi et vendredi, par un trait continu. EuroMillions ne tire pas le mercredi. Les mois descendent, un trait horizontal ferme chaque mois, un trait vertical marque 128. Δ compare les moyennes de mois affichées. Ce n’est pas la fenêtre « année civile » : les trois années restent entières. Lecture d’archive, pas un pronostic.",
+    text: "Onglet Évolution : barres horizontales de la somme des 5 numéros. Les années n, n−1 et n−2 sont en tête, côte à côte. Mardi et vendredi se sélectionnent sur le graphique ; Synthèse relie la somme de chaque tirage, mardi et vendredi, par un trait continu. Les mois descendent, un trait horizontal ferme chaque mois, un trait vertical marque 128. Δ compare les moyennes de mois affichées. Ce n’est pas la fenêtre « année civile » : les trois années restent entières. Lecture d’archive, pas un pronostic.",
   },
   {
     term: "Formule actuelle (12 ★)",
@@ -172,7 +172,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Historique pronostic",
     group: "grilles",
-    text: "Onglet /pronostic?tab=historic. Chaque tirage des 100 derniers est noté avec une marge d’erreur (moyenne ± k·σ des tirages antérieurs). En manuel, la marge est annoncée à l’avance. En automatique, elle est choisie après les tirages notés ; la partie jouée la fige sur les seuls tirages d’avant. Le comité ajoute onze têtes, une porte sur au plus dix essais d’avant, et un global. σ est recalée pour qu’1 σ couvre environ deux tiers, et les rangs sont remis en ordre. Mardi, vendredi, et mardi + vendredi sont confrontés. EuroMillions ne tire pas le mercredi. La mise est le nombre de grilles 5+2 restantes. Ce n’est pas P(prochain tirage).",
+    text: "Onglet /pronostic?tab=historic. Chaque tirage des 100 derniers est noté avec une marge d’erreur (moyenne ± k·σ des tirages antérieurs). En manuel, la marge est annoncée à l’avance. En automatique, elle est choisie après les tirages notés ; la partie jouée la fige sur les seuls tirages d’avant. Le comité ajoute onze têtes, une porte sur au plus dix essais d’avant, et un global. σ est recalée pour qu’1 σ couvre environ deux tiers, et les rangs sont remis en ordre. Mardi, vendredi, et mardi + vendredi sont confrontés. La mise est le nombre de grilles 5+2 restantes. Ce n’est pas P(prochain tirage).",
   },
   {
     term: "Statistique d’ordre",

@@ -20,10 +20,10 @@ import {
 import { NUMBER_SUM_SD, weekdayDivergence } from "../src/lib/weekday-divergence.ts"
 import { synthesizeWeekdays, weekdayCounts } from "../src/lib/weekday-synthesis.ts"
 
-test("weekday scope parses jour aliases and ignores mercredi", () => {
+test("weekday scope parses jour aliases and ignores other days", () => {
   assert.equal(asWeekdayScope("synthèse"), "synthese")
   assert.equal(asWeekdayScope("mardi"), "mardi")
-  assert.equal(asWeekdayScope("mercredi"), null)
+  assert.equal(asWeekdayScope("lundi"), null)
   assert.equal(normalizeDrawWeekday("VENDREDI"), "vendredi")
   assert.equal(weekdayFilterDay("synthese"), null)
   assert.equal(weekdayApiValue("mardi"), "mardi")
@@ -59,7 +59,7 @@ test("weekday split keeps mardi and vendredi on their own curve", () => {
     overlayMardi: null,
     overlayVendredi: null,
   })
-  assert.deepEqual(weekdaySplitFields("mercredi", 9), {
+  assert.deepEqual(weekdaySplitFields("lundi", 9), {
     overlayMardi: null,
     overlayVendredi: null,
   })

@@ -9,7 +9,7 @@ from synchro.weekday import (
 def test_normalize_weekday_filter_is_case_insensitive():
     assert normalize_weekday_filter("MARDI") == "mardi"
     assert normalize_weekday_filter("Vendredi") == "vendredi"
-    assert normalize_weekday_filter("mercredi") is None
+    assert normalize_weekday_filter("lundi") is None
     assert normalize_weekday_filter("synthese") is None
     assert normalize_weekday_filter("") is None
 

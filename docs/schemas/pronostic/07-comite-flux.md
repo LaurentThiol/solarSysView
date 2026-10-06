@@ -84,7 +84,7 @@ Si toutes les têtes sont en repli, le global n’écrit rien. **Préparer le co
 
 ## Trois séries
 
-Mixte, mardi et vendredi ne partagent aucun poids. Un tirage sans jour n’entre que dans le mixte. Il n’y a pas de série du mercredi. Les trois tournent en parallèle dès que l’archive dépasse 160 tirages et que deux séries sont assez longues. Le filtre du bandeau choisit seulement la série affichée. L’affichage synthèse ou tous montre le mixte.
+Mixte, mardi et vendredi ne partagent aucun poids. Un tirage sans jour n’entre que dans le mixte. Les trois tournent en parallèle dès que l’archive dépasse 160 tirages et que deux séries sont assez longues. Le filtre du bandeau choisit seulement la série affichée. L’affichage synthèse ou tous montre le mixte.
 
 En mode automatique, quand le comité a répondu, la marge affichée est celle du post hoc de la série affichée. La partie jouée du comité fige cette marge tirage par tirage.
 

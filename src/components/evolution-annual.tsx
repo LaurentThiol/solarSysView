@@ -27,7 +27,7 @@ Les mois descendent, de janvier à décembre, et ont la même hauteur. Le jour p
 
 Le trait vertical est la moyenne théorique, 128. L’échelle est commune et resserrée sur les sommes observées : elle ne part pas de 0, pour que l’écart se voie. Elle ne bouge pas quand un soir s’éteint.
 
-Mardi (cyan) et vendredi (rose) se sélectionnent ici. Le bandeau ne fait que poser le premier choix : les deux soirs restent chargés, l’autre jour se rallume d’un clic. Synthèse trace un trait continu qui passe par la somme de chaque tirage, mardi et vendredi, de janvier à décembre. Chaque point est un jour de tirage. Le chiffre à droite du mois reste la moyenne de ces tirages, même si une soirée est masquée. EuroMillions ne tire pas le mercredi : il n’y a pas de série mercredi.
+Mardi (cyan) et vendredi (rose) se sélectionnent ici. Le bandeau ne fait que poser le premier choix : les deux soirs restent chargés, l’autre jour se rallume d’un clic. Synthèse trace un trait continu qui passe par la somme de chaque tirage, mardi et vendredi, de janvier à décembre. Chaque point est un jour de tirage. Le chiffre à droite du mois reste la moyenne de ces tirages, même si une soirée est masquée.
 
 « en cours » : l’année n n’a pas encore de tirage en décembre. Δ, à droite, compare les moyennes de mois affichées (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. La fenêtre 20 / 50 / année ne coupe pas ces trois années.
 

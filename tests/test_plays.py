@@ -29,7 +29,7 @@ def _client() -> TestClient:
     return TestClient(create_app())
 
 
-def test_parse_play_date_rejects_wednesday() -> None:
+def test_parse_play_date_rejects_non_draw_day() -> None:
     try:
         parse_play_date("2026-09-02")
     except ValueError as exc:
@@ -53,7 +53,7 @@ def test_next_play_date_after_cutoff_is_next_draw() -> None:
     assert next_play_date(now) == date(2026, 9, 4)
 
 
-def test_next_play_date_wednesday_is_friday() -> None:
+def test_next_play_date_after_tuesday_is_friday() -> None:
     now = datetime(2026, 9, 2, 10, 0, tzinfo=PARIS)
     assert next_play_date(now) == date(2026, 9, 4)
 

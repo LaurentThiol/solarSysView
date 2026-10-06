@@ -678,7 +678,7 @@ export function confrontationSentence(
     }
     return `Le ${label} ne baisse pas la mise du comité sous la moyenne de fenêtre (${gridsText(committee.meanGrids)} contre ${gridsText(baseline.meanGrids)}).`
   })
-  return `À ${marginLabel} σ, ${parts.join(" ")} Mardi + vendredi mélange les deux soirs. EuroMillions ne tire pas le mercredi : il n’y a pas de troisième série.`
+  return `À ${marginLabel} σ, ${parts.join(" ")} Mardi + vendredi mélange les deux soirs.`
 }
 
 export function mixWindowSentence(lookback: number) {

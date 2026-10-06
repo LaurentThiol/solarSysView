@@ -1,4 +1,4 @@
-"""Filtre mardi / vendredi (insensible à la casse). Pas de mercredi."""
+"""Filtre mardi / vendredi (insensible à la casse)."""
 
 from __future__ import annotations
 

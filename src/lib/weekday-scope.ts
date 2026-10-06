@@ -1,4 +1,4 @@
-/** Portée jour : sépare mardi / vendredi sans inventer de mercredi. */
+/** Portée jour : sépare mardi / vendredi. */
 
 export const WEEKDAY_SCOPES = ["all", "mardi", "vendredi", "synthese"] as const
 
