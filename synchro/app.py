@@ -2632,6 +2632,66 @@ def create_app() -> FastAPI:
         report = await run_in_threadpool(run_confrontation, draws, lookback)
         return {"ok": True, **report}
 
+    @app.get("/api/nextdata/status")
+    def nextdata_status() -> dict[str, Any]:
+        from synchro.nextdata import dependency_status
+
+        return {"ok": True, **dependency_status()}
+
+    @app.post("/api/nextdata/forecast")
+    async def nextdata_forecast(request: Request) -> dict[str, Any]:
+        try:
+            payload = await request.json()
+        except Exception as exc:
+            raise HTTPException(400, "nextData n’a pas reçu une requête lisible.") from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(400, "Le corps nextData doit être un objet.")
+        focus = payload.get("focus", 50)
+        if focus not in (50, 100):
+            raise HTTPException(400, "Le focus est 50 ou 100.")
+        primary = payload.get("primary") or "corpus"
+        if primary not in ("corpus", "fenetre"):
+            raise HTTPException(400, "Le mode est corpus ou fenetre.")
+        years = payload.get("years")
+        if years is not None and not isinstance(years, list):
+            raise HTTPException(400, "Les années se cochent dans une liste.")
+        covariates = payload.get("covariates")
+        if covariates is not None and not isinstance(covariates, list):
+            raise HTTPException(400, "Les covariables se cochent dans une liste.")
+        weekday = payload.get("weekday")
+        draws = payload.get("draws")
+        if not isinstance(draws, list) or not draws:
+            try:
+                draws = [db.serialize_draw(row) for row in db.all_draws(era="current")]
+            except Exception as exc:
+                raise HTTPException(503, f"Tirages indisponibles : {exc}") from exc
+        from starlette.concurrency import run_in_threadpool
+        from synchro.nextdata import run_forecast
+
+        def _bounded(name: str, default: int) -> int:
+            raw = os.environ.get(name)
+            if not raw:
+                return default
+            try:
+                return max(2, min(80, int(raw)))
+            except ValueError:
+                return default
+
+        report = await run_in_threadpool(
+            lambda: run_forecast(
+                draws,
+                focus=int(focus),
+                years=years,
+                primary=str(primary),
+                weekday=weekday if isinstance(weekday, str) else None,
+                covariates=covariates,
+                with_chronos=bool(payload.get("with_chronos")),
+                estimators=_bounded("SYNCHRO_NEXTDATA_ESTIMATORS", 32),
+                backtest_estimators=_bounded("SYNCHRO_NEXTDATA_BACKTEST_ESTIMATORS", 8),
+            )
+        )
+        return report
+
     if WEB_DIR.exists():
         app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
 

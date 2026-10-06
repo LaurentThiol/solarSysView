@@ -140,6 +140,14 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         },
       },
       {
+        href: "/nextdata",
+        label: "nextData",
+        help: {
+          title: "nextData",
+          body: "Pronostic du prochain tirage 5+2 : LightGBM sur les années n, n−1 et n−2, comparé à un entraînement sur les 50 ou 100 derniers tirages seulement. Somme, rangs n1–n5 et étoiles viennent des tirages sortis. Le retour arrière compare la prévision au tirage déjà sorti ; la grille affichée est la meilleure lecture du modèle sur cette base, pas une probabilité de gain FDJ.",
+        },
+      },
+      {
         href: "/jeux",
         label: "Jeux",
         help: {

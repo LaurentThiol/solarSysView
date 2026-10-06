@@ -51,6 +51,7 @@ def test_launch_help_lists_new_commands() -> None:
     assert "./launch restart" in out
     assert "./launch chartisme-train" in out
     assert "./launch brain-specialist-train" in out
+    assert "./launch install-nextdata" in out
     assert "./launch stop --force" in out
     assert "HOST du .env" in out
     assert "vérifie Neon / Ollama" in out

@@ -54,11 +54,12 @@ Usage:
   ./launch logs            Dernières lignes des journaux (.run/)
   ./launch logs -f         Suit les journaux (autre terminal)
   ./launch update          Contrôle GitHub et tire origin (ff-only), puis réinstalle si besoin
-  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM / chartisme / harmo / decisionTree / Ollama
+  ./launch doctor          Diagnostic Python / Node / venv / npm / ports / Neon / VLM / chartisme / harmo / decisionTree / nextData / Ollama
   ./launch install         Installe uniquement les dépendances
   ./launch install-vlm     Installe Moondream via torch (optionnel si ollama pull moondream)
   ./launch install-chartisme  Installe les réseaux du chartisme (torch + torch-geometric)
   ./launch install-harmo      Installe les extras Harmo (PyWavelets, ssqueezepy, librosa)
+  ./launch install-nextdata   Installe nextData (LightGBM / Darts, Chronos, torch, matplotlib)
   ./launch install-decision-tree  Répare decisionTree (scikit-learn, dtreeviz, dot). Le démarrage l'installe déjà.
   ./launch chartisme-train    Entraîne les réseaux du chartisme (options passées au CLI)
   ./launch brain-specialist-train  Entraîne un spécialiste Brain (options passées au CLI)
@@ -1104,6 +1105,17 @@ cmd_install_decision_tree() {
   ensure_decision_tree
 }
 
+cmd_install_nextdata() {
+  local venv="$ROOT/.venv"
+  SKIP_INSTALL=0
+  ensure_install
+  info "Installation nextData (LightGBM via Darts, Chronos, torch, matplotlib)…"
+  if ! "$venv/bin/python" -m pip install -r "$ROOT/requirements-nextdata.txt"; then
+    die "pip install -r requirements-nextdata.txt a échoué. Voir ./launch doctor"
+  fi
+  ok "nextData prêt. Grilles → nextData. Le premier Chronos télécharge amazon/chronos-t5-small."
+}
+
 cmd_install_harmo() {
   local venv="$ROOT/.venv"
   SKIP_INSTALL=0
@@ -1205,6 +1217,31 @@ vlm_doctor() {
   fi
   if "$py" -c 'import moondream' 2>/dev/null; then
     ok "VLM : photon (paquet moondream)"
+  fi
+}
+
+nextdata_doctor() {
+  local py="$ROOT/.venv/bin/python"
+  if [[ ! -x "$py" ]]; then
+    printf '%snextData : pas de venv — ./launch install%s\n' "$C_DIM" "$C_RESET"
+    return 0
+  fi
+  if "$py" -c 'import lightgbm' 2>/dev/null; then
+    ok "nextData : LightGBM"
+  else
+    printf '%snextData : LightGBM absent — ./launch install-nextdata%s\n' "$C_DIM" "$C_RESET"
+    return 0
+  fi
+  if "$py" -c 'import darts' 2>/dev/null; then
+    ok "nextData : Darts (LightGBMModel)"
+  else
+    printf '%snextData : Darts absent — la chaîne LightGBM directe reste disponible (./launch install-nextdata)%s\n' \
+      "$C_DIM" "$C_RESET"
+  fi
+  if "$py" -c 'import chronos, torch' 2>/dev/null; then
+    ok "nextData : Chronos + torch"
+  else
+    printf '%snextData : Chronos optionnel absent — ./launch install-nextdata%s\n' "$C_DIM" "$C_RESET"
   fi
 }
 
@@ -1581,6 +1618,7 @@ cmd_doctor() {
   vlm_doctor
   chartisme_doctor
   harmo_doctor
+  nextdata_doctor
   decision_tree_doctor
   ollama_doctor
   if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -1798,7 +1836,7 @@ CMD="start"
 PASSTHROUGH=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    start|stop|status|update|shortcut|help|doctor|install|install-vlm|install-chartisme|install-harmo|install-decision-tree|restart|-h|--help)
+    start|stop|status|update|shortcut|help|doctor|install|install-vlm|install-chartisme|install-harmo|install-nextdata|install-decision-tree|restart|-h|--help)
       CMD="$1"
       shift
       ;;
@@ -1835,6 +1873,7 @@ case "$CMD" in
   install-vlm) cmd_install_vlm ;;
   install-chartisme) cmd_install_chartisme ;;
   install-harmo) cmd_install_harmo ;;
+  install-nextdata) cmd_install_nextdata ;;
   install-decision-tree) cmd_install_decision_tree ;;
   chartisme-train) cmd_chartisme_train "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" ;;
   brain-specialist-train) cmd_brain_specialist_train "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" ;;

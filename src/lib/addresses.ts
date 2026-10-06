@@ -285,6 +285,27 @@ const TABS: AddressEntry[] = [
   ),
   ...OVERLAYS,
   tabEntry("/jeux?tab=solutions", "Jeux · Solutions", "Décompte exact des grilles 5+2 sous contraintes. Ce n’est pas un pronostic.", "grilles"),
+  tabEntry(
+    "/nextdata?tab=pronostic",
+    "nextData · Pronostic",
+    "Deux grilles 5+2 : trois ans avec poids ×3 sur le focus, et fenêtre seule des 50 ou 100 derniers tirages.",
+    "grilles",
+    "tab=pronostic"
+  ),
+  tabEntry(
+    "/nextdata?tab=base",
+    "nextData · Base",
+    "Effectifs recomptés des numéros, étoiles, couples et triples réellement sortis dans le focus.",
+    "grilles",
+    "tab=base"
+  ),
+  tabEntry(
+    "/nextdata?tab=retour",
+    "nextData · Retour",
+    "Walk-forward du focus : erreur des deux modes, persistance et moyenne.",
+    "grilles",
+    "tab=retour"
+  ),
   ...SCHEMA_DOCS.map((doc) =>
     tabEntry(`/schemas/pronostic/${doc.id}`, `Schémas · ${doc.label}`, doc.text, "systeme")
   ),
@@ -486,6 +507,15 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/brain/readings/{id}/notes", "POST", "Brain · note", "Ajouter une note à une lecture du carnet.", "assistants"),
   apiEntry("/api/brain/retrieve", "POST", "Brain · retrieve", "Recherche dans le carnet / la table épinglée.", "assistants"),
   apiEntry("/api/brain/analogs", "POST", "Brain · analogie", "Voisins (dont Jumeaux) pour une fiche.", "assistants"),
+  apiEntry("/api/nextdata/status", "GET", "nextData · statut", "Présence de LightGBM, Darts, Chronos et torch.", "grilles"),
+  apiEntry(
+    "/api/nextdata/forecast",
+    "POST",
+    "nextData · pronostic",
+    "Deux entraînements (trois ans, fenêtre seule) et le faisceau 5+2 sur la base recomptée.",
+    "grilles",
+    "focus=50|100, primary=corpus|fenetre"
+  ),
   apiEntry(
     "/api/pronostic/committee",
     "POST",

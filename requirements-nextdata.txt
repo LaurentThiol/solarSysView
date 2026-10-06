@@ -1,0 +1,11 @@
+# Pronostic nextData (Grilles). Optionnel : la page s’ouvre sans ces paquets.
+#   ./launch install-nextdata
+#
+# u8darts[lightgbm] suffit au LightGBMModel. L’extra [all] tirerait Prophet
+# et un second jeu de dépendances en conflit avec le torch de Morpho,
+# Chartisme et Cycles.
+u8darts[lightgbm]>=0.30
+lightgbm>=4.3
+chronos-forecasting>=1.5
+torch>=2.6
+matplotlib>=3.8
