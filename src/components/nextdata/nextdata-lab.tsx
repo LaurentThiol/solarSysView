@@ -4,41 +4,21 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
-import { HelpTip } from "@/components/help"
+import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import { DRAWS, type Draw } from "@/lib/draws"
+import { NEXTDATA_HELP } from "@/lib/nextdata/help"
 import { defaultStoredSpec, writeStoredSpec } from "@/lib/jeux"
 import { useLabTab } from "@/lib/use-lab-tab"
 import { cn } from "@/lib/utils"
 
 const TABS = [
-  {
-    id: "pronostic",
-    label: "Pronostic",
-    help: {
-      title: "Pronostic",
-      body: "Deux grilles pour le prochain mardi ou vendredi. L’interrupteur choisit celle qui part vers Jeux. L’autre reste visible, avec son erreur de somme sur le focus.",
-    },
-  },
-  {
-    id: "base",
-    label: "Base",
-    help: {
-      title: "Base recomptée",
-      body: "Effectif de chaque numéro et de chaque étoile dans les 50 ou 100 derniers tirages du corpus. Les couples et les triples sont ceux qui sont réellement sortis ensemble.",
-    },
-  },
-  {
-    id: "retour",
-    label: "Retour",
-    help: {
-      title: "Retour arrière",
-      body: "Pour chaque tirage du focus, les deux modèles ne voient que ce qui est déjà sorti. La persistance reprend le tirage d’avant. La moyenne reprend la somme moyenne d’avant.",
-    },
-  },
+  { id: "pronostic", label: "Pronostic", help: NEXTDATA_HELP.tabPronostic },
+  { id: "base", label: "Base", help: NEXTDATA_HELP.tabBase },
+  { id: "retour", label: "Retour", help: NEXTDATA_HELP.tabRetour },
 ] as const
 
 type TabId = (typeof TABS)[number]["id"]
@@ -364,8 +344,9 @@ export function NextDataLab() {
   return (
     <div className="flex min-w-0 flex-col gap-6" data-nextdata>
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-        Les rangs n1 à n5 sont les numéros triés du tirage, pas l’ordre de sortie. L’anneau autour
-        d’une boule suit la largeur du quantile. Ce n’est pas une probabilité de gain FDJ.
+        <TitleHelp help={NEXTDATA_HELP.banner}>nextData</TitleHelp> propose deux grilles 5+2.
+        n1 à n5 sont les numéros triés, pas l’ordre de sortie. L’anneau d’une boule suit la largeur
+        du quantile. Ce n’est pas une probabilité de gain FDJ.
       </p>
 
       {status && status.ready === false && (
@@ -378,13 +359,19 @@ export function NextDataLab() {
       <Card>
         <CardContent className="flex flex-col gap-4 pt-6">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Focus</span>
+            <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Focus
+              <HelpTip {...NEXTDATA_HELP.focus} />
+            </span>
             {([50, 100] as const).map((value) => (
               <Button key={value} type="button" size="sm" variant={focus === value ? "default" : "outline"} onClick={() => setFocus(value)}>
                 {value}
               </Button>
             ))}
-            <span className="ml-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Années</span>
+            <span className="ml-2 inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Années
+              <HelpTip {...NEXTDATA_HELP.years} />
+            </span>
             {(["n", "n-1", "n-2"] as const).map((year) => (
               <Button key={year} type="button" size="sm" variant={years.includes(year) ? "default" : "outline"} onClick={() => toggleYear(year)}>
                 {year}
@@ -393,35 +380,45 @@ export function NextDataLab() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2" data-primary-switch>
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Entraînement</span>
+            <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Entraînement
+              <HelpTip {...NEXTDATA_HELP.train} />
+            </span>
             <Button type="button" variant={primary === "corpus" ? "default" : "outline"} onClick={() => setPrimary("corpus")}>
               Trois ans · poids ×3
             </Button>
             <Button type="button" variant={primary === "fenetre" ? "default" : "outline"} onClick={() => setPrimary("fenetre")}>
               Fenêtre seule
             </Button>
-            <HelpTip
-              title="Deux entraînements"
-              body="Les deux modèles sont calculés à chaque fois. L’interrupteur choisit la grille mise en avant. Fenêtre seule n’apprend que sur les 50 ou 100 derniers tirages ; les années d’avant remplissent l’ancienneté des couples et des triples."
-            />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Jour</span>
+            <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Jour
+              <HelpTip {...NEXTDATA_HELP.jour} />
+            </span>
             {(["tous", "mardi", "vendredi"] as const).map((day) => (
               <Button key={day} type="button" size="sm" variant={weekday === day ? "secondary" : "ghost"} onClick={() => setWeekday(day)}>
                 {day === "tous" ? "Tous" : day === "mardi" ? "Mardi" : "Vendredi"}
               </Button>
             ))}
-            <Button type="button" size="sm" variant={withChronos ? "secondary" : "ghost"} onClick={() => setWithChronos((value) => !value)}>
-              {withChronos ? "Chronos inclus" : "LightGBM seul"}
-            </Button>
-            <Button type="button" size="sm" variant={delta ? "secondary" : "ghost"} onClick={() => setDelta((value) => !value)}>
-              {delta ? "DeltaEvol" : "Niveaux"}
-            </Button>
+            <HelpWrap help={NEXTDATA_HELP.moteur}>
+              <Button type="button" size="sm" variant={withChronos ? "secondary" : "ghost"} onClick={() => setWithChronos((value) => !value)}>
+                {withChronos ? "Chronos inclus" : "LightGBM seul"}
+              </Button>
+            </HelpWrap>
+            <HelpWrap help={NEXTDATA_HELP.delta}>
+              <Button type="button" size="sm" variant={delta ? "secondary" : "ghost"} onClick={() => setDelta((value) => !value)}>
+                {delta ? "DeltaEvol" : "Niveaux"}
+              </Button>
+            </HelpWrap>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Covariables
+              <HelpTip {...NEXTDATA_HELP.covariates} />
+            </span>
             {FAMILIES.map((family) => (
               <button
                 key={family.id}
@@ -438,13 +435,16 @@ export function NextDataLab() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" disabled={running || status?.ready === false} onClick={() => void pronostiquer()}>
-              {running ? "Calcul des deux lectures…" : "Pronostiquer"}
-            </Button>
-            <span className="text-xs text-muted-foreground">
+            <HelpWrap help={NEXTDATA_HELP.run}>
+              <Button type="button" disabled={running || status?.ready === false} onClick={() => void pronostiquer()}>
+                {running ? "Calcul des deux lectures…" : "Pronostiquer"}
+              </Button>
+            </HelpWrap>
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               {draws.length} tirages · {source === "neon" ? "archive synchronisée" : "jeu embarqué"}
               {status?.darts ? " · Darts" : ""}
               {status?.chronos ? " · Chronos" : ""}
+              <HelpTip {...NEXTDATA_HELP.source} />
             </span>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -472,7 +472,7 @@ export function NextDataLab() {
                       <Card key={mode} className={cn(active && "border-primary")} data-mode={mode} data-active={active ? "true" : "false"}>
                         <CardHeader>
                           <CardTitle className="flex items-center justify-between gap-2 text-base">
-                            <span>{MODE_LABEL[mode]}</span>
+                            <TitleHelp help={NEXTDATA_HELP.grille}>{MODE_LABEL[mode]}</TitleHelp>
                             <span className="text-xs font-normal text-muted-foreground">
                               {active ? "mise en avant" : "comparaison"}
                               {block.mae_sum != null ? ` · MAE somme ${block.mae_sum}` : ""}
@@ -486,9 +486,11 @@ export function NextDataLab() {
                             {block.chronos?.available ? ` Mélange Chronos : poids LightGBM ${block.blend_weight}.` : ""}
                           </p>
                           {active && (
-                            <Button type="button" variant="outline" onClick={sendToJeux}>
-                              Envoyer vers Jeux
-                            </Button>
+                            <HelpWrap help={NEXTDATA_HELP.jeux}>
+                              <Button type="button" variant="outline" onClick={sendToJeux}>
+                                Envoyer vers Jeux
+                              </Button>
+                            </HelpWrap>
                           )}
                         </CardContent>
                       </Card>
@@ -497,7 +499,10 @@ export function NextDataLab() {
                 </div>
                 {report.modes[primary].alternates.length > 0 && (
                   <div className="flex flex-col gap-2">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cinq suivantes · {MODE_LABEL[primary]}</p>
+                    <p className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Cinq suivantes · {MODE_LABEL[primary]}
+                      <HelpTip {...NEXTDATA_HELP.suivantes} />
+                    </p>
                     <ul className="flex flex-col gap-1 text-sm tabular-nums">
                       {report.modes[primary].alternates.map((grid) => (
                         <li key={grid.numbers.join("-") + grid.stars.join("-")}>
@@ -507,6 +512,11 @@ export function NextDataLab() {
                     </ul>
                   </div>
                 )}
+                <div className="flex flex-col gap-3">
+                  <p className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Courbes
+                    <HelpTip {...NEXTDATA_HELP.courbes} />
+                  </p>
                 <div className="grid gap-4 lg:grid-cols-2">
                   {SERIES.map((series) => (
                     <SeriesChart
@@ -519,6 +529,7 @@ export function NextDataLab() {
                     />
                   ))}
                 </div>
+                </div>
               </>
             )}
           </div>
@@ -529,8 +540,10 @@ export function NextDataLab() {
             {!report && <p className="text-sm text-muted-foreground">La base se recompte au pronostic, sur le focus choisi.</p>}
             {report && (
               <>
-                <p className="text-sm text-muted-foreground">
-                  {report.base.draw_count} tirages. L’intensité suit l’effectif réel. Les boules de la grille mise en avant sont entourées.
+                <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                  <TitleHelp help={NEXTDATA_HELP.baseIntro}>
+                    {report.base.draw_count} tirages. L’intensité suit l’effectif réel.
+                  </TitleHelp>
                 </p>
                 <div className="grid max-w-3xl grid-cols-10 gap-1.5">
                   {report.base.numbers.map((item) => (
@@ -564,7 +577,7 @@ export function NextDataLab() {
                 </div>
                 <div className="grid gap-6 md:grid-cols-2">
                   <Card>
-                    <CardHeader><CardTitle className="text-base">Couples sortis</CardTitle></CardHeader>
+                    <CardHeader><CardTitle className="text-base"><TitleHelp help={NEXTDATA_HELP.couples}>Couples sortis</TitleHelp></CardTitle></CardHeader>
                     <CardContent className="max-h-80 overflow-auto">
                       <ul className="flex flex-col gap-1 text-sm tabular-nums">
                         {report.base.couples.slice(0, 20).map((link) => (
@@ -576,7 +589,7 @@ export function NextDataLab() {
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardHeader><CardTitle className="text-base">Triples sortis</CardTitle></CardHeader>
+                    <CardHeader><CardTitle className="text-base"><TitleHelp help={NEXTDATA_HELP.triples}>Triples sortis</TitleHelp></CardTitle></CardHeader>
                     <CardContent className="max-h-80 overflow-auto">
                       <ul className="flex flex-col gap-1 text-sm tabular-nums">
                         {report.base.triples.slice(0, 20).map((link) => (
@@ -602,7 +615,7 @@ export function NextDataLab() {
                   <table className="w-full min-w-[36rem] text-left text-sm">
                     <thead className="text-xs uppercase tracking-wide text-muted-foreground">
                       <tr>
-                        <th className="py-2 pr-3">Lecture</th>
+                        <th className="py-2 pr-3"><TitleHelp help={NEXTDATA_HELP.metriques}>Lecture</TitleHelp></th>
                         <th className="py-2 pr-3">MAE somme</th>
                         <th className="py-2 pr-3">RMSE somme</th>
                         <th className="py-2 pr-3">Numéros communs</th>
@@ -637,7 +650,7 @@ export function NextDataLab() {
                 <div className="grid gap-4 md:grid-cols-2">
                   {(["corpus", "fenetre"] as const).map((mode) => (
                     <Card key={mode}>
-                      <CardHeader><CardTitle className="text-base">Tirages · {MODE_LABEL[mode]}</CardTitle></CardHeader>
+                      <CardHeader><CardTitle className="text-base"><TitleHelp help={NEXTDATA_HELP.tirages}>Tirages · {MODE_LABEL[mode]}</TitleHelp></CardTitle></CardHeader>
                       <CardContent className="max-h-96 overflow-auto">
                         <ul className="flex flex-col gap-1 text-xs tabular-nums">
                           {report.backtest.rows.map((row) => {
@@ -657,7 +670,7 @@ export function NextDataLab() {
                 <div className="grid gap-4 md:grid-cols-2">
                   {(["corpus", "fenetre"] as const).map((mode) => (
                     <Card key={`${mode}-imp`}>
-                      <CardHeader><CardTitle className="text-base">Poids · {MODE_LABEL[mode]}</CardTitle></CardHeader>
+                      <CardHeader><CardTitle className="text-base"><TitleHelp help={NEXTDATA_HELP.poids}>Poids · {MODE_LABEL[mode]}</TitleHelp></CardTitle></CardHeader>
                       <CardContent>
                         <ul className="flex flex-col gap-1 text-sm">
                           {report.modes[mode].importance.map((item) => (
