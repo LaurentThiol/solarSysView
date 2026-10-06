@@ -1113,6 +1113,15 @@ cmd_install_nextdata() {
   if ! "$venv/bin/python" -m pip install -r "$ROOT/requirements-nextdata.txt"; then
     die "pip install -r requirements-nextdata.txt a échoué. Voir ./launch doctor"
   fi
+  local lgb_err
+  if ! lgb_err="$(MPLBACKEND=Agg "$venv/bin/python" -c 'import lightgbm' 2>&1)"; then
+    warn "LightGBM est installé mais Python ne le charge pas."
+    printf '%s\n' "$lgb_err" >&2
+    if [[ "$lgb_err" == *libomp* || "$lgb_err" == *dlopen* ]]; then
+      die "Sur Mac : brew install libomp — puis relancez ./launch install-nextdata"
+    fi
+    die "import lightgbm a échoué. Voir le message au-dessus."
+  fi
   ok "nextData prêt. Grilles → nextData. Le premier Chronos télécharge amazon/chronos-t5-small."
 }
 
@@ -1226,20 +1235,28 @@ nextdata_doctor() {
     printf '%snextData : pas de venv — ./launch install%s\n' "$C_DIM" "$C_RESET"
     return 0
   fi
-  if "$py" -c 'import lightgbm' 2>/dev/null; then
+  local lgb_err
+  if lgb_err="$(MPLBACKEND=Agg "$py" -c 'import lightgbm' 2>&1)"; then
     ok "nextData : LightGBM"
   else
-    printf '%snextData : LightGBM absent — ./launch install-nextdata%s\n' "$C_DIM" "$C_RESET"
+    warn "nextData : LightGBM ne se charge pas."
+    printf '%s%s%s\n' "$C_DIM" "$lgb_err" "$C_RESET" >&2
+    if [[ "$lgb_err" == *libomp* || "$lgb_err" == *dlopen* ]]; then
+      warn "Sur Mac : brew install libomp"
+    else
+      printf '%snextData : ./launch install-nextdata%s\n' "$C_DIM" "$C_RESET"
+    fi
     return 0
   fi
-  if "$py" -c 'import darts' 2>/dev/null; then
-    ok "nextData : Darts (LightGBMModel)"
+  # Ne pas importer Darts / Chronos / torch ici : le chargement peut bloquer le Mac.
+  if MPLBACKEND=Agg "$py" -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("darts") else 1)'; then
+    ok "nextData : Darts installé (chargé au pronostic, pas au démarrage)"
   else
     printf '%snextData : Darts absent — la chaîne LightGBM directe reste disponible (./launch install-nextdata)%s\n' \
       "$C_DIM" "$C_RESET"
   fi
-  if "$py" -c 'import chronos, torch' 2>/dev/null; then
-    ok "nextData : Chronos + torch"
+  if MPLBACKEND=Agg "$py" -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("chronos") and importlib.util.find_spec("torch") else 1)'; then
+    ok "nextData : Chronos + torch installés"
   else
     printf '%snextData : Chronos optionnel absent — ./launch install-nextdata%s\n' "$C_DIM" "$C_RESET"
   fi
@@ -1738,6 +1755,7 @@ cmd_start() {
     trap '' INT
     cd "$ROOT"
     export PYTHONUNBUFFERED=1
+    export MPLBACKEND=Agg
     export SYNCHRO_RUN_DIR="$RUN_DIR"
     export NO_PROXY="$merged_no_proxy"
     export no_proxy="$merged_no_proxy"

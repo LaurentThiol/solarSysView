@@ -125,6 +125,24 @@ def test_projection_is_increasing_and_beam_returns_a_grid() -> None:
     assert ranked[0]["stars"][0] < ranked[0]["stars"][1]
 
 
+def test_status_does_not_import_darts_or_torch() -> None:
+    import sys
+
+    from synchro.nextdata.forecast import dependency_status, lightgbm_hint
+
+    before = set(sys.modules)
+    status = dependency_status()
+    loaded = set(sys.modules) - before
+    blocked = [name for name in loaded if name == "darts" or name.startswith(("darts.", "chronos", "torch"))]
+    assert blocked == []
+    assert status["ready"] is True
+    assert status["lightgbm_error"] is None
+    assert "darts" in status and "chronos" in status
+    assert lightgbm_hint("Library not loaded: @rpath/libomp.dylib") == (
+        "Sur Mac : brew install libomp, puis relancez ./launch."
+    )
+
+
 def test_blend_keeps_lightgbm_when_chronos_is_absent() -> None:
     assert blend_mid(12.0, None, 0.2) == 12.0
     assert blend_mid(10.0, 0.0, 0.5) == 5.0

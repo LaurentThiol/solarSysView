@@ -238,7 +238,15 @@ export function NextDataLab() {
   const [tab, selectTab] = useLabTab(TAB_IDS, "pronostic")
   const [draws, setDraws] = useState<Draw[]>(DRAWS)
   const [source, setSource] = useState("json")
-  const [status, setStatus] = useState<{ ready?: boolean; install?: string; lightgbm?: boolean; darts?: boolean; chronos?: boolean } | null>(null)
+  const [status, setStatus] = useState<{
+    ready?: boolean
+    install?: string
+    lightgbm?: boolean
+    lightgbm_error?: string | null
+    hint?: string | null
+    darts?: boolean
+    chronos?: boolean
+  } | null>(null)
   const [focus, setFocus] = useState<50 | 100>(50)
   const [years, setYears] = useState<string[]>(["n", "n-1", "n-2"])
   const [primary, setPrimary] = useState<"corpus" | "fenetre">("corpus")
@@ -254,21 +262,24 @@ export function NextDataLab() {
     let cancelled = false
     void (async () => {
       try {
-        const [drawRes, statusRes] = await Promise.all([
-          fetch("/api/draws?era=current", { cache: "no-store" }),
-          fetch("/api/nextdata/status", { cache: "no-store" }),
-        ])
-        if (cancelled) return
-        if (drawRes.ok) {
-          const body = (await drawRes.json()) as { items?: Draw[]; source?: string }
-          if (Array.isArray(body.items) && body.items.length >= 24) {
-            setDraws(body.items)
-            setSource(body.source || "neon")
-          }
+        const drawRes = await fetch("/api/draws?era=current", { cache: "no-store" })
+        if (cancelled || !drawRes.ok) return
+        const body = (await drawRes.json()) as { items?: Draw[]; source?: string }
+        if (Array.isArray(body.items) && body.items.length >= 24) {
+          setDraws(body.items)
+          setSource(body.source || "neon")
         }
-        if (statusRes.ok) setStatus(await statusRes.json())
       } catch {
-        /* la page reste ouverte sur le jeu embarqué */
+        /* le jeu embarqué reste affiché */
+      }
+    })()
+    void (async () => {
+      try {
+        const statusRes = await fetch("/api/nextdata/status", { cache: "no-store" })
+        if (cancelled || !statusRes.ok) return
+        setStatus(await statusRes.json())
+      } catch {
+        /* le pronostic LightGBM reste proposé */
       }
     })()
     return () => {
@@ -359,7 +370,8 @@ export function NextDataLab() {
 
       {status && status.ready === false && (
         <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-          LightGBM n’est pas installé. {status.install || "./launch install-nextdata"}
+          {status.hint || status.lightgbm_error || "LightGBM n’est pas installé."}{" "}
+          {status.install || "./launch install-nextdata"}
         </p>
       )}
 

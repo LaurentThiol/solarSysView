@@ -8,8 +8,13 @@ Chronos, s’il est installé, ne mélange que somme, somme des étoiles et n1.
 
 from __future__ import annotations
 
-import importlib
+import importlib.util
+import os
 from typing import Any, Iterable
+
+# Darts charge Matplotlib. Sur Mac, le backend graphique peut bloquer l’API
+# au premier import, et la page nextData ne répond plus.
+os.environ.setdefault("MPLBACKEND", "Agg")
 
 import numpy as np
 
@@ -42,26 +47,46 @@ CLAMPS: dict[str, tuple[float, float]] = {
 }
 
 
-def _has(module: str) -> bool:
+def _installed(module: str) -> bool:
+    """Présence du paquet, sans l’importer.
+
+    Importer Darts, Chronos ou torch ici gèle le processus (GIL, backend
+    graphique) pendant que la page demande aussi les tirages.
+    """
     try:
-        importlib.import_module(module)
+        return importlib.util.find_spec(module) is not None
     except Exception:
         return False
-    return True
+
+
+def lightgbm_import_error() -> str | None:
+    try:
+        import lightgbm  # noqa: F401
+    except Exception as exc:
+        return str(exc)
+    return None
+
+
+def lightgbm_hint(message: str | None) -> str | None:
+    if not message:
+        return None
+    lowered = message.lower()
+    if "libomp" in lowered or "dlopen" in lowered:
+        return "Sur Mac : brew install libomp, puis relancez ./launch."
+    return None
 
 
 def dependency_status() -> dict[str, Any]:
-    lightgbm = _has("lightgbm")
-    darts = _has("darts")
-    chronos = _has("chronos")
-    torch = _has("torch")
+    error = lightgbm_import_error()
     return {
-        "lightgbm": lightgbm,
-        "darts": darts,
-        "chronos": chronos,
-        "torch": torch,
-        "matplotlib": _has("matplotlib"),
-        "ready": lightgbm,
+        "lightgbm": error is None,
+        "lightgbm_error": error,
+        "hint": lightgbm_hint(error),
+        "darts": _installed("darts"),
+        "chronos": _installed("chronos"),
+        "torch": _installed("torch"),
+        "matplotlib": _installed("matplotlib"),
+        "ready": error is None,
         "install": "./launch install-nextdata",
     }
 
@@ -540,11 +565,13 @@ def run_forecast(
     estimators: int = 40,
     backtest_estimators: int = 12,
 ) -> dict[str, Any]:
-    if not _has("lightgbm"):
+    if lightgbm_import_error():
+        status = dependency_status()
+        detail = status.get("hint") or status.get("lightgbm_error") or "LightGBM ne se charge pas."
         return {
             "ok": False,
-            "error": "LightGBM n’est pas installé. Lancez ./launch install-nextdata.",
-            **dependency_status(),
+            "error": f"{detail} Sinon : ./launch install-nextdata.",
+            **status,
         }
     mode_primary = primary if primary in ("corpus", "fenetre") else "corpus"
     families = normalize_families(covariates)
