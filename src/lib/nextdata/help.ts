@@ -258,7 +258,7 @@ export const NEXTDATA_TRAINING_HELP = {
   banner: {
     title: "nextDataTraining",
     wide: true,
-    body: "Même réglage que nextData, mesuré sur les dix tirages d’avant. −1 cache seulement le dernier tirage et le prévoit. −10 se place dix tirages plus tôt et prévoit celui qui venait juste après.\n\nL’écart est prévu moins sorti. Au-dessus de zéro, la lecture était trop haute. Ce n’est pas une prévision à dix coups d’avance, et ce n’est pas une probabilité de gain FDJ.",
+    body: "Même réglage que nextData, mesuré sur les dix tirages d’avant. −1 cache seulement le dernier tirage et le prévoit. −10 se place dix tirages plus tôt et prévoit celui qui venait juste après.\n\nL’écart est prévu moins sorti. Au-dessus de zéro, la lecture était trop haute. Ce n’est pas une prévision à dix coups d’avance, et ce n’est pas une probabilité de gain FDJ.\n\nLa barre avance quand un décalage est terminé. 10 % veut dire que −1 est mesuré, 100 % que les dix le sont. Ce n’est pas une estimation du temps restant.",
   },
   decalage: {
     title: "Décalage −x",

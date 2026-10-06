@@ -2710,6 +2710,15 @@ def create_app() -> FastAPI:
         if covariates is not None and not isinstance(covariates, list):
             raise HTTPException(400, "Les covariables se cochent dans une liste.")
         weekday = payload.get("weekday")
+        raw_shift = payload.get("shift")
+        shift: int | None = None
+        if raw_shift is not None:
+            try:
+                shift = int(raw_shift)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Le décalage va de 1 à 10.") from None
+            if shift < 1 or shift > 10:
+                raise HTTPException(400, "Le décalage va de 1 à 10.")
         draws = payload.get("draws")
         if not isinstance(draws, list) or not draws:
             try:
@@ -2736,6 +2745,7 @@ def create_app() -> FastAPI:
                 weekday=weekday if isinstance(weekday, str) else None,
                 covariates=covariates,
                 estimators=_bounded("SYNCHRO_NEXTDATA_ESTIMATORS", 16),
+                shift=shift,
             )
         )
         return report

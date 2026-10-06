@@ -37,6 +37,9 @@ test("nextDataTraining explains the backward shift", () => {
     assert.ok(NEXTDATA_TRAINING_HELP[key as keyof typeof NEXTDATA_TRAINING_HELP].body.length > 40)
   }
   assert.match(NEXTDATA_TRAINING_HELP.banner.body, /pas une probabilité de gain FDJ/)
+  assert.match(NEXTDATA_TRAINING_HELP.banner.body, /10 %/)
   assert.match(NEXTDATA_TRAINING_HELP.decalage.body, /avant le tirage noté/)
+  assert.match(training, /role="progressbar"/)
+  assert.match(training, /shift: lag/)
   assert.match(nav, /nextdatatraining/)
 })

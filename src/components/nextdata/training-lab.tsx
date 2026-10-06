@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
 import { HelpTip, TitleHelp } from "@/components/help"
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { DRAWS, type Draw } from "@/lib/draws"
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "@/lib/nextdata/help"
+import { summarizeShifts, TRAINING_SHIFT_TOTAL, trainingPercent } from "@/lib/nextdata/training-progress"
 import { cn } from "@/lib/utils"
 
 const FAMILIES: { id: string; label: string }[] = [
@@ -87,8 +88,10 @@ export function TrainingLab() {
   const [families, setFamilies] = useState<string[]>(FAMILIES.map((item) => item.id))
   const [reading, setReading] = useState<ReadingId>("corpus")
   const [running, setRunning] = useState(false)
+  const [progress, setProgress] = useState<{ done: number; current: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<TrainingPayload | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -108,6 +111,10 @@ export function TrainingLab() {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  useEffect(() => {
+    return () => abortRef.current?.abort()
   }, [])
 
   const chartRows = useMemo(
@@ -137,42 +144,74 @@ export function TrainingLab() {
   }
 
   async function train() {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setRunning(true)
     setError(null)
+    setReport(null)
+    setProgress({ done: 0, current: 1 })
+    const payloadDraws = draws.map((draw) => ({
+      date: draw.date,
+      weekday: draw.weekday,
+      numbers: draw.numbers,
+      stars: draw.stars,
+      star_pool: draw.star_pool,
+    }))
+    const collected: Shift[] = []
     try {
-      const response = await fetch("/api/nextdata/training", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          focus,
-          years,
-          weekday,
-          covariates: families,
-          draws: draws.map((draw) => ({
-            date: draw.date,
-            weekday: draw.weekday,
-            numbers: draw.numbers,
-            stars: draw.stars,
-            star_pool: draw.star_pool,
-          })),
-        }),
-      })
-      const body = (await response.json()) as TrainingPayload
-      if (!response.ok || body.ok === false) {
-        setReport(null)
-        setError(body.error || "L’entraînement n’a pas abouti.")
-        return
-      }
-      setReport(body)
-      if (!body.catboost && (reading === "corpus_catboost" || reading === "fenetre_catboost")) {
-        setReading("corpus")
+      for (let lag = 1; lag <= TRAINING_SHIFT_TOTAL; lag += 1) {
+        if (controller.signal.aborted) return
+        setProgress({ done: lag - 1, current: lag })
+        const response = await fetch("/api/nextdata/training", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            focus,
+            years,
+            weekday,
+            covariates: families,
+            shift: lag,
+            draws: payloadDraws,
+          }),
+        })
+        const body = (await response.json()) as TrainingPayload
+        if (!response.ok || body.ok === false) {
+          setError(body.error || `Le décalage −${lag} n’a pas abouti.`)
+          break
+        }
+        const incoming = body.shifts?.[0]
+        if (!incoming) {
+          setError("Pas assez de tirages pour mesurer ce décalage.")
+          break
+        }
+        collected.push(incoming)
+        if (body.catboost === false && (reading === "corpus_catboost" || reading === "fenetre_catboost")) {
+          setReading("corpus")
+        }
+        setReport({
+          ok: true,
+          focus: body.focus,
+          years_present: body.years_present,
+          catboost: body.catboost,
+          shifts: [...collected],
+          summary: summarizeShifts(collected),
+        })
+        setProgress({ done: lag, current: lag })
       }
     } catch (err) {
+      if (controller.signal.aborted) return
       setError(err instanceof Error ? err.message : "API injoignable")
     } finally {
-      setRunning(false)
+      if (abortRef.current === controller) {
+        setRunning(false)
+        setProgress(null)
+      }
     }
   }
+
+  const percent = trainingPercent(progress?.done ?? 0)
 
   const summary = report?.summary ?? {}
   const persistenceMae = summary.persistence?.mae_sum
@@ -238,17 +277,49 @@ export function TrainingLab() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" disabled={running} onClick={() => void train()}>
-              {running ? "Décalage −1 à −10…" : "Entraîner"}
+              {running ? `Décalage −${progress?.current ?? 1} sur ${TRAINING_SHIFT_TOTAL}…` : "Entraîner"}
             </Button>
             <span className="text-xs text-muted-foreground">
               {draws.length} tirages · {source === "neon" ? "archive synchronisée" : "jeu embarqué"}
             </span>
           </div>
+          {running && progress && (
+            <div className="flex max-w-md flex-col gap-2" aria-live="polite">
+              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-2">
+                  <span className="relative flex size-2" aria-hidden>
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" />
+                    <span className="relative inline-flex size-2 rounded-full bg-primary" />
+                  </span>
+                  Décalage −{progress.current} sur {TRAINING_SHIFT_TOTAL}
+                </span>
+                <span className="tabular-nums">{percent} %</span>
+              </div>
+              <div
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={percent}
+                aria-label="Avancement de l’entraînement"
+                className="h-1.5 overflow-hidden rounded-full bg-muted"
+              >
+                <div
+                  className={cn(
+                    "h-full rounded-full bg-primary",
+                    percent === 0 ? "w-1/3 animate-pulse" : "transition-[width] duration-500 ease-out"
+                  )}
+                  style={percent === 0 ? undefined : { width: `${percent}%` }}
+                />
+              </div>
+            </div>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>
 
-      {!report && <p className="text-sm text-muted-foreground">Lancez l’entraînement pour voir les dix écarts.</p>}
+      {!report && !running && (
+        <p className="text-sm text-muted-foreground">Lancez l’entraînement pour voir les dix écarts.</p>
+      )}
 
       {report?.shifts && (
         <>

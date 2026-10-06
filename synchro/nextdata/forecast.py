@@ -763,6 +763,7 @@ def run_training(
     weekday: str | None = None,
     covariates: Iterable[str] | None = None,
     estimators: int = 16,
+    shift: int | None = None,
 ) -> dict[str, Any]:
     """Banc −1…−10. Même réglage que le pronostic, sans Chronos."""
     if lightgbm_import_error():
@@ -790,6 +791,7 @@ def run_training(
             families,
             estimators=estimators,
             libraries=tuple(libraries),
+            only=shift,
         )
     except ValueError as exc:
         return {"ok": False, "error": str(exc), **dependency_status()}

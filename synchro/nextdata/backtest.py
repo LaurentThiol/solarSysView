@@ -235,6 +235,7 @@ def shift_report(
     estimators: int = 12,
     libraries: tuple[str, ...] = ("lightgbm",),
     quantiles: tuple[float, ...] = (0.1, 0.5, 0.9),
+    only: int | None = None,
 ) -> dict[str, Any]:
     """Dix coupures −1…−10. Chaque prévision n'apprend pas le tirage qu'elle note.
 
@@ -243,7 +244,8 @@ def shift_report(
     """
     rows = frame.rows
     shifts: list[dict[str, Any]] = []
-    for lag in range(1, SHIFT_MAX + 1):
+    lags = (only,) if only is not None else tuple(range(1, SHIFT_MAX + 1))
+    for lag in lags:
         if len(rows) - lag < 16:
             break
         prefix = rows[:-lag]

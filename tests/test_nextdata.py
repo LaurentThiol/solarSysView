@@ -198,6 +198,47 @@ def test_shift_hides_the_draw_it_scores(monkeypatch) -> None:
     assert report["summary"]["corpus"]["mae_sum"] is not None
 
 
+def test_one_shift_stops_before_the_scored_draw(monkeypatch) -> None:
+    from synchro.nextdata.backtest import shift_report
+
+    draws = _draws(40, seed=9)
+    frame = build_frame(draws, focus=24)
+    seen: list[tuple[int, str, str]] = []
+
+    def spy(rows, horizon, **kwargs):
+        del kwargs
+        seen.append((len(rows), rows[-1]["date"], horizon[0]["date"]))
+        raise RuntimeError("un seul décalage, sans entraîner")
+
+    monkeypatch.setattr("synchro.nextdata.backtest.predict_moments", spy)
+    report = shift_report(frame, ["forme"], estimators=2, libraries=("lightgbm",), quantiles=(0.5,), only=1)
+    assert [shift["x"] for shift in report["shifts"]] == [1]
+    assert report["shifts"][0]["date"] == frame.rows[-1]["date"]
+    assert seen
+    assert all(count == len(frame.rows) - 1 and last < target for count, last, target in seen)
+    assert report["summary"]["persistence"]["count"] == 1
+
+
+def test_training_shift_is_one_through_ten(monkeypatch) -> None:
+    captured: dict[str, int | None] = {}
+
+    def fake(draws, **kwargs):
+        del draws
+        captured["shift"] = kwargs.get("shift")
+        return {"ok": True, "shifts": [{"x": kwargs.get("shift")}], "summary": {}}
+
+    monkeypatch.setattr("synchro.nextdata.run_training", fake)
+    client = TestClient(create_app())
+    refused = client.post("/api/nextdata/training", json={"focus": 50, "shift": 0, "draws": _draws(30)})
+    assert refused.status_code == 400
+    garbled = client.post("/api/nextdata/training", json={"focus": 50, "shift": "deux", "draws": _draws(30)})
+    assert garbled.status_code == 400
+    accepted = client.post("/api/nextdata/training", json={"focus": 50, "shift": 3, "draws": _draws(30)})
+    assert accepted.status_code == 200, accepted.text
+    assert captured["shift"] == 3
+    assert accepted.json()["shifts"][0]["x"] == 3
+
+
 def test_blend_keeps_lightgbm_when_chronos_is_absent() -> None:
     assert blend_mid(12.0, None, 0.2) == 12.0
     assert blend_mid(10.0, 0.0, 0.5) == 5.0
