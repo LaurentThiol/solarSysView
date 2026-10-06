@@ -80,7 +80,7 @@ const CHART_TABS = [
     label: "Annuel",
     help: {
       title: "Annuel",
-      body: "Somme des 5 numéros en barres horizontales. Les années n, n−1 et n−2 sont en tête. Mardi et vendredi se sélectionnent sur le graphique ; Synthèse relie chaque tirage, mardi et vendredi, par un trait continu. Un trait horizontal ferme chaque mois. La fenêtre 20 / 50 / année ne coupe pas ces trois années.",
+      body: "Somme des 5 numéros en barres horizontales. Les années n, n−1 et n−2 sont en tête. Mardi et vendredi se sélectionnent sur le graphique ; Synthèse relie chaque tirage, mardi et vendredi, par un trait continu. Décalage compare des suites de 6 à 10 tirages entre n et n−1, puis n−1 et n−2. Un trait horizontal ferme chaque mois. La fenêtre 20 / 50 / année ne coupe pas ces trois années.",
     },
   },
 ] as const

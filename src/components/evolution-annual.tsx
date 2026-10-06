@@ -5,6 +5,15 @@ import { useEffect, useMemo, useState } from "react"
 import { TitleHelp, type HelpCopy } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
+  annualLagZones,
+  DEFAULT_SUITE_LENGTH,
+  formatLagDays,
+  lagNullPhrase,
+  SUITE_LENGTHS,
+  type LagPoint,
+  type LagZone,
+} from "@/lib/annual-lag"
+import {
   ANNUAL_MONTHS,
   annualMonthMean,
   annualPants,
@@ -31,7 +40,9 @@ Mardi (cyan) et vendredi (rose) se sélectionnent ici. Le bandeau ne fait que po
 
 « en cours » : l’année n n’a pas encore de tirage en décembre. Δ, à droite, compare les moyennes de mois affichées (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. La fenêtre 20 / 50 / année ne coupe pas ces trois années.
 
-Lecture d’archive. Les tirages restent indépendants.`,
+Décalage compare des suites de 6 à 10 tirages, 8 au départ. Une suite est une chaîne de sens consécutifs, par exemple 2 monte + 3 baisse + 3 monte. Un pas monte s’il dépasse l’écart-type de l’année, baisse s’il le dépasse vers le bas, stable sinon. La corrélation croisée cherche un écart de −21 à +21 jours, n contre n−1, puis n−1 contre n−2, au tirage le plus proche à trois jours près. On le retient si la chaîne est la même, si |r| dépasse l’alignement sans décalage, et s’il dépasse le 95e centile du nul qui réordonne l’autre année. La zone porte alors cette phrase. Sinon la lecture est « pas de décalage retenu ». Les mois absents d’un côté ne sont pas comparés. Mardi et vendredi ensemble, l’écart entre les soirs est de trois ou quatre jours.
+
+Lecture d’archive. Les tirages restent indépendants. r n’est pas une probabilité du prochain tirage.`,
 }
 
 const ROLE_LABEL: Record<AnnualRole, string> = {
@@ -96,6 +107,8 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
   )
   const [picks, setPicks] = useState<DayPicks>(() => picksFor(weekday))
   const [tip, setTip] = useState<Tip | null>(null)
+  const [lagOn, setLagOn] = useState(false)
+  const [suiteLength, setSuiteLength] = useState(DEFAULT_SUITE_LENGTH)
   const [seededWeekday, setSeededWeekday] = useState(weekday)
   if (seededWeekday !== weekday) {
     setSeededWeekday(weekday)
@@ -110,6 +123,22 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
     () => model.lanes.map((lane) => (picks.synthese ? synthesePoints(lane) : [])),
     [model.lanes, picks.synthese]
   )
+  const lagSeries = useMemo(
+    () => model.lanes.map((lane) => lagPoints(lane, picks)),
+    [model.lanes, picks]
+  )
+  const lagZones = useMemo(() => {
+    if (!lagOn) return [[], [], []] as LagZone[][]
+    return [
+      annualLagZones(lagSeries[0] ?? [], lagSeries[1] ?? [], { length: suiteLength }),
+      annualLagZones(lagSeries[1] ?? [], lagSeries[2] ?? [], { length: suiteLength }),
+      [],
+    ]
+  }, [lagOn, lagSeries, suiteLength])
+  const hoverZone =
+    lagOn && tip
+      ? zoneUnder(lagZones[model.lanes.findIndex((lane) => lane.year === tip.year)] ?? [], tip.bar.x)
+      : null
   const localGap =
     archive.source === "json" && model.lanes.slice(1).every((lane) => lane.bars.length === 0)
   const nothingOn = !picks.mardi && !picks.vendredi && !picks.synthese
@@ -125,15 +154,15 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
     .join(". ")
 
   return (
-    <Card data-annual-pants data-annual-source={archive.source}>
+    <Card data-annual-pants data-annual-source={archive.source} data-annual-lag={lagOn ? "on" : "off"} data-suite-length={suiteLength}>
       <CardHeader>
         <CardTitle className="text-sm">
           <TitleHelp help={TITLE_HELP}>Somme des numéros</TitleHelp>
         </CardTitle>
         <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
           Barres horizontales. n, n−1 et n−2 sont en tête. Mardi et vendredi se choisissent.
-          Synthèse relie chaque tirage par un trait continu. Trait horizontal en fin de mois,
-          trait vertical à 128.
+          Synthèse relie chaque tirage par un trait continu. Décalage lit un écart zonal sur des
+          suites de 6 à 10 tirages. Trait horizontal en fin de mois, trait vertical à 128.
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -157,6 +186,38 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
               onClick={() => togglePick("synthese")}
               swatch={<SyntheseSwatch muted={!picks.synthese} />}
             />
+            <DayToggle
+              pressed={lagOn}
+              label="Décalage"
+              onClick={() => {
+                setLagOn((current) => !current)
+                setTip(null)
+              }}
+              swatch={<LagSwatch muted={!lagOn} />}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Suites de tirages">
+            <span>Suites</span>
+            {SUITE_LENGTHS.map((size) => (
+              <button
+                key={size}
+                type="button"
+                aria-pressed={suiteLength === size}
+                data-suite-length={size}
+                onClick={() => {
+                  setSuiteLength(size)
+                  setTip(null)
+                }}
+                className={cn(
+                  "inline-flex h-6 min-w-6 items-center justify-center rounded-full border px-1.5 text-xs tabular-nums",
+                  suiteLength === size
+                    ? "border-primary bg-primary/15 text-foreground"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {size}
+              </button>
+            ))}
           </div>
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block h-3 w-px border-l border-dashed border-muted-foreground" />
@@ -215,6 +276,7 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
                 bars={visibleBars(lane, picks)}
                 readout={readouts[index] ?? []}
                 points={lines[index] ?? []}
+                zones={lagOn ? (lagZones[index] ?? []) : []}
                 loading={archive.loading && lane.bars.length === 0}
                 activeDate={tip && tip.year === lane.year ? tip.bar.date : null}
                 onHover={(next) =>
@@ -309,9 +371,16 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
             </span>
           )}
         </p>
+        {hoverZone ? (
+          <p data-annual-lag-detail className="text-sm leading-5 tabular-nums">
+            <LagDetail zone={hoverZone} />
+          </p>
+        ) : null}
         <p className="text-xs leading-5 text-muted-foreground">
           Δ suit les moyennes affichées : les soirs allumés, ou mardi + vendredi si Synthèse est
-          allumée. Positif, la moyenne la plus récente est plus haute.{" "}
+          allumée. Positif, la moyenne la plus récente est plus haute. Décalage, s’il est allumé,
+          pose le décalage retenu sur la colonne la plus récente de la paire. r décrit l’archive,
+          pas le prochain tirage.{" "}
           {archive.source === "neon" ? "Source Neon." : "Source fichier local."}
           {localGap
             ? " n−1 et n−2 restent vides tant que l’archive distante ne répond pas."
@@ -381,6 +450,7 @@ function YearColumn({
   bars,
   readout,
   points,
+  zones,
   loading,
   activeDate,
   onHover,
@@ -392,6 +462,7 @@ function YearColumn({
   bars: readonly AnnualBar[]
   readout: readonly MonthReadout[]
   points: readonly AnnualBar[]
+  zones: readonly LagZone[]
   loading: boolean
   activeDate: string | null
   onHover: (tip: Tip) => void
@@ -440,6 +511,43 @@ function YearColumn({
           </rect>
         )
       })}
+      {lagMarks(zones).map((mark) => (
+        <g
+          key={`${mark.zone.fromDate}-${mark.zone.toDate}-${mark.zone.tau}-${mark.zone.chainLabel}`}
+          data-annual-lag-zone={mark.zone.fromDate}
+          data-annual-lag-tau={mark.zone.tau}
+          data-annual-lag-chain={mark.zone.chainLabel}
+          pointerEvents="none"
+        >
+          <title>
+            {mark.zone.chainLabel} · {formatLagDays(mark.zone.tau ?? 0)} · {lagNullPhrase(mark.zone)}
+          </title>
+          <line
+            x1={left + 2}
+            x2={left + 2}
+            y1={mark.y1}
+            y2={mark.y2}
+            stroke="var(--foreground)"
+            strokeWidth={2}
+          />
+          <line x1={left + 2} x2={left + 8} y1={mark.y1} y2={mark.y1} stroke="var(--foreground)" strokeWidth={1.4} />
+          <line x1={left + 2} x2={left + 8} y1={mark.y2} y2={mark.y2} stroke="var(--foreground)" strokeWidth={1.4} />
+          <rect
+            x={left + 10}
+            y={mark.labelY - 9}
+            width={Math.min(COL_W - 46, Math.max(36, mark.zone.chainLabel.length * 4.2))}
+            height={22}
+            fill="var(--background)"
+            opacity={0.92}
+          />
+          <text x={left + 12} y={mark.labelY} fill="var(--foreground)" fontSize="9">
+            {formatLagDays(mark.zone.tau ?? 0)}
+          </text>
+          <text x={left + 12} y={mark.labelY + 10} fill="var(--muted-foreground)" fontSize="8">
+            {mark.zone.chainLabel}
+          </text>
+        </g>
+      ))}
       {points.length > 0 ? (
         <g data-annual-synthese="continu" pointerEvents="none">
           {points.length > 1 ? (
@@ -529,6 +637,27 @@ function Detail({ bar, year }: { bar: AnnualBar; year: number }) {
   )
 }
 
+function LagDetail({ zone }: { zone: LagZone }) {
+  const phrase = lagNullPhrase(zone)
+  return (
+    <>
+      <span className="text-foreground">{zone.chainLabel}</span>
+      <span className="text-muted-foreground">
+        {" "}
+        · {formatDrawDate(zone.fromDate)} – {formatDrawDate(zone.toDate)} · r(0){" "}
+      </span>
+      <span className="text-foreground">{zone.r0 == null ? "—" : formatR(zone.r0)}</span>
+      {zone.kept && zone.tau != null && zone.rTau != null ? (
+        <>
+          <span className="text-muted-foreground"> · r({formatLagDays(zone.tau)}) </span>
+          <span className="text-foreground">{formatR(zone.rTau)}</span>
+        </>
+      ) : null}
+      <span className="text-muted-foreground"> · {phrase}</span>
+    </>
+  )
+}
+
 function SyntheseDetail({ tip }: { tip: Extract<Tip, { kind: "synthese" }> }) {
   const numbers = [...tip.bar.numbers].sort((a, b) => a - b).join(" ")
   return (
@@ -580,6 +709,15 @@ function BarSwatch({ color, muted }: { color: string; muted: boolean }) {
     <span
       className="inline-block h-3 w-1.5 rounded-[1px]"
       style={{ background: color, opacity: muted ? 0.35 : 1 }}
+    />
+  )
+}
+
+function LagSwatch({ muted }: { muted: boolean }) {
+  return (
+    <span
+      className="inline-block h-3 w-px bg-foreground"
+      style={{ opacity: muted ? 0.35 : 1 }}
     />
   )
 }
@@ -733,6 +871,48 @@ function monthReadout(lane: AnnualLane, picks: DayPicks): MonthReadout[] {
   return ANNUAL_MONTHS.map((item) => annualMonthMean(lane.bars, item.month, days))
 }
 
+function lagMarks(zones: readonly LagZone[]) {
+  const kept = zones
+    .filter((zone) => zone.kept && zone.tau != null)
+    .slice()
+    .sort((a, b) => a.fromX - b.fromX || a.toX - b.toX)
+  let nextLabel = HEADER_H + 12
+  return kept.map((zone) => {
+    const y1 = yTime(zone.fromX)
+    const y2 = yTime(zone.toX)
+    const preferred = (y1 + y2) / 2
+    const labelY = Math.min(HEADER_H + PLOT_H - 14, Math.max(preferred, nextLabel))
+    nextLabel = labelY + 24
+    return { zone, y1, y2, labelY }
+  })
+}
+
+function lagPoints(lane: AnnualLane, picks: DayPicks): LagPoint[] {
+  return visibleBars(lane, picks).map((bar) => ({
+    date: bar.date,
+    sum: bar.sum,
+    month: bar.month,
+    day: bar.day,
+  }))
+}
+
+function zoneUnder(zones: readonly LagZone[], x: number): LagZone | null {
+  let best: LagZone | null = null
+  let bestSpan = Infinity
+  let bestKept = false
+  for (const zone of zones) {
+    if (x < zone.fromX || x > zone.toX) continue
+    const span = zone.toX - zone.fromX
+    const kept = zone.kept
+    if (!best || (kept && !bestKept) || (kept === bestKept && span < bestSpan)) {
+      best = zone
+      bestSpan = span
+      bestKept = kept
+    }
+  }
+  return best
+}
+
 function synthesePoints(lane: AnnualLane): AnnualBar[] {
   return lane.bars.filter((bar) => bar.weekday === "mardi" || bar.weekday === "vendredi")
 }
@@ -759,6 +939,10 @@ function sameTip(current: Tip | null, next: Tip): boolean {
 
 function formatInt(value: number) {
   return Math.round(value).toLocaleString("fr-FR")
+}
+
+function formatR(value: number) {
+  return value.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function formatDelta(value: number | null) {
