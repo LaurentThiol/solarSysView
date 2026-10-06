@@ -2746,6 +2746,7 @@ def create_app() -> FastAPI:
                 covariates=covariates,
                 estimators=_bounded("SYNCHRO_NEXTDATA_ESTIMATORS", 16),
                 shift=shift,
+                with_chronos=payload.get("with_chronos") is True,
             )
         )
         return report

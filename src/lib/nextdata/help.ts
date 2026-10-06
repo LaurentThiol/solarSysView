@@ -258,7 +258,7 @@ export const NEXTDATA_TRAINING_HELP = {
   banner: {
     title: "nextDataTraining",
     wide: true,
-    body: "Même réglage que nextData, mesuré sur les dix tirages d’avant. −1 cache seulement le dernier tirage et le prévoit. −10 se place dix tirages plus tôt et prévoit celui qui venait juste après.\n\nL’écart est prévu moins sorti. Au-dessus de zéro, la lecture était trop haute. Ce n’est pas une prévision à dix coups d’avance, et ce n’est pas une probabilité de gain FDJ.\n\nLa barre avance quand un décalage est terminé. 10 % veut dire que −1 est mesuré, 100 % que les dix le sont. Ce n’est pas une estimation du temps restant.",
+    body: "Même réglage que nextData, mesuré sur les dix tirages d’avant. −1 cache seulement le dernier tirage et le prévoit. −10 se place dix tirages plus tôt et prévoit celui qui venait juste après.\n\nL’écart est prévu moins sorti. Au-dessus de zéro, la lecture était trop haute. Ce n’est pas une prévision à dix coups d’avance, et ce n’est pas une probabilité de gain FDJ.\n\nChronos et DeltaEvol sont les mêmes interrupteurs que sur nextData. La puce Delta, elle, est une covariable : elle entre dans l’apprentissage.\n\nLa barre avance quand un décalage est terminé. 10 % veut dire que −1 est mesuré, 100 % que les dix le sont. Ce n’est pas une estimation du temps restant.",
   },
   decalage: {
     title: "Décalage −x",
@@ -267,6 +267,15 @@ export const NEXTDATA_TRAINING_HELP = {
   somme: {
     title: "Écart de somme",
     body: "Chaque point est un décalage. Le trait est l’écart signé de la somme des cinq numéros. La persistance rejoue le tirage d’avant la coupure : c’est le repère. Un MAE de 12 ne dit rien si rejouer le dernier est à 8.",
+  },
+  chronos: {
+    title: "Chronos inclus",
+    wide: true,
+    body: "Même interrupteur que nextData. Sans Chronos, LightGBM et CatBoost partent seuls. Chronos inclus mélange une médiane zéro-shot à LightGBM, sur la somme, la somme des étoiles et n1. Le poids penche vers la lecture qui s’est moins trompée sur le dernier tirage connu, pas sur le tirage noté. CatBoost reste seul.",
+  },
+  delta: {
+    title: "Niveaux ou DeltaEvol",
+    body: "Même interrupteur que nextData, et il ne relance pas l’entraînement. Niveaux : l’écart prévu moins sorti. DeltaEvol : cet écart moins celui du décalage précédent, sur la courbe seulement. Le tableau des rangs reste l’écart brut.",
   },
   rangs: {
     title: "Écarts de rangs",

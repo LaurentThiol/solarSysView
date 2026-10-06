@@ -764,8 +764,9 @@ def run_training(
     covariates: Iterable[str] | None = None,
     estimators: int = 16,
     shift: int | None = None,
+    with_chronos: bool = False,
 ) -> dict[str, Any]:
-    """Banc −1…−10. Même réglage que le pronostic, sans Chronos."""
+    """Banc −1…−10. Même réglage que le pronostic, Chronos en option."""
     if lightgbm_import_error():
         status = dependency_status()
         detail = status.get("hint") or status.get("lightgbm_error") or "LightGBM ne se charge pas."
@@ -792,6 +793,7 @@ def run_training(
             estimators=estimators,
             libraries=tuple(libraries),
             only=shift,
+            with_chronos=with_chronos,
         )
     except ValueError as exc:
         return {"ok": False, "error": str(exc), **dependency_status()}

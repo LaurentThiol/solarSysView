@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
-import { HelpTip, TitleHelp } from "@/components/help"
+import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { DRAWS, type Draw } from "@/lib/draws"
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "@/lib/nextdata/help"
-import { summarizeShifts, TRAINING_SHIFT_TOTAL, trainingPercent } from "@/lib/nextdata/training-progress"
+import { deltaNumbers, summarizeShifts, TRAINING_SHIFT_TOTAL, trainingPercent } from "@/lib/nextdata/training-progress"
 import { cn } from "@/lib/utils"
 
 const FAMILIES: { id: string; label: string }[] = [
@@ -68,6 +68,7 @@ type TrainingPayload = {
   focus?: number
   years_present?: string[]
   catboost?: boolean
+  chronos?: { requested?: boolean; used?: boolean }
   shifts?: Shift[]
   summary?: Summary
 }
@@ -86,6 +87,8 @@ export function TrainingLab() {
   const [years, setYears] = useState<string[]>(["n", "n-1", "n-2"])
   const [weekday, setWeekday] = useState<"tous" | "mardi" | "vendredi">("tous")
   const [families, setFamilies] = useState<string[]>(FAMILIES.map((item) => item.id))
+  const [withChronos, setWithChronos] = useState(false)
+  const [delta, setDelta] = useState(false)
   const [reading, setReading] = useState<ReadingId>("corpus")
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ done: number; current: number } | null>(null)
@@ -117,17 +120,25 @@ export function TrainingLab() {
     return () => abortRef.current?.abort()
   }, [])
 
-  const chartRows = useMemo(
-    () =>
-      (report?.shifts ?? []).map((shift) => {
-        const row: Record<string, string | number | null> = { label: shift.label, x: shift.x }
-        for (const item of READINGS) {
-          row[item.id] = shift.readings[item.id]?.errors.sum ?? null
-        }
-        return row
-      }),
-    [report]
-  )
+  const chartRows = useMemo(() => {
+    const rows = (report?.shifts ?? []).map((shift) => {
+      const row: Record<string, string | number | null> = { label: shift.label, x: shift.x }
+      for (const item of READINGS) {
+        row[item.id] = shift.readings[item.id]?.errors.sum ?? null
+      }
+      return row
+    })
+    if (!delta) return rows
+    const keys = READINGS.map((item) => item.id)
+    const differed = deltaNumbers(rows.map((row) => keys.map((key) => (typeof row[key] === "number" ? row[key] : null))))
+    return rows.map((row, index) => {
+      const next = { ...row }
+      keys.forEach((key, column) => {
+        next[key] = differed[index][column]
+      })
+      return next
+    })
+  }, [report, delta])
 
   function toggleYear(year: string) {
     setYears((current) => {
@@ -173,6 +184,7 @@ export function TrainingLab() {
             weekday,
             covariates: families,
             shift: lag,
+            with_chronos: withChronos,
             draws: payloadDraws,
           }),
         })
@@ -195,6 +207,7 @@ export function TrainingLab() {
           focus: body.focus,
           years_present: body.years_present,
           catboost: body.catboost,
+          chronos: body.chronos,
           shifts: [...collected],
           summary: summarizeShifts(collected),
         })
@@ -255,6 +268,16 @@ export function TrainingLab() {
                 {day === "tous" ? "Tous" : day === "mardi" ? "Mardi" : "Vendredi"}
               </Button>
             ))}
+            <HelpWrap help={NEXTDATA_TRAINING_HELP.chronos}>
+              <Button type="button" size="sm" variant={withChronos ? "secondary" : "ghost"} onClick={() => setWithChronos((value) => !value)}>
+                {withChronos ? "Chronos inclus" : "Sans Chronos"}
+              </Button>
+            </HelpWrap>
+            <HelpWrap help={NEXTDATA_TRAINING_HELP.delta}>
+              <Button type="button" size="sm" variant={delta ? "secondary" : "ghost"} onClick={() => setDelta((value) => !value)}>
+                {delta ? "DeltaEvol" : "Niveaux"}
+              </Button>
+            </HelpWrap>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -323,6 +346,9 @@ export function TrainingLab() {
 
       {report?.shifts && (
         <>
+          {report?.chronos?.requested && !report.chronos.used && (
+            <p className="text-sm text-muted-foreground">Chronos n’a pas répondu. LightGBM et CatBoost restent seuls.</p>
+          )}
           <div className="flex flex-wrap gap-3">
             {READINGS.filter((item) => summary[item.id]).map((item) => {
               const mae = summary[item.id]?.mae_sum
@@ -341,6 +367,7 @@ export function TrainingLab() {
                   <span className="text-lg font-semibold tabular-nums">{mae ?? "—"}</span>
                   <span className="mt-1 block text-xs text-muted-foreground">
                     MAE somme{better ? " · sous la persistance" : ""}
+                    {report?.chronos?.used && (item.id === "corpus" || item.id === "fenetre") ? " · Chronos" : ""}
                     {summary[item.id]?.hits_numbers != null ? ` · ${summary[item.id]?.hits_numbers} numéros` : ""}
                   </span>
                 </button>
@@ -351,7 +378,9 @@ export function TrainingLab() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                <TitleHelp help={NEXTDATA_TRAINING_HELP.somme}>Écart de somme</TitleHelp>
+                <TitleHelp help={NEXTDATA_TRAINING_HELP.somme}>
+                  {delta ? "Écart de somme · Δ" : "Écart de somme"}
+                </TitleHelp>
               </CardTitle>
             </CardHeader>
             <CardContent>

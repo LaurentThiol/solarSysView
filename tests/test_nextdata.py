@@ -239,6 +239,79 @@ def test_training_shift_is_one_through_ten(monkeypatch) -> None:
     assert accepted.json()["shifts"][0]["x"] == 3
 
 
+def _band(mid: float) -> dict[str, float]:
+    return {"lo": mid - 1, "mid": mid, "hi": mid + 1}
+
+
+def test_chronos_blends_lightgbm_and_leaves_catboost(monkeypatch) -> None:
+    from synchro.nextdata.backtest import shift_report
+
+    draws = _draws(40, seed=11)
+    frame = build_frame(draws, focus=24)
+    calls: list[str] = []
+
+    def fake_moments(rows, horizon, **kwargs):
+        del rows, horizon
+        calls.append(kwargs["library"])
+        return (
+            {
+                "sum": _band(30),
+                "parity": _band(2),
+                "star_sum": _band(6),
+                "n1": _band(5),
+                "g1": _band(6),
+                "g2": _band(6),
+                "g3": _band(6),
+                "g4": _band(6),
+                "e1": _band(2),
+                "e_gap": _band(3),
+            },
+            [],
+            kwargs["library"],
+        )
+
+    monkeypatch.setattr("synchro.nextdata.backtest.predict_moments", fake_moments)
+    monkeypatch.setattr("synchro.nextdata.backtest.chronos_point", lambda values: 180.0)
+    plain = shift_report(
+        frame, ["forme"], estimators=2, libraries=("lightgbm", "catboost"), quantiles=(0.5,), only=1
+    )
+    calls.clear()
+    mixed = shift_report(
+        frame,
+        ["forme"],
+        estimators=2,
+        libraries=("lightgbm", "catboost"),
+        quantiles=(0.5,),
+        only=1,
+        with_chronos=True,
+    )
+    plain_sum = sum(plain["shifts"][0]["readings"]["corpus"]["numbers"])
+    mixed_sum = sum(mixed["shifts"][0]["readings"]["corpus"]["numbers"])
+    assert mixed_sum > plain_sum
+    assert mixed["shifts"][0]["readings"]["corpus_catboost"]["numbers"] == plain["shifts"][0]["readings"]["corpus_catboost"]["numbers"]
+    assert mixed["shifts"][0]["readings"]["corpus"]["chronos"]["available"] is True
+    assert mixed["chronos"]["used"] is True
+    assert plain["chronos"]["requested"] is False
+    assert calls.count("lightgbm") == 4
+    assert calls.count("catboost") == 2
+
+
+def test_training_forwards_chronos_flag(monkeypatch) -> None:
+    captured: dict[str, bool] = {}
+
+    def fake(draws, **kwargs):
+        del draws
+        captured["with_chronos"] = kwargs.get("with_chronos")
+        return {"ok": True, "shifts": [], "summary": {}}
+
+    monkeypatch.setattr("synchro.nextdata.run_training", fake)
+    client = TestClient(create_app())
+    client.post("/api/nextdata/training", json={"focus": 50, "shift": 1, "with_chronos": True, "draws": _draws(30)})
+    assert captured["with_chronos"] is True
+    client.post("/api/nextdata/training", json={"focus": 50, "shift": 1, "with_chronos": False, "draws": _draws(30)})
+    assert captured["with_chronos"] is False
+
+
 def test_blend_keeps_lightgbm_when_chronos_is_absent() -> None:
     assert blend_mid(12.0, None, 0.2) == 12.0
     assert blend_mid(10.0, 0.0, 0.5) == 5.0

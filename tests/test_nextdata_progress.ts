@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { summarizeShifts, trainingPercent } from "../src/lib/nextdata/training-progress.ts"
+import { deltaNumbers, summarizeShifts, trainingPercent } from "../src/lib/nextdata/training-progress.ts"
 
 test("the training percent is the share of finished shifts", () => {
   assert.equal(trainingPercent(0), 0)
@@ -9,6 +9,14 @@ test("the training percent is the share of finished shifts", () => {
   assert.equal(trainingPercent(10), 100)
   assert.equal(trainingPercent(11), 100)
   assert.equal(trainingPercent(-1), 0)
+})
+
+test("DeltaEvol is the gap versus the previous shift", () => {
+  assert.deepEqual(deltaNumbers([[1, 4], [3, null], [3, 1]]), [
+    [null, null],
+    [2, null],
+    [0, null],
+  ])
 })
 
 test("the running summary is the mean absolute sum error so far", () => {

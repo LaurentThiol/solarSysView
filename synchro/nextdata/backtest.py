@@ -6,7 +6,14 @@ import math
 from typing import Any, Iterable
 
 from synchro.nextdata.empirical import recount
-from synchro.nextdata.forecast import _rank_view, predict_moments
+from synchro.nextdata.forecast import (
+    _clip,
+    _rank_view,
+    blend_mid,
+    blend_weight,
+    chronos_point,
+    predict_moments,
+)
 from synchro.nextdata.panel import Frame
 from synchro.nextdata.project import beam
 
@@ -228,6 +235,72 @@ def _reading_key(mode: str, library: str) -> str:
     return mode if library == "lightgbm" else f"{mode}_catboost"
 
 
+def _blend_shift_chronos(
+    moments: dict[str, dict[str, float]],
+    prefix: list[dict[str, Any]],
+    follower: dict[str, Any],
+    *,
+    mode: str,
+    focus: int,
+    families: Iterable[str],
+    estimators: int,
+    star_pool: int,
+) -> dict[str, Any]:
+    """Même mélange que le pronostic : Chronos du dernier tirage connu, poids sur son écart.
+
+    CatBoost n’est pas appelé ici. Le tirage noté ne sert pas à choisir le poids.
+    """
+    note: dict[str, Any] = {"available": False, "weight": 1.0}
+    if len(prefix) < 17:
+        return note
+    holdout = prefix[-1]
+    context = prefix[:-1]
+    window = context[-focus:] if mode == "fenetre" else context
+    if len(window) < 8:
+        return note
+    points = {
+        name: chronos_point([float(row[name]) for row in window])
+        for name in ("sum", "star_sum", "n1")
+    }
+    if points["sum"] is None:
+        return note
+    try:
+        hold_moments, _importance, _engine = predict_moments(
+            context,
+            [holdout, follower],
+            mode=mode,
+            focus=focus,
+            families=families,
+            estimators=estimators,
+            quantiles=(0.5,),
+            library="lightgbm",
+        )
+    except Exception:
+        return note
+    base = recount(context[-focus:], star_pool=star_pool)
+    ranked = beam(hold_moments, base, star_pool=star_pool, radius=1)
+    if not ranked:
+        return note
+    lgb_sum = float(sum(ranked[0]["numbers"]))
+    lgb_mae = abs(lgb_sum - float(holdout["sum"]))
+    chrono_mae = abs(float(points["sum"]) - float(holdout["sum"]))
+    weight = blend_weight(lgb_mae, chrono_mae)
+    for name in ("sum", "star_sum", "n1"):
+        point = points[name]
+        if point is None or name not in moments:
+            continue
+        blended = _clip(name, blend_mid(moments[name]["mid"], point, weight))
+        moments[name]["mid"] = blended
+        moments[name]["lo"] = min(moments[name]["lo"], blended)
+        moments[name]["hi"] = max(moments[name]["hi"], blended)
+    return {
+        "available": True,
+        "weight": round(weight, 4),
+        "holdout_mae_lgb": round(lgb_mae, 4),
+        "holdout_mae_chronos": round(chrono_mae, 4),
+    }
+
+
 def shift_report(
     frame: Frame,
     families: Iterable[str],
@@ -236,6 +309,7 @@ def shift_report(
     libraries: tuple[str, ...] = ("lightgbm",),
     quantiles: tuple[float, ...] = (0.1, 0.5, 0.9),
     only: int | None = None,
+    with_chronos: bool = False,
 ) -> dict[str, Any]:
     """Dix coupures −1…−10. Chaque prévision n'apprend pas le tirage qu'elle note.
 
@@ -244,6 +318,7 @@ def shift_report(
     """
     rows = frame.rows
     shifts: list[dict[str, Any]] = []
+    chronos_used = False
     lags = (only,) if only is not None else tuple(range(1, SHIFT_MAX + 1))
     for lag in lags:
         if len(rows) - lag < 16:
@@ -274,11 +349,27 @@ def shift_report(
                     )
                 except Exception:
                     continue
+                chronos_note = None
+                if with_chronos and library == "lightgbm":
+                    chronos_note = _blend_shift_chronos(
+                        moments,
+                        prefix,
+                        target,
+                        mode=mode,
+                        focus=frame.focus,
+                        families=families,
+                        estimators=estimators,
+                        star_pool=frame.star_pool,
+                    )
+                    chronos_used = chronos_used or bool(chronos_note.get("available"))
                 ranked = beam(moments, base, star_pool=frame.star_pool, radius=1)
                 if not ranked:
                     continue
                 packed = _pack(ranked[0]["numbers"], ranked[0]["stars"], moments["sum"]["mid"])
-                readings[key] = _shift_side(packed, actual, _rank_view(moments))
+                side = _shift_side(packed, actual, _rank_view(moments))
+                if chronos_note and chronos_note.get("available"):
+                    side["chronos"] = chronos_note
+                readings[key] = side
         shifts.append(
             {
                 "x": lag,
@@ -291,6 +382,7 @@ def shift_report(
     return {
         "shifts": shifts,
         "summary": _shift_summary(shifts),
+        "chronos": {"requested": with_chronos, "used": chronos_used},
     }
 
 

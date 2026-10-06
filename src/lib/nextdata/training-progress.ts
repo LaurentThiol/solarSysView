@@ -16,6 +16,19 @@ export type ShiftSummary = Record<
   { mae_sum: number | null; hits_numbers: number | null; count: number }
 >
 
+/** Écart de chaque point avec le décalage d’avant. Le premier point n’a pas de précédent. */
+export function deltaNumbers(rows: (number | null)[][]): (number | null)[][] {
+  return rows.map((row, index) => {
+    if (index === 0) return row.map(() => null)
+    const previous = rows[index - 1]
+    return row.map((value, column) => {
+      const prior = previous[column]
+      if (value == null || prior == null || !Number.isFinite(value) || !Number.isFinite(prior)) return null
+      return Math.round((value - prior) * 100) / 100
+    })
+  })
+}
+
 export function trainingPercent(done: number, total = TRAINING_SHIFT_TOTAL): number {
   if (total <= 0) return 0
   const finished = Math.max(0, Math.min(done, total))
