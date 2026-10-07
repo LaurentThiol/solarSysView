@@ -8,7 +8,15 @@ from typing import Any, Iterable
 
 from synchro.analysis.common import as_date
 from synchro.analysis.variables import decade_hist
-from synchro.nextdata.covariates import clocks, link_series, mean_delay, repeat_counts, star_couple_ago
+from synchro.nextdata.covariates import (
+    clocks,
+    consecutive_count,
+    link_series,
+    mean_delay,
+    repeat_counts,
+    spread_of,
+    star_couple_ago,
+)
 from synchro.short_cycle import short_residual
 
 MIN_DRAWS = 24
@@ -159,13 +167,13 @@ def build_frame(
     e2 = [float(pool[1]) for pool in stars]
     e_gap = [e2[t] - e1[t] for t in range(len(selected))]
     parity = [float(sum(1 for n in pool if n % 2 == 0)) for pool in numbers]
-    spread = [float(pool[-1] - pool[0]) for pool in numbers]
+    spread = [spread_of(pool) for pool in numbers]
     high_low = [float(sum(1 for n in pool if n >= 26)) for pool in numbers]
-    consecutive = []
+    consecutive = [consecutive_count(pool) for pool in numbers]
+    star_spread = [spread_of(pool) for pool in stars]
+    star_consecutive = [consecutive_count(pool) for pool in stars]
     decades = []
     for pool in numbers:
-        present = set(pool)
-        consecutive.append(float(sum(1 for n in present if (n + 1) in present)))
         bins = decade_hist({"numbers": pool})
         decades.append(bins)
     centroid = [sums[t] / 5.0 for t in range(len(selected))]
@@ -215,6 +223,8 @@ def build_frame(
             "spread": spread[index],
             "high_low": high_low[index],
             "consecutive": consecutive[index],
+            "star_spread": star_spread[index],
+            "star_consecutive": star_consecutive[index],
             "centroid": centroid[index],
             "short_residual": residual[index],
             "mean_delay": delays[index],

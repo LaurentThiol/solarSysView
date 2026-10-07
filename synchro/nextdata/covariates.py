@@ -50,9 +50,27 @@ CHAIN: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("e_gap", ("e1",)),
 )
 
-TEMPORAL_TARGETS: tuple[str, ...] = ("sum", "parity", "star_sum")
+# Étendue et consécutifs : mêmes comptes que la page Évolution.
+# L’étendue des étoiles est e_gap (e2 − e1), déjà dans la chaîne des rangs.
+TEMPORAL_TARGETS: tuple[str, ...] = (
+    "sum",
+    "parity",
+    "star_sum",
+    "spread",
+    "consecutive",
+    "star_consecutive",
+)
+SHAPE_SERIES: tuple[str, ...] = ("spread", "consecutive", "star_spread", "star_consecutive")
 
-PAST_FORME = ("spread", "high_low", "consecutive", "centroid", "short_residual", "mean_delay")
+PAST_FORME = (
+    "spread",
+    "high_low",
+    "consecutive",
+    "star_consecutive",
+    "centroid",
+    "short_residual",
+    "mean_delay",
+)
 PAST_DECADES = ("d0", "d1", "d2", "d3", "d4", "decade_occupied")
 PAST_DELTA = (
     "d_sum",
@@ -170,6 +188,32 @@ def column_family(feature: str) -> str:
 def _sin_cos(fraction: float) -> tuple[float, float]:
     angle = 2.0 * math.pi * (float(fraction) % 1.0)
     return math.sin(angle), math.cos(angle)
+
+
+def spread_of(values: Iterable[int]) -> float:
+    """max − min. 0 si la grille a moins de deux boules."""
+    ordered = sorted(int(value) for value in values)
+    if len(ordered) < 2:
+        return 0.0
+    return float(ordered[-1] - ordered[0])
+
+
+def grid_shape(numbers: Iterable[int], stars: Iterable[int]) -> dict[str, float]:
+    """Étendue et consécutifs des numéros puis des étoiles."""
+    nums = [int(value) for value in numbers]
+    star = [int(value) for value in stars]
+    return {
+        "spread": spread_of(nums),
+        "consecutive": consecutive_count(nums),
+        "star_spread": spread_of(star),
+        "star_consecutive": consecutive_count(star),
+    }
+
+
+def consecutive_count(values: Iterable[int]) -> float:
+    """Paires (n, n+1). 0 à 4 pour les numéros, 0 ou 1 pour les étoiles."""
+    present = {int(value) for value in values}
+    return float(sum(1 for number in present if (number + 1) in present))
 
 
 def clocks(day: date) -> dict[str, float]:

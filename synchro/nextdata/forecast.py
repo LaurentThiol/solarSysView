@@ -20,10 +20,12 @@ import numpy as np
 
 from synchro.nextdata.covariates import (
     CHAIN,
+    SHAPE_SERIES,
     TARGETS,
     TEMPORAL_TARGETS,
     column_family,
     future_columns,
+    grid_shape,
     normalize_families,
     past_columns,
 )
@@ -44,6 +46,10 @@ CLAMPS: dict[str, tuple[float, float]] = {
     "star_sum": (3.0, 23.0),
     "e1": (1.0, 11.0),
     "e_gap": (1.0, 11.0),
+    "spread": (4.0, 49.0),
+    "consecutive": (0.0, 4.0),
+    "star_spread": (1.0, 11.0),
+    "star_consecutive": (0.0, 1.0),
 }
 
 
@@ -440,7 +446,7 @@ def try_darts_medians(
     lags, past_lags = lag_choice(mode, focus_used, n)
     past_names = past_columns(families)
     future_names = future_columns(families)
-    target_names = ["sum", "star_sum", "n1", "parity"]
+    target_names = ["sum", "star_sum", "n1", "parity", "spread", "consecutive", "star_consecutive"]
     start = max(0, focus_start - lags) if mode == "fenetre" else 0
     if n - start <= lags + 8:
         return None
@@ -544,7 +550,7 @@ def _apply_external(
     moments: dict[str, dict[str, float]],
     external: dict[str, float] | None,
     *,
-    names: tuple[str, ...] = ("sum", "star_sum", "n1", "parity"),
+    names: tuple[str, ...] = ("sum", "star_sum", "n1", "parity", "spread", "consecutive", "star_consecutive"),
     mix_n1: bool = False,
 ) -> None:
     if not external:
@@ -569,7 +575,8 @@ def _round_moments(moments: dict[str, dict[str, float]]) -> dict[str, dict[str, 
 
 def _rank_view(moments: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
     """n1…n5 et e2 reconstruits, pour les anneaux et les courbes."""
-    view = {name: dict(moments[name]) for name in ("sum", "parity", "star_sum", "n1", "e1") if name in moments}
+    kept = ("sum", "parity", "star_sum", "n1", "e1", "spread", "consecutive", "star_consecutive")
+    view = {name: dict(moments[name]) for name in kept if name in moments}
     gaps = [moments[name]["mid"] for name in ("g1", "g2", "g3", "g4")]
     mids = reconstruct(moments["n1"]["mid"], gaps)
     widths = []
@@ -588,6 +595,7 @@ def _rank_view(moments: dict[str, dict[str, float]]) -> dict[str, dict[str, floa
     e_half = (moments["e1"]["hi"] - moments["e1"]["lo"] + moments["e_gap"]["hi"] - moments["e_gap"]["lo"]) / 2.0
     view["e2"] = {"lo": e_mid - e_half, "mid": e_mid, "hi": e_mid + e_half}
     view["e_gap"] = dict(moments["e_gap"])
+    view["star_spread"] = dict(moments["e_gap"])
     return _round_moments(view)
 
 
@@ -691,12 +699,14 @@ def run_forecast(
     if with_chronos:
         chronos_info = _blend_chronos(frame, moment_book, walked)
 
+    chart_grids: dict[str, dict[str, Any]] = {}
     for mode in ("corpus", "fenetre"):
         moments = moment_book[mode]
         ranked = beam(moments, base, star_pool=frame.star_pool)
         if not ranked:
             return {"ok": False, "error": "Aucune grille entière n’a pu être projetée.", **dependency_status()}
         best = ranked[0]
+        chart_grids[mode] = best
         view = _rank_view(moments)
         mae_sum = walked["metrics"][mode]["mae"].get("sum")
         modes[mode].update(
@@ -715,6 +725,7 @@ def run_forecast(
             if not cat_ranked:
                 return {"ok": False, "error": "CatBoost n’a pas produit de grille entière.", **dependency_status()}
             cat_best = cat_ranked[0]
+            chart_grids[f"{mode}_catboost"] = cat_best
             cat_metrics = walked["metrics"].get(f"{mode}_catboost") or {}
             cat_block.pop("_moments", None)
             cat_block.update(
@@ -749,7 +760,7 @@ def run_forecast(
         "modes": modes,
         "base": public_base(base),
         "backtest": walked,
-        "chart": _chart(frame, walked["rows"], moment_book),
+        "chart": _chart(frame, walked["rows"], moment_book, chart_grids),
         "best_mae_sum": walked["best_mae_sum"],
         "chronos": {"used": bool(chronos_info.get("used"))},
     }
@@ -865,9 +876,10 @@ def _chart(
     frame: Frame,
     steps: list[dict[str, Any]],
     moment_book: dict[str, dict[str, dict[str, float]]],
+    grids: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     by_date = {step["date"]: step for step in steps}
-    level_names = ("sum", "n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2")
+    level_names = ("sum", "n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2", *SHAPE_SERIES)
     points: list[dict[str, Any]] = []
     for row in frame.rows[frame.focus_start :]:
         point: dict[str, Any] = {
@@ -900,6 +912,10 @@ def _chart(
             forecast[f"{name}_{mode}"] = band["mid"]
             forecast[f"{name}_{mode}_lo"] = band["lo"]
             forecast[f"{name}_{mode}_hi"] = band["hi"]
+        grid = (grids or {}).get(mode) or {}
+        if grid.get("numbers"):
+            for name, value in grid_shape(grid["numbers"], grid.get("stars") or []).items():
+                forecast[f"{name}_{mode}"] = value
     if points:
         last = points[-1]
         forecast["d_sum"] = round(float(forecast.get("sum_corpus", last["sum"])) - float(last["sum"]), 4)

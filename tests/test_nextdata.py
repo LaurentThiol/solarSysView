@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from synchro.app import create_app
 from synchro.nextdata.backtest import walk_forward
-from synchro.nextdata.covariates import link_series, star_couple_ago
+from synchro.nextdata.covariates import consecutive_count, link_series, spread_of, star_couple_ago
 from synchro.nextdata.empirical import recount, smoothed_share
 from synchro.nextdata.forecast import (
     blend_mid,
@@ -78,6 +78,13 @@ def test_frame_uses_civil_years_and_recounts_the_focus() -> None:
     assert base["couples"]
     assert base["triples"]
     assert smoothed_share(0, 50, 5, 50) < smoothed_share(10, 50, 5, 50)
+    for row in frame.rows:
+        assert row["spread"] == spread_of(row["numbers"])
+        assert row["consecutive"] == consecutive_count(row["numbers"])
+        assert row["star_spread"] == spread_of(row["stars"])
+        assert row["star_spread"] == row["e_gap"]
+        assert row["star_consecutive"] == consecutive_count(row["stars"])
+        assert row["star_consecutive"] in (0.0, 1.0)
 
 
 def test_window_loss_ignores_the_three_year_prefix() -> None:
@@ -123,6 +130,67 @@ def test_projection_is_increasing_and_beam_returns_a_grid() -> None:
     assert len(ranked[0]["numbers"]) == 5
     assert len(ranked[0]["stars"]) == 2
     assert ranked[0]["stars"][0] < ranked[0]["stars"][1]
+
+
+def test_projection_matches_spread_without_moving_the_sum() -> None:
+    wide = {
+        "n1": {"lo": 2, "mid": 4, "hi": 8},
+        "g1": {"lo": 4, "mid": 8, "hi": 12},
+        "g2": {"lo": 4, "mid": 8, "hi": 12},
+        "g3": {"lo": 4, "mid": 8, "hi": 12},
+        "g4": {"lo": 4, "mid": 10, "hi": 14},
+        "sum": {"lo": 80, "mid": 100, "hi": 120},
+    }
+    before, _raw = project_numbers(wide)
+    aimed = {**wide, "spread": {"lo": 18, "mid": 22, "hi": 26}}
+    after, _raw = project_numbers(aimed)
+    assert abs((after[-1] - after[0]) - 22) <= 1
+    assert sum(after) == sum(before)
+    assert after == sorted(after)
+    assert len(set(after)) == 5
+
+
+def test_score_follows_predicted_spread_and_consecutive() -> None:
+    from synchro.nextdata.project import score_grid
+
+    def wide(mid: float) -> dict[str, float]:
+        return {"lo": mid - 80, "mid": mid, "hi": mid + 80}
+
+    tight = [8, 9, 10, 11, 12]
+    loose = [8, 16, 24, 32, 40]
+    moments = {
+        "n1": wide(8),
+        "g1": wide(8),
+        "g2": wide(8),
+        "g3": wide(8),
+        "g4": wide(8),
+        "sum": wide(50),
+        "parity": wide(2),
+        "e1": wide(2),
+        "e_gap": wide(3),
+        "star_sum": wide(7),
+        "spread": {"lo": 3, "mid": 4, "hi": 5},
+        "consecutive": {"lo": 3, "mid": 4, "hi": 4},
+        "star_consecutive": {"lo": 0, "mid": 1, "hi": 1},
+    }
+    base = {
+        "draw_count": 40,
+        "number_counts": {},
+        "star_counts": {},
+        "pair_counts": {},
+        "triple_counts": {},
+        "star_pool": 12,
+    }
+    close = score_grid(tight, [3, 4], moments, base)
+    far = score_grid(loose, [3, 8], moments, base)
+    bare = {
+        key: value
+        for key, value in moments.items()
+        if key not in ("spread", "consecutive", "star_consecutive")
+    }
+    close_bare = score_grid(tight, [3, 4], bare, base)
+    far_bare = score_grid(loose, [3, 8], bare, base)
+    assert close - far > (close_bare - far_bare) + 5
 
 
 def test_status_does_not_import_darts_or_torch() -> None:
@@ -194,6 +262,10 @@ def test_shift_hides_the_draw_it_scores(monkeypatch) -> None:
     errors = report["shifts"][0]["readings"]["corpus"]["errors"]
     assert isinstance(errors["sum"], float)
     assert isinstance(errors["n1"], float)
+    assert isinstance(errors["spread"], float)
+    assert isinstance(errors["consecutive"], float)
+    assert isinstance(errors["star_spread"], float)
+    assert isinstance(errors["star_consecutive"], float)
     assert "persistence" in report["summary"]
     assert report["summary"]["corpus"]["mae_sum"] is not None
 
@@ -338,6 +410,20 @@ def test_two_modes_forecast_real_draws() -> None:
     assert "sum" in report["backtest"]["metrics"]["corpus"]["mae"]
     assert report["backtest"]["metrics"]["fenetre"]["mae"]["sum"] is not None
     assert report["chart"][-1]["kind"] == "forecast"
+    assert "spread" in report["modes"]["corpus"]["quantiles"]
+    assert "consecutive" in report["modes"]["corpus"]["quantiles"]
+    assert "star_spread" in report["modes"]["corpus"]["quantiles"]
+    assert "star_consecutive" in report["modes"]["corpus"]["quantiles"]
+    assert report["chart"][0]["kind"] == "history"
+    assert report["chart"][0]["spread"] is not None
+    assert report["chart"][0]["star_spread"] is not None
+    assert report["chart"][0]["consecutive"] is not None
+    assert report["backtest"]["rows"][0]["actual"]["spread"] == spread_of(report["backtest"]["rows"][0]["actual"]["numbers"])
+    assert report["chart"][-1]["spread_corpus"] == spread_of(report["modes"]["corpus"]["grid"]["numbers"])
+    assert report["chart"][-1]["star_spread_corpus"] == spread_of(report["modes"]["corpus"]["grid"]["stars"])
+    assert report["chart"][-1]["star_consecutive_corpus"] is not None
+    assert report["backtest"]["metrics"]["corpus"]["mae"]["consecutive"] is not None
+    assert report["backtest"]["metrics"]["corpus"]["mae"]["star_spread"] is not None
     assert report["base"]["couples"]
     walked = walk_forward(build_frame(_draws(36, seed=4), focus=24), ["forme", "couples"], estimators=2)
     assert walked["rows"]

@@ -11,6 +11,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import { DRAWS, type Draw } from "@/lib/draws"
 import { NEXTDATA_HELP } from "@/lib/nextdata/help"
+import { shapeCaption } from "@/lib/nextdata/shape"
 import { defaultStoredSpec, writeStoredSpec } from "@/lib/jeux"
 import { useLabTab } from "@/lib/use-lab-tab"
 import { cn } from "@/lib/utils"
@@ -45,6 +46,10 @@ const SERIES = [
   { key: "star_sum", label: "Somme ★" },
   { key: "e1", label: "e1" },
   { key: "e2", label: "e2" },
+  { key: "spread", label: "Étendue" },
+  { key: "consecutive", label: "Consécutifs" },
+  { key: "star_spread", label: "Étendue ★" },
+  { key: "star_consecutive", label: "Consécutifs ★" },
 ] as const
 
 const CHART: ChartConfig = {
@@ -526,6 +531,7 @@ export function NextDataLab() {
                               {block.chronos?.available ? ` · Chronos ${block.blend_weight}` : ""}
                             </p>
                             <ForecastBalls grid={block.grid} quantiles={block.quantiles} active={active && library === "lightgbm"} />
+                            <p className="text-xs tabular-nums text-muted-foreground">{shapeCaption(block.grid.numbers, block.grid.stars)}</p>
                           </div>
                           {block.catboost && (
                             <div className={cn("flex flex-col gap-2 rounded-xl p-2", active && library === "catboost" && "bg-primary/5")}>
@@ -533,6 +539,7 @@ export function NextDataLab() {
                                 CatBoost{block.catboost.mae_sum != null ? ` · MAE somme ${block.catboost.mae_sum}` : ""}
                               </p>
                               <ForecastBalls grid={block.catboost.grid} quantiles={block.catboost.quantiles} active={active && library === "catboost"} />
+                              <p className="text-xs tabular-nums text-muted-foreground">{shapeCaption(block.catboost.grid.numbers, block.catboost.grid.stars)}</p>
                             </div>
                           )}
                           {active && (
@@ -563,6 +570,7 @@ export function NextDataLab() {
                       ).map((grid) => (
                         <li key={grid.numbers.join("-") + grid.stars.join("-")}>
                           {grid.numbers.join(" ")} + {grid.stars.join(" ")}
+                          <span className="text-muted-foreground"> · {shapeCaption(grid.numbers, grid.stars)}</span>
                         </li>
                       ))}
                     </ul>

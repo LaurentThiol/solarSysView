@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "../src/lib/nextdata/help.ts"
+import { shapeCaption } from "../src/lib/nextdata/shape.ts"
 
 const lab = readFileSync(new URL("../src/components/nextdata/nextdata-lab.tsx", import.meta.url), "utf8")
 const training = readFileSync(new URL("../src/components/nextdata/training-lab.tsx", import.meta.url), "utf8")
@@ -42,4 +43,19 @@ test("nextDataTraining explains the backward shift", () => {
   assert.match(training, /role="progressbar"/)
   assert.match(training, /shift: lag/)
   assert.match(nav, /nextdatatraining/)
+  assert.match(NEXTDATA_TRAINING_HELP.rangs.body, /étendue ★/)
+  assert.match(training, /consécutifs ★/)
+})
+
+test("étendue and consécutifs follow the evolution page", () => {
+  assert.equal(
+    shapeCaption([1, 2, 3, 10, 20], [4, 5]),
+    "Étendue 19 · consécutifs 2 · étendue ★ 1 · consécutifs ★ 1"
+  )
+  assert.equal(shapeCaption([10, 12, 14, 16, 20], [1, 3]), "Étendue 10 · consécutifs 0 · étendue ★ 2 · consécutifs ★ 0")
+  assert.match(lab, /label: "Étendue ★"/)
+  assert.match(lab, /shapeCaption/)
+  assert.match(NEXTDATA_HELP.moteur.items?.map((item) => item.label).join(" ") ?? "", /Étendue et consécutifs/)
+  assert.match(NEXTDATA_HELP.courbes.body, /page Évolution/)
+  assert.match(NEXTDATA_HELP.suivantes.body, /consécutifs/)
 })

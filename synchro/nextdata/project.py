@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from synchro.nextdata.covariates import consecutive_count, spread_of
 from synchro.nextdata.empirical import log_ball, smoothed_lift
 
 NUMBER_BOUNDS = [(index, 50 - 5 + index) for index in range(1, 6)]
@@ -61,6 +62,93 @@ def project_increasing(values: list[float], lo: list[int], hi: list[int]) -> lis
     return out
 
 
+def _inside(values: list[int], index: int, delta: int, lo: list[int], hi: list[int]) -> bool:
+    trial = list(values)
+    trial[index] += delta
+    low, high = _room(trial, index, lo, hi)
+    return low <= trial[index] <= high
+
+
+def _pay(values: list[int], lo: list[int], hi: list[int], start: int, stop: int, step: int, delta: int) -> bool:
+    index = start
+    while index != stop:
+        if _inside(values, index, delta, lo, hi):
+            values[index] += delta
+            return True
+        index += step
+    return False
+
+
+def _move_end(values: list[int], lo: list[int], hi: list[int], index: int, delta: int, pay_delta: int) -> bool:
+    """Bouge une extrémité et compense sur un rang intérieur. La somme ne change pas."""
+    last = len(values) - 1
+    if not _inside(values, index, delta, lo, hi):
+        return False
+    values[index] += delta
+    if index == last:
+        paid = _pay(values, lo, hi, last - 1, 0, -1, pay_delta)
+    else:
+        paid = _pay(values, lo, hi, 1, last, 1, pay_delta)
+    if paid:
+        return True
+    values[index] -= delta
+    return False
+
+
+def _free_end(values: list[int], lo: list[int], hi: list[int], shrink: bool) -> bool:
+    """Décale le voisin d’une extrémité bloquée. L’étendue ne change pas."""
+    last = len(values) - 1
+    if shrink:
+        if _move_end(values, lo, hi, last - 1, -1, 1):
+            return True
+        return _move_end(values, lo, hi, 1, 1, -1)
+    if _move_end(values, lo, hi, last - 1, 1, -1):
+        return True
+    return _move_end(values, lo, hi, 1, -1, 1)
+
+
+def _stretch(values: list[int], lo: list[int], hi: list[int]) -> bool:
+    """Étend n5 − n1 de 1, ou dégage une extrémité, sans changer la somme."""
+    last = len(values) - 1
+    if _move_end(values, lo, hi, last, 1, -1):
+        return True
+    if _move_end(values, lo, hi, 0, -1, 1):
+        return True
+    return _free_end(values, lo, hi, shrink=False)
+
+
+def _compress(values: list[int], lo: list[int], hi: list[int]) -> bool:
+    """Réduit n5 − n1 de 1, ou dégage une extrémité, sans changer la somme."""
+    last = len(values) - 1
+    if _move_end(values, lo, hi, last, -1, 1):
+        return True
+    if _move_end(values, lo, hi, 0, 1, -1):
+        return True
+    return _free_end(values, lo, hi, shrink=True)
+
+
+def _nudge_spread(values: list[int], target: int, lo: list[int], hi: list[int]) -> list[int]:
+    """Ramène max − min vers la cible. Chaque pas garde la somme et l’ordre."""
+    out = list(values)
+    stall = 0
+    for _ in range(90):
+        spread = out[-1] - out[0]
+        if spread == int(target):
+            break
+        before = tuple(out)
+        moved = _stretch(out, lo, hi) if spread < target else _compress(out, lo, hi)
+        if not moved or tuple(out) == before or len(set(out)) != len(out) or out != sorted(out):
+            out[:] = before
+            break
+        if out[-1] - out[0] == spread:
+            stall += 1
+            if stall > 6:
+                break
+        else:
+            stall = 0
+    return out
+
+
 def _nudge_sum(values: list[int], target: int, lo: list[int], hi: list[int]) -> list[int]:
     out = list(values)
     guard = 0
@@ -102,6 +190,9 @@ def project_numbers(moments: dict[str, dict[str, float]]) -> tuple[list[int], li
     ints = project_increasing(raw, lo, hi)
     _, sum_mid, _ = _band(moments.get("sum"), float(sum(ints)))
     ints = _nudge_sum(ints, int(round(sum_mid)), lo, hi)
+    if moments.get("spread"):
+        _, spread_mid, _ = _band(moments.get("spread"), float(ints[-1] - ints[0]))
+        ints = _nudge_spread(ints, int(round(spread_mid)), lo, hi)
     return ints, raw
 
 
@@ -157,6 +248,14 @@ def _neighbors(values: list[int], lo: list[int], hi: list[int], radius: int = 3)
     return found
 
 
+def _shape_distance(actual: float, moment: dict[str, float] | None) -> float:
+    """Écart à la médiane prévue, à l’échelle de la bande. Moment absent : 0."""
+    if not moment:
+        return 0.0
+    lo, mid, hi = _band(moment, actual)
+    return abs(float(actual) - mid) / max(1.0, hi - lo)
+
+
 def rank_scales(moments: dict[str, dict[str, float]]) -> tuple[list[float], list[float], list[float]]:
     """Médiane reconstruite et largeur de quantile de chaque rang."""
     def piece(name: str, default: float) -> tuple[float, float, float]:
@@ -181,7 +280,7 @@ def score_grid(
     moments: dict[str, dict[str, float]],
     base: dict[str, Any],
 ) -> float:
-    """Plus le score est haut, plus la grille colle aux rangs et à la base recomptée."""
+    """Plus le score est haut, plus la grille colle aux rangs, à l’étendue, aux consécutifs et à la base."""
     mids, scales, _ = rank_scales(moments)
     distance = 0.0
     for index, number in enumerate(numbers):
@@ -193,6 +292,11 @@ def score_grid(
     parity_lo = _band(moments.get("parity"), 2.5)[0]
     even = sum(1 for number in numbers if number % 2 == 0)
     distance += abs(even - parity_mid) / max(1.0, parity_hi - parity_lo)
+    distance += _shape_distance(spread_of(numbers), moments.get("spread"))
+    distance += _shape_distance(consecutive_count(numbers), moments.get("consecutive"))
+    star_spread_moment = moments.get("star_spread") or moments.get("e_gap")
+    distance += _shape_distance(spread_of(stars), star_spread_moment)
+    distance += _shape_distance(consecutive_count(stars), moments.get("star_consecutive"))
 
     draws = max(int(base.get("draw_count") or 0), 1)
     number_counts = base.get("number_counts") or {}

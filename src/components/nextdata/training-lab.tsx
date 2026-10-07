@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { DRAWS, type Draw } from "@/lib/draws"
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "@/lib/nextdata/help"
+import { shapeCaption } from "@/lib/nextdata/shape"
 import { deltaNumbers, summarizeShifts, TRAINING_SHIFT_TOTAL, trainingPercent } from "@/lib/nextdata/training-progress"
 import { cn } from "@/lib/utils"
 
@@ -41,7 +42,20 @@ const CHART: ChartConfig = {
   persistence: { label: "Persistance", color: "var(--foreground)" },
 }
 
-const RANK_ROWS = ["n1", "n2", "n3", "n4", "n5", "e1", "e2", "sum"] as const
+const RANK_ROWS = [
+  { key: "n1", label: "n1" },
+  { key: "n2", label: "n2" },
+  { key: "n3", label: "n3" },
+  { key: "n4", label: "n4" },
+  { key: "n5", label: "n5" },
+  { key: "e1", label: "e1" },
+  { key: "e2", label: "e2" },
+  { key: "sum", label: "sum" },
+  { key: "spread", label: "étendue" },
+  { key: "consecutive", label: "consécutifs" },
+  { key: "star_spread", label: "étendue ★" },
+  { key: "star_consecutive", label: "consécutifs ★" },
+] as const
 
 type Side = {
   numbers: number[]
@@ -430,15 +444,15 @@ export function TrainingLab() {
                 </thead>
                 <tbody>
                   {RANK_ROWS.map((field) => (
-                    <tr key={field}>
-                      <th className="pr-2 text-left font-medium text-muted-foreground">{field}</th>
+                    <tr key={field.key}>
+                      <th className="pr-2 text-left font-medium text-muted-foreground">{field.label}</th>
                       {report.shifts.map((shift) => {
                         const side = shift.readings[reading]
-                        const value = side?.errors[field]
-                        const covered = side?.in_band[field]
+                        const value = side?.errors[field.key]
+                        const covered = side?.in_band[field.key]
                         return (
                           <td
-                            key={`${field}-${shift.x}`}
+                            key={`${field.key}-${shift.x}`}
                             className="rounded-md px-1 py-1.5"
                             style={{ background: tone(value) }}
                             title={covered ? "dans la bande 10–90" : undefined}
@@ -473,6 +487,8 @@ export function TrainingLab() {
                       {side?.numbers?.length ? ` · prévu ${side.numbers.join(" ")}` : ""}
                       {side?.hits_numbers != null ? ` · ${side.hits_numbers}/5` : ""}
                       {side?.hits_stars != null ? ` · étoiles ${side.hits_stars}/2` : ""}
+                      {shift.actual.numbers.length ? ` · forme ${shapeCaption(shift.actual.numbers, shift.actual.stars)}` : ""}
+                      {side?.numbers?.length ? ` · forme prévue ${shapeCaption(side.numbers, side.stars)}` : ""}
                     </li>
                   )
                 })}

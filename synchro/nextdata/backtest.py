@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any, Iterable
 
+from synchro.nextdata.covariates import SHAPE_SERIES, grid_shape
 from synchro.nextdata.empirical import recount
 from synchro.nextdata.forecast import (
     _clip,
@@ -17,10 +18,10 @@ from synchro.nextdata.forecast import (
 from synchro.nextdata.panel import Frame
 from synchro.nextdata.project import beam
 
-FIELDS = ("sum", "n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2")
+FIELDS = ("sum", "n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2", *SHAPE_SERIES)
 MODES = ("corpus", "fenetre")
 SHIFT_MAX = 10
-SHIFT_FIELDS = ("sum", "n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2")
+SHIFT_FIELDS = FIELDS
 
 
 def _pack(numbers: list[int], stars: list[int], fallback_sum: float | None = None) -> dict[str, Any]:
@@ -36,6 +37,7 @@ def _pack(numbers: list[int], stars: list[int], fallback_sum: float | None = Non
         out[name] = float(nums[index]) if index < len(nums) else None
     out["e1"] = float(star[0]) if star else None
     out["e2"] = float(star[1]) if len(star) > 1 else None
+    out.update(grid_shape(nums, star))
     return out
 
 
@@ -200,7 +202,7 @@ def _public_step(step: dict[str, Any]) -> dict[str, Any]:
             "stars": block.get("stars") or [],
             "sum": None if block.get("sum") is None else round(float(block["sum"]), 4),
         }
-        for name in ("n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2"):
+        for name in ("n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2", *SHAPE_SERIES):
             value = block.get(name)
             kept[name] = None if value is None else round(float(value), 4)
         return kept
@@ -399,6 +401,10 @@ def _public_numbers(block: dict[str, Any]) -> dict[str, Any]:
         "star_sum": block.get("star_sum"),
         "e1": block.get("e1"),
         "e2": block.get("e2"),
+        "spread": block.get("spread"),
+        "consecutive": block.get("consecutive"),
+        "star_spread": block.get("star_spread"),
+        "star_consecutive": block.get("star_consecutive"),
     }
 
 

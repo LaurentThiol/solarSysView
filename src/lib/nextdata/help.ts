@@ -101,6 +101,10 @@ export const NEXTDATA_HELP = {
         label: "Darts",
         text: "S’il est installé, il remplace la médiane temporelle LightGBM du prochain pas. La chaîne des rangs reste LightGBM. Darts n’est pas chargé à l’ouverture de la page.",
       },
+      {
+        label: "Étendue et consécutifs",
+        text: "Même définition que la page Évolution. Étendue = max − min : 4 à 49 pour les numéros, 1 à 11 pour les étoiles. Consécutifs = paires n, n+1 : 0 à 4 pour les numéros, 0 ou 1 pour les étoiles. Ces quatre lectures sont prévues avec la somme et la parité. L’étendue des numéros rapproche la grille projetée de cette cible, un pas à la fois, sans changer la somme. Les voisines sont ensuite classées sur l’étendue et les consécutifs.",
+      },
     ],
   },
   bibliotheque: {
@@ -126,7 +130,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Forme",
-        text: "Écart max−min, hauts et bas, consécutifs, centre, résidu de cycle court, retard moyen des cinq numéros sortis.",
+        text: "Écart max−min des numéros, hauts et bas, consécutifs des numéros et des étoiles, centre, résidu de cycle court, retard moyen des cinq numéros sortis. L’étendue des étoiles est l’écart e2 − e1, déjà prévu avec les rangs.",
       },
       {
         label: "Décennies",
@@ -173,7 +177,7 @@ export const NEXTDATA_HELP = {
   grille: {
     title: "Grille 5+2",
     wide: true,
-    body: "Cinq numéros triés et deux étoiles. L’anneau suit l’écart entre le quantile bas et le quantile haut du rang : un anneau large dit que le modèle hésite.",
+    body: "Cinq numéros triés et deux étoiles. L’anneau suit l’écart entre le quantile bas et le quantile haut du rang : un anneau large dit que le modèle hésite. Sous les boules, l’étendue et les consécutifs de cette grille, numéros puis étoiles, avec les mêmes comptes que la page Évolution.",
     items: [
       {
         label: "Mise en avant",
@@ -191,7 +195,7 @@ export const NEXTDATA_HELP = {
   },
   suivantes: {
     title: "Cinq suivantes",
-    body: "Voisins de la grille projetée : un rang bouge de 1 à 3, l’ordre et la bande de somme restent tenus. Elles sont classées par distance aux rangs prévus, puis par les fréquences, les couples et les triples recomptés dans le focus.",
+    body: "Voisins de la grille projetée : un rang bouge de 1 à 3, l’ordre et la bande de somme restent tenus. Elles sont classées par distance aux rangs prévus, à l’étendue et aux consécutifs (numéros et étoiles, comme sur Évolution), puis par les fréquences, les couples et les triples recomptés dans le focus.",
   },
   jeux: {
     title: "Envoyer vers Jeux",
@@ -199,7 +203,7 @@ export const NEXTDATA_HELP = {
   },
   courbes: {
     title: "Courbes du focus",
-    body: "Trait plein : ce qui est sorti. Trait long : trois ans. Trait court : fenêtre seule. Le fin trait du dernier pas est la bande du mode choisi. DeltaEvol remplace chaque niveau par l’écart au tirage d’avant.",
+    body: "Trait plein : ce qui est sorti. Trait long : trois ans. Trait court : fenêtre seule. Le fin trait du dernier pas est la bande du mode choisi. DeltaEvol remplace chaque niveau par l’écart au tirage d’avant. Étendue et consécutifs, numéros puis étoiles, suivent le même dessin que la page Évolution.",
   },
   baseIntro: {
     title: "Effectifs du focus",
@@ -279,7 +283,7 @@ export const NEXTDATA_TRAINING_HELP = {
   },
   rangs: {
     title: "Écarts de rangs",
-    body: "Une case, un décalage et un rang. n1 est le plus petit numéro, n5 le plus grand. Le nombre est prévu moins sorti. Une case marquée d’un point : le numéro sorti tombe dans la bande 10–90 du modèle.",
+    body: "Une case, un décalage et un rang. n1 est le plus petit numéro, n5 le plus grand. Le nombre est prévu moins sorti. Une case marquée d’un point : le numéro sorti tombe dans la bande 10–90 du modèle. Les lignes étendue, consécutifs, étendue ★ et consécutifs ★ reprennent les comptes de la page Évolution.",
   },
   boules: {
     title: "Prévu et sorti",
