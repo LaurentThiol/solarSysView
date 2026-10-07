@@ -40,7 +40,7 @@ Mardi (cyan) et vendredi (rose) se sélectionnent ici. Le bandeau ne fait que po
 
 « en cours » : l’année n n’a pas encore de tirage en décembre. Δ, à droite, compare les moyennes de mois affichées (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. La fenêtre 20 / 50 / année ne coupe pas ces trois années.
 
-Décalage compare des suites de 6 à 10 tirages, 8 au départ. Une suite est une chaîne de sens consécutifs, par exemple 2 monte + 3 baisse + 3 monte. Un pas monte s’il dépasse l’écart-type de l’année, baisse s’il le dépasse vers le bas, stable sinon. La corrélation croisée cherche un écart de −21 à +21 jours, n contre n−1, puis n−1 contre n−2, au tirage le plus proche à trois jours près. On le retient si la chaîne est la même, si |r| dépasse l’alignement sans décalage, et s’il dépasse le 95e centile du nul qui réordonne l’autre année. La zone porte alors cette phrase. Sinon la lecture est « pas de décalage retenu ». Les mois absents d’un côté ne sont pas comparés. Mardi et vendredi ensemble, l’écart entre les soirs est de trois ou quatre jours.
+Décalage compare des suites de 6 à 10 tirages, 8 au départ. Une suite est une chaîne de sens consécutifs, par exemple 2 monte + 3 baisse + 3 monte. Un pas monte s’il dépasse l’écart-type de l’année, baisse s’il le dépasse vers le bas, stable sinon. La corrélation croisée cherche un écart de −21 à +21 jours, n contre n−1, puis n−1 contre n−2, au tirage le plus proche à trois jours près. On le retient si la chaîne est la même, si |r| dépasse l’alignement sans décalage, et s’il dépasse le 95e centile du nul qui réordonne l’autre année. La zone porte alors cette phrase. Sinon la lecture est « pas de décalage retenu ». Les mois absents d’un côté ne sont pas comparés. Synthèse allumée, Décalage suit le trait continu : mardi et vendredi, même si une soirée est masquée. Mardi et vendredi ensemble, l’écart entre les soirs est de trois ou quatre jours.
 
 Lecture d’archive. Les tirages restent indépendants. r n’est pas une probabilité du prochain tirage.`,
 }
@@ -154,7 +154,13 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
     .join(". ")
 
   return (
-    <Card data-annual-pants data-annual-source={archive.source} data-annual-lag={lagOn ? "on" : "off"} data-suite-length={suiteLength}>
+    <Card
+      data-annual-pants
+      data-annual-source={archive.source}
+      data-annual-lag={lagOn ? "on" : "off"}
+      data-annual-lag-series={lagSeriesMode(picks, lagOn)}
+      data-suite-length={suiteLength}
+    >
       <CardHeader>
         <CardTitle className="text-sm">
           <TitleHelp help={TITLE_HELP}>Somme des numéros</TitleHelp>
@@ -379,8 +385,8 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
         <p className="text-xs leading-5 text-muted-foreground">
           Δ suit les moyennes affichées : les soirs allumés, ou mardi + vendredi si Synthèse est
           allumée. Positif, la moyenne la plus récente est plus haute. Décalage, s’il est allumé,
-          pose le décalage retenu sur la colonne la plus récente de la paire. r décrit l’archive,
-          pas le prochain tirage.{" "}
+          pose le décalage retenu sur la colonne la plus récente de la paire. Synthèse allumée, il
+          suit le trait continu. r décrit l’archive, pas le prochain tirage.{" "}
           {archive.source === "neon" ? "Source Neon." : "Source fichier local."}
           {localGap
             ? " n−1 et n−2 restent vides tant que l’archive distante ne répond pas."
@@ -887,8 +893,16 @@ function lagMarks(zones: readonly LagZone[]) {
   })
 }
 
+function lagSeriesMode(picks: DayPicks, lagOn: boolean): "off" | "synthese" | "soirs" | "vide" {
+  if (!lagOn) return "off"
+  if (picks.synthese) return "synthese"
+  if (picks.mardi || picks.vendredi) return "soirs"
+  return "vide"
+}
+
 function lagPoints(lane: AnnualLane, picks: DayPicks): LagPoint[] {
-  return visibleBars(lane, picks).map((bar) => ({
+  const bars = picks.synthese ? synthesePoints(lane) : visibleBars(lane, picks)
+  return bars.map((bar) => ({
     date: bar.date,
     sum: bar.sum,
     month: bar.month,

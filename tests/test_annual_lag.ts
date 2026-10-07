@@ -236,6 +236,8 @@ test("the annual chart exposes the lag control", () => {
   assert.match(view, /pas de décalage retenu/)
   assert.match(view, /95e centile du nul/)
   assert.match(view, /SUITE_LENGTHS/)
+  assert.match(view, /picks\.synthese \? synthesePoints\(lane\) : visibleBars\(lane, picks\)/)
+  assert.match(view, /data-annual-lag-series/)
   assert.match(view, /data-annual-synthese="continu"/)
   assert.match(view, /data-month-end/)
   assert.match(glossary, /pas une probabilité/)
