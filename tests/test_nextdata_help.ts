@@ -45,6 +45,11 @@ test("nextDataTraining explains the backward shift", () => {
   assert.match(nav, /nextdatatraining/)
   assert.match(NEXTDATA_TRAINING_HELP.rangs.body, /étendue ★/)
   assert.match(training, /consécutifs ★/)
+  assert.match(NEXTDATA_TRAINING_HELP.boules.body, /cerclée/)
+  assert.match(NEXTDATA_TRAINING_HELP.boules.body, /prévu moins sorti/)
+  assert.match(training, /TrainingCompare/)
+  assert.doesNotMatch(training, /shapeCaption/)
+  assert.doesNotMatch(training, /forme prévue/)
 })
 
 test("étendue and consécutifs follow the evolution page", () => {

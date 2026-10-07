@@ -4,12 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
+import { TrainingCompare } from "@/components/nextdata/training-compare"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { DRAWS, type Draw } from "@/lib/draws"
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "@/lib/nextdata/help"
-import { shapeCaption } from "@/lib/nextdata/shape"
 import { deltaNumbers, summarizeShifts, TRAINING_SHIFT_TOTAL, trainingPercent } from "@/lib/nextdata/training-progress"
 import { cn } from "@/lib/utils"
 
@@ -472,27 +472,13 @@ export function TrainingLab() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                <TitleHelp help={NEXTDATA_TRAINING_HELP.boules}>Prévu et sorti</TitleHelp>
+                <TitleHelp help={NEXTDATA_TRAINING_HELP.boules}>
+                  Prévu et sorti · {READINGS.find((item) => item.id === reading)?.label}
+                </TitleHelp>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="flex flex-col gap-2 text-sm tabular-nums">
-                {report.shifts.map((shift) => {
-                  const side = shift.readings[reading]
-                  return (
-                    <li key={shift.x}>
-                      <span className="text-muted-foreground">{shift.label} · {shift.date}</span>
-                      {" · sorti "}
-                      {shift.actual.numbers.join(" ")}
-                      {side?.numbers?.length ? ` · prévu ${side.numbers.join(" ")}` : ""}
-                      {side?.hits_numbers != null ? ` · ${side.hits_numbers}/5` : ""}
-                      {side?.hits_stars != null ? ` · étoiles ${side.hits_stars}/2` : ""}
-                      {shift.actual.numbers.length ? ` · forme ${shapeCaption(shift.actual.numbers, shift.actual.stars)}` : ""}
-                      {side?.numbers?.length ? ` · forme prévue ${shapeCaption(side.numbers, side.stars)}` : ""}
-                    </li>
-                  )
-                })}
-              </ul>
+              <TrainingCompare shifts={report.shifts} reading={reading} />
             </CardContent>
           </Card>
         </>
