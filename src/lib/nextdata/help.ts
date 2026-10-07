@@ -287,6 +287,6 @@ export const NEXTDATA_TRAINING_HELP = {
   },
   boules: {
     title: "Prévu et sorti",
-    body: "Deux lignes par décalage. Sorti est le tirage FDJ, prévu est la grille de la lecture choisie, rangée n1 à n5 puis e1 et e2. Une boule cerclée est dans les deux grilles. Communs compte ces boules, de 0 à 5 et de 0 à 2. Étendue et consécutifs suivent la page Évolution. Le petit nombre à côté du prévu est l’écart prévu moins sorti : positif, la lecture était trop haute. La moyenne, en bas, reprend les communs et ces écarts.",
+    body: "Deux lignes par décalage. Sorti est le tirage FDJ, prévu est la grille de la lecture choisie, rangée n1 à n5 puis e1 et e2. Une boule cerclée est dans les deux grilles. Communs compte ces boules, de 0 à 5 et de 0 à 2. Étendue et consécutifs suivent la page Évolution. Le petit nombre à côté du prévu est l’écart prévu moins sorti, omis quand il est nul. Positif : la lecture était trop haute. La moyenne, en bas, reprend les communs et ces écarts.",
   },
 } satisfies Record<string, HelpCopy>

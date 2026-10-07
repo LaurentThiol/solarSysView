@@ -50,8 +50,10 @@ function BallLine({
   return (
     <div
       className={cn(
-        "grid gap-1.5",
-        kind === "number" ? "w-[calc(5*2rem+4*0.375rem)] grid-cols-5" : "w-[calc(2*2rem+0.375rem)] grid-cols-2"
+        "grid",
+        kind === "number"
+          ? "w-[calc(5*1.75rem+4*0.375rem)] grid-cols-5 gap-1.5 sm:w-[calc(5*2rem+4*0.5rem)] sm:gap-2"
+          : "w-[calc(2*1.75rem+0.375rem)] grid-cols-2 gap-1.5 sm:w-[calc(2*2rem+0.5rem)] sm:gap-2"
       )}
     >
       {values.map((value, index) => {
@@ -65,9 +67,9 @@ function BallLine({
             aria-label={label}
             data-hit={hit ? "true" : undefined}
             className={cn(
-              "inline-flex size-8 items-center justify-center rounded-full border-2 text-xs font-semibold tabular-nums",
+              "inline-flex size-7 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums sm:size-8 sm:text-xs",
               kind === "number" ? "bg-primary text-primary-foreground" : "bg-star text-primary-foreground",
-              hit ? "border-foreground" : "border-transparent"
+              hit && "z-10 shadow-[0_0_0_2px_var(--foreground)]"
             )}
           >
             {value}
@@ -101,11 +103,8 @@ function ShapeValue({ value, delta }: { value: number | null; delta: number | nu
   return (
     <span className="inline-flex items-baseline justify-center gap-1">
       <span className="min-w-5 text-right">{value}</span>
-      <span
-        className={cn("w-7 text-left text-[10px]", delta == null ? "" : deltaTone(delta))}
-        title={delta == null ? undefined : "prévu moins sorti"}
-      >
-        {delta == null ? "" : formatSigned(delta)}
+      <span className="w-7 text-left text-[10px]" title={delta != null && delta !== 0 ? "prévu moins sorti" : undefined}>
+        {delta == null || delta === 0 ? "" : <span className={deltaTone(delta)}>{formatSigned(delta)}</span>}
       </span>
     </span>
   )
@@ -130,7 +129,7 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
     <div>
       <div className="overflow-x-auto">
         <table
-          className="w-full min-w-[60rem] border-separate border-spacing-0 text-left text-xs tabular-nums"
+          className="w-full min-w-[52rem] border-separate border-spacing-0 text-left text-xs tabular-nums"
           data-reading={reading}
         >
           <caption className="sr-only">
@@ -140,9 +139,6 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
             <tr className="text-[11px] font-medium tracking-wide text-muted-foreground">
               <th scope="col" className="px-2 pb-2 font-medium">
                 Décalage
-              </th>
-              <th scope="col" className="px-2 pb-2 font-medium">
-                Date
               </th>
               <th scope="col" className="px-2 pb-2 font-medium">
                 <span className="sr-only">Grille</span>
@@ -173,11 +169,9 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
                 <Fragment key={shift.x}>
                   <tr>
                     <th scope="row" rowSpan={2} className={cn(open, "px-2 py-1.5 align-middle font-medium whitespace-nowrap")}>
-                      {shift.label}
+                      <span className="block">{shift.label}</span>
+                      <span className="mt-0.5 block font-normal text-muted-foreground">{shift.date}</span>
                     </th>
-                    <td rowSpan={2} className={cn(open, "px-2 py-1.5 align-middle whitespace-nowrap text-muted-foreground")}>
-                      {shift.date}
-                    </td>
                     <th scope="row" className={cn(open, "px-2 py-1.5 align-middle font-medium text-muted-foreground")}>
                       Sorti
                     </th>
@@ -222,7 +216,7 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
           </tbody>
           <tfoot>
             <tr>
-              <th scope="row" colSpan={5} className="border-t border-border px-2 pt-3 text-left font-medium text-muted-foreground">
+              <th scope="row" colSpan={4} className="border-t border-border px-2 pt-3 text-left font-medium text-muted-foreground">
                 Moyenne
               </th>
               <td className="border-t border-border px-2 pt-3 text-center">
@@ -260,7 +254,7 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
         </table>
       </div>
       <p className="mt-3 max-w-3xl text-xs leading-5 text-muted-foreground">
-        Une boule cerclée est dans les deux grilles. Le petit nombre est l’écart prévu moins sorti : rouge si la lecture était trop haute, bleu si elle était trop basse.
+        Une boule cerclée est dans les deux grilles. L’écart, prévu moins sorti, n’est écrit que s’il n’est pas nul : rouge si la lecture était trop haute, bleu si elle était trop basse.
       </p>
     </div>
   )
