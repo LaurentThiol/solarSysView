@@ -11,6 +11,7 @@ import {
 
 import { HelpTip, WithHelp } from "@/components/help"
 import { AdminDependenciesCard } from "@/components/admin-dependencies-card"
+import { AdminSupplyCard } from "@/components/admin-supply-card"
 import { AdminLlmCard } from "@/components/admin-llm-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -538,6 +539,8 @@ export function AdminPanel() {
       </Card>
 
       <AdminDependenciesCard />
+
+      <AdminSupplyCard />
 
       <Card id="neon-status">
         <CardHeader className="border-b">

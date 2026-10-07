@@ -274,6 +274,8 @@ Catalog nommé des indicateurs (`@rsi`, `@sum.rsi`, `@ete`, `@fft`, `@analogs`),
 
 Page locale pour les consoles et les secrets (Neon, Google, OpenAI, Brave Search). Les valeurs sont lues/écrites dans `.env` — **jamais commitées**. Révélation / copie, test de connexion, **suivi LLM** (Ollama / Llama, Brain, IA, Morpho VLM, embeddings : santé live, ping generate d’un jeton, appels et jetons 24 h), mise à jour GitHub (`git fetch` / `git pull --ff-only`, équivalent `./launch update`), synchro FDJ.
 
+La carte **Failles** inventorie le dépôt avec Syft (lockfile npm, et le `.venv` s’il est là) puis affiche les correspondances Grype : barre de sévérité, filtres, paquets dépliables. Le bouton Scanner lance le relevé en local si `syft` et `grype` sont installés ; le lundi, la même lecture part en action GitHub et met à jour l’issue « Failles connues ».
+
 En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, définissez `ADMIN_PASSWORD`. Sur Netlify, les secrets se configurent dans les variables d’environnement du site.
 
 ## Interface web (Next.js)

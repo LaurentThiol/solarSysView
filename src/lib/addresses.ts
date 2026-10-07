@@ -604,6 +604,14 @@ const APIS: AddressEntry[] = [
     "systeme",
     "refresh=1"
   ),
+  apiEntry(
+    "/api/admin/supply-chain",
+    "GET",
+    "Admin · failles",
+    "Inventaire Syft et correspondances Grype. refresh=1 lance le scan local.",
+    "systeme",
+    "refresh=1"
+  ),
   apiEntry("/api/sync", "POST", "Synchro FDJ", "Télécharge et upsert l’historique (API Python).", "systeme"),
   apiEntry("/api/sync/ensure", "POST", "Rattrapage FDJ", "N’ajoute que les tirages manquants récents.", "systeme"),
   apiEntry("/api/reload-env", "POST", "Recharger .env", "Relit les secrets et le pool Neon.", "systeme"),

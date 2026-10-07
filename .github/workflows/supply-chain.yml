@@ -1,0 +1,87 @@
+name: Failles connues
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Lundi 08:00 heure de Paris en hiver, 09:00 en été. Même créneau que le suivi des bibliothèques.
+    - cron: "0 7 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/supply-chain.yml"
+      - ".syft.yaml"
+      - "scripts/supply_chain.py"
+      - "package-lock.json"
+      - "requirements*.txt"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: supply-chain
+  cancel-in-progress: true
+
+jobs:
+  rapport:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installer l’API Python
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+      - name: Inventaire Syft
+        uses: anchore/sbom-action@v0.24.3
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: ${{ runner.temp }}/sbom.cdx.json
+          config: .syft.yaml
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Scan Grype
+        id: scan
+        uses: anchore/scan-action@v7.4.2
+        with:
+          sbom: ${{ runner.temp }}/sbom.cdx.json
+          fail-build: false
+          severity-cutoff: critical
+          output-format: json
+          output-file: ${{ runner.temp }}/grype.json
+      - name: Rapport
+        run: |
+          grype_json="${{ steps.scan.outputs.json }}"
+          if [ -z "$grype_json" ] || [ ! -f "$grype_json" ]; then
+            grype_json="$RUNNER_TEMP/grype.json"
+          fi
+          python scripts/supply_chain.py \
+            --from-sbom "$RUNNER_TEMP/sbom.cdx.json" \
+            --from-grype "$grype_json" \
+            > "$RUNNER_TEMP/supply-chain.md"
+      - name: Résumé
+        run: cat "$RUNNER_TEMP/supply-chain.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Mettre à jour l'issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/supply-chain.md"
+          gh label create failles \
+            --color d73a4a \
+            --description "Failles connues (Syft, Grype)" \
+            || true
+          number="$(gh issue list --state open --limit 100 --json number,body \
+            --jq '[.[] | select(.body != null and (.body | contains("<!-- supply-chain -->")))][0].number')"
+          if [ -n "$number" ] && [ "$number" != "null" ]; then
+            gh issue edit "$number" --body-file "$report"
+          else
+            gh issue create \
+              --title "Failles connues" \
+              --label failles \
+              --body-file "$report"
+          fi

@@ -1,0 +1,7 @@
+# Mêmes exclusions que scripts/supply_chain.py. Le .venv reste inclus :
+# c’est là que les versions Python sont figées.
+exclude:
+  - "./.git/**"
+  - "./.run/**"
+  - "./.next/**"
+  - "**/node_modules/**"
