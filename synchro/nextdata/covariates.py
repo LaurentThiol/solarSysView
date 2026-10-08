@@ -83,7 +83,8 @@ PAST_DELTA = (
     "d_e1",
     "d_e2",
 )
-PAST_REPEATS = ("repeat_count",)
+# Les comptes du bloc Persist d’Évolution : numéros puis étoiles, contre n−1 et n−2.
+PAST_REPEATS = ("repeat_count", "repeat_count_2", "star_repeat_count", "star_repeat_count_2")
 PAST_COUPLES = (
     "couple_ago_mean",
     "couple_ago_min",
@@ -328,12 +329,11 @@ def mean_delay(pools: list[list[int]]) -> list[float]:
     return out
 
 
-def repeat_counts(pools: list[list[int]]) -> list[float]:
+def repeat_counts(pools: list[list[int]], lag: int = 1) -> list[float]:
+    """Boules du tirage déjà sorties `lag` tirages plus tôt. 0 tant que ce tirage manque."""
     out: list[float] = []
-    previous: set[int] = set()
-    for pool in pools:
-        current = set(pool)
-        out.append(float(len(current & previous)))
-        previous = current
+    for index, pool in enumerate(pools):
+        earlier = set(pools[index - lag]) if index >= lag else set()
+        out.append(float(len(set(pool) & earlier)))
     return out
 

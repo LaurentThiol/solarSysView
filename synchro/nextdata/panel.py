@@ -189,6 +189,9 @@ def build_frame(
     residual = [float(value) for value in short_residual(sums)]
     delays = mean_delay(numbers)
     repeats = repeat_counts(numbers)
+    repeats_2 = repeat_counts(numbers, 2)
+    star_repeats = repeat_counts(stars)
+    star_repeats_2 = repeat_counts(stars, 2)
     couples = link_series(numbers, 2)
     triples = link_series(numbers, 3)
     star_ago = star_couple_ago(stars)
@@ -238,6 +241,9 @@ def build_frame(
             "short_residual": residual[index],
             "mean_delay": delays[index],
             "repeat_count": repeats[index],
+            "repeat_count_2": repeats_2[index],
+            "star_repeat_count": star_repeats[index],
+            "star_repeat_count_2": star_repeats_2[index],
             "d0": float(bins[0]),
             "d1": float(bins[1]),
             "d2": float(bins[2]),

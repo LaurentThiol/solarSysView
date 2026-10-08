@@ -149,6 +149,29 @@ def test_independent_draws_give_no_edge_to_a_repeated_ball() -> None:
     assert swaps_to_detect(0.02, 5, 50) * 4 == pytest.approx(swaps_to_detect(0.01, 5, 50), rel=0.01)
 
 
+def test_repetitions_count_numbers_and_stars_against_n_minus_1_and_n_minus_2() -> None:
+    from synchro.nextdata.covariates import past_columns
+
+    draws = _draws(30, seed=34)
+    draws[-3].update(numbers=[1, 2, 3, 4, 5], stars=[1, 2])
+    draws[-2].update(numbers=[1, 2, 30, 40, 50], stars=[2, 3])
+    draws[-1].update(numbers=[1, 3, 4, 30, 41], stars=[1, 3])
+    frame = build_frame(draws, focus=24)
+    last = frame.rows[-1]
+    assert last["repeat_count"] == 2.0
+    assert last["repeat_count_2"] == 3.0
+    assert last["star_repeat_count"] == 1.0
+    assert last["star_repeat_count_2"] == 1.0
+    assert frame.rows[0]["repeat_count"] == 0.0
+    assert frame.rows[1]["repeat_count_2"] == 0.0
+    assert past_columns(["repetitions"]) == [
+        "repeat_count",
+        "repeat_count_2",
+        "star_repeat_count",
+        "star_repeat_count_2",
+    ]
+
+
 def _band(mid: float) -> dict[str, float]:
     return {"lo": mid - 1, "mid": mid, "hi": mid + 1}
 

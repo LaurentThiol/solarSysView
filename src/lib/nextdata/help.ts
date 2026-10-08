@@ -142,7 +142,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Répétitions",
-        text: "Combien de numéros du tirage figuraient déjà au tirage d’avant.",
+        text: "Combien de numéros, puis d’étoiles, du tirage figuraient déjà au tirage d’avant (n−1) et à celui d’encore avant (n−2) : les comptes du bloc Persist d’Évolution.",
       },
       {
         label: "Couples",
