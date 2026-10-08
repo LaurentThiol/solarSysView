@@ -70,6 +70,7 @@ import { cn } from "@/lib/utils"
 import {
   seriesHasBothWeekdays,
   weekdayDayLineCaption,
+  weekdayLinesOff,
   weekdayOverlayFieldsFor,
   weekdaySeriesPhrase,
   type DrawWeekday,
@@ -373,7 +374,7 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
   const [hidden, setHidden] = useState<Partial<Record<DeltaKey, boolean>>>({})
   const [showSma, setShowSma] = useState(true)
   const [showBb, setShowBb] = useState(false)
-  const [dayLine, setDayLine] = useState({ mardi: true, vendredi: true })
+  const [dayLine, setDayLine] = useState<{ mardi: boolean; vendredi: boolean }>(weekdayLinesOff)
   const [targetKey, setTargetKey] = useState<DeltaKey>("sumNumbers")
 
   const series = useMemo(() => toDeltaSeries(toDrawSeries(draws)), [draws])
@@ -1044,7 +1045,7 @@ export function EvolutionDelta({ draws }: { draws: Draw[] }) {
                 </button>
               ))}
             </div>
-            {showDayLines ? (
+            {showDayLines && (dayLine.mardi || dayLine.vendredi) ? (
               <p className="mt-2 text-center text-xs text-muted-foreground">
                 {weekdayDayLineCaption(splitLabels)}
               </p>

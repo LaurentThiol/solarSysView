@@ -30,6 +30,11 @@ export const WEEKDAY_LINE_COLOR: Record<DrawWeekday, string> = {
   vendredi: "oklch(0.74 0.2 350)",
 }
 
+/** Pastilles Mardi / Vendredi : éteintes tant qu’on ne clique pas. */
+export function weekdayLinesOff(): { mardi: false; vendredi: false } {
+  return { mardi: false, vendredi: false }
+}
+
 export function weekdayLineDash(day: DrawWeekday): string | undefined {
   return day === "vendredi" ? "6 3" : undefined
 }

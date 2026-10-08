@@ -140,6 +140,7 @@ import {
   WEEKDAY_LINE_COLOR,
   normalizeDrawWeekday,
   weekdayDayLineCaption,
+  weekdayLinesOff,
   weekdayOverlayFieldsFor,
   weekdaySeriesPhrase,
   type DrawWeekday,
@@ -945,6 +946,7 @@ export function DrawChart({
   coupleTick = 0,
   triple = null,
   tripleTick = 0,
+  weekdayLinesOn = true,
 }: {
   draws: Draw[]
   /** Couple à relier dans la vue « Chaque numéro ». */
@@ -955,6 +957,8 @@ export function DrawChart({
   triple?: TripleChartLink | null
   /** Incrémenté à chaque clic de triplet pour ramener la vue sur Chaque numéro. */
   tripleTick?: number
+  /** Évolution laisse Mardi et Vendredi éteints. Next les allume. */
+  weekdayLinesOn?: boolean
 }) {
   const draw = useChartDrawOptional()
   const drawRef = useRef(draw)
@@ -983,7 +987,9 @@ export function DrawChart({
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>(rank1HiddenDefault)
   const [showSma, setShowSma] = useState(true)
   const [showBb, setShowBb] = useState(false)
-  const [dayLine, setDayLine] = useState({ mardi: true, vendredi: true })
+  const [dayLine, setDayLine] = useState<{ mardi: boolean; vendredi: boolean }>(() =>
+    weekdayLinesOn ? { mardi: true, vendredi: true } : weekdayLinesOff()
+  )
   const [targetKey, setTargetKey] = useState<SeriesKey>("relNumbers")
   const [hint, setHint] = useState<string | null>(null)
   const [moving, setMoving] = useState<{ sketchId: string; handle: SketchHandle } | null>(null)
@@ -3029,7 +3035,7 @@ export function DrawChart({
                 (report).
               </p>
             ) : null}
-            {showDayLines ? (
+            {showDayLines && (dayLine.mardi || dayLine.vendredi) ? (
               <p className="mt-2 text-center text-xs text-muted-foreground">
                 {weekdayDayLineCaption(splitLabels)}
               </p>

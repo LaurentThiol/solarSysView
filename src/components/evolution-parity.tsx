@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils"
 import {
   seriesHasBothWeekdays,
   weekdayDayLineCaption,
+  weekdayLinesOff,
   weekdayOverlayFieldsFor,
   weekdaySeriesPhrase,
   type DrawWeekday,
@@ -66,7 +67,7 @@ Score d’un tirage = somme de ces signes :
 
 Le cumul part de 0 au premier tirage de la fenêtre et additionne les scores. Espérance 0 (25 pairs / 25 impairs dans l’urne, 6 / 6 pour les étoiles). Une dérive n’augmente pas la chance au tirage suivant.
 
-Quand la fenêtre mêle mardi et vendredi, la courbe des numéros (des étoiles si les numéros sont masqués) se dédouble : mardi en trait plein, vendredi en tirets.`,
+Quand la fenêtre mêle mardi et vendredi, les pastilles Mardi et Vendredi restent éteintes. Les allumer dédouble la courbe des numéros (des étoiles si les numéros sont masqués) : mardi en trait plein, vendredi en tirets.`,
 }
 
 const VIEW_HELP: HelpCopy = {
@@ -244,7 +245,7 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({})
   const [showSma, setShowSma] = useState(true)
   const [showBand, setShowBand] = useState(false)
-  const [dayLine, setDayLine] = useState({ mardi: true, vendredi: true })
+  const [dayLine, setDayLine] = useState<{ mardi: boolean; vendredi: boolean }>(weekdayLinesOff)
 
   const points = useMemo(() => toParityChart(draws), [draws])
   const smaPeriod = overlayPeriodFor(points.length)
@@ -568,7 +569,7 @@ export function EvolutionParity({ draws }: { draws: Draw[] }) {
                 </span>
               ))}
             </div>
-            {showDayLines ? (
+            {showDayLines && (dayLine.mardi || dayLine.vendredi) ? (
               <p className="mt-2 text-center text-xs text-muted-foreground">
                 {weekdayDayLineCaption(splitLabels)}
               </p>

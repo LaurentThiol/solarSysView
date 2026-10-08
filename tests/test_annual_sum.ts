@@ -161,6 +161,8 @@ test("evolution exposes the annual submenu", () => {
   assert.match(view, /trait continu/)
   assert.doesNotMatch(view, /data-annual-synthese-mean/)
   assert.match(view, /Aucun soir sélectionné/)
+  assert.match(view, /return \{ mardi: false, vendredi: false, synthese: false \}/)
+  assert.match(view, /éteints/)
   assert.match(view, /mardi \+ vendredi/)
   assert.doesNotMatch(view, /filterDrawsByWeekday/)
   assert.match(page, /Annuel/)

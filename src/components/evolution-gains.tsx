@@ -61,6 +61,7 @@ import {
   WEEKDAY_LINE_COLOR,
   normalizeDrawWeekday,
   weekdayLineDash,
+  weekdayLinesOff,
   weekdaySplitFields,
   type DrawWeekday,
 } from "@/lib/weekday-scope"
@@ -476,7 +477,7 @@ export function EvolutionGains({
     defaultHidden("winners")
   )
   const [showSma, setShowSma] = useState(true)
-  const [dayLine, setDayLine] = useState({ mardi: true, vendredi: true })
+  const [dayLine, setDayLine] = useState<{ mardi: boolean; vendredi: boolean }>(weekdayLinesOff)
   const [targetKey, setTargetKey] = useState<SeriesKey>("winnersEu")
 
   const chartScope = view === "jackpot" || view === "report" ? 1 : scope
@@ -1236,7 +1237,7 @@ export function EvolutionGains({
                 Échelle log : 0 (report) hors axe. R1 et R13 deviennent lisibles ensemble.
               </p>
             ) : null}
-            {showDayLines ? (
+            {showDayLines && (dayLine.mardi || dayLine.vendredi) ? (
               <p className="mt-1 text-center text-xs text-muted-foreground">
                 Mardi (cyan) et vendredi (rose) : « {split.label} », soir par soir.
               </p>

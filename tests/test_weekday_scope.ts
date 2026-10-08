@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -12,6 +13,7 @@ import {
   weekdayFilterDay,
   weekdayDayLineCaption,
   weekdayLineDash,
+  weekdayLinesOff,
   weekdayOverlayField,
   weekdayOverlayFieldsFor,
   weekdaySeriesPhrase,
@@ -110,6 +112,27 @@ test("weekday overlays keep one pair per series", () => {
     "Mardi (cyan) et vendredi (rose) : n1 et n2, chacun soir par soir."
   )
   assert.equal(weekdayDayLineCaption([]), "")
+})
+
+test("evolution keeps mardi and vendredi off until the pills are clicked", () => {
+  assert.deepEqual(weekdayLinesOff(), { mardi: false, vendredi: false })
+  const charts = [
+    "evolution-delta.tsx",
+    "evolution-gains.tsx",
+    "evolution-parity.tsx",
+    "evolution-shape.tsx",
+  ]
+  for (const name of charts) {
+    const source = readFileSync(new URL(`../src/components/${name}`, import.meta.url), "utf8")
+    assert.match(source, /useState<\{ mardi: boolean; vendredi: boolean \}>\(weekdayLinesOff\)/)
+  }
+  const panel = readFileSync(new URL("../src/components/evolution-panel.tsx", import.meta.url), "utf8")
+  assert.match(panel, /<DrawChart draws=\{filtered\} weekdayLinesOn=\{false\} \/>/)
+  const chart = readFileSync(new URL("../src/components/draw-chart.tsx", import.meta.url), "utf8")
+  assert.match(chart, /weekdayLinesOn = true/)
+  assert.match(chart, /weekdayLinesOn \? \{ mardi: true, vendredi: true \} : weekdayLinesOff\(\)/)
+  const annual = readFileSync(new URL("../src/components/evolution-annual.tsx", import.meta.url), "utf8")
+  assert.match(annual, /return \{ mardi: false, vendredi: false, synthese: false \}/)
 })
 
 test("weekday API value is omitted for Tous and Synthèse", () => {

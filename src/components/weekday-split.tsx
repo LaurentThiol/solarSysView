@@ -159,8 +159,8 @@ export function WeekdaySplitLegend({
         title="Mardi + vendredi"
         body={
           seriesCount > 1
-            ? `Chaque série visible (${metric}) a ses deux courbes. Le mardi (trait plein, cyan) relie un soir au mardi suivant ; le vendredi (tirets, rose) fait de même de son côté. Les soirs ne se mélangent pas, et n1 ne porte pas les autres n. Cliquez pour masquer.`
-            : `Courbes du soir sur « ${metric} ». Chaque mardi est relié au mardi suivant (trait plein, cyan) ; chaque vendredi au vendredi suivant (tirets, rose). Les deux soirs restent séparés. Cliquez pour masquer.`
+            ? `Chaque série visible (${metric}) a ses deux courbes. Le mardi (trait plein, cyan) relie un soir au mardi suivant ; le vendredi (tirets, rose) fait de même de son côté. Les soirs ne se mélangent pas, et n1 ne porte pas les autres n. Cliquez pour afficher ou masquer.`
+            : `Courbes du soir sur « ${metric} ». Chaque mardi est relié au mardi suivant (trait plein, cyan) ; chaque vendredi au vendredi suivant (tirets, rose). Les deux soirs restent séparés. Cliquez pour afficher ou masquer.`
         }
       />
     </span>

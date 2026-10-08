@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils"
 import {
   seriesHasBothWeekdays,
   weekdayDayLineCaption,
+  weekdayLinesOff,
   weekdayOverlayFieldsFor,
   weekdaySeriesPhrase,
   type DrawWeekday,
@@ -103,7 +104,7 @@ const TITLE_HELP: HelpCopy = {
 
 SMA et Bollinger (optionnels) lissent ou encadrent chaque courbe visible. Maj+clic isole une série. Descriptif : chaque tirage reste indépendant.
 
-Quand la fenêtre mêle mardi et vendredi, la première courbe visible se dédouble : mardi en trait plein, vendredi en tirets.`,
+Quand la fenêtre mêle mardi et vendredi, les pastilles Mardi et Vendredi restent éteintes. Les allumer dédouble chaque courbe visible : mardi en trait plein, vendredi en tirets.`,
 }
 
 const VIEW_HELP: HelpCopy = {
@@ -237,7 +238,7 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({})
   const [showSma, setShowSma] = useState(true)
   const [showBb, setShowBb] = useState(false)
-  const [dayLine, setDayLine] = useState({ mardi: true, vendredi: true })
+  const [dayLine, setDayLine] = useState<{ mardi: boolean; vendredi: boolean }>(weekdayLinesOff)
 
   const series = useMemo(() => toDrawSeries(draws), [draws])
   const keys = VIEW_KEYS[view]
@@ -620,7 +621,7 @@ export function EvolutionShape({ draws }: { draws: Draw[] }) {
                 </button>
               ))}
             </div>
-            {showDayLines ? (
+            {showDayLines && (dayLine.mardi || dayLine.vendredi) ? (
               <p className="mt-2 text-center text-xs text-muted-foreground">
                 {weekdayDayLineCaption(splitLabels)}
               </p>

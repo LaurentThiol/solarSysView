@@ -36,7 +36,7 @@ Les mois descendent, de janvier à décembre, et ont la même hauteur. Le jour p
 
 Le trait vertical est la moyenne théorique, 128. L’échelle est commune et resserrée sur les sommes observées : elle ne part pas de 0, pour que l’écart se voie. Elle ne bouge pas quand un soir s’éteint.
 
-Mardi (cyan) et vendredi (rose) se sélectionnent ici. Le bandeau ne fait que poser le premier choix : les deux soirs restent chargés, l’autre jour se rallume d’un clic. Synthèse trace un trait continu qui passe par la somme de chaque tirage, mardi et vendredi, de janvier à décembre. Chaque point est un jour de tirage. Le chiffre à droite du mois reste la moyenne de ces tirages, même si une soirée est masquée.
+Mardi (cyan) et vendredi (rose) se sélectionnent ici. Sur Tous, les deux pastilles sont éteintes : un clic les affiche. Le bandeau Mardi ou Vendredi allume ce soir ; l’autre reste éteint et se rallume d’un clic. Les deux soirs restent chargés. Synthèse trace un trait continu qui passe par la somme de chaque tirage, mardi et vendredi, de janvier à décembre. Chaque point est un jour de tirage. Le chiffre à droite du mois reste la moyenne de ces tirages, même si une soirée est masquée.
 
 « en cours » : l’année n n’a pas encore de tirage en décembre. Δ, à droite, compare les moyennes de mois affichées (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. La fenêtre 20 / 50 / année ne coupe pas ces trois années.
 
@@ -88,7 +88,7 @@ function picksFor(scope: WeekdayScope): DayPicks {
   if (scope === "mardi") return { mardi: true, vendredi: false, synthese: false }
   if (scope === "vendredi") return { mardi: false, vendredi: true, synthese: false }
   if (scope === "synthese") return { mardi: true, vendredi: true, synthese: true }
-  return { mardi: true, vendredi: true, synthese: false }
+  return { mardi: false, vendredi: false, synthese: false }
 }
 
 export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
@@ -166,7 +166,8 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
           <TitleHelp help={TITLE_HELP}>Somme des numéros</TitleHelp>
         </CardTitle>
         <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
-          Barres horizontales. n, n−1 et n−2 sont en tête. Mardi et vendredi se choisissent.
+          Barres horizontales. n, n−1 et n−2 sont en tête. Mardi et vendredi se choisissent, éteints
+          sur Tous.
           Synthèse relie chaque tirage par un trait continu. Décalage lit un écart zonal sur des
           suites de 6 à 10 tirages. Trait horizontal en fin de mois, trait vertical à 128.
         </p>
