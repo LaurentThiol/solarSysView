@@ -1,15 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { bandCoverage, deltaNumbers, summarizeShifts, trainingPercent, visibleTrainingShift } from "../src/lib/nextdata/training-progress.ts"
-
-test("the training percent is the share of finished shifts", () => {
-  assert.equal(trainingPercent(0), 0)
-  assert.equal(trainingPercent(1), 10)
-  assert.equal(trainingPercent(10), 100)
-  assert.equal(trainingPercent(11), 100)
-  assert.equal(trainingPercent(-1), 0)
-})
+import { bandCoverage, deltaNumbers, visibleTrainingShift } from "../src/lib/nextdata/training-progress.ts"
 
 test("DeltaEvol is the gap versus the previous shift", () => {
   assert.deepEqual(deltaNumbers([[1, 4], [3, null], [3, 1]]), [
@@ -17,28 +9,6 @@ test("DeltaEvol is the gap versus the previous shift", () => {
     [2, null],
     [0, null],
   ])
-})
-
-test("the running summary is the mean absolute sum error so far", () => {
-  const summary = summarizeShifts([
-    {
-      readings: {
-        corpus: { errors: { sum: 10 }, hits_numbers: 1 },
-        persistence: { errors: { sum: -4 }, hits_numbers: 0 },
-      },
-    },
-    {
-      readings: {
-        corpus: { errors: { sum: -2 }, hits_numbers: 2 },
-        persistence: { errors: { sum: 6 }, hits_numbers: 1 },
-      },
-    },
-  ])
-  assert.equal(summary.corpus.mae_sum, 6)
-  assert.equal(summary.corpus.hits_numbers, 1.5)
-  assert.equal(summary.corpus.count, 2)
-  assert.equal(summary.persistence.mae_sum, 5)
-  assert.equal(summary.persistence.count, 2)
 })
 
 test("the rank figure follows the latest measured shift unless one is pinned", () => {
@@ -59,4 +29,14 @@ test("the band column counts the draws inside, where the reading has a band", ()
   assert.deepEqual(bandCoverage(shifts, "corpus", "n1"), { inside: 2, total: 3 })
   assert.deepEqual(bandCoverage(shifts, "corpus", "sum"), { inside: 1, total: 2 })
   assert.deepEqual(bandCoverage(shifts, "persistence", "n1"), { inside: 0, total: 0 })
+})
+
+test("raw and calibrated bands are counted apart", () => {
+  const shifts = [
+    { readings: { corpus: { calibrated: true, in_band: { n5: true }, in_band_raw: { n5: false } } } },
+    { readings: { corpus: { calibrated: true, in_band: { n5: true }, in_band_raw: { n5: true } } } },
+    { readings: { corpus: { calibrated: false, in_band: { n5: false }, in_band_raw: { n5: false } } } },
+  ]
+  assert.deepEqual(bandCoverage(shifts, "corpus", "n5", "raw"), { inside: 1, total: 3 })
+  assert.deepEqual(bandCoverage(shifts, "corpus", "n5", "calibrated"), { inside: 2, total: 2 })
 })

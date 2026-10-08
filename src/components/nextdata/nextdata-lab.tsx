@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
@@ -11,9 +11,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import { DRAWS, type Draw } from "@/lib/draws"
+import {
+  BAND_FIELDS,
+  calibrationCaption,
+  formatShare,
+  progressPercent,
+  type BandCoverage,
+  type Calibration,
+  type StepProgress,
+} from "@/lib/nextdata/bands"
+import { formatDecimal } from "@/lib/nextdata/compare"
 import { NEXTDATA_HELP } from "@/lib/nextdata/help"
 import type { Arbitration } from "@/lib/nextdata/rank-path"
-import { lowestSumMae, RETOUR_READINGS, retourLabel } from "@/lib/nextdata/retour"
+import { lowestSumMae, RETOUR_READINGS, retourLabel, type RetourId } from "@/lib/nextdata/retour"
 import { seriesRows, type SeriesRow } from "@/lib/nextdata/series"
 import { shapeCaption } from "@/lib/nextdata/shape"
 import { defaultStoredSpec, writeStoredSpec } from "@/lib/jeux"
@@ -76,6 +86,7 @@ type ModePayload = {
   importance: { name: string; gain: number; family: string }[]
   chronos?: { available?: boolean; weight?: number; holdout_mae_chronos?: number; holdout_mae_lgb?: number } | null
   arbitration?: Arbitration | null
+  calibration?: Calibration
   catboost?: ModePayload | null
 }
 type StepSide = {
@@ -122,9 +133,12 @@ type ForecastPayload = {
       persistence: StepSide
     }[]
     metrics: Record<string, { mae: Record<string, number | null>; rmse: Record<string, number | null>; hits_numbers: number | null; hits_stars: number | null }>
+    bands?: Record<string, Record<string, BandCoverage>>
   }
   chart: Record<string, string | number | null>[]
   dependencies?: { ready?: boolean; install?: string }
+  estimators?: number
+  progress?: StepProgress
 }
 
 const MODE_LABEL = { corpus: "Trois ans", fenetre: "Fenêtre seule" } as const
@@ -234,6 +248,11 @@ export function NextDataLab() {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<ForecastPayload | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    return () => abortRef.current?.abort()
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -295,40 +314,62 @@ export function NextDataLab() {
   }
 
   async function pronostiquer() {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setRunning(true)
     setError(null)
+    const body = JSON.stringify({
+      focus,
+      years,
+      primary,
+      weekday,
+      covariates: families,
+      with_chronos: withChronos,
+      draws: draws.map((draw) => ({
+        date: draw.date,
+        weekday: draw.weekday,
+        numbers: draw.numbers,
+        stars: draw.stars,
+        star_pool: draw.star_pool,
+      })),
+    })
+    let ready = -1
     try {
-      const response = await fetch("/api/nextdata/forecast", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          focus,
-          years,
-          primary,
-          weekday,
-          covariates: families,
-          with_chronos: withChronos,
-          draws: draws.map((draw) => ({
-            date: draw.date,
-            weekday: draw.weekday,
-            numbers: draw.numbers,
-            stars: draw.stars,
-            star_pool: draw.star_pool,
-          })),
-        }),
-      })
-      const body = (await response.json()) as ForecastPayload
-      if (!response.ok || body.ok === false) {
-        setReport(null)
-        setError(body.error || "Le pronostic n’a pas abouti.")
-        return
+      for (;;) {
+        const response = await fetch("/api/nextdata/forecast", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          signal: controller.signal,
+          body,
+        })
+        const payload = (await response.json()) as ForecastPayload
+        if (!response.ok || payload.ok === false) {
+          if (ready < 0) setReport(null)
+          setError(payload.error || "Le pronostic n’a pas abouti.")
+          return
+        }
+        setReport(payload)
+        const progress = payload.progress
+        if (!progress || progress.complete) return
+        if (progress.ready <= ready) {
+          setError("Le retour n’avance plus : un pas échoue à chaque tranche.")
+          return
+        }
+        ready = progress.ready
       }
-      setReport(body)
     } catch (err) {
+      if (controller.signal.aborted) return
       setError(err instanceof Error ? err.message : "API injoignable")
     } finally {
-      setRunning(false)
+      if (abortRef.current === controller) setRunning(false)
     }
+  }
+
+  function stop() {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setRunning(false)
   }
 
   function sendToJeux() {
@@ -352,7 +393,11 @@ export function NextDataLab() {
 
   const maxCount = Math.max(1, ...(report?.base.numbers.map((item) => item.count) ?? [1]))
   const lowest = report ? lowestSumMae(report.backtest.metrics) : null
-  const shown = library === "catboost" && report?.modes[primary].catboost ? `${primary}_catboost` : primary
+  const shown: RetourId =
+    library === "catboost" && report?.modes[primary].catboost ? (`${primary}_catboost` as const) : primary
+  const shownBlock = library === "catboost" && report?.modes[primary].catboost ? report.modes[primary].catboost : report?.modes[primary]
+  const progress = report?.progress ?? null
+  const shownBands = report?.backtest.bands?.[shown]
 
   return (
     <div className="flex min-w-0 flex-col gap-6" data-nextdata>
@@ -466,9 +511,14 @@ export function NextDataLab() {
           <div className="flex flex-wrap items-center gap-3">
             <HelpWrap help={NEXTDATA_HELP.run}>
               <Button type="button" disabled={running || status?.ready === false} onClick={() => void pronostiquer()}>
-                {running ? "Calcul des deux lectures…" : "Pronostiquer"}
+                {!running ? "Pronostiquer" : progress ? `Pas ${progress.ready} sur ${progress.total}…` : "Calcul du prochain tirage…"}
               </Button>
             </HelpWrap>
+            {running && (
+              <Button type="button" size="sm" variant="ghost" onClick={stop}>
+                Arrêter
+              </Button>
+            )}
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               {draws.length} tirages · {source === "neon" ? "archive synchronisée" : "jeu embarqué"}
               {status?.darts ? " · Darts" : ""}
@@ -476,6 +526,29 @@ export function NextDataLab() {
               <HelpTip {...NEXTDATA_HELP.source} />
             </span>
           </div>
+          {running && progress && (
+            <div className="flex max-w-md flex-col gap-2" aria-live="polite">
+              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span>
+                  Pas {progress.ready} sur {progress.total} : le prochain tirage, puis le retour
+                </span>
+                <span className="tabular-nums">{progressPercent(progress)} %</span>
+              </div>
+              <div
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPercent(progress)}
+                aria-label="Avancement du retour"
+                className="h-1.5 overflow-hidden rounded-full bg-muted"
+              >
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
+                  style={{ width: `${progressPercent(progress)}%` }}
+                />
+              </div>
+            </div>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>
@@ -496,6 +569,7 @@ export function NextDataLab() {
                     : lowest === shown
                       ? " Cette lecture a la plus petite erreur de somme sur le retour."
                       : ` Sur le retour, la plus petite erreur de somme revient à « ${retourLabel(lowest)} ».`}
+                  {shownBlock?.calibration ? ` ${calibrationCaption(shownBlock.calibration)}` : ""}
                 </p>
                 <div className="grid gap-4 md:grid-cols-2">
                   {(["corpus", "fenetre"] as const).map((mode) => {
@@ -699,7 +773,58 @@ export function NextDataLab() {
                       })}
                     </tbody>
                   </table>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {report.backtest.draw_count} tirages notés
+                    {progress && !progress.complete ? `, ${progress.total - progress.ready} pas encore à calculer` : ""}.
+                    {report.estimators ? ` Même réglage que le pronostic : ${report.estimators} arbres, quantiles 10, 50 et 90.` : ""}
+                  </p>
                 </div>
+                {shownBands && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">
+                        <TitleHelp help={NEXTDATA_HELP.bandes}>
+                          Bandes 10–90 · {retourLabel(shown)}
+                        </TitleHelp>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="overflow-x-auto">
+                      <table className="w-full min-w-[28rem] text-left text-sm tabular-nums" data-bands={shown}>
+                        <thead className="text-xs uppercase tracking-wide text-muted-foreground">
+                          <tr>
+                            <th className="py-2 pr-3">Lecture</th>
+                            <th className="py-2 pr-3">Brute</th>
+                            <th className="py-2 pr-3">Calibrée</th>
+                            <th className="py-2">Élargie au prochain tirage</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {BAND_FIELDS.map((field) => {
+                            const measured = shownBands[field.key]
+                            if (!measured) return null
+                            const edge = shownBlock?.calibration?.edges?.[field.key]
+                            return (
+                              <tr key={field.key}>
+                                <td className="py-1 pr-3">{field.label}</td>
+                                <td className="py-1 pr-3">
+                                  {formatShare(measured.raw)}
+                                  <span className="text-xs text-muted-foreground"> · {measured.raw_count}</span>
+                                </td>
+                                <td className="py-1 pr-3">
+                                  {formatShare(measured.calibrated)}
+                                  <span className="text-xs text-muted-foreground"> · {measured.calibrated_count}</span>
+                                </td>
+                                <td className="py-1 text-xs text-muted-foreground">
+                                  {edge ? `bas ${formatDecimal(-edge.down, true)} · haut ${formatDecimal(edge.up, true)}` : "—"}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </CardContent>
+                  </Card>
+                )}
                 <div className="grid gap-4 md:grid-cols-2">
                   {(["corpus", "fenetre"] as const).map((mode) => (
                     <Card key={mode}>

@@ -12,14 +12,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { DRAWS, type Draw } from "@/lib/draws"
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "@/lib/nextdata/help"
 import type { Arbitration } from "@/lib/nextdata/rank-path"
-import {
-  bandCoverage,
-  deltaNumbers,
-  summarizeShifts,
-  TRAINING_SHIFT_TOTAL,
-  trainingPercent,
-  visibleTrainingShift,
-} from "@/lib/nextdata/training-progress"
+import { progressPercent, type StepProgress } from "@/lib/nextdata/bands"
+import { bandCoverage, deltaNumbers, TRAINING_SHIFT_TOTAL, visibleTrainingShift } from "@/lib/nextdata/training-progress"
 import { cn } from "@/lib/utils"
 
 const FAMILIES: { id: string; label: string }[] = [
@@ -73,6 +67,9 @@ type Side = {
   stars: number[]
   errors: Record<string, number | null>
   in_band: Record<string, boolean | null>
+  in_band_raw?: Record<string, boolean | null>
+  calibrated?: boolean
+  calibration_steps?: number
   hits_numbers: number | null
   hits_stars: number | null
   arbitration?: Arbitration | null
@@ -97,6 +94,8 @@ type TrainingPayload = {
   chronos?: { requested?: boolean; used?: boolean }
   shifts?: Shift[]
   summary?: Summary
+  estimators?: number
+  progress?: StepProgress
 }
 
 function tone(value: number | null | undefined) {
@@ -118,7 +117,7 @@ export function TrainingLab() {
   const [reading, setReading] = useState<ReadingId>("corpus")
   const [pinnedShift, setPinnedShift] = useState<number | null>(null)
   const [running, setRunning] = useState(false)
-  const [progress, setProgress] = useState<{ done: number; current: number } | null>(null)
+  const [progress, setProgress] = useState<StepProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<TrainingPayload | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -189,59 +188,47 @@ export function TrainingLab() {
     setError(null)
     setReport(null)
     setPinnedShift(null)
-    setProgress({ done: 0, current: 1 })
-    const payloadDraws = draws.map((draw) => ({
-      date: draw.date,
-      weekday: draw.weekday,
-      numbers: draw.numbers,
-      stars: draw.stars,
-      star_pool: draw.star_pool,
-    }))
-    const collected: Shift[] = []
-    let chronosUsed = false
+    setProgress(null)
+    const body = JSON.stringify({
+      focus,
+      years,
+      weekday,
+      covariates: families,
+      with_chronos: withChronos,
+      draws: draws.map((draw) => ({
+        date: draw.date,
+        weekday: draw.weekday,
+        numbers: draw.numbers,
+        stars: draw.stars,
+        star_pool: draw.star_pool,
+      })),
+    })
+    let ready = -1
     try {
-      for (let lag = 1; lag <= TRAINING_SHIFT_TOTAL; lag += 1) {
-        if (controller.signal.aborted) return
-        setProgress({ done: lag - 1, current: lag })
+      for (;;) {
         const response = await fetch("/api/nextdata/training", {
           method: "POST",
           headers: { "content-type": "application/json" },
           signal: controller.signal,
-          body: JSON.stringify({
-            focus,
-            years,
-            weekday,
-            covariates: families,
-            shift: lag,
-            with_chronos: withChronos,
-            draws: payloadDraws,
-          }),
+          body,
         })
-        const body = (await response.json()) as TrainingPayload
-        if (!response.ok || body.ok === false) {
-          setError(body.error || `Le décalage −${lag} n’a pas abouti.`)
-          break
+        const payload = (await response.json()) as TrainingPayload
+        if (!response.ok || payload.ok === false) {
+          setError(payload.error || "L’entraînement n’a pas abouti.")
+          return
         }
-        const incoming = body.shifts?.[0]
-        if (!incoming) {
-          setError("Pas assez de tirages pour mesurer ce décalage.")
-          break
-        }
-        collected.push(incoming)
-        chronosUsed = chronosUsed || Boolean(body.chronos?.used)
-        if (body.catboost === false && (reading === "corpus_catboost" || reading === "fenetre_catboost")) {
+        if (payload.catboost === false && (reading === "corpus_catboost" || reading === "fenetre_catboost")) {
           setReading("corpus")
         }
-        setReport({
-          ok: true,
-          focus: body.focus,
-          years_present: body.years_present,
-          catboost: body.catboost,
-          chronos: { requested: withChronos, used: chronosUsed },
-          shifts: [...collected],
-          summary: summarizeShifts(collected),
-        })
-        setProgress({ done: lag, current: lag })
+        setReport(payload)
+        const step = payload.progress ?? null
+        setProgress(step)
+        if (!step || step.complete) return
+        if (step.ready <= ready) {
+          setError("Le calcul n’avance plus : un pas échoue à chaque tranche.")
+          return
+        }
+        ready = step.ready
       }
     } catch (err) {
       if (controller.signal.aborted) return
@@ -254,7 +241,14 @@ export function TrainingLab() {
     }
   }
 
-  const percent = trainingPercent(progress?.done ?? 0)
+  function stop() {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setRunning(false)
+    setProgress(null)
+  }
+
+  const percent = progressPercent(progress)
 
   const summary = report?.summary ?? {}
   const persistenceMae = summary.persistence?.mae_sum
@@ -262,6 +256,10 @@ export function TrainingLab() {
   const pathTrace = activeShift?.readings[reading]?.arbitration
   const meanMae = summary.mean?.mae_sum
   const shifts = report?.shifts ?? []
+  const calibrationSteps = shifts.flatMap((shift) => {
+    const side = shift.readings[reading]
+    return side?.calibrated && side.calibration_steps ? [side.calibration_steps] : []
+  })
 
   return (
     <div className="flex min-w-0 flex-col gap-6" data-nextdata-training>
@@ -335,13 +333,18 @@ export function TrainingLab() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" disabled={running} onClick={() => void train()}>
-              {running ? `Décalage −${progress?.current ?? 1} sur ${TRAINING_SHIFT_TOTAL}…` : "Entraîner"}
+              {running ? (progress ? `Pas ${progress.ready} sur ${progress.total}…` : "Premiers décalages…") : "Entraîner"}
             </Button>
+            {running && (
+              <Button type="button" size="sm" variant="ghost" onClick={stop}>
+                Arrêter
+              </Button>
+            )}
             <span className="text-xs text-muted-foreground">
               {draws.length} tirages · {source === "neon" ? "archive synchronisée" : "jeu embarqué"}
             </span>
           </div>
-          {running && progress && (
+          {running && (
             <div className="flex max-w-md flex-col gap-2" aria-live="polite">
               <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-2">
@@ -349,7 +352,11 @@ export function TrainingLab() {
                     <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" />
                     <span className="relative inline-flex size-2 rounded-full bg-primary" />
                   </span>
-                  Décalage −{progress.current} sur {TRAINING_SHIFT_TOTAL}
+                  {!progress
+                    ? "Les décalages −1, −2… partent d’abord"
+                    : (report?.shifts?.length ?? 0) < TRAINING_SHIFT_TOTAL
+                      ? `Pas ${progress.ready} sur ${progress.total} : les décalages d’abord`
+                      : `Pas ${progress.ready} sur ${progress.total} : les tirages d’avant, pour le calibrage`}
                 </span>
                 <span className="tabular-nums">{percent} %</span>
               </div>
@@ -507,14 +514,18 @@ export function TrainingLab() {
                         </button>
                       </th>
                     ))}
-                    <th className="pl-2 font-medium text-muted-foreground" title="tirages dans la bande 10–90">
-                      Bande
+                    <th className="pl-2 font-medium text-muted-foreground" title="tirages dans la bande 10–90 du modèle">
+                      Brute
+                    </th>
+                    <th className="pl-2 font-medium text-muted-foreground" title="tirages dans la bande calibrée sur les tirages d’avant">
+                      Calibrée
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {RANK_ROWS.map((field) => {
-                    const coverage = bandCoverage(shifts, reading, field.key)
+                    const raw = bandCoverage(shifts, reading, field.key, "raw")
+                    const calibrated = bandCoverage(shifts, reading, field.key, "calibrated")
                     return (
                       <tr key={field.key}>
                         <th className="pr-2 text-left font-medium text-muted-foreground">{field.label}</th>
@@ -527,7 +538,7 @@ export function TrainingLab() {
                               key={`${field.key}-${shift.x}`}
                               className="rounded-md px-1 py-1.5"
                               style={{ background: tone(value) }}
-                              title={covered ? "dans la bande 10–90" : undefined}
+                              title={covered ? (side?.calibrated ? "dans la bande 10–90 calibrée" : "dans la bande 10–90 brute") : undefined}
                             >
                               {value == null ? "—" : value > 0 ? `+${value}` : value}
                               {covered ? " ·" : ""}
@@ -535,13 +546,26 @@ export function TrainingLab() {
                           )
                         })}
                         <td className="pl-2 text-muted-foreground">
-                          {coverage.total ? `${coverage.inside}/${coverage.total}` : "—"}
+                          {raw.total ? `${raw.inside}/${raw.total}` : "—"}
+                        </td>
+                        <td className="pl-2 text-muted-foreground">
+                          {calibrated.total ? `${calibrated.inside}/${calibrated.total}` : "—"}
                         </td>
                       </tr>
                     )
                   })}
                 </tbody>
               </table>
+              {calibrationSteps.length > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Bandes calibrées sur{" "}
+                  {Math.min(...calibrationSteps) === Math.max(...calibrationSteps)
+                    ? calibrationSteps[0]
+                    : `${Math.min(...calibrationSteps)} à ${Math.max(...calibrationSteps)}`}{" "}
+                  tirages du focus : ceux qui précèdent chaque décalage.
+                  {report.estimators ? ` Même réglage que le pronostic : ${report.estimators} arbres.` : ""}
+                </p>
+              )}
             </CardContent>
           </Card>
 

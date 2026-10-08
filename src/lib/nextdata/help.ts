@@ -156,7 +156,7 @@ export const NEXTDATA_HELP = {
   },
   run: {
     title: "Pronostiquer",
-    body: "Lance les deux entraînements sur l’archive affichée. Le focus, les années, le jour et les covariables sont ceux des boutons. Le calcul peut prendre un moment : le retour refait une prévision pour chaque tirage du focus, sans voir le tirage qu’il note.",
+    body: "Lance les deux entraînements sur l’archive affichée. Le focus, les années, le jour et les covariables sont ceux des boutons. Le prochain tirage se calcule d’abord, puis le retour, tirage par tirage, au même réglage : mêmes arbres, mêmes quantiles, Darts et Chronos compris. Chaque tirage du retour n’apprend que les tirages d’avant.\n\nLe premier calcul est long : chaque pas ajuste LightGBM et CatBoost sur les deux modes, et plusieurs pas tournent en parallèle. Un pas déjà calculé est relu, ici comme sur nextDataTraining ; après un nouveau tirage, seul ce tirage est à calculer. Arrêter garde les pas déjà faits.",
   },
   source: {
     title: "Archive lue",
@@ -172,7 +172,7 @@ export const NEXTDATA_HELP = {
   },
   tabRetour: {
     title: "Retour arrière",
-    body: "Pour chaque tirage du focus, les modèles ne voient que les tirages d’avant. On compare ensuite au tirage qui est sorti. La persistance rejoue le tirage précédent. La moyenne reprend la somme moyenne d’avant.",
+    body: "Pour chaque tirage du focus, les modèles ne voient que les tirages d’avant, au réglage du pronostic. On compare ensuite au tirage qui est sorti. La persistance rejoue le tirage précédent. La moyenne reprend la somme moyenne d’avant. Le tableau des bandes dit combien de tirages tombaient dans la bande 10–90, avant et après calibrage.",
   },
   chemin: {
     title: "Comment n1…n5 et e1, e2 sont obtenus",
@@ -182,7 +182,7 @@ export const NEXTDATA_HELP = {
   grille: {
     title: "Grille 5+2",
     wide: true,
-    body: "Cinq numéros triés et deux étoiles. L’anneau suit l’écart entre le quantile bas et le quantile haut du rang : un anneau large dit que le modèle hésite. De n2 à n5, et pour e2, cette bande cumule celles de n1 et des écarts en quadrature, sans sortir des valeurs possibles du rang. Sous les boules, l’étendue et les consécutifs de cette grille, numéros puis étoiles, avec les mêmes comptes que la page Évolution.",
+    body: "Cinq numéros triés et deux étoiles. L’anneau suit la largeur de la bande 10–90 du rang : un anneau large dit que le modèle hésite. De n2 à n5, et pour e2, cette bande cumule celles de n1 et des écarts en quadrature, sans sortir des valeurs possibles du rang. Elle est ensuite calibrée sur le retour, comme les autres bandes. Sous les boules, l’étendue et les consécutifs de cette grille, numéros puis étoiles, avec les mêmes comptes que la page Évolution.",
     items: [
       {
         label: "Mise en avant",
@@ -253,6 +253,29 @@ export const NEXTDATA_HELP = {
       },
     ],
   },
+  bandes: {
+    title: "Bandes 10–90 calibrées",
+    wide: true,
+    body: "Une bande 10–90 devrait contenir huit tirages sur dix. Apprise sur peu de tirages, elle se croit plus sûre qu’elle n’est : la colonne Brute le mesure sur le retour. Le calibrage dit conforme corrige chaque bord. Sur les tirages du retour qui précèdent, on relève de combien la bande a manqué le tirage sorti, par le bas et par le haut ; le bord est déplacé de l’écart qui, parmi ces manques, laisse passer au plus un tirage sur dix.",
+    items: [
+      {
+        label: "Brute",
+        text: "Part des tirages du retour tombés dans la bande du modèle, et le nombre de tirages lus.",
+      },
+      {
+        label: "Calibrée",
+        text: "Même part, chaque tirage étant calibré sur les seuls tirages d’avant. Il en faut neuf : les premiers ne comptent pas. Près de 80 % veut dire que la bande dit vrai.",
+      },
+      {
+        label: "Élargie au prochain tirage",
+        text: "Déplacement des bords de la bande du prochain tirage, calibrée sur tout le retour. Négatif en bas ou positif en haut : la bande s’élargit. L’inverse la resserre.",
+      },
+      {
+        label: "La grille",
+        text: "Le calibrage change les bandes, les anneaux et les courbes. Il ne change pas la grille, choisie sur les bandes du modèle, au retour comme au prochain tirage.",
+      },
+    ],
+  },
   tirages: {
     title: "Tirage par tirage",
     body: "Pour une date du focus : les cinq numéros sortis, les cinq prévus par ce mode, et combien sont communs. Le modèle qui a produit la ligne n’avait pas encore vu ce tirage.",
@@ -267,7 +290,7 @@ export const NEXTDATA_TRAINING_HELP = {
   banner: {
     title: "nextDataTraining",
     wide: true,
-    body: "Même réglage que nextData, mesuré sur les dix tirages d’avant. −1 cache seulement le dernier tirage et le prévoit. −10 se place dix tirages plus tôt et prévoit celui qui venait juste après.\n\nL’écart est prévu moins sorti. Au-dessus de zéro, la lecture était trop haute. Ce n’est pas une prévision à dix coups d’avance, et ce n’est pas une probabilité de gain FDJ.\n\nPersistance et moyenne sont les repères sans modèle : rejouer le tirage d’avant, ou prévoir la somme moyenne d’avant.\n\nChronos et DeltaEvol sont les mêmes interrupteurs que sur nextData. La puce Delta, elle, est une covariable : elle entre dans l’apprentissage.\n\nLa barre avance quand un décalage est terminé. 10 % veut dire que −1 est mesuré, 100 % que les dix le sont. Ce n’est pas une estimation du temps restant.",
+    body: "Même réglage que nextData, mesuré sur les dix tirages d’avant : mêmes arbres, mêmes quantiles, même faisceau de grilles voisines, Darts et Chronos compris. Les dix décalages sont les dix derniers tirages du retour de nextData. −1 cache seulement le dernier tirage et le prévoit. −10 se place dix tirages plus tôt et prévoit celui qui venait juste après.\n\nL’écart est prévu moins sorti. Au-dessus de zéro, la lecture était trop haute. Ce n’est pas une prévision à dix coups d’avance, et ce n’est pas une probabilité de gain FDJ.\n\nPersistance et moyenne sont les repères sans modèle : rejouer le tirage d’avant, ou prévoir la somme moyenne d’avant.\n\nChronos et DeltaEvol sont les mêmes interrupteurs que sur nextData. La puce Delta, elle, est une covariable : elle entre dans l’apprentissage.\n\nLa barre compte les pas calculés : les dix décalages d’abord, puis les tirages d’avant, qui calibrent leurs bandes. Un pas déjà calculé, ici ou sur nextData, est relu ; après un nouveau tirage, seul ce tirage est à calculer. Ce n’est pas une estimation du temps restant.",
   },
   decalage: {
     title: "Décalage −x",
@@ -288,7 +311,7 @@ export const NEXTDATA_TRAINING_HELP = {
   },
   rangs: {
     title: "Écarts de rangs",
-    body: "Une case, un décalage et un rang. n1 est le plus petit numéro, n5 le plus grand. Le nombre est prévu moins sorti. Une case marquée d’un point : le numéro sorti tombe dans la bande 10–90 du modèle. La colonne Bande compte ces cases : une bande juste en contient environ huit sur dix, moins veut dire que le modèle se croit plus sûr qu’il ne l’est. Les lignes étendue, consécutifs, étendue ★ et consécutifs ★ reprennent les comptes de la page Évolution.\n\nLa figure du calcul suit le décalage qui vient d’être mesuré. Un clic sur l’en-tête d’une colonne la laisse sur ce décalage ; un second clic la laisse de nouveau suivre.",
+    body: "Une case, un décalage et un rang. n1 est le plus petit numéro, n5 le plus grand. Le nombre est prévu moins sorti. Une case marquée d’un point : le numéro sorti tombe dans la bande 10–90, calibrée dès que le décalage a neuf tirages d’avant. Brute compte les tirages dans la bande du modèle, Calibrée dans la bande corrigée sur les tirages du focus qui précèdent ce décalage. Une bande juste en contient environ huit sur dix ; moins, le modèle se croit plus sûr qu’il ne l’est. Les lignes étendue, consécutifs, étendue ★ et consécutifs ★ reprennent les comptes de la page Évolution.\n\nLa figure du calcul suit le décalage qui vient d’être mesuré. Un clic sur l’en-tête d’une colonne la laisse sur ce décalage ; un second clic la laisse de nouveau suivre.",
   },
   boules: {
     title: "Prévu et sorti",
