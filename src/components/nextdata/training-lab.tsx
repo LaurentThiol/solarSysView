@@ -198,6 +198,7 @@ export function TrainingLab() {
       star_pool: draw.star_pool,
     }))
     const collected: Shift[] = []
+    let chronosUsed = false
     try {
       for (let lag = 1; lag <= TRAINING_SHIFT_TOTAL; lag += 1) {
         if (controller.signal.aborted) return
@@ -227,6 +228,7 @@ export function TrainingLab() {
           break
         }
         collected.push(incoming)
+        chronosUsed = chronosUsed || Boolean(body.chronos?.used)
         if (body.catboost === false && (reading === "corpus_catboost" || reading === "fenetre_catboost")) {
           setReading("corpus")
         }
@@ -235,7 +237,7 @@ export function TrainingLab() {
           focus: body.focus,
           years_present: body.years_present,
           catboost: body.catboost,
-          chronos: body.chronos,
+          chronos: { requested: withChronos, used: chronosUsed },
           shifts: [...collected],
           summary: summarizeShifts(collected),
         })
