@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils"
 import {
   seriesHasBothWeekdays,
   weekdayDayLineCaption,
+  weekdayLinesOff,
   weekdayOverlayFieldsFor,
   weekdaySeriesPhrase,
   type DrawWeekday,
@@ -220,7 +221,7 @@ export function EvolutionPersist({ draws }: { draws: Draw[] }) {
   const [view, setView] = useState<PersistView>("both")
   const [hidden, setHidden] = useState<Partial<Record<PersistKey, boolean>>>({})
   const [showSma, setShowSma] = useState(true)
-  const [dayLine, setDayLine] = useState({ mardi: true, vendredi: true })
+  const [dayLine, setDayLine] = useState<{ mardi: boolean; vendredi: boolean }>(weekdayLinesOff)
 
   const series = useMemo(() => toPersistSeries(draws), [draws])
   const keys = VIEW_KEYS[view]
@@ -472,7 +473,7 @@ export function EvolutionPersist({ draws }: { draws: Draw[] }) {
                 </button>
               ))}
             </div>
-            {showDayLines ? (
+            {showDayLines && (dayLine.mardi || dayLine.vendredi) ? (
               <p className="mt-2 text-center text-xs text-muted-foreground">
                 {weekdayDayLineCaption(splitLabels)}
               </p>
