@@ -66,3 +66,6 @@ next-env.d.ts
 
 # spécialistes Brain (poids numpy, rapports)
 .brain/
+
+# pas nextData (modèles ajustés avant chaque tirage)
+.nextdata/

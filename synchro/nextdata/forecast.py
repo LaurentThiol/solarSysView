@@ -5,7 +5,8 @@ du prochain pas. La chaîne n1 → écarts reste en LightGBM direct : le
 conditionnement est dans le même tirage, ce que les lags ne portent pas.
 Chronos, s’il est installé, ne mélange que somme, somme des étoiles et n1.
 Les niveaux n1…n5, e1, e2 et leurs deltas sont prévus à part, puis arbitrés
-avec cette chaîne avant la grille.
+avec cette chaîne avant la grille. Le pronostic, le retour et les décalages
+lisent les mêmes pas (`steps`), au même réglage.
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ from synchro.nextdata.covariates import (
 )
 from synchro.nextdata.empirical import public_base, recount
 from synchro.nextdata.panel import Frame, build_frame
-from synchro.nextdata.project import beam, compose_ranks, rank_bands, stamp_grid
+from synchro.nextdata.project import rank_bands
 
 FUTURE_BACK = 4
 FUTURE_FWD = 1
@@ -682,6 +683,42 @@ def _rank_view(moments: dict[str, dict[str, float]], star_pool: int = 12) -> dic
     return _round_moments(view)
 
 
+def _unready() -> dict[str, Any] | None:
+    if not lightgbm_import_error():
+        return None
+    status = dependency_status()
+    detail = status.get("hint") or status.get("lightgbm_error") or "LightGBM ne se charge pas."
+    return {"ok": False, "error": f"{detail} Sinon : ./launch install-nextdata.", **status}
+
+
+def _reading_block(
+    step: dict[str, Any],
+    key: str,
+    history: list[dict[str, Any]],
+    walked: dict[str, Any],
+    star_pool: int,
+) -> tuple[dict[str, Any], dict[str, dict[str, float]]]:
+    from synchro.nextdata.backtest import calibrated_view
+
+    reading = step["readings"][key]
+    view, calibration = calibrated_view(step, key, history, star_pool)
+    block: dict[str, Any] = {
+        "importance": reading["importance"],
+        "engine": reading["engine"],
+        "grid": dict(reading["grid"]),
+        "alternates": reading["alternates"],
+        "quantiles": view,
+        "calibration": calibration,
+        "mae_sum": ((walked["metrics"].get(key) or {}).get("mae") or {}).get("sum"),
+        "arbitration": reading["arbitration"],
+    }
+    if reading["library"] == "lightgbm":
+        chronos = reading["chronos"]
+        block["chronos"] = chronos
+        block["blend_weight"] = (chronos or {}).get("weight", 1.0)
+    return block, view
+
+
 def run_forecast(
     draws: list[dict[str, Any]],
     *,
@@ -691,17 +728,19 @@ def run_forecast(
     weekday: str | None = None,
     covariates: Iterable[str] | None = None,
     with_chronos: bool = False,
-    estimators: int = 40,
-    backtest_estimators: int = 12,
+    estimators: int = 32,
+    chunk: int | None = None,
 ) -> dict[str, Any]:
-    if lightgbm_import_error():
-        status = dependency_status()
-        detail = status.get("hint") or status.get("lightgbm_error") or "LightGBM ne se charge pas."
-        return {
-            "ok": False,
-            "error": f"{detail} Sinon : ./launch install-nextdata.",
-            **status,
-        }
+    """Prochain tirage et retour, au même réglage, par tranches de pas.
+
+    Chaque appel calcule au plus `chunk` pas manquants : le prochain tirage
+    d’abord, puis le retour du plus récent au plus ancien. Il rend tout ce qui
+    est prêt ; `progress.complete` dit quand le retour est entier. Les bandes du
+    prochain tirage sont calibrées sur les pas du retour déjà prêts.
+    """
+    refused = _unready()
+    if refused:
+        return refused
     mode_primary = primary if primary in ("corpus", "fenetre") else "corpus"
     families = normalize_families(covariates)
     try:
@@ -709,128 +748,40 @@ def run_forecast(
     except ValueError as exc:
         return {"ok": False, "error": str(exc), **dependency_status()}
 
-    base_rows = frame.rows[frame.focus_start :]
-    base = recount(base_rows, star_pool=frame.star_pool)
-    libraries = ["lightgbm"]
-    catboost_error = catboost_import_error()
-    if catboost_error is None:
-        libraries.append("catboost")
+    from synchro.nextdata import backtest
+    from synchro.nextdata.steps import StepSettings, ensure_steps, parts_needed, worker_count
+
+    settings = StepSettings(focus=frame.focus, families=tuple(families), estimators=int(estimators))
+    parts = parts_needed(with_chronos)
+    n = len(frame.rows)
+    order = [n, *reversed(backtest.retour_indices(frame, with_chronos=with_chronos))]
+    ready, remaining = ensure_steps(frame, order, settings, parts, limit=chunk or worker_count())
+    steps = backtest.assemble(frame, ready, with_chronos=with_chronos)
+    upcoming = steps[n]
+    for mode in ("corpus", "fenetre"):
+        if mode not in upcoming["readings"]:
+            error = backtest.model_error(ready[n]["parts"], mode) or "Aucune grille entière n’a pu être projetée."
+            return {"ok": False, "error": error, **dependency_status()}
+
+    history = [steps[t] for t in sorted(steps) if frame.focus_start <= t < n]
+    walked = backtest.retour_report(history)
+    walked["bands"] = backtest.band_report(history, frame.star_pool)
     modes: dict[str, Any] = {}
-    moment_book: dict[str, dict[str, dict[str, float]]] = {}
-    engines: dict[str, str] = {}
+    views: dict[str, dict[str, dict[str, float]]] = {}
+    grids: dict[str, dict[str, Any]] = {}
     for mode in ("corpus", "fenetre"):
-        try:
-            moments, importance, engine = predict_moments(
-                frame.rows,
-                frame.horizon,
-                mode=mode,
-                focus=frame.focus,
-                families=families,
-                estimators=estimators,
-                library="lightgbm",
-            )
-        except ValueError as exc:
-            return {"ok": False, "error": str(exc), **dependency_status()}
-        darts_values = try_darts_medians(
-            frame.rows,
-            frame.horizon,
-            mode=mode,
-            focus=frame.focus,
-            families=families,
-        )
-        if darts_values:
-            _apply_external(moments, darts_values, mix_n1=True)
-            engine = "darts"
-        moment_book[mode] = moments
-        engines[mode] = engine
-        modes[mode] = {"importance": importance, "engine": engine}
-        if "catboost" in libraries:
-            try:
-                cat_moments, cat_importance, _cat_engine = predict_moments(
-                    frame.rows,
-                    frame.horizon,
-                    mode=mode,
-                    focus=frame.focus,
-                    families=families,
-                    estimators=estimators,
-                    library="catboost",
-                )
-            except Exception as exc:
-                libraries = ["lightgbm"]
-                catboost_error = str(exc)
-                for built in modes.values():
-                    built.pop("catboost", None)
-                for key in ("corpus_catboost", "fenetre_catboost"):
-                    moment_book.pop(key, None)
-            else:
-                moment_book[f"{mode}_catboost"] = cat_moments
-                modes[mode]["catboost"] = {
-                    "importance": cat_importance,
-                    "engine": "catboost",
-                    "_moments": cat_moments,
-                }
+        block, views[mode] = _reading_block(upcoming, mode, history, walked, frame.star_pool)
+        grids[mode] = block["grid"]
+        cat_key = f"{mode}_catboost"
+        if cat_key in upcoming["readings"]:
+            block["catboost"], views[cat_key] = _reading_block(upcoming, cat_key, history, walked, frame.star_pool)
+            grids[cat_key] = block["catboost"]["grid"]
+        modes[mode] = block
 
-    from synchro.nextdata.backtest import walk_forward
-
-    walked = walk_forward(
-        frame,
-        families,
-        estimators=backtest_estimators,
-        libraries=tuple(libraries),
-    )
-    chronos_info: dict[str, Any] = {"used": False}
-    if with_chronos:
-        chronos_info = _blend_chronos(frame, moment_book, walked)
-
-    chart_grids: dict[str, dict[str, Any]] = {}
-    for mode in ("corpus", "fenetre"):
-        moments, trace = compose_ranks(moment_book[mode], frame.rows[-1])
-        moment_book[mode] = moments
-        ranked = beam(moments, base, star_pool=frame.star_pool)
-        if not ranked:
-            return {"ok": False, "error": "Aucune grille entière n’a pu être projetée.", **dependency_status()}
-        best = ranked[0]
-        chart_grids[mode] = best
-        view = _rank_view(moments, frame.star_pool)
-        mae_sum = walked["metrics"][mode]["mae"].get("sum")
-        modes[mode].update(
-            {
-                "grid": {"numbers": best["numbers"], "stars": best["stars"], "score": best["score"]},
-                "alternates": ranked[1:],
-                "quantiles": view,
-                "mae_sum": mae_sum,
-                "blend_weight": chronos_info.get(mode, {}).get("weight", 1.0),
-                "chronos": chronos_info.get(mode),
-                "arbitration": None if trace is None else stamp_grid(trace, best["numbers"], best["stars"]),
-            }
-        )
-        cat_block = modes[mode].get("catboost")
-        if cat_block and f"{mode}_catboost" in moment_book:
-            cat_moments, cat_trace = compose_ranks(moment_book[f"{mode}_catboost"], frame.rows[-1])
-            moment_book[f"{mode}_catboost"] = cat_moments
-            cat_ranked = beam(cat_moments, base, star_pool=frame.star_pool)
-            if not cat_ranked:
-                return {"ok": False, "error": "CatBoost n’a pas produit de grille entière.", **dependency_status()}
-            cat_best = cat_ranked[0]
-            chart_grids[f"{mode}_catboost"] = cat_best
-            cat_metrics = walked["metrics"].get(f"{mode}_catboost") or {}
-            cat_block.pop("_moments", None)
-            cat_block.update(
-                {
-                    "grid": {
-                        "numbers": cat_best["numbers"],
-                        "stars": cat_best["stars"],
-                        "score": cat_best["score"],
-                    },
-                    "alternates": cat_ranked[1:],
-                    "quantiles": _rank_view(moment_book[f"{mode}_catboost"], frame.star_pool),
-                    "mae_sum": (cat_metrics.get("mae") or {}).get("sum"),
-                    "arbitration": None
-                    if cat_trace is None
-                    else stamp_grid(cat_trace, cat_best["numbers"], cat_best["stars"]),
-                }
-            )
-
+    catboost_error = catboost_import_error()
+    if catboost_error is None and not any(key.endswith("_catboost") for key in upcoming["readings"]):
+        catboost_error = backtest.model_error(ready[n]["parts"], "corpus", "catboost")
+    base = recount(frame.rows[frame.focus_start :], star_pool=frame.star_pool)
     return {
         "ok": True,
         "focus": frame.focus,
@@ -843,16 +794,18 @@ def run_forecast(
         "next_date": frame.next_date,
         "star_pool": frame.star_pool,
         "anchor_year": frame.anchor_year,
-        "engine": engines.get(mode_primary, "lightgbm"),
-        "catboost": catboost_error is None,
+        "engine": modes[mode_primary]["engine"],
+        "estimators": settings.estimators,
+        "catboost": any(key.endswith("_catboost") for key in upcoming["readings"]),
         "catboost_error": catboost_error,
         "dependencies": dependency_status(),
         "modes": modes,
         "base": public_base(base),
         "backtest": walked,
-        "chart": _chart(frame, walked["rows"], moment_book, chart_grids),
+        "chart": _chart(frame, walked["rows"], views, grids),
         "best_mae_sum": walked["best_mae_sum"],
-        "chronos": {"used": bool(chronos_info.get("used"))},
+        "chronos": {"used": any((modes[mode].get("chronos") or {}).get("available") for mode in modes)},
+        "progress": {"ready": len(ready), "total": len(order), "complete": remaining == 0},
     }
 
 
@@ -863,41 +816,49 @@ def run_training(
     years: Iterable[str] | None = None,
     weekday: str | None = None,
     covariates: Iterable[str] | None = None,
-    estimators: int = 16,
+    estimators: int = 32,
     shift: int | None = None,
     with_chronos: bool = False,
+    chunk: int | None = None,
 ) -> dict[str, Any]:
-    """Banc −1…−10. Même réglage que le pronostic, Chronos en option."""
-    if lightgbm_import_error():
-        status = dependency_status()
-        detail = status.get("hint") or status.get("lightgbm_error") or "LightGBM ne se charge pas."
-        return {
-            "ok": False,
-            "error": f"{detail} Sinon : ./launch install-nextdata.",
-            **status,
-        }
+    """Banc −1…−10 : les dix derniers pas du retour, au réglage du pronostic.
+
+    Sans `shift`, chaque appel calcule au plus `chunk` pas manquants : les dix
+    décalages d’abord, puis les tirages d’avant qui calibrent leurs bandes.
+    Avec `shift`, seul ce décalage se calcule ; ses bandes se calibrent sur ce
+    que le cache a déjà.
+    """
+    refused = _unready()
+    if refused:
+        return refused
     families = normalize_families(covariates)
     try:
         frame = build_frame(draws, years=years, focus=int(focus), weekday=weekday)
     except ValueError as exc:
         return {"ok": False, "error": str(exc), **dependency_status()}
-    libraries = ["lightgbm"]
-    catboost_error = catboost_import_error()
-    if catboost_error is None:
-        libraries.append("catboost")
-    from synchro.nextdata.backtest import shift_report
 
-    try:
-        report = shift_report(
-            frame,
-            families,
-            estimators=estimators,
-            libraries=tuple(libraries),
-            only=shift,
-            with_chronos=with_chronos,
-        )
-    except ValueError as exc:
-        return {"ok": False, "error": str(exc), **dependency_status()}
+    from synchro.nextdata import backtest
+    from synchro.nextdata.steps import MIN_HISTORY, StepSettings, ensure_steps, parts_needed, worker_count
+
+    settings = StepSettings(focus=frame.focus, families=tuple(families), estimators=int(estimators))
+    parts = parts_needed(with_chronos)
+    n = len(frame.rows)
+    retour = list(reversed(backtest.retour_indices(frame, with_chronos=with_chronos)))
+    lags = [int(shift)] if shift is not None else list(range(1, backtest.SHIFT_MAX + 1))
+    targets = [n - lag for lag in lags if n - lag >= MIN_HISTORY]
+    if shift is not None:
+        needed = targets + [t - 1 for t in targets if with_chronos and t - 1 >= MIN_HISTORY]
+        ready, _left = ensure_steps(frame, needed, settings, parts, limit=len(needed))
+        cached, _rest = ensure_steps(frame, [t for t in retour if t not in ready], settings, parts, limit=0)
+        ready.update(cached)
+        order = needed
+        remaining = 0
+    else:
+        order = targets + [t for t in retour if t not in targets]
+        ready, remaining = ensure_steps(frame, order, settings, parts, limit=chunk or worker_count())
+    steps = backtest.assemble(frame, ready, with_chronos=with_chronos)
+    report = backtest.shift_report(frame, steps, lags=lags, chronos_requested=with_chronos)
+    catboost_error = catboost_import_error()
     return {
         "ok": True,
         "focus": frame.focus,
@@ -907,73 +868,23 @@ def run_training(
         "weekday": frame.weekday,
         "covariates": families,
         "anchor_year": frame.anchor_year,
+        "estimators": settings.estimators,
         "catboost": catboost_error is None,
         "catboost_error": catboost_error,
         "dependencies": dependency_status(),
         **report,
+        "progress": {
+            "ready": sum(1 for t in order if t in ready),
+            "total": len(order),
+            "complete": remaining == 0,
+        },
     }
-
-
-def _blend_chronos(
-    frame: Frame,
-    moment_book: dict[str, dict[str, dict[str, float]]],
-    walked: dict[str, Any],
-) -> dict[str, Any]:
-    """Chronos prévoit le prochain tirage, son poids se règle sur le dernier tirage du focus.
-
-    Deux lectures par mode : sans le dernier tirage, Chronos est noté contre
-    le retour LightGBM du même tirage ; avec lui, il donne la valeur mélangée.
-    """
-    info: dict[str, Any] = {"used": False}
-    if len(frame.rows) < 12:
-        return info
-    actual = frame.rows[-1]
-    prefix = frame.rows[:-1]
-    held = next((step for step in walked["rows"] if step["date"] == actual["date"]), None)
-    for mode in ("corpus", "fenetre"):
-        if mode == "fenetre":
-            window = prefix[-frame.focus :]
-            ahead = frame.rows[-frame.focus :]
-        else:
-            window = prefix
-            ahead = frame.rows
-        holdout = chronos_point([float(row["sum"]) for row in window])
-        points = {
-            "sum": chronos_point([float(row["sum"]) for row in ahead]),
-            "star_sum": chronos_point([float(row["star_sum"]) for row in ahead]),
-            "n1": chronos_point([float(row["n1"]) for row in ahead]),
-        }
-        if holdout is None or points["sum"] is None or held is None:
-            info[mode] = {"weight": 1.0, "available": False}
-            continue
-        info["used"] = True
-        lgb_mae = abs(float(held[mode]["sum"]) - float(actual["sum"]))
-        chrono_mae = abs(float(holdout) - float(actual["sum"]))
-        weight = blend_weight(lgb_mae, chrono_mae)
-        moments = moment_book[mode]
-        for name in ("sum", "star_sum", "n1"):
-            if points[name] is None or name not in moments:
-                continue
-            blended = _clip(name, blend_mid(moments[name]["mid"], points[name], weight))
-            moments[name]["mid"] = blended
-            moments[name]["lo"] = min(moments[name]["lo"], blended)
-            moments[name]["hi"] = max(moments[name]["hi"], blended)
-        info[mode] = {
-            "available": True,
-            "weight": round(weight, 4),
-            "holdout_mae_lgb": round(lgb_mae, 4),
-            "holdout_mae_chronos": round(chrono_mae, 4),
-            "sum": round(float(points["sum"]), 4),
-            "star_sum": None if points["star_sum"] is None else round(float(points["star_sum"]), 4),
-            "n1": None if points["n1"] is None else round(float(points["n1"]), 4),
-        }
-    return info
 
 
 def _chart(
     frame: Frame,
     steps: list[dict[str, Any]],
-    moment_book: dict[str, dict[str, dict[str, float]]],
+    views: dict[str, dict[str, dict[str, float]]],
     grids: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     by_date = {step["date"]: step for step in steps}
@@ -1002,8 +913,7 @@ def _chart(
         "label": frame.next_date[5:],
         "kind": "forecast",
     }
-    for mode, moments in moment_book.items():
-        view = _rank_view(moments, frame.star_pool)
+    for mode, view in views.items():
         for name, band in view.items():
             if name == "e_gap":
                 continue

@@ -8,7 +8,6 @@ from datetime import date, timedelta
 from fastapi.testclient import TestClient
 
 from synchro.app import create_app
-from synchro.nextdata.backtest import walk_forward
 from synchro.nextdata.covariates import consecutive_count, link_series, spread_of, star_couple_ago
 from synchro.nextdata.empirical import recount, smoothed_share
 from synchro.nextdata.forecast import (
@@ -461,8 +460,8 @@ def test_catboost_matches_the_lightgbm_reading() -> None:
         _draws(36, seed=6),
         focus=24,
         estimators=4,
-        backtest_estimators=2,
         with_chronos=False,
+        chunk=4,
     )
     assert report["ok"] is True
     assert report["catboost"] is True
@@ -478,9 +477,8 @@ def test_catboost_matches_the_lightgbm_reading() -> None:
 
 
 def test_shift_hides_the_draw_it_scores(monkeypatch) -> None:
-    from synchro.nextdata.backtest import _covers, _signed, shift_report
-    from synchro.nextdata.forecast import predict_moments
-    from synchro.nextdata.panel import build_frame
+    from synchro.nextdata.backtest import _covers, _signed
+    from synchro.nextdata.forecast import run_training
 
     assert _signed(12, 10) == 2
     assert _signed(8, 10) == -2
@@ -489,15 +487,10 @@ def test_shift_hides_the_draw_it_scores(monkeypatch) -> None:
 
     draws = _draws(40, seed=8)
     frame = build_frame(draws, focus=24)
-    seen: list[dict[str, str | int]] = []
-    real = predict_moments
-
-    def spy(rows, horizon, **kwargs):
-        seen.append({"n": len(rows), "last": rows[-1]["date"], "target": horizon[0]["date"]})
-        return real(rows, horizon, **kwargs)
-
-    monkeypatch.setattr("synchro.nextdata.backtest.predict_moments", spy)
-    report = shift_report(frame, ["forme"], estimators=2, libraries=("lightgbm",), quantiles=(0.5,))
+    seen: list[dict] = []
+    _offline(monkeypatch, calls=seen)
+    report = run_training(draws, focus=24, covariates=["forme"], estimators=2, chunk=100)
+    assert report["progress"]["complete"] is True
     assert [shift["x"] for shift in report["shifts"]] == list(range(1, 11))
     assert report["shifts"][0]["date"] == frame.rows[-1]["date"]
     assert all(str(item["last"]) < str(item["target"]) for item in seen)
@@ -519,19 +512,19 @@ def test_shift_hides_the_draw_it_scores(monkeypatch) -> None:
 
 
 def test_one_shift_stops_before_the_scored_draw(monkeypatch) -> None:
-    from synchro.nextdata.backtest import shift_report
+    from synchro.nextdata.forecast import run_training
 
     draws = _draws(40, seed=9)
     frame = build_frame(draws, focus=24)
     seen: list[tuple[int, str, str]] = []
 
-    def spy(rows, horizon, **kwargs):
+    def failing(rows, horizon, **kwargs):
         del kwargs
         seen.append((len(rows), rows[-1]["date"], horizon[0]["date"]))
         raise RuntimeError("un seul décalage, sans entraîner")
 
-    monkeypatch.setattr("synchro.nextdata.backtest.predict_moments", spy)
-    report = shift_report(frame, ["forme"], estimators=2, libraries=("lightgbm",), quantiles=(0.5,), only=1)
+    _offline(monkeypatch, moments=failing)
+    report = run_training(draws, focus=24, covariates=["forme"], estimators=2, shift=1)
     assert [shift["x"] for shift in report["shifts"]] == [1]
     assert report["shifts"][0]["date"] == frame.rows[-1]["date"]
     assert seen
@@ -540,11 +533,12 @@ def test_one_shift_stops_before_the_scored_draw(monkeypatch) -> None:
 
 
 def test_shift_scores_the_mean_of_earlier_sums(monkeypatch) -> None:
-    from synchro.nextdata.backtest import shift_report
+    from synchro.nextdata.forecast import run_training
 
-    frame = build_frame(_draws(40, seed=15), focus=24)
-    monkeypatch.setattr("synchro.nextdata.backtest.predict_moments", _flat_moments)
-    report = shift_report(frame, ["forme"], estimators=2, libraries=("lightgbm",), quantiles=(0.5,), only=3)
+    draws = _draws(40, seed=15)
+    frame = build_frame(draws, focus=24)
+    _offline(monkeypatch)
+    report = run_training(draws, focus=24, covariates=["forme"], estimators=2, shift=3)
     mean = report["shifts"][0]["readings"]["mean"]
     prefix = frame.rows[:-3]
     expected = sum(row["sum"] for row in prefix) / len(prefix) - frame.rows[-3]["sum"]
@@ -579,47 +573,16 @@ def _band(mid: float) -> dict[str, float]:
 
 
 def test_chronos_blends_lightgbm_and_leaves_catboost(monkeypatch) -> None:
-    from synchro.nextdata.backtest import shift_report
+    from synchro.nextdata.forecast import run_training
 
     draws = _draws(40, seed=11)
-    frame = build_frame(draws, focus=24)
-    calls: list[str] = []
-
-    def fake_moments(rows, horizon, **kwargs):
-        del rows, horizon
-        calls.append(kwargs["library"])
-        return (
-            {
-                "sum": _band(30),
-                "parity": _band(2),
-                "star_sum": _band(6),
-                "n1": _band(5),
-                "g1": _band(6),
-                "g2": _band(6),
-                "g3": _band(6),
-                "g4": _band(6),
-                "e1": _band(2),
-                "e_gap": _band(3),
-            },
-            [],
-            kwargs["library"],
-        )
-
-    monkeypatch.setattr("synchro.nextdata.backtest.predict_moments", fake_moments)
-    monkeypatch.setattr("synchro.nextdata.backtest.chronos_point", lambda values: 180.0)
-    plain = shift_report(
-        frame, ["forme"], estimators=2, libraries=("lightgbm", "catboost"), quantiles=(0.5,), only=1
-    )
+    rows = build_frame(draws, focus=24).rows
+    calls: list[dict] = []
+    _offline(monkeypatch, calls=calls, chronos=True)
+    monkeypatch.setattr("synchro.nextdata.steps.chronos_point", lambda values: 180.0)
+    plain = run_training(draws, focus=24, covariates=["forme"], estimators=2, shift=1)
     calls.clear()
-    mixed = shift_report(
-        frame,
-        ["forme"],
-        estimators=2,
-        libraries=("lightgbm", "catboost"),
-        quantiles=(0.5,),
-        only=1,
-        with_chronos=True,
-    )
+    mixed = run_training(draws, focus=24, covariates=["forme"], estimators=2, shift=1, with_chronos=True)
     plain_sum = sum(plain["shifts"][0]["readings"]["corpus"]["numbers"])
     mixed_sum = sum(mixed["shifts"][0]["readings"]["corpus"]["numbers"])
     assert mixed_sum > plain_sum
@@ -627,75 +590,88 @@ def test_chronos_blends_lightgbm_and_leaves_catboost(monkeypatch) -> None:
     assert mixed["shifts"][0]["readings"]["corpus"]["chronos"]["available"] is True
     assert mixed["chronos"]["used"] is True
     assert plain["chronos"]["requested"] is False
-    assert calls.count("lightgbm") == 4
-    assert calls.count("catboost") == 2
+    # Le pas noté sort du cache. Seul le pas d’avant, qui règle le poids, s’ajuste, au même réglage.
+    assert sorted(call["library"] for call in calls) == ["catboost", "catboost", "lightgbm", "lightgbm"]
+    assert {call["n"] for call in calls} == {len(rows) - 2}
+    assert {call["estimators"] for call in calls} == {2}
 
 
-def _flat_moments(rows, horizon, **kwargs):
-    del rows, horizon
+def _fake_moments(rows, horizon, **kwargs):
+    """Bandes fixes, sauf la somme qui suit le nombre de tirages lus : chaque pas a sa grille."""
+    del horizon
     bands = {
-        "sum": _band(30),
+        "sum": _band(100 + len(rows) % 30),
         "parity": _band(2),
-        "star_sum": _band(6),
-        "n1": _band(5),
-        "g1": _band(6),
-        "g2": _band(6),
-        "g3": _band(6),
-        "g4": _band(6),
-        "e1": _band(2),
-        "e_gap": _band(3),
+        "star_sum": _band(10),
+        "spread": _band(35),
+        "consecutive": _band(1),
+        "star_consecutive": {"lo": 0, "mid": 0, "hi": 1},
+        "n1": _band(6),
+        "g1": _band(8),
+        "g2": _band(8),
+        "g3": _band(8),
+        "g4": _band(8),
+        "e1": _band(3),
+        "e_gap": _band(4),
     }
-    return bands, [], kwargs.get("library", "lightgbm")
+    for rank, mid in zip(("n1", "n2", "n3", "n4", "n5", "e1", "e2"), (6, 15, 25, 34, 43, 3, 8)):
+        bands[f"level:{rank}"] = _band(mid)
+        bands[f"delta:{rank}"] = _band(0)
+    importance = [{"name": "lag:sum:1", "gain": 1.0, "family": "series"}]
+    return bands, importance, kwargs.get("library", "lightgbm")
+
+
+def _offline(monkeypatch, moments=_fake_moments, calls: list | None = None, chronos: bool = False) -> None:
+    """LightGBM, CatBoost, Darts et Chronos remplacés : le moteur des pas tourne sans bibliothèque."""
+
+    def fake(rows, horizon, **kwargs):
+        if calls is not None:
+            calls.append({"n": len(rows), "last": rows[-1]["date"], "target": horizon[0]["date"], **kwargs})
+        return moments(rows, horizon, **kwargs)
+
+    monkeypatch.setattr("synchro.nextdata.forecast.lightgbm_import_error", lambda: None)
+    monkeypatch.setattr("synchro.nextdata.steps.predict_moments", fake)
+    monkeypatch.setattr("synchro.nextdata.steps.catboost_import_error", lambda: None)
+    monkeypatch.setattr("synchro.nextdata.steps._installed", lambda module: chronos and module == "chronos")
 
 
 def test_shift_chronos_blends_the_forecast_of_the_scored_draw(monkeypatch) -> None:
     """Chronos rejoue son dernier point : sa prévision du tirage noté est le tirage juste avant."""
-    from synchro.nextdata.backtest import _blend_shift_chronos
+    from synchro.nextdata.forecast import run_training
 
-    frame = build_frame(_draws(40, seed=12), focus=24)
-    prefix = frame.rows[:-1]
-    assert prefix[-1]["sum"] != prefix[-2]["sum"]
-    monkeypatch.setattr("synchro.nextdata.backtest.predict_moments", _flat_moments)
-    monkeypatch.setattr("synchro.nextdata.backtest.chronos_point", lambda values: values[-1])
+    draws = _draws(40, seed=12)
+    rows = build_frame(draws, focus=24).rows
+    assert rows[-2]["sum"] != rows[-3]["sum"]
+    _offline(monkeypatch, chronos=True)
+    monkeypatch.setattr("synchro.nextdata.steps.chronos_point", lambda values: values[-1])
     monkeypatch.setattr("synchro.nextdata.backtest.blend_weight", lambda lgb, chronos: 0.0)
-    moments = {"sum": _band(120), "star_sum": _band(10), "n1": _band(9)}
-    note = _blend_shift_chronos(
-        moments,
-        prefix,
-        frame.rows[-1],
-        mode="corpus",
-        focus=24,
-        families=["forme"],
-        estimators=2,
-        star_pool=12,
-    )
+    report = run_training(draws, focus=24, covariates=["forme"], estimators=2, shift=1, with_chronos=True)
+    note = report["shifts"][0]["readings"]["corpus"]["chronos"]
     assert note["available"] is True
-    assert moments["sum"]["mid"] == prefix[-1]["sum"]
-    assert moments["n1"]["mid"] == prefix[-1]["n1"]
-    assert note["holdout_mae_chronos"] == round(abs(prefix[-2]["sum"] - prefix[-1]["sum"]), 4)
+    assert note["sum"] == rows[-2]["sum"]
+    assert note["n1"] == rows[-2]["n1"]
+    assert note["holdout_mae_chronos"] == round(abs(rows[-3]["sum"] - rows[-2]["sum"]), 4)
 
 
 def test_forecast_chronos_blends_the_next_draw(monkeypatch) -> None:
     """Même Chronos : la valeur mélangée au prochain tirage est le dernier tirage connu."""
-    from synchro.nextdata import forecast as forecast_mod
+    from synchro.nextdata.forecast import run_forecast
 
-    frame = build_frame(_draws(40, seed=13), focus=24)
-    assert frame.rows[-1]["sum"] != frame.rows[-2]["sum"]
-    monkeypatch.setattr(forecast_mod, "chronos_point", lambda values: values[-1])
-    monkeypatch.setattr(forecast_mod, "blend_weight", lambda lgb, chronos: 0.0)
-
-    def book() -> dict:
-        return {mode: {"sum": _band(120), "star_sum": _band(10), "n1": _band(9)} for mode in ("corpus", "fenetre")}
-
-    walked = {"rows": [{"date": frame.rows[-1]["date"], "corpus": {"sum": 118.0}, "fenetre": {"sum": 131.0}}]}
-    moments = book()
-    info = forecast_mod._blend_chronos(frame, moments, walked)
-    assert info["used"] is True
+    draws = _draws(40, seed=13)
+    rows = build_frame(draws, focus=24).rows
+    assert rows[-1]["sum"] != rows[-2]["sum"]
+    _offline(monkeypatch, chronos=True)
+    monkeypatch.setattr("synchro.nextdata.steps.chronos_point", lambda values: values[-1])
+    monkeypatch.setattr("synchro.nextdata.backtest.blend_weight", lambda lgb, chronos: 0.0)
+    alone = run_forecast(draws, focus=24, covariates=["forme"], estimators=2, with_chronos=True, chunk=1)
+    assert alone["modes"]["corpus"]["chronos"]["available"] is False
+    report = run_forecast(draws, focus=24, covariates=["forme"], estimators=2, with_chronos=True, chunk=1)
     for mode in ("corpus", "fenetre"):
-        assert moments[mode]["sum"]["mid"] == frame.rows[-1]["sum"]
-        assert info[mode]["holdout_mae_chronos"] == round(abs(frame.rows[-2]["sum"] - frame.rows[-1]["sum"]), 4)
-    unscored = forecast_mod._blend_chronos(frame, book(), {"rows": []})
-    assert unscored["used"] is False
+        note = report["modes"][mode]["chronos"]
+        assert note["available"] is True
+        assert note["sum"] == rows[-1]["sum"]
+        assert note["holdout_mae_chronos"] == round(abs(rows[-2]["sum"] - rows[-1]["sum"]), 4)
+    assert report["chronos"]["used"] is True
 
 
 def test_training_forwards_chronos_flag(monkeypatch) -> None:
@@ -725,10 +701,11 @@ def test_two_modes_forecast_real_draws() -> None:
         _draws(36, seed=4),
         focus=24,
         estimators=4,
-        backtest_estimators=2,
         with_chronos=False,
+        chunk=4,
     )
     assert report["ok"] is True
+    assert report["progress"] == {"ready": 4, "total": 21, "complete": False}
     assert report["primary"] == "corpus"
     for mode in ("corpus", "fenetre"):
         grid = report["modes"][mode]["grid"]
@@ -762,13 +739,10 @@ def test_two_modes_forecast_real_draws() -> None:
     assert report["backtest"]["metrics"]["corpus"]["mae"]["consecutive"] is not None
     assert report["backtest"]["metrics"]["corpus"]["mae"]["star_spread"] is not None
     assert report["base"]["couples"]
-    walked = walk_forward(build_frame(_draws(36, seed=4), focus=24), ["forme", "couples"], estimators=2)
-    assert walked["rows"]
 
 
 def test_status_and_focus_guard(monkeypatch) -> None:
     monkeypatch.setenv("SYNCHRO_NEXTDATA_ESTIMATORS", "3")
-    monkeypatch.setenv("SYNCHRO_NEXTDATA_BACKTEST_ESTIMATORS", "2")
     client = TestClient(create_app())
     status = client.get("/api/nextdata/status")
     assert status.status_code == 200
@@ -791,6 +765,126 @@ def test_status_and_focus_guard(monkeypatch) -> None:
     assert accepted.status_code == 200, accepted.text
     payload = accepted.json()
     assert payload["ok"] is True
+    assert payload["estimators"] == 3
+    assert payload["progress"]["ready"] >= 1
     assert payload["primary"] == "fenetre"
     assert len(payload["modes"]["corpus"]["grid"]["numbers"]) == 5
     assert len(payload["modes"]["fenetre"]["grid"]["stars"]) == 2
+
+
+def test_every_step_reads_the_forecast_settings(monkeypatch) -> None:
+    """Pronostic, retour et décalages : mêmes arbres, mêmes quantiles, même faisceau à ±3."""
+    from synchro.nextdata import backtest
+    from synchro.nextdata.forecast import run_forecast, run_training
+
+    draws = _draws(40, seed=16)
+    calls: list[dict] = []
+    radii: list[int] = []
+    real_beam = backtest.beam
+
+    def spy_beam(moments, base, **kwargs):
+        radii.append(kwargs.get("radius", 3))
+        return real_beam(moments, base, **kwargs)
+
+    _offline(monkeypatch, calls=calls)
+    monkeypatch.setattr("synchro.nextdata.backtest.beam", spy_beam)
+    forecast = run_forecast(draws, focus=24, covariates=["forme"], estimators=7, chunk=100)
+    fitted = len(calls)
+    training = run_training(draws, focus=24, covariates=["forme"], estimators=7, chunk=100)
+    assert forecast["progress"]["complete"] is True
+    assert training["progress"]["complete"] is True
+    assert len(calls) == fitted
+    assert {call["estimators"] for call in calls} == {7}
+    assert {tuple(call["quantiles"]) for call in calls} == {(0.1, 0.5, 0.9)}
+    assert set(radii) == {3}
+    retour = {row["date"]: row for row in forecast["backtest"]["rows"]}
+    assert len({tuple(row["corpus"]["numbers"]) for row in retour.values()}) > 1
+    for shift in training["shifts"]:
+        for key in ("corpus", "fenetre", "corpus_catboost", "fenetre_catboost"):
+            assert shift["readings"][key]["numbers"] == retour[shift["date"]][key]["numbers"]
+
+
+def test_steps_are_cached_and_keyed_on_earlier_draws(monkeypatch) -> None:
+    from synchro.nextdata.steps import StepSettings, ensure_steps, horizon_of, prefix_digests, step_key
+
+    draws = _draws(40, seed=17)
+    frame = build_frame(draws, focus=24)
+    calls: list[dict] = []
+    _offline(monkeypatch, calls=calls)
+    settings = StepSettings(focus=frame.focus, families=("forme",), estimators=3)
+    n = len(frame.rows)
+    order = [n - 1, n - 2, n - 3]
+    ready, remaining = ensure_steps(frame, order, settings, ("lightgbm",), limit=2)
+    assert sorted(ready) == [n - 2, n - 1]
+    assert remaining == 1
+    assert len(calls) == 4
+    again, remaining = ensure_steps(frame, order, settings, ("lightgbm",), limit=2)
+    assert sorted(again) == sorted(order)
+    assert remaining == 0
+    assert len(calls) == 6
+    assert again[n - 1]["parts"] == ready[n - 1]["parts"]
+
+    t = 30
+
+    def key(source: list[dict], part: str = "lightgbm", estimators: int = 3) -> str:
+        built = build_frame(source, focus=24)
+        chosen = StepSettings(focus=built.focus, families=("forme",), estimators=estimators)
+        return step_key(prefix_digests(built.rows)[t], horizon_of(built, t), chosen, part)
+
+    later = [dict(draw) for draw in draws]
+    later[-1] = {**later[-1], "numbers": [1, 2, 3, 4, 5]}
+    earlier = [dict(draw) for draw in draws]
+    earlier[5] = {**earlier[5], "numbers": [1, 2, 3, 4, 5]}
+    assert key(later) == key(draws)
+    assert key(earlier) != key(draws)
+    assert key(draws, estimators=4) != key(draws)
+    assert key(draws, part="chronos", estimators=4) == key(draws, part="chronos")
+
+
+def test_each_call_computes_one_chunk(monkeypatch) -> None:
+    from synchro.nextdata.forecast import run_forecast
+
+    draws = _draws(40, seed=18)
+    _offline(monkeypatch)
+    first = run_forecast(draws, focus=24, covariates=["forme"], estimators=2, chunk=5)
+    assert first["ok"] is True
+    assert first["progress"] == {"ready": 5, "total": 25, "complete": False}
+    assert first["backtest"]["draw_count"] == 4
+    last = run_forecast(draws, focus=24, covariates=["forme"], estimators=2, chunk=100)
+    assert last["progress"] == {"ready": 25, "total": 25, "complete": True}
+    assert last["backtest"]["draw_count"] == 24
+    assert last["modes"]["corpus"]["grid"] == first["modes"]["corpus"]["grid"]
+
+
+def test_forecast_bands_are_calibrated_on_the_retour(monkeypatch) -> None:
+    from synchro.nextdata.forecast import run_forecast
+
+    _offline(monkeypatch)
+    report = run_forecast(_draws(60, seed=19), focus=50, covariates=["forme"], estimators=2, chunk=100)
+    block = report["modes"]["corpus"]
+    assert block["calibration"]["calibrated"] is True
+    assert block["calibration"]["steps"] == report["backtest"]["draw_count"] == 44
+    band = block["quantiles"]["sum"]
+    assert band["hi"] - band["lo"] > 20
+    assert 15 <= band["lo"] <= band["mid"] <= band["hi"] <= 240
+    measured = report["backtest"]["bands"]["corpus"]["sum"]
+    assert measured["raw"] < 0.2
+    assert measured["calibrated"] >= 0.6
+    assert measured["calibrated_count"] == 44 - 9
+
+
+def test_training_route_returns_progress(monkeypatch) -> None:
+    _offline(monkeypatch)
+    monkeypatch.setenv("SYNCHRO_NEXTDATA_ESTIMATORS", "3")
+    client = TestClient(create_app())
+    response = client.post(
+        "/api/nextdata/training",
+        json={"focus": 50, "covariates": ["forme"], "draws": _draws(40, seed=20)},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ok"] is True
+    assert body["estimators"] == 3
+    assert body["progress"] == {"ready": 1, "total": 24, "complete": False}
+    assert [shift["x"] for shift in body["shifts"]] == [1]
+    assert body["shifts"][0]["readings"]["corpus"]["calibrated"] is False

@@ -2632,6 +2632,16 @@ def create_app() -> FastAPI:
         report = await run_in_threadpool(run_confrontation, draws, lookback)
         return {"ok": True, **report}
 
+    def _nextdata_estimators() -> int:
+        """Un seul nombre d’arbres : le pronostic, le retour et les décalages lisent les mêmes pas."""
+        raw = os.environ.get("SYNCHRO_NEXTDATA_ESTIMATORS")
+        if not raw:
+            return 32
+        try:
+            return max(2, min(80, int(raw)))
+        except ValueError:
+            return 32
+
     @app.get("/api/nextdata/status")
     def nextdata_status() -> dict[str, Any]:
         from synchro.nextdata import dependency_status
@@ -2668,15 +2678,6 @@ def create_app() -> FastAPI:
         from starlette.concurrency import run_in_threadpool
         from synchro.nextdata import run_forecast
 
-        def _bounded(name: str, default: int) -> int:
-            raw = os.environ.get(name)
-            if not raw:
-                return default
-            try:
-                return max(2, min(80, int(raw)))
-            except ValueError:
-                return default
-
         report = await run_in_threadpool(
             lambda: run_forecast(
                 draws,
@@ -2686,8 +2687,7 @@ def create_app() -> FastAPI:
                 weekday=weekday if isinstance(weekday, str) else None,
                 covariates=covariates,
                 with_chronos=bool(payload.get("with_chronos")),
-                estimators=_bounded("SYNCHRO_NEXTDATA_ESTIMATORS", 32),
-                backtest_estimators=_bounded("SYNCHRO_NEXTDATA_BACKTEST_ESTIMATORS", 8),
+                estimators=_nextdata_estimators(),
             )
         )
         return report
@@ -2728,15 +2728,6 @@ def create_app() -> FastAPI:
         from starlette.concurrency import run_in_threadpool
         from synchro.nextdata import run_training
 
-        def _bounded(name: str, default: int) -> int:
-            raw = os.environ.get(name)
-            if not raw:
-                return default
-            try:
-                return max(2, min(80, int(raw)))
-            except ValueError:
-                return default
-
         report = await run_in_threadpool(
             lambda: run_training(
                 draws,
@@ -2744,7 +2735,7 @@ def create_app() -> FastAPI:
                 years=years,
                 weekday=weekday if isinstance(weekday, str) else None,
                 covariates=covariates,
-                estimators=_bounded("SYNCHRO_NEXTDATA_ESTIMATORS", 16),
+                estimators=_nextdata_estimators(),
                 shift=shift,
                 with_chronos=payload.get("with_chronos") is True,
             )
