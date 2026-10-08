@@ -396,7 +396,7 @@ export function TrainingLab() {
               const body = (
                 <>
                   <span className="block text-xs text-muted-foreground">{item.label}</span>
-                  <span className="text-lg font-semibold tabular-nums">{mae ?? "—"}</span>
+                  <span className="text-lg font-semibold tabular-nums">{mae == null ? "—" : mae.toFixed(1)}</span>
                   <span className="mt-1 block text-xs text-muted-foreground">
                     MAE somme{below.length ? ` · sous ${below.join(" et ")}` : ""}
                     {report?.chronos?.used && (item.id === "corpus" || item.id === "fenetre") ? " · Chronos" : ""}
