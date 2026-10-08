@@ -8,6 +8,7 @@ from typing import Any, Iterable
 
 from synchro.analysis.common import as_date
 from synchro.analysis.variables import decade_hist
+from synchro.fdj import star_pool_for
 from synchro.nextdata.covariates import (
     clocks,
     consecutive_count,
@@ -101,9 +102,9 @@ def _normalize(draws: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         pool = draw.get("star_pool")
         try:
-            star_pool = int(pool) if pool is not None else max(stars)
+            star_pool = int(pool) if pool is not None else star_pool_for(day)
         except (TypeError, ValueError):
-            star_pool = max(stars)
+            star_pool = star_pool_for(day)
         star_pool = max(star_pool, max(stars), 2)
         rows.append(
             {

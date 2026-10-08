@@ -86,6 +86,15 @@ def test_frame_uses_civil_years_and_recounts_the_focus() -> None:
         assert row["star_consecutive"] in (0.0, 1.0)
 
 
+def test_star_pool_follows_the_draw_date_when_it_is_missing() -> None:
+    draws = [{key: value for key, value in draw.items() if key != "star_pool"} for draw in _draws(40, seed=21)]
+    draws[-1] = {**draws[-1], "stars": [3, 7]}
+    assert build_frame(draws, focus=24).star_pool == 12
+    old = [{key: value for key, value in draw.items() if key != "star_pool"} for draw in _draws(30, start=date(2014, 1, 3))]
+    old[-1] = {**old[-1], "stars": [2, 5]}
+    assert build_frame(old, focus=24).star_pool == 11
+
+
 def test_window_loss_ignores_the_three_year_prefix() -> None:
     lags, past = lag_choice("fenetre", 50, 160)
     assert (lags, past) == (12, 6)
