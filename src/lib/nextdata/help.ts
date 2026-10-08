@@ -267,7 +267,7 @@ export const NEXTDATA_TRAINING_HELP = {
   banner: {
     title: "nextDataTraining",
     wide: true,
-    body: "Même réglage que nextData, mesuré sur les dix tirages d’avant. −1 cache seulement le dernier tirage et le prévoit. −10 se place dix tirages plus tôt et prévoit celui qui venait juste après.\n\nL’écart est prévu moins sorti. Au-dessus de zéro, la lecture était trop haute. Ce n’est pas une prévision à dix coups d’avance, et ce n’est pas une probabilité de gain FDJ.\n\nChronos et DeltaEvol sont les mêmes interrupteurs que sur nextData. La puce Delta, elle, est une covariable : elle entre dans l’apprentissage.\n\nLa barre avance quand un décalage est terminé. 10 % veut dire que −1 est mesuré, 100 % que les dix le sont. Ce n’est pas une estimation du temps restant.",
+    body: "Même réglage que nextData, mesuré sur les dix tirages d’avant. −1 cache seulement le dernier tirage et le prévoit. −10 se place dix tirages plus tôt et prévoit celui qui venait juste après.\n\nL’écart est prévu moins sorti. Au-dessus de zéro, la lecture était trop haute. Ce n’est pas une prévision à dix coups d’avance, et ce n’est pas une probabilité de gain FDJ.\n\nPersistance et moyenne sont les repères sans modèle : rejouer le tirage d’avant, ou prévoir la somme moyenne d’avant.\n\nChronos et DeltaEvol sont les mêmes interrupteurs que sur nextData. La puce Delta, elle, est une covariable : elle entre dans l’apprentissage.\n\nLa barre avance quand un décalage est terminé. 10 % veut dire que −1 est mesuré, 100 % que les dix le sont. Ce n’est pas une estimation du temps restant.",
   },
   decalage: {
     title: "Décalage −x",
@@ -275,7 +275,7 @@ export const NEXTDATA_TRAINING_HELP = {
   },
   somme: {
     title: "Écart de somme",
-    body: "Chaque point est un décalage. Le trait est l’écart signé de la somme des cinq numéros. La persistance rejoue le tirage d’avant la coupure : c’est le repère. Un MAE de 12 ne dit rien si rejouer le dernier est à 8.",
+    body: "Chaque point est un décalage. Le trait est l’écart signé de la somme des cinq numéros. Deux repères sans modèle : la persistance rejoue le tirage d’avant la coupure, la moyenne prévoit la somme moyenne des tirages d’avant. La moyenne est le plus dur des deux : sur des tirages au hasard, elle se trompe d’environ 25 en moyenne, la persistance d’environ 35. Passer sous la persistance ne prouve donc rien. Sur dix décalages, quelques points d’écart entre deux MAE tiennent encore du hasard.",
   },
   chronos: {
     title: "Chronos inclus",
@@ -288,7 +288,7 @@ export const NEXTDATA_TRAINING_HELP = {
   },
   rangs: {
     title: "Écarts de rangs",
-    body: "Une case, un décalage et un rang. n1 est le plus petit numéro, n5 le plus grand. Le nombre est prévu moins sorti. Une case marquée d’un point : le numéro sorti tombe dans la bande 10–90 du modèle. Les lignes étendue, consécutifs, étendue ★ et consécutifs ★ reprennent les comptes de la page Évolution.\n\nLa figure du calcul suit le décalage qui vient d’être mesuré. Un clic sur l’en-tête d’une colonne la laisse sur ce décalage ; un second clic la laisse de nouveau suivre.",
+    body: "Une case, un décalage et un rang. n1 est le plus petit numéro, n5 le plus grand. Le nombre est prévu moins sorti. Une case marquée d’un point : le numéro sorti tombe dans la bande 10–90 du modèle. La colonne Bande compte ces cases : une bande juste en contient environ huit sur dix, moins veut dire que le modèle se croit plus sûr qu’il ne l’est. Les lignes étendue, consécutifs, étendue ★ et consécutifs ★ reprennent les comptes de la page Évolution.\n\nLa figure du calcul suit le décalage qui vient d’être mesuré. Un clic sur l’en-tête d’une colonne la laisse sur ce décalage ; un second clic la laisse de nouveau suivre.",
   },
   boules: {
     title: "Prévu et sorti",

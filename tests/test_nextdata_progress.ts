@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { deltaNumbers, summarizeShifts, trainingPercent, visibleTrainingShift } from "../src/lib/nextdata/training-progress.ts"
+import { bandCoverage, deltaNumbers, summarizeShifts, trainingPercent, visibleTrainingShift } from "../src/lib/nextdata/training-progress.ts"
 
 test("the training percent is the share of finished shifts", () => {
   assert.equal(trainingPercent(0), 0)
@@ -48,4 +48,15 @@ test("the rank figure follows the latest measured shift unless one is pinned", (
   assert.equal(visibleTrainingShift(shifts.slice(0, 1), null)?.x, 1)
   assert.equal(visibleTrainingShift(shifts, 1)?.x, 1)
   assert.equal(visibleTrainingShift(shifts, 9)?.x, 3)
+})
+
+test("the band column counts the draws inside, where the reading has a band", () => {
+  const shifts = [
+    { readings: { corpus: { errors: { sum: 3 }, in_band: { n1: true, sum: false } }, persistence: { errors: { sum: 1 }, in_band: { n1: null } } } },
+    { readings: { corpus: { errors: { sum: -2 }, in_band: { n1: true, sum: true } } } },
+    { readings: { corpus: { errors: { sum: 5 }, in_band: { n1: false, sum: null } } } },
+  ]
+  assert.deepEqual(bandCoverage(shifts, "corpus", "n1"), { inside: 2, total: 3 })
+  assert.deepEqual(bandCoverage(shifts, "corpus", "sum"), { inside: 1, total: 2 })
+  assert.deepEqual(bandCoverage(shifts, "persistence", "n1"), { inside: 0, total: 0 })
 })

@@ -539,6 +539,21 @@ def test_one_shift_stops_before_the_scored_draw(monkeypatch) -> None:
     assert report["summary"]["persistence"]["count"] == 1
 
 
+def test_shift_scores_the_mean_of_earlier_sums(monkeypatch) -> None:
+    from synchro.nextdata.backtest import shift_report
+
+    frame = build_frame(_draws(40, seed=15), focus=24)
+    monkeypatch.setattr("synchro.nextdata.backtest.predict_moments", _flat_moments)
+    report = shift_report(frame, ["forme"], estimators=2, libraries=("lightgbm",), quantiles=(0.5,), only=3)
+    mean = report["shifts"][0]["readings"]["mean"]
+    prefix = frame.rows[:-3]
+    expected = sum(row["sum"] for row in prefix) / len(prefix) - frame.rows[-3]["sum"]
+    assert mean["errors"]["sum"] == round(expected, 4)
+    assert mean["errors"]["n1"] is None
+    assert mean["hits_numbers"] is None
+    assert report["summary"]["mean"]["mae_sum"] == round(abs(expected), 4)
+
+
 def test_training_shift_is_one_through_ten(monkeypatch) -> None:
     captured: dict[str, int | None] = {}
 

@@ -4,6 +4,7 @@ export const TRAINING_SHIFT_TOTAL = 10
 
 export type ShiftReading = {
   errors: { sum?: number | null }
+  in_band?: Record<string, boolean | null>
   hits_numbers?: number | null
 }
 
@@ -50,6 +51,19 @@ export function visibleTrainingShift<T extends { x: number }>(shifts: T[], pinne
 
 function round4(value: number): number {
   return Math.round(value * 10000) / 10000
+}
+
+/** Tirages tombés dans la bande 10–90, sur les décalages où la lecture en donne une. */
+export function bandCoverage(shifts: ShiftSlice[], reading: string, field: string): { inside: number; total: number } {
+  let inside = 0
+  let total = 0
+  for (const shift of shifts) {
+    const covered = shift.readings[reading]?.in_band?.[field]
+    if (covered == null) continue
+    total += 1
+    if (covered) inside += 1
+  }
+  return { inside, total }
 }
 
 /** MAE de la somme et moyenne des numéros communs, sur les décalages déjà reçus. */

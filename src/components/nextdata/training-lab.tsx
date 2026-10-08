@@ -12,7 +12,14 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { DRAWS, type Draw } from "@/lib/draws"
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "@/lib/nextdata/help"
 import type { Arbitration } from "@/lib/nextdata/rank-path"
-import { deltaNumbers, summarizeShifts, TRAINING_SHIFT_TOTAL, trainingPercent, visibleTrainingShift } from "@/lib/nextdata/training-progress"
+import {
+  bandCoverage,
+  deltaNumbers,
+  summarizeShifts,
+  TRAINING_SHIFT_TOTAL,
+  trainingPercent,
+  visibleTrainingShift,
+} from "@/lib/nextdata/training-progress"
 import { cn } from "@/lib/utils"
 
 const FAMILIES: { id: string; label: string }[] = [
@@ -27,11 +34,12 @@ const FAMILIES: { id: string; label: string }[] = [
 ]
 
 const READINGS = [
-  { id: "corpus", label: "LightGBM · trois ans", color: "var(--chart-1)" },
-  { id: "fenetre", label: "LightGBM · fenêtre", color: "var(--chart-2)" },
-  { id: "corpus_catboost", label: "CatBoost · trois ans", color: "var(--chart-3)" },
-  { id: "fenetre_catboost", label: "CatBoost · fenêtre", color: "var(--chart-4)" },
-  { id: "persistence", label: "Persistance", color: "var(--foreground)" },
+  { id: "corpus", label: "LightGBM · trois ans", color: "var(--chart-1)", grid: true },
+  { id: "fenetre", label: "LightGBM · fenêtre", color: "var(--chart-2)", grid: true },
+  { id: "corpus_catboost", label: "CatBoost · trois ans", color: "var(--chart-3)", grid: true },
+  { id: "fenetre_catboost", label: "CatBoost · fenêtre", color: "var(--chart-4)", grid: true },
+  { id: "persistence", label: "Persistance", color: "var(--foreground)", grid: true },
+  { id: "mean", label: "Moyenne", color: "var(--muted-foreground)", grid: false },
 ] as const
 
 type ReadingId = (typeof READINGS)[number]["id"]
@@ -42,6 +50,7 @@ const CHART: ChartConfig = {
   corpus_catboost: { label: "CatBoost trois ans", color: "var(--chart-3)" },
   fenetre_catboost: { label: "CatBoost fenêtre", color: "var(--chart-4)" },
   persistence: { label: "Persistance", color: "var(--foreground)" },
+  mean: { label: "Moyenne", color: "var(--muted-foreground)" },
 }
 
 const RANK_ROWS = [
@@ -249,12 +258,15 @@ export function TrainingLab() {
   const persistenceMae = summary.persistence?.mae_sum
   const activeShift = visibleTrainingShift(report?.shifts ?? [], pinnedShift)
   const pathTrace = activeShift?.readings[reading]?.arbitration
+  const meanMae = summary.mean?.mae_sum
+  const shifts = report?.shifts ?? []
 
   return (
     <div className="flex min-w-0 flex-col gap-6" data-nextdata-training>
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
         <TitleHelp help={NEXTDATA_TRAINING_HELP.banner}>nextDataTraining</TitleHelp> recule de 1 à 10
-        tirages. L’écart est prévu moins sorti. La persistance rejoue le tirage d’avant. Ce n’est pas un ticket.
+        tirages. L’écart est prévu moins sorti. La persistance rejoue le tirage d’avant, la moyenne prévoit la
+        somme moyenne d’avant. Ce n’est pas un ticket.
       </p>
 
       <Card>
@@ -373,7 +385,30 @@ export function TrainingLab() {
           <div className="flex flex-wrap gap-3">
             {READINGS.filter((item) => summary[item.id]).map((item) => {
               const mae = summary[item.id]?.mae_sum
-              const better = mae != null && persistenceMae != null && item.id !== "persistence" && mae < persistenceMae
+              const below = [
+                mae != null && meanMae != null && item.id !== "mean" && mae < meanMae ? "la moyenne" : null,
+                mae != null && persistenceMae != null && item.id !== "persistence" && mae < persistenceMae
+                  ? "la persistance"
+                  : null,
+              ].filter(Boolean)
+              const body = (
+                <>
+                  <span className="block text-xs text-muted-foreground">{item.label}</span>
+                  <span className="text-lg font-semibold tabular-nums">{mae ?? "—"}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    MAE somme{below.length ? ` · sous ${below.join(" et ")}` : ""}
+                    {report?.chronos?.used && (item.id === "corpus" || item.id === "fenetre") ? " · Chronos" : ""}
+                    {summary[item.id]?.hits_numbers != null ? ` · ${summary[item.id]?.hits_numbers} numéros` : ""}
+                  </span>
+                </>
+              )
+              if (!item.grid) {
+                return (
+                  <div key={item.id} className="rounded-xl border border-dashed border-border px-3 py-2 text-left">
+                    {body}
+                  </div>
+                )
+              }
               return (
                 <button
                   key={item.id}
@@ -384,13 +419,7 @@ export function TrainingLab() {
                     reading === item.id ? "border-primary bg-primary/5" : "border-border"
                   )}
                 >
-                  <span className="block text-xs text-muted-foreground">{item.label}</span>
-                  <span className="text-lg font-semibold tabular-nums">{mae ?? "—"}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    MAE somme{better ? " · sous la persistance" : ""}
-                    {report?.chronos?.used && (item.id === "corpus" || item.id === "fenetre") ? " · Chronos" : ""}
-                    {summary[item.id]?.hits_numbers != null ? ` · ${summary[item.id]?.hits_numbers} numéros` : ""}
-                  </span>
+                  {body}
                 </button>
               )
             })}
@@ -476,30 +505,39 @@ export function TrainingLab() {
                         </button>
                       </th>
                     ))}
+                    <th className="pl-2 font-medium text-muted-foreground" title="tirages dans la bande 10–90">
+                      Bande
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {RANK_ROWS.map((field) => (
-                    <tr key={field.key}>
-                      <th className="pr-2 text-left font-medium text-muted-foreground">{field.label}</th>
-                      {report.shifts.map((shift) => {
-                        const side = shift.readings[reading]
-                        const value = side?.errors[field.key]
-                        const covered = side?.in_band[field.key]
-                        return (
-                          <td
-                            key={`${field.key}-${shift.x}`}
-                            className="rounded-md px-1 py-1.5"
-                            style={{ background: tone(value) }}
-                            title={covered ? "dans la bande 10–90" : undefined}
-                          >
-                            {value == null ? "—" : value > 0 ? `+${value}` : value}
-                            {covered ? " ·" : ""}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
+                  {RANK_ROWS.map((field) => {
+                    const coverage = bandCoverage(shifts, reading, field.key)
+                    return (
+                      <tr key={field.key}>
+                        <th className="pr-2 text-left font-medium text-muted-foreground">{field.label}</th>
+                        {shifts.map((shift) => {
+                          const side = shift.readings[reading]
+                          const value = side?.errors[field.key]
+                          const covered = side?.in_band[field.key]
+                          return (
+                            <td
+                              key={`${field.key}-${shift.x}`}
+                              className="rounded-md px-1 py-1.5"
+                              style={{ background: tone(value) }}
+                              title={covered ? "dans la bande 10–90" : undefined}
+                            >
+                              {value == null ? "—" : value > 0 ? `+${value}` : value}
+                              {covered ? " ·" : ""}
+                            </td>
+                          )
+                        })}
+                        <td className="pl-2 text-muted-foreground">
+                          {coverage.total ? `${coverage.inside}/${coverage.total}` : "—"}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </CardContent>

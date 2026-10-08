@@ -323,7 +323,9 @@ def shift_report(
     """Dix coupures −1…−10. Chaque prévision n'apprend pas le tirage qu'elle note.
 
     x = 1 cache le dernier tirage. x = 10 se place dix tirages plus tôt et
-    prévoit celui qui venait juste après. L'écart est prévu − sorti.
+    prévoit celui qui venait juste après. L'écart est prévu − sorti. Deux
+    repères sans modèle, comme le retour de nextData : la persistance et la
+    somme moyenne des tirages d'avant.
     """
     rows = frame.rows
     shifts: list[dict[str, Any]] = []
@@ -340,6 +342,8 @@ def shift_report(
         previous = _actual(prefix[-1])
         actual = _actual(target)
         readings["persistence"] = _shift_side(previous, actual, None)
+        mean_sum = sum(float(row["sum"]) for row in prefix) / len(prefix)
+        readings["mean"] = _shift_side({"sum": mean_sum}, actual, None)
         window = prefix[-frame.focus :]
         base = recount(window, star_pool=frame.star_pool)
         for mode in MODES:

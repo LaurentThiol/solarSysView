@@ -254,7 +254,7 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
         </table>
       </div>
       <p className="mt-3 max-w-3xl text-xs leading-5 text-muted-foreground">
-        Une boule cerclée est dans les deux grilles. L’écart, prévu moins sorti, n’est écrit que s’il n’est pas nul : rouge si la lecture était trop haute, bleu si elle était trop basse.
+        Une boule cerclée est dans les deux grilles. L’écart, prévu moins sorti, n’est écrit que s’il n’est pas nul : rouge si la lecture était trop haute, bleu si elle était trop basse. Au hasard, une grille partage en moyenne 0,5 numéro et 0,33 étoile avec le tirage.
       </p>
     </div>
   )
