@@ -2669,6 +2669,12 @@ def create_app() -> FastAPI:
         if covariates is not None and not isinstance(covariates, list):
             raise HTTPException(400, "Les covariables se cochent dans une liste.")
         weekday = payload.get("weekday")
+        from synchro.nextdata.persist import parse_persist
+
+        try:
+            persist = parse_persist(payload.get("persist"))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         draws = payload.get("draws")
         if not isinstance(draws, list) or not draws:
             try:
@@ -2688,6 +2694,7 @@ def create_app() -> FastAPI:
                 covariates=covariates,
                 with_chronos=bool(payload.get("with_chronos")),
                 estimators=_nextdata_estimators(),
+                persist=persist,
             )
         )
         return report
@@ -2719,6 +2726,12 @@ def create_app() -> FastAPI:
                 raise HTTPException(400, "Le décalage va de 1 à 10.") from None
             if shift < 1 or shift > 10:
                 raise HTTPException(400, "Le décalage va de 1 à 10.")
+        from synchro.nextdata.persist import parse_persist
+
+        try:
+            persist = parse_persist(payload.get("persist"))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         draws = payload.get("draws")
         if not isinstance(draws, list) or not draws:
             try:
@@ -2738,6 +2751,7 @@ def create_app() -> FastAPI:
                 estimators=_nextdata_estimators(),
                 shift=shift,
                 with_chronos=payload.get("with_chronos") is True,
+                persist=persist,
             )
         )
         return report

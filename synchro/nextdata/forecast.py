@@ -37,7 +37,8 @@ from synchro.nextdata.covariates import (
     past_columns,
 )
 from synchro.nextdata.empirical import public_base, recount
-from synchro.nextdata.panel import Frame, build_frame
+from synchro.nextdata.panel import Frame, build_frame, normalized_draws
+from synchro.nextdata.persist import base_rates, recent_draws, snap_grid
 from synchro.nextdata.project import rank_bands
 
 FUTURE_BACK = 4
@@ -719,6 +720,40 @@ def _reading_block(
     return block, view
 
 
+def _persist_grid(grid: dict[str, Any], frame: Frame, persist: dict[str, int] | None) -> dict[str, Any] | None:
+    """Grille Persist du prochain tirage : n−1 et n−2 sont les deux derniers tirages sortis."""
+    if not persist:
+        return None
+    snapped = snap_grid(
+        grid["numbers"],
+        grid["stars"],
+        frame.rows,
+        radius=persist["radius"],
+        limit=persist["limit"],
+        star_pool=frame.star_pool,
+    )
+    return {
+        "grid": {"numbers": snapped["numbers"], "stars": snapped["stars"]},
+        "swaps": snapped["swaps"],
+        "held": snapped["held"],
+    }
+
+
+def persist_info(
+    draws: list[dict[str, Any]],
+    frame: Frame,
+    persist: dict[str, int] | None,
+) -> dict[str, Any] | None:
+    """Réglage Persist, les deux tirages repris et la table de l’archive reçue, toutes années."""
+    if not persist:
+        return None
+    return {
+        **persist,
+        "recent": recent_draws(frame.rows),
+        "base": base_rates(normalized_draws(draws, frame.weekday)),
+    }
+
+
 def run_forecast(
     draws: list[dict[str, Any]],
     *,
@@ -730,6 +765,7 @@ def run_forecast(
     with_chronos: bool = False,
     estimators: int = 32,
     chunk: int | None = None,
+    persist: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Prochain tirage et retour, au même réglage, par tranches de pas.
 
@@ -764,17 +800,19 @@ def run_forecast(
             return {"ok": False, "error": error, **dependency_status()}
 
     history = [steps[t] for t in sorted(steps) if frame.focus_start <= t < n]
-    walked = backtest.retour_report(history)
+    walked = backtest.retour_report(history, frame=frame, persist=persist)
     walked["bands"] = backtest.band_report(history, frame.star_pool)
     modes: dict[str, Any] = {}
     views: dict[str, dict[str, dict[str, float]]] = {}
     grids: dict[str, dict[str, Any]] = {}
     for mode in ("corpus", "fenetre"):
         block, views[mode] = _reading_block(upcoming, mode, history, walked, frame.star_pool)
+        block["persist"] = _persist_grid(block["grid"], frame, persist)
         grids[mode] = block["grid"]
         cat_key = f"{mode}_catboost"
         if cat_key in upcoming["readings"]:
             block["catboost"], views[cat_key] = _reading_block(upcoming, cat_key, history, walked, frame.star_pool)
+            block["catboost"]["persist"] = _persist_grid(block["catboost"]["grid"], frame, persist)
             grids[cat_key] = block["catboost"]["grid"]
         modes[mode] = block
 
@@ -806,6 +844,7 @@ def run_forecast(
         "best_mae_sum": walked["best_mae_sum"],
         "chronos": {"used": any((modes[mode].get("chronos") or {}).get("available") for mode in modes)},
         "progress": {"ready": len(ready), "total": len(order), "complete": remaining == 0},
+        "persist": persist_info(draws, frame, persist),
     }
 
 
@@ -820,6 +859,7 @@ def run_training(
     shift: int | None = None,
     with_chronos: bool = False,
     chunk: int | None = None,
+    persist: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Banc −1…−10 : les dix derniers pas du retour, au réglage du pronostic.
 
@@ -857,8 +897,11 @@ def run_training(
         order = targets + [t for t in retour if t not in targets]
         ready, remaining = ensure_steps(frame, order, settings, parts, limit=chunk or worker_count())
     steps = backtest.assemble(frame, ready, with_chronos=with_chronos)
-    report = backtest.shift_report(frame, steps, lags=lags, chronos_requested=with_chronos)
+    report = backtest.shift_report(frame, steps, lags=lags, chronos_requested=with_chronos, persist=persist)
     catboost_error = catboost_import_error()
+    info = persist_info(draws, frame, persist)
+    if info:
+        info.pop("recent", None)
     return {
         "ok": True,
         "focus": frame.focus,
@@ -878,6 +921,7 @@ def run_training(
             "total": len(order),
             "complete": remaining == 0,
         },
+        "persist": info,
     }
 
 

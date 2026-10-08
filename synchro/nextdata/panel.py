@@ -127,6 +127,14 @@ def _normalize(draws: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return deduped
 
 
+def normalized_draws(draws: Iterable[dict[str, Any]], weekday: str | None = None) -> list[dict[str, Any]]:
+    """Tous les tirages reçus, triés, sans filtre d’année. Mardi ou vendredi seul si demandé."""
+    rows = _normalize(draws)
+    if weekday in ("mardi", "vendredi"):
+        rows = [row for row in rows if row["weekday"] == weekday]
+    return rows
+
+
 def _year_keys(anchor: int, years: Iterable[str] | None) -> tuple[list[str], set[int]]:
     requested = [key for key in YEAR_KEYS if years is None or key in set(years)]
     if not requested:

@@ -19,6 +19,7 @@ from synchro.nextdata.covariates import SHAPE_SERIES, grid_shape
 from synchro.nextdata.empirical import recount
 from synchro.nextdata.forecast import _apply_external, _clip, _rank_view, blend_mid, blend_weight
 from synchro.nextdata.panel import Frame
+from synchro.nextdata.persist import score_swaps, snap_grid
 from synchro.nextdata.project import beam, compose_ranks, stamp_grid
 from synchro.nextdata.steps import CHRONOS_SERIES, MIN_HISTORY
 
@@ -72,6 +73,26 @@ def _rmse(errors: list[float]) -> float | None:
 
 def _hits(left: list[int], right: list[int]) -> int:
     return len(set(left) & set(right))
+
+
+def persist_side(frame: Frame, t: int, reading: dict[str, Any], persist: dict[str, int]) -> dict[str, Any]:
+    """Grille Persist d’une lecture au pas t, ses échanges et, si le tirage est sorti, leur issue."""
+    grid = reading["grid"]
+    snapped = snap_grid(
+        grid["numbers"],
+        grid["stars"],
+        frame.rows[max(0, t - 2) : t],
+        radius=persist["radius"],
+        limit=persist["limit"],
+        star_pool=frame.star_pool,
+    )
+    packed = _pack(snapped["numbers"], snapped["stars"], reading["packed"].get("sum_model"))
+    swaps = snapped["swaps"]
+    if t < len(frame.rows):
+        swaps = score_swaps(swaps, frame.rows[t]["numbers"], frame.rows[t]["stars"])
+    packed["swaps"] = swaps
+    packed["held"] = snapped["held"]
+    return packed
 
 
 def retour_indices(frame: Frame, *, with_chronos: bool = False) -> list[int]:
@@ -247,8 +268,16 @@ def band_report(steps: list[dict[str, Any]], star_pool: int) -> dict[str, Any]:
     return out
 
 
-def retour_report(steps: list[dict[str, Any]]) -> dict[str, Any]:
-    """Métriques du retour sur les pas prêts du focus. Un pas sans ses deux lectures LightGBM est écarté."""
+def retour_report(
+    steps: list[dict[str, Any]],
+    *,
+    frame: Frame | None = None,
+    persist: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """Métriques du retour sur les pas prêts du focus. Un pas sans ses deux lectures LightGBM est écarté.
+
+    Avec Persist, chaque lecture a sa jumelle `<lecture>_persist`, notée sur le même tirage.
+    """
     kept: list[dict[str, Any]] = []
     for step in steps:
         if any(mode not in step["readings"] for mode in MODES):
@@ -264,11 +293,16 @@ def retour_report(steps: list[dict[str, Any]]) -> dict[str, Any]:
             if reading["arbitration"]:
                 side["arbitration"] = reading["arbitration"]
             item[key] = side
+            if persist and frame is not None:
+                item[f"{key}_persist"] = persist_side(frame, step["t"], reading, persist)
         kept.append(item)
 
     metric_keys = list(MODES)
     if any("corpus_catboost" in item for item in kept):
         metric_keys.extend(("corpus_catboost", "fenetre_catboost"))
+    metric_keys.extend(
+        [f"{key}_persist" for key in metric_keys if any(f"{key}_persist" in item for item in kept)]
+    )
     metrics = {mode: _metrics(kept, mode) for mode in metric_keys}
     metrics["persistence"] = _metrics(kept, "persistence")
     metrics["mean"] = _sum_only(kept, "mean")
@@ -354,6 +388,9 @@ def _public_step(step: dict[str, Any]) -> dict[str, Any]:
             kept[name] = None if value is None else round(float(value), 4)
         if block.get("arbitration"):
             kept["arbitration"] = block["arbitration"]
+        if "swaps" in block:
+            kept["swaps"] = block["swaps"]
+            kept["held"] = block.get("held")
         return kept
 
     published = {
@@ -367,6 +404,9 @@ def _public_step(step: dict[str, Any]) -> dict[str, Any]:
     for key in ("corpus_catboost", "fenetre_catboost"):
         if step.get(key):
             published[key] = side(step[key])
+    for key, _mode, _library in READINGS:
+        if step.get(f"{key}_persist"):
+            published[f"{key}_persist"] = side(step[f"{key}_persist"])
     return published
 
 
@@ -388,6 +428,7 @@ def shift_report(
     *,
     lags: Iterable[int] | None = None,
     chronos_requested: bool = False,
+    persist: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Dix coupures −1…−10 : les dix derniers pas du retour.
 
@@ -395,7 +436,8 @@ def shift_report(
     prévoit celui qui venait juste après. L’écart est prévu − sorti. Deux
     repères sans modèle, comme le retour de nextData : la persistance et la
     somme moyenne des tirages d’avant. Les bandes se calibrent sur les pas du
-    focus qui précèdent la coupure.
+    focus qui précèdent la coupure. Avec Persist, chaque lecture a sa jumelle
+    `<lecture>_persist`, notée sur le même tirage avec les mêmes bandes.
     """
     rows = frame.rows
     retour = [steps[t] for t in sorted(steps) if frame.focus_start <= t < len(rows)]
@@ -424,6 +466,12 @@ def shift_report(
                 side["chronos"] = reading["chronos"]
                 chronos_used = True
             readings[key] = side
+            if persist:
+                snapped = persist_side(frame, t, reading, persist)
+                twin = _shift_side(snapped, actual, view)
+                twin["swaps"] = snapped["swaps"]
+                twin["held"] = snapped["held"]
+                readings[f"{key}_persist"] = twin
         shifts.append(
             {
                 "x": int(lag),
