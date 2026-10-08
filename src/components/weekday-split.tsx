@@ -59,11 +59,14 @@ export function WeekdaySeriesLines({
   showMardi,
   showVendredi,
   yAxisId,
+  type = "linear",
 }: {
   seriesKeys: readonly string[]
   showMardi: boolean
   showVendredi: boolean
   yAxisId?: (key: string) => string | number
+  /** `stepAfter` pour une série 0 / +1 : un segment droit inventerait une pente. */
+  type?: "linear" | "step" | "stepBefore" | "stepAfter"
 }) {
   return seriesKeys.map((key) => {
     const axis = yAxisId?.(key)
@@ -73,7 +76,7 @@ export function WeekdaySeriesLines({
         <Line
           {...axisProps}
           dataKey={weekdayOverlayField("mardi", key)}
-          type="linear"
+          type={type}
           stroke={WEEKDAY_LINE_COLOR.mardi}
           strokeWidth={2.75}
           strokeDasharray={weekdayLineDash("mardi")}
@@ -88,7 +91,7 @@ export function WeekdaySeriesLines({
         <Line
           {...axisProps}
           dataKey={weekdayOverlayField("vendredi", key)}
-          type="linear"
+          type={type}
           stroke={WEEKDAY_LINE_COLOR.vendredi}
           strokeWidth={2.75}
           strokeDasharray={weekdayLineDash("vendredi")}

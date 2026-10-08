@@ -11,6 +11,7 @@ import { BouncingPanel } from "@/components/bouncing-panel"
 import { DrawChart } from "@/components/draw-chart"
 import { EvolutionAnnual } from "@/components/evolution-annual"
 import { EvolutionDelta } from "@/components/evolution-delta"
+import { EvolutionPersist } from "@/components/evolution-persist"
 import { EvolutionGains } from "@/components/evolution-gains"
 import { EvolutionHeat } from "@/components/evolution-heat"
 import { EvolutionParity } from "@/components/evolution-parity"
@@ -478,6 +479,8 @@ function EvolutionContent() {
         <EvolutionDelta draws={filtered} />
       </ChartDrawProvider>
 
+      <EvolutionPersist draws={filtered} />
+
       <ChartDrawProvider host="gains">
         <SketchBridge onSketches={setGainsSketches} />
         <EvolutionGains draws={filtered} history={archive} />
@@ -556,7 +559,7 @@ function EvolutionContent() {
 
       <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
         Chaque tirage est indépendant. Les fréquences, la SMA, les bandes de
-        Bollinger, les écarts n − n−1, le cumul pair/impair, les totaux de
+        Bollinger, les écarts n − n−1, la reprise 0 / +1, le cumul pair/impair, les totaux de
         gagnants, la longueur de report, la masse empilée et les barres annuelles
         décrivent l’archive, elles ne prédisent pas le prochain tirage.
       </p>
