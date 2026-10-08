@@ -364,6 +364,227 @@ def _triple_list(numbers: list[int]):
                 yield (a, ordered[j], c)
 
 
+_WEIGHT_FLOOR = 0.05
+_CHAIN_PRIOR = 1.0
+_LEVEL_PRIOR = 1.0
+_DELTA_PRIOR = 0.75
+_NUMBER_RANKS = ("n1", "n2", "n3", "n4", "n5")
+_NUMBER_GAPS = ("g1", "g2", "g3", "g4")
+_STAR_RANKS = ("e1", "e2")
+
+
+def _round4(value: float) -> float:
+    return round(float(value), 4)
+
+
+def _has_evolution(moments: dict[str, Any]) -> bool:
+    return any(str(key).startswith("level:") or str(key).startswith("delta:") for key in moments)
+
+
+def _previous_rank(previous: dict[str, Any] | None, name: str) -> float | None:
+    if not previous or name not in previous or previous[name] is None:
+        return None
+    return float(previous[name])
+
+
+def _mix_weights(parts: list[tuple[str, float, float, float]]) -> dict[str, float]:
+    """Poids = prior / largeur, plancher 0,05, puis renormalisés."""
+    scores = [prior / max(float(width), 1e-6) for _key, _center, width, prior in parts]
+    total = sum(scores) or 1.0
+    weights = [score / total for score in scores]
+    for _ in range(4):
+        weights = [max(_WEIGHT_FLOOR, weight) for weight in weights]
+        total = sum(weights) or 1.0
+        weights = [weight / total for weight in weights]
+    return {parts[index][0]: weights[index] for index in range(len(parts))}
+
+
+def _chain_number_bands(moments: dict[str, dict[str, float]]) -> list[tuple[float, float, float]]:
+    lo, mid, hi = _band(moments.get("n1"), 8)
+    bands = [(lo, mid, hi)]
+    for name in _NUMBER_GAPS:
+        gap_lo, gap_mid, gap_hi = _band(moments.get(name), 8)
+        lo = lo + max(1.0, gap_lo)
+        mid = mid + max(1.0, gap_mid)
+        hi = hi + max(1.0, gap_hi)
+        bands.append((lo, mid, hi))
+    return bands
+
+
+def _union_clip(
+    value: float,
+    chain_lo: float,
+    chain_hi: float,
+    level: dict[str, float] | None,
+) -> float:
+    lo, hi = chain_lo, chain_hi
+    if level:
+        level_lo, _, level_hi = _band(level, value)
+        lo = min(lo, level_lo)
+        hi = max(hi, level_hi)
+    if hi < lo:
+        lo, hi = hi, lo
+    return min(hi, max(lo, value))
+
+
+def _clip_gap(raw: float, moment: dict[str, float] | None) -> tuple[float, float, float, bool]:
+    lo, _, hi = _band(moment, max(1.0, raw))
+    lo = max(1.0, lo)
+    hi = max(lo, hi)
+    clipped = min(hi, max(lo, raw))
+    return clipped, lo, hi, abs(clipped - raw) > 1e-6
+
+
+def _rank_reading(
+    name: str,
+    chain: tuple[float, float, float],
+    moments: dict[str, dict[str, float]],
+    previous: dict[str, Any] | None,
+) -> tuple[dict[str, Any], float]:
+    chain_lo, chain_mid, chain_hi = chain
+    parts: list[tuple[str, float, float, float]] = [
+        ("chain", chain_mid, max(chain_hi - chain_lo, 1e-6), _CHAIN_PRIOR),
+    ]
+    level = moments.get(f"level:{name}")
+    level_width: float | None = None
+    if level:
+        level_lo, level_mid, level_hi = _band(level, chain_mid)
+        level_width = max(level_hi - level_lo, 1e-6)
+        parts.append(("level", level_mid, level_width, _LEVEL_PRIOR))
+    delta = moments.get(f"delta:{name}")
+    last = _previous_rank(previous, name)
+    delta_level: float | None = None
+    if delta and last is not None:
+        _, delta_mid, _ = _band(delta, 0.0)
+        delta_level = last + delta_mid
+        width = level_width if level_width is not None else max(_band(delta, 0.0)[2] - _band(delta, 0.0)[0], 1e-6)
+        parts.append(("delta", delta_level, width, _DELTA_PRIOR))
+    weights = _mix_weights(parts)
+    blend = sum(weights[key] * center for key, center, _width, _prior in parts)
+    full = {"chain": 0.0, "level": 0.0, "delta": 0.0}
+    full.update(weights)
+    reading = {
+        "rank": name,
+        "chain": _round4(chain_mid),
+        "level": None if level is None else _round4(_band(level, chain_mid)[1]),
+        "delta": None if delta_level is None else _round4(delta_level),
+        "weights": {key: _round4(value) for key, value in full.items()},
+        "blend": _round4(blend),
+        "clipped": None,
+        "grid": None,
+    }
+    return reading, blend
+
+
+def _gap_trace(name: str, raw: float, moment: dict[str, float] | None) -> tuple[dict[str, Any], float]:
+    clipped, lo, hi, hit = _clip_gap(raw, moment)
+    return (
+        {
+            "name": name,
+            "blend": _round4(raw),
+            "lo": _round4(lo),
+            "hi": _round4(hi),
+            "clipped": _round4(clipped),
+            "hit": hit,
+        },
+        clipped,
+    )
+
+
+def compose_ranks(
+    moments: dict[str, dict[str, float]],
+    previous: dict[str, Any] | None,
+) -> tuple[dict[str, dict[str, float]], dict[str, Any] | None]:
+    """Mélange chaîne, niveau et delta, puis tient les écarts dans leur bande.
+
+    Sans clés `level:` ni `delta:`, la chaîne reste telle quelle. Les médianes
+    réécrites sont `n1`, `g1`…`g4`, `e1` et `e_gap`, celles que la projection lit.
+    """
+    if not _has_evolution(moments):
+        return moments, None
+
+    number_bands = _chain_number_bands(moments)
+    number_rows: list[dict[str, Any]] = []
+    number_blend: list[float] = []
+    for index, name in enumerate(_NUMBER_RANKS):
+        reading, blend = _rank_reading(name, number_bands[index], moments, previous)
+        number_rows.append(reading)
+        number_blend.append(blend)
+
+    gap_rows: list[dict[str, Any]] = []
+    gap_values: list[float] = []
+    for index, name in enumerate(_NUMBER_GAPS):
+        row, clipped = _gap_trace(name, number_blend[index + 1] - number_blend[index], moments.get(name))
+        gap_rows.append(row)
+        gap_values.append(clipped)
+
+    chain_lo, _, chain_hi = number_bands[0]
+    held_n1 = _union_clip(number_blend[0], chain_lo, chain_hi, moments.get("level:n1"))
+    held_numbers = reconstruct(held_n1, gap_values)
+    for index, value in enumerate(held_numbers):
+        number_rows[index]["clipped"] = _round4(value)
+
+    e1_lo, e1_mid, e1_hi = _band(moments.get("e1"), 2)
+    _gap_lo, gap_mid, gap_hi = _band(moments.get("e_gap"), 3)
+    e2_mid = e1_mid + max(1.0, gap_mid)
+    # Largeur de e2 = largeur de e1 + largeur de l’écart, comme l’anneau.
+    e2_width = max((e1_hi - e1_lo) + max(0.0, gap_hi - _gap_lo), 1e-6)
+    e2_half = e2_width / 2.0
+    star_bands = [
+        (e1_lo, e1_mid, e1_hi),
+        (e2_mid - e2_half, e2_mid, e2_mid + e2_half),
+    ]
+    star_rows: list[dict[str, Any]] = []
+    star_blend: list[float] = []
+    for index, name in enumerate(_STAR_RANKS):
+        reading, blend = _rank_reading(name, star_bands[index], moments, previous)
+        star_rows.append(reading)
+        star_blend.append(blend)
+    star_gap, star_gap_value = _gap_trace("e_gap", star_blend[1] - star_blend[0], moments.get("e_gap"))
+    held_e1 = _union_clip(star_blend[0], e1_lo, e1_hi, moments.get("level:e1"))
+    held_stars = [held_e1, held_e1 + star_gap_value]
+    for index, value in enumerate(held_stars):
+        star_rows[index]["clipped"] = _round4(value)
+
+    out = dict(moments)
+    out["n1"] = dict(moments.get("n1") or {"lo": held_n1, "mid": held_n1, "hi": held_n1})
+    out["n1"]["mid"] = held_numbers[0]
+    for index, name in enumerate(_NUMBER_GAPS):
+        current = moments.get(name) or {"lo": gap_values[index], "mid": gap_values[index], "hi": gap_values[index]}
+        out[name] = dict(current)
+        out[name]["mid"] = gap_values[index]
+    out["e1"] = dict(moments.get("e1") or {"lo": held_e1, "mid": held_e1, "hi": held_e1})
+    out["e1"]["mid"] = held_stars[0]
+    current_gap = moments.get("e_gap") or {"lo": star_gap_value, "mid": star_gap_value, "hi": star_gap_value}
+    out["e_gap"] = dict(current_gap)
+    out["e_gap"]["mid"] = star_gap_value
+
+    _, sum_mid, _ = _band(moments.get("sum"), float(sum(held_numbers)))
+    _, star_sum_mid, _ = _band(moments.get("star_sum"), float(sum(held_stars)))
+    trace = {
+        "numbers": number_rows,
+        "gaps": gap_rows,
+        "stars": star_rows,
+        "star_gap": star_gap,
+        "sum_target": _round4(sum_mid),
+        "sum_grid": None,
+        "star_sum_target": _round4(star_sum_mid),
+        "star_sum_grid": None,
+    }
+    return out, trace
+
+
+def stamp_grid(trace: dict[str, Any], numbers: list[int], stars: list[int]) -> dict[str, Any]:
+    """Pose la grille retenue sur la trace, après le nudge et le voisin."""
+    for index, row in enumerate(trace["numbers"]):
+        row["grid"] = int(numbers[index]) if index < len(numbers) else None
+    for index, row in enumerate(trace["stars"]):
+        row["grid"] = int(stars[index]) if index < len(stars) else None
+    trace["sum_grid"] = int(sum(int(number) for number in numbers))
+    trace["star_sum_grid"] = int(sum(int(star) for star in stars))
+    return trace
+
+
 def beam(
     moments: dict[str, dict[str, float]],
     base: dict[str, Any],

@@ -16,6 +16,7 @@ def test_nextdata_training_table_node() -> None:
             "--test",
             str(ROOT / "tests" / "test_nextdata_help.ts"),
             str(ROOT / "tests" / "test_nextdata_compare.ts"),
+            str(ROOT / "tests" / "test_nextdata_rank_path.ts"),
         ],
         cwd=ROOT,
         capture_output=True,

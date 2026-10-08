@@ -4,6 +4,8 @@ Darts `LightGBMModel`, quand le paquet est là, remplace la médiane temporelle
 du prochain pas. La chaîne n1 → écarts reste en LightGBM direct : le
 conditionnement est dans le même tirage, ce que les lags ne portent pas.
 Chronos, s’il est installé, ne mélange que somme, somme des étoiles et n1.
+Les niveaux n1…n5, e1, e2 et leurs deltas sont prévus à part, puis arbitrés
+avec cette chaîne avant la grille.
 """
 
 from __future__ import annotations
@@ -35,7 +37,7 @@ from synchro.nextdata.covariates import (
 )
 from synchro.nextdata.empirical import public_base, recount
 from synchro.nextdata.panel import Frame, build_frame
-from synchro.nextdata.project import beam, reconstruct
+from synchro.nextdata.project import beam, compose_ranks, reconstruct, stamp_grid
 
 FUTURE_BACK = 4
 FUTURE_FWD = 1
@@ -54,7 +56,24 @@ CLAMPS: dict[str, tuple[float, float]] = {
     "consecutive": (0.0, 4.0),
     "star_spread": (1.0, 11.0),
     "star_consecutive": (0.0, 1.0),
+    "level:n1": (1.0, 46.0),
+    "level:n2": (2.0, 47.0),
+    "level:n3": (3.0, 48.0),
+    "level:n4": (4.0, 49.0),
+    "level:n5": (5.0, 50.0),
+    "level:e1": (1.0, 11.0),
+    "level:e2": (2.0, 12.0),
+    "delta:n1": (-45.0, 45.0),
+    "delta:n2": (-45.0, 45.0),
+    "delta:n3": (-45.0, 45.0),
+    "delta:n4": (-45.0, 45.0),
+    "delta:n5": (-45.0, 45.0),
+    "delta:e1": (-11.0, 11.0),
+    "delta:e2": (-11.0, 11.0),
 }
+
+# Niveaux et deltas : mêmes lags que la somme, sans `same:` ni entrée dans TARGETS.
+RANK_LEVELS: tuple[str, ...] = ("n1", "n2", "n3", "n4", "n5", "e1", "e2")
 
 
 def _installed(module: str) -> bool:
@@ -440,6 +459,38 @@ def predict_moments(
         if name == "n1" and median_model is not None:
             importance_models.append((median_model, chain_names))
 
+    for name in RANK_LEVELS:
+        y = np.asarray([float(rows[t][name]) for t in used], dtype=float)
+        found = {}
+        for alpha in alphas:
+            pred, _model = _fit_one(
+                x_time,
+                y,
+                weights,
+                x_next_arr,
+                alpha=alpha,
+                estimators=estimators,
+                library=library,
+            )
+            found[alpha] = pred
+        moments[f"level:{name}"] = _moments_from_alphas(found, f"level:{name}")
+
+    for name in RANK_LEVELS:
+        y = np.asarray([float(rows[t][f"d_{name}"]) for t in used], dtype=float)
+        pred, _model = _fit_one(
+            x_time,
+            y,
+            weights,
+            x_next_arr,
+            alpha=0.5,
+            estimators=estimators,
+            library=library,
+        )
+        mid = _clip(f"delta:{name}", pred)
+        level = moments[f"level:{name}"]
+        half = max(0.0, (float(level["hi"]) - float(level["lo"])) / 2.0)
+        moments[f"delta:{name}"] = {"lo": mid - half, "mid": mid, "hi": mid + half}
+
     return moments, _importance(importance_models), library
 
 
@@ -748,7 +799,8 @@ def run_forecast(
 
     chart_grids: dict[str, dict[str, Any]] = {}
     for mode in ("corpus", "fenetre"):
-        moments = moment_book[mode]
+        moments, trace = compose_ranks(moment_book[mode], frame.rows[-1])
+        moment_book[mode] = moments
         ranked = beam(moments, base, star_pool=frame.star_pool)
         if not ranked:
             return {"ok": False, "error": "Aucune grille entière n’a pu être projetée.", **dependency_status()}
@@ -764,11 +816,14 @@ def run_forecast(
                 "mae_sum": mae_sum,
                 "blend_weight": chronos_info.get(mode, {}).get("weight", 1.0),
                 "chronos": chronos_info.get(mode),
+                "arbitration": None if trace is None else stamp_grid(trace, best["numbers"], best["stars"]),
             }
         )
         cat_block = modes[mode].get("catboost")
         if cat_block and f"{mode}_catboost" in moment_book:
-            cat_ranked = beam(moment_book[f"{mode}_catboost"], base, star_pool=frame.star_pool)
+            cat_moments, cat_trace = compose_ranks(moment_book[f"{mode}_catboost"], frame.rows[-1])
+            moment_book[f"{mode}_catboost"] = cat_moments
+            cat_ranked = beam(cat_moments, base, star_pool=frame.star_pool)
             if not cat_ranked:
                 return {"ok": False, "error": "CatBoost n’a pas produit de grille entière.", **dependency_status()}
             cat_best = cat_ranked[0]
@@ -785,6 +840,9 @@ def run_forecast(
                     "alternates": cat_ranked[1:],
                     "quantiles": _rank_view(moment_book[f"{mode}_catboost"]),
                     "mae_sum": (cat_metrics.get("mae") or {}).get("sum"),
+                    "arbitration": None
+                    if cat_trace is None
+                    else stamp_grid(cat_trace, cat_best["numbers"], cat_best["stars"]),
                 }
             )
 

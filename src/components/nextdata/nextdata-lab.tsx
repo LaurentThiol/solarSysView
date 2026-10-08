@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
+import { RankPath } from "@/components/nextdata/rank-path"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import { DRAWS, type Draw } from "@/lib/draws"
 import { NEXTDATA_HELP } from "@/lib/nextdata/help"
+import type { Arbitration } from "@/lib/nextdata/rank-path"
 import { shapeCaption } from "@/lib/nextdata/shape"
 import { defaultStoredSpec, writeStoredSpec } from "@/lib/jeux"
 import { useLabTab } from "@/lib/use-lab-tab"
@@ -71,6 +73,7 @@ type ModePayload = {
   engine: string
   importance: { name: string; gain: number; family: string }[]
   chronos?: { available?: boolean; weight?: number; holdout_mae_chronos?: number; holdout_mae_lgb?: number } | null
+  arbitration?: Arbitration | null
   catboost?: ModePayload | null
 }
 type StepSide = {
@@ -295,6 +298,11 @@ export function NextDataLab() {
     const block = report?.modes[primary]
     const grid = library === "catboost" && block?.catboost ? block.catboost.grid : block?.grid
     return new Set(grid?.stars ?? [])
+  }, [report, primary, library])
+  const pathTrace = useMemo(() => {
+    const block = report?.modes[primary]
+    if (library === "catboost" && block?.catboost) return block.catboost.arbitration
+    return block?.arbitration
   }, [report, primary, library])
 
   function toggleYear(year: string) {
@@ -554,6 +562,13 @@ export function NextDataLab() {
                     )
                   })}
                 </div>
+                {pathTrace ? (
+                  <Card>
+                    <CardContent>
+                      <RankPath help={NEXTDATA_HELP.chemin} trace={pathTrace} />
+                    </CardContent>
+                  </Card>
+                ) : null}
                 {((library === "catboost" && report.modes[primary].catboost
                   ? report.modes[primary].catboost.alternates
                   : report.modes[primary].alternates) ?? []

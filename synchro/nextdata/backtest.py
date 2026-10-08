@@ -16,7 +16,7 @@ from synchro.nextdata.forecast import (
     predict_moments,
 )
 from synchro.nextdata.panel import Frame
-from synchro.nextdata.project import beam
+from synchro.nextdata.project import beam, compose_ranks, stamp_grid
 
 FIELDS = ("sum", "n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2", *SHAPE_SERIES)
 MODES = ("corpus", "fenetre")
@@ -105,13 +105,16 @@ def walk_forward(
                     if library == "lightgbm":
                         failed = True
                     break
-                ranked = beam(moments, base, star_pool=frame.star_pool, radius=2)
+                composed, trace = compose_ranks(moments, prefix[-1])
+                ranked = beam(composed, base, star_pool=frame.star_pool, radius=2)
                 if not ranked:
                     if library == "lightgbm":
                         failed = True
                     break
                 packed = _pack(ranked[0]["numbers"], ranked[0]["stars"], moments["sum"]["mid"])
                 packed["sum_model"] = round(float(moments["sum"]["mid"]), 4)
+                if trace is not None:
+                    packed["arbitration"] = stamp_grid(trace, ranked[0]["numbers"], ranked[0]["stars"])
                 step[key] = packed
             if failed:
                 break
@@ -205,6 +208,8 @@ def _public_step(step: dict[str, Any]) -> dict[str, Any]:
         for name in ("n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2", *SHAPE_SERIES):
             value = block.get(name)
             kept[name] = None if value is None else round(float(value), 4)
+        if block.get("arbitration"):
+            kept["arbitration"] = block["arbitration"]
         return kept
 
     published = {
@@ -364,11 +369,14 @@ def shift_report(
                         star_pool=frame.star_pool,
                     )
                     chronos_used = chronos_used or bool(chronos_note.get("available"))
-                ranked = beam(moments, base, star_pool=frame.star_pool, radius=1)
+                composed, trace = compose_ranks(moments, prefix[-1])
+                ranked = beam(composed, base, star_pool=frame.star_pool, radius=1)
                 if not ranked:
                     continue
                 packed = _pack(ranked[0]["numbers"], ranked[0]["stars"], moments["sum"]["mid"])
-                side = _shift_side(packed, actual, _rank_view(moments))
+                side = _shift_side(packed, actual, _rank_view(composed))
+                if trace is not None:
+                    side["arbitration"] = stamp_grid(trace, ranked[0]["numbers"], ranked[0]["stars"])
                 if chronos_note and chronos_note.get("available"):
                     side["chronos"] = chronos_note
                 readings[key] = side

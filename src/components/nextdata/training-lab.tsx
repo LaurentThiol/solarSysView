@@ -4,12 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
+import { RankPath } from "@/components/nextdata/rank-path"
 import { TrainingCompare } from "@/components/nextdata/training-compare"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { DRAWS, type Draw } from "@/lib/draws"
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "@/lib/nextdata/help"
+import type { Arbitration } from "@/lib/nextdata/rank-path"
 import { deltaNumbers, summarizeShifts, TRAINING_SHIFT_TOTAL, trainingPercent } from "@/lib/nextdata/training-progress"
 import { cn } from "@/lib/utils"
 
@@ -64,6 +66,7 @@ type Side = {
   in_band: Record<string, boolean | null>
   hits_numbers: number | null
   hits_stars: number | null
+  arbitration?: Arbitration | null
 }
 
 type Shift = {
@@ -242,6 +245,7 @@ export function TrainingLab() {
 
   const summary = report?.summary ?? {}
   const persistenceMae = summary.persistence?.mae_sum
+  const pathTrace = report?.shifts?.find((shift) => shift.x === 1)?.readings[reading]?.arbitration
 
   return (
     <div className="flex min-w-0 flex-col gap-6" data-nextdata-training>
@@ -388,6 +392,14 @@ export function TrainingLab() {
               )
             })}
           </div>
+
+          {pathTrace ? (
+            <Card>
+              <CardContent>
+                <RankPath help={NEXTDATA_HELP.chemin} trace={pathTrace} />
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Card>
             <CardHeader>

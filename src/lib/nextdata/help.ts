@@ -174,6 +174,11 @@ export const NEXTDATA_HELP = {
     title: "Retour arrière",
     body: "Pour chaque tirage du focus, les modèles ne voient que les tirages d’avant. On compare ensuite au tirage qui est sorti. La persistance rejoue le tirage précédent. La moyenne reprend la somme moyenne d’avant.",
   },
+  chemin: {
+    title: "Comment n1…n5 et e1, e2 sont obtenus",
+    wide: true,
+    body: "Trois lectures par rang. La chaîne part de n1 et ajoute les écarts g1 à g4 ; pour les étoiles, e1 puis l’écart e2 − e1. Le niveau est le quantile prévu pour ce rang, seul. Le delta ajoute au dernier rang sorti le pas n − n−1. Le barreau donne le poids : l’inverse de la largeur de bande, un peu moins pour le delta. Un écart du mélange qui sort de la bande 10–90 est ramené au bord, puis la somme rapproche la grille. La boule est le voisin retenu.",
+  },
   grille: {
     title: "Grille 5+2",
     wide: true,

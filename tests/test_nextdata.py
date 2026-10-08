@@ -20,7 +20,7 @@ from synchro.nextdata.forecast import (
     run_forecast,
 )
 from synchro.nextdata.panel import build_frame
-from synchro.nextdata.project import beam, project_numbers
+from synchro.nextdata.project import beam, compose_ranks, project_numbers
 
 
 def _draws(count: int, start: date = date(2024, 1, 2), seed: int = 0) -> list[dict]:
@@ -148,6 +148,79 @@ def test_projection_matches_spread_without_moving_the_sum() -> None:
     assert sum(after) == sum(before)
     assert after == sorted(after)
     assert len(set(after)) == 5
+
+
+def test_compose_leaves_the_chain_without_evolution_models() -> None:
+    moments = {
+        "n1": {"lo": 4, "mid": 7, "hi": 11},
+        "g1": {"lo": 3, "mid": 6, "hi": 10},
+        "g2": {"lo": 4, "mid": 8, "hi": 12},
+        "g3": {"lo": 3, "mid": 7, "hi": 11},
+        "g4": {"lo": 5, "mid": 9, "hi": 14},
+        "sum": {"lo": 90, "mid": 110, "hi": 130},
+        "e1": {"lo": 1, "mid": 3, "hi": 5},
+        "e_gap": {"lo": 1, "mid": 4, "hi": 6},
+    }
+    out, trace = compose_ranks(
+        moments,
+        {"n1": 5, "n2": 11, "n3": 19, "n4": 26, "n5": 35, "e1": 2, "e2": 6},
+    )
+    assert trace is None
+    assert out is moments
+    assert out["n1"]["mid"] == 7
+    assert out["g1"]["mid"] == 6
+
+
+def test_compose_clips_a_gap_and_keeps_ranks_increasing() -> None:
+    def tight(mid: float) -> dict[str, float]:
+        return {"lo": mid - 0.1, "mid": mid, "hi": mid + 0.1}
+
+    moments = {
+        "n1": {"lo": 1, "mid": 10, "hi": 40},
+        "g1": {"lo": 1, "mid": 5, "hi": 8},
+        "g2": {"lo": 1, "mid": 5, "hi": 8},
+        "g3": {"lo": 1, "mid": 5, "hi": 8},
+        "g4": {"lo": 1, "mid": 5, "hi": 8},
+        "sum": {"lo": 80, "mid": 100, "hi": 120},
+        "star_sum": {"lo": 4, "mid": 7, "hi": 12},
+        "e1": {"lo": 1, "mid": 2, "hi": 6},
+        "e_gap": {"lo": 1, "mid": 3, "hi": 4},
+        "level:n1": tight(10),
+        "level:n2": tight(30),
+        "level:n3": tight(36),
+        "level:n4": tight(42),
+        "level:n5": tight(48),
+        "level:e1": tight(2),
+        "level:e2": tight(9),
+        "delta:n1": {"lo": -1, "mid": 0, "hi": 1},
+        "delta:n2": {"lo": -1, "mid": 0, "hi": 1},
+        "delta:n3": {"lo": -1, "mid": 0, "hi": 1},
+        "delta:n4": {"lo": -1, "mid": 0, "hi": 1},
+        "delta:n5": {"lo": -1, "mid": 0, "hi": 1},
+        "delta:e1": {"lo": -1, "mid": 0, "hi": 1},
+        "delta:e2": {"lo": -1, "mid": 0, "hi": 1},
+    }
+    previous = {"n1": 10, "n2": 30, "n3": 36, "n4": 42, "n5": 48, "e1": 2, "e2": 9}
+    out, trace = compose_ranks(moments, previous)
+    assert moments["n1"]["mid"] == 10
+    assert moments["g1"]["mid"] == 5
+    assert trace is not None
+    assert [row["rank"] for row in trace["numbers"]] == ["n1", "n2", "n3", "n4", "n5"]
+    assert [row["name"] for row in trace["gaps"]] == ["g1", "g2", "g3", "g4"]
+    assert [row["rank"] for row in trace["stars"]] == ["e1", "e2"]
+    assert trace["star_gap"]["name"] == "e_gap"
+    assert trace["gaps"][0]["hit"] is True
+    assert trace["gaps"][0]["clipped"] <= 8
+    held = [row["clipped"] for row in trace["numbers"]]
+    assert held == sorted(held)
+    assert all(held[index + 1] - held[index] >= 1 for index in range(4))
+    assert abs(out["g1"]["mid"] - trace["gaps"][0]["clipped"]) < 1e-6
+    assert abs(out["n1"]["mid"] - trace["numbers"][0]["clipped"]) < 1e-6
+    weights = trace["numbers"][1]["weights"]
+    assert weights["level"] > weights["chain"]
+    assert weights["chain"] >= 0.04
+    assert abs(sum(weights.values()) - 1) < 0.02
+    assert trace["sum_target"] == 100
 
 
 def test_score_follows_predicted_spread_and_consecutive() -> None:
@@ -344,6 +417,11 @@ def test_shift_hides_the_draw_it_scores(monkeypatch) -> None:
     assert all(str(item["last"]) < str(item["target"]) for item in seen)
     assert any(item["n"] == len(frame.rows) - 1 for item in seen)
     errors = report["shifts"][0]["readings"]["corpus"]["errors"]
+    shift_path = report["shifts"][0]["readings"]["corpus"]["arbitration"]
+    assert [row["rank"] for row in shift_path["numbers"]] == ["n1", "n2", "n3", "n4", "n5"]
+    assert [row["name"] for row in shift_path["gaps"]] == ["g1", "g2", "g3", "g4"]
+    assert shift_path["stars"][0]["rank"] == "e1"
+    assert shift_path["stars"][1]["rank"] == "e2"
     assert isinstance(errors["sum"], float)
     assert isinstance(errors["n1"], float)
     assert isinstance(errors["spread"], float)
@@ -494,6 +572,13 @@ def test_two_modes_forecast_real_draws() -> None:
     assert "sum" in report["backtest"]["metrics"]["corpus"]["mae"]
     assert report["backtest"]["metrics"]["fenetre"]["mae"]["sum"] is not None
     assert report["chart"][-1]["kind"] == "forecast"
+    arbitration = report["modes"]["corpus"]["arbitration"]
+    assert [row["rank"] for row in arbitration["numbers"]] == ["n1", "n2", "n3", "n4", "n5"]
+    assert [row["name"] for row in arbitration["gaps"]] == ["g1", "g2", "g3", "g4"]
+    assert [row["rank"] for row in arbitration["stars"]] == ["e1", "e2"]
+    assert arbitration["star_gap"]["name"] == "e_gap"
+    assert arbitration["sum_grid"] == sum(report["modes"]["corpus"]["grid"]["numbers"])
+    assert report["backtest"]["rows"][0]["corpus"]["arbitration"]["numbers"]
     assert "spread" in report["modes"]["corpus"]["quantiles"]
     assert "consecutive" in report["modes"]["corpus"]["quantiles"]
     assert "star_spread" in report["modes"]["corpus"]["quantiles"]
