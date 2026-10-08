@@ -13,6 +13,8 @@ import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import { DRAWS, type Draw } from "@/lib/draws"
 import { NEXTDATA_HELP } from "@/lib/nextdata/help"
 import type { Arbitration } from "@/lib/nextdata/rank-path"
+import { lowestSumMae, RETOUR_READINGS, retourLabel } from "@/lib/nextdata/retour"
+import { seriesRows, type SeriesRow } from "@/lib/nextdata/series"
 import { shapeCaption } from "@/lib/nextdata/shape"
 import { defaultStoredSpec, writeStoredSpec } from "@/lib/jeux"
 import { useLabTab } from "@/lib/use-lab-tab"
@@ -177,38 +179,11 @@ function SeriesChart({
 }: {
   title: string
   dataKey: string
-  rows: Record<string, string | number | null>[]
+  rows: SeriesRow[]
   delta: boolean
   primary: "corpus" | "fenetre"
 }) {
-  const keys = [
-    dataKey,
-    `${dataKey}_corpus`,
-    `${dataKey}_fenetre`,
-    `${dataKey}_corpus_catboost`,
-    `${dataKey}_fenetre_catboost`,
-  ]
-  const data = rows.map((row, index) => {
-    const next = { ...row }
-    if (!delta) return next
-    const previous = rows[index - 1]
-    for (const key of keys) {
-      const current = Number(row[key])
-      const prior = Number(previous?.[key])
-      next[key] = Number.isFinite(current) && Number.isFinite(prior) ? Math.round((current - prior) * 100) / 100 : null
-    }
-    return next
-  })
-  if (data.length >= 2) {
-    const last = data[data.length - 1]
-    const prev = data[data.length - 2]
-    if (last?.kind === "forecast") {
-      const lo = `${dataKey}_${primary}_lo`
-      const hi = `${dataKey}_${primary}_hi`
-      prev[lo] = prev[dataKey]
-      prev[hi] = prev[dataKey]
-    }
-  }
+  const data = seriesRows(rows, dataKey, primary, delta)
   const loKey = `${dataKey}_${primary}_lo`
   const hiKey = `${dataKey}_${primary}_hi`
   return (
@@ -376,6 +351,8 @@ export function NextDataLab() {
   }
 
   const maxCount = Math.max(1, ...(report?.base.numbers.map((item) => item.count) ?? [1]))
+  const lowest = report ? lowestSumMae(report.backtest.metrics) : null
+  const shown = library === "catboost" && report?.modes[primary].catboost ? `${primary}_catboost` : primary
 
   return (
     <div className="flex min-w-0 flex-col gap-6" data-nextdata>
@@ -514,7 +491,11 @@ export function NextDataLab() {
                 <p className="text-sm text-muted-foreground">
                   Prochain tirage {report.next_date}. Focus utilisé : {report.focus}
                   {report.focus !== report.focus_requested ? ` (demandé ${report.focus_requested})` : ""}. Années présentes : {report.years_present.join(", ") || "—"}.
-                  {report.best_mae_sum === primary ? " Ce mode a la plus petite erreur de somme sur le retour." : ` La plus petite erreur de somme est ${MODE_LABEL[report.best_mae_sum]}.`}
+                  {lowest == null
+                    ? ""
+                    : lowest === shown
+                      ? " Cette lecture a la plus petite erreur de somme sur le retour."
+                      : ` Sur le retour, la plus petite erreur de somme revient à « ${retourLabel(lowest)} ».`}
                 </p>
                 <div className="grid gap-4 md:grid-cols-2">
                   {(["corpus", "fenetre"] as const).map((mode) => {
@@ -702,19 +683,10 @@ export function NextDataLab() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(
-                        [
-                          ["corpus", "LightGBM · trois ans"],
-                          ["fenetre", "LightGBM · fenêtre seule"],
-                          ["corpus_catboost", "CatBoost · trois ans"],
-                          ["fenetre_catboost", "CatBoost · fenêtre seule"],
-                          ["persistence", "Persistance"],
-                          ["mean", "Moyenne"],
-                        ] as const
-                      ).map(([key, label]) => {
+                      {RETOUR_READINGS.map(({ id: key, label }) => {
                         const block = report.backtest.metrics[key]
                         if (!block) return null
-                        const best = report.backtest.best_mae_sum === key
+                        const best = lowest === key
                         return (
                           <tr key={key} className={cn(best && "bg-primary/5")}>
                             <td className="py-1.5 pr-3">{label}{best ? " · plus basse erreur" : ""}</td>

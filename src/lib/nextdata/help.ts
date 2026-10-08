@@ -58,7 +58,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Erreur de somme",
-        text: "Le mode au MAE le plus bas est signalé. L’interrupteur reste votre choix : une petite erreur de somme ne désigne pas la grille à jouer.",
+        text: "La lecture au MAE le plus bas est signalée, persistance et moyenne comprises : si la moyenne des sommes fait mieux, c’est elle qui est nommée. L’interrupteur reste votre choix : une petite erreur de somme ne désigne pas la grille à jouer.",
       },
     ],
   },
@@ -113,7 +113,7 @@ export const NEXTDATA_HELP = {
   },
   delta: {
     title: "Niveaux ou DeltaEvol",
-    body: "Niveaux : la valeur du tirage, somme ou rang. DeltaEvol : l’écart avec le tirage d’avant, la même lecture que dans Évolution. Le bouton ne relance pas le modèle, il change les courbes.",
+    body: "Niveaux : la valeur du tirage, somme ou rang. DeltaEvol : l’écart avec le tirage d’avant, la même lecture que dans Évolution. La bande du prochain tirage se lit alors contre le dernier tirage sorti. Le bouton ne relance pas le modèle, il change les courbes.",
   },
   covariates: {
     title: "Covariables",
@@ -208,7 +208,7 @@ export const NEXTDATA_HELP = {
   },
   courbes: {
     title: "Courbes du focus",
-    body: "Trait plein : ce qui est sorti. Trait long : trois ans. Trait court : fenêtre seule. Le fin trait du dernier pas est la bande du mode choisi. DeltaEvol remplace chaque niveau par l’écart au tirage d’avant. Étendue et consécutifs, numéros puis étoiles, suivent le même dessin que la page Évolution.",
+    body: "Trait plein : ce qui est sorti. Trait long : trois ans. Trait court : fenêtre seule. Le fin trait du dernier pas est la bande du mode choisi. DeltaEvol remplace chaque niveau par l’écart au tirage d’avant, et la bande par son écart au dernier tirage sorti. Étendue et consécutifs, numéros puis étoiles, suivent le même dessin que la page Évolution.",
   },
   baseIntro: {
     title: "Effectifs du focus",
@@ -225,7 +225,7 @@ export const NEXTDATA_HELP = {
   metriques: {
     title: "Lectures du retour",
     wide: true,
-    body: "Chaque ligne note la même fenêtre de focus. La plus basse erreur de somme est surlignée. Elle n’impose pas l’interrupteur.",
+    body: "Chaque ligne note la même fenêtre de focus. La plus basse erreur de somme est surlignée, persistance et moyenne comprises. Elle n’impose pas l’interrupteur.",
     items: [
       {
         label: "MAE",
@@ -237,11 +237,11 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Numéros communs",
-        text: "Combien des cinq numéros prévus figuraient dans le tirage, en moyenne entre 0 et 5.",
+        text: "Combien des cinq numéros prévus figuraient dans le tirage, en moyenne entre 0 et 5. Une grille prise au hasard en partage 0,5.",
       },
       {
         label: "Étoiles communes",
-        text: "Même compte pour les deux étoiles, entre 0 et 2.",
+        text: "Même compte pour les deux étoiles, entre 0 et 2. Au hasard : 0,33.",
       },
       {
         label: "Persistance",
