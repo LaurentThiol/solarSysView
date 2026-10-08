@@ -934,28 +934,36 @@ def _blend_chronos(
     moment_book: dict[str, dict[str, dict[str, float]]],
     walked: dict[str, Any],
 ) -> dict[str, Any]:
-    """Un appel Chronos par mode, poids fixé par le dernier tirage du focus."""
+    """Chronos prévoit le prochain tirage, son poids se règle sur le dernier tirage du focus.
+
+    Deux lectures par mode : sans le dernier tirage, Chronos est noté contre
+    le retour LightGBM du même tirage ; avec lui, il donne la valeur mélangée.
+    """
     info: dict[str, Any] = {"used": False}
     if len(frame.rows) < 12:
         return info
     actual = frame.rows[-1]
     prefix = frame.rows[:-1]
+    held = next((step for step in walked["rows"] if step["date"] == actual["date"]), None)
     for mode in ("corpus", "fenetre"):
         if mode == "fenetre":
             window = prefix[-frame.focus :]
+            ahead = frame.rows[-frame.focus :]
         else:
             window = prefix
+            ahead = frame.rows
+        holdout = chronos_point([float(row["sum"]) for row in window])
         points = {
-            "sum": chronos_point([float(row["sum"]) for row in window]),
-            "star_sum": chronos_point([float(row["star_sum"]) for row in window]),
-            "n1": chronos_point([float(row["n1"]) for row in window]),
+            "sum": chronos_point([float(row["sum"]) for row in ahead]),
+            "star_sum": chronos_point([float(row["star_sum"]) for row in ahead]),
+            "n1": chronos_point([float(row["n1"]) for row in ahead]),
         }
-        if points["sum"] is None:
+        if holdout is None or points["sum"] is None or held is None:
             info[mode] = {"weight": 1.0, "available": False}
             continue
         info["used"] = True
-        lgb_mae = abs(float(walked["rows"][-1][mode]["sum"]) - float(actual["sum"])) if walked["rows"] else 1.0
-        chrono_mae = abs(float(points["sum"]) - float(actual["sum"]))
+        lgb_mae = abs(float(held[mode]["sum"]) - float(actual["sum"]))
+        chrono_mae = abs(float(holdout) - float(actual["sum"]))
         weight = blend_weight(lgb_mae, chrono_mae)
         moments = moment_book[mode]
         for name in ("sum", "star_sum", "n1"):

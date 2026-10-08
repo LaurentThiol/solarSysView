@@ -530,6 +530,73 @@ def test_chronos_blends_lightgbm_and_leaves_catboost(monkeypatch) -> None:
     assert calls.count("catboost") == 2
 
 
+def _flat_moments(rows, horizon, **kwargs):
+    del rows, horizon
+    bands = {
+        "sum": _band(30),
+        "parity": _band(2),
+        "star_sum": _band(6),
+        "n1": _band(5),
+        "g1": _band(6),
+        "g2": _band(6),
+        "g3": _band(6),
+        "g4": _band(6),
+        "e1": _band(2),
+        "e_gap": _band(3),
+    }
+    return bands, [], kwargs.get("library", "lightgbm")
+
+
+def test_shift_chronos_blends_the_forecast_of_the_scored_draw(monkeypatch) -> None:
+    """Chronos rejoue son dernier point : sa prévision du tirage noté est le tirage juste avant."""
+    from synchro.nextdata.backtest import _blend_shift_chronos
+
+    frame = build_frame(_draws(40, seed=12), focus=24)
+    prefix = frame.rows[:-1]
+    assert prefix[-1]["sum"] != prefix[-2]["sum"]
+    monkeypatch.setattr("synchro.nextdata.backtest.predict_moments", _flat_moments)
+    monkeypatch.setattr("synchro.nextdata.backtest.chronos_point", lambda values: values[-1])
+    monkeypatch.setattr("synchro.nextdata.backtest.blend_weight", lambda lgb, chronos: 0.0)
+    moments = {"sum": _band(120), "star_sum": _band(10), "n1": _band(9)}
+    note = _blend_shift_chronos(
+        moments,
+        prefix,
+        frame.rows[-1],
+        mode="corpus",
+        focus=24,
+        families=["forme"],
+        estimators=2,
+        star_pool=12,
+    )
+    assert note["available"] is True
+    assert moments["sum"]["mid"] == prefix[-1]["sum"]
+    assert moments["n1"]["mid"] == prefix[-1]["n1"]
+    assert note["holdout_mae_chronos"] == round(abs(prefix[-2]["sum"] - prefix[-1]["sum"]), 4)
+
+
+def test_forecast_chronos_blends_the_next_draw(monkeypatch) -> None:
+    """Même Chronos : la valeur mélangée au prochain tirage est le dernier tirage connu."""
+    from synchro.nextdata import forecast as forecast_mod
+
+    frame = build_frame(_draws(40, seed=13), focus=24)
+    assert frame.rows[-1]["sum"] != frame.rows[-2]["sum"]
+    monkeypatch.setattr(forecast_mod, "chronos_point", lambda values: values[-1])
+    monkeypatch.setattr(forecast_mod, "blend_weight", lambda lgb, chronos: 0.0)
+
+    def book() -> dict:
+        return {mode: {"sum": _band(120), "star_sum": _band(10), "n1": _band(9)} for mode in ("corpus", "fenetre")}
+
+    walked = {"rows": [{"date": frame.rows[-1]["date"], "corpus": {"sum": 118.0}, "fenetre": {"sum": 131.0}}]}
+    moments = book()
+    info = forecast_mod._blend_chronos(frame, moments, walked)
+    assert info["used"] is True
+    for mode in ("corpus", "fenetre"):
+        assert moments[mode]["sum"]["mid"] == frame.rows[-1]["sum"]
+        assert info[mode]["holdout_mae_chronos"] == round(abs(frame.rows[-2]["sum"] - frame.rows[-1]["sum"]), 4)
+    unscored = forecast_mod._blend_chronos(frame, book(), {"rows": []})
+    assert unscored["used"] is False
+
+
 def test_training_forwards_chronos_flag(monkeypatch) -> None:
     captured: dict[str, bool] = {}
 

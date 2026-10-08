@@ -253,7 +253,7 @@ def _blend_shift_chronos(
     estimators: int,
     star_pool: int,
 ) -> dict[str, Any]:
-    """Même mélange que le pronostic : Chronos du dernier tirage connu, poids sur son écart.
+    """Même mélange que le pronostic : Chronos prévoit le tirage noté, son poids se règle sur celui d’avant.
 
     CatBoost n’est pas appelé ici. Le tirage noté ne sert pas à choisir le poids.
     """
@@ -265,11 +265,13 @@ def _blend_shift_chronos(
     window = context[-focus:] if mode == "fenetre" else context
     if len(window) < 8:
         return note
+    held = chronos_point([float(row["sum"]) for row in window])
+    ahead = prefix[-focus:] if mode == "fenetre" else prefix
     points = {
-        name: chronos_point([float(row[name]) for row in window])
+        name: chronos_point([float(row[name]) for row in ahead])
         for name in ("sum", "star_sum", "n1")
     }
-    if points["sum"] is None:
+    if held is None or points["sum"] is None:
         return note
     try:
         hold_moments, _importance, _engine = predict_moments(
@@ -290,7 +292,7 @@ def _blend_shift_chronos(
         return note
     lgb_sum = float(sum(ranked[0]["numbers"]))
     lgb_mae = abs(lgb_sum - float(holdout["sum"]))
-    chrono_mae = abs(float(points["sum"]) - float(holdout["sum"]))
+    chrono_mae = abs(float(held) - float(holdout["sum"]))
     weight = blend_weight(lgb_mae, chrono_mae)
     for name in ("sum", "star_sum", "n1"):
         point = points[name]
