@@ -35,6 +35,19 @@ export function trainingPercent(done: number, total = TRAINING_SHIFT_TOTAL): num
   return Math.round((finished / total) * 100)
 }
 
+/** Décalage affiché par la figure des rangs.
+ *  Sans épingle, c’est le dernier décalage reçu : la figure suit l’évaluation.
+ *  Une épingle reste sur ce décalage tant qu’il est dans la liste.
+ */
+export function visibleTrainingShift<T extends { x: number }>(shifts: T[], pinned: number | null): T | null {
+  if (!shifts.length) return null
+  if (pinned != null) {
+    const chosen = shifts.find((shift) => shift.x === pinned)
+    if (chosen) return chosen
+  }
+  return shifts[shifts.length - 1]
+}
+
 function round4(value: number): number {
   return Math.round(value * 10000) / 10000
 }

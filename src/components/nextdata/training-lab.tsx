@@ -12,7 +12,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { DRAWS, type Draw } from "@/lib/draws"
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "@/lib/nextdata/help"
 import type { Arbitration } from "@/lib/nextdata/rank-path"
-import { deltaNumbers, summarizeShifts, TRAINING_SHIFT_TOTAL, trainingPercent } from "@/lib/nextdata/training-progress"
+import { deltaNumbers, summarizeShifts, TRAINING_SHIFT_TOTAL, trainingPercent, visibleTrainingShift } from "@/lib/nextdata/training-progress"
 import { cn } from "@/lib/utils"
 
 const FAMILIES: { id: string; label: string }[] = [
@@ -107,6 +107,7 @@ export function TrainingLab() {
   const [withChronos, setWithChronos] = useState(false)
   const [delta, setDelta] = useState(false)
   const [reading, setReading] = useState<ReadingId>("corpus")
+  const [pinnedShift, setPinnedShift] = useState<number | null>(null)
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ done: number; current: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -178,6 +179,7 @@ export function TrainingLab() {
     setRunning(true)
     setError(null)
     setReport(null)
+    setPinnedShift(null)
     setProgress({ done: 0, current: 1 })
     const payloadDraws = draws.map((draw) => ({
       date: draw.date,
@@ -245,7 +247,8 @@ export function TrainingLab() {
 
   const summary = report?.summary ?? {}
   const persistenceMae = summary.persistence?.mae_sum
-  const pathTrace = report?.shifts?.find((shift) => shift.x === 1)?.readings[reading]?.arbitration
+  const activeShift = visibleTrainingShift(report?.shifts ?? [], pinnedShift)
+  const pathTrace = activeShift?.readings[reading]?.arbitration
 
   return (
     <div className="flex min-w-0 flex-col gap-6" data-nextdata-training>
@@ -393,10 +396,19 @@ export function TrainingLab() {
             })}
           </div>
 
-          {pathTrace ? (
+          {activeShift ? (
             <Card>
               <CardContent>
-                <RankPath help={NEXTDATA_HELP.chemin} trace={pathTrace} />
+                <p className="mb-3 text-xs text-muted-foreground" data-path-shift={activeShift.x}>
+                  Décalage {activeShift.label}
+                  {activeShift.date ? ` · ${activeShift.date}` : ""}
+                  {pinnedShift == null ? " · suit la mesure" : " · fixé"}
+                </p>
+                {pathTrace ? (
+                  <RankPath key={`${reading}-${activeShift.x}`} help={NEXTDATA_HELP.chemin} trace={pathTrace} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">Cette lecture ne détaille pas le calcul des rangs.</p>
+                )}
               </CardContent>
             </Card>
           ) : null}
@@ -450,7 +462,19 @@ export function TrainingLab() {
                       <HelpTip {...NEXTDATA_TRAINING_HELP.decalage} />
                     </th>
                     {report.shifts.map((shift) => (
-                      <th key={shift.x} className="font-medium text-muted-foreground">{shift.label}</th>
+                      <th key={shift.x}>
+                        <button
+                          type="button"
+                          aria-pressed={activeShift?.x === shift.x}
+                          onClick={() => setPinnedShift((current) => (current === shift.x ? null : shift.x))}
+                          className={cn(
+                            "rounded-md px-1.5 py-0.5 font-medium",
+                            activeShift?.x === shift.x ? "bg-primary/10 text-foreground" : "text-muted-foreground"
+                          )}
+                        >
+                          {shift.label}
+                        </button>
+                      </th>
                     ))}
                   </tr>
                 </thead>

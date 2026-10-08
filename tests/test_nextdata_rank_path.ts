@@ -51,5 +51,7 @@ test("the figure lists n1 to n5, e1, e2 and the gaps", () => {
   assert.match(lab, /<RankPath/)
   assert.match(lab, /NEXTDATA_HELP\.chemin/)
   assert.match(training, /<RankPath/)
-  assert.match(training, /shift\.x === 1/)
+  assert.match(training, /visibleTrainingShift/)
+  assert.match(training, /data-path-shift/)
+  assert.doesNotMatch(training, /shift\.x === 1/)
 })

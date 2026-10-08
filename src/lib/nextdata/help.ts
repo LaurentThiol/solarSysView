@@ -288,7 +288,7 @@ export const NEXTDATA_TRAINING_HELP = {
   },
   rangs: {
     title: "Écarts de rangs",
-    body: "Une case, un décalage et un rang. n1 est le plus petit numéro, n5 le plus grand. Le nombre est prévu moins sorti. Une case marquée d’un point : le numéro sorti tombe dans la bande 10–90 du modèle. Les lignes étendue, consécutifs, étendue ★ et consécutifs ★ reprennent les comptes de la page Évolution.",
+    body: "Une case, un décalage et un rang. n1 est le plus petit numéro, n5 le plus grand. Le nombre est prévu moins sorti. Une case marquée d’un point : le numéro sorti tombe dans la bande 10–90 du modèle. Les lignes étendue, consécutifs, étendue ★ et consécutifs ★ reprennent les comptes de la page Évolution.\n\nLa figure du calcul suit le décalage qui vient d’être mesuré. Un clic sur l’en-tête d’une colonne la laisse sur ce décalage ; un second clic la laisse de nouveau suivre.",
   },
   boules: {
     title: "Prévu et sorti",

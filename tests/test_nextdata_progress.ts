@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { deltaNumbers, summarizeShifts, trainingPercent } from "../src/lib/nextdata/training-progress.ts"
+import { deltaNumbers, summarizeShifts, trainingPercent, visibleTrainingShift } from "../src/lib/nextdata/training-progress.ts"
 
 test("the training percent is the share of finished shifts", () => {
   assert.equal(trainingPercent(0), 0)
@@ -39,4 +39,13 @@ test("the running summary is the mean absolute sum error so far", () => {
   assert.equal(summary.corpus.count, 2)
   assert.equal(summary.persistence.mae_sum, 5)
   assert.equal(summary.persistence.count, 2)
+})
+
+test("the rank figure follows the latest measured shift unless one is pinned", () => {
+  const shifts = [{ x: 1 }, { x: 2 }, { x: 3 }]
+  assert.equal(visibleTrainingShift([], null), null)
+  assert.equal(visibleTrainingShift(shifts, null)?.x, 3)
+  assert.equal(visibleTrainingShift(shifts.slice(0, 1), null)?.x, 1)
+  assert.equal(visibleTrainingShift(shifts, 1)?.x, 1)
+  assert.equal(visibleTrainingShift(shifts, 9)?.x, 3)
 })
