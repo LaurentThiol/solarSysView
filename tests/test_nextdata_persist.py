@@ -149,6 +149,20 @@ def test_independent_draws_give_no_edge_to_a_repeated_ball() -> None:
     assert swaps_to_detect(0.02, 5, 50) * 4 == pytest.approx(swaps_to_detect(0.01, 5, 50), rel=0.01)
 
 
+def test_a_draw_without_star_pool_takes_the_pool_of_its_date() -> None:
+    bare = [{key: value for key, value in draw.items() if key != "star_pool"} for draw in _draws(30, seed=35)]
+    bare[-1]["stars"] = [3, 6]
+    frame = build_frame(bare, focus=24)
+    assert frame.star_pool == 12
+    assert {row["star_pool"] for row in normalized_draws(bare)} == {12}
+    old = [{"date": "2012-03-02", "numbers": [1, 2, 3, 4, 5], "stars": [1, 2]}]
+    assert normalized_draws(old)[0]["star_pool"] == 11
+    table = base_rates(normalized_draws(bare))
+    assert table is not None
+    assert abs(table["stars"]["chance"] - 2 / 12) < 1e-6
+    assert sum(item["seen"] for item in table["stars"]["by_distance"]) == 12 * table["draws"]
+
+
 def test_repetitions_count_numbers_and_stars_against_n_minus_1_and_n_minus_2() -> None:
     from synchro.nextdata.covariates import past_columns
 
