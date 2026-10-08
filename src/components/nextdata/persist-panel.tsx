@@ -144,8 +144,8 @@ function TallyLine({ label, tally }: { label: string; tally: SwapTally }) {
     <li>
       <span className="font-medium">{label}</span> : {plural(tally.swaps, "échange", "échanges")} ·{" "}
       {plural(tally.gains, "gagné", "gagnés")}, {plural(tally.losses, "perdu", "perdus")},{" "}
-      {plural(tally.neutral, "neutre", "neutres")} · net {tally.net > 0 ? `+${tally.net}` : tally.net} · p ={" "}
-      {formatPValue(tally.p)} ·{" "}
+      {plural(tally.neutral, "neutre", "neutres")} · net {tally.net > 0 ? `+${tally.net}` : tally.net} ·{" "}
+      {tally.p == null ? null : <>p = {formatPValue(tally.p)} · </>}
       <span className="text-muted-foreground">
         au hasard ±{tally.noise.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}
       </span>
