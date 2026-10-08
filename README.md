@@ -1,10 +1,10 @@
 # Synchro — tirages EuroMillions
 
-Deux couches sur les mêmes tirages : **Next.js** (consultation + laboratoire d’analyse + Morpho) et **Python / Neon** (historique FDJ complet). Les résultats officiels restent ceux de la [FDJ](https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique).
+Deux couches sur les mêmes tirages : **Next.js** (archive, laboratoires, grilles, assistants) et **Python / Neon** (historique FDJ complet et calculs). Les résultats officiels restent ceux de la [FDJ](https://www.fdj.fr/jeux-de-tirage/euromillions-my-million/historique).
 
 ## Démarrage
 
-Prérequis : **Python 3.10+**, **Node.js 20+** / npm.
+Prérequis : **Python 3.10+**, **Node.js 20+** / npm (le build Netlify fixe Node 22).
 
 ```bash
 ./launch
@@ -31,11 +31,15 @@ Le lanceur (même modèle que PaxVideo) installe les dépendances si besoin, lib
 | `./launch status` | Qui écoute, `/api/alive`, santé Neon |
 | `./launch logs` / `./launch logs -f` | Journaux `.run/` (aperçu ou suivi) |
 | `./launch update` / `make update` | Contrôle GitHub (`git fetch`) et tire `origin` en fast-forward |
-| `./launch doctor` | Python, venv, Node, `.env`, ports, VLM, chartisme, harmo, Ollama |
+| `./launch doctor` | Python, venv, Node, `.env`, ports, VLM, chartisme, harmo, decisionTree, nextData, Ollama |
 | `./launch install` | Dépendances seulement |
 | `./launch install-vlm` | Moondream via torch (optionnel si `ollama pull moondream`) |
 | `./launch install-chartisme` | Réseaux chartisme (optionnels) |
 | `./launch install-harmo` | Extras Harmo (PyWavelets, ssqueezepy, librosa) |
+| `./launch install-nextdata` | nextData : LightGBM, CatBoost, Darts, Chronos, torch, matplotlib |
+| `./launch install-decision-tree` | Répare decisionTree (scikit-learn, dtreeviz, Graphviz). `./launch` l’installe déjà |
+| `./launch chartisme-train` | Entraîne svgformer / GNN (après `install-chartisme`) |
+| `./launch brain-specialist-train` | Entraîne un spécialiste Brain |
 | `./launch shortcut` | Raccourci Bureau / menu applications (Linux) ou `~/Desktop/Synchro.command` (macOS) |
 | `make test` | Tests (`pytest`) |
 
@@ -43,7 +47,17 @@ Sur macOS, un double-clic sur `Synchro.command` à la racine du dépôt lance au
 
 Options : `--skip-install`, `--force-install`, `--no-open`. Ports : `SYNCHRO_BACKEND_PORT` (sinon `PORT` du `.env`, 8000) et `SYNCHRO_FRONTEND_PORT` (43147). L'API ne se recharge que si `synchro/` change, pas l'UI. Logs : `.run/` (`./launch logs -f` depuis un autre terminal).
 
-Dans l’UI, les pages s’ouvrent depuis le **menu burger** (raccourci **g** hors champ de saisie), groupées en **Archive**, **Lecture**, **Grilles**, **Assistants** et **Système**. Le bandeau garde le burger, **Synchro**, le nom de la page courante, et les pastilles **Santé** / Aide / Glossaire / Adresse. Une pastille **Santé** (clic pour le détail API / Neon / GitHub / LLM) refait les contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. **Glossaire** (raccourci **l**) ouvre un menu Vocabulaire / Probabilités / Mémo / Chartisme (`?glossaire=`). **Adresse** (raccourci **a**, `?adresse=1`) liste les pages, onglets `?tab=` et fonctions API. Les anciens `/analyse?tab=proba|memo|adresse` sont réécrits vers ces overlays. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface.
+Dans l’UI, les pages s’ouvrent depuis le **menu burger** (raccourci **g** hors champ de saisie) :
+
+| Groupe | Pages |
+|---|---|
+| **Archive** | Tirage `/tirage`, Évolution `/evolution` |
+| **Lecture** | Analyse `/analyse`, Morpho `/morpho`, Relief `/relief`, Chartisme `/chartisme`, Cycles `/cycles`, Harmo `/harmo`, Next `/next` |
+| **Grilles** | Combinaisons `/combinaisons`, Pronostic `/pronostic`, nextData `/nextdata`, nextDataTraining `/nextdatatraining`, Jeux `/jeux` |
+| **Assistants** | Brain `/brain`, Spécialistes `/brain/specialistes`, decisionTree `/brain/decision-tree`, Dictionnaire `/brain/dictionnaire`, Réf `/ref`, IA `/ia` |
+| **Système** | Admin `/admin`, Schémas `/schemas` |
+
+Le bandeau garde le burger, **Synchro**, le nom de la page courante, et les pastilles **Santé** / Aide / Glossaire / Adresse / Capture. Une pastille **Santé** (clic pour le détail API / Neon / GitHub / LLM) refait les contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. **Aide** (raccourci **?**) affiche les points d’exclamation des champs. **Glossaire** (raccourci **l**) ouvre Vocabulaire / Probabilités / Mémo / Chartisme (`?glossaire=`). **Adresse** (raccourci **a**, `?adresse=1`) liste les pages, onglets `?tab=` et fonctions API. **Capture** (raccourci **c**) empaquette le visuel et les données de la fenêtre pour IA ou un PDF. Les anciens `/analyse?tab=proba|memo|adresse` sont réécrits vers ces overlays. **Échap** ferme le menu, le glossaire, l’annuaire, une capture ou une démo. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface.
 
 ## Tirage (`/tirage`)
 
@@ -51,7 +65,23 @@ Archives EuroMillions : tableau filtrable (mois, numéros, **jour mardi / vendre
 
 ## Évolution (`/evolution`)
 
-Onglet admin : **évolution dans le temps** (SMA et Bollinger optionnels sur chaque n1–n5 / e1–e2 et sur les sommes ; **DeltaEvol** juste après : écart n − n−1 de n1–n5, e1–e2 et des sommes, ligne 0, SMA et Bollinger sur ces écarts, glissement n1/n5, histogramme des pas, |Δ| comparé à un mélange des mêmes valeurs, jauges du |Δ| de n1–n5 et e1–e2 contre l’espérance de deux tirages indépendants, et cohérence du pas (les rangs bougent-ils dans le même sens), dessin libre chartiste sur ces écarts ; sur « Somme des numéros » et « Chaque numéro », ligne **gagnant 1er rang** : 0 s’il y a un gagnant du jackpot, +1 sinon), **Persist** juste sous DeltaEvol (reprise 0 / +1 d’un numéro ou d’une étoile au tirage précédent de la fenêtre, SMA optionnelle), **gains dans le temps** (effectifs FR / EU / hors FR, jackpot €, masse gagnants × rapport, **échelle log** pour comparer rang 13 et jackpot, filtre **jour** (mardi / vendredi / synthèse) commun à toute la page, **longueur de report**, **masse empilée** par rang, dessin chartiste sur ces courbes ; la **somme des 5 numéros** est superposée, axe droit ; EU comprend la France, on n’additionne pas FR + EU), **dessin libre chartiste** (figure de la table, segment = droite, départ aimanté, arrivée démagnétisable au Alt / Option pour poser hors courbe, puis une parallèle au clic suivant (Échap garde le segment seul) — gabarit, segment ou canal —, reprise d’un point déjà posé par clic ou glisser, bandeau de coordonnées au-dessus du graphique, capture IA), **suivi pair/impair** (pair = +1, impair = −1, cumul numéros et étoiles), **forme de la grille** (étendue max−min, paires consécutives, occupation des cinq décennies 1–10 … 41–50, SMA et Bollinger optionnels comme sur la courbe), **numéros et étoiles les plus sortis / en retard**, grille 1–50. Même accès que **Admin** (`ADMIN_PASSWORD`, ou ouvert en local sur `127.0.0.1`). Fenêtres : 20 tirages, 50 tirages, année en cours, année n-1, formule actuelle, tout l’historique ; filtre mois sur les plages calendaires. La fenêtre de travail reste **sous le bandeau**, pour changer de plage sans remonter.
+Onglet admin. Trois lectures de courbe : **Courbes**, **Bouncing**, **Annuel**.
+
+**Courbes** — SMA et Bollinger optionnels sur chaque n1–n5 / e1–e2 et sur les sommes. Sur Tous, les pastilles Mardi et Vendredi restent éteintes tant qu’on ne clique pas (Next, lui, les allume). **DeltaEvol** juste après : écart n − n−1 de n1–n5, e1–e2 et des sommes, ligne 0, SMA et Bollinger sur ces écarts, glissement n1/n5, histogramme des pas, |Δ| comparé à un mélange des mêmes valeurs, jauges du |Δ| de n1–n5 et e1–e2 contre l’espérance de deux tirages indépendants, et cohérence du pas (les rangs bougent-ils dans le même sens), dessin libre chartiste sur ces écarts. Sur « Somme des numéros » et « Chaque numéro », ligne **gagnant 1er rang** : 0 s’il y a un gagnant du jackpot, +1 sinon. Un clic depuis Next (couple ou triplet) relie ce lien dans Chaque numéro.
+
+**Persist**, juste sous DeltaEvol — reprise 0 / +1 : +1 si au moins un des 5 numéros (ou une des 2 étoiles) était déjà dans le tirage précédent de la fenêtre, sinon 0. Le premier point de la fenêtre n’a pas de prédécesseur. L’infobulle nomme les boules reprises. La SMA est le taux local de ces 0 / +1 ; la part de la fenêtre se compare au taux de deux grilles indépendantes. Mardi seul, le précédent est le mardi d’avant. Ce n’est pas le compte des paires n, n+1 de Forme.
+
+**Bouncing** — sur n1…n5 et e1, e2, arches dont la hauteur décroît comme une balle qui s’amortit (restitution e). La dérivée se lit sur chaque flanc du sommet. Des curseurs resserrent le nombre de rebonds, l’ajustement, la forme, la dérivée, l’amortissement et l’amplitude. Lecture du tracé, pas un pronostic.
+
+**Annuel** — barres horizontales de la somme des 5 numéros. Les années n, n−1 et n−2 restent entières, côte à côte : ce n’est pas le preset « année civile ». Mardi et vendredi se sélectionnent sur le graphique ; sur Tous, les deux pastilles sont éteintes. Le bandeau Mardi ou Vendredi allume ce soir. Synthèse relie chaque tirage par un trait continu. **Décalage** compare des suites de 6 à 10 tirages (8 au départ) entre n et n−1, puis n−1 et n−2. Il retient un écart de −21 à +21 jours quand la chaîne coïncide et que |r| dépasse l’alignement et le 95e centile d’un nul. Un trait horizontal ferme chaque mois, un trait vertical marque 128. Δ compare les moyennes de mois affichées. r n’est pas une probabilité.
+
+**Gains dans le temps** — effectifs FR / EU / hors FR, jackpot €, masse gagnants × rapport, **échelle log** pour comparer rang 13 et jackpot, filtre **jour** (mardi / vendredi / synthèse) commun à toute la page, **longueur de report**, **masse empilée** par rang, dessin chartiste sur ces courbes. La **somme des 5 numéros** est superposée, axe droit. EU comprend la France : on n’additionne pas FR + EU.
+
+**Dessin libre chartiste** — figure de la table, segment = droite, départ aimanté, arrivée démagnétisable au Alt / Option pour poser hors courbe, puis une parallèle au clic suivant (Échap garde le segment seul) — gabarit, segment ou canal —, reprise d’un point déjà posé par clic ou glisser, bandeau de coordonnées au-dessus du graphique, capture IA.
+
+**Suivi pair/impair** — pair = +1, impair = −1, cumul numéros et étoiles. **Forme de la grille** — étendue max−min, paires consécutives, occupation des cinq décennies 1–10 … 41–50, SMA et Bollinger optionnels. **Numéros et étoiles les plus sortis / en retard**, grille 1–50.
+
+Même accès que **Admin** (`ADMIN_PASSWORD`, ou ouvert en local sur `127.0.0.1`). Fenêtres des courbes : 20 tirages, 50 tirages, année en cours, année n-1, formule actuelle, tout l’historique ; filtre mois sur les plages calendaires. Annuel ignore ce découpage. La fenêtre de travail reste **sous le bandeau**, pour changer de plage sans remonter.
 
 ## Analyse (`/analyse`)
 
@@ -60,28 +90,6 @@ Laboratoire borné par une **fenêtre de travail** (presets : 20/50/100/200 tira
 Onglets technique : Vue (série, OHLC / Heikin-Ashi / Renko, profil temporel, comparaison A/B), Tendance, Momentum, Volatilité, Niveaux, Figures, Flux (activité-proxy, pas un volume de marché), Moyennes, Système. Onglets tirage : Numéros (grille 1–50), Pair / impair, Hasard, Bayésien, Dépendance, **Jumeaux** (empreintes multi-axes, heatmap z-score et 8 voisins — ressemblance d’archive, pas un pronostic ; démo guidée `/analyse?tab=jumeaux&demo=1` ou bouton « Lancer la démo », pop-up Suivant / Annuler). **Probabilités** (combinatoire officielle, indépendante de la fenêtre) et **Mémo** (périodes d’indicateurs et biais) sont dans le **Glossaire du bandeau** (`?glossaire=proba|memo`, raccourci **l**). L’annuaire des pages, onglets, API et raccourcis est uniquement dans **Adresse** du bandeau (`?adresse=1`, raccourci **a**).
 
 Les tirages sont indépendants : ces outils décrivent l’archive, ils ne prédisent pas le prochain. Monte-Carlo via l’API Python quand elle est joignable (`from_date` / `to_date` de la fenêtre).
-
-## Combinaisons (`/combinaisons`)
-
-Composeur EuroMillions 5+2 : chaque boule affiche **total de sorties** et **retard** dans la même fenêtre de travail qu’Analyse. Cinq stratégies proposent jusqu’à 20 grilles (équilibré, retards, totaux élevés / faibles, aléatoire). Le score affiché est une **proba de gain** : loi officielle des 13 rangs (identique pour toute grille 5+2) et **P̂ empirique** (part des tirages de la fenêtre où la grille aurait été payée, avec IC Wilson). Le tableau officiel ajoute le **rapport moyen** FDJ de la fenêtre (descriptif). Le contrôle tirage par tirage affiche le rapport € du rang. Les **modèles** se sauvegardent via `/api/grids` (Neon) ou, à défaut, en session. **Consigner** envoie une grille (ou toute la salve) dans **histoJeux** pour un tirage mardi/vendredi. La dernière salve de propositions est lue par **Jeux** pour l’intersection.
-
-## Jeux (`/jeux`)
-
-Deux onglets.
-
-**Solutions** — compteur combinatoire de l’univers EuroMillions (5 parmi 50 × 2 parmi 12 = 139 838 160). Les curseurs de somme, de parité pair/impair, d’étendue, de consécutifs, de décennies (1–10 … 41–50) et de chance 0–100 % par boule réduisent l’espace ; le bandeau affiche en permanence le nombre exact de grilles restantes. 0 % exclut une boule ; un seuil de présence fait entrer les pourcentages intermédiaires dans le décompte entier ; un clic impose une boule. Sous 50 solutions la liste s’affiche, sinon un échantillon uniforme. Les propositions de Combinaisons (session, jusqu’à 20) sont filtrées : combien survivent ici. Ce n’est pas un pronostic : le tirage officiel reste uniforme.
-
-**histoJeux** — journal des grilles **réellement jouées**, stocké dans Neon (`plays`). Chaque ligne a une date de tirage (mardi/vendredi, défaut = prochain tirage encore ouvert avant 20h45 Paris). Après synchro FDJ, rang, correspondances et **rapport €** (× copies) se calculent. Stats descriptives (rangs, matches, total des gains FDJ, boules les plus jouées), **IC Wilson** et **test binomial exact** vs P(gain) officielle ≈ 7,71 % (une consignation = un essai ; les copies ne sont pas des essais de plus). Les consignations depuis Solutions emportent le **spec Jeux** (somme, décennies, forcés…) pour relire pourquoi la grille a été jouée, et **Rouvrir dans Jeux** recharge ces curseurs. Export CSV. Repli session si l’API ne répond pas. Distinct de Mes grilles, qui reste une bibliothèque de modèles.
-
-## Pronostic (`/pronostic`)
-
-Schémas fonctionnels Mermaid, lus dans **Système → Schémas** (`/schemas`, contraste, zoom, plein écran) et versionnés dans [`docs/schemas/pronostic`](docs/schemas/pronostic/README.md).
-
-Deux onglets.
-
-**Atelier** — composeur d’hypothèses 5+2 : trois couches modulables (**somme**, **rangs + parité**, **espaces n1–n5 / e1–e2**) se resserrent. Le bandeau affiche le nombre exact de grilles restantes (cascade univers → couches). Les espaces peuvent se chevaucher ; un numéro n’est pris qu’une fois (`n1 < n2 < …`). Un **proposeur** lit la fenêtre (20 / 50 / 100 / année) avec une formule réglable (`min/max ± k·σ`, moyenne ± k·σ, percentiles) ; un walk-forward mesure la couverture. **Appliquer** n’est jamais silencieux. On peut importer un forecast Spécialiste (somme / parité) et **envoyer vers Jeux**. Ce n’est pas P(prochain tirage) : la loi officielle reste uniforme.
-
-**Historique** (`?tab=historic`) — note les **100 derniers tirages**, un par un, numéros et étoiles. La prévision d’un tirage n’utilise que les tirages d’avant : fenêtre stricte 20, 50 ou 100, ou **Choisi avant**. Choisi avant fige, avant le tirage, la fenêtre dont les essais précédents ont demandé la plus petite marge ; en cas d’égalité, la plus courte ; à défaut, 20. La **marge d’erreur** (moyenne ± k·σ) est, en manuel, une règle annoncée à l’avance. En automatique, elle est choisie après les tirages notés (la carte le dit) ; un second taux, la partie jouée, fige la marge sur les seuls tirages d’avant. À cette marge, l’onglet dit si le tirage tombe dedans et combien de grilles 5+2 il aurait fallu jouer. La plus petite marge qui aurait contenu le tirage est l’erreur mesurée. Les courbes montrent cette erreur dans le temps et la part de tirages contenus selon la marge. Le tableau **Paramètres qui pèsent** classe somme, parité et espaces (n1–n5, e1–e2). **Préparer le prochain tirage** recopie la prévision de la moyenne (dernière fenêtre, marge choisie) : ce tirage n’entre pas dans le calcul. Le **comité** (`POST /api/pronostic/committee`) ajoute onze têtes et un global. Chaque tête ne s’ajuste que sur la fenêtre. Si son erreur médiane sur au plus dix essais d’avant est plus grande que celle de la moyenne, elle reprend la moyenne. À égalité, le réseau reste. Le global réécrit les centres dès qu’une tête reste en réseau, recale σ pour qu’1 σ couvre environ deux tiers des tirages d’avant, et remet les rangs dans l’ordre avant le décompte. Le tableau **Têtes** montre la décision, μ, σ et le nombre de fois où la tête a été gardée. **Préparer le comité** recopie ses bandes. S’il reprend la moyenne, le bouton ne propose pas une autre prévision. La confrontation tourne sur mardi seul, vendredi seul, et mardi + vendredi, calculés à part. Sans Python, un bandeau le dit et la marge reste celle de la moyenne. Le plan des résidus place chaque tirage noté sur deux axes de ce vecteur z, avec le carré ±k·σ de la marge en cours. La grille colore le même vecteur, une ligne par tirage et une colonne par axe allumé. Les couches se coupent une à une. Le filtre mardi / vendredi du bandeau s’applique à la moyenne ; le comité confronte quand même les trois séries. L’archive locale 2026 n’a pas encore 100 tirages antérieurs : la fenêtre 100 reste vide tant que l’archive complète n’est pas là, et le comité lit alors une fenêtre de 20.
 
 ## Morpho (`/morpho`)
 
@@ -234,6 +242,22 @@ Le rétro-test se **borne par défaut à la fenêtre d’étude**, aux mêmes é
 
 Les tirages sont indépendants. Une figure sur une courbe de retards ou de sorties est une propriété du tracé, pas une prédiction. Cet onglet décrit, et le rétro-test mesure l’écart entre la figure et le hasard ; il ne le comble pas.
 
+`POST /api/chartisme/detect` accepte `reference_sigma` (nomme le sens de la fenêtre et découpe ses tronçons) et `reference_slope_sigma` (compare les coefficients directeurs). `POST /api/chartisme/similar` cherche dans le jour affiché (`weekday=mardi|vendredi`, ou l’archive mixte).
+
+## Cycles (`/cycles`)
+
+Registre commun des horloges, sur le même index de tirage que la fenêtre d’Analyse : phases **Réf**, raies **Harmo**, figures **Chartisme**, séries d’Analyse. Le sous-titre de la page le dit : le TFT dit lesquelles pèsent. Aucune sortie vers les grilles.
+
+| Onglet | Lecture |
+|---|---|
+| Registre | Un canal par horloge ou par série. Phase au dernier tirage, période en jours et en tirages. Répond sans torch. |
+| Atlas | Poids du réseau de sélection (VSN) sur le walk-forward. |
+| Attention | Ruban quantile (0,1 / 0,5 / 0,9) et attention repliée sur les phases. |
+| Comparaison | Cosinus des signatures de deux courbes, canaux qui divergent. |
+| Nuls | Ablation des horloges contre remaniement, phases permutées et loi marginale. |
+
+Le choix du jour et la fenêtre restent ceux du bandeau. **Lire le TFT** envoie `POST /api/cycles/fit` (encodeur, horizon, epochs). `GET /api/cycles/status` dit si torch est là ; `GET /api/cycles/registry` et `GET /api/cycles/panel` lisent le registre et le panneau. Décrit la structure de l’archive, pas le prochain tirage.
+
 ## Harmo (`/harmo`)
 
 Laboratoire spectral sur les mêmes séries qu’Analyse (somme, étendue, retard, présence, étoiles). Le choix du jour (Tous / Mardi / Vendredi / Synthèse) reste sous le bandeau, comme sur Évolution : Mardi ou Vendredi isole ce jour avant les N derniers et le warmup. scipy est la source de vérité ; le navigateur n’invente pas de FFT. Les unités sont des **cycles/tirage** et des **cycles/an**, pas des hertz : interpoler vers une grille kHz fabriquerait des artefacts. Le « 50 Hz réseau » est l’analogue d’un **peigne de raies verrouillé** sur le calendrier (année, semestre, trimestre, plus un scan de fondamentale).
@@ -256,6 +280,89 @@ Le modèle nul (onglet **Tests**) rejoue des tirages uniformes **aux mêmes date
 
 Sans Neon, Harmo lit l’archive JSON embarquée (`src/data/euromillions-2026.json`), la même que l’UI.
 
+## Next (`/next`)
+
+Lecture des tirages réalisés, du plus récent au plus ancien. Le filtre jour (Tous / Mardi / Vendredi / Synthèse) s’applique avant l’espace. Espaces : 20, 50, 100, 200, année civile, année n−1. Rang 0 est le tirage le plus récent. Les boules absentes de la fenêtre ne sont pas dessinées. Neon si l’API répond, sinon le JSON embarqué.
+
+**Couple** (`?tab=couple`) — volume des boules 1–50. Le poids d’une paire est la somme des co-sorties : le plus récent pèse n, le plus ancien pèse 1. Le compte est le nombre de co-sorties, chacune à 1. « Il y a k tirages » compte les tirages plus récents que la dernière co-sortie. Un clic dans la liste épingle le couple et le relie dans Chaque numéro (Évolution). Un seuil de compte retire les sorties en dessous.
+
+**Triple** (`?tab=triple`) — même lecture pour les triplets, trois boules du même tirage.
+
+**pronosticNext** (`?tab=pronosticNext`) — curseurs sur le total, les pairs, les décennies et n1 à n5. Un champ sans borne reste OFF. Les solutions reçoivent une chance lue à l’envers sur 20, 50, 100 et 200, couples et triples compris. Le tirage officiel reste uniforme.
+
+## Combinaisons (`/combinaisons`)
+
+Composeur EuroMillions 5+2 : chaque boule affiche **total de sorties** et **retard** dans la même fenêtre de travail qu’Analyse. Cinq stratégies proposent jusqu’à 20 grilles (équilibré, retards, totaux élevés / faibles, aléatoire). Le score affiché est une **proba de gain** : loi officielle des 13 rangs (identique pour toute grille 5+2) et **P̂ empirique** (part des tirages de la fenêtre où la grille aurait été payée, avec IC Wilson). Le tableau officiel ajoute le **rapport moyen** FDJ de la fenêtre (descriptif). Le contrôle tirage par tirage affiche le rapport € du rang. Les **modèles** se sauvegardent via `/api/grids` (Neon) ou, à défaut, en session. **Consigner** envoie une grille (ou toute la salve) dans **histoJeux** pour un tirage mardi/vendredi. La dernière salve de propositions est lue par **Jeux** pour l’intersection.
+
+## Pronostic (`/pronostic`)
+
+Schémas de cet écran : [`docs/schemas/pronostic`](docs/schemas/pronostic/README.md), lus dans **Système → Schémas**.
+
+Deux onglets.
+
+**Atelier** — composeur d’hypothèses 5+2 : trois couches modulables (**somme**, **rangs + parité**, **espaces n1–n5 / e1–e2**) se resserrent. Le bandeau affiche le nombre exact de grilles restantes (cascade univers → couches). Les espaces peuvent se chevaucher ; un numéro n’est pris qu’une fois (`n1 < n2 < …`). Un **proposeur** lit la fenêtre (20 / 50 / 100 / année) avec une formule réglable (`min/max ± k·σ`, moyenne ± k·σ, percentiles) ; un walk-forward mesure la couverture. **Appliquer** n’est jamais silencieux. On peut importer un forecast Spécialiste (somme / parité) et **envoyer vers Jeux**. Ce n’est pas P(prochain tirage) : la loi officielle reste uniforme.
+
+**Historique** (`?tab=historic`) — note les **100 derniers tirages**, un par un, numéros et étoiles. La prévision d’un tirage n’utilise que les tirages d’avant : fenêtre stricte 20, 50 ou 100, ou **Choisi avant**. Choisi avant fige, avant le tirage, la fenêtre dont les essais précédents ont demandé la plus petite marge ; en cas d’égalité, la plus courte ; à défaut, 20. La **marge d’erreur** (moyenne ± k·σ) est, en manuel, une règle annoncée à l’avance. En automatique, elle est choisie après les tirages notés (la carte le dit) ; un second taux, la partie jouée, fige la marge sur les seuls tirages d’avant. À cette marge, l’onglet dit si le tirage tombe dedans et combien de grilles 5+2 il aurait fallu jouer. La plus petite marge qui aurait contenu le tirage est l’erreur mesurée. Les courbes montrent cette erreur dans le temps et la part de tirages contenus selon la marge. Le tableau **Paramètres qui pèsent** classe somme, parité et espaces (n1–n5, e1–e2). **Préparer le prochain tirage** recopie la prévision de la moyenne (dernière fenêtre, marge choisie) : ce tirage n’entre pas dans le calcul. Le **comité** (`POST /api/pronostic/committee`) ajoute onze têtes et un global. Chaque tête ne s’ajuste que sur la fenêtre. Si son erreur médiane sur au plus dix essais d’avant est plus grande que celle de la moyenne, elle reprend la moyenne. À égalité, le réseau reste. Le global réécrit les centres dès qu’une tête reste en réseau, recale σ pour qu’1 σ couvre environ deux tiers des tirages d’avant, et remet les rangs dans l’ordre avant le décompte. Le tableau **Têtes** montre la décision, μ, σ et le nombre de fois où la tête a été gardée. **Préparer le comité** recopie ses bandes. S’il reprend la moyenne, le bouton ne propose pas une autre prévision. La confrontation tourne sur mardi seul, vendredi seul, et mardi + vendredi, calculés à part. Sans Python, un bandeau le dit et la marge reste celle de la moyenne. Le plan des résidus place chaque tirage noté sur deux axes de ce vecteur z, avec le carré ±k·σ de la marge en cours. La grille colore le même vecteur, une ligne par tirage et une colonne par axe allumé. Les couches se coupent une à une. Le filtre mardi / vendredi du bandeau s’applique à la moyenne ; le comité confronte quand même les trois séries. L’archive locale 2026 n’a pas encore 100 tirages antérieurs : la fenêtre 100 reste vide tant que l’archive complète n’est pas là, et le comité lit alors une fenêtre de 20.
+
+## nextData (`/nextdata`)
+
+Deux grilles 5+2 pour le prochain tirage. LightGBM et CatBoost lisent les mêmes décalages et les mêmes covariables : calendrier (mardi/vendredi, mois, jour de l’année, Carrington, Schwabe, année tropique), lune, forme (étendue, consécutifs, centre, retard moyen), décennies, delta, répétitions, couples et triples réellement sortis. Les horloges sont connues avant le tirage ; le reste n’est vu que jusqu’au dernier tirage sorti. Une famille décochée sort des deux modèles.
+
+**Trois ans** apprend sur les années civiles n, n−1 et n−2 du dernier tirage synchronisé. Le **focus** (50 ou 100 derniers du jour choisi) pèse ×3 ; le reste pèse 1. **Fenêtre seule** n’apprend que sur ce focus (décalages ramenés à 12 si le focus vaut 50, 16 s’il vaut 100). Le filtre Tous / Mardi / Vendredi s’applique avant le focus. L’interrupteur choisit la grille encadrée et celle envoyée vers Jeux ; il ne relance pas le calcul. L’anneau d’une boule suit la largeur du quantile.
+
+Chaque rang a trois lectures. La chaîne part de n1 et ajoute les écarts g1 à g4 ; pour les étoiles, e1 puis l’écart e2 − e1. Le **niveau** est le quantile prévu pour ce rang, seul. Le **delta** ajoute au dernier rang sorti le pas n − n−1. Le barreau donne le poids : l’inverse de la largeur de bande, un peu moins pour le delta. Un écart du mélange qui sort de la bande 10–90 est ramené au bord, puis la somme rapproche la grille. La boule affichée est le voisin retenu. nextData et l’entraînement montrent ce chemin.
+
+**Chronos** (`amazon/chronos-t5-small`, premier appel = téléchargement) mélange une médiane zéro-shot à LightGBM sur la somme, la somme des étoiles et n1. Le mélange penche vers la lecture qui s’est moins trompée sur le dernier tirage connu. CatBoost reste seul. **Darts**, s’il est installé, remplace la médiane temporelle LightGBM du prochain pas ; la chaîne des rangs reste LightGBM. **DeltaEvol** change les courbes (écart au tirage d’avant) sans relancer le modèle.
+
+Trois onglets : **Pronostic** (les deux grilles, cinq voisines, courbes du focus, poids des variables), **Base** (effectifs recomptés des numéros, étoiles, couples et triples du focus), **Retour** (walk-forward : MAE, RMSE, numéros et étoiles communs, contre la persistance et la moyenne). Ce n’est pas une probabilité de gain FDJ. Sans les libs :
+
+```bash
+./launch install-nextdata
+```
+
+`GET /api/nextdata/status`, `POST /api/nextdata/forecast`.
+
+## nextDataTraining (`/nextdatatraining`)
+
+Le même réglage que nextData, mesuré sur les dix tirages d’avant. **−1** cache le dernier tirage et le prévoit. **−10** se place dix tirages plus tôt. L’écart affiché est prévu moins sorti : au-dessus de zéro, la lecture était trop haute. La persistance rejoue le tirage d’avant la coupure. Chronos et DeltaEvol sont les mêmes interrupteurs. La barre avance d’un cran par décalage terminé (10 % = −1 mesuré), ce n’est pas une estimation du temps restant. La figure du calcul suit le dernier décalage reçu ; un clic sur l’en-tête d’une colonne la fixe, un second clic la laisse de nouveau suivre. `POST /api/nextdata/training`. Ce n’est pas un ticket, ni une prévision à dix coups d’avance.
+
+## Jeux (`/jeux`)
+
+Deux onglets.
+
+**Solutions** — compteur combinatoire de l’univers EuroMillions (5 parmi 50 × 2 parmi 12 = 139 838 160). Les curseurs de somme, de parité pair/impair, d’étendue, de consécutifs, de décennies (1–10 … 41–50) et de chance 0–100 % par boule réduisent l’espace ; le bandeau affiche en permanence le nombre exact de grilles restantes. 0 % exclut une boule ; un seuil de présence fait entrer les pourcentages intermédiaires dans le décompte entier ; un clic impose une boule. Sous 50 solutions la liste s’affiche, sinon un échantillon uniforme. Les propositions de Combinaisons (session, jusqu’à 20) sont filtrées : combien survivent ici. Ce n’est pas un pronostic : le tirage officiel reste uniforme.
+
+**histoJeux** — journal des grilles **réellement jouées**, stocké dans Neon (`plays`). Chaque ligne a une date de tirage (mardi/vendredi, défaut = prochain tirage encore ouvert avant 20h45 Paris). Après synchro FDJ, rang, correspondances et **rapport €** (× copies) se calculent. Stats descriptives (rangs, matches, total des gains FDJ, boules les plus jouées), **IC Wilson** et **test binomial exact** vs P(gain) officielle ≈ 7,71 % (une consignation = un essai ; les copies ne sont pas des essais de plus). Les consignations depuis Solutions emportent le **spec Jeux** (somme, décennies, forcés…) pour relire pourquoi la grille a été jouée, et **Rouvrir dans Jeux** recharge ces curseurs. Export CSV. Repli session si l’API ne répond pas. Distinct de Mes grilles, qui reste une bibliothèque de modèles.
+
+## Brain (`/brain`)
+
+Catalog nommé des indicateurs (`@rsi`, `@sum.rsi`, `@ete`, `@fft`, `@analogs`), journal persisté (Neon, repli local), mémoire vectorielle locale (`nomic-embed-text`) et **agent manuel** (catalog ou 142 courbes Chartisme). Le panneau **Objets** est exactement le prompt. Chat et lots passent par Ollama ; **Ce tour dans le cloud** / **Lots cloud** sont opt-in. **Approfondir** n’agit que sur le chat local (pas les lots). **Lire la table** décrit les fiches sans modèle. Une **démo guidée** (`/brain?demo=1` ou bouton « Lancer la démo ») épingle un handle par lab, lit la table, suit `@rsi`, balaye ces fiches et les consigne au carnet. Après chaque phase un pop-up explique ce que vous voyez : **Suivant** ou **Annuler**. L’onglet IA n’est pas fusionné : il reste la lecture de captures. Brain peut pronostiquer une grille (hypothèse, pas une certitude). Les concepts confirmés à la main sont sur **Dictionnaire**, pas dans ce chat.
+
+**Spécialistes** (`/brain/specialistes`) — un petit réseau par série (parité, somme…), entraîné sur l’ère formule, noté sur les 20/50/100 derniers, enregistré dans `.brain/specialists/`. Le décompte d’archive suit le jour ; l’entraînement API reste borné au même `weekday` si Mardi ou Vendredi est choisi. Jamais une grille 5+2. Démo (`/brain/specialistes?demo=1`) : nom, cible, forme, indicateurs, score vs hasard ; elle n’entraîne pas toute seule. CLI : `python -m synchro specialist train|list|infer|delete`, ou `./launch brain-specialist-train`.
+
+**decisionTree** (`/brain/decision-tree`, démo `?demo=1`) montre d’abord le tableau du flux (une ligne est l’état juste avant le tirage t), puis cherche un seuil en le faisant couper par un arbre — somme, rangs, retards, figures. L’indépendance n’est que le nul : l’ordre des tirages est détruit et le calcul est rejoué. Un seuil qui tient sur l’ordre réel et disparaît sur l’ordre détruit est un seuil de flux. S’il ne dépasse pas ce nul, aucun seuil n’est visible — ce n’est pas une conclusion d’indépendance. Le dessin (dtreeviz) montre chaque coupure ; sans Graphviz, l’arbre reste en texte. La suite mène vers un spécialiste, Jeux ou une règle chartiste, sans rien écrire en silence. Schémas dans [`docs/schemas/decision-tree`](docs/schemas/decision-tree/README.md). `./launch` installe scikit-learn et dtreeviz tout seul (`./launch install-decision-tree` répare). CLI : `python -m synchro decision-tree read|list|show|predict`.
+
+`./launch doctor` ping Ollama (lecture seule, ne démarre pas le serveur) et prévient si seuls des 3B de chat sont tirés. `OLLAMA_HOST` (défaut `http://127.0.0.1:11434`), `OLLAMA_NUM_CTX` et `LOCAL_LLM_MODEL` sont dans `.env.example`. Pull manuel : `ollama pull qwen2.5:7b` et `ollama pull qwen2.5vl:7b`. Un clic glyphe Morpho et une passe IA vision partagent `keep_alive` 30m ; deux 7B se swapent si la VRAM ne tient pas les deux. `IA_VISION_UNLOAD=1` décharge le VLM (`keep_alive` 0) dès la fin de la passe visuelle, avant le modèle texte. Entraînement d’un spécialiste : `./launch brain-specialist-train` (ou le panneau Spécialistes de `/brain` / `/brain/specialistes`).
+
+## Dictionnaire (`/brain/dictionnaire`)
+
+Fiches de concepts : vignette, équation, mots-clés, portée. Neuf fiches sont semées depuis le code : **monte**, **baisse**, **stable**, chacune avec un registre **05**, **1** ou **sup** (nuage serré, habituel, large). La lecture 20/50/100 porte sur six champs — somme, parité, étoiles, étendue, n1, n5 — et nomme le sens, la relecture et les quarts Réf. Une fiche se confirme à la main ; un brouillon du modèle local ne s’écrit pas tout seul. L’interrupteur automatique pose une demande à chaque tirage nouveau. L’aide locale peut escalader vers le cloud, et le cloud n’écrit une note que si `escalate` et `cloud_note` sont posés. Démo guidée (`/brain/dictionnaire?demo=1`) : la boucle tourne sur une courbe fixe, rien n’est enregistré.
+
+`GET|POST /api/brain/lexicon/cards`, `POST /api/brain/lexicon/read`, `GET|POST /api/brain/lexicon/mode`, `POST /api/brain/lexicon/help`.
+
+## Réf (`/ref`)
+
+Cycles physiques datés, puis un plan. Une phase ou un numéro de rotation décrit le ciel à une date. Ça ne dit rien du prochain tirage.
+
+| Onglet | Lecture |
+|---|---|
+| Lunaire | Mois synodique (~29,53 j) : âge, éclairement, quartiers, calendrier du mois. |
+| Solaire | Rotation de Carrington (~27,3 j), cycle de Schwabe (~11 ans), solstices. Catalogue GOES XRS ou éruptions HEK via SunPy. Le TimeSeries n’est pas téléchargé. |
+| Autres | Année tropique et Chandler en phase locale. F10.7, Kp, rayons cosmiques, ENSO et QBO restent des séries mesurées, sans horloge inventée. |
+| Synthèse | Deux phases en axes. Couleur : total des numéros, total des étoiles, n1–n5, E1 ou E2. Fenêtres 20, 50, 100. |
+
+Le nuage phase × tirage marque un solstice ou un équinoxe par un trait vertical, et un jackpot gagné (rang 1) par un losange. `GET /api/ref/catalog|phases|trace|plane|lunar|solar` et `GET /api/ref/solar/goes`.
+
 ## IA (`/ia`)
 
 Lecture d’une capture (visuel + données de fenêtre). L’onglet propose **Gemini** et **OpenAI**, puis un **choix de modèle** : un catalogue recommandé pour la lecture d’écran, plus les modèles de chat visibles sur tes clés. La réponse **s’écrit en flux**. **Comparer** envoie le même pack à deux modèles (Flash contre Pro, ou Gemini contre OpenAI) — utile en Chartisme / Harmo. Le modèle réellement utilisé s’affiche sous la réponse ; un aperçu introuvable replie vers le catalogue, sauf si des jetons ont déjà commencé.
@@ -264,23 +371,23 @@ L’historique (colonne **Captures**) se **renomme**, s’**épingle**, s’**ex
 
 Un troisième fournisseur **Local** (Ollama / llama-server) sert les lectures **texte** du pack. Avec une capture, Synchro fait **deux passes** : `qwen2.5vl:7b` lit le visuel (sans le JSON technique), puis `qwen2.5:7b` (ou `LOCAL_LLM_MODEL`) raisonne sur le pack + ces notes. `IA_LOCAL_TWO_PASS=0` envoie image et pack au VLM en une fois. Un 404 Ollama **ne bascule pas** sur Gemini / OpenAI. Si le probe touche vraiment Ollama (`/api/tags` ou `/api/version`), le chat utilise `/api/chat` avec `num_ctx` (défaut 16384, `OLLAMA_NUM_CTX`). LM Studio et llama-server restent sur `/v1/chat/completions`. Case **Approfondir** : température 0.7, plus long, `think` seulement sur qwen3 / deepseek-r1 / gpt-oss / r1. Moondream reste pour Morpho, pas pour le chat IA.
 
-## Brain (`/brain`)
-
-Catalog nommé des indicateurs (`@rsi`, `@sum.rsi`, `@ete`, `@fft`, `@analogs`), **spécialistes** (un petit réseau par série — parité, somme… — entraîné sur l’ère formule, noté sur les 20/50/100 derniers, enregistré dans `.brain/specialists/` ; le décompte d’archive suit le jour, l’entraînement API reste borné au même `weekday` si Mardi ou Vendredi est choisi), journal persisté (Neon, repli local), mémoire vectorielle locale (`nomic-embed-text`) et **agent manuel** (catalog ou 142 courbes Chartisme). Le panneau **Objets** est exactement le prompt. Chat et lots passent par Ollama ; **Ce tour dans le cloud** / **Lots cloud** sont opt-in. **Approfondir** n’agit que sur le chat local (pas les lots). **Lire la table** décrit les fiches sans modèle. Une **démo guidée** (`/brain?demo=1` ou bouton « Lancer la démo ») épingle un handle par lab, lit la table, suit `@rsi`, balaye ces fiches et les consigne au carnet. Après chaque phase un pop-up explique ce que vous voyez : **Suivant** ou **Annuler**. **Spécialistes** (`/brain/specialistes` ou `/brain?demo=specialistes`) a sa propre démo : nom, cible, forme, indicateurs, score vs hasard, enregistrés ; après chaque étape un pop-up : **Suivant** ou **Annuler**. Elle n’entraîne pas toute seule. **decisionTree** (`/brain/decision-tree`, démo `?demo=1`) montre d’abord le tableau du flux (une ligne est l’état juste avant le tirage t), puis cherche un seuil en le faisant couper par un arbre — somme, rangs, retards, figures. L’indépendance n’est que le nul : l’ordre des tirages est détruit et le calcul est rejoué. Le dessin (dtreeviz) montre chaque coupure ; sans Graphviz, l’arbre reste en texte. `./launch` installe scikit-learn et dtreeviz tout seul (`./launch install-decision-tree` répare). L’onglet IA n’est pas fusionné : il reste la lecture de captures. Un spécialiste cite une prévision de série nommée ; Brain peut aussi pronostiquer une grille (hypothèse, pas une certitude).
-
-`./launch doctor` ping Ollama (lecture seule, ne démarre pas le serveur) et prévient si seuls des 3B de chat sont tirés. `OLLAMA_HOST` (défaut `http://127.0.0.1:11434`), `OLLAMA_NUM_CTX` et `LOCAL_LLM_MODEL` sont dans `.env.example`. Pull manuel : `ollama pull qwen2.5:7b` et `ollama pull qwen2.5vl:7b`. Un clic glyphe Morpho et une passe IA vision partagent `keep_alive` 30m ; deux 7B se swapent si la VRAM ne tient pas les deux. `IA_VISION_UNLOAD=1` décharge le VLM (`keep_alive` 0) dès la fin de la passe visuelle, avant le modèle texte. Entraînement d’un spécialiste : `./launch brain-specialist-train` (ou le panneau Spécialistes de `/brain` / `/brain/specialistes`).
-
 ## Admin (`/admin`)
 
 Page locale pour les consoles et les secrets (Neon, Google, OpenAI, Brave Search). Les valeurs sont lues/écrites dans `.env` — **jamais commitées**. Révélation / copie, test de connexion, **suivi LLM** (Ollama / Llama, Brain, IA, Morpho VLM, embeddings : santé live, ping generate d’un jeton, appels et jetons 24 h), mise à jour GitHub (`git fetch` / `git pull --ff-only`, équivalent `./launch update`), synchro FDJ.
 
-La carte **Failles** inventorie le dépôt avec Syft (lockfile npm, et le `.venv` s’il est là) puis affiche les correspondances Grype : barre de sévérité, filtres, paquets dépliables. Le bouton Scanner lance le relevé en local si `syft` et `grype` sont installés ; le lundi, la même lecture part en action GitHub et met à jour l’issue « Failles connues ». **Exporter** écrit ce relevé complet en Markdown, ou ouvre l’impression pour un PDF : un brief à coller à une IA, qui ne retient comme cibles que les correctifs déjà publiés.
+La carte **Bibliothèques** suit npm, pip et GitHub Actions. **Relire** interroge les registres (`GET /api/admin/dependencies?refresh=1`).
+
+La carte **Failles** inventorie le dépôt avec Syft (lockfile npm, et le `.venv` s’il est là) puis affiche les correspondances Grype : barre de sévérité, filtres, paquets dépliables. Le bouton Scanner lance le relevé en local si `syft` et `grype` sont installés (`GET /api/admin/supply-chain?refresh=1`) ; le lundi, la même lecture part en action GitHub et met à jour l’issue « Failles connues ». **Exporter** écrit ce relevé complet en Markdown, ou ouvre l’impression pour un PDF : un brief à coller à une IA, qui ne retient comme cibles que les correctifs déjà publiés.
 
 En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, définissez `ADMIN_PASSWORD`. Sur Netlify, les secrets se configurent dans les variables d’environnement du site.
 
+## Schémas (`/schemas`)
+
+Lecteur des schémas Mermaid versionnés dans [`docs/schemas`](docs/schemas/README.md). Texte éclairci, recherche dans les libellés, liens en toutes lettres, zoom, plein écran, export PNG du cadre. Un fichier = un schéma (contexte, conteneurs, composants, flux). Modules versionnés : [Pronostic](docs/schemas/pronostic/README.md), [decisionTree](docs/schemas/decision-tree/README.md).
+
 ## Interface web (Next.js)
 
-App Next.js : menu burger (raccourci **g**), pages groupées — **Archive** (Tirage `/tirage`, Évolution `/evolution`), **Lecture** (Analyse `/analyse`, Morpho `/morpho`, Relief `/relief`, Chartisme `/chartisme`, Harmo `/harmo`), **Grilles** (Combinaisons `/combinaisons`, Pronostic `/pronostic`, Jeux `/jeux`), **Assistants** (Brain `/brain`, Spécialistes `/brain/specialistes`, decisionTree `/brain/decision-tree`, IA `/ia`) et **Système** (Admin `/admin`, Schémas `/schemas`). Le nom de la page courante reste à côté de Synchro. Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
+App Next.js (Next 16, React 19). Le menu burger (raccourci **g**) reprend les cinq groupes du bandeau, listés plus haut. Le nom de la page courante reste à côté de Synchro. Le lanceur l’ouvre sur [http://127.0.0.1:43147](http://127.0.0.1:43147). Sans lanceur :
 
 ```bash
 npm install
@@ -306,13 +413,15 @@ Puis http://127.0.0.1:8000 (docs : `/docs`).
 
 | Commande | Rôle |
 |---|---|
-| `python -m synchro init-db` | Crée les tables `draws`, `grids`, `sync_log` |
+| `python -m synchro init-db` | Crée les tables Neon (`draws`, `grids`, `plays`, `sync_log`, règles Morpho et Chartisme, carnet Brain, dictionnaire) |
 | `python -m synchro ensure` | Rattrape l’archive FDJ récente si Neon est en retard |
 | `python -m synchro sync` | Télécharge les 6 archives FDJ et les écrit dans Neon |
 | `python -m synchro serve` | API locale `/api/*` |
 | `python -m synchro export` | Snapshot JSON (`synchro/web/snapshot.json`) |
-| `python -m synchro chartisme export\|scan\|train\|report` | Module chartisme sans interface (usage cron) |
-| `make test` | Tests unitaires (parse FDJ, rangs, stats, `/api/alive`, ensure, chartisme, harmo) |
+| `python -m synchro chartisme export\|scan\|train\|report\|auto` | Module chartisme sans interface (usage cron) |
+| `python -m synchro specialist train\|list\|infer\|delete` | Spécialistes Brain, un réseau par série |
+| `python -m synchro decision-tree read\|list\|show\|predict` | Seuils du flux, preuve par remaniement, dessin |
+| `make test` | Tests unitaires (`pytest` : parse FDJ, rangs, stats, API, chartisme, harmo, cycles, nextData, Réf, pronostic) |
 
 `DATABASE_URL` ne doit **jamais** être commitée. `.env` en local, variables d’environnement / secret GitHub Actions en déployé. Au premier `./launch`, le fichier `.env` est créé depuis `.env.example` s’il manque.
 
@@ -325,7 +434,7 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 - `GET /api/alive` — liveness (pas de Neon)
 - `GET /api/health` — ping Neon, tirages, dernier sync, `stale` / `expected_draw_date`
 - `POST /api/shutdown` — arrêt propre (localhost uniquement)
-- `GET /api/draws?limit=&offset=&q=&year=&era=current|all`
+- `GET /api/draws?limit=&offset=&q=&year=&era=current|all&weekday=mardi|vendredi`
 - `GET /api/draws/latest`
 - `GET /api/stats?era=current|all`
 - `GET /api/analysis/proba` — combinatoire exacte (sans Neon)
@@ -338,11 +447,32 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 - `POST /api/sync/ensure` — rattrapage si Neon est en retard (`./launch`)
 - `GET\|POST /api/morpho/*` — glyphes, voisins, règles, anticipation, VLM
 - `GET /api/chartisme/catalog|status|curves|figures|svg|training` — table de référence, état du module, courbes exportées, figures d’une courbe, annotation SVG, rapport d’entraînement
-- `POST /api/chartisme/detect|similar` — lecture d’une fenêtre envoyée par le navigateur, recherche par ressemblance DTW
+- `POST /api/chartisme/detect|similar` — lecture d’une fenêtre (`reference_sigma`, `reference_slope_sigma`) et recherche DTW dans le jour affiché (`weekday`)
 - `GET\|POST /api/chartisme/labels|rules` · `DELETE …/{id}` — atelier d’étiquetage et espace de règles (Neon)
 - `POST /api/chartisme/rules/evaluate` · `GET /api/chartisme/firings` — déclenchements et journal
 - `GET /api/chartisme/backtest` — objectif atteint, signal sur les numéros, taux de base (`base_length` = longueur des fenêtres de bruit). Bornable à une fenêtre : `start`, `end`, `context` (tirages calculés en amont), `scales` (« 25,50,100 »), `thresholds` (un seuil par échelle, « 0.79,0.74,0.71 », apparié positionnellement et ignoré en entier si la longueur ne correspond pas). La réponse porte un bloc `window` qui dit sur quoi la mesure a réellement porté.
 - `GET /api/harmo/status` — scipy / extras (sans Neon)
 - `GET /api/harmo/spectrum|welch|stft|envelope|orders|unmix|null` — même fenêtre qu’Analyse (`variable`, `n`, `era`, `preset`, `from_date`, `to_date`, `last_n`, `warmup`). Sans Neon : repli sur l’archive JSON 2026.
+- `GET /api/cycles/status` — torch optionnel ; le registre répond sans lui
+- `GET /api/cycles/registry|panel` — canaux et panneau (`variable`, `n`, `preset`, `weekday`)
+- `POST /api/cycles/fit` — walk-forward TFT, VSN, attention, ablation. Pas une grille
+- `GET /api/nextdata/status` — LightGBM, CatBoost, Darts, Chronos, torch
+- `POST /api/nextdata/forecast` — deux entraînements et le faisceau 5+2 (`focus=50|100`)
+- `POST /api/nextdata/training` — décalages −1 à −10, écart prévu moins sorti
+- `POST /api/pronostic/committee` — onze têtes et un global (`lookback=20|50`)
+- `GET|POST /api/brain/lexicon/cards` · `POST /api/brain/lexicon/read` · `GET|POST /api/brain/lexicon/mode` · `POST /api/brain/lexicon/help` — Dictionnaire
+- `GET /api/brain/status` · `GET|POST /api/brain/readings` · `POST /api/brain/readings/{id}/notes` · `POST /api/brain/retrieve` · `POST /api/brain/analogs`
+- `GET /api/brain/specialists/features` · `GET|POST /api/brain/specialists` · `GET|DELETE /api/brain/specialists/{slug}` · `POST …/infer`
+- `GET /api/brain/decision-tree/status|catalog` · `POST /api/brain/decision-tree/tableau` · `GET|POST /api/brain/decision-tree` · `GET|DELETE /api/brain/decision-tree/jobs/{id}` · `GET /api/brain/decision-tree/{slug}` · `POST …/predict` · `POST …/draft` · SVG `…/tree.svg` et `…/case.svg`
+- `GET /api/ref/catalog|phases|trace|plane|lunar|solar` · `GET /api/ref/solar/goes` — cycles physiques (`date`, `window=20|50|100`, `cycle`, `x`, `y`)
+- `GET /api/ia/status` — fournisseurs Gemini / OpenAI / local ; `GET /api/ia/local` — modèles Ollama ; `POST /api/ia/chat` — lecture d’une capture (SSE)
+- `GET|POST /api/llm/usage` · `POST /api/llm/ping`
+- `GET /api/startup` — contrôles du bandeau (API, Neon, GitHub, LLM ; `refresh=1`)
+- `GET|POST /api/github` — état du dépôt ; POST pour fetch / mise à jour
+- `GET|POST /api/admin` · `POST /api/admin/login` · `POST /api/admin/sync` · `POST /api/admin/test`
+- `GET /api/admin/dependencies` — npm, pip, GitHub Actions (`refresh=1` relit les registres)
+- `GET /api/admin/supply-chain` — Syft + Grype (`refresh=1` lance le scan local)
+
+L’UI appelle `src/app/api`. Analyse, Harmo, Cycles, Morpho, Chartisme, nextData, Réf, Brain, grilles et tirages sont proxifiés vers FastAPI dès que l’API locale répond. Santé du bandeau (`/api/startup`), GitHub, Admin et IA sont des routes Next.js. Sur Netlify, les secrets viennent des variables d’environnement du site ; les modules Python restent le process local.
 
 Application indépendante, non affiliée à La Française des Jeux.
