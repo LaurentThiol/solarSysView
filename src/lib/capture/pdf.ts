@@ -112,7 +112,8 @@ function reportStyles() {
 }
 
 export function printHtml(html: string, filename: string) {
-  const popup = window.open("", "_blank", "noopener,noreferrer,width=900,height=720")
+  // noopener et noreferrer font retourner null : le document ne pourrait plus être écrit.
+  const popup = window.open("", "_blank", "width=900,height=720")
   if (!popup) {
     const blob = new Blob([html], { type: "text/html;charset=utf-8" })
     const url = URL.createObjectURL(blob)
@@ -123,6 +124,7 @@ export function printHtml(html: string, filename: string) {
     URL.revokeObjectURL(url)
     return
   }
+  popup.opener = null
   popup.document.open()
   popup.document.write(html)
   popup.document.close()

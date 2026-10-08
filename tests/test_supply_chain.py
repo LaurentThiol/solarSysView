@@ -212,6 +212,23 @@ def test_summary_is_one_line() -> None:
     assert findings[0].summary.endswith("…")
 
 
+def test_supply_repair_node() -> None:
+    result = subprocess.run(
+        [
+            "node",
+            "--experimental-strip-types",
+            "--import",
+            str(ROOT / "tests" / "node-register.mjs"),
+            "--test",
+            str(ROOT / "tests" / "test_supply_repair.ts"),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_admin_supply_card_is_wired() -> None:
     panel = (ROOT / "src/components/admin-panel.tsx").read_text(encoding="utf-8")
     card = (ROOT / "src/components/admin-supply-card.tsx").read_text(encoding="utf-8")
@@ -222,6 +239,15 @@ def test_admin_supply_card_is_wired() -> None:
     assert panel.rindex("<AdminDependenciesCard") < panel.rindex("<AdminSupplyCard")
     assert "Failles" in card
     assert "aria-pressed" in card
+    assert "Exporter" in card
+    assert 'aria-haspopup="menu"' in card
+    assert "Exporter en Markdown" in card
+    assert "Exporter en PDF" in card
+    assert "repairMarkdown" in card
+    assert "repairHtml" in card
+    pdf = (ROOT / "src/lib/capture/pdf.ts").read_text(encoding="utf-8")
+    assert "noopener,noreferrer" not in pdf
+    assert "popup.opener = null" in pdf
     assert "Afficher la suite" in card
     assert "anchore/syft/main/install.sh" in card
     assert "anchore/grype/main/install.sh" in card

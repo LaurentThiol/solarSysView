@@ -1,9 +1,16 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronDown, Copy, RefreshCw } from "lucide-react"
+import { ChevronDown, Copy, Download, RefreshCw } from "lucide-react"
 
 import { HelpTip, WithHelp } from "@/components/help"
+import { printHtml } from "@/lib/capture/pdf"
+import {
+  downloadRepairFile,
+  repairFilename,
+  repairHtml,
+  repairMarkdown,
+} from "@/lib/supply-repair"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -256,6 +263,88 @@ function EcosystemBar({
   )
 }
 
+function ExportMenu({
+  disabled,
+  onMarkdown,
+  onPdf,
+}: {
+  disabled: boolean
+  onMarkdown: () => void
+  onPdf: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onPointer(event: PointerEvent) {
+      if (!root.current?.contains(event.target as Node)) setOpen(false)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false)
+    }
+    document.addEventListener("pointerdown", onPointer)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("pointerdown", onPointer)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={root} className="flex flex-col items-end gap-2">
+      <WithHelp
+        help={{
+          title: "Exporter pour une IA",
+          body: "Prépare le relevé complet, filtres ignorés, à coller à une IA qui répare les dépendances. Markdown télécharge un .md. PDF ouvre l’impression du navigateur : choisir Enregistrer au format PDF. Les seules cibles sont les correctifs déjà publiés.",
+        }}
+      >
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          onClick={() => setOpen((current) => !current)}
+        >
+          <Download />
+          Exporter
+        </Button>
+      </WithHelp>
+      {open ? (
+        <div role="menu" className="flex gap-2">
+          <Button
+            type="button"
+            role="menuitem"
+            variant="outline"
+            size="sm"
+            aria-label="Exporter en Markdown"
+            onClick={() => {
+              setOpen(false)
+              onMarkdown()
+            }}
+          >
+            Markdown
+          </Button>
+          <Button
+            type="button"
+            role="menuitem"
+            variant="outline"
+            size="sm"
+            aria-label="Exporter en PDF"
+            onClick={() => {
+              setOpen(false)
+              onPdf()
+            }}
+          >
+            PDF
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function InstallPanel({ missing }: { missing: string[] }) {
   const [copied, setCopied] = useState<string | null>(null)
   const label = missing.length === 1 ? `Il manque ${missing[0]}.` : `Il manque ${missing.join(" et ")}.`
@@ -415,7 +504,7 @@ export function AdminSupplyCard() {
               Failles
               <HelpTip
                 title="Inventaire et failles"
-                body="Syft lit le lockfile npm et, s’il est là, le .venv. Grype rapproche cet inventaire des avis connus. La barre filtre par sévérité. Le ruban du dessous filtre npm ou Python. Rien n’est lancé à l’ouverture : Scanner relance les deux binaires en local."
+                body="Syft lit le lockfile npm et, s’il est là, le .venv. Grype rapproche cet inventaire des avis connus. La barre filtre par sévérité. Le ruban du dessous filtre npm ou Python. Rien n’est lancé à l’ouverture : Scanner relance les deux binaires en local. Exporter prépare ce relevé complet en Markdown ou en PDF, à transmettre à une IA pour appliquer les correctifs publiés."
               />
             </CardTitle>
             <CardDescription>
@@ -426,17 +515,34 @@ export function AdminSupplyCard() {
                 : "Inventaire Syft et correspondances Grype. Le scan part au clic, ou le lundi sur GitHub."}
             </CardDescription>
           </div>
-          <WithHelp
-            help={{
-              title: "Scanner",
-              body: "Lance syft puis grype sur ce dépôt. La première fois, Grype télécharge sa base : compte jusqu’à trois minutes. Le résultat reste dans .run jusqu’au prochain scan.",
-            }}
-          >
-            <Button type="button" variant="outline" disabled={phase !== "idle" || netlify} onClick={() => void scan()}>
-              <RefreshCw />
-              {phase === "scan" ? "Scan…" : phase === "load" ? "Lecture…" : "Scanner"}
-            </Button>
-          </WithHelp>
+          <div className="flex flex-wrap items-start gap-2">
+            <ExportMenu
+              disabled={!report}
+              onMarkdown={() => {
+                if (!report) return
+                downloadRepairFile(
+                  repairFilename(report.generated_at, "md"),
+                  repairMarkdown(report),
+                  "text/markdown",
+                )
+              }}
+              onPdf={() => {
+                if (!report) return
+                printHtml(repairHtml(report), repairFilename(report.generated_at, "html"))
+              }}
+            />
+            <WithHelp
+              help={{
+                title: "Scanner",
+                body: "Lance syft puis grype sur ce dépôt. La première fois, Grype télécharge sa base : compte jusqu’à trois minutes. Le résultat reste dans .run jusqu’au prochain scan.",
+              }}
+            >
+              <Button type="button" variant="outline" disabled={phase !== "idle" || netlify} onClick={() => void scan()}>
+                <RefreshCw />
+                {phase === "scan" ? "Scan…" : phase === "load" ? "Lecture…" : "Scanner"}
+              </Button>
+            </WithHelp>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 pt-4">
