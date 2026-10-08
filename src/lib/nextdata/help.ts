@@ -182,7 +182,7 @@ export const NEXTDATA_HELP = {
   grille: {
     title: "Grille 5+2",
     wide: true,
-    body: "Cinq numéros triés et deux étoiles. L’anneau suit l’écart entre le quantile bas et le quantile haut du rang : un anneau large dit que le modèle hésite. Sous les boules, l’étendue et les consécutifs de cette grille, numéros puis étoiles, avec les mêmes comptes que la page Évolution.",
+    body: "Cinq numéros triés et deux étoiles. L’anneau suit l’écart entre le quantile bas et le quantile haut du rang : un anneau large dit que le modèle hésite. De n2 à n5, et pour e2, cette bande cumule celles de n1 et des écarts en quadrature, sans sortir des valeurs possibles du rang. Sous les boules, l’étendue et les consécutifs de cette grille, numéros puis étoiles, avec les mêmes comptes que la page Évolution.",
     items: [
       {
         label: "Mise en avant",

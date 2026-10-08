@@ -223,6 +223,35 @@ def test_compose_clips_a_gap_and_keeps_ranks_increasing() -> None:
     assert trace["sum_target"] == 100
 
 
+def test_rank_bands_add_in_quadrature_and_stay_in_range() -> None:
+    from synchro.nextdata.forecast import _rank_view
+    from synchro.nextdata.project import NUMBER_BOUNDS, rank_scales
+
+    gap = {"lo": 1, "mid": 7, "hi": 18}
+    moments = {
+        "n1": {"lo": 2, "mid": 7, "hi": 17},
+        "g1": gap,
+        "g2": gap,
+        "g3": gap,
+        "g4": gap,
+        "e1": {"lo": 1, "mid": 3, "hi": 7},
+        "e_gap": {"lo": 1, "mid": 4, "hi": 9},
+    }
+    view = _rank_view(moments)
+    assert view["n1"] == {"lo": 2, "mid": 7, "hi": 17}
+    # n5 : 7 + 4 × 7 = 35, √(5² + 4 × 6²) = 13 sous la médiane, √(10² + 4 × 11²) ≈ 24 au-dessus, borné à 50.
+    assert view["n5"] == {"lo": 22, "mid": 35, "hi": 50}
+    for rank, (low, high) in enumerate(NUMBER_BOUNDS, start=1):
+        band = view[f"n{rank}"]
+        assert low <= band["lo"] <= band["mid"] <= band["hi"] <= high
+    assert view["e1"] == {"lo": 1, "mid": 3, "hi": 7}
+    assert 2 <= view["e2"]["lo"] <= view["e2"]["mid"] == 7 <= view["e2"]["hi"] <= 12
+    mids, scales, _ = rank_scales(moments)
+    assert mids == [view[f"n{rank}"]["mid"] for rank in range(1, 6)]
+    assert scales[0] == 15
+    assert scales[-1] == 28
+
+
 def test_score_follows_predicted_spread_and_consecutive() -> None:
     from synchro.nextdata.project import score_grid
 

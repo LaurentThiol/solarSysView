@@ -37,7 +37,7 @@ from synchro.nextdata.covariates import (
 )
 from synchro.nextdata.empirical import public_base, recount
 from synchro.nextdata.panel import Frame, build_frame
-from synchro.nextdata.project import beam, compose_ranks, reconstruct, stamp_grid
+from synchro.nextdata.project import beam, compose_ranks, rank_bands, stamp_grid
 
 FUTURE_BACK = 4
 FUTURE_FWD = 1
@@ -672,27 +672,11 @@ def _round_moments(moments: dict[str, dict[str, float]]) -> dict[str, dict[str, 
     return out
 
 
-def _rank_view(moments: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
+def _rank_view(moments: dict[str, dict[str, float]], star_pool: int = 12) -> dict[str, dict[str, float]]:
     """n1…n5 et e2 reconstruits, pour les anneaux et les courbes."""
-    kept = ("sum", "parity", "star_sum", "n1", "e1", "spread", "consecutive", "star_consecutive")
+    kept = ("sum", "parity", "star_sum", "spread", "consecutive", "star_consecutive")
     view = {name: dict(moments[name]) for name in kept if name in moments}
-    gaps = [moments[name]["mid"] for name in ("g1", "g2", "g3", "g4")]
-    mids = reconstruct(moments["n1"]["mid"], gaps)
-    widths = []
-    cursor_lo = moments["n1"]["lo"]
-    cursor_hi = moments["n1"]["hi"]
-    widths.append(max(0.0, cursor_hi - cursor_lo))
-    for name in ("g1", "g2", "g3", "g4"):
-        cursor_lo += moments[name]["lo"]
-        cursor_hi += moments[name]["hi"]
-        widths.append(max(0.0, cursor_hi - cursor_lo))
-    for index, name in enumerate(("n1", "n2", "n3", "n4", "n5")):
-        mid = mids[index]
-        half = widths[index] / 2.0
-        view[name] = {"lo": mid - half, "mid": mid, "hi": mid + half}
-    e_mid = moments["e1"]["mid"] + max(1.0, moments["e_gap"]["mid"])
-    e_half = (moments["e1"]["hi"] - moments["e1"]["lo"] + moments["e_gap"]["hi"] - moments["e_gap"]["lo"]) / 2.0
-    view["e2"] = {"lo": e_mid - e_half, "mid": e_mid, "hi": e_mid + e_half}
+    view.update(rank_bands(moments, star_pool))
     view["e_gap"] = dict(moments["e_gap"])
     view["star_spread"] = dict(moments["e_gap"])
     return _round_moments(view)
@@ -807,7 +791,7 @@ def run_forecast(
             return {"ok": False, "error": "Aucune grille entière n’a pu être projetée.", **dependency_status()}
         best = ranked[0]
         chart_grids[mode] = best
-        view = _rank_view(moments)
+        view = _rank_view(moments, frame.star_pool)
         mae_sum = walked["metrics"][mode]["mae"].get("sum")
         modes[mode].update(
             {
@@ -839,7 +823,7 @@ def run_forecast(
                         "score": cat_best["score"],
                     },
                     "alternates": cat_ranked[1:],
-                    "quantiles": _rank_view(moment_book[f"{mode}_catboost"]),
+                    "quantiles": _rank_view(moment_book[f"{mode}_catboost"], frame.star_pool),
                     "mae_sum": (cat_metrics.get("mae") or {}).get("sum"),
                     "arbitration": None
                     if cat_trace is None
@@ -1019,7 +1003,7 @@ def _chart(
         "kind": "forecast",
     }
     for mode, moments in moment_book.items():
-        view = _rank_view(moments)
+        view = _rank_view(moments, frame.star_pool)
         for name, band in view.items():
             if name == "e_gap":
                 continue

@@ -256,22 +256,51 @@ def _shape_distance(actual: float, moment: dict[str, float] | None) -> float:
     return abs(float(actual) - mid) / max(1.0, hi - lo)
 
 
-def rank_scales(moments: dict[str, dict[str, float]]) -> tuple[list[float], list[float], list[float]]:
-    """Médiane reconstruite et largeur de quantile de chaque rang."""
-    def piece(name: str, default: float) -> tuple[float, float, float]:
-        return _band(moments.get(name), default)
+def _gap(moment: dict[str, float] | None, default: float) -> tuple[float, float, float]:
+    lo, mid, hi = _band(moment, default)
+    return max(1.0, lo), max(1.0, mid), max(1.0, hi)
 
-    n1_lo, n1_mid, n1_hi = piece("n1", 8)
-    mids = [n1_mid]
-    los = [n1_lo]
-    his = [n1_hi]
-    for name in ("g1", "g2", "g3", "g4"):
-        lo, mid, hi = piece(name, 8)
-        mids.append(mids[-1] + max(1.0, mid))
-        los.append(los[-1] + max(1.0, lo))
-        his.append(his[-1] + max(1.0, hi))
-    scales = [max(1.0, his[i] - los[i]) for i in range(5)]
-    return mids, scales, [max(1.0, his[i] - mids[i]) for i in range(5)]
+
+def _spread_out(parts: list[tuple[float, float, float]]) -> tuple[float, float]:
+    below = math.sqrt(sum((mid - lo) ** 2 for lo, mid, _hi in parts))
+    above = math.sqrt(sum((hi - mid) ** 2 for _lo, mid, hi in parts))
+    return below, above
+
+
+def rank_bands(moments: dict[str, dict[str, float]], star_pool: int = 12) -> dict[str, dict[str, float]]:
+    """Bandes de n1…n5, e1 et e2, reconstruites depuis la chaîne.
+
+    Les écarts bas et haut de n1 et des g s’ajoutent en quadrature. Additionner
+    les largeurs supposerait des écarts qui grandissent tous ensemble, alors
+    qu’ils se partagent les cinquante numéros. Chaque bande reste dans les
+    valeurs que son rang peut prendre.
+    """
+    first = _band(moments.get("n1"), 8)
+    gaps = [_gap(moments.get(name), 8) for name in ("g1", "g2", "g3", "g4")]
+    mids = reconstruct(first[1], [gap[1] for gap in gaps])
+    out: dict[str, dict[str, float]] = {}
+    for index, (low, high) in enumerate(NUMBER_BOUNDS):
+        below, above = _spread_out([first, *gaps[:index]])
+        mid = min(high, max(low, mids[index]))
+        out[f"n{index + 1}"] = {"lo": max(low, mid - below), "mid": mid, "hi": min(high, mid + above)}
+    pool = max(2, min(12, int(star_pool)))
+    e1 = _band(moments.get("e1"), 2)
+    e_gap = _gap(moments.get("e_gap"), 3)
+    e1_mid = min(pool - 1, max(1.0, e1[1]))
+    out["e1"] = {"lo": max(1.0, min(e1[0], e1_mid)), "mid": e1_mid, "hi": min(pool - 1, max(e1[2], e1_mid))}
+    below, above = _spread_out([e1, e_gap])
+    e2_mid = min(pool, max(2.0, e1[1] + e_gap[1]))
+    out["e2"] = {"lo": max(2.0, e2_mid - below), "mid": e2_mid, "hi": min(pool, e2_mid + above)}
+    return out
+
+
+def rank_scales(moments: dict[str, dict[str, float]]) -> tuple[list[float], list[float], list[float]]:
+    """Médiane reconstruite et largeur de bande de chaque rang."""
+    every = rank_bands(moments)
+    bands = [every[f"n{rank}"] for rank in range(1, 6)]
+    mids = [band["mid"] for band in bands]
+    scales = [max(1.0, band["hi"] - band["lo"]) for band in bands]
+    return mids, scales, [max(1.0, band["hi"] - band["mid"]) for band in bands]
 
 
 def score_grid(

@@ -376,7 +376,7 @@ def shift_report(
                 if not ranked:
                     continue
                 packed = _pack(ranked[0]["numbers"], ranked[0]["stars"], moments["sum"]["mid"])
-                side = _shift_side(packed, actual, _rank_view(composed))
+                side = _shift_side(packed, actual, _rank_view(composed, frame.star_pool))
                 if trace is not None:
                     side["arbitration"] = stamp_grid(trace, ranked[0]["numbers"], ranked[0]["stars"])
                 if chronos_note and chronos_note.get("available"):
