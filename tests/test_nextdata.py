@@ -350,6 +350,63 @@ def test_darts_lightgbm_stays_single_threaded(monkeypatch) -> None:
     assert captured["n_jobs"] == 1
 
 
+def test_darts_reads_corpus_weights_and_predicts_a_median(monkeypatch) -> None:
+    """Le faux Darts refuse des poids hors TimeSeries, comme darts 0.41."""
+    import sys
+    import types
+
+    import numpy as np
+
+    from synchro.nextdata.forecast import try_darts_medians
+
+    seen: dict[str, object] = {}
+
+    class TimeSeries:
+        def __init__(self, values: object) -> None:
+            self._values = np.asarray(values, dtype=float)
+
+        @staticmethod
+        def from_values(values: object) -> "TimeSeries":
+            return TimeSeries(values)
+
+        def values(self) -> np.ndarray:
+            return self._values
+
+    class LightGBMModel:
+        def __init__(self, **kwargs: object) -> None:
+            seen["kwargs"] = kwargs
+
+        def fit(self, series, past_covariates=None, future_covariates=None, sample_weight=None) -> None:
+            del series, past_covariates, future_covariates
+            if sample_weight is not None and not isinstance(sample_weight, TimeSeries):
+                raise ValueError("input series must be of type `TimeSeries`")
+            seen["weights"] = sample_weight
+
+        def predict(self, n, series, past_covariates=None, future_covariates=None) -> TimeSeries:
+            del n, past_covariates, future_covariates
+            return TimeSeries(series.values()[-1:])
+
+    models = types.ModuleType("darts.models")
+    models.LightGBMModel = LightGBMModel  # type: ignore[attr-defined]
+    darts_mod = types.ModuleType("darts")
+    darts_mod.TimeSeries = TimeSeries  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "darts", darts_mod)
+    monkeypatch.setitem(sys.modules, "darts.models", models)
+
+    frame = build_frame(_draws(60, seed=14), focus=24)
+    corpus = try_darts_medians(frame.rows, frame.horizon, mode="corpus", focus=frame.focus, families=["forme"])
+    assert corpus is not None
+    assert seen["kwargs"]["likelihood"] == "quantile"  # type: ignore[index]
+    assert seen["kwargs"]["quantiles"] == [0.5]  # type: ignore[index]
+    weights = seen["weights"].values().reshape(-1)  # type: ignore[union-attr]
+    assert len(weights) == len(frame.rows)
+    assert set(weights[-frame.focus :]) == {3.0}
+    assert set(weights[: -frame.focus]) == {1.0}
+    window = try_darts_medians(frame.rows, frame.horizon, mode="fenetre", focus=frame.focus, families=["forme"])
+    assert window is not None
+    assert seen["weights"] is None
+
+
 def test_status_does_not_import_darts_or_torch() -> None:
     import sys
 

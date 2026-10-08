@@ -565,6 +565,9 @@ def try_darts_medians(
             "random_state": 42,
             "verbose": -1,
             "n_jobs": 1,
+            # Sans likelihood, Darts ajuste un L2 : une moyenne, pas la médiane qu’il remplace.
+            "likelihood": "quantile",
+            "quantiles": [0.5],
         }
         if past is not None:
             kwargs["lags_past_covariates"] = past_lags
@@ -577,10 +580,8 @@ def try_darts_medians(
             "future_covariates": future,
         }
         if mode == "corpus":
-            fit_args["sample_weight"] = np.asarray(
-                [3.0 if (start + i) >= focus_start else 1.0 for i in range(n - start)],
-                dtype=float,
-            )
+            weights = [[3.0 if (start + i) >= focus_start else 1.0] for i in range(n - start)]
+            fit_args["sample_weight"] = TimeSeries.from_values(np.asarray(weights, dtype=float))
         try:
             model.fit(**fit_args)
         except TypeError:
