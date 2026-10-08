@@ -65,6 +65,8 @@ def test_launch_reloads_only_python_package() -> None:
     assert "/v1/models" in text
     assert "LOCAL_LLM_BASE_URL" in text
     assert 'NO_PROXY="$merged_no_proxy"' in text
+    assert 'export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"' in text
+    assert 'export KMP_DUPLICATE_LIB_OK="${KMP_DUPLICATE_LIB_OK:-TRUE}"' in text
     assert "--noproxy '*'" in text
     assert "ollama serve" in text
     assert "ensure_local_llm" in text

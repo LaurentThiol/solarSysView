@@ -193,6 +193,90 @@ def test_score_follows_predicted_spread_and_consecutive() -> None:
     assert close - far > (close_bare - far_bare) + 5
 
 
+def test_lightgbm_predict_does_not_reopen_the_openmp_pool(monkeypatch) -> None:
+    """predict sans num_threads remet OpenMP à tous les cœurs et SIGSEGV sur Mac."""
+    import sys
+    import types
+
+    import numpy as np
+
+    from synchro.nextdata import forecast as forecast_mod
+
+    calls: dict[str, int | None] = {}
+
+    class _Lib:
+        def LGBM_SetMaxThreads(self, count: int) -> int:
+            calls["max_threads"] = count
+            return 0
+
+    class _Booster:
+        def predict(self, row: np.ndarray, num_threads: int | None = None) -> np.ndarray:
+            del row
+            calls["predict_threads"] = num_threads
+            return np.asarray([4.0])
+
+    def train(params: dict, dataset: object, num_boost_round: int) -> _Booster:
+        del dataset, num_boost_round
+        calls["train_threads"] = params["num_threads"]
+        return _Booster()
+
+    fake = types.ModuleType("lightgbm")
+    fake.Dataset = lambda *args, **kwargs: object()  # type: ignore[attr-defined]
+    fake.train = train  # type: ignore[attr-defined]
+    fake.basic = types.SimpleNamespace(_LIB=_Lib())  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "lightgbm", fake)
+    monkeypatch.setattr(forecast_mod, "_LIGHTGBM_PINNED", False)
+
+    x = np.arange(12, dtype=float).reshape(12, 1)
+    y = np.linspace(2.0, 9.0, 12)
+    pred, model = forecast_mod._fit_one(
+        x,
+        y,
+        np.ones(12),
+        np.asarray([3.0]),
+        alpha=0.5,
+        estimators=4,
+        library="lightgbm",
+    )
+    assert pred == 4.0
+    assert isinstance(model, _Booster)
+    assert calls["train_threads"] == 1
+    assert calls["predict_threads"] == 1
+    assert calls["max_threads"] == 1
+
+
+def test_darts_lightgbm_stays_single_threaded(monkeypatch) -> None:
+    import sys
+    import types
+
+    from synchro.nextdata.forecast import try_darts_medians
+
+    captured: dict[str, int] = {}
+
+    class LightGBMModel:
+        def __init__(self, **kwargs: object) -> None:
+            captured["n_jobs"] = int(kwargs["n_jobs"])  # type: ignore[arg-type]
+            raise RuntimeError("arrêt après le constructeur")
+
+    models = types.ModuleType("darts.models")
+    models.LightGBMModel = LightGBMModel  # type: ignore[attr-defined]
+    darts_mod = types.ModuleType("darts")
+
+    class TimeSeries:
+        @staticmethod
+        def from_values(values: object) -> object:
+            return values
+
+    darts_mod.TimeSeries = TimeSeries  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "darts", darts_mod)
+    monkeypatch.setitem(sys.modules, "darts.models", models)
+
+    draws = _draws(40, seed=1)
+    frame = build_frame(draws, focus=24)
+    assert try_darts_medians(frame.rows, frame.horizon, mode="corpus", focus=frame.focus, families=["forme"]) is None
+    assert captured["n_jobs"] == 1
+
+
 def test_status_does_not_import_darts_or_torch() -> None:
     import sys
 

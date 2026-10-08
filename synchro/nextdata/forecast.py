@@ -15,6 +15,10 @@ from typing import Any, Iterable
 # Darts charge Matplotlib. Sur Mac, le backend graphique peut bloquer l’API
 # au premier import, et la page nextData ne répond plus.
 os.environ.setdefault("MPLBACKEND", "Agg")
+# Filet si ce module est importé avant le paquet. Le serveur pose les mêmes
+# variables dans synchro/__init__.py, avant les bibliothèques natives.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import numpy as np
 
@@ -225,6 +229,40 @@ def catboost_import_error() -> str | None:
     return None
 
 
+_LIGHTGBM_PINNED = False
+
+
+def _pin_lightgbm(lgb: Any) -> None:
+    """Un seul fil OpenMP pour tout LightGBM chargé dans ce processus.
+
+    `LGBM_BoosterPredictForMat` lit `num_threads` du paramètre de prédiction.
+    Sans ce paramètre, LightGBM remet son compteur à 0 puis fork
+    `omp_get_max_threads()` cœurs. Sur Mac, torch, scikit-learn et Homebrew
+    ont chacun un `libomp` : le fil ouvrier saute d’un runtime à l’autre et
+    meurt dans `__kmp_suspend_initialize_thread` (SIGSEGV à 0x580).
+    """
+    global _LIGHTGBM_PINNED
+    if _LIGHTGBM_PINNED:
+        return
+    lib = getattr(getattr(lgb, "basic", None), "_LIB", None)
+    setter = getattr(lib, "LGBM_SetMaxThreads", None)
+    if setter is None:
+        _LIGHTGBM_PINNED = True
+        return
+    try:
+        import ctypes
+
+        setter.argtypes = [ctypes.c_int]
+        setter.restype = ctypes.c_int
+    except Exception:
+        pass
+    try:
+        setter(1)
+    except Exception:
+        return
+    _LIGHTGBM_PINNED = True
+
+
 def _fit_one(
     x_train: np.ndarray,
     y_train: np.ndarray,
@@ -257,6 +295,7 @@ def _fit_one(
         return pred, model
     import lightgbm as lgb
 
+    _pin_lightgbm(lgb)
     dataset = lgb.Dataset(x_train, label=y_train, weight=weights, free_raw_data=False)
     params = {
         "objective": "quantile",
@@ -274,7 +313,8 @@ def _fit_one(
         "verbose": -1,
     }
     booster = lgb.train(params, dataset, num_boost_round=int(estimators))
-    pred = float(booster.predict(row)[0])
+    # Sans num_threads, predict remet le pool OpenMP au nombre de cœurs.
+    pred = float(booster.predict(row, num_threads=1)[0])
     return pred, booster
 
 
@@ -451,6 +491,12 @@ def try_darts_medians(
     if n - start <= lags + 8:
         return None
     try:
+        try:
+            import lightgbm as lgb
+
+            _pin_lightgbm(lgb)
+        except Exception:
+            pass
         from darts import TimeSeries
 
         def series(source: list[dict[str, Any]], names: list[str]):
@@ -467,6 +513,7 @@ def try_darts_medians(
             "output_chunk_length": 1,
             "random_state": 42,
             "verbose": -1,
+            "n_jobs": 1,
         }
         if past is not None:
             kwargs["lags_past_covariates"] = past_lags
