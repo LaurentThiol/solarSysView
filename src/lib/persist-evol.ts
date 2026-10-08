@@ -1,4 +1,4 @@
-/** Reprise d’une boule au tirage précédent de la fenêtre : +1 ou 0. */
+/** Reprise d’une boule au tirage n−1 ou n−2 de la fenêtre : +1 ou 0. */
 
 export type PersistSource = {
   date: string
@@ -14,10 +14,15 @@ export type PersistPoint = {
   weekday?: string
   id: number
   prevDate: string | null
+  lag2Date: string | null
   numbers: 0 | 1 | null
   stars: 0 | 1 | null
+  numbers2: 0 | 1 | null
+  stars2: 0 | 1 | null
   repeatedNumbers: number[]
   repeatedStars: number[]
+  repeatedNumbers2: number[]
+  repeatedStars2: number[]
 }
 
 function intersection(current: readonly number[], previous: readonly number[]): number[] {
@@ -37,34 +42,47 @@ function flag(values: readonly number[]): 0 | 1 {
   return values.length > 0 ? 1 : 0
 }
 
-/** +1 si l’intersection avec le tirage précédent n’est pas vide. Le premier point n’a pas de prédécesseur. */
+function against(current: PersistSource, earlier: PersistSource | undefined) {
+  if (!earlier) {
+    return {
+      date: null as string | null,
+      numbers: null as 0 | 1 | null,
+      stars: null as 0 | 1 | null,
+      repeatedNumbers: [] as number[],
+      repeatedStars: [] as number[],
+    }
+  }
+  const repeatedNumbers = intersection(current.numbers, earlier.numbers)
+  const repeatedStars = intersection(current.stars, earlier.stars)
+  return {
+    date: earlier.date,
+    numbers: flag(repeatedNumbers),
+    stars: flag(repeatedStars),
+    repeatedNumbers,
+    repeatedStars,
+  }
+}
+
+/** +1 si l’intersection n’est pas vide. n−1 manque au premier point, n−2 aux deux premiers. */
 export function toPersistSeries(draws: readonly PersistSource[]): PersistPoint[] {
   const ordered = [...draws].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id)
   return ordered.map((draw, index) => {
-    const prev = index > 0 ? ordered[index - 1] : undefined
-    if (!prev) {
-      return {
-        date: draw.date,
-        weekday: draw.weekday,
-        id: draw.id,
-        prevDate: null,
-        numbers: null,
-        stars: null,
-        repeatedNumbers: [],
-        repeatedStars: [],
-      }
-    }
-    const repeatedNumbers = intersection(draw.numbers, prev.numbers)
-    const repeatedStars = intersection(draw.stars, prev.stars)
+    const prev = against(draw, index > 0 ? ordered[index - 1] : undefined)
+    const lag2 = against(draw, index > 1 ? ordered[index - 2] : undefined)
     return {
       date: draw.date,
       weekday: draw.weekday,
       id: draw.id,
       prevDate: prev.date,
-      numbers: flag(repeatedNumbers),
-      stars: flag(repeatedStars),
-      repeatedNumbers,
-      repeatedStars,
+      lag2Date: lag2.date,
+      numbers: prev.numbers,
+      stars: prev.stars,
+      numbers2: lag2.numbers,
+      stars2: lag2.stars,
+      repeatedNumbers: prev.repeatedNumbers,
+      repeatedStars: prev.repeatedStars,
+      repeatedNumbers2: lag2.repeatedNumbers,
+      repeatedStars2: lag2.repeatedStars,
     }
   })
 }

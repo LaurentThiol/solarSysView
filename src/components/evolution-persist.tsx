@@ -38,7 +38,7 @@ import {
 } from "@/lib/weekday-scope"
 
 type PersistView = "both" | "numbers" | "stars"
-type PersistKey = "numbers" | "stars"
+type PersistKey = "numbers" | "stars" | "numbers2" | "stars2"
 
 const VIEWS: { value: PersistView; label: string }[] = [
   { value: "both", label: "Les deux" },
@@ -47,43 +47,49 @@ const VIEWS: { value: PersistView; label: string }[] = [
 ]
 
 const chartConfig = {
-  numbers: { label: "Numéros", color: "var(--chart-1)" },
-  stars: { label: "Étoiles", color: "var(--chart-2)" },
+  numbers: { label: "Numéros n−1", color: "var(--chart-1)" },
+  numbers2: { label: "Numéros n−2", color: "var(--chart-3)" },
+  stars: { label: "Étoiles n−1", color: "var(--chart-2)" },
+  stars2: { label: "Étoiles n−2", color: "var(--chart-4)" },
   sma: { label: "SMA", color: "var(--chart-2)" },
 } satisfies ChartConfig
 
 const VIEW_KEYS: Record<PersistView, PersistKey[]> = {
-  both: ["numbers", "stars"],
-  numbers: ["numbers"],
-  stars: ["stars"],
+  both: ["numbers", "numbers2", "stars", "stars2"],
+  numbers: ["numbers", "numbers2"],
+  stars: ["stars", "stars2"],
+}
+
+function isLag2(key: PersistKey) {
+  return key === "numbers2" || key === "stars2"
 }
 
 const TITLE_HELP: HelpCopy = {
   title: "Persist",
   wide: true,
-  body: `Reprise d’une boule d’un tirage au suivant, dans l’ordre de la fenêtre.
+  body: `Reprise d’une boule d’un tirage à l’autre, dans l’ordre de la fenêtre.
 
-• Numéros : +1 si au moins un des 5 numéros était déjà dans le tirage précédent, sinon 0.
-• Étoiles : même lecture sur les 2 étoiles.
-• Le premier tirage de la fenêtre n’a pas de prédécesseur : la marche commence au second point.
-• L’infobulle nomme les boules reprises. Ce n’est pas le compte des paires n, n+1 de Forme.
+• n−1 : +1 si au moins une boule du tirage était déjà dans le tirage précédent, sinon 0.
+• n−2 : même règle contre le tirage d’encore avant. Les deux premiers points n’ont pas de n−2.
+• Numéros : les 5 boules. Étoiles : les 2 étoiles. Chaque décalage a sa courbe.
+• L’infobulle nomme les boules reprises et la date comparée. Ce n’est pas le compte des paires n, n+1 de Forme.
 
-La SMA, si elle est affichée, est le taux local de ces 0 / +1. La part de la fenêtre se compare au taux de deux grilles indépendantes. Mardi seul, le précédent est le mardi d’avant dans la fenêtre. Descriptif : chaque tirage reste indépendant.`,
+La SMA, si elle est affichée, est le taux local de ces 0 / +1. La part de la fenêtre se compare au taux de deux grilles indépendantes, le même pour n−1 et n−2. Mardi seul, n−1 est le mardi d’avant dans la fenêtre, n−2 le mardi d’encore avant. Descriptif : chaque tirage reste indépendant.`,
 }
 
 const VIEW_HELP: HelpCopy = {
   title: "Lecture",
-  body: "Les deux : numéros et étoiles sur la même échelle 0 / +1. Ils se superposent quand les deux valent +1. Numéros ou Étoiles isole une série. Une série seule, si la fenêtre mêle les deux soirs, se dédouble : mardi en trait plein, vendredi en tirets. Maj+clic sur une pastille fait de même.",
+  body: "Les deux : numéros et étoiles, chacun en n−1 et en n−2, sur la même échelle 0 / +1. Les marches se superposent quand elles valent +1. n−2 est en pointillés. Numéros ou Étoiles ne garde qu’un pool. Une série seule, si la fenêtre mêle les deux soirs, se dédouble : mardi en trait plein, vendredi en tirets. Maj+clic sur une pastille fait de même.",
 }
 
 const SMA_HELP: HelpCopy = {
   title: "SMA",
-  body: "Moyenne simple des 0 / +1, période auto (5 si au moins 10 tirages, 10 si au moins 40). Le premier trou n’entre pas dans la fenêtre. Taux local de reprise, pas une prédiction.",
+  body: "Moyenne simple des 0 / +1, période auto (5 si au moins 10 tirages, 10 si au moins 40). Les trous du début n’entrent pas dans la fenêtre : un pour n−1, deux pour n−2. Taux local de reprise, pas une prédiction.",
 }
 
 const SUMMARY_HELP: HelpCopy = {
   title: "Part et série",
-  body: "Sur les pas de la fenêtre : nombre de +1, part, série de +1 en cours à la fin, et le taux si deux grilles indépendantes sortent de l’urne (5 parmi 50, 2 étoiles parmi le pool de la fenêtre). Pools d’étoiles mélangés : pas de taux. Ce n’est pas un signal de jeu.",
+  body: "Sur les pas de la fenêtre : nombre de +1, part, série de +1 en cours à la fin, et le taux si deux grilles indépendantes sortent de l’urne (5 parmi 50, 2 étoiles parmi le pool de la fenêtre). Le taux est le même pour n−1 et n−2. Pools d’étoiles mélangés : pas de taux. Ce n’est pas un signal de jeu.",
 }
 
 const EMPTY_BAND: BandPoint = {
@@ -127,8 +133,19 @@ function alignBands(values: Array<0 | 1 | null>, period: number): BandPoint[] {
 }
 
 function theoryFor(key: PersistKey, pool: number | null): number | null {
-  if (key === "numbers") return numberPersistTheory()
+  if (key === "numbers" || key === "numbers2") return numberPersistTheory()
   return pool == null ? null : starPersistTheory(pool)
+}
+
+function repeatedOf(point: PersistPoint, key: PersistKey): number[] {
+  if (key === "numbers") return point.repeatedNumbers
+  if (key === "numbers2") return point.repeatedNumbers2
+  if (key === "stars") return point.repeatedStars
+  return point.repeatedStars2
+}
+
+function comparedDate(point: PersistPoint, key: PersistKey): string | null {
+  return isLag2(key) ? point.lag2Date : point.prevDate
 }
 
 function PersistTooltip({
@@ -164,7 +181,8 @@ function PersistTooltip({
           .map((key) => {
             const raw = point[key]
             const value = raw === 0 || raw === 1 ? raw : null
-            const repeated = key === "numbers" ? point.repeatedNumbers : point.repeatedStars
+            const repeated = repeatedOf(point, key)
+            const against = comparedDate(point, key)
             const sma = showSma ? readOverlay(point, key, "sma") : null
             return (
               <div key={key} className="grid gap-0.5">
@@ -177,7 +195,10 @@ function PersistTooltip({
                   <span className="font-mono font-medium tabular-nums">{formatStep(value)}</span>
                 </div>
                 {value === 0 || value === 1 ? (
-                  <div className="pl-4 text-muted-foreground">{repriseLabel(repeated)}</div>
+                  <div className="pl-4 text-muted-foreground">
+                    {repriseLabel(repeated)}
+                    {against ? ` · ${formatShortDate(against)}` : ""}
+                  </div>
                 ) : null}
                 {showSma ? (
                   <div className="flex items-center gap-2 pl-4 text-muted-foreground">
@@ -360,6 +381,7 @@ export function EvolutionPersist({ draws }: { draws: Draw[] }) {
                     type="stepAfter"
                     stroke={`var(--color-${key})`}
                     strokeWidth={2}
+                    strokeDasharray={isLag2(key) ? "1 3" : undefined}
                     dot={false}
                     name={chartConfig[key].label}
                     isAnimationActive={false}

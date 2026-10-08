@@ -37,6 +37,9 @@ test("the first draw has no step and a repeat is +1", () => {
   assert.deepEqual(series[1].repeatedNumbers, [1, 2, 3, 4])
   assert.equal(series[1].stars, 0)
   assert.deepEqual(series[1].repeatedStars, [])
+  assert.equal(series[1].numbers2, null)
+  assert.equal(series[1].stars2, null)
+  assert.equal(series[1].lag2Date, null)
 })
 
 test("numbers and stars persist independently", () => {
@@ -54,6 +57,28 @@ test("numbers and stars persist independently", () => {
   assert.deepEqual(series[2].repeatedNumbers, [10])
   assert.equal(series[2].stars, 0)
   assert.deepEqual(series[2].repeatedStars, [])
+})
+
+test("n-2 repeats the draw before last, not the previous one", () => {
+  const series = toPersistSeries([
+    source("2026-01-01", [1, 2, 3, 4, 5], [1, 2]),
+    source("2026-01-02", [6, 7, 8, 9, 10], [3, 4]),
+    source("2026-01-03", [1, 6, 11, 12, 13], [1, 5]),
+  ])
+
+  assert.equal(series[0].numbers2, null)
+  assert.equal(series[1].numbers2, null)
+  assert.equal(series[1].lag2Date, null)
+
+  assert.equal(series[2].numbers, 1)
+  assert.deepEqual(series[2].repeatedNumbers, [6])
+  assert.equal(series[2].stars, 0)
+  assert.equal(series[2].numbers2, 1)
+  assert.deepEqual(series[2].repeatedNumbers2, [1])
+  assert.equal(series[2].stars2, 1)
+  assert.deepEqual(series[2].repeatedStars2, [1])
+  assert.equal(series[2].lag2Date, "2026-01-01")
+  assert.equal(series[2].prevDate, "2026-01-02")
 })
 
 test("share and current +1 streak ignore the opening gap", () => {

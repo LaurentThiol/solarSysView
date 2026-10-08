@@ -38,7 +38,10 @@ def test_persist_block_follows_delta_evol() -> None:
     assert "la reprise 0 / +1" in body
     assert "Persist" in block
     assert 'type="stepAfter"' in block
+    assert "Numéros n−2" in block
+    assert "Étoiles n−2" in block
     assert "aucune" in block
     assert "paires n, n+1" in block
-    assert "Persist (reprise 0 / +1)" in page
-    assert "Persist** juste sous DeltaEvol" in readme
+    assert "Persist (reprise 0 / +1, n−1 et n−2)" in page
+    assert "**Persist**, juste sous DeltaEvol" in readme
+    assert "n−2 : la même règle deux tirages plus tôt" in readme

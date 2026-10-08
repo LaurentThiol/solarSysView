@@ -559,7 +559,7 @@ function EvolutionContent() {
 
       <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
         Chaque tirage est indépendant. Les fréquences, la SMA, les bandes de
-        Bollinger, les écarts n − n−1, la reprise 0 / +1, le cumul pair/impair, les totaux de
+        Bollinger, les écarts n − n−1, la reprise 0 / +1 (n−1 et n−2), le cumul pair/impair, les totaux de
         gagnants, la longueur de report, la masse empilée et les barres annuelles
         décrivent l’archive, elles ne prédisent pas le prochain tirage.
       </p>
