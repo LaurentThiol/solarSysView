@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
+import { PersistArchive, PersistControl, PersistPairCard } from "@/components/nextdata/persist-panel"
 import { RankPath } from "@/components/nextdata/rank-path"
 import { TrainingCompare } from "@/components/nextdata/training-compare"
 import { Button } from "@/components/ui/button"
@@ -11,6 +12,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { DRAWS, type Draw } from "@/lib/draws"
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "@/lib/nextdata/help"
+import {
+  pairPersist,
+  persistKey,
+  radiusLabel,
+  type PersistHeld,
+  type PersistInfo,
+  type PersistSetting,
+  type PersistSwap,
+} from "@/lib/nextdata/persist"
 import type { Arbitration } from "@/lib/nextdata/rank-path"
 import { progressPercent, type StepProgress } from "@/lib/nextdata/bands"
 import { bandCoverage, deltaNumbers, TRAINING_SHIFT_TOTAL, visibleTrainingShift } from "@/lib/nextdata/training-progress"
@@ -45,6 +55,7 @@ const CHART: ChartConfig = {
   fenetre_catboost: { label: "CatBoost fenêtre", color: "var(--chart-4)" },
   persistence: { label: "Persistance", color: "var(--foreground)" },
   mean: { label: "Moyenne", color: "var(--muted-foreground)" },
+  persist: { label: "Persist", color: "var(--chart-5)" },
 }
 
 const RANK_ROWS = [
@@ -73,6 +84,8 @@ type Side = {
   hits_numbers: number | null
   hits_stars: number | null
   arbitration?: Arbitration | null
+  swaps?: PersistSwap[]
+  held?: PersistHeld | null
 }
 
 type Shift = {
@@ -96,6 +109,7 @@ type TrainingPayload = {
   summary?: Summary
   estimators?: number
   progress?: StepProgress
+  persist?: PersistInfo | null
 }
 
 function tone(value: number | null | undefined) {
@@ -114,6 +128,7 @@ export function TrainingLab() {
   const [families, setFamilies] = useState<string[]>(FAMILIES.map((item) => item.id))
   const [withChronos, setWithChronos] = useState(false)
   const [delta, setDelta] = useState(false)
+  const [persistSetting, setPersistSetting] = useState<PersistSetting | null>(null)
   const [reading, setReading] = useState<ReadingId>("corpus")
   const [pinnedShift, setPinnedShift] = useState<number | null>(null)
   const [running, setRunning] = useState(false)
@@ -152,10 +167,11 @@ export function TrainingLab() {
       for (const item of READINGS) {
         row[item.id] = shift.readings[item.id]?.errors.sum ?? null
       }
+      row.persist = shift.readings[persistKey(reading)]?.errors.sum ?? null
       return row
     })
     if (!delta) return rows
-    const keys = READINGS.map((item) => item.id)
+    const keys = [...READINGS.map((item) => item.id), "persist"]
     const differed = deltaNumbers(rows.map((row) => keys.map((key) => (typeof row[key] === "number" ? row[key] : null))))
     return rows.map((row, index) => {
       const next = { ...row }
@@ -164,7 +180,7 @@ export function TrainingLab() {
       })
       return next
     })
-  }, [report, delta])
+  }, [report, delta, reading])
 
   function toggleYear(year: string) {
     setYears((current) => {
@@ -195,6 +211,7 @@ export function TrainingLab() {
       weekday,
       covariates: families,
       with_chronos: withChronos,
+      persist: persistSetting,
       draws: draws.map((draw) => ({
         date: draw.date,
         weekday: draw.weekday,
@@ -260,6 +277,21 @@ export function TrainingLab() {
     const side = shift.readings[reading]
     return side?.calibrated && side.calibration_steps ? [side.calibration_steps] : []
   })
+  const persistInfo = report?.persist ?? null
+  const readingLabel = READINGS.find((item) => item.id === reading)?.label
+  const persistPair = useMemo(
+    () =>
+      report?.persist
+        ? pairPersist(
+            (report.shifts ?? []).map((shift) => ({
+              actual: shift.actual,
+              raw: shift.readings[reading],
+              persist: shift.readings[persistKey(reading)],
+            }))
+          )
+        : null,
+    [report, reading]
+  )
 
   return (
     <div className="flex min-w-0 flex-col gap-6" data-nextdata-training>
@@ -312,6 +344,7 @@ export function TrainingLab() {
               </Button>
             </HelpWrap>
           </div>
+          <PersistControl value={persistSetting} onChange={setPersistSetting} help={NEXTDATA_HELP.persist} />
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Covariables
@@ -434,6 +467,21 @@ export function TrainingLab() {
             })}
           </div>
 
+          {persistInfo && (
+            <div className="grid gap-4 lg:grid-cols-2" data-training-persist>
+              {persistPair ? (
+                <PersistPairCard
+                  summary={persistPair}
+                  help={NEXTDATA_TRAINING_HELP.persist}
+                  title={`Persist ${radiusLabel(persistInfo.radius)} · ${readingLabel ?? reading}`}
+                />
+              ) : null}
+              {persistInfo.base ? (
+                <PersistArchive base={persistInfo.base} radius={persistInfo.radius} help={NEXTDATA_HELP.persistArchive} />
+              ) : null}
+            </div>
+          )}
+
           {activeShift ? (
             <Card>
               <CardContent>
@@ -479,6 +527,18 @@ export function TrainingLab() {
                       connectNulls
                     />
                   ))}
+                  {persistInfo ? (
+                    <Line
+                      type="monotone"
+                      dataKey="persist"
+                      name={`${readingLabel ?? reading} · Persist ${radiusLabel(persistInfo.radius)}`}
+                      stroke={`var(--color-${reading})`}
+                      strokeDasharray="4 3"
+                      strokeWidth={2}
+                      dot={{ r: 2 }}
+                      connectNulls
+                    />
+                  ) : null}
                 </LineChart>
               </ChartContainer>
             </CardContent>

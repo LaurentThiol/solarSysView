@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
+import { PersistArchive, PersistControl, PersistPairCard, RecentNote, SwapNote } from "@/components/nextdata/persist-panel"
 import { RankPath } from "@/components/nextdata/rank-path"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,6 +23,18 @@ import {
 } from "@/lib/nextdata/bands"
 import { formatDecimal } from "@/lib/nextdata/compare"
 import { NEXTDATA_HELP } from "@/lib/nextdata/help"
+import {
+  edgeFor,
+  formatPoints,
+  pairPersist,
+  persistKey,
+  radiusLabel,
+  swappedValues,
+  type PersistHeld,
+  type PersistInfo,
+  type PersistSetting,
+  type PersistSwap,
+} from "@/lib/nextdata/persist"
 import type { Arbitration } from "@/lib/nextdata/rank-path"
 import { lowestSumMae, RETOUR_READINGS, retourLabel, type RetourId } from "@/lib/nextdata/retour"
 import { seriesRows, type SeriesRow } from "@/lib/nextdata/series"
@@ -76,6 +89,7 @@ const CHART: ChartConfig = {
 
 type Band = { lo: number; mid: number; hi: number }
 type Grid = { numbers: number[]; stars: number[]; score?: number }
+type PersistBlock = { grid: Grid; swaps: PersistSwap[]; held: PersistHeld | null }
 type ModePayload = {
   grid: Grid
   alternates: Grid[]
@@ -87,6 +101,7 @@ type ModePayload = {
   chronos?: { available?: boolean; weight?: number; holdout_mae_chronos?: number; holdout_mae_lgb?: number } | null
   arbitration?: Arbitration | null
   calibration?: Calibration
+  persist?: PersistBlock | null
   catboost?: ModePayload | null
 }
 type StepSide = {
@@ -101,7 +116,16 @@ type StepSide = {
   star_sum?: number | null
   e1?: number | null
   e2?: number | null
+  swaps?: PersistSwap[]
+  held?: PersistHeld | null
 }
+type BacktestRow = {
+  date: string
+  actual: StepSide
+  corpus: StepSide
+  fenetre: StepSide
+  persistence: StepSide
+} & Partial<Record<string, StepSide | string>>
 type ForecastPayload = {
   ok: boolean
   error?: string
@@ -125,13 +149,7 @@ type ForecastPayload = {
   backtest: {
     draw_count: number
     best_mae_sum: string
-    rows: {
-      date: string
-      actual: StepSide
-      corpus: StepSide
-      fenetre: StepSide
-      persistence: StepSide
-    }[]
+    rows: BacktestRow[]
     metrics: Record<string, { mae: Record<string, number | null>; rmse: Record<string, number | null>; hits_numbers: number | null; hits_stars: number | null }>
     bands?: Record<string, Record<string, BandCoverage>>
   }
@@ -139,6 +157,12 @@ type ForecastPayload = {
   dependencies?: { ready?: boolean; install?: string }
   estimators?: number
   progress?: StepProgress
+  persist?: PersistInfo | null
+}
+
+function rowSide(row: BacktestRow, key: string): StepSide | null {
+  const side = row[key]
+  return side && typeof side === "object" ? side : null
 }
 
 const MODE_LABEL = { corpus: "Trois ans", fenetre: "Fenêtre seule" } as const
@@ -149,23 +173,34 @@ function ringSize(band: Band | undefined) {
   return Math.max(2, Math.min(10, 2 + width / 3))
 }
 
+const SWAPPED_OUTLINE = { outline: "2px dashed var(--foreground)", outlineOffset: "5px" } as const
+
 function ForecastBalls({
   grid,
   quantiles,
   active,
+  swaps,
 }: {
   grid: Grid
   quantiles: Record<string, Band>
   active: boolean
+  swaps?: PersistSwap[]
 }) {
   const ranks = ["n1", "n2", "n3", "n4", "n5"] as const
+  const swappedNumbers = swappedValues(swaps, "number")
+  const swappedStars = swappedValues(swaps, "star")
   return (
     <div className={cn("flex flex-wrap items-center gap-2", active && "rounded-2xl bg-primary/5 px-3 py-2")}>
       {grid.numbers.map((value, index) => (
         <span
           key={`n-${value}-${index}`}
+          data-swapped={swappedNumbers.has(value) ? "true" : undefined}
+          title={swappedNumbers.has(value) ? "reprise de n−1 ou n−2" : undefined}
           className="inline-flex size-11 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground tabular-nums"
-          style={{ boxShadow: `0 0 0 ${ringSize(quantiles[ranks[index]])}px color-mix(in oklch, var(--primary) 28%, transparent)` }}
+          style={{
+            boxShadow: `0 0 0 ${ringSize(quantiles[ranks[index]])}px color-mix(in oklch, var(--primary) 28%, transparent)`,
+            ...(swappedNumbers.has(value) ? SWAPPED_OUTLINE : {}),
+          }}
         >
           {value}
         </span>
@@ -174,12 +209,39 @@ function ForecastBalls({
       {grid.stars.map((value, index) => (
         <span
           key={`s-${value}-${index}`}
+          data-swapped={swappedStars.has(value) ? "true" : undefined}
+          title={swappedStars.has(value) ? "reprise de n−1 ou n−2" : undefined}
           className="inline-flex size-11 items-center justify-center rounded-full bg-star text-sm font-semibold text-primary-foreground tabular-nums"
-          style={{ boxShadow: `0 0 0 ${ringSize(quantiles[index === 0 ? "e1" : "e2"])}px color-mix(in oklch, var(--star) 35%, transparent)` }}
+          style={{
+            boxShadow: `0 0 0 ${ringSize(quantiles[index === 0 ? "e1" : "e2"])}px color-mix(in oklch, var(--star) 35%, transparent)`,
+            ...(swappedStars.has(value) ? SWAPPED_OUTLINE : {}),
+          }}
         >
           {value}
         </span>
       ))}
+    </div>
+  )
+}
+
+function PersistLine({
+  block,
+  info,
+  quantiles,
+  active,
+}: {
+  block: PersistBlock
+  info: PersistInfo
+  quantiles: Record<string, Band>
+  active: boolean
+}) {
+  return (
+    <div className="flex flex-col gap-2 border-t border-dashed border-border pt-2" data-persist-grid>
+      <p className="text-xs font-medium text-muted-foreground">
+        Persist {radiusLabel(info.radius)} · {info.limit === 1 ? "1 numéro" : "2 numéros"}
+      </p>
+      <ForecastBalls grid={block.grid} quantiles={quantiles} active={active} swaps={block.swaps} />
+      <SwapNote swaps={block.swaps} held={block.held} radius={info.radius} limit={info.limit} />
     </div>
   )
 }
@@ -245,6 +307,7 @@ export function NextDataLab() {
   const [families, setFamilies] = useState<string[]>(FAMILIES.map((item) => item.id))
   const [withChronos, setWithChronos] = useState(false)
   const [delta, setDelta] = useState(false)
+  const [persistSetting, setPersistSetting] = useState<PersistSetting | null>(null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<ForecastPayload | null>(null)
@@ -326,6 +389,7 @@ export function NextDataLab() {
       weekday,
       covariates: families,
       with_chronos: withChronos,
+      persist: persistSetting,
       draws: draws.map((draw) => ({
         date: draw.date,
         weekday: draw.weekday,
@@ -372,9 +436,10 @@ export function NextDataLab() {
     setRunning(false)
   }
 
-  function sendToJeux() {
+  function sendToJeux(withPersist = false) {
     const block = report?.modes[primary]
-    const grid = library === "catboost" && block?.catboost ? block.catboost.grid : block?.grid
+    const chosen = library === "catboost" && block?.catboost ? block.catboost : block
+    const grid = withPersist ? chosen?.persist?.grid : chosen?.grid
     if (!grid) return
     const spec = defaultStoredSpec()
     const sum = grid.numbers.reduce((total, value) => total + value, 0)
@@ -398,6 +463,20 @@ export function NextDataLab() {
   const shownBlock = library === "catboost" && report?.modes[primary].catboost ? report.modes[primary].catboost : report?.modes[primary]
   const progress = report?.progress ?? null
   const shownBands = report?.backtest.bands?.[shown]
+  const persistInfo = report?.persist ?? null
+  const persistMoved = Boolean(shownBlock?.persist?.swaps.length)
+  const persistPair = useMemo(() => {
+    if (!report?.persist) return null
+    return pairPersist(
+      report.backtest.rows.map((row) => ({
+        actual: row.actual,
+        raw: rowSide(row, shown),
+        persist: rowSide(row, persistKey(shown)),
+      })),
+      report.star_pool
+    )
+  }, [report, shown])
+  const archiveEdge = persistInfo?.base ? edgeFor(persistInfo.base.numbers, persistInfo.radius) : null
 
   return (
     <div className="flex min-w-0 flex-col gap-6" data-nextdata>
@@ -488,6 +567,8 @@ export function NextDataLab() {
             </HelpWrap>
           </div>
 
+          <PersistControl value={persistSetting} onChange={setPersistSetting} help={NEXTDATA_HELP.persist} />
+
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Covariables
@@ -571,6 +652,18 @@ export function NextDataLab() {
                       : ` Sur le retour, la plus petite erreur de somme revient à « ${retourLabel(lowest)} ».`}
                   {shownBlock?.calibration ? ` ${calibrationCaption(shownBlock.calibration)}` : ""}
                 </p>
+                {persistInfo && (
+                  <div className="flex flex-col gap-1" data-persist-recent>
+                    {persistInfo.recent?.length ? <RecentNote recent={persistInfo.recent} /> : null}
+                    {archiveEdge && archiveEdge.value != null && persistInfo.base ? (
+                      <p className="text-xs tabular-nums text-muted-foreground">
+                        Sur {persistInfo.base.draws} tirages de l’archive, un échange de numéro à {radiusLabel(persistInfo.radius)}{" "}
+                        rapporte {formatPoints(archiveEdge.value)} [{formatPoints(archiveEdge.lo)} ; {formatPoints(archiveEdge.hi)}]
+                        de sortie, le hasard 0. Détail et mesure sur le retour : onglet Retour.
+                      </p>
+                    ) : null}
+                  </div>
+                )}
                 <div className="grid gap-4 md:grid-cols-2">
                   {(["corpus", "fenetre"] as const).map((mode) => {
                     const block = report.modes[mode]
@@ -595,6 +688,9 @@ export function NextDataLab() {
                             </p>
                             <ForecastBalls grid={block.grid} quantiles={block.quantiles} active={active && library === "lightgbm"} />
                             <p className="text-xs tabular-nums text-muted-foreground">{shapeCaption(block.grid.numbers, block.grid.stars)}</p>
+                            {persistInfo && block.persist && (
+                              <PersistLine block={block.persist} info={persistInfo} quantiles={block.quantiles} active={false} />
+                            )}
                           </div>
                           {block.catboost && (
                             <div className={cn("flex flex-col gap-2 rounded-xl p-2", active && library === "catboost" && "bg-primary/5")}>
@@ -603,14 +699,29 @@ export function NextDataLab() {
                               </p>
                               <ForecastBalls grid={block.catboost.grid} quantiles={block.catboost.quantiles} active={active && library === "catboost"} />
                               <p className="text-xs tabular-nums text-muted-foreground">{shapeCaption(block.catboost.grid.numbers, block.catboost.grid.stars)}</p>
+                              {persistInfo && block.catboost.persist && (
+                                <PersistLine
+                                  block={block.catboost.persist}
+                                  info={persistInfo}
+                                  quantiles={block.catboost.quantiles}
+                                  active={false}
+                                />
+                              )}
                             </div>
                           )}
                           {active && (
-                            <HelpWrap help={NEXTDATA_HELP.jeux}>
-                              <Button type="button" variant="outline" onClick={sendToJeux}>
-                                Envoyer vers Jeux
-                              </Button>
-                            </HelpWrap>
+                            <div className="flex flex-wrap gap-2">
+                              <HelpWrap help={NEXTDATA_HELP.jeux}>
+                                <Button type="button" variant="outline" onClick={() => sendToJeux()}>
+                                  Envoyer vers Jeux
+                                </Button>
+                              </HelpWrap>
+                              {persistInfo && persistMoved && (
+                                <Button type="button" variant="outline" onClick={() => sendToJeux(true)}>
+                                  Envoyer la grille Persist
+                                </Button>
+                              )}
+                            </div>
                           )}
                         </CardContent>
                       </Card>
@@ -824,6 +935,20 @@ export function NextDataLab() {
                       </table>
                     </CardContent>
                   </Card>
+                )}
+                {persistInfo && (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {persistPair ? (
+                      <PersistPairCard
+                        summary={persistPair}
+                        help={NEXTDATA_HELP.persistPair}
+                        title={`Persist ${radiusLabel(persistInfo.radius)} · ${retourLabel(shown)}`}
+                      />
+                    ) : null}
+                    {persistInfo.base ? (
+                      <PersistArchive base={persistInfo.base} radius={persistInfo.radius} help={NEXTDATA_HELP.persistArchive} />
+                    ) : null}
+                  </div>
                 )}
                 <div className="grid gap-4 md:grid-cols-2">
                   {(["corpus", "fenetre"] as const).map((mode) => (

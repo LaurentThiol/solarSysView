@@ -9,6 +9,7 @@ import {
   type ComparedGrid,
   type ShapeKey,
 } from "@/lib/nextdata/compare"
+import { persistKey, swappedValues, type PersistSwap } from "@/lib/nextdata/persist"
 import type { GridShape } from "@/lib/nextdata/shape"
 import { cn } from "@/lib/utils"
 
@@ -27,7 +28,7 @@ export type TrainingCompareShift = {
   label: string
   date: string
   actual: ComparedGrid
-  readings: Record<string, ComparedGrid | undefined>
+  readings: Record<string, (ComparedGrid & { swaps?: PersistSwap[] }) | undefined>
 }
 
 function deltaTone(value: number) {
@@ -40,10 +41,12 @@ function BallLine({
   values,
   hits,
   kind,
+  swapped,
 }: {
   values: number[]
   hits: Set<number>
   kind: "number" | "star"
+  swapped?: Set<number>
 }) {
   if (values.length === 0) return <span className="text-muted-foreground">—</span>
   const ranks = kind === "number" ? NUMBER_RANKS : STAR_RANKS
@@ -58,18 +61,21 @@ function BallLine({
     >
       {values.map((value, index) => {
         const hit = hits.has(value)
+        const moved = swapped?.has(value) ?? false
         const rank = ranks[index] ?? ""
-        const label = hit ? `${rank} ${value}, commun` : `${rank} ${value}`
+        const label = `${rank} ${value}${hit ? ", commun" : ""}${moved ? ", reprise de n−1 ou n−2" : ""}`
         return (
           <span
             key={`${kind}-${index}`}
             title={label}
             aria-label={label}
             data-hit={hit ? "true" : undefined}
+            data-swapped={moved ? "true" : undefined}
             className={cn(
               "inline-flex size-7 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums sm:size-8 sm:text-xs",
               kind === "number" ? "bg-primary text-primary-foreground" : "bg-star text-primary-foreground",
-              hit && "z-10 shadow-[0_0_0_2px_var(--foreground)]"
+              hit && "z-10 shadow-[0_0_0_2px_var(--foreground)]",
+              moved && "outline-2 outline-offset-2 outline-dashed outline-foreground"
             )}
           >
             {value}
@@ -114,16 +120,44 @@ function shapeOf(shape: GridShape | null, key: ShapeKey) {
   return shape ? shape[key] : null
 }
 
+function MeanScore({ numbers, stars, label }: { numbers: number | null; stars: number | null; label: string }) {
+  if (numbers == null || stars == null) return <span className="text-muted-foreground">—</span>
+  return (
+    <div
+      className="flex flex-col items-center leading-tight"
+      aria-label={`${label} ${formatDecimal(numbers)} numéros communs sur 5, ${formatDecimal(stars)} étoiles communes sur 2`}
+    >
+      <span className="font-semibold text-foreground">
+        {formatDecimal(numbers)}
+        <span className="text-[10px] font-medium text-muted-foreground">/5</span>
+      </span>
+      <span className="text-[11px] text-muted-foreground">★ {formatDecimal(stars)}/2</span>
+    </div>
+  )
+}
+
 export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareShift[]; reading: string }) {
   const rows = shifts.map((shift) => {
     const side = shift.readings[reading]
     const forecast = side && side.numbers.length > 0 ? side : null
-    return { shift, forecast, compared: compareGrids(shift.actual, forecast) }
+    const twinSide = shift.readings[persistKey(reading)]
+    const twin = twinSide && twinSide.numbers.length > 0 ? twinSide : null
+    return {
+      shift,
+      forecast,
+      compared: compareGrids(shift.actual, forecast),
+      twin,
+      twinCompared: twin ? compareGrids(shift.actual, twin) : null,
+    }
   })
   const ready = rows.filter((row) => row.forecast)
   const numberMean = meanOf(ready.map((row) => row.compared.numberHits.length))
   const starMean = meanOf(ready.map((row) => row.compared.starHits.length))
   const gapMean = (key: ShapeKey) => meanOf(ready.flatMap((row) => (row.compared.gap ? [row.compared.gap[key]] : [])))
+  const twins = rows.flatMap((row) => (row.twinCompared ? [row.twinCompared] : []))
+  const twinNumberMean = meanOf(twins.map((item) => item.numberHits.length))
+  const twinStarMean = meanOf(twins.map((item) => item.starHits.length))
+  const twinGapMean = (key: ShapeKey) => meanOf(twins.flatMap((item) => (item.gap ? [item.gap[key]] : [])))
 
   return (
     <div>
@@ -160,7 +194,7 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ shift, forecast, compared }, index) => {
+            {rows.map(({ shift, forecast, compared, twin, twinCompared }, index) => {
               const numberHits = new Set(compared.numberHits)
               const starHits = new Set(compared.starHits)
               const band = index % 2 === 0 ? "bg-card" : "bg-background"
@@ -168,7 +202,11 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
               return (
                 <Fragment key={shift.x}>
                   <tr>
-                    <th scope="row" rowSpan={2} className={cn(open, "px-2 py-1.5 align-middle font-medium whitespace-nowrap")}>
+                    <th
+                      scope="row"
+                      rowSpan={twin ? 3 : 2}
+                      className={cn(open, "px-2 py-1.5 align-middle font-medium whitespace-nowrap")}
+                    >
                       <span className="block">{shift.label}</span>
                       <span className="mt-0.5 block font-normal text-muted-foreground">{shift.date}</span>
                     </th>
@@ -210,6 +248,37 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
                       </td>
                     ))}
                   </tr>
+                  {twin && twinCompared ? (
+                    <tr data-persist-row>
+                      <th scope="row" className={cn(band, "px-2 py-1.5 align-middle font-medium text-muted-foreground")}>
+                        Persist
+                      </th>
+                      <td className={cn(band, "px-2 py-1.5 align-middle")}>
+                        <BallLine
+                          values={twin.numbers}
+                          hits={new Set(twinCompared.numberHits)}
+                          kind="number"
+                          swapped={swappedValues(twin.swaps, "number")}
+                        />
+                      </td>
+                      <td className={cn(band, "px-2 py-1.5 align-middle")}>
+                        <BallLine
+                          values={twin.stars}
+                          hits={new Set(twinCompared.starHits)}
+                          kind="star"
+                          swapped={swappedValues(twin.swaps, "star")}
+                        />
+                      </td>
+                      <td className={cn(band, "px-2 py-1.5 text-center align-middle")}>
+                        <Score numbers={twinCompared.numberHits.length} stars={twinCompared.starHits.length} ready />
+                      </td>
+                      {SHAPE_KEYS.map((key) => (
+                        <td key={key} className={cn(band, "px-2 py-1.5 text-center align-middle")}>
+                          <ShapeValue value={shapeOf(twinCompared.forecast, key)} delta={shapeOf(twinCompared.gap, key)} />
+                        </td>
+                      ))}
+                    </tr>
+                  ) : null}
                 </Fragment>
               )
             })}
@@ -220,20 +289,7 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
                 Moyenne
               </th>
               <td className="border-t border-border px-2 pt-3 text-center">
-                {numberMean == null || starMean == null ? (
-                  <span className="text-muted-foreground">—</span>
-                ) : (
-                  <div
-                    className="flex flex-col items-center leading-tight"
-                    aria-label={`Moyenne ${formatDecimal(numberMean)} numéros communs sur 5, ${formatDecimal(starMean)} étoiles communes sur 2`}
-                  >
-                    <span className="font-semibold text-foreground">
-                      {formatDecimal(numberMean)}
-                      <span className="text-[10px] font-medium text-muted-foreground">/5</span>
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">★ {formatDecimal(starMean)}/2</span>
-                  </div>
-                )}
+                <MeanScore numbers={numberMean} stars={starMean} label="Moyenne" />
               </td>
               {SHAPE_KEYS.map((key) => {
                 const value = gapMean(key)
@@ -250,6 +306,30 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
                 )
               })}
             </tr>
+            {twins.length > 0 ? (
+              <tr data-persist-mean>
+                <th scope="row" colSpan={4} className="px-2 pt-2 text-left font-medium text-muted-foreground">
+                  Moyenne Persist
+                </th>
+                <td className="px-2 pt-2 text-center">
+                  <MeanScore numbers={twinNumberMean} stars={twinStarMean} label="Moyenne Persist" />
+                </td>
+                {SHAPE_KEYS.map((key) => {
+                  const value = twinGapMean(key)
+                  return (
+                    <td
+                      key={key}
+                      className={cn(
+                        "px-2 pt-2 text-center text-[11px] font-medium",
+                        value == null ? "text-muted-foreground" : deltaTone(value)
+                      )}
+                    >
+                      {value == null ? "—" : formatDecimal(value, true)}
+                    </td>
+                  )
+                })}
+              </tr>
+            ) : null}
           </tfoot>
         </table>
       </div>

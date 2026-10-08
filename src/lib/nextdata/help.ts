@@ -280,6 +280,53 @@ export const NEXTDATA_HELP = {
     title: "Tirage par tirage",
     body: "Pour une date du focus : les cinq numéros sortis, les cinq prévus par ce mode, et combien sont communs. Le modèle qui a produit la ligne n’avait pas encore vu ce tirage.",
   },
+  persist: {
+    title: "Persist ±1, ±2, ±3",
+    wide: true,
+    body: "Reprend l’observation du bloc Persist d’Évolution : le tirage n garde souvent un numéro ou une étoile de n−1 ou n−2. Une fois la grille choisie, un numéro prévu à ±1, ±2 ou ±3 d’une boule de n−1 ou n−2 cède sa place à cette boule. Le modèle ne change pas, seule la grille finale bouge.\n\nCe n’est pas la Persistance du retour, qui rejoue tout le tirage d’avant : Persist ne reprend qu’une ou deux boules proches. Il faut relancer le pronostic pour changer de réglage : les pas sont relus du cache, seuls les échanges se refont.",
+    items: [
+      {
+        label: "Rayon",
+        text: "±1 : seul un numéro voisin d’une boule de n−1 ou n−2 est remplacé. Plus le rayon est large, plus la grille s’éloigne des rangs prévus : chaque échange déplace une boule d’au plus le rayon.",
+      },
+      {
+        label: "1 ou 2 numéros",
+        text: "Nombre de numéros de n−1 ou n−2 que la grille doit tenir. Ceux qu’elle a déjà comptent : une grille qui en a assez ne bouge pas. Les échanges vont du plus proche au plus loin, n−1 avant n−2 à égalité, et une boule reprise ne sert qu’une fois.",
+      },
+      {
+        label: "Étoile",
+        text: "Même règle pour une étoile, toujours une seule : deux étoiles reprises sont rares, environ 9 % au hasard.",
+      },
+      {
+        label: "Coût",
+        text: "Le retour et nextDataTraining notent la grille avec et sans Persist. Un échange est gagné si la boule reprise sort et pas celle qu’elle remplace, perdu dans le cas inverse. La table de l’archive dit ce qu’un échange rapporte en moyenne.",
+      },
+    ],
+  },
+  persistArchive: {
+    title: "Persist sur l’archive",
+    wide: true,
+    body: "Tous les tirages reçus, toutes années, mardi ou vendredi seul si le filtre le demande. À chaque tirage, chaque boule possible est rangée selon sa distance à n−1 ∪ n−2 : 0 si elle y était, puis 1, 2, 3, 4 ou plus. Le taux est la part de ces boules qui sont sorties, avec son intervalle à 95 %. Le hasard donne 5/50 = 10 % à chaque numéro et 2/12 ≈ 16,7 % à chaque étoile, quelle que soit la distance.",
+    items: [
+      {
+        label: "Au moins une reprise",
+        text: "Part des tirages qui gardent au moins un numéro, une étoile, ou l’un des deux, de n−1 ou n−2 : le +1 du bloc Persist. Le hasard tient compte de la taille réelle de n−1 ∪ n−2 à chaque tirage.",
+      },
+      {
+        label: "Échange",
+        text: "Remplacer une boule à distance 1 à r par une boule de n−1 ou n−2 change les communs de p(0) − p(1…r) en moyenne, par échange. Si l’intervalle contient 0, l’archive ne distingue pas l’échange du hasard.",
+      },
+      {
+        label: "Échanges pour voir +1 pt",
+        text: "Combien d’échanges il faudrait pour qu’un gain d’un point par boule reprise sorte du bruit, avec 80 % de chances de le voir et 5 % de risque de le voir à tort.",
+      },
+    ],
+  },
+  persistPair: {
+    title: "Avec et sans Persist",
+    wide: true,
+    body: "Même modèle, même tirage noté : la grille du modèle et sa jumelle Persist. Gagné : la boule reprise sort, pas celle qu’elle remplace. Perdu : l’inverse. Neutre : ni l’une ni l’autre, ou les deux. Le net est gagnés moins perdus, le p le test exact des signes sur ces deux comptes. Au hasard, le net reste dans la marge affichée 95 fois sur 100. Le tableau donne l’erreur moyenne de chaque champ, sans et avec Persist : un écart positif est de l’erreur ajoutée par les échanges.",
+  },
   poids: {
     title: "Poids des variables",
     body: "Les quinze colonnes les plus utilisées pour la somme et pour n1, une liste pour LightGBM et une pour CatBoost. Le nom dit le décalage : lag:sum:2 est la somme d’il y a deux tirages. La famille regroupe calendrier, lune, forme, décennies, delta, répétitions, couples, triples ou la série elle-même. Un gain élevé dit que la colonne a servi à couper les arbres, pas qu’elle annonce le prochain tirage à elle seule.",
@@ -315,6 +362,11 @@ export const NEXTDATA_TRAINING_HELP = {
   },
   boules: {
     title: "Prévu et sorti",
-    body: "Deux lignes par décalage. Sorti est le tirage FDJ, prévu est la grille de la lecture choisie, rangée n1 à n5 puis e1 et e2. Une boule cerclée est dans les deux grilles. Communs compte ces boules, de 0 à 5 et de 0 à 2. Étendue et consécutifs suivent la page Évolution. Le petit nombre à côté du prévu est l’écart prévu moins sorti, omis quand il est nul. Positif : la lecture était trop haute. La moyenne, en bas, reprend les communs et ces écarts.",
+    body: "Deux lignes par décalage. Sorti est le tirage FDJ, prévu est la grille de la lecture choisie, rangée n1 à n5 puis e1 et e2. Une boule cerclée est dans les deux grilles. Communs compte ces boules, de 0 à 5 et de 0 à 2. Étendue et consécutifs suivent la page Évolution. Le petit nombre à côté du prévu est l’écart prévu moins sorti, omis quand il est nul. Positif : la lecture était trop haute. La moyenne, en bas, reprend les communs et ces écarts. Avec Persist, une troisième ligne donne la grille jumelle : une boule en pointillés vient de n−1 ou n−2.",
+  },
+  persist: {
+    title: "Persist sur dix décalages",
+    wide: true,
+    body: "Même interrupteur que nextData. Chaque lecture garde sa grille et reçoit une jumelle Persist, notée sur le même tirage avec les mêmes bandes. Sur dix décalages, il y a rarement plus d’une vingtaine d’échanges : le net tient presque toujours dans la marge du hasard. La table de l’archive, calculée sur tous les tirages reçus, est la mesure qui compte. Sur la courbe de somme, le pointillé est la jumelle de la lecture choisie.",
   },
 } satisfies Record<string, HelpCopy>

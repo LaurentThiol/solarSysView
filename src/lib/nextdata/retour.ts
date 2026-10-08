@@ -5,6 +5,10 @@ export const RETOUR_READINGS = [
   { id: "fenetre", label: "LightGBM · fenêtre seule" },
   { id: "corpus_catboost", label: "CatBoost · trois ans" },
   { id: "fenetre_catboost", label: "CatBoost · fenêtre seule" },
+  { id: "corpus_persist", label: "LightGBM · trois ans · Persist" },
+  { id: "fenetre_persist", label: "LightGBM · fenêtre seule · Persist" },
+  { id: "corpus_catboost_persist", label: "CatBoost · trois ans · Persist" },
+  { id: "fenetre_catboost_persist", label: "CatBoost · fenêtre seule · Persist" },
   { id: "persistence", label: "Persistance" },
   { id: "mean", label: "Moyenne" },
 ] as const
