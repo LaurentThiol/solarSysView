@@ -131,8 +131,8 @@ test("the retour lists each Persist twin after the model readings", () => {
     assert.ok(ids.indexOf(persistKey(id) as (typeof ids)[number]) > ids.indexOf("fenetre_catboost"), id)
     assert.ok(ids.indexOf(persistKey(id) as (typeof ids)[number]) < ids.indexOf("persistence"), id)
   }
-  assert.equal(lowestSumMae({ corpus: { mae: { sum: 20 } }, corpus_persist: { mae: { sum: 20 } } }), "corpus")
-  assert.equal(lowestSumMae({ corpus: { mae: { sum: 20 } }, corpus_persist: { mae: { sum: 19 } } }), "corpus_persist")
+  assert.equal(lowestSumMae({ corpus: { mae: { sum: 20 } }, corpus_persist: { mae: { sum: 19 } } }), "corpus")
+  assert.equal(lowestSumMae({ corpus_persist: { mae: { sum: 19 } } }), null)
 })
 
 test("Persist is wired in both pages and its help says what it costs", () => {

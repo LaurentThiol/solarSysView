@@ -225,7 +225,7 @@ export const NEXTDATA_HELP = {
   metriques: {
     title: "Lectures du retour",
     wide: true,
-    body: "Chaque ligne note la même fenêtre de focus. La plus basse erreur de somme est surlignée, persistance et moyenne comprises. Elle n’impose pas l’interrupteur.",
+    body: "Chaque ligne note la même fenêtre de focus. La plus basse erreur de somme est surlignée, persistance et moyenne comprises. Elle n’impose pas l’interrupteur. Les lignes Persist ne concourent pas : elles ne diffèrent de leur lecture que de quelques échanges, et la carte Avec et sans Persist les compare.",
     items: [
       {
         label: "MAE",

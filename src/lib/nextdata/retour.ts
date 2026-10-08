@@ -5,10 +5,10 @@ export const RETOUR_READINGS = [
   { id: "fenetre", label: "LightGBM · fenêtre seule" },
   { id: "corpus_catboost", label: "CatBoost · trois ans" },
   { id: "fenetre_catboost", label: "CatBoost · fenêtre seule" },
-  { id: "corpus_persist", label: "LightGBM · trois ans · Persist" },
-  { id: "fenetre_persist", label: "LightGBM · fenêtre seule · Persist" },
-  { id: "corpus_catboost_persist", label: "CatBoost · trois ans · Persist" },
-  { id: "fenetre_catboost_persist", label: "CatBoost · fenêtre seule · Persist" },
+  { id: "corpus_persist", label: "LightGBM · trois ans · Persist", twin: true },
+  { id: "fenetre_persist", label: "LightGBM · fenêtre seule · Persist", twin: true },
+  { id: "corpus_catboost_persist", label: "CatBoost · trois ans · Persist", twin: true },
+  { id: "fenetre_catboost_persist", label: "CatBoost · fenêtre seule · Persist", twin: true },
   { id: "persistence", label: "Persistance" },
   { id: "mean", label: "Moyenne" },
 ] as const
@@ -21,14 +21,18 @@ export function retourLabel(id: RetourId): string {
   return RETOUR_READINGS.find((item) => item.id === id)?.label ?? id
 }
 
-/** Lecture au MAE de somme le plus bas, persistance et moyenne comprises. À égalité, la première de la liste. */
+/**
+ * Lecture au MAE de somme le plus bas, persistance et moyenne comprises. À égalité, la première de la liste.
+ * Une jumelle Persist ne diffère de sa lecture que de quelques échanges : elle se compare à elle, pas au classement.
+ */
 export function lowestSumMae(metrics: SumMetrics): RetourId | null {
   let best: RetourId | null = null
   let bestValue = Number.POSITIVE_INFINITY
-  for (const { id } of RETOUR_READINGS) {
-    const value = metrics[id]?.mae.sum
+  for (const item of RETOUR_READINGS) {
+    if ("twin" in item) continue
+    const value = metrics[item.id]?.mae.sum
     if (value == null || !Number.isFinite(value) || value >= bestValue) continue
-    best = id
+    best = item.id
     bestValue = value
   }
   return best
