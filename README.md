@@ -100,7 +100,7 @@ Sinon, Moondream2 via Hugging Face :
 # équivalent : .venv/bin/pip install -r requirements-morpho.txt
 ```
 
-Le bouton peut aussi installer torch + transformers 4.x + accelerate (~2 Go, une fois). `transformers` est épinglé `<5` : la 5.x casse le chargement de `HfMoondream` (`all_tied_weights_keys`). CLIP navigateur : `@huggingface/transformers`, chargé au clic **Œil local CLIP** — ce n’est pas un LLM, il ne passe pas par Ollama.
+Le bouton peut aussi installer torch + transformers + accelerate (~2 Go, une fois). `transformers` est au plancher `>=5.10.0` (avis publiés sur la 4.x). HfMoondream (révision 2025-06-21) n’appelle pas `post_init` : le chargement rattrape `all_tied_weights_keys`. CLIP navigateur : `@huggingface/transformers`, chargé au clic **Œil local CLIP** — ce n’est pas un LLM, il ne passe pas par Ollama.
 
 ## Relief (`/relief`)
 

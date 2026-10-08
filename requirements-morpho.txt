@@ -1,11 +1,13 @@
 # Extra local VLM (Moondream). Pas dans ./launch start — trop lourd (~2 Go).
 # Installer : ./launch install-vlm  ou bouton Morpho « Charger / interroger ».
 # Défaut : vikhyatk/moondream2 via transformers (révision 2025-06-21).
-# transformers 5.x attend all_tied_weights_keys (post_init) ; HfMoondream du
-# hub (rév. 2025-06-21) ne l'appelle pas → AttributeError au chargement.
+# Plancher 5.10.0 : les avis publiés sur la 4.x (RCE, LightGlue, save_pretrained)
+# sont corrigés à partir de cette version. 5.10.0 est retirée de PyPI ; pip
+# prend une 5.10.x ultérieure, qui atteint ce plancher.
+# HfMoondream du hub (rév. 2025-06-21) n'appelle pas post_init.
 # device_map CUDA/MPS exige accelerate (transformers le refuse sinon).
 # Photon (Ampere / Apple Silicon) : pip install moondream
-transformers>=4.45.0,<5
+transformers>=5.10.0
 torch>=2.6.0
 accelerate>=1.0.0
 einops>=0.8.0

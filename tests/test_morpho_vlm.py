@@ -208,7 +208,7 @@ def test_package_major_and_transformers_pin() -> None:
     assert vlm_mod.transformers_needs_pin("4.56.1") is False
     assert vlm_mod.transformers_needs_pin("5.3.0") is True
     req = vlm_mod.extras_requirements_path().read_text()
-    assert "transformers>=4.45.0,<5" in req.replace(" ", "")
+    assert "transformers>=5.10.0" in req.replace(" ", "")
 
 
 def test_apply_hf_moondream_compat_calls_post_init() -> None:
