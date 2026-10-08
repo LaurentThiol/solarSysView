@@ -404,7 +404,7 @@ export function NextDataLab() {
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
         <TitleHelp help={NEXTDATA_HELP.banner}>nextData</TitleHelp> propose deux grilles 5+2.
         n1 à n5 sont les numéros triés, pas l’ordre de sortie. L’anneau d’une boule suit la largeur
-        du quantile. Ce n’est pas une probabilité de gain FDJ.
+        de sa bande 10–90, calibrée sur le retour. Ce n’est pas une probabilité de gain FDJ.
       </p>
 
       {status && status.ready === false && (
