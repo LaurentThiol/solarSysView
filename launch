@@ -1129,12 +1129,19 @@ cmd_install_nextdata() {
   info "Chronos : téléchargement du modèle et premier appel…"
   if chronos_out="$(cd "$ROOT" && MPLBACKEND=Agg "$venv/bin/python" -c '
 import sys
+import numpy as np
 from synchro.nextdata.forecast import CHRONOS_MODEL, chronos_quantiles
+days = np.arange(33, dtype=float)
+item = {
+    "target": np.asarray([days[:32] % 7]),
+    "past_covariates": {"jour": days[:32] % 7},
+    "future_covariates": {"jour": days[32:] % 7},
+}
 try:
-    band = chronos_quantiles([[float(i % 7) for i in range(32)]])[0]
+    band = chronos_quantiles([item])[0][0]
 except RuntimeError as exc:
     sys.exit(str(exc))
-print("%s répond, médiane %.1f" % (CHRONOS_MODEL, band["mid"]))
+print("%s répond avec une covariable connue d’avance, médiane %.1f" % (CHRONOS_MODEL, band["mid"]))
 ')"; then
     ok "Chronos : $chronos_out"
   else
