@@ -185,6 +185,7 @@ export function TrainingLab() {
   }, [report, delta, reading])
 
   function toggleYear(year: string) {
+    if (year === "n") return
     setYears((current) => {
       const next = current.includes(year) ? current.filter((item) => item !== year) : [...current, year]
       return next.length ? next : current
@@ -320,7 +321,15 @@ export function TrainingLab() {
               <HelpTip {...NEXTDATA_HELP.years} />
             </span>
             {(["n", "n-1", "n-2"] as const).map((year) => (
-              <Button key={year} type="button" size="sm" variant={years.includes(year) ? "default" : "outline"} onClick={() => toggleYear(year)}>
+              <Button
+                key={year}
+                type="button"
+                size="sm"
+                variant={years.includes(year) ? "default" : "outline"}
+                aria-disabled={year === "n" || undefined}
+                title={year === "n" ? "n reste cochée : ses tirages précèdent le prochain" : undefined}
+                onClick={() => toggleYear(year)}
+              >
                 {year}
               </Button>
             ))}

@@ -136,9 +136,9 @@ def normalized_draws(draws: Iterable[dict[str, Any]], weekday: str | None = None
 
 
 def _year_keys(anchor: int, years: Iterable[str] | None) -> tuple[list[str], set[int]]:
-    requested = [key for key in YEAR_KEYS if years is None or key in set(years)]
-    if not requested:
-        requested = list(YEAR_KEYS)
+    """Années cochées. n reste toujours : ses tirages précèdent le prochain, celui qu’on prévoit."""
+    chosen = set(YEAR_KEYS) if years is None else {str(key) for key in years} | {"n"}
+    requested = [key for key in YEAR_KEYS if key in chosen]
     mapping = {"n": anchor, "n-1": anchor - 1, "n-2": anchor - 2}
     return requested, {mapping[key] for key in requested}
 

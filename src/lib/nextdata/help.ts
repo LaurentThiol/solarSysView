@@ -31,11 +31,11 @@ export const NEXTDATA_HELP = {
   },
   years: {
     title: "Années n, n−1, n−2",
-    body: "Années civiles du dernier tirage synchronisé. n est l’année de ce tirage, n−1 l’année d’avant, n−2 celle d’encore avant. Au moins une année reste cochée.",
+    body: "Années civiles du dernier tirage synchronisé. n est l’année de ce tirage, n−1 l’année d’avant, n−2 celle d’encore avant. n reste toujours cochée : ses tirages précèdent le prochain tirage, celui que les modèles prévoient.",
     items: [
       {
         label: "Corpus",
-        text: "Décocher une année retire ses tirages de l’apprentissage. Une année vide n’apparaît pas dans « années présentes ».",
+        text: "Décocher n−1 ou n−2 retire ses tirages de l’apprentissage. Une année vide n’apparaît pas dans « années présentes ».",
       },
       {
         label: "Mémoire",

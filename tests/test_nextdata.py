@@ -82,6 +82,17 @@ def test_link_features_do_not_grow_with_history() -> None:
     assert abs(np.corrcoef(ranks, np.arange(len(ago)))[0, 1]) < 0.3
 
 
+def test_year_n_stays_in_the_corpus() -> None:
+    draws = _draws(150, start=date(2024, 1, 2))
+    last = draws[-1]["date"]
+    assert last.startswith("2025")
+    frame = build_frame(draws, years=["n-1", "n-2"], focus=50)
+    assert frame.years == ["n", "n-1", "n-2"]
+    assert frame.years_present == ["n", "n-1"]
+    assert frame.rows[-1]["date"] == last
+    assert frame.next_date > last
+
+
 def test_frame_uses_civil_years_and_recounts_the_focus() -> None:
     draws = _draws(230, seed=2)
     frame = build_frame(draws, years=["n", "n-1"], focus=50)
