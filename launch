@@ -1125,7 +1125,22 @@ cmd_install_nextdata() {
   if ! MPLBACKEND=Agg "$venv/bin/python" -c 'import catboost' 2>/dev/null; then
     warn "CatBoost ne se charge pas. LightGBM reste disponible."
   fi
-  ok "nextData prêt. Grilles → nextData. Le premier Chronos télécharge amazon/chronos-t5-small."
+  local chronos_out
+  info "Chronos : téléchargement du modèle et premier appel…"
+  if chronos_out="$(cd "$ROOT" && MPLBACKEND=Agg "$venv/bin/python" -c '
+import sys
+from synchro.nextdata.forecast import CHRONOS_MODEL, chronos_quantiles
+try:
+    band = chronos_quantiles([[float(i % 7) for i in range(32)]])[0]
+except RuntimeError as exc:
+    sys.exit(str(exc))
+print("%s répond, médiane %.1f" % (CHRONOS_MODEL, band["mid"]))
+')"; then
+    ok "Chronos : $chronos_out"
+  else
+    warn "Chronos ne répond pas (message au-dessus). nextData tourne sans lui."
+  fi
+  ok "nextData prêt. Grilles → nextData."
 }
 
 cmd_install_harmo() {
