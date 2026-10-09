@@ -856,7 +856,7 @@ def test_a_chronos_failure_is_reported_and_never_cached(monkeypatch) -> None:
     from synchro.nextdata.forecast import chronos_error, chronos_quantiles, run_training
     from synchro.nextdata.steps import parts_needed
 
-    seen = _fake_chronos(monkeypatch, fail=OSError("hub injoignable"))
+    seen = _fake_chronos(monkeypatch, fail=OSError("hub\n  injoignable"))
     _offline(monkeypatch, chronos=True)
     monkeypatch.setattr("synchro.nextdata.forecast._installed", lambda module: module == "chronos")
     draws = _draws(40, seed=24)

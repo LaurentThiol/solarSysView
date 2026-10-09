@@ -651,7 +651,8 @@ def chronos_quantiles(series: list[list[float]]) -> list[dict[str, float]]:
             if not np.isfinite(table).all():
                 raise ValueError("quantile non fini")
         except Exception as exc:
-            _CHRONOS_ERROR = f"{type(exc).__name__}: {exc}"
+            detail = " ".join(str(exc).split())
+            _CHRONOS_ERROR = f"{type(exc).__name__}: {detail if len(detail) <= 300 else detail[:299] + '…'}"
             raise RuntimeError(_CHRONOS_ERROR) from exc
     return [dict(zip(("lo", "mid", "hi"), sorted(float(value) for value in row))) for row in table]
 
