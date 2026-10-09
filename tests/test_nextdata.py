@@ -225,10 +225,60 @@ def test_compose_clips_a_gap_and_keeps_ranks_increasing() -> None:
     assert abs(out["g1"]["mid"] - trace["gaps"][0]["clipped"]) < 1e-6
     assert abs(out["n1"]["mid"] - trace["numbers"][0]["clipped"]) < 1e-6
     weights = trace["numbers"][1]["weights"]
-    assert weights["level"] > weights["chain"]
-    assert weights["chain"] >= 0.04
+    assert weights["chain"] == 0
+    assert weights["level"] > weights["delta"] > 0
     assert abs(sum(weights.values()) - 1) < 0.02
+    assert trace["numbers"][1]["chain"] == 15
+    assert trace["numbers"][1]["blend"] == 30
     assert trace["sum_target"] == 100
+
+
+def test_direct_ranks_are_not_pulled_down_by_the_chain() -> None:
+    """Sept partout dans la chaîne donne n5 = 35 ; la prévision directe dit 44, la grille la suit."""
+    from synchro.nextdata.project import project_numbers
+
+    gap = {"lo": 1, "mid": 7, "hi": 18}
+    moments = {
+        "n1": {"lo": 2, "mid": 7, "hi": 17},
+        "g1": gap,
+        "g2": gap,
+        "g3": gap,
+        "g4": gap,
+        "sum": {"lo": 90, "mid": 128, "hi": 165},
+        "spread": {"lo": 25, "mid": 37, "hi": 46},
+        "e1": {"lo": 1, "mid": 3, "hi": 7},
+        "e_gap": {"lo": 1, "mid": 4, "hi": 9},
+    }
+    for rank, (lo, mid, hi) in zip(
+        ("n1", "n2", "n3", "n4", "n5", "e1", "e2"),
+        ((2, 7, 17), (7, 16, 28), (14, 26, 37), (23, 35, 45), (34, 44, 49), (1, 3, 7), (5, 9, 12)),
+    ):
+        moments[f"level:{rank}"] = {"lo": lo, "mid": mid, "hi": hi}
+    out, trace = compose_ranks(moments, None)
+    assert [row["chain"] for row in trace["numbers"]] == [7, 14, 21, 28, 35]
+    assert [row["clipped"] for row in trace["numbers"]] == [7, 16, 26, 35, 44]
+    assert all(row["weights"] == {"chain": 0.0, "level": 1.0, "delta": 0.0} for row in trace["numbers"])
+    numbers, _raw = project_numbers(out)
+    assert numbers == [7, 16, 26, 35, 44]
+
+
+def test_sum_and_spread_nudges_share_the_correction() -> None:
+    from synchro.nextdata.project import NUMBER_BOUNDS, _nudge_spread, _nudge_sum
+
+    lo = [low for low, _high in NUMBER_BOUNDS]
+    hi = [high for _low, high in NUMBER_BOUNDS]
+    start = [8, 18, 28, 38, 48]
+    scales = [13, 18, 19, 17, 13]
+    lowered = _nudge_sum(start, 120, lo, hi, start, scales)
+    assert sum(lowered) == 120
+    assert lowered == [5, 13, 23, 34, 45]
+    assert min(b - a for a, b in zip(lowered, lowered[1:])) >= 8
+    assert _nudge_sum(start, 120, lo, hi) != [1, 5, 28, 38, 48]
+    narrowed = _nudge_spread(start, 34, lo, hi, start, scales)
+    assert sum(narrowed) == sum(start)
+    assert narrowed[-1] - narrowed[0] == 34
+    assert narrowed == sorted(narrowed)
+    assert min(b - a for a, b in zip(narrowed, narrowed[1:])) >= 6
 
 
 def test_rank_bands_add_in_quadrature_and_stay_in_range() -> None:

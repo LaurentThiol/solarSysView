@@ -62,119 +62,103 @@ def project_increasing(values: list[float], lo: list[int], hi: list[int]) -> lis
     return out
 
 
-def _inside(values: list[int], index: int, delta: int, lo: list[int], hi: list[int]) -> bool:
-    trial = list(values)
-    trial[index] += delta
-    low, high = _room(trial, index, lo, hi)
-    return low <= trial[index] <= high
+def _step_cost(value: int, delta: int, center: float, scale: float) -> float:
+    """Ce que coûte un pas à un rang : le carré de son écart au centre, à l’échelle de sa bande.
+
+    Au carré, chaque pas de plus sur un même rang coûte davantage : un total à
+    déplacer se répartit en proportion du carré des largeurs, au lieu d’épuiser
+    un seul rang.
+    """
+    width = max(float(scale), 1e-6)
+    return ((value + delta - center) / width) ** 2 - ((value - center) / width) ** 2
 
 
-def _pay(values: list[int], lo: list[int], hi: list[int], start: int, stop: int, step: int, delta: int) -> bool:
-    index = start
-    while index != stop:
-        if _inside(values, index, delta, lo, hi):
-            values[index] += delta
-            return True
-        index += step
-    return False
+def _fits(values: list[int], lo: list[int], hi: list[int]) -> bool:
+    inside = all(lo[index] <= value <= hi[index] for index, value in enumerate(values))
+    return inside and all(left < right for left, right in zip(values, values[1:]))
 
 
-def _move_end(values: list[int], lo: list[int], hi: list[int], index: int, delta: int, pay_delta: int) -> bool:
-    """Bouge une extrémité et compense sur un rang intérieur. La somme ne change pas."""
-    last = len(values) - 1
-    if not _inside(values, index, delta, lo, hi):
-        return False
-    values[index] += delta
-    if index == last:
-        paid = _pay(values, lo, hi, last - 1, 0, -1, pay_delta)
-    else:
-        paid = _pay(values, lo, hi, 1, last, 1, pay_delta)
-    if paid:
-        return True
-    values[index] -= delta
-    return False
+def _guides(values: list[int], centers: list[float] | None, scales: list[float] | None) -> tuple[list[float], list[float]]:
+    chosen = [float(value) for value in values] if centers is None else [float(value) for value in centers]
+    widths = [1.0] * len(values) if scales is None else [float(value) for value in scales]
+    return chosen, widths
 
 
-def _free_end(values: list[int], lo: list[int], hi: list[int], shrink: bool) -> bool:
-    """Décale le voisin d’une extrémité bloquée. L’étendue ne change pas."""
-    last = len(values) - 1
-    if shrink:
-        if _move_end(values, lo, hi, last - 1, -1, 1):
-            return True
-        return _move_end(values, lo, hi, 1, 1, -1)
-    if _move_end(values, lo, hi, last - 1, 1, -1):
-        return True
-    return _move_end(values, lo, hi, 1, -1, 1)
+def _nudge_spread(
+    values: list[int],
+    target: int,
+    lo: list[int],
+    hi: list[int],
+    centers: list[float] | None = None,
+    scales: list[float] | None = None,
+) -> list[int]:
+    """Ramène max − min vers la cible sans changer la somme ni l’ordre.
 
-
-def _stretch(values: list[int], lo: list[int], hi: list[int]) -> bool:
-    """Étend n5 − n1 de 1, ou dégage une extrémité, sans changer la somme."""
-    last = len(values) - 1
-    if _move_end(values, lo, hi, last, 1, -1):
-        return True
-    if _move_end(values, lo, hi, 0, -1, 1):
-        return True
-    return _free_end(values, lo, hi, shrink=False)
-
-
-def _compress(values: list[int], lo: list[int], hi: list[int]) -> bool:
-    """Réduit n5 − n1 de 1, ou dégage une extrémité, sans changer la somme."""
-    last = len(values) - 1
-    if _move_end(values, lo, hi, last, -1, 1):
-        return True
-    if _move_end(values, lo, hi, 0, 1, -1):
-        return True
-    return _free_end(values, lo, hi, shrink=True)
-
-
-def _nudge_spread(values: list[int], target: int, lo: list[int], hi: list[int]) -> list[int]:
-    """Ramène max − min vers la cible. Chaque pas garde la somme et l’ordre."""
+    Un pas bouge une extrémité et compense sur un autre rang. Parmi les paires
+    possibles, il prend celle qui éloigne le moins les rangs de leurs centres.
+    """
     out = list(values)
-    stall = 0
-    for _ in range(90):
-        spread = out[-1] - out[0]
+    centers, scales = _guides(out, centers, scales)
+    last = len(out) - 1
+    for _ in range(120):
+        spread = out[last] - out[0]
         if spread == int(target):
             break
-        before = tuple(out)
-        moved = _stretch(out, lo, hi) if spread < target else _compress(out, lo, hi)
-        if not moved or tuple(out) == before or len(set(out)) != len(out) or out != sorted(out):
-            out[:] = before
+        widen = spread < int(target)
+        best: tuple[tuple[float, int, int], list[int]] | None = None
+        for end, move in ((last, 1 if widen else -1), (0, -1 if widen else 1)):
+            for other in range(len(out)):
+                if other == end:
+                    continue
+                trial = list(out)
+                trial[end] += move
+                trial[other] -= move
+                if not _fits(trial, lo, hi):
+                    continue
+                if abs(int(target) - (trial[last] - trial[0])) >= abs(int(target) - spread):
+                    continue
+                cost = _step_cost(out[end], move, centers[end], scales[end])
+                cost += _step_cost(out[other], -move, centers[other], scales[other])
+                key = (cost, end, other)
+                if best is None or key < best[0]:
+                    best = (key, trial)
+        if best is None:
             break
-        if out[-1] - out[0] == spread:
-            stall += 1
-            if stall > 6:
-                break
-        else:
-            stall = 0
+        out = best[1]
     return out
 
 
-def _nudge_sum(values: list[int], target: int, lo: list[int], hi: list[int]) -> list[int]:
+def _nudge_sum(
+    values: list[int],
+    target: int,
+    lo: list[int],
+    hi: list[int],
+    centers: list[float] | None = None,
+    scales: list[float] | None = None,
+) -> list[int]:
+    """Rapproche la somme de la cible, un pas à la fois.
+
+    Chaque pas va au rang qu’il éloigne le moins de son centre, à l’échelle de
+    sa bande : la correction se répartit au lieu de pousser toujours n5 ou n1.
+    """
     out = list(values)
-    guard = 0
-    while sum(out) < target and guard < 80:
-        guard += 1
-        moved = False
-        for index in range(len(out) - 1, -1, -1):
-            low, high = _room(out, index, lo, hi)
-            if out[index] < high and out[index] >= low:
-                out[index] += 1
-                moved = True
-                break
-        if not moved:
+    centers, scales = _guides(out, centers, scales)
+    for _ in range(250):
+        gap = int(target) - sum(out)
+        if gap == 0:
             break
-    guard = 0
-    while sum(out) > target and guard < 80:
-        guard += 1
-        moved = False
+        step = 1 if gap > 0 else -1
+        best: tuple[float, float, int] | None = None
         for index in range(len(out)):
             low, high = _room(out, index, lo, hi)
-            if out[index] > low and out[index] <= high:
-                out[index] -= 1
-                moved = True
-                break
-        if not moved:
+            if not low <= out[index] + step <= high:
+                continue
+            key = (_step_cost(out[index], step, centers[index], scales[index]), -scales[index], index)
+            if best is None or key < best:
+                best = key
+        if best is None:
             break
+        out[best[2]] += step
     return out
 
 
@@ -187,12 +171,13 @@ def project_numbers(moments: dict[str, dict[str, float]]) -> tuple[list[int], li
     raw = reconstruct(n1, gaps)
     lo = [bound[0] for bound in NUMBER_BOUNDS]
     hi = [bound[1] for bound in NUMBER_BOUNDS]
+    mids, scales, _ = rank_scales(moments)
     ints = project_increasing(raw, lo, hi)
     _, sum_mid, _ = _band(moments.get("sum"), float(sum(ints)))
-    ints = _nudge_sum(ints, int(round(sum_mid)), lo, hi)
+    ints = _nudge_sum(ints, int(round(sum_mid)), lo, hi, mids, scales)
     if moments.get("spread"):
         _, spread_mid, _ = _band(moments.get("spread"), float(ints[-1] - ints[0]))
-        ints = _nudge_spread(ints, int(round(spread_mid)), lo, hi)
+        ints = _nudge_spread(ints, int(round(spread_mid)), lo, hi, mids, scales)
     return ints, raw
 
 
@@ -203,9 +188,12 @@ def project_stars(moments: dict[str, dict[str, float]], star_pool: int) -> list[
     raw = [e1, e1 + max(1.0, gap)]
     lo = [1, 2]
     hi = [pool - 1, pool]
+    bands = rank_bands(moments, pool)
+    centers = [bands[name]["mid"] for name in ("e1", "e2")]
+    scales = [max(1.0, bands[name]["hi"] - bands[name]["lo"]) for name in ("e1", "e2")]
     ints = project_increasing(raw, lo, hi)
     _, sum_mid, _ = _band(moments.get("star_sum"), float(sum(ints)))
-    return _nudge_sum(ints, int(round(sum_mid)), lo, hi)
+    return _nudge_sum(ints, int(round(sum_mid)), lo, hi, centers, scales)
 
 
 def _valid_numbers(values: list[int]) -> bool:
@@ -267,30 +255,59 @@ def _spread_out(parts: list[tuple[float, float, float]]) -> tuple[float, float]:
     return below, above
 
 
-def rank_bands(moments: dict[str, dict[str, float]], star_pool: int = 12) -> dict[str, dict[str, float]]:
-    """Bandes de n1…n5, e1 et e2, reconstruites depuis la chaîne.
+def _direct_band(
+    moments: dict[str, dict[str, float]],
+    name: str,
+    mid: float,
+    low: float,
+    high: float,
+) -> dict[str, float] | None:
+    level = moments.get(f"level:{name}")
+    if not level:
+        return None
+    lo, _, hi = _band(level, mid)
+    return {"lo": max(low, min(lo, mid)), "mid": mid, "hi": min(high, max(hi, mid))}
 
-    Les écarts bas et haut de n1 et des g s’ajoutent en quadrature. Additionner
-    les largeurs supposerait des écarts qui grandissent tous ensemble, alors
-    qu’ils se partagent les cinquante numéros. Chaque bande reste dans les
-    valeurs que son rang peut prendre.
+
+def rank_bands(moments: dict[str, dict[str, float]], star_pool: int = 12) -> dict[str, dict[str, float]]:
+    """Bandes de n1…n5, e1 et e2, autour des rangs tenus.
+
+    La bande d’un rang est celle de sa prévision directe (`level:`) quand elle
+    existe. Sinon elle se reconstruit depuis la chaîne : les écarts bas et haut
+    de n1 et des g s’ajoutent en quadrature, car additionner les largeurs
+    supposerait des écarts qui grandissent tous ensemble, alors qu’ils se
+    partagent les cinquante numéros. Chaque bande reste dans les valeurs que
+    son rang peut prendre.
     """
     first = _band(moments.get("n1"), 8)
     gaps = [_gap(moments.get(name), 8) for name in ("g1", "g2", "g3", "g4")]
     mids = reconstruct(first[1], [gap[1] for gap in gaps])
     out: dict[str, dict[str, float]] = {}
     for index, (low, high) in enumerate(NUMBER_BOUNDS):
-        below, above = _spread_out([first, *gaps[:index]])
+        name = f"n{index + 1}"
         mid = min(high, max(low, mids[index]))
-        out[f"n{index + 1}"] = {"lo": max(low, mid - below), "mid": mid, "hi": min(high, mid + above)}
+        direct = _direct_band(moments, name, mid, low, high)
+        if direct is not None:
+            out[name] = direct
+            continue
+        below, above = _spread_out([first, *gaps[:index]])
+        out[name] = {"lo": max(low, mid - below), "mid": mid, "hi": min(high, mid + above)}
     pool = max(2, min(12, int(star_pool)))
     e1 = _band(moments.get("e1"), 2)
     e_gap = _gap(moments.get("e_gap"), 3)
     e1_mid = min(pool - 1, max(1.0, e1[1]))
-    out["e1"] = {"lo": max(1.0, min(e1[0], e1_mid)), "mid": e1_mid, "hi": min(pool - 1, max(e1[2], e1_mid))}
-    below, above = _spread_out([e1, e_gap])
+    out["e1"] = _direct_band(moments, "e1", e1_mid, 1.0, pool - 1.0) or {
+        "lo": max(1.0, min(e1[0], e1_mid)),
+        "mid": e1_mid,
+        "hi": min(pool - 1, max(e1[2], e1_mid)),
+    }
     e2_mid = min(pool, max(2.0, e1[1] + e_gap[1]))
-    out["e2"] = {"lo": max(2.0, e2_mid - below), "mid": e2_mid, "hi": min(pool, e2_mid + above)}
+    direct = _direct_band(moments, "e2", e2_mid, 2.0, float(pool))
+    if direct is not None:
+        out["e2"] = direct
+    else:
+        below, above = _spread_out([e1, e_gap])
+        out["e2"] = {"lo": max(2.0, e2_mid - below), "mid": e2_mid, "hi": min(pool, e2_mid + above)}
     return out
 
 
@@ -470,10 +487,14 @@ def _rank_reading(
     moments: dict[str, dict[str, float]],
     previous: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], float]:
+    """Centre d’un rang : ses deux prévisions directes, le niveau et le delta.
+
+    La chaîne n’y entre que faute de prévision directe : additionner des
+    médianes d’écarts tire n2…n5 vers le bas, la médiane d’une somme n’étant
+    pas la somme des médianes. Elle reste dans la trace, pour comparaison.
+    """
     chain_lo, chain_mid, chain_hi = chain
-    parts: list[tuple[str, float, float, float]] = [
-        ("chain", chain_mid, max(chain_hi - chain_lo, 1e-6), _CHAIN_PRIOR),
-    ]
+    parts: list[tuple[str, float, float, float]] = []
     level = moments.get(f"level:{name}")
     level_width: float | None = None
     if level:
@@ -488,6 +509,8 @@ def _rank_reading(
         delta_level = last + delta_mid
         width = level_width if level_width is not None else max(_band(delta, 0.0)[2] - _band(delta, 0.0)[0], 1e-6)
         parts.append(("delta", delta_level, width, _DELTA_PRIOR))
+    if not parts:
+        parts.append(("chain", chain_mid, max(chain_hi - chain_lo, 1e-6), _CHAIN_PRIOR))
     weights = _mix_weights(parts)
     blend = sum(weights[key] * center for key, center, _width, _prior in parts)
     full = {"chain": 0.0, "level": 0.0, "delta": 0.0}
@@ -524,7 +547,7 @@ def compose_ranks(
     moments: dict[str, dict[str, float]],
     previous: dict[str, Any] | None,
 ) -> tuple[dict[str, dict[str, float]], dict[str, Any] | None]:
-    """Mélange chaîne, niveau et delta, puis tient les écarts dans leur bande.
+    """Centre de chaque rang par ses prévisions directes, puis écarts tenus dans la bande de la chaîne.
 
     Sans clés `level:` ni `delta:`, la chaîne reste telle quelle. Les médianes
     réécrites sont `n1`, `g1`…`g4`, `e1` et `e_gap`, celles que la projection lit.
@@ -556,7 +579,6 @@ def compose_ranks(
     e1_lo, e1_mid, e1_hi = _band(moments.get("e1"), 2)
     _gap_lo, gap_mid, gap_hi = _band(moments.get("e_gap"), 3)
     e2_mid = e1_mid + max(1.0, gap_mid)
-    # Largeur de e2 = largeur de e1 + largeur de l’écart, comme l’anneau.
     e2_width = max((e1_hi - e1_lo) + max(0.0, gap_hi - _gap_lo), 1e-6)
     e2_half = e2_width / 2.0
     star_bands = [

@@ -83,7 +83,7 @@ export const NEXTDATA_HELP = {
   moteur: {
     title: "LightGBM, CatBoost et Chronos",
     wide: true,
-    body: "LightGBM et CatBoost lisent les mêmes décalages et les mêmes covariables, puis enchaînent les rangs de la même façon : n1, puis les écarts jusqu’à n5, puis e1 et l’écart d’étoiles. Chacun propose sa grille. Le voisin entier le mieux noté est affiché.",
+    body: "LightGBM et CatBoost lisent les mêmes décalages et les mêmes covariables, puis prévoient chaque rang de la même façon : n1 à n5, e1 et e2 directement, la chaîne des écarts bornant l’espacement. Chacun propose sa grille. Le voisin entier le mieux noté est affiché.",
     items: [
       {
         label: "Sans Chronos",
@@ -177,12 +177,12 @@ export const NEXTDATA_HELP = {
   chemin: {
     title: "Comment n1…n5 et e1, e2 sont obtenus",
     wide: true,
-    body: "Trois lectures par rang. La chaîne part de n1 et ajoute les écarts g1 à g4 ; pour les étoiles, e1 puis l’écart e2 − e1. Le niveau est le quantile prévu pour ce rang, seul. Le delta ajoute au dernier rang sorti le pas n − n−1. Le barreau donne le poids : l’inverse de la largeur de bande, un peu moins pour le delta. Un écart du mélange qui sort de la bande 10–90 est ramené au bord, puis la somme rapproche la grille. La boule est le voisin retenu.",
+    body: "Chaque rang est prévu directement, deux fois. Le niveau est le quantile prévu pour ce rang, seul. Le delta ajoute au dernier rang sorti le pas n − n−1. Le barreau donne leur poids : l’inverse de la largeur de bande, un peu moins pour le delta.\n\nLa chaîne part de n1 et ajoute les écarts g1 à g4 ; pour les étoiles, e1 puis l’écart e2 − e1. Elle reste affichée, sans poids : la médiane d’une somme n’est pas la somme des médianes, et additionner des médianes d’écarts tirait n2…n5 vers le bas (n5 vers 39 quand sa médiane est 44). Ses bandes d’écarts tiennent encore l’espacement : un écart du mélange qui en sort est ramené au bord.\n\nLa somme, puis l’étendue, rapprochent ensuite la grille de leurs cibles, un pas à la fois, sur le rang que ce pas éloigne le moins de son centre, à l’échelle de sa bande. La correction se répartit au lieu de pousser n5 puis n4. La boule est le voisin retenu.",
   },
   grille: {
     title: "Grille 5+2",
     wide: true,
-    body: "Cinq numéros triés et deux étoiles. L’anneau suit la largeur de la bande 10–90 du rang : un anneau large dit que le modèle hésite. De n2 à n5, et pour e2, cette bande cumule celles de n1 et des écarts en quadrature, sans sortir des valeurs possibles du rang. Elle est ensuite calibrée sur le retour, comme les autres bandes. Sous les boules, l’étendue et les consécutifs de cette grille, numéros puis étoiles, avec les mêmes comptes que la page Évolution.",
+    body: "Cinq numéros triés et deux étoiles. L’anneau suit la largeur de la bande 10–90 du rang : un anneau large dit que le modèle hésite. Chaque rang a la bande de sa prévision directe, sans sortir des valeurs possibles du rang ; elle est ensuite calibrée sur le retour, comme les autres bandes. Sous les boules, l’étendue et les consécutifs de cette grille, numéros puis étoiles, avec les mêmes comptes que la page Évolution.",
     items: [
       {
         label: "Mise en avant",

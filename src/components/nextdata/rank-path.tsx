@@ -29,7 +29,9 @@ function ReadingColumn({ rank }: { rank: RankReading }) {
   return (
     <div className="flex min-w-[6.5rem] flex-1 flex-col gap-1">
       <p className="text-xs font-medium text-muted-foreground">{rank.rank}</p>
-      <p className="text-xs tabular-nums">chaîne {fmt(rank.chain)}</p>
+      <p className={cn("text-xs tabular-nums", rank.weights.chain === 0 && "text-muted-foreground")}>
+        chaîne {fmt(rank.chain)}
+      </p>
       <p className="text-xs tabular-nums">niveau {fmt(rank.level)}</p>
       <p className="text-xs tabular-nums">delta {fmt(rank.delta)}</p>
       <WeightBar weights={rank.weights} />
@@ -123,7 +125,7 @@ export function RankPath({ trace, help }: { trace: Arbitration | null | undefine
         <p className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <span className="inline-block size-2 rounded-full" style={{ background: "var(--chart-1)" }} />
-            chaîne
+            chaîne, sans poids
           </span>
           <span className="inline-flex items-center gap-1">
             <span className="inline-block size-2 rounded-full" style={{ background: "var(--chart-2)" }} />

@@ -4,9 +4,10 @@ Darts `LightGBMModel`, quand le paquet est là, remplace la médiane temporelle
 du prochain pas. La chaîne n1 → écarts reste en LightGBM direct : le
 conditionnement est dans le même tirage, ce que les lags ne portent pas.
 Chronos, s’il est installé, ne mélange que somme, somme des étoiles et n1.
-Les niveaux n1…n5, e1, e2 et leurs deltas sont prévus à part, puis arbitrés
-avec cette chaîne avant la grille. Le pronostic, le retour et les décalages
-lisent les mêmes pas (`steps`), au même réglage.
+Les niveaux n1…n5, e1, e2 et leurs deltas, prévus à part, donnent le centre
+de chaque rang ; la chaîne n’y pèse plus et borne seulement les écarts. Le
+pronostic, le retour et les décalages lisent les mêmes pas (`steps`), au
+même réglage.
 """
 
 from __future__ import annotations
