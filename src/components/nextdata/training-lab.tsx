@@ -25,7 +25,19 @@ import {
 } from "@/lib/nextdata/persist"
 import type { Arbitration } from "@/lib/nextdata/rank-path"
 import { progressPercent, type StepProgress } from "@/lib/nextdata/bands"
+import { formatDecimal } from "@/lib/nextdata/compare"
 import { bandCoverage, deltaNumbers, TRAINING_SHIFT_TOTAL, visibleTrainingShift } from "@/lib/nextdata/training-progress"
+import {
+  coverageRange,
+  formatCoverage,
+  hitsWord,
+  maeInterval,
+  versusText,
+  type HitsChance,
+  type MeanInterval,
+  type PairedGap,
+  type Verdict,
+} from "@/lib/nextdata/uncertainty"
 import { cn } from "@/lib/utils"
 
 const FAMILIES: { id: string; label: string }[] = [
@@ -49,6 +61,17 @@ const READINGS = [
 ] as const
 
 type ReadingId = (typeof READINGS)[number]["id"]
+
+const BENCHMARKS = [
+  { id: "mean", label: "la moyenne" },
+  { id: "persistence", label: "la persistance" },
+] as const
+
+const VERDICT_TONE: Record<Verdict, string> = {
+  lower: "text-chart-2",
+  higher: "text-destructive",
+  undecided: "text-muted-foreground",
+}
 
 const CHART: ChartConfig = {
   corpus: { label: "LightGBM trois ans", color: "var(--chart-1)" },
@@ -98,7 +121,18 @@ type Shift = {
   readings: Record<string, Side>
 }
 
-type Summary = Record<string, { mae_sum: number | null; hits_numbers: number | null; count: number }>
+type Summary = Record<
+  string,
+  {
+    mae_sum: number | null
+    mae_sum_ci?: MeanInterval
+    hits_numbers: number | null
+    hits_stars?: number | null
+    hits_chance?: HitsChance
+    versus?: Record<string, PairedGap>
+    count: number
+  }
+>
 
 type TrainingPayload = {
   ok: boolean
@@ -271,10 +305,8 @@ export function TrainingLab() {
   const percent = progressPercent(progress)
 
   const summary = report?.summary ?? {}
-  const persistenceMae = summary.persistence?.mae_sum
   const activeShift = visibleTrainingShift(report?.shifts ?? [], pinnedShift)
   const pathTrace = activeShift?.readings[reading]?.arbitration
-  const meanMae = summary.mean?.mae_sum
   const shifts = report?.shifts ?? []
   const calibrationSteps = shifts.flatMap((shift) => {
     const side = shift.readings[reading]
@@ -412,24 +444,32 @@ export function TrainingLab() {
       {report?.shifts && (
         <>
           {chronosBanner(report.chronos) && <p className="text-sm text-muted-foreground">{chronosBanner(report.chronos)}</p>}
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-start gap-3">
             {READINGS.filter((item) => summary[item.id]).map((item) => {
-              const mae = summary[item.id]?.mae_sum
-              const below = [
-                mae != null && meanMae != null && item.id !== "mean" && mae < meanMae ? "la moyenne" : null,
-                mae != null && persistenceMae != null && item.id !== "persistence" && mae < persistenceMae
-                  ? "la persistance"
-                  : null,
-              ].filter(Boolean)
+              const entry = summary[item.id]
+              const mae = entry?.mae_sum
+              const interval = maeInterval(entry?.mae_sum_ci)
               const body = (
                 <>
                   <span className="block text-xs text-muted-foreground">{item.label}</span>
-                  <span className="text-lg font-semibold tabular-nums">{mae == null ? "—" : mae.toFixed(1)}</span>
+                  <span className="text-lg font-semibold tabular-nums">{mae == null ? "—" : formatDecimal(mae)}</span>
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    MAE somme{below.length ? ` · sous ${below.join(" et ")}` : ""}
+                    MAE somme{interval ? ` · ${interval}` : ""}
                     {report?.chronos?.used && (item.id === "corpus" || item.id === "fenetre") ? " · Chronos" : ""}
-                    {summary[item.id]?.hits_numbers != null ? ` · ${summary[item.id]?.hits_numbers} numéros` : ""}
+                    {entry?.hits_numbers != null ? ` · ${hitsWord(entry.hits_numbers, "numéro", "numéros")}` : ""}
                   </span>
+                  {BENCHMARKS.filter((rival) => rival.id !== item.id).map((rival) => {
+                    const gap = entry?.versus?.[rival.id]
+                    return (
+                      <span
+                        key={rival.id}
+                        data-versus={rival.id}
+                        className={cn("block text-xs tabular-nums", gap?.verdict ? VERDICT_TONE[gap.verdict] : "text-muted-foreground")}
+                      >
+                        contre {rival.label} : {versusText(gap)}
+                      </span>
+                    )
+                  })}
                 </>
               )
               if (!item.grid) {
@@ -453,6 +493,9 @@ export function TrainingLab() {
                 </button>
               )
             })}
+            <span className="self-center">
+              <HelpTip {...NEXTDATA_TRAINING_HELP.verdicts} />
+            </span>
           </div>
 
           {persistInfo && (
@@ -562,10 +605,16 @@ export function TrainingLab() {
                         </button>
                       </th>
                     ))}
-                    <th className="pl-2 font-medium text-muted-foreground" title="tirages dans la bande 10–90 du modèle">
+                    <th
+                      className="pl-2 font-medium text-muted-foreground"
+                      title="tirages dans la bande 10–90 du modèle, puis l’intervalle à 95 % de cette part"
+                    >
                       Brute
                     </th>
-                    <th className="pl-2 font-medium text-muted-foreground" title="tirages dans la bande calibrée sur les tirages d’avant">
+                    <th
+                      className="pl-2 font-medium text-muted-foreground"
+                      title="tirages dans la bande calibrée sur les tirages d’avant, puis l’intervalle à 95 % de cette part"
+                    >
                       Calibrée
                     </th>
                   </tr>
@@ -593,12 +642,24 @@ export function TrainingLab() {
                             </td>
                           )
                         })}
-                        <td className="pl-2 text-muted-foreground">
-                          {raw.total ? `${raw.inside}/${raw.total}` : "—"}
-                        </td>
-                        <td className="pl-2 text-muted-foreground">
-                          {calibrated.total ? `${calibrated.inside}/${calibrated.total}` : "—"}
-                        </td>
+                        {[raw, calibrated].map((measured, column) => (
+                          <td
+                            key={column}
+                            className="pl-2 text-muted-foreground"
+                            aria-label={measured.total ? formatCoverage(measured.inside, measured.total) : undefined}
+                          >
+                            {measured.total ? (
+                              <>
+                                <span className="block">{`${measured.inside}/${measured.total}`}</span>
+                                <span className="block whitespace-nowrap text-[10px]">
+                                  {coverageRange(measured.inside, measured.total)}
+                                </span>
+                              </>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                        ))}
                       </tr>
                     )
                   })}
@@ -626,7 +687,12 @@ export function TrainingLab() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <TrainingCompare shifts={report.shifts} reading={reading} />
+              <TrainingCompare
+                shifts={report.shifts}
+                reading={reading}
+                chance={summary[reading]?.hits_chance}
+                twinChance={summary[persistKey(reading)]?.hits_chance}
+              />
             </CardContent>
           </Card>
         </>

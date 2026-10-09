@@ -11,6 +11,7 @@ import {
 } from "@/lib/nextdata/compare"
 import { persistKey, swappedValues, type PersistSwap } from "@/lib/nextdata/persist"
 import type { GridShape } from "@/lib/nextdata/shape"
+import { chanceOdds, chanceRange, chanceText, type HitsChance } from "@/lib/nextdata/uncertainty"
 import { cn } from "@/lib/utils"
 
 const NUMBER_RANKS = ["n1", "n2", "n3", "n4", "n5"] as const
@@ -136,7 +137,33 @@ function MeanScore({ numbers, stars, label }: { numbers: number | null; stars: n
   )
 }
 
-export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareShift[]; reading: string }) {
+function ChanceNote({ chance }: { chance: HitsChance | null | undefined }) {
+  if (!chance?.numbers) return null
+  const title = [chanceText(chance.numbers), chance.stars ? `★ ${chanceText(chance.stars)}` : ""].filter(Boolean).join(" · ")
+  return (
+    <span className="mt-0.5 block text-[10px] font-normal" title={title} data-chance>
+      hasard {chanceRange(chance.numbers)}
+      {chance.stars ? ` · ★ ${chanceRange(chance.stars)}` : ""}
+    </span>
+  )
+}
+
+function oddsSentence(label: string, chance: HitsChance | null | undefined) {
+  const odds = chanceOdds(chance?.numbers)
+  return odds ? ` ${label} : ${odds}.` : ""
+}
+
+export function TrainingCompare({
+  shifts,
+  reading,
+  chance,
+  twinChance,
+}: {
+  shifts: TrainingCompareShift[]
+  reading: string
+  chance?: HitsChance | null
+  twinChance?: HitsChance | null
+}) {
   const rows = shifts.map((shift) => {
     const side = shift.readings[reading]
     const forecast = side && side.numbers.length > 0 ? side : null
@@ -287,6 +314,7 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
             <tr>
               <th scope="row" colSpan={4} className="border-t border-border px-2 pt-3 text-left font-medium text-muted-foreground">
                 Moyenne
+                <ChanceNote chance={chance} />
               </th>
               <td className="border-t border-border px-2 pt-3 text-center">
                 <MeanScore numbers={numberMean} stars={starMean} label="Moyenne" />
@@ -334,7 +362,9 @@ export function TrainingCompare({ shifts, reading }: { shifts: TrainingCompareSh
         </table>
       </div>
       <p className="mt-3 max-w-3xl text-xs leading-5 text-muted-foreground">
-        Une boule cerclée est dans les deux grilles. L’écart, prévu moins sorti, n’est écrit que s’il n’est pas nul : rouge si la lecture était trop haute, bleu si elle était trop basse. Au hasard, une grille partage en moyenne 0,5 numéro et 0,33 étoile avec le tirage.
+        Une boule cerclée est dans les deux grilles. L’écart, prévu moins sorti, n’est écrit que s’il n’est pas nul : rouge si la lecture était trop haute, bleu si elle était trop basse. Au hasard, une grille partage en moyenne 0,5 numéro et 0,33 étoile avec le tirage. Sur autant de tirages, sa moyenne tombe 95 fois sur 100 dans la plage écrite sous Moyenne.
+        {oddsSentence("Numéros de cette lecture", chance)}
+        {twins.length > 0 ? oddsSentence("Avec Persist", twinChance) : ""}
       </p>
     </div>
   )

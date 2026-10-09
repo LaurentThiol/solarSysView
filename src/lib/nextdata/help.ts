@@ -345,7 +345,12 @@ export const NEXTDATA_TRAINING_HELP = {
   },
   somme: {
     title: "Écart de somme",
-    body: "Chaque point est un décalage. Le trait est l’écart signé de la somme des cinq numéros. Deux repères sans modèle : la persistance rejoue le tirage d’avant la coupure, la moyenne prévoit la somme moyenne des tirages d’avant. La moyenne est le plus dur des deux : sur des tirages au hasard, elle se trompe d’environ 25 en moyenne, la persistance d’environ 35. Passer sous la persistance ne prouve donc rien. Sur dix décalages, quelques points d’écart entre deux MAE tiennent encore du hasard.",
+    body: "Chaque point est un décalage. Le trait est l’écart signé de la somme des cinq numéros. Deux repères sans modèle : la persistance rejoue le tirage d’avant la coupure, la moyenne prévoit la somme moyenne des tirages d’avant. La moyenne est le plus dur des deux : sur des tirages au hasard, elle se trompe d’environ 25 en moyenne, la persistance d’environ 35. Passer sous la persistance ne prouve donc rien. Sur dix décalages, une MAE varie d’environ ±6 points au seul gré des tirages : les cartes disent si l’écart à chaque repère est tranché.",
+  },
+  verdicts: {
+    title: "Contre la moyenne, contre la persistance",
+    wide: true,
+    body: "Une lecture et son repère sont notés sur les mêmes décalages. À chaque décalage, on retranche l’erreur absolue de somme du repère à celle de la lecture. La carte donne la moyenne de ces écarts et son intervalle à 95 %, par la loi de Student : c’est le test de Diebold et Mariano à un pas. Apparier retire le bruit commun au tirage, car une somme sortie très haute trompe toutes les lectures à la fois.\n\n« Erreur plus basse » : tout l’intervalle est sous zéro, la lecture se trompe moins que le repère. « Erreur plus haute » : il est au-dessus. « Non tranché » : il contient zéro, et ces décalages ne départagent pas les deux.\n\nL’IC 95 % de la MAE est l’intervalle de Student de la moyenne des erreurs absolues. Sur dix décalages, il s’étend souvent à ±13 points autour de la MAE : dix tirages départagent rarement deux lectures.",
   },
   chronos: {
     title: "Chronos inclus",

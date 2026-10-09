@@ -1,10 +1,15 @@
 /** Bandes 10–90 de nextData : couverture brute et calibrée, avancement du retour. */
 
+/** Parts dans la bande, avec leurs bornes de Wilson à 95 %. */
 export type BandCoverage = {
   raw: number | null
   raw_count: number
+  raw_lo?: number | null
+  raw_hi?: number | null
   calibrated: number | null
   calibrated_count: number
+  calibrated_lo?: number | null
+  calibrated_hi?: number | null
 }
 
 export type Calibration = {
