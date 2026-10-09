@@ -10,6 +10,7 @@ export type ChronosNote = {
   window?: number
   holdout_mae_lgb?: number | null
   holdout_mae_chronos?: number | null
+  covariates?: { past: number; future: number } | null
 }
 
 export type ChronosStatus = {
@@ -24,10 +25,15 @@ export function chronosBanner(chronos: ChronosStatus | null | undefined): string
   return `${chronos.error || "Chronos n’a pas répondu."} LightGBM et CatBoost restent seuls.`
 }
 
-/** Part de Chronos dans la somme mélangée d’une lecture LightGBM. */
+/** Part de Chronos dans la somme mélangée d’une lecture LightGBM, et les covariables qu’il a lues. */
 export function chronosShare(note: ChronosNote | null | undefined): string | null {
   if (!note?.available) return null
   const share = Math.round((1 - (note.weight ?? 1)) * 100)
-  if ((note.window ?? 0) < CHRONOS_WINDOW) return `Chronos ${share} %, faute de ${CHRONOS_WINDOW} tirages d’avant`
-  return `Chronos ${share} % de la somme`
+  const base =
+    (note.window ?? 0) < CHRONOS_WINDOW
+      ? `Chronos ${share} %, faute de ${CHRONOS_WINDOW} tirages d’avant`
+      : `Chronos ${share} % de la somme`
+  if (!note.covariates) return base
+  const count = note.covariates.past + note.covariates.future
+  return `${base}, ${count === 0 ? "sans covariable" : `${count} covariable${count > 1 ? "s" : ""}`}`
 }

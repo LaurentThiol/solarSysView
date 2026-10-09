@@ -29,6 +29,16 @@ test("the share of Chronos says when ten earlier draws are missing", () => {
   assert.match(backtest, new RegExp(`^CHRONOS_WINDOW = ${CHRONOS_WINDOW}$`, "m"))
 })
 
+test("the share of Chronos counts the covariates it read", () => {
+  const note = { available: true, weight: 0.52, window: 10 }
+  assert.equal(chronosShare({ ...note, covariates: { past: 37, future: 11 } }), "Chronos 48 % de la somme, 48 covariables")
+  assert.equal(chronosShare({ ...note, covariates: { past: 0, future: 1 } }), "Chronos 48 % de la somme, 1 covariable")
+  assert.equal(
+    chronosShare({ ...note, window: 2, covariates: { past: 7, future: 0 } }),
+    "Chronos 48 %, faute de 10 tirages d’avant, 7 covariables"
+  )
+})
+
 test("the rank figure shows what Chronos brings to the level of n1", () => {
   const row = {
     rank: "n1",

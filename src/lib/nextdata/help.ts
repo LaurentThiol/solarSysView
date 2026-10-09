@@ -95,7 +95,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Chronos inclus",
-        text: "Chronos-Bolt prévoit la somme, la somme des étoiles et n1, avec leurs bandes 10–90, sans rien apprendre de l’archive. Ces bandes se mélangent à celles de LightGBM ; n1 rejoint son niveau. Chaque série a son poids, réglé sur les dix tirages d’avant : il penche vers la lecture qui s’y est le moins trompée, et reste à moitié-moitié tant que ces tirages ne sont pas calculés. CatBoost reste seul. ./launch install-nextdata télécharge amazon/chronos-bolt-small. Si Chronos ne répond pas, un bandeau dit pourquoi ; il est retenté au prochain démarrage de l’API.",
+        text: "Chronos-2 prévoit ensemble la somme, la somme des étoiles et n1, avec leurs bandes 10–90, sans être entraîné sur l’archive : il lit les tirages d’avant et les covariables cochées. Les horloges, calendrier et lune, sont connues pour le tirage prévu ; les autres familles s’arrêtent au dernier tirage sorti. Ces bandes se mélangent à celles de LightGBM ; n1 rejoint son niveau. Chaque série a son poids, réglé sur les dix tirages d’avant : il penche vers la lecture qui s’y est le moins trompée, et reste à moitié-moitié tant que ces tirages ne sont pas calculés. CatBoost reste seul. ./launch install-nextdata télécharge autogluon/chronos-2-small. Si Chronos ne répond pas, un bandeau dit pourquoi ; il est retenté au prochain démarrage de l’API.",
       },
       {
         label: "Darts",
@@ -118,7 +118,7 @@ export const NEXTDATA_HELP = {
   covariates: {
     title: "Covariables",
     wide: true,
-    body: "Cases cochées par défaut. Une famille éteinte sort de LightGBM et de CatBoost. Les horloges sont connues avant le tirage. Le reste n’est connu qu’une fois les boules sorties : les modèles ne le voient que jusqu’au dernier tirage.",
+    body: "Cases cochées par défaut. Une famille éteinte sort de LightGBM, de CatBoost et de Chronos. Les horloges sont connues avant le tirage. Le reste n’est connu qu’une fois les boules sorties : les modèles ne le voient que jusqu’au dernier tirage.",
     items: [
       {
         label: "Calendrier",
@@ -350,7 +350,7 @@ export const NEXTDATA_TRAINING_HELP = {
   chronos: {
     title: "Chronos inclus",
     wide: true,
-    body: "Même interrupteur que nextData. Sans Chronos, LightGBM et CatBoost partent seuls. Chronos inclus mélange les bandes 10–90 de Chronos-Bolt à celles de LightGBM, sur la somme, la somme des étoiles et le niveau de n1. Chaque série a son poids, réglé sur les dix tirages d’avant le décalage, jamais sur le tirage noté ; moitié-moitié tant qu’ils ne sont pas calculés. CatBoost reste seul. Si Chronos ne répond pas, le bandeau dit pourquoi.",
+    body: "Même interrupteur que nextData. Sans Chronos, LightGBM et CatBoost partent seuls. Chronos inclus mélange les bandes 10–90 de Chronos-2 à celles de LightGBM, sur la somme, la somme des étoiles et le niveau de n1. Chronos-2 lit les mêmes covariables cochées : les horloges du tirage prévu, le reste jusqu’au tirage d’avant. Chaque série a son poids, réglé sur les dix tirages d’avant le décalage, jamais sur le tirage noté ; moitié-moitié tant qu’ils ne sont pas calculés. CatBoost reste seul. Si Chronos ne répond pas, le bandeau dit pourquoi.",
   },
   delta: {
     title: "Niveaux ou DeltaEvol",
