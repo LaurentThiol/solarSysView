@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 
 import { formatRunClock } from "@/lib/nextdata/bands"
-import { cn } from "@/lib/utils"
 
 /** Barre d’un calcul long. Le pourcentage ne bouge qu’à chaque pas rendu :
  *  entre deux réponses, le trait défile et le temps écoulé avance. */
@@ -58,14 +57,21 @@ export function StepMeter({
         aria-busy="true"
         className="relative h-2 overflow-hidden rounded-full bg-muted"
       >
-        <div
-          className={cn(
-            "h-full rounded-full bg-primary",
-            indeterminate ? "train-travel" : "transition-[width] duration-500 ease-out"
-          )}
-          style={indeterminate ? undefined : { width: `${percent}%` }}
-        />
-        {indeterminate ? null : <span className="train-sheen" aria-hidden />}
+        {indeterminate ? (
+          <>
+            <div className="train-travel" />
+            <div className="train-travel train-travel-late" />
+          </>
+        ) : (
+          <>
+            <div
+              className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width] duration-500 ease-out"
+              style={{ width: `${percent}%` }}
+            />
+            <span className="train-sheen" aria-hidden />
+            <span className="train-sheen train-sheen-late" aria-hidden />
+          </>
+        )}
       </div>
     </div>
   )

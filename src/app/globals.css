@@ -218,7 +218,7 @@
   animation: brain-dot 1s ease-in-out infinite;
 }
 
-/* Le pas nextData reste longtemps sans nouveau pourcentage : le trait doit bouger quand même. */
+/* Le pas nextData reste longtemps sans nouveau pourcentage : un trait reste visible sur la piste. */
 @keyframes train-travel {
   0% {
     transform: translateX(-110%);
@@ -233,7 +233,7 @@
     transform: translateX(-120%);
   }
   100% {
-    transform: translateX(480%);
+    transform: translateX(700%);
   }
 }
 
@@ -251,18 +251,31 @@
 }
 
 .train-travel {
-  width: 38%;
-  animation: train-travel 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 36%;
+  border-radius: 9999px;
+  background: var(--primary);
+  animation: train-travel 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.train-travel-late {
+  animation-delay: -0.9s;
 }
 
 .train-sheen {
   position: absolute;
   inset-block: 0;
   left: 0;
-  width: 28%;
-  background: linear-gradient(90deg, transparent, color-mix(in oklch, white 78%, var(--primary)), transparent);
-  animation: train-sheen 1.5s ease-in-out infinite;
+  width: 18%;
+  background: linear-gradient(90deg, transparent, color-mix(in oklch, white 88%, var(--primary)), transparent);
+  animation: train-sheen 1.6s ease-in-out infinite;
   pointer-events: none;
+}
+
+.train-sheen-late {
+  animation-delay: -0.8s;
 }
 
 .train-dots {

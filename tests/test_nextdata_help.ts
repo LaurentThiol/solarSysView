@@ -50,6 +50,7 @@ test("nextDataTraining explains the backward shift", () => {
   assert.match(lab, /<StepMeter/)
   assert.match(meter, /role="progressbar"/)
   assert.match(meter, /train-travel/)
+  assert.match(meter, /train-travel-late/)
   assert.match(meter, /formatRunClock/)
   assert.doesNotMatch(training, /shift: lag/)
   assert.match(training, /progress\.ready/)
