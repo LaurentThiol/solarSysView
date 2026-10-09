@@ -33,6 +33,9 @@ READINGS = (
 )
 SHIFT_MAX = 10
 SHIFT_FIELDS = FIELDS
+CHRONOS_WINDOW = 10
+# n1 rejoint le niveau : c’est lui qui fait le centre du rang, la chaîne n’y pèse plus.
+CHRONOS_TARGETS = {"sum": "sum", "star_sum": "star_sum", "n1": "level:n1"}
 
 
 def _pack(numbers: list[int], stars: list[int], fallback_sum: float | None = None) -> dict[str, Any]:
@@ -95,11 +98,9 @@ def persist_side(frame: Frame, t: int, reading: dict[str, Any], persist: dict[st
     return packed
 
 
-def retour_indices(frame: Frame, *, with_chronos: bool = False) -> list[int]:
-    """Pas du retour : chaque tirage du focus. Chronos lit aussi le pas d’avant le premier."""
-    start = max(frame.focus_start, MIN_HISTORY)
-    first = start - 1 if with_chronos and start - 1 >= MIN_HISTORY else start
-    return list(range(first, len(frame.rows)))
+def retour_indices(frame: Frame) -> list[int]:
+    """Pas du retour : chaque tirage du focus."""
+    return list(range(max(frame.focus_start, MIN_HISTORY), len(frame.rows)))
 
 
 def _model_block(parts: dict[str, Any], mode: str, library: str) -> dict[str, Any] | None:
@@ -112,46 +113,83 @@ def model_error(parts: dict[str, Any], mode: str, library: str = "lightgbm") -> 
     return block.get("error")
 
 
+def _chronos_bands(parts: dict[str, Any], mode: str) -> dict[str, dict[str, float]] | None:
+    block = (parts.get("chronos") or {}).get(mode) or {}
+    if all(isinstance(block.get(name), dict) for name in CHRONOS_SERIES):
+        return block
+    return None
+
+
+def _lightgbm_mids(parts: dict[str, Any], mode: str) -> dict[str, float] | None:
+    """Médianes LightGBM que Chronos rejoint, Darts compris, avant tout mélange."""
+    block = _model_block(parts, mode, "lightgbm")
+    if block is None:
+        return None
+    moments = {target: dict(block["moments"][target]) for target in CHRONOS_TARGETS.values() if target in block["moments"]}
+    if len(moments) < len(CHRONOS_TARGETS):
+        return None
+    darts = (parts.get("darts") or {}).get(mode)
+    if darts:
+        _apply_external(moments, darts, names=("sum", "star_sum"))
+    return {name: float(moments[target]["mid"]) for name, target in CHRONOS_TARGETS.items()}
+
+
+def _chronos_weights(
+    frame: Frame,
+    mode: str,
+    window: list[tuple[int, dict[str, Any]]],
+) -> tuple[dict[str, float], dict[str, tuple[float, float]] | None, int]:
+    """Poids de LightGBM par série, sur les erreurs moyennes des pas d’avant. Moitié-moitié tant qu’il en manque."""
+    totals = {name: [0.0, 0.0] for name in CHRONOS_SERIES}
+    count = 0
+    for t, step in window:
+        mids = _lightgbm_mids(step["parts"], mode)
+        bands = _chronos_bands(step["parts"], mode)
+        if mids is None or bands is None or t >= len(frame.rows):
+            continue
+        row = frame.rows[t]
+        for name in CHRONOS_SERIES:
+            truth = float(row[name])
+            totals[name][0] += abs(mids[name] - truth)
+            totals[name][1] += abs(float(bands[name]["mid"]) - truth)
+        count += 1
+    if count < CHRONOS_WINDOW:
+        return {name: 0.5 for name in CHRONOS_SERIES}, None, count
+    mae = {name: (lgb / count, chronos / count) for name, (lgb, chronos) in totals.items()}
+    return {name: blend_weight(*pair) for name, pair in mae.items()}, mae, count
+
+
 def _blend_chronos(
     frame: Frame,
-    t: int,
     mode: str,
     moments: dict[str, dict[str, float]],
     parts: dict[str, Any],
-    previous: dict[str, Any] | None,
+    window: list[tuple[int, dict[str, Any]]],
 ) -> dict[str, Any]:
-    """Chronos prévoit le tirage du pas. Son poids se règle sur le pas d’avant, contre LightGBM seul.
+    """Chronos rejoint LightGBM sur la somme, la somme des étoiles et le niveau de n1, bornes 10–90 comprises.
 
-    Le tirage noté ne sert pas à choisir le poids. CatBoost n’est pas mélangé.
+    Chaque série a son poids, réglé sur les pas d’avant (`window`), jamais sur
+    le tirage noté. CatBoost n’est pas mélangé.
     """
-    note: dict[str, Any] = {"available": False, "weight": 1.0}
-    points = (parts.get("chronos") or {}).get(mode) or {}
-    if previous is None or points.get("sum") is None:
-        return note
-    held_points = (previous["parts"].get("chronos") or {}).get(mode) or {}
-    if held_points.get("sum") is None:
-        return note
-    held = _memo(frame, t - 1, previous, None, False)["readings"].get(mode)
-    if not held:
-        return note
-    truth = float(frame.rows[t - 1]["sum"])
-    lgb_mae = abs(float(sum(held["grid"]["numbers"])) - truth)
-    chrono_mae = abs(float(held_points["sum"]) - truth)
-    weight = blend_weight(lgb_mae, chrono_mae)
-    for name in CHRONOS_SERIES:
-        point = points.get(name)
-        if point is None or name not in moments:
+    bands = _chronos_bands(parts, mode)
+    if bands is None:
+        return {"available": False, "weight": 1.0}
+    weights, mae, count = _chronos_weights(frame, mode, window)
+    for name, target in CHRONOS_TARGETS.items():
+        if target not in moments:
             continue
-        blended = _clip(name, blend_mid(moments[name]["mid"], point, weight))
-        moments[name]["mid"] = blended
-        moments[name]["lo"] = min(moments[name]["lo"], blended)
-        moments[name]["hi"] = max(moments[name]["hi"], blended)
+        moments[target] = {
+            key: _clip(target, blend_mid(moments[target][key], bands[name][key], weights[name]))
+            for key in ("lo", "mid", "hi")
+        }
     return {
         "available": True,
-        "weight": round(weight, 4),
-        "holdout_mae_lgb": round(lgb_mae, 4),
-        "holdout_mae_chronos": round(chrono_mae, 4),
-        **{name: None if points.get(name) is None else round(float(points[name]), 4) for name in CHRONOS_SERIES},
+        "weight": round(weights["sum"], 4),
+        "weights": {name: round(value, 4) for name, value in weights.items()},
+        "window": count,
+        "holdout_mae_lgb": None if mae is None else round(mae["sum"][0], 4),
+        "holdout_mae_chronos": None if mae is None else round(mae["sum"][1], 4),
+        **{name: round(float(bands[name]["mid"]), 4) for name in CHRONOS_SERIES},
     }
 
 
@@ -159,7 +197,7 @@ def _assemble(
     frame: Frame,
     t: int,
     step: dict[str, Any],
-    previous: dict[str, Any] | None,
+    window: list[tuple[int, dict[str, Any]]],
     with_chronos: bool,
 ) -> dict[str, Any]:
     rows = frame.rows
@@ -189,8 +227,10 @@ def _assemble(
                 _apply_external(moments, darts, mix_n1=True)
                 engine = "darts"
             if with_chronos:
-                chronos = _blend_chronos(frame, t, mode, moments, parts, previous)
+                chronos = _blend_chronos(frame, mode, moments, parts, window)
         composed, trace = compose_ranks(moments, last)
+        if trace is not None and chronos and chronos["available"]:
+            trace["numbers"][0]["chronos"] = {"value": chronos["n1"], "share": round(1.0 - chronos["weights"]["n1"], 4)}
         ranked = beam(composed, base, star_pool=frame.star_pool)
         if not ranked:
             continue
@@ -222,13 +262,13 @@ def _memo(
     frame: Frame,
     t: int,
     step: dict[str, Any],
-    previous: dict[str, Any] | None,
+    window: list[tuple[int, dict[str, Any]]],
     with_chronos: bool,
 ) -> dict[str, Any]:
-    """Un pas assemblé ne change pas tant que ses morceaux ne changent pas. Lecture seule."""
-    used = previous if with_chronos else None
+    """Un pas assemblé ne change pas tant que ses morceaux et ceux des pas qui règlent Chronos ne changent pas. Lecture seule."""
+    used = window if with_chronos else []
     target = None if t >= len(frame.rows) else (tuple(frame.rows[t]["numbers"]), tuple(frame.rows[t]["stars"]))
-    key = (step["key"], None if used is None else used["key"], bool(with_chronos), frame.focus, frame.star_pool, target)
+    key = (step["key"], tuple(past["key"] for _t, past in used), bool(with_chronos), frame.focus, frame.star_pool, target)
     with _MEMO_LOCK:
         hit = _MEMO.get(key)
         if hit is not None:
@@ -243,8 +283,12 @@ def _memo(
 
 
 def assemble(frame: Frame, ready: dict[int, dict[str, Any]], *, with_chronos: bool = False) -> dict[int, dict[str, Any]]:
-    """Les pas prêts, assemblés. Chronos a besoin du pas d’avant : sans lui, il reste à l’écart."""
-    return {t: _memo(frame, t, ready[t], ready.get(t - 1), with_chronos) for t in sorted(ready)}
+    """Les pas prêts, assemblés. Les poids de Chronos se règlent sur les CHRONOS_WINDOW pas prêts d’avant."""
+    order = sorted(ready)
+    return {
+        t: _memo(frame, t, ready[t], [(p, ready[p]) for p in order[max(0, index - CHRONOS_WINDOW) : index]], with_chronos)
+        for index, t in enumerate(order)
+    }
 
 
 def calibrated_view(

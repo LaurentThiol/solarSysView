@@ -3,7 +3,8 @@
 Darts `LightGBMModel`, quand le paquet est là, remplace la médiane temporelle
 du prochain pas. La chaîne n1 → écarts reste en LightGBM direct : le
 conditionnement est dans le même tirage, ce que les lags ne portent pas.
-Chronos, s’il est installé, ne mélange que somme, somme des étoiles et n1.
+Chronos-Bolt, s’il est installé, ne mélange que la somme, la somme des étoiles
+et le niveau de n1, bornes 10–90 comprises.
 Les niveaux n1…n5, e1, e2 et leurs deltas, prévus à part, donnent le centre
 de chaque rang ; la chaîne n’y pèse plus et borne seulement les écarts. Le
 pronostic, le retour et les décalages lisent les mêmes pas (`steps`), au
@@ -14,6 +15,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import threading
 from typing import Any, Iterable
 
 # Darts charge Matplotlib. Sur Mac, le backend graphique peut bloquer l’API
@@ -116,6 +118,7 @@ def dependency_status() -> dict[str, Any]:
         "hint": lightgbm_hint(error),
         "darts": _installed("darts"),
         "chronos": _installed("chronos"),
+        "chronos_error": chronos_error(),
         "torch": _installed("torch"),
         "matplotlib": _installed("matplotlib"),
         "catboost": _installed("catboost"),
@@ -604,34 +607,65 @@ def try_darts_medians(
         return None
 
 
-_CHRONOS = None
+CHRONOS_MODEL = "amazon/chronos-bolt-small"
+CHRONOS_LEVELS = (0.1, 0.5, 0.9)
+
+_CHRONOS: Any = None
+_CHRONOS_ERROR: str | None = None
+_CHRONOS_LOCK = threading.Lock()
 
 
-def chronos_point(values: list[float]) -> float | None:
-    """Médiane Chronos à un pas. None si le paquet ou le poids manque."""
-    global _CHRONOS
-    if len(values) < 8:
-        return None
-    try:
-        import torch
-        from chronos import ChronosPipeline
-    except Exception:
-        return None
-    try:
-        if _CHRONOS is None:
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            dtype = torch.bfloat16 if device == "cuda" else torch.float32
-            _CHRONOS = ChronosPipeline.from_pretrained(
-                "amazon/chronos-t5-small",
-                device_map=device,
-                torch_dtype=dtype,
+def chronos_error() -> str | None:
+    """Pourquoi Chronos n’a pas répondu dans ce processus. Il n’est retenté qu’au redémarrage de l’API."""
+    return _CHRONOS_ERROR
+
+
+def chronos_quantiles(series: list[list[float]]) -> list[dict[str, float]]:
+    """Bandes 10–90 du tirage qui suit chaque série, en un seul appel à Chronos-Bolt.
+
+    Un échec (paquet, poids, appel) lève `RuntimeError` et reste noté : les
+    appels suivants échouent aussitôt, sans retélécharger ni rappeler le modèle.
+    """
+    global _CHRONOS, _CHRONOS_ERROR
+    with _CHRONOS_LOCK:
+        if _CHRONOS_ERROR is not None:
+            raise RuntimeError(_CHRONOS_ERROR)
+        try:
+            import torch
+            from chronos import BaseChronosPipeline
+
+            if _CHRONOS is None:
+                cuda = torch.cuda.is_available()
+                _CHRONOS = BaseChronosPipeline.from_pretrained(
+                    CHRONOS_MODEL,
+                    device_map="cuda" if cuda else "cpu",
+                    torch_dtype=torch.bfloat16 if cuda else torch.float32,
+                )
+            # En position : ce premier argument s’appelle `context` en 1.x et `inputs` en 2.x.
+            quantiles, _mean = _CHRONOS.predict_quantiles(
+                [torch.tensor(values, dtype=torch.float32) for values in series],
+                prediction_length=1,
+                quantile_levels=list(CHRONOS_LEVELS),
             )
-        context = torch.tensor(values, dtype=torch.float32)
-        forecast = _CHRONOS.predict(context=context, prediction_length=1, num_samples=20)
-        median = np.median(np.asarray(forecast[0]), axis=0)
-        return float(median.reshape(-1)[-1])
-    except Exception:
+            table = np.asarray(quantiles, dtype=float).reshape(len(series), -1, len(CHRONOS_LEVELS))[:, 0, :]
+            if not np.isfinite(table).all():
+                raise ValueError("quantile non fini")
+        except Exception as exc:
+            _CHRONOS_ERROR = f"{type(exc).__name__}: {exc}"
+            raise RuntimeError(_CHRONOS_ERROR) from exc
+    return [dict(zip(("lo", "mid", "hi"), sorted(float(value) for value in row))) for row in table]
+
+
+def chronos_problem(requested: bool, used: bool) -> str | None:
+    """Ce que la page dit quand Chronos est demandé et n’a rien mélangé."""
+    if not requested or used:
         return None
+    if not _installed("chronos"):
+        return "Chronos n’est pas installé : ./launch install-nextdata."
+    error = chronos_error()
+    if error is None:
+        return None
+    return f"Chronos n’a pas répondu ({error}) ; il sera retenté au prochain démarrage de l’API."
 
 
 def blend_weight(mae_lgb: float, mae_chronos: float) -> float:
@@ -791,7 +825,7 @@ def run_forecast(
     settings = StepSettings(focus=frame.focus, families=tuple(families), estimators=int(estimators))
     parts = parts_needed(with_chronos)
     n = len(frame.rows)
-    order = [n, *reversed(backtest.retour_indices(frame, with_chronos=with_chronos))]
+    order = [n, *reversed(backtest.retour_indices(frame))]
     ready, remaining = ensure_steps(frame, order, settings, parts, limit=chunk or worker_count())
     steps = backtest.assemble(frame, ready, with_chronos=with_chronos)
     upcoming = steps[n]
@@ -820,6 +854,7 @@ def run_forecast(
     catboost_error = catboost_import_error()
     if catboost_error is None and not any(key.endswith("_catboost") for key in upcoming["readings"]):
         catboost_error = backtest.model_error(ready[n]["parts"], "corpus", "catboost")
+    chronos_used = any((modes[mode].get("chronos") or {}).get("available") for mode in modes)
     base = recount(frame.rows[frame.focus_start :], star_pool=frame.star_pool)
     return {
         "ok": True,
@@ -843,7 +878,11 @@ def run_forecast(
         "backtest": walked,
         "chart": _chart(frame, walked["rows"], views, grids),
         "best_mae_sum": walked["best_mae_sum"],
-        "chronos": {"used": any((modes[mode].get("chronos") or {}).get("available") for mode in modes)},
+        "chronos": {
+            "requested": with_chronos,
+            "used": chronos_used,
+            "error": chronos_problem(with_chronos, chronos_used),
+        },
         "progress": {"ready": len(ready), "total": len(order), "complete": remaining == 0},
         "persist": persist_info(draws, frame, persist),
     }
@@ -866,8 +905,8 @@ def run_training(
 
     Sans `shift`, chaque appel calcule au plus `chunk` pas manquants : les dix
     décalages d’abord, puis les tirages d’avant qui calibrent leurs bandes.
-    Avec `shift`, seul ce décalage se calcule ; ses bandes se calibrent sur ce
-    que le cache a déjà.
+    Avec `shift`, seul ce décalage se calcule ; ses bandes et les poids de
+    Chronos se règlent sur ce que le cache a déjà.
     """
     refused = _unready()
     if refused:
@@ -884,21 +923,21 @@ def run_training(
     settings = StepSettings(focus=frame.focus, families=tuple(families), estimators=int(estimators))
     parts = parts_needed(with_chronos)
     n = len(frame.rows)
-    retour = list(reversed(backtest.retour_indices(frame, with_chronos=with_chronos)))
+    retour = list(reversed(backtest.retour_indices(frame)))
     lags = [int(shift)] if shift is not None else list(range(1, backtest.SHIFT_MAX + 1))
     targets = [n - lag for lag in lags if n - lag >= MIN_HISTORY]
     if shift is not None:
-        needed = targets + [t - 1 for t in targets if with_chronos and t - 1 >= MIN_HISTORY]
-        ready, _left = ensure_steps(frame, needed, settings, parts, limit=len(needed))
+        ready, _left = ensure_steps(frame, targets, settings, parts, limit=len(targets))
         cached, _rest = ensure_steps(frame, [t for t in retour if t not in ready], settings, parts, limit=0)
         ready.update(cached)
-        order = needed
+        order = targets
         remaining = 0
     else:
         order = targets + [t for t in retour if t not in targets]
         ready, remaining = ensure_steps(frame, order, settings, parts, limit=chunk or worker_count())
     steps = backtest.assemble(frame, ready, with_chronos=with_chronos)
     report = backtest.shift_report(frame, steps, lags=lags, chronos_requested=with_chronos, persist=persist)
+    report["chronos"]["error"] = chronos_problem(with_chronos, report["chronos"]["used"])
     catboost_error = catboost_import_error()
     info = persist_info(draws, frame, persist)
     if info:

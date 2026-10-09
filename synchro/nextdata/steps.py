@@ -31,7 +31,8 @@ from synchro.config import ROOT
 from synchro.nextdata.forecast import (
     _installed,
     catboost_import_error,
-    chronos_point,
+    chronos_error,
+    chronos_quantiles,
     predict_moments,
     try_darts_medians,
 )
@@ -89,7 +90,7 @@ def parts_needed(with_chronos: bool) -> tuple[str, ...]:
         parts.append("catboost")
     if _installed("darts"):
         parts.append("darts")
-    if with_chronos and _installed("chronos"):
+    if with_chronos and _installed("chronos") and chronos_error() is None:
         parts.append("chronos")
     return tuple(parts)
 
@@ -172,6 +173,8 @@ def compute_part(
     settings: StepSettings,
 ) -> dict[str, Any]:
     """Un morceau d’un pas, pour les deux modes : LightGBM, CatBoost, Darts ou Chronos."""
+    if part == "chronos":
+        return _chronos_part(prefix, settings.focus)
     out: dict[str, Any] = {}
     for mode in MODES:
         if part in MODEL_PARTS:
@@ -198,10 +201,21 @@ def compute_part(
                 focus=settings.focus,
                 families=settings.families,
             )
-        elif part == "chronos":
-            window = prefix[-settings.focus :] if mode == "fenetre" else prefix
-            out[mode] = {name: chronos_point([float(row[name]) for row in window]) for name in CHRONOS_SERIES}
     # Même structure qu’un morceau relu du cache.
+    return json.loads(json.dumps(out))
+
+
+def _chronos_part(prefix: list[dict[str, Any]], focus: int) -> dict[str, Any]:
+    """Bandes 10–90 de Chronos, trois séries pour chacun des deux modes, en un appel. Un échec rend son message."""
+    windows = {"corpus": prefix, "fenetre": prefix[-focus:]}
+    series = [(mode, name) for mode in MODES for name in CHRONOS_SERIES]
+    try:
+        bands = chronos_quantiles([[float(row[name]) for row in windows[mode]] for mode, name in series])
+    except RuntimeError as exc:
+        return {"error": str(exc)}
+    out: dict[str, Any] = {mode: {} for mode in MODES}
+    for (mode, name), band in zip(series, bands):
+        out[mode][name] = band
     return json.loads(json.dumps(out))
 
 
@@ -289,7 +303,9 @@ def _compute(
 
     def keep(job: tuple[int, str, str], data: dict[str, Any]) -> None:
         t, part, key = job
-        save_part(key, data)
+        # Un échec de Chronos tient à l’installation ou au réseau : rangé, il ne serait jamais retenté.
+        if not (part == "chronos" and "error" in data):
+            save_part(key, data)
         done[t][part] = data
 
     for job in inline:

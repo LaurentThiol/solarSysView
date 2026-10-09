@@ -505,6 +505,7 @@ def test_status_does_not_import_darts_or_torch() -> None:
     loaded = set(sys.modules) - before
     blocked = [name for name in loaded if name == "darts" or name.startswith(("darts.", "chronos", "torch"))]
     assert blocked == []
+    assert status["chronos_error"] is None
     assert status["ready"] is True
     assert status["lightgbm_error"] is None
     assert "darts" in status and "chronos" in status
@@ -632,14 +633,22 @@ def _band(mid: float) -> dict[str, float]:
     return {"lo": mid - 1, "mid": mid, "hi": mid + 1}
 
 
+def _chronos_replays(scale: float = 1.0):
+    """Faux Chronos : chaque bande entoure la dernière valeur de sa série, multipliée par `scale`."""
+
+    def fake(series: list[list[float]]) -> list[dict[str, float]]:
+        return [{"lo": values[-1] * scale - 1, "mid": values[-1] * scale, "hi": values[-1] * scale + 1} for values in series]
+
+    return fake
+
+
 def test_chronos_blends_lightgbm_and_leaves_catboost(monkeypatch) -> None:
     from synchro.nextdata.forecast import run_training
 
     draws = _draws(40, seed=11)
-    rows = build_frame(draws, focus=24).rows
     calls: list[dict] = []
     _offline(monkeypatch, calls=calls, chronos=True)
-    monkeypatch.setattr("synchro.nextdata.steps.chronos_point", lambda values: 180.0)
+    monkeypatch.setattr("synchro.nextdata.steps.chronos_quantiles", _chronos_replays(1.6))
     plain = run_training(draws, focus=24, covariates=["forme"], estimators=2, shift=1)
     calls.clear()
     mixed = run_training(draws, focus=24, covariates=["forme"], estimators=2, shift=1, with_chronos=True)
@@ -647,13 +656,15 @@ def test_chronos_blends_lightgbm_and_leaves_catboost(monkeypatch) -> None:
     mixed_sum = sum(mixed["shifts"][0]["readings"]["corpus"]["numbers"])
     assert mixed_sum > plain_sum
     assert mixed["shifts"][0]["readings"]["corpus_catboost"]["numbers"] == plain["shifts"][0]["readings"]["corpus_catboost"]["numbers"]
-    assert mixed["shifts"][0]["readings"]["corpus"]["chronos"]["available"] is True
-    assert mixed["chronos"]["used"] is True
+    note = mixed["shifts"][0]["readings"]["corpus"]["chronos"]
+    assert note["available"] is True
+    # Aucun pas d’avant dans le cache : moitié-moitié.
+    assert note["window"] == 0
+    assert note["weights"] == {"sum": 0.5, "star_sum": 0.5, "n1": 0.5}
+    assert mixed["chronos"] == {"requested": True, "used": True, "error": None}
     assert plain["chronos"]["requested"] is False
-    # Le pas noté sort du cache. Seul le pas d’avant, qui règle le poids, s’ajuste, au même réglage.
-    assert sorted(call["library"] for call in calls) == ["catboost", "catboost", "lightgbm", "lightgbm"]
-    assert {call["n"] for call in calls} == {len(rows) - 2}
-    assert {call["estimators"] for call in calls} == {2}
+    # Le pas noté sort du cache : Chronos n’ajuste aucun pas de plus.
+    assert calls == []
 
 
 def _fake_moments(rows, horizon, **kwargs):
@@ -695,43 +706,204 @@ def _offline(monkeypatch, moments=_fake_moments, calls: list | None = None, chro
     monkeypatch.setattr("synchro.nextdata.steps._installed", lambda module: chronos and module == "chronos")
 
 
-def test_shift_chronos_blends_the_forecast_of_the_scored_draw(monkeypatch) -> None:
-    """Chronos rejoue son dernier point : sa prévision du tirage noté est le tirage juste avant."""
+def test_shift_chronos_is_weighted_on_the_ten_draws_before(monkeypatch) -> None:
+    """Chronos rejoue son dernier point. Ses poids se règlent sur les dix pas d’avant le tirage noté."""
     from synchro.nextdata.forecast import run_training
 
     draws = _draws(40, seed=12)
     rows = build_frame(draws, focus=24).rows
-    assert rows[-2]["sum"] != rows[-3]["sum"]
+    n = len(rows)
     _offline(monkeypatch, chronos=True)
-    monkeypatch.setattr("synchro.nextdata.steps.chronos_point", lambda values: values[-1])
+    monkeypatch.setattr("synchro.nextdata.steps.chronos_quantiles", _chronos_replays())
     monkeypatch.setattr("synchro.nextdata.backtest.blend_weight", lambda lgb, chronos: 0.0)
-    report = run_training(draws, focus=24, covariates=["forme"], estimators=2, shift=1, with_chronos=True)
-    note = report["shifts"][0]["readings"]["corpus"]["chronos"]
+    report = run_training(draws, focus=24, covariates=["forme"], estimators=2, chunk=100, with_chronos=True)
+    reading = report["shifts"][0]["readings"]["corpus"]
+    note = reading["chronos"]
     assert note["available"] is True
+    assert note["window"] == 10
     assert note["sum"] == rows[-2]["sum"]
     assert note["n1"] == rows[-2]["n1"]
-    assert note["holdout_mae_chronos"] == round(abs(rows[-3]["sum"] - rows[-2]["sum"]), 4)
+    window = range(n - 11, n - 1)
+    assert note["holdout_mae_chronos"] == round(sum(abs(rows[t - 1]["sum"] - rows[t]["sum"]) for t in window) / 10, 4)
+    # La fausse somme LightGBM suit le nombre de tirages lus.
+    assert note["holdout_mae_lgb"] == round(sum(abs(100 + t % 30 - rows[t]["sum"]) for t in window) / 10, 4)
+    # Poids nul pour LightGBM : la somme visée et le niveau de n1 sont ceux de Chronos.
+    assert reading["arbitration"]["sum_target"] == round(rows[-2]["sum"], 4)
+    first = reading["arbitration"]["numbers"][0]
+    assert first["level"] == round(rows[-2]["n1"], 4)
+    assert first["chronos"] == {"value": rows[-2]["n1"], "share": 1.0}
 
 
-def test_forecast_chronos_blends_the_next_draw(monkeypatch) -> None:
-    """Même Chronos : la valeur mélangée au prochain tirage est le dernier tirage connu."""
+def test_forecast_chronos_is_half_and_half_until_ten_draws_are_ready(monkeypatch) -> None:
+    """Même Chronos au prochain tirage : moitié-moitié au premier pas, puis réglé sur les dix tirages d’avant."""
     from synchro.nextdata.forecast import run_forecast
 
     draws = _draws(40, seed=13)
     rows = build_frame(draws, focus=24).rows
-    assert rows[-1]["sum"] != rows[-2]["sum"]
+    n = len(rows)
     _offline(monkeypatch, chronos=True)
-    monkeypatch.setattr("synchro.nextdata.steps.chronos_point", lambda values: values[-1])
+    monkeypatch.setattr("synchro.nextdata.steps.chronos_quantiles", _chronos_replays())
     monkeypatch.setattr("synchro.nextdata.backtest.blend_weight", lambda lgb, chronos: 0.0)
     alone = run_forecast(draws, focus=24, covariates=["forme"], estimators=2, with_chronos=True, chunk=1)
-    assert alone["modes"]["corpus"]["chronos"]["available"] is False
-    report = run_forecast(draws, focus=24, covariates=["forme"], estimators=2, with_chronos=True, chunk=1)
+    first = alone["modes"]["corpus"]["chronos"]
+    assert first["available"] is True
+    assert first["window"] == 0
+    assert first["weight"] == 0.5
+    report = run_forecast(draws, focus=24, covariates=["forme"], estimators=2, with_chronos=True, chunk=100)
+    # Chronos n’ajoute plus de pas avant le focus.
+    assert report["progress"]["total"] == 25
+    window = range(n - 10, n)
     for mode in ("corpus", "fenetre"):
         note = report["modes"][mode]["chronos"]
-        assert note["available"] is True
+        assert note["window"] == 10
         assert note["sum"] == rows[-1]["sum"]
-        assert note["holdout_mae_chronos"] == round(abs(rows[-2]["sum"] - rows[-1]["sum"]), 4)
-    assert report["chronos"]["used"] is True
+        assert note["holdout_mae_chronos"] == round(sum(abs(rows[t - 1]["sum"] - rows[t]["sum"]) for t in window) / 10, 4)
+    assert report["chronos"] == {"requested": True, "used": True, "error": None}
+
+
+def test_chronos_blends_the_three_quantiles_and_leaves_the_chain() -> None:
+    from synchro.nextdata import backtest
+
+    frame = build_frame(_draws(40, seed=22), focus=24)
+    moments = {
+        "sum": {"lo": 90.0, "mid": 100.0, "hi": 110.0},
+        "star_sum": {"lo": 8.0, "mid": 10.0, "hi": 12.0},
+        "n1": {"lo": 3.0, "mid": 5.0, "hi": 7.0},
+        "level:n1": {"lo": 4.0, "mid": 6.0, "hi": 8.0},
+    }
+    bands = {
+        "sum": {"lo": 110.0, "mid": 130.0, "hi": 150.0},
+        "star_sum": {"lo": 10.0, "mid": 14.0, "hi": 18.0},
+        "n1": {"lo": 2.0, "mid": 8.0, "hi": 14.0},
+    }
+    note = backtest._blend_chronos(frame, "corpus", moments, {"chronos": {"corpus": bands}}, [])
+    assert note["window"] == 0
+    assert note["weights"] == {"sum": 0.5, "star_sum": 0.5, "n1": 0.5}
+    assert moments["sum"] == {"lo": 100.0, "mid": 115.0, "hi": 130.0}
+    assert moments["star_sum"] == {"lo": 9.0, "mid": 12.0, "hi": 15.0}
+    assert moments["level:n1"] == {"lo": 3.0, "mid": 7.0, "hi": 11.0}
+    assert moments["n1"] == {"lo": 3.0, "mid": 5.0, "hi": 7.0}
+    failed = backtest._blend_chronos(frame, "corpus", moments, {"chronos": {"error": "OSError: hub"}}, [])
+    assert failed == {"available": False, "weight": 1.0}
+
+
+def _fake_chronos(monkeypatch, fail: Exception | None = None) -> dict[str, list]:
+    """Faux torch et faux chronos-forecasting 2.x : `predict_quantiles` reprend la vraie signature, `inputs` en tête."""
+    import sys
+    import types
+
+    import numpy as np
+
+    from synchro.nextdata import forecast as forecast_mod
+
+    seen: dict[str, list] = {"loads": [], "calls": []}
+
+    class ChronosBoltPipeline:
+        def predict_quantiles(self, inputs, prediction_length=None, quantile_levels=(0.1, 0.5, 0.9), **predict_kwargs):
+            seen["calls"].append({"inputs": inputs, "prediction_length": prediction_length, "quantile_levels": quantile_levels, **predict_kwargs})
+            table = np.asarray([[[values[-1] - 2.0, values[-1], values[-1] + 2.0]] for values in inputs], dtype=float)
+            return table, table[:, :, 1]
+
+    class BaseChronosPipeline:
+        @classmethod
+        def from_pretrained(cls, name: str, **kwargs: object) -> ChronosBoltPipeline:
+            seen["loads"].append({"name": name, **kwargs})
+            if fail is not None:
+                raise fail
+            return ChronosBoltPipeline()
+
+    chronos_mod = types.ModuleType("chronos")
+    chronos_mod.BaseChronosPipeline = BaseChronosPipeline  # type: ignore[attr-defined]
+    torch_mod = types.ModuleType("torch")
+    torch_mod.float32 = "float32"  # type: ignore[attr-defined]
+    torch_mod.bfloat16 = "bfloat16"  # type: ignore[attr-defined]
+    torch_mod.cuda = types.SimpleNamespace(is_available=lambda: False)  # type: ignore[attr-defined]
+    torch_mod.tensor = lambda values, dtype=None: list(values)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "chronos", chronos_mod)
+    monkeypatch.setitem(sys.modules, "torch", torch_mod)
+    monkeypatch.setattr(forecast_mod, "_CHRONOS", None)
+    monkeypatch.setattr(forecast_mod, "_CHRONOS_ERROR", None)
+    return seen
+
+
+def test_chronos_bolt_reads_the_six_series_of_a_step_in_one_call(monkeypatch) -> None:
+    from synchro.nextdata.forecast import CHRONOS_MODEL, chronos_quantiles
+    from synchro.nextdata.steps import CHRONOS_SERIES, StepSettings, compute_part
+
+    seen = _fake_chronos(monkeypatch)
+    frame = build_frame(_draws(40, seed=23), focus=24)
+    settings = StepSettings(focus=24, families=("forme",), estimators=2)
+    part = compute_part(frame.rows, frame.horizon, "chronos", settings)
+    assert len(seen["calls"]) == 1
+    call = seen["calls"][0]
+    assert call["prediction_length"] == 1
+    assert list(call["quantile_levels"]) == [0.1, 0.5, 0.9]
+    assert [len(values) for values in call["inputs"]] == [len(frame.rows)] * 3 + [24] * 3
+    for mode in ("corpus", "fenetre"):
+        for name in CHRONOS_SERIES:
+            last = float(frame.rows[-1][name])
+            assert part[mode][name] == {"lo": last - 2.0, "mid": last, "hi": last + 2.0}
+    chronos_quantiles([[1.0, 2.0, 3.0]])
+    assert seen["loads"] == [{"name": CHRONOS_MODEL, "device_map": "cpu", "torch_dtype": "float32"}]
+
+
+def test_a_chronos_failure_is_reported_and_never_cached(monkeypatch) -> None:
+    import json
+    import os
+    from pathlib import Path
+
+    pytest = __import__("pytest")
+    from synchro.nextdata.forecast import chronos_error, chronos_quantiles, run_training
+    from synchro.nextdata.steps import parts_needed
+
+    seen = _fake_chronos(monkeypatch, fail=OSError("hub injoignable"))
+    _offline(monkeypatch, chronos=True)
+    monkeypatch.setattr("synchro.nextdata.forecast._installed", lambda module: module == "chronos")
+    draws = _draws(40, seed=24)
+    report = run_training(draws, focus=24, covariates=["forme"], estimators=2, chunk=100, with_chronos=True)
+    assert report["progress"]["complete"] is True
+    assert report["chronos"]["used"] is False
+    assert report["chronos"]["error"] == (
+        "Chronos n’a pas répondu (OSError: hub injoignable) ; il sera retenté au prochain démarrage de l’API."
+    )
+    assert chronos_error() == "OSError: hub injoignable"
+    saved = [json.loads(path.read_text(encoding="utf-8")) for path in Path(os.environ["SYNCHRO_NEXTDATA_CACHE"]).rglob("*.json")]
+    assert saved
+    assert not any(set(part) == {"error"} for part in saved)
+    # Ni retéléchargement ni nouvel appel avant le redémarrage : la suite part sans Chronos.
+    assert parts_needed(True) == ("lightgbm", "catboost")
+    again = run_training(draws, focus=24, covariates=["forme"], estimators=2, chunk=100, with_chronos=True)
+    assert again["progress"]["complete"] is True
+    assert again["chronos"]["error"] == report["chronos"]["error"]
+    with pytest.raises(RuntimeError):
+        chronos_quantiles([[1.0, 2.0, 3.0]])
+    assert len(seen["loads"]) == 1
+    assert seen["calls"] == []
+
+
+def test_chronos_missing_is_said_plainly(monkeypatch) -> None:
+    from synchro.nextdata.forecast import run_forecast
+
+    _offline(monkeypatch)
+    monkeypatch.setattr("synchro.nextdata.forecast._installed", lambda module: False)
+    report = run_forecast(_draws(40, seed=25), focus=24, covariates=["forme"], estimators=2, with_chronos=True, chunk=100)
+    assert report["chronos"] == {
+        "requested": True,
+        "used": False,
+        "error": "Chronos n’est pas installé : ./launch install-nextdata.",
+    }
+
+
+def test_the_installed_chronos_takes_its_series_first() -> None:
+    """Contrat avec le vrai paquet, s’il est là : la série passe en position, le reste par nom."""
+    import inspect
+
+    pytest = __import__("pytest")
+    chronos = pytest.importorskip("chronos")
+    assert hasattr(chronos.BaseChronosPipeline, "from_pretrained")
+    params = list(inspect.signature(chronos.ChronosBoltPipeline.predict_quantiles).parameters.values())
+    assert params[1].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert {"prediction_length", "quantile_levels"} <= {param.name for param in params}
 
 
 def test_training_forwards_chronos_flag(monkeypatch) -> None:
