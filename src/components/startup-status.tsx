@@ -13,6 +13,7 @@ import { StatusPill, worstStatusTone, type StatusTone } from "@/components/statu
 import { Button } from "@/components/ui/button"
 import { isNavItemActive, pageHelpForPath, pageTitleForPath, NAV_GROUPS } from "@/lib/nav"
 import { isLocalHost } from "@/lib/api-base"
+import { requestLocalStop } from "@/lib/dev-stop"
 import { formatSyncStamp } from "@/lib/draws"
 import { localLlmOffMessage } from "@/lib/ia/local-url"
 import { FIRING_EVENT, readLastFiring, type StoredFiring } from "@/lib/morpho/store"
@@ -144,9 +145,7 @@ export function QuitButton() {
     if (!confirmed) return
     setQuitting(true)
     try {
-      await fetch("/api/shutdown", { method: "POST", cache: "no-store" })
-    } catch {
-      // le serveur peut déjà être coupé
+      await requestLocalStop()
     } finally {
       setQuitDone(true)
     }

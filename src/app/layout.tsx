@@ -11,6 +11,7 @@ import {
 import { HelpModeProvider } from "@/components/help"
 import { SiteHeader } from "@/components/startup-status"
 import { WatchlistSync } from "@/components/brain/watchlist-sync"
+import { devStopGuardSource } from "@/lib/dev-stop-guard"
 
 import "./globals.css"
 
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
+        <script dangerouslySetInnerHTML={{ __html: devStopGuardSource }} />
         <a
           href="#contenu"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-3 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:text-foreground"
