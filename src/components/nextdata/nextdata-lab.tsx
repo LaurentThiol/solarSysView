@@ -7,6 +7,7 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { PersistArchive, PersistControl, PersistPairCard, RecentNote, SwapNote } from "@/components/nextdata/persist-panel"
 import { RankPath } from "@/components/nextdata/rank-path"
+import { StepMeter } from "@/components/nextdata/step-meter"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
@@ -607,28 +608,16 @@ export function NextDataLab() {
               <HelpTip {...NEXTDATA_HELP.source} />
             </span>
           </div>
-          {running && progress && (
-            <div className="flex max-w-md flex-col gap-2" aria-live="polite">
-              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                <span>
-                  Pas {progress.ready} sur {progress.total} : le prochain tirage, puis le retour
-                </span>
-                <span className="tabular-nums">{progressPercent(progress)} %</span>
-              </div>
-              <div
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progressPercent(progress)}
-                aria-label="Avancement du retour"
-                className="h-1.5 overflow-hidden rounded-full bg-muted"
-              >
-                <div
-                  className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
-                  style={{ width: `${progressPercent(progress)}%` }}
-                />
-              </div>
-            </div>
+          {running && (
+            <StepMeter
+              percent={progress ? progressPercent(progress) : 0}
+              ariaLabel="Avancement du retour"
+              label={
+                progress
+                  ? `Pas ${progress.ready} sur ${progress.total} : le prochain tirage, puis le retour`
+                  : "Calcul du prochain tirage…"
+              }
+            />
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>

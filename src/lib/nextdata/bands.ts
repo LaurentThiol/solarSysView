@@ -43,6 +43,17 @@ export function progressPercent(progress: StepProgress | null | undefined) {
   return Math.round((Math.min(progress.ready, progress.total) / progress.total) * 100)
 }
 
+/** Temps passé depuis le lancement, à côté du pourcentage. Pas une estimation du reste. */
+export function formatRunClock(seconds: number) {
+  const whole = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0))
+  const hours = Math.floor(whole / 3600)
+  const minutes = Math.floor((whole % 3600) / 60)
+  const rest = whole % 60
+  if (hours > 0) return `${hours} h ${String(minutes).padStart(2, "0")} min`
+  if (minutes > 0) return `${minutes} min ${String(rest).padStart(2, "0")} s`
+  return `${rest} s`
+}
+
 /** Phrase sous les grilles : bandes calibrées, ou pourquoi elles ne le sont pas encore. */
 export function calibrationCaption(calibration: Calibration | null | undefined) {
   if (!calibration) return ""

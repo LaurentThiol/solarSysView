@@ -6,6 +6,7 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "rec
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { PersistArchive, PersistControl, PersistPairCard } from "@/components/nextdata/persist-panel"
 import { RankPath } from "@/components/nextdata/rank-path"
+import { StepMeter } from "@/components/nextdata/step-meter"
 import { TrainingCompare } from "@/components/nextdata/training-compare"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -378,38 +379,17 @@ export function TrainingLab() {
             </span>
           </div>
           {running && (
-            <div className="flex max-w-md flex-col gap-2" aria-live="polite">
-              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-2">
-                  <span className="relative flex size-2" aria-hidden>
-                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" />
-                    <span className="relative inline-flex size-2 rounded-full bg-primary" />
-                  </span>
-                  {!progress
-                    ? "Les décalages −1, −2… partent d’abord"
-                    : (report?.shifts?.length ?? 0) < TRAINING_SHIFT_TOTAL
-                      ? `Pas ${progress.ready} sur ${progress.total} : les décalages d’abord`
-                      : `Pas ${progress.ready} sur ${progress.total} : les tirages d’avant, pour le calibrage`}
-                </span>
-                <span className="tabular-nums">{percent} %</span>
-              </div>
-              <div
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={percent}
-                aria-label="Avancement de l’entraînement"
-                className="h-1.5 overflow-hidden rounded-full bg-muted"
-              >
-                <div
-                  className={cn(
-                    "h-full rounded-full bg-primary",
-                    percent === 0 ? "w-1/3 animate-pulse" : "transition-[width] duration-500 ease-out"
-                  )}
-                  style={percent === 0 ? undefined : { width: `${percent}%` }}
-                />
-              </div>
-            </div>
+            <StepMeter
+              percent={percent}
+              ariaLabel="Avancement de l’entraînement"
+              label={
+                !progress
+                  ? "Les décalages −1, −2… partent d’abord"
+                  : (report?.shifts?.length ?? 0) < TRAINING_SHIFT_TOTAL
+                    ? `Pas ${progress.ready} sur ${progress.total} : les décalages d’abord`
+                    : `Pas ${progress.ready} sur ${progress.total} : les tirages d’avant, pour le calibrage`
+              }
+            />
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>

@@ -7,6 +7,7 @@ import { shapeCaption } from "../src/lib/nextdata/shape.ts"
 
 const lab = readFileSync(new URL("../src/components/nextdata/nextdata-lab.tsx", import.meta.url), "utf8")
 const training = readFileSync(new URL("../src/components/nextdata/training-lab.tsx", import.meta.url), "utf8")
+const meter = readFileSync(new URL("../src/components/nextdata/step-meter.tsx", import.meta.url), "utf8")
 const nav = readFileSync(new URL("../src/lib/nav.ts", import.meta.url), "utf8")
 
 test("every nextData help entry is wired and says something", () => {
@@ -43,7 +44,13 @@ test("nextDataTraining explains the backward shift", () => {
   assert.match(NEXTDATA_TRAINING_HELP.banner.body, /pas calculés/)
   assert.match(NEXTDATA_TRAINING_HELP.banner.body, /mêmes arbres, mêmes quantiles/)
   assert.match(NEXTDATA_TRAINING_HELP.decalage.body, /avant le tirage noté/)
-  assert.match(training, /role="progressbar"/)
+  assert.match(NEXTDATA_TRAINING_HELP.banner.body, /temps écoulé/)
+  assert.match(NEXTDATA_TRAINING_HELP.banner.body, /pas une estimation du temps restant/)
+  assert.match(training, /<StepMeter/)
+  assert.match(lab, /<StepMeter/)
+  assert.match(meter, /role="progressbar"/)
+  assert.match(meter, /train-travel/)
+  assert.match(meter, /formatRunClock/)
   assert.doesNotMatch(training, /shift: lag/)
   assert.match(training, /progress\.ready/)
   assert.match(NEXTDATA_TRAINING_HELP.rangs.body, /Calibrée/)
