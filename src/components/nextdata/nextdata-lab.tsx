@@ -998,13 +998,13 @@ export function NextDataLab() {
                             return (
                               <tr key={field.key}>
                                 <td className="py-1 pr-3">{field.label}</td>
-                                <td className="py-1 pr-3">
+                                <td className="whitespace-nowrap py-1 pr-3">
                                   {formatShare(measured.raw)}
                                   <span className="text-xs text-muted-foreground">
                                     {measured.raw_lo != null ? ` (${formatShareInterval(measured.raw_lo, measured.raw_hi)})` : ""} · {measured.raw_count}
                                   </span>
                                 </td>
-                                <td className="py-1 pr-3">
+                                <td className="whitespace-nowrap py-1 pr-3">
                                   {formatShare(measured.calibrated)}
                                   <span className="text-xs text-muted-foreground">
                                     {measured.calibrated_lo != null
