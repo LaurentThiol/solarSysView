@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from datetime import date, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 
 from synchro.app import create_app
@@ -644,6 +645,67 @@ def test_shift_scores_the_mean_of_earlier_sums(monkeypatch) -> None:
     assert mean["errors"]["n1"] is None
     assert mean["hits_numbers"] is None
     assert report["summary"]["mean"]["mae_sum"] == round(abs(expected), 4)
+
+
+def test_shift_summary_carries_its_95_margins(monkeypatch) -> None:
+    from synchro.nextdata.forecast import run_training
+
+    draws = _draws(40, seed=8)
+    _offline(monkeypatch)
+    report = run_training(
+        draws, focus=24, covariates=["forme"], estimators=2, chunk=100, persist={"radius": 2, "limit": 1}
+    )
+    summary = report["summary"]
+    corpus = summary["corpus"]
+    interval = corpus["mae_sum_ci"]
+    assert interval["count"] == corpus["count"] == 10
+    assert 0 <= interval["lo"] <= interval["value"] == corpus["mae_sum"] <= interval["hi"]
+    assert {"mean", "persistence", "fenetre"} <= set(corpus["versus"])
+    assert not any(key.endswith("_persist") or key == "corpus" for key in corpus["versus"])
+    assert all(gap["verdict"] in {"lower", "higher", "undecided"} and gap["count"] == 10 for gap in corpus["versus"].values())
+    pairs = [(shift["readings"]["corpus"]["errors"]["sum"], shift["readings"]["mean"]["errors"]["sum"]) for shift in report["shifts"]]
+    assert corpus["versus"]["mean"]["value"] == pytest.approx(sum(abs(a) - abs(b) for a, b in pairs) / len(pairs), abs=1e-4)
+    numbers, stars = corpus["hits_chance"]["numbers"], corpus["hits_chance"]["stars"]
+    assert (numbers["expected"], numbers["lo"], numbers["hi"], numbers["count"]) == (0.5, 0.1, 0.9, 10)
+    assert stars["expected"] == round(4 / 12, 4)
+    assert numbers["observed"] == corpus["hits_numbers"]
+    assert stars["observed"] == corpus["hits_stars"]
+    assert "mean" not in summary["mean"]["versus"] and "persistence" in summary["mean"]["versus"]
+    assert summary["mean"]["hits_chance"] == {"numbers": None, "stars": None}
+    assert {"corpus", "mean", "persistence"} <= set(summary["corpus_persist"]["versus"])
+
+
+def test_retour_metrics_carry_their_95_margins(monkeypatch) -> None:
+    draws = _draws(40, seed=8)
+    _offline(monkeypatch)
+    report = run_forecast(
+        draws, focus=24, covariates=["forme"], estimators=2, chunk=100, persist={"radius": 2, "limit": 1}
+    )
+    walked = report["backtest"]
+    metrics = walked["metrics"]
+    corpus = metrics["corpus"]
+    interval = corpus["mae_sum_ci"]
+    assert interval["count"] == walked["draw_count"] == len(walked["rows"])
+    assert interval["lo"] <= corpus["mae"]["sum"] <= interval["hi"]
+    gaps = [
+        abs(row["corpus"]["sum"] - row["actual"]["sum"]) - abs(row["mean"]["sum"] - row["actual"]["sum"])
+        for row in walked["rows"]
+    ]
+    assert corpus["versus"]["mean"]["value"] == pytest.approx(sum(gaps) / len(gaps), abs=1e-3)
+    assert corpus["versus"]["mean"]["count"] == walked["draw_count"]
+    twin = metrics["corpus_persist"]["versus"]
+    assert twin["corpus"]["count"] == walked["draw_count"]
+    assert not any(key.endswith("_persist") for key in twin)
+    assert "mean" not in metrics["mean"]["versus"]
+    assert metrics["mean"]["mae_sum_ci"]["count"] == walked["draw_count"]
+    assert metrics["mean"]["hits_chance"] == {"numbers": None, "stars": None}
+    numbers = corpus["hits_chance"]["numbers"]
+    assert numbers["count"] == walked["draw_count"]
+    assert numbers["lo"] < 0.5 < numbers["hi"]
+    assert 0 <= numbers["p"] <= 1
+    band = walked["bands"]["corpus"]["sum"]
+    assert band["raw_lo"] <= band["raw"] <= band["raw_hi"]
+    assert band["calibrated_lo"] <= band["calibrated"] <= band["calibrated_hi"]
 
 
 def test_training_shift_is_one_through_ten(monkeypatch) -> None:

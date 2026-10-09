@@ -64,5 +64,12 @@ def test_coverage_is_measured_out_of_sample() -> None:
         assert measured["raw_count"] == 120
         assert measured["calibrated_count"] == 120 - MIN_STEPS
         assert measured["raw"] < 0.6
+        assert measured["raw_lo"] < measured["raw"] < measured["raw_hi"]
+        assert measured["calibrated_lo"] < measured["calibrated"] < measured["calibrated_hi"]
+        assert measured["raw_hi"] - measured["raw_lo"] < 0.2
         rates.append(measured["calibrated"])
     assert 0.77 <= sum(rates) / len(rates) <= 0.87
+    rng = random.Random(7)
+    short = coverage([_pair(rng) for _ in range(10)])["sum"]
+    assert short["calibrated_count"] == 1
+    assert short["raw_hi"] - short["raw_lo"] > 0.4

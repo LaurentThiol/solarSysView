@@ -35,6 +35,21 @@ test("the two trainings, the focus and the recounted base are explained", () => 
   assert.match(nav, /Fenêtre seule/)
 })
 
+test("the 95 % margins are explained where they are shown", () => {
+  assert.match(NEXTDATA_HELP.apparie.body, /mêmes tirages/)
+  assert.match(NEXTDATA_HELP.apparie.body, /Diebold et Mariano/)
+  assert.match(NEXTDATA_HELP.apparie.items?.map((item) => item.label).join(" ") ?? "", /Non tranché/)
+  assert.match(NEXTDATA_HELP.metriques.items?.map((item) => item.label).join(" ") ?? "", /IC 95 %/)
+  assert.match(NEXTDATA_HELP.bandes.items?.[0].text ?? "", /Wilson/)
+  assert.match(NEXTDATA_TRAINING_HELP.verdicts.body, /Non tranché/)
+  assert.match(NEXTDATA_TRAINING_HELP.rangs.body, /49 à 94 %/)
+  assert.match(NEXTDATA_TRAINING_HELP.boules.body, /plage du hasard/)
+  assert.match(lab, /Contre la moyenne/)
+  assert.match(lab, /IC 95 %/)
+  assert.doesNotMatch(training, /sous \$\{below/)
+  assert.match(training, /data-versus/)
+})
+
 test("nextDataTraining explains the backward shift", () => {
   for (const key of Object.keys(NEXTDATA_TRAINING_HELP)) {
     assert.match(training, new RegExp(`NEXTDATA_TRAINING_HELP\\.${key}\\b`), key)
