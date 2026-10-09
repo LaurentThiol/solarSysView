@@ -189,6 +189,7 @@ def _blend_chronos(
         "window": count,
         "holdout_mae_lgb": None if mae is None else round(mae["sum"][0], 4),
         "holdout_mae_chronos": None if mae is None else round(mae["sum"][1], 4),
+        "covariates": (parts.get("chronos") or {}).get("covariates"),
         **{name: round(float(bands[name]["mid"]), 4) for name in CHRONOS_SERIES},
     }
 

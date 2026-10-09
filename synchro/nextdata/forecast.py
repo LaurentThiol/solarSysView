@@ -3,8 +3,8 @@
 Darts `LightGBMModel`, quand le paquet est là, remplace la médiane temporelle
 du prochain pas. La chaîne n1 → écarts reste en LightGBM direct : le
 conditionnement est dans le même tirage, ce que les lags ne portent pas.
-Chronos-Bolt, s’il est installé, ne mélange que la somme, la somme des étoiles
-et le niveau de n1, bornes 10–90 comprises.
+Chronos-2, s’il est installé, lit les mêmes covariables et ne mélange que la
+somme, la somme des étoiles et le niveau de n1, bornes 10–90 comprises.
 Les niveaux n1…n5, e1, e2 et leurs deltas, prévus à part, donnent le centre
 de chaque rang ; la chaîne n’y pèse plus et borne seulement les écarts. Le
 pronostic, le retour et les décalages lisent les mêmes pas (`steps`), au
@@ -607,7 +607,8 @@ def try_darts_medians(
         return None
 
 
-CHRONOS_MODEL = "amazon/chronos-bolt-small"
+# Sur un cœur, avec les 48 covariables : 0,8 s par pas sur trois ans ; amazon/chronos-2 (120 M) en prend 3,1.
+CHRONOS_MODEL = "autogluon/chronos-2-small"
 CHRONOS_LEVELS = (0.1, 0.5, 0.9)
 
 _CHRONOS: Any = None
@@ -620,11 +621,13 @@ def chronos_error() -> str | None:
     return _CHRONOS_ERROR
 
 
-def chronos_quantiles(series: list[list[float]]) -> list[dict[str, float]]:
-    """Bandes 10–90 du tirage qui suit chaque série, en un seul appel à Chronos-Bolt.
+def chronos_quantiles(items: list[dict[str, Any]]) -> list[list[dict[str, float]]]:
+    """Bandes 10–90 du tirage qui suit chaque entrée, une par variable de la cible, en un seul appel à Chronos-2.
 
-    Un échec (paquet, poids, appel) lève `RuntimeError` et reste noté : les
-    appels suivants échouent aussitôt, sans retélécharger ni rappeler le modèle.
+    Une entrée suit le format de Chronos-2 : `target` (variables × tirages),
+    `past_covariates`, `future_covariates`. Un échec (paquet, poids, appel)
+    lève `RuntimeError` et reste noté : les appels suivants échouent aussitôt,
+    sans retélécharger ni rappeler le modèle.
     """
     global _CHRONOS, _CHRONOS_ERROR
     with _CHRONOS_LOCK:
@@ -641,20 +644,15 @@ def chronos_quantiles(series: list[list[float]]) -> list[dict[str, float]]:
                     device_map="cuda" if cuda else "cpu",
                     torch_dtype=torch.bfloat16 if cuda else torch.float32,
                 )
-            # En position : ce premier argument s’appelle `context` en 1.x et `inputs` en 2.x.
-            quantiles, _mean = _CHRONOS.predict_quantiles(
-                [torch.tensor(values, dtype=torch.float32) for values in series],
-                prediction_length=1,
-                quantile_levels=list(CHRONOS_LEVELS),
-            )
-            table = np.asarray(quantiles, dtype=float).reshape(len(series), -1, len(CHRONOS_LEVELS))[:, 0, :]
-            if not np.isfinite(table).all():
-                raise ValueError("quantile non fini")
+            quantiles, _mean = _CHRONOS.predict_quantiles(items, prediction_length=1, quantile_levels=list(CHRONOS_LEVELS))
+            tables = [np.asarray(table, dtype=float).reshape(-1, len(CHRONOS_LEVELS)) for table in quantiles]
+            if len(tables) != len(items) or not all(np.isfinite(table).all() for table in tables):
+                raise ValueError("quantile manquant ou non fini")
         except Exception as exc:
             detail = " ".join(str(exc).split())
             _CHRONOS_ERROR = f"{type(exc).__name__}: {detail if len(detail) <= 300 else detail[:299] + '…'}"
             raise RuntimeError(_CHRONOS_ERROR) from exc
-    return [dict(zip(("lo", "mid", "hi"), sorted(float(value) for value in row))) for row in table]
+    return [[dict(zip(("lo", "mid", "hi"), sorted(float(value) for value in row))) for row in table] for table in tables]
 
 
 def chronos_problem(requested: bool, used: bool) -> str | None:

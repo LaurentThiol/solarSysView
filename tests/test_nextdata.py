@@ -671,10 +671,13 @@ def _band(mid: float) -> dict[str, float]:
 
 
 def _chronos_replays(scale: float = 1.0):
-    """Faux Chronos : chaque bande entoure la dernière valeur de sa série, multipliée par `scale`."""
+    """Faux Chronos : chaque bande entoure la dernière valeur de sa variable, multipliée par `scale`."""
 
-    def fake(series: list[list[float]]) -> list[dict[str, float]]:
-        return [{"lo": values[-1] * scale - 1, "mid": values[-1] * scale, "hi": values[-1] * scale + 1} for values in series]
+    def fake(items: list[dict]) -> list[list[dict[str, float]]]:
+        return [
+            [{"lo": float(values[-1]) * scale - 1, "mid": float(values[-1]) * scale, "hi": float(values[-1]) * scale + 1} for values in item["target"]]
+            for item in items
+        ]
 
     return fake
 
@@ -825,7 +828,7 @@ def test_chronos_blends_the_three_quantiles_and_leaves_the_chain() -> None:
 
 
 def _fake_chronos(monkeypatch, fail: Exception | None = None) -> dict[str, list]:
-    """Faux torch et faux chronos-forecasting 2.x : `predict_quantiles` reprend la vraie signature, `inputs` en tête."""
+    """Faux torch et faux Chronos-2 : `predict_quantiles` reprend la vraie signature et rend une liste, une entrée par cible."""
     import sys
     import types
 
@@ -835,19 +838,20 @@ def _fake_chronos(monkeypatch, fail: Exception | None = None) -> dict[str, list]
 
     seen: dict[str, list] = {"loads": [], "calls": []}
 
-    class ChronosBoltPipeline:
+    class Chronos2Pipeline:
         def predict_quantiles(self, inputs, prediction_length=None, quantile_levels=(0.1, 0.5, 0.9), **predict_kwargs):
             seen["calls"].append({"inputs": inputs, "prediction_length": prediction_length, "quantile_levels": quantile_levels, **predict_kwargs})
-            table = np.asarray([[[values[-1] - 2.0, values[-1], values[-1] + 2.0]] for values in inputs], dtype=float)
-            return table, table[:, :, 1]
+            # (variables, horizon, quantiles), comme Chronos-2.
+            tables = [np.asarray([[[row[-1] - 2.0, row[-1], row[-1] + 2.0]] for row in item["target"]], dtype=float) for item in inputs]
+            return tables, [table[:, :, 1] for table in tables]
 
     class BaseChronosPipeline:
         @classmethod
-        def from_pretrained(cls, name: str, **kwargs: object) -> ChronosBoltPipeline:
+        def from_pretrained(cls, name: str, **kwargs: object) -> Chronos2Pipeline:
             seen["loads"].append({"name": name, **kwargs})
             if fail is not None:
                 raise fail
-            return ChronosBoltPipeline()
+            return Chronos2Pipeline()
 
     chronos_mod = types.ModuleType("chronos")
     chronos_mod.BaseChronosPipeline = BaseChronosPipeline  # type: ignore[attr-defined]
@@ -863,25 +867,66 @@ def _fake_chronos(monkeypatch, fail: Exception | None = None) -> dict[str, list]
     return seen
 
 
-def test_chronos_bolt_reads_the_six_series_of_a_step_in_one_call(monkeypatch) -> None:
-    from synchro.nextdata.forecast import CHRONOS_MODEL, chronos_quantiles
+def test_chronos_2_reads_both_modes_and_their_covariates_in_one_call(monkeypatch) -> None:
+    from synchro.nextdata.covariates import FAMILIES, future_columns, past_columns
+    from synchro.nextdata.forecast import CHRONOS_MODEL
     from synchro.nextdata.steps import CHRONOS_SERIES, StepSettings, compute_part
 
     seen = _fake_chronos(monkeypatch)
     frame = build_frame(_draws(40, seed=23), focus=24)
-    settings = StepSettings(focus=24, families=("forme",), estimators=2)
+    settings = StepSettings(focus=24, families=FAMILIES, estimators=2)
     part = compute_part(frame.rows, frame.horizon, "chronos", settings)
     assert len(seen["calls"]) == 1
     call = seen["calls"][0]
     assert call["prediction_length"] == 1
     assert list(call["quantile_levels"]) == [0.1, 0.5, 0.9]
-    assert [len(values) for values in call["inputs"]] == [len(frame.rows)] * 3 + [24] * 3
+    corpus, window = call["inputs"]
+    assert corpus["target"].shape == (3, len(frame.rows))
+    assert window["target"].shape == (3, 24)
+    clocks = future_columns(FAMILIES)
+    assert sorted(corpus["past_covariates"]) == sorted(past_columns(FAMILIES) + clocks)
+    assert sorted(corpus["future_covariates"]) == sorted(clocks)
+    assert {name: list(values) for name, values in window["future_covariates"].items()} == {name: [frame.horizon[0][name]] for name in clocks}
+    assert part["covariates"] == {"past": 37, "future": 11}
     for mode in ("corpus", "fenetre"):
         for name in CHRONOS_SERIES:
             last = float(frame.rows[-1][name])
             assert part[mode][name] == {"lo": last - 2.0, "mid": last, "hi": last + 2.0}
-    chronos_quantiles([[1.0, 2.0, 3.0]])
+    compute_part(frame.rows[:-1], frame.horizon, "chronos", settings)
     assert seen["loads"] == [{"name": CHRONOS_MODEL, "device_map": "cpu", "torch_dtype": "float32"}]
+
+
+def test_chronos_covariates_follow_the_families_and_stop_before_the_draw() -> None:
+    from dataclasses import replace
+
+    from synchro.nextdata.covariates import FUTURE_CALENDAR, FUTURE_MOON, PAST_FORME
+    from synchro.nextdata.steps import chronos_inputs, horizon_of
+
+    frame = build_frame(_draws(40, seed=26), focus=24)
+    rows = frame.rows
+    shape = chronos_inputs(rows, frame.horizon, 24, ("forme",))
+    assert sorted(shape[0]["past_covariates"]) == sorted(PAST_FORME)
+    assert "future_covariates" not in shape[0]
+    clocks = chronos_inputs(rows, frame.horizon, 24, ("calendrier", "lune"))
+    assert sorted(clocks[0]["past_covariates"]) == sorted(clocks[0]["future_covariates"]) == sorted(FUTURE_CALENDAR + FUTURE_MOON)
+
+    # Au pas t, Chronos lit les tirages d’avant t et, du tirage t, ses seules horloges.
+    families = ("calendrier", "lune", "forme")
+    t = len(rows) - 3
+    before = chronos_inputs(rows[:t], horizon_of(frame, t), 24, families)
+    assert before[0]["target"][0][-1] == rows[t - 1]["sum"]
+    assert before[0]["future_covariates"]["lunar_sin"][0] == rows[t]["lunar_sin"]
+    hidden = {name: -1.0 for name in ("sum", "star_sum", "n1", *PAST_FORME)}
+    blurred = replace(frame, rows=[*rows[:t], *({**row, **hidden} for row in rows[t:])])
+    after = chronos_inputs(blurred.rows[:t], horizon_of(blurred, t), 24, families)
+    for item, other in zip(before, after):
+        assert item["target"].tolist() == other["target"].tolist()
+        assert {name: values.tolist() for name, values in item["past_covariates"].items()} == {
+            name: values.tolist() for name, values in other["past_covariates"].items()
+        }
+        assert {name: values.tolist() for name, values in item["future_covariates"].items()} == {
+            name: values.tolist() for name, values in other["future_covariates"].items()
+        }
 
 
 def test_a_chronos_failure_is_reported_and_never_cached(monkeypatch) -> None:
@@ -913,7 +958,7 @@ def test_a_chronos_failure_is_reported_and_never_cached(monkeypatch) -> None:
     assert again["progress"]["complete"] is True
     assert again["chronos"]["error"] == report["chronos"]["error"]
     with pytest.raises(RuntimeError):
-        chronos_quantiles([[1.0, 2.0, 3.0]])
+        chronos_quantiles([{"target": [[1.0, 2.0, 3.0]]}])
     assert len(seen["loads"]) == 1
     assert seen["calls"] == []
 
@@ -931,16 +976,28 @@ def test_chronos_missing_is_said_plainly(monkeypatch) -> None:
     }
 
 
-def test_the_installed_chronos_takes_its_series_first() -> None:
-    """Contrat avec le vrai paquet, s’il est là : la série passe en position, le reste par nom."""
+def test_the_installed_chronos_2_accepts_our_inputs() -> None:
+    """Contrat avec le vrai paquet, s’il est là : nos entrées passent sa validation, sans télécharger de modèle."""
     import inspect
 
     pytest = __import__("pytest")
     chronos = pytest.importorskip("chronos")
-    assert hasattr(chronos.BaseChronosPipeline, "from_pretrained")
-    params = list(inspect.signature(chronos.ChronosBoltPipeline.predict_quantiles).parameters.values())
+    from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode
+
+    from synchro.nextdata.covariates import FAMILIES
+    from synchro.nextdata.steps import chronos_inputs
+
+    params = list(inspect.signature(chronos.Chronos2Pipeline.predict_quantiles).parameters.values())
     assert params[1].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert {"prediction_length", "quantile_levels"} <= {param.name for param in params}
+    frame = build_frame(_draws(40, seed=27), focus=24)
+    items = chronos_inputs(frame.rows, frame.horizon, 24, FAMILIES)
+    dataset = Chronos2Dataset(items, context_length=8192, prediction_length=1, batch_size=256, output_patch_size=16, mode=DatasetMode.TEST)
+    batch = next(iter(dataset))
+    # Deux entrées de 3 cibles et 48 covariables ; seules les 11 horloges sont connues pour le tirage prévu.
+    assert batch["context"].shape[0] == 2 * (3 + 48)
+    assert batch["target_idx_ranges"] == [(0, 3), (51, 54)]
+    assert int(batch["future_covariates"].isfinite().sum()) == 2 * 11
 
 
 def test_training_forwards_chronos_flag(monkeypatch) -> None:

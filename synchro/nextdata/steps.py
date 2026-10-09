@@ -27,7 +27,10 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any, Iterable
 
+import numpy as np
+
 from synchro.config import ROOT
+from synchro.nextdata.covariates import future_columns, past_columns
 from synchro.nextdata.forecast import (
     _installed,
     catboost_import_error,
@@ -174,7 +177,7 @@ def compute_part(
 ) -> dict[str, Any]:
     """Un morceau d’un pas, pour les deux modes : LightGBM, CatBoost, Darts ou Chronos."""
     if part == "chronos":
-        return _chronos_part(prefix, settings.focus)
+        return _chronos_part(prefix, horizon, settings)
     out: dict[str, Any] = {}
     for mode in MODES:
         if part in MODEL_PARTS:
@@ -205,17 +208,41 @@ def compute_part(
     return json.loads(json.dumps(out))
 
 
-def _chronos_part(prefix: list[dict[str, Any]], focus: int) -> dict[str, Any]:
-    """Bandes 10–90 de Chronos, trois séries pour chacun des deux modes, en un appel. Un échec rend son message."""
+def chronos_inputs(
+    prefix: list[dict[str, Any]],
+    horizon: list[dict[str, Any]],
+    focus: int,
+    families: Iterable[str],
+) -> list[dict[str, Any]]:
+    """Entrées Chronos-2 des deux modes, dans l’ordre de MODES : trois cibles et les covariables cochées.
+
+    Les horloges sont connues pour le tirage prévu, `horizon[0]` ; Chronos-2
+    lit aussi leur historique. Les autres familles s’arrêtent au dernier
+    tirage sorti.
+    """
+    past = past_columns(families)
+    future = future_columns(families)
     windows = {"corpus": prefix, "fenetre": prefix[-focus:]}
-    series = [(mode, name) for mode in MODES for name in CHRONOS_SERIES]
+    items: list[dict[str, Any]] = []
+    for mode in MODES:
+        window = windows[mode]
+        item: dict[str, Any] = {"target": np.asarray([[float(row[name]) for row in window] for name in CHRONOS_SERIES])}
+        if past or future:
+            item["past_covariates"] = {col: np.asarray([float(row[col]) for row in window]) for col in past + future}
+        if future:
+            item["future_covariates"] = {col: np.asarray([float(horizon[0][col])]) for col in future}
+        items.append(item)
+    return items
+
+
+def _chronos_part(prefix: list[dict[str, Any]], horizon: list[dict[str, Any]], settings: StepSettings) -> dict[str, Any]:
+    """Bandes 10–90 de Chronos-2 pour les deux modes, en un appel, et les covariables lues. Un échec rend son message."""
     try:
-        bands = chronos_quantiles([[float(row[name]) for row in windows[mode]] for mode, name in series])
+        bands = chronos_quantiles(chronos_inputs(prefix, horizon, settings.focus, settings.families))
     except RuntimeError as exc:
         return {"error": str(exc)}
-    out: dict[str, Any] = {mode: {} for mode in MODES}
-    for (mode, name), band in zip(series, bands):
-        out[mode][name] = band
+    out: dict[str, Any] = {mode: dict(zip(CHRONOS_SERIES, mode_bands)) for mode, mode_bands in zip(MODES, bands)}
+    out["covariates"] = {"past": len(past_columns(settings.families)), "future": len(future_columns(settings.families))}
     return json.loads(json.dumps(out))
 
 
