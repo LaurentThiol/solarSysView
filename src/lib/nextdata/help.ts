@@ -172,7 +172,7 @@ export const NEXTDATA_HELP = {
   },
   tabRetour: {
     title: "Retour arrière",
-    body: "Pour chaque tirage du focus, les modèles ne voient que les tirages d’avant, au réglage du pronostic. On compare ensuite au tirage qui est sorti. La persistance rejoue le tirage précédent. La moyenne reprend la somme moyenne d’avant. Le tableau des bandes dit combien de tirages tombaient dans la bande 10–90, avant et après calibrage.",
+    body: "Pour chaque tirage du focus, les modèles ne voient que les tirages d’avant, au réglage du pronostic. On compare ensuite au tirage qui est sorti. La persistance rejoue le tirage précédent. La moyenne reprend la somme moyenne d’avant. Chaque mesure porte sa marge à 95 % : sur cinquante tirages, deux MAE proches ne se départagent pas toujours. Le tableau des bandes dit combien de tirages tombaient dans la bande 10–90, avant et après calibrage.",
   },
   chemin: {
     title: "Comment n1…n5 et e1, e2 sont obtenus",
@@ -225,11 +225,15 @@ export const NEXTDATA_HELP = {
   metriques: {
     title: "Lectures du retour",
     wide: true,
-    body: "Chaque ligne note la même fenêtre de focus. La plus basse erreur de somme est surlignée, persistance et moyenne comprises. Elle n’impose pas l’interrupteur. Les lignes Persist ne concourent pas : elles ne diffèrent de leur lecture que de quelques échanges, et la carte Avec et sans Persist les compare.",
+    body: "Chaque ligne note la même fenêtre de focus. La plus basse erreur de somme est surlignée, persistance et moyenne comprises. Elle n’impose pas l’interrupteur. Si son écart apparié avec la deuxième lecture contient zéro, la ligne le dit : « non tranché face à » cette lecture. Les lignes Persist ne concourent pas : elles ne diffèrent de leur lecture que de quelques échanges, et la carte Avec et sans Persist les compare.",
     items: [
       {
         label: "MAE",
         text: "Moyenne des écarts absolus entre la somme prévue et la somme sortie.",
+      },
+      {
+        label: "IC 95 %",
+        text: "Intervalle de Student de cette moyenne. Sur cinquante tirages, il s’étend souvent à ±5 points : deux MAE dont les intervalles se chevauchent peuvent encore se départager par paires, colonne suivante.",
       },
       {
         label: "RMSE",
@@ -237,7 +241,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Numéros communs",
-        text: "Combien des cinq numéros prévus figuraient dans le tirage, en moyenne entre 0 et 5. Une grille prise au hasard en partage 0,5.",
+        text: "Combien des cinq numéros prévus figuraient dans le tirage, en moyenne entre 0 et 5. Une grille prise au hasard en partage 0,5. La loi exacte du hasard donne la plage écrite sous le tableau ; au survol, combien de fois sur 100 une grille au hasard fait au moins autant.",
       },
       {
         label: "Étoiles communes",
@@ -283,11 +287,11 @@ export const NEXTDATA_HELP = {
     items: [
       {
         label: "Brute",
-        text: "Part des tirages du retour tombés dans la bande du modèle, et le nombre de tirages lus.",
+        text: "Part des tirages du retour tombés dans la bande du modèle, son intervalle de Wilson à 95 % entre parenthèses, et le nombre de tirages lus.",
       },
       {
         label: "Calibrée",
-        text: "Même part, chaque tirage étant calibré sur les seuls tirages d’avant. Il en faut neuf : les premiers ne comptent pas. Près de 80 % veut dire que la bande dit vrai.",
+        text: "Même part, chaque tirage étant calibré sur les seuls tirages d’avant. Il en faut neuf : les premiers ne comptent pas. Près de 80 % veut dire que la bande dit vrai ; un intervalle qui contient 80 % ne la contredit pas.",
       },
       {
         label: "Élargie au prochain tirage",
@@ -386,11 +390,11 @@ export const NEXTDATA_TRAINING_HELP = {
   },
   rangs: {
     title: "Écarts de rangs",
-    body: "Une case, un décalage et un rang. n1 est le plus petit numéro, n5 le plus grand. Le nombre est prévu moins sorti. Une case marquée d’un point : le numéro sorti tombe dans la bande 10–90, calibrée dès que le décalage a neuf tirages d’avant. Brute compte les tirages dans la bande du modèle, Calibrée dans la bande corrigée sur les tirages du focus qui précèdent ce décalage. Une bande juste en contient environ huit sur dix ; moins, le modèle se croit plus sûr qu’il ne l’est. Les lignes étendue, consécutifs, étendue ★ et consécutifs ★ reprennent les comptes de la page Évolution.\n\nLa figure du calcul suit le décalage qui vient d’être mesuré. Un clic sur l’en-tête d’une colonne la laisse sur ce décalage ; un second clic la laisse de nouveau suivre.",
+    body: "Une case, un décalage et un rang. n1 est le plus petit numéro, n5 le plus grand. Le nombre est prévu moins sorti. Une case marquée d’un point : le numéro sorti tombe dans la bande 10–90, calibrée dès que le décalage a neuf tirages d’avant. Brute compte les tirages dans la bande du modèle, Calibrée dans la bande corrigée sur les tirages du focus qui précèdent ce décalage. Une bande juste en contient environ huit sur dix ; moins, le modèle se croit plus sûr qu’il ne l’est. Sous chaque compte, l’intervalle de Wilson à 95 % de cette part : 8/10 va de 49 à 94 %, et dix décalages ne distinguent pas 60 % de 80 %. Les lignes étendue, consécutifs, étendue ★ et consécutifs ★ reprennent les comptes de la page Évolution.\n\nLa figure du calcul suit le décalage qui vient d’être mesuré. Un clic sur l’en-tête d’une colonne la laisse sur ce décalage ; un second clic la laisse de nouveau suivre.",
   },
   boules: {
     title: "Prévu et sorti",
-    body: "Deux lignes par décalage. Sorti est le tirage FDJ, prévu est la grille de la lecture choisie, rangée n1 à n5 puis e1 et e2. Une boule cerclée est dans les deux grilles. Communs compte ces boules, de 0 à 5 et de 0 à 2. Étendue et consécutifs suivent la page Évolution. Le petit nombre à côté du prévu est l’écart prévu moins sorti, omis quand il est nul. Positif : la lecture était trop haute. La moyenne, en bas, reprend les communs et ces écarts. Avec Persist, une troisième ligne donne la grille jumelle : une boule en pointillés vient de n−1 ou n−2.",
+    body: "Deux lignes par décalage. Sorti est le tirage FDJ, prévu est la grille de la lecture choisie, rangée n1 à n5 puis e1 et e2. Une boule cerclée est dans les deux grilles. Communs compte ces boules, de 0 à 5 et de 0 à 2. Étendue et consécutifs suivent la page Évolution. Le petit nombre à côté du prévu est l’écart prévu moins sorti, omis quand il est nul. Positif : la lecture était trop haute. La moyenne, en bas, reprend les communs et ces écarts. Sous Moyenne, la plage du hasard : une grille prise au hasard, notée sur autant de décalages, y tombe 95 fois sur 100 (loi exacte, 0,5 numéro et 0,33 étoile par tirage en moyenne). Avec Persist, une troisième ligne donne la grille jumelle : une boule en pointillés vient de n−1 ou n−2.",
   },
   persist: {
     title: "Persist sur dix décalages",
