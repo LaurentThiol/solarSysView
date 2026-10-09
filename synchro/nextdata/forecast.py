@@ -124,12 +124,9 @@ def dependency_status() -> dict[str, Any]:
     }
 
 
-def lag_choice(mode: str, focus: int, n: int) -> tuple[int, int]:
-    """Lags du corpus, ou lags plafonnés de la fenêtre seule."""
-    if mode == "fenetre":
-        lags, past = (12, 6) if int(focus) <= 50 else (16, 8)
-    else:
-        lags, past = 16, 8
+def lag_choice(n: int) -> tuple[int, int]:
+    """Mêmes lags pour les deux modes, plafonnés quand l’histoire est courte."""
+    lags, past = 16, 8
     cap = max(2, n // 4)
     lags = max(2, min(lags, cap, max(2, n - 8)))
     past = max(1, min(past, lags))
@@ -137,16 +134,19 @@ def lag_choice(mode: str, focus: int, n: int) -> tuple[int, int]:
 
 
 def loss_indices(n: int, lags: int, focus_start: int, mode: str) -> list[int]:
-    """Lignes qui entrent dans la perte. La fenêtre seule ignore l’avant-focus."""
+    """Lignes qui entrent dans la perte.
+
+    La fenêtre seule n’y met que les tirages du focus, tous : leurs lags lisent
+    les tirages d’avant le focus, comme Darts. Sans assez d’histoire devant le
+    focus, ses premiers tirages manquent.
+    """
     if n <= lags:
         return []
     if mode == "fenetre":
-        start = focus_start + lags
-        if n - start < 30:
-            start = max(lags, focus_start)
+        start = max(lags, focus_start)
         if n - start < 8:
             start = lags
-        return list(range(max(start, lags), n))
+        return list(range(start, n))
     return list(range(lags, n))
 
 
@@ -366,7 +366,7 @@ def predict_moments(
     n = len(rows)
     focus_used = max(1, min(int(focus), n))
     focus_start = n - focus_used
-    lags, past_lags = lag_choice(mode, focus_used, n)
+    lags, past_lags = lag_choice(n)
     past_names = past_columns(families)
     future_names = future_columns(families)
     indices = loss_indices(n, lags, focus_start, mode)
@@ -537,7 +537,7 @@ def try_darts_medians(
     n = len(rows)
     focus_used = max(1, min(int(focus), n))
     focus_start = n - focus_used
-    lags, past_lags = lag_choice(mode, focus_used, n)
+    lags, past_lags = lag_choice(n)
     past_names = past_columns(families)
     future_names = future_columns(families)
     target_names = ["sum", "star_sum", "n1", "parity", "spread", "consecutive", "star_consecutive"]

@@ -21,7 +21,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Fenêtre seule",
-        text: "La perte ne voit qu’eux. Avec 50 tirages les décalages sont ramenés à 12, avec 100 ils restent à 16, pour laisser assez de lignes.",
+        text: "La perte ne voit qu’eux, et tous : leurs décalages lisent les tirages d’avant le focus, comme Darts. La fenêtre apprend donc sur 50 ou 100 tirages, avec les mêmes 16 décalages que le mode trois ans.",
       },
       {
         label: "Lecture",

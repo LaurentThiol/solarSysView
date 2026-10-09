@@ -96,14 +96,15 @@ def test_star_pool_follows_the_draw_date_when_it_is_missing() -> None:
 
 
 def test_window_loss_ignores_the_three_year_prefix() -> None:
-    lags, past = lag_choice("fenetre", 50, 160)
-    assert (lags, past) == (12, 6)
-    assert lag_choice("fenetre", 100, 220) == (16, 8)
-    assert lag_choice("corpus", 50, 220)[0] == 16
+    lags, past = lag_choice(160)
+    assert (lags, past) == (16, 8)
+    assert lag_choice(220) == (16, 8)
+    assert lag_choice(40) == (10, 8)
     focus_start = 110
     window = loss_indices(160, lags, focus_start, "fenetre")
-    assert window
-    assert min(window) >= focus_start
+    assert window == list(range(focus_start, 160))
+    assert loss_indices(320, lags, 220, "fenetre") == list(range(220, 320))
+    assert len(loss_indices(60, lags, 10, "fenetre")) == 60 - lags
     assert all(row_weight(index, focus_start, "fenetre") == 1.0 for index in window)
     assert row_weight(10, focus_start, "corpus") == 1.0
     assert row_weight(focus_start, focus_start, "corpus") == 3.0
