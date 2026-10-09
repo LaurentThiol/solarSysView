@@ -91,6 +91,8 @@ def test_year_n_stays_in_the_corpus() -> None:
     assert frame.years_present == ["n", "n-1"]
     assert frame.rows[-1]["date"] == last
     assert frame.next_date > last
+    assert build_frame(draws, years=[], focus=50).years == ["n", "n-1", "n-2"]
+    assert build_frame(draws, years=["n-1"], focus=50).years == ["n", "n-1"]
 
 
 def test_frame_uses_civil_years_and_recounts_the_focus() -> None:
