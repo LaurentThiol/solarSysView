@@ -60,10 +60,17 @@ export function lowestAgainstNext(
   return { best, next: next ?? null, gap: next ? (metrics[best]?.versus?.[next] ?? null) : null }
 }
 
+type Lowest = ReturnType<typeof lowestAgainstNext>
+
+/** La deuxième lecture quand l’écart apparié avec elle ne tranche pas ; null si la plus basse l’est vraiment. */
+export function undecidedRunnerUp(lowest: Lowest): RetourId | null {
+  const verdict = lowest?.gap?.verdict
+  return lowest?.next && verdict != null && verdict !== "lower" ? lowest.next : null
+}
+
 /** « plus basse erreur », complétée quand l’écart avec la deuxième lecture ne tranche pas. */
-export function lowestNote(lowest: ReturnType<typeof lowestAgainstNext>) {
+export function lowestNote(lowest: Lowest) {
   if (!lowest) return ""
-  const verdict = lowest.gap?.verdict
-  if (!lowest.next || verdict == null || verdict === "lower") return "plus basse erreur"
-  return `plus basse erreur, non tranché face à ${retourLabel(lowest.next)}`
+  const runnerUp = undecidedRunnerUp(lowest)
+  return runnerUp ? `plus basse erreur, non tranché face à ${retourLabel(runnerUp)}` : "plus basse erreur"
 }

@@ -253,6 +253,29 @@ export const NEXTDATA_HELP = {
       },
     ],
   },
+  apparie: {
+    title: "Contre la moyenne",
+    wide: true,
+    body: "La lecture et la moyenne sont notées sur les mêmes tirages du retour. À chaque tirage, on retranche l’erreur absolue de somme de la moyenne à celle de la lecture. La case donne la moyenne de ces écarts et son intervalle à 95 %, par la loi de Student : c’est le test de Diebold et Mariano à un pas. Apparier retire le bruit commun au tirage, car une somme sortie très haute trompe toutes les lectures à la fois : l’intervalle est bien plus étroit que celui de deux MAE prises chacune de leur côté.",
+    items: [
+      {
+        label: "Erreur plus basse",
+        text: "Tout l’intervalle est sous zéro : la lecture se trompe moins que la moyenne, au-delà du hasard des tirages.",
+      },
+      {
+        label: "Erreur plus haute",
+        text: "Tout l’intervalle est au-dessus de zéro : la moyenne fait mieux.",
+      },
+      {
+        label: "Non tranché",
+        text: "L’intervalle contient zéro : ces tirages ne départagent pas les deux. Sur des tirages au hasard, c’est le verdict attendu contre la moyenne.",
+      },
+      {
+        label: "Lignes Persist",
+        text: "Une jumelle se compare à sa lecture sans Persist : l’écart dit ce que les échanges changent à l’erreur de somme.",
+      },
+    ],
+  },
   bandes: {
     title: "Bandes 10–90 calibrées",
     wide: true,

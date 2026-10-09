@@ -38,9 +38,32 @@ import {
   type PersistSwap,
 } from "@/lib/nextdata/persist"
 import type { Arbitration } from "@/lib/nextdata/rank-path"
-import { lowestSumMae, RETOUR_READINGS, retourLabel, type RetourId } from "@/lib/nextdata/retour"
+import {
+  lowestAgainstNext,
+  lowestNote,
+  RETOUR_READINGS,
+  retourLabel,
+  twinOrigin,
+  undecidedRunnerUp,
+  type RetourId,
+} from "@/lib/nextdata/retour"
 import { seriesRows, type SeriesRow } from "@/lib/nextdata/series"
 import { shapeCaption } from "@/lib/nextdata/shape"
+import {
+  chanceOdds,
+  chanceRange,
+  chanceSentence,
+  formatGap,
+  formatHits,
+  formatInterval,
+  formatShareInterval,
+  verdictLabel,
+  type ChanceHits,
+  type HitsChance,
+  type MeanInterval,
+  type PairedGap,
+  type Verdict,
+} from "@/lib/nextdata/uncertainty"
 import { defaultStoredSpec, writeStoredSpec } from "@/lib/jeux"
 import { useLabTab } from "@/lib/use-lab-tab"
 import { cn } from "@/lib/utils"
@@ -128,6 +151,32 @@ type BacktestRow = {
   fenetre: StepSide
   persistence: StepSide
 } & Partial<Record<string, StepSide | string>>
+type RetourMetrics = {
+  mae: Record<string, number | null>
+  rmse: Record<string, number | null>
+  mae_sum_ci?: MeanInterval | null
+  hits_numbers: number | null
+  hits_stars: number | null
+  hits_chance?: HitsChance | null
+  versus?: Record<string, PairedGap>
+}
+
+const VERDICT_TONE: Record<Verdict, string> = {
+  lower: "text-chart-2",
+  higher: "text-destructive",
+  undecided: "text-muted-foreground",
+}
+
+/** Repère de la colonne « contre la moyenne » : la moyenne, ou la lecture d’origine pour une jumelle Persist. */
+function benchmarkOf(key: RetourId): RetourId | null {
+  if (key === "mean") return null
+  return twinOrigin(key) ?? "mean"
+}
+
+function chanceTitle(chance: ChanceHits | null | undefined) {
+  const odds = chanceOdds(chance)
+  return odds ? `Hasard ${chanceRange(chance)} ; ${odds}.` : undefined
+}
 type ForecastPayload = {
   ok: boolean
   error?: string
@@ -152,7 +201,7 @@ type ForecastPayload = {
     draw_count: number
     best_mae_sum: string
     rows: BacktestRow[]
-    metrics: Record<string, { mae: Record<string, number | null>; rmse: Record<string, number | null>; hits_numbers: number | null; hits_stars: number | null }>
+    metrics: Record<string, RetourMetrics>
     bands?: Record<string, Record<string, BandCoverage>>
   }
   chart: Record<string, string | number | null>[]
@@ -462,7 +511,12 @@ export function NextDataLab() {
   }
 
   const maxCount = Math.max(1, ...(report?.base.numbers.map((item) => item.count) ?? [1]))
-  const lowest = report ? lowestSumMae(report.backtest.metrics) : null
+  const lowest = report ? lowestAgainstNext(report.backtest.metrics) : null
+  const runnerUp = undecidedRunnerUp(lowest)
+  const lowestTail = runnerUp ? `, sans écart tranché avec « ${retourLabel(runnerUp)} »` : ""
+  const retourChance = report
+    ? RETOUR_READINGS.map((item) => report.backtest.metrics[item.id]?.hits_chance).find((chance) => chance?.numbers)
+    : null
   const shown: RetourId =
     library === "catboost" && report?.modes[primary].catboost ? (`${primary}_catboost` as const) : primary
   const shownBlock = library === "catboost" && report?.modes[primary].catboost ? report.modes[primary].catboost : report?.modes[primary]
@@ -648,9 +702,9 @@ export function NextDataLab() {
                   {report.focus !== report.focus_requested ? ` (demandé ${report.focus_requested})` : ""}. Années présentes : {report.years_present.join(", ") || "—"}.
                   {lowest == null
                     ? ""
-                    : lowest === shown
-                      ? " Cette lecture a la plus petite erreur de somme sur le retour."
-                      : ` Sur le retour, la plus petite erreur de somme revient à « ${retourLabel(lowest)} ».`}
+                    : lowest.best === shown
+                      ? ` Cette lecture a la plus petite erreur de somme sur le retour${lowestTail}.`
+                      : ` Sur le retour, la plus petite erreur de somme revient à « ${retourLabel(lowest.best)} »${lowestTail}.`}
                   {shownBlock?.calibration ? ` ${calibrationCaption(shownBlock.calibration)}` : ""}
                 </p>
                 {chronosBanner(report.chronos) && <p className="text-sm text-muted-foreground">{chronosBanner(report.chronos)}</p>}
@@ -859,11 +913,13 @@ export function NextDataLab() {
             {report && (
               <>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[36rem] text-left text-sm">
+                  <table className="w-full min-w-[48rem] text-left text-sm">
                     <thead className="text-xs uppercase tracking-wide text-muted-foreground">
                       <tr>
                         <th className="py-2 pr-3"><TitleHelp help={NEXTDATA_HELP.metriques}>Lecture</TitleHelp></th>
                         <th className="py-2 pr-3">MAE somme</th>
+                        <th className="py-2 pr-3">IC 95 %</th>
+                        <th className="py-2 pr-3"><TitleHelp help={NEXTDATA_HELP.apparie}>Contre la moyenne</TitleHelp></th>
                         <th className="py-2 pr-3">RMSE somme</th>
                         <th className="py-2 pr-3">Numéros communs</th>
                         <th className="py-2">Étoiles communes</th>
@@ -873,14 +929,34 @@ export function NextDataLab() {
                       {RETOUR_READINGS.map(({ id: key, label }) => {
                         const block = report.backtest.metrics[key]
                         if (!block) return null
-                        const best = lowest === key
+                        const best = lowest?.best === key
+                        const rival = benchmarkOf(key)
+                        const gap = rival ? block.versus?.[rival] : undefined
                         return (
-                          <tr key={key} className={cn(best && "bg-primary/5")}>
-                            <td className="py-1.5 pr-3">{label}{best ? " · plus basse erreur" : ""}</td>
-                            <td className="py-1.5 pr-3 tabular-nums">{block.mae.sum ?? "—"}</td>
-                            <td className="py-1.5 pr-3 tabular-nums">{block.rmse.sum ?? "—"}</td>
-                            <td className="py-1.5 pr-3 tabular-nums">{block.hits_numbers ?? "—"}</td>
-                            <td className="py-1.5 tabular-nums">{block.hits_stars ?? "—"}</td>
+                          <tr key={key} className={cn(best && "bg-primary/5")} data-retour={key}>
+                            <td className="py-1.5 pr-3">{label}{best ? ` · ${lowestNote(lowest)}` : ""}</td>
+                            <td className="py-1.5 pr-3 tabular-nums">{block.mae.sum == null ? "—" : formatDecimal(block.mae.sum)}</td>
+                            <td className="py-1.5 pr-3 tabular-nums text-muted-foreground">{formatInterval(block.mae_sum_ci)}</td>
+                            <td className="py-1.5 pr-3 tabular-nums" data-versus={rival ?? undefined}>
+                              {gap?.verdict ? (
+                                <>
+                                  <span className={VERDICT_TONE[gap.verdict]}>
+                                    {rival !== "mean" ? "face à sa lecture : " : ""}
+                                    {verdictLabel(gap.verdict)}
+                                  </span>
+                                  <span className="block text-xs text-muted-foreground">{formatGap(gap)}</span>
+                                </>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                            <td className="py-1.5 pr-3 tabular-nums">{block.rmse.sum == null ? "—" : formatDecimal(block.rmse.sum)}</td>
+                            <td className="py-1.5 pr-3 tabular-nums" title={chanceTitle(block.hits_chance?.numbers)}>
+                              {formatHits(block.hits_numbers)}
+                            </td>
+                            <td className="py-1.5 tabular-nums" title={chanceTitle(block.hits_chance?.stars)}>
+                              {formatHits(block.hits_stars)}
+                            </td>
                           </tr>
                         )
                       })}
@@ -890,6 +966,7 @@ export function NextDataLab() {
                     {report.backtest.draw_count} tirages notés
                     {progress && !progress.complete ? `, ${progress.total - progress.ready} pas encore à calculer` : ""}.
                     {report.estimators ? ` Même réglage que le pronostic : ${report.estimators} arbres, quantiles 10, 50 et 90.` : ""}
+                    {retourChance ? ` ${chanceSentence(retourChance)}` : ""}
                   </p>
                 </div>
                 {shownBands && (
@@ -921,11 +998,18 @@ export function NextDataLab() {
                                 <td className="py-1 pr-3">{field.label}</td>
                                 <td className="py-1 pr-3">
                                   {formatShare(measured.raw)}
-                                  <span className="text-xs text-muted-foreground"> · {measured.raw_count}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {measured.raw_lo != null ? ` (${formatShareInterval(measured.raw_lo, measured.raw_hi)})` : ""} · {measured.raw_count}
+                                  </span>
                                 </td>
                                 <td className="py-1 pr-3">
                                   {formatShare(measured.calibrated)}
-                                  <span className="text-xs text-muted-foreground"> · {measured.calibrated_count}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {measured.calibrated_lo != null
+                                      ? ` (${formatShareInterval(measured.calibrated_lo, measured.calibrated_hi)})`
+                                      : ""}{" "}
+                                    · {measured.calibrated_count}
+                                  </span>
                                 </td>
                                 <td className="py-1 text-xs text-muted-foreground">
                                   {edge ? `bas ${formatDecimal(-edge.down, true)} · haut ${formatDecimal(edge.up, true)}` : "—"}

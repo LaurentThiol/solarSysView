@@ -84,6 +84,19 @@ export function chanceText(chance: ChanceHits | null | undefined) {
   return `le hasard donne ${formatHits(chance.expected)}, entre ${formatHits(chance.lo)} et ${formatHits(chance.hi)} sur ${chance.count} ${word}`
 }
 
+/** Phrase sous un tableau : la moyenne du hasard et sa plage à 95 % sur autant de tirages. */
+export function chanceSentence(chance: HitsChance | null | undefined) {
+  const numbers = chance?.numbers
+  if (!numbers || !finite(numbers.lo) || !finite(numbers.hi)) return ""
+  const stars = chance?.stars && finite(chance.stars.lo) && finite(chance.stars.hi) ? chance.stars : null
+  const mean = `${formatHits(numbers.expected)} numéro${stars ? ` et ${formatHits(stars.expected)} étoile` : ""}`
+  const range = `entre ${formatHits(numbers.lo)} et ${formatHits(numbers.hi)} numéro${
+    stars ? `, entre ${formatHits(stars.lo)} et ${formatHits(stars.hi)} étoile` : ""
+  }`
+  const word = numbers.count > 1 ? "tirages" : "tirage"
+  return `Au hasard, une grille partage en moyenne ${mean} ; sur ${numbers.count} ${word}, sa moyenne tombe ${range}, 95 fois sur 100.`
+}
+
 /** Le p unilatéral en clair : combien de fois sur 100 une grille au hasard fait au moins autant. */
 export function chanceOdds(chance: ChanceHits | null | undefined) {
   if (!chance || !finite(chance.p)) return ""
