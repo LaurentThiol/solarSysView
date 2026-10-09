@@ -936,7 +936,9 @@ export function NextDataLab() {
                           <tr key={key} className={cn(best && "bg-primary/5")} data-retour={key}>
                             <td className="py-1.5 pr-3">{label}{best ? ` · ${lowestNote(lowest)}` : ""}</td>
                             <td className="py-1.5 pr-3 tabular-nums">{block.mae.sum == null ? "—" : formatDecimal(block.mae.sum)}</td>
-                            <td className="py-1.5 pr-3 tabular-nums text-muted-foreground">{formatInterval(block.mae_sum_ci)}</td>
+                            <td className="whitespace-nowrap py-1.5 pr-3 tabular-nums text-muted-foreground">
+                              {formatInterval(block.mae_sum_ci)}
+                            </td>
                             <td className="py-1.5 pr-3 tabular-nums" data-versus={rival ?? undefined}>
                               {gap?.verdict ? (
                                 <>
@@ -944,7 +946,7 @@ export function NextDataLab() {
                                     {rival !== "mean" ? "face à sa lecture : " : ""}
                                     {verdictLabel(gap.verdict)}
                                   </span>
-                                  <span className="block text-xs text-muted-foreground">{formatGap(gap)}</span>
+                                  <span className="block whitespace-nowrap text-xs text-muted-foreground">{formatGap(gap)}</span>
                                 </>
                               ) : (
                                 "—"
