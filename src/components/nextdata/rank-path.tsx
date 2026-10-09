@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 
 import { TitleHelp, type HelpCopy } from "@/components/help"
-import type { Arbitration, GapReading, RankReading } from "@/lib/nextdata/rank-path"
+import { chronosPart, type Arbitration, type GapReading, type RankReading } from "@/lib/nextdata/rank-path"
 import { cn } from "@/lib/utils"
 
 function fmt(value: number | null | undefined) {
@@ -33,6 +33,7 @@ function ReadingColumn({ rank }: { rank: RankReading }) {
         chaîne {fmt(rank.chain)}
       </p>
       <p className="text-xs tabular-nums">niveau {fmt(rank.level)}</p>
+      {chronosPart(rank, fmt) ? <p className="text-xs tabular-nums text-muted-foreground">{chronosPart(rank, fmt)}</p> : null}
       <p className="text-xs tabular-nums">delta {fmt(rank.delta)}</p>
       <WeightBar weights={rank.weights} />
     </div>
@@ -86,7 +87,8 @@ function NarrowRank({ rank, gap, star }: { rank: RankReading; gap?: GapReading |
         <div className="min-w-0 flex-1">
           <p className="text-xs font-medium">{rank.rank}</p>
           <p className="text-xs tabular-nums text-muted-foreground">
-            chaîne {fmt(rank.chain)} · niveau {fmt(rank.level)} · delta {fmt(rank.delta)}
+            chaîne {fmt(rank.chain)} · niveau {fmt(rank.level)}
+            {chronosPart(rank, fmt) ? ` (${chronosPart(rank, fmt)})` : ""} · delta {fmt(rank.delta)}
           </p>
           <WeightBar weights={rank.weights} />
           <p className="text-xs tabular-nums">tenu {fmt(rank.clipped)}</p>

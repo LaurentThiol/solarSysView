@@ -22,6 +22,7 @@ import {
   type Calibration,
   type StepProgress,
 } from "@/lib/nextdata/bands"
+import { chronosBanner, chronosShare, type ChronosNote, type ChronosStatus } from "@/lib/nextdata/chronos"
 import { formatDecimal } from "@/lib/nextdata/compare"
 import { NEXTDATA_HELP } from "@/lib/nextdata/help"
 import {
@@ -99,7 +100,7 @@ type ModePayload = {
   blend_weight: number
   engine: string
   importance: { name: string; gain: number; family: string }[]
-  chronos?: { available?: boolean; weight?: number; holdout_mae_chronos?: number; holdout_mae_lgb?: number } | null
+  chronos?: ChronosNote | null
   arbitration?: Arbitration | null
   calibration?: Calibration
   persist?: PersistBlock | null
@@ -159,6 +160,7 @@ type ForecastPayload = {
   estimators?: number
   progress?: StepProgress
   persist?: PersistInfo | null
+  chronos?: ChronosStatus
 }
 
 function rowSide(row: BacktestRow, key: string): StepSide | null {
@@ -298,6 +300,7 @@ export function NextDataLab() {
     hint?: string | null
     darts?: boolean
     chronos?: boolean
+    chronos_error?: string | null
     catboost?: boolean
   } | null>(null)
   const [focus, setFocus] = useState<50 | 100>(50)
@@ -604,7 +607,7 @@ export function NextDataLab() {
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               {draws.length} tirages · {source === "neon" ? "archive synchronisée" : "jeu embarqué"}
               {status?.darts ? " · Darts" : ""}
-              {status?.chronos ? " · Chronos" : ""}
+              {status?.chronos && !status.chronos_error && !report?.chronos?.error ? " · Chronos" : ""}
               <HelpTip {...NEXTDATA_HELP.source} />
             </span>
           </div>
@@ -641,6 +644,7 @@ export function NextDataLab() {
                       : ` Sur le retour, la plus petite erreur de somme revient à « ${retourLabel(lowest)} ».`}
                   {shownBlock?.calibration ? ` ${calibrationCaption(shownBlock.calibration)}` : ""}
                 </p>
+                {chronosBanner(report.chronos) && <p className="text-sm text-muted-foreground">{chronosBanner(report.chronos)}</p>}
                 {persistInfo && (
                   <div className="flex flex-col gap-1" data-persist-recent>
                     {persistInfo.recent?.length ? <RecentNote recent={persistInfo.recent} /> : null}
@@ -673,7 +677,7 @@ export function NextDataLab() {
                             <p className="text-xs font-medium text-muted-foreground">
                               LightGBM{block.mae_sum != null ? ` · MAE somme ${block.mae_sum}` : ""}
                               {block.engine === "darts" ? " · Darts" : ""}
-                              {block.chronos?.available ? ` · Chronos ${block.blend_weight}` : ""}
+                              {block.chronos?.available ? ` · ${chronosShare(block.chronos)}` : ""}
                             </p>
                             <ForecastBalls grid={block.grid} quantiles={block.quantiles} active={active && library === "lightgbm"} />
                             <p className="text-xs tabular-nums text-muted-foreground">{shapeCaption(block.grid.numbers, block.grid.stars)}</p>

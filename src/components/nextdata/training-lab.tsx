@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { DRAWS, type Draw } from "@/lib/draws"
+import { chronosBanner, type ChronosStatus } from "@/lib/nextdata/chronos"
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "@/lib/nextdata/help"
 import {
   pairPersist,
@@ -105,7 +106,7 @@ type TrainingPayload = {
   focus?: number
   years_present?: string[]
   catboost?: boolean
-  chronos?: { requested?: boolean; used?: boolean }
+  chronos?: ChronosStatus
   shifts?: Shift[]
   summary?: Summary
   estimators?: number
@@ -401,9 +402,7 @@ export function TrainingLab() {
 
       {report?.shifts && (
         <>
-          {report?.chronos?.requested && !report.chronos.used && (
-            <p className="text-sm text-muted-foreground">Chronos n’a pas répondu. LightGBM et CatBoost restent seuls.</p>
-          )}
+          {chronosBanner(report.chronos) && <p className="text-sm text-muted-foreground">{chronosBanner(report.chronos)}</p>}
           <div className="flex flex-wrap gap-3">
             {READINGS.filter((item) => summary[item.id]).map((item) => {
               const mae = summary[item.id]?.mae_sum
