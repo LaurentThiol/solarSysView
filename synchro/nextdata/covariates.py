@@ -249,13 +249,19 @@ def _combos(values: list[int], width: int) -> list[tuple[int, ...]]:
     return list(combinations(ordered, width))
 
 
-def link_series(pools: list[list[int]], width: int) -> dict[str, list[float]]:
-    """Ancienneté, compte, affinité et recouvrement des co-sorties réelles.
+AGO_CAP = 25
 
-    À l’indice t, le compte et l’affinité ne voient que les tirages d’avant t.
-    L’affinité d’une occurrence à l’indice i vaut i+1 : dans une histoire de
-    longueur t, le plus récent pèse t et le plus ancien pèse 1, comme
-    `coupleRankWeight`. Un lien jamais vu a une ancienneté égale à t.
+
+def link_series(pools: list[list[int]], width: int) -> dict[str, list[float]]:
+    """Ancienneté, part, affinité et recouvrement des co-sorties réelles.
+
+    À l’indice t, tout ne voit que les tirages d’avant t, et rien ne grandit
+    avec t : un arbre ne prolonge pas une tendance. L’ancienneté est plafonnée
+    à AGO_CAP tirages, sinon un lien jamais vu vaudrait t ; plus haut, la
+    censure du début du corpus la ferait encore suivre t. Le compte devient
+    une part, rapportée aux t tirages lus. L’affinité d’une occurrence à
+    l’indice i vaut i+1 (le plus récent pèse t, le plus ancien 1, comme
+    `coupleRankWeight`) et se rapporte à son maximum t(t+1)/2.
     """
     prefix = "couple" if width == 2 else "triple"
     history: dict[tuple[int, ...], list[int]] = {}
@@ -267,17 +273,19 @@ def link_series(pools: list[list[int]], width: int) -> dict[str, list[float]]:
     overlap: list[float] = []
     for index, pool in enumerate(pools):
         keys = _combos(pool, width)
+        read = float(max(index, 1))
+        weight_total = float(max(index * (index + 1) // 2, 1))
         agos: list[float] = []
         counts: list[float] = []
         affinities: list[float] = []
         for key in keys:
             seen = history.get(key, [])
             if seen:
-                agos.append(float(index - seen[-1]))
-                counts.append(float(len(seen)))
-                affinities.append(float(sum(hit + 1 for hit in seen)))
+                agos.append(float(min(index - seen[-1], AGO_CAP)))
+                counts.append(len(seen) / read)
+                affinities.append(sum(hit + 1 for hit in seen) / weight_total)
             else:
-                agos.append(float(index))
+                agos.append(float(min(index, AGO_CAP)))
                 counts.append(0.0)
                 affinities.append(0.0)
         width_now = max(len(keys), 1)
@@ -299,17 +307,17 @@ def link_series(pools: list[list[int]], width: int) -> dict[str, list[float]]:
 
 
 def star_couple_ago(stars: list[list[int]]) -> list[float]:
-    """Ancienneté de la paire d’étoiles réellement sortie. Pas de triple."""
+    """Ancienneté de la paire d’étoiles réellement sortie, plafonnée comme les couples. Pas de triple."""
     seen: dict[tuple[int, int], int] = {}
     out: list[float] = []
     for index, pool in enumerate(stars):
         key = tuple(sorted(pool)[:2])
         if len(key) < 2:
-            out.append(float(index))
+            out.append(float(min(index, AGO_CAP)))
             continue
         pair = (int(key[0]), int(key[1]))
         previous = seen.get(pair)
-        out.append(float(index if previous is None else index - previous))
+        out.append(float(min(index if previous is None else index - previous, AGO_CAP)))
         seen[pair] = index
     return out
 

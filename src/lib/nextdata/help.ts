@@ -146,7 +146,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Couples",
-        text: "Les 10 paires réellement sorties parmi les cinq numéros. Ancienneté, compte, affinité de rang et recouvrement avec le tirage précédent. L’historique s’arrête avant le tirage en cours. La paire d’étoiles a sa propre ancienneté.",
+        text: "Les 10 paires réellement sorties parmi les cinq numéros. Ancienneté plafonnée à 25 tirages, part des tirages d’avant où la paire est sortie, affinité de rang rapportée à son maximum, et recouvrement avec le tirage précédent. Rien ne grandit avec la longueur de l’historique : un compte brut monterait avec le temps, une tendance qu’un arbre ne sait pas prolonger. L’historique s’arrête avant le tirage en cours. La paire d’étoiles a sa propre ancienneté, plafonnée de même.",
       },
       {
         label: "Triples",

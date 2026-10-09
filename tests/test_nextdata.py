@@ -58,6 +58,30 @@ def test_couple_and_triple_history_stops_before_the_draw() -> None:
     assert star_couple_ago([[1, 2], [1, 2], [3, 4]]) == [0.0, 1.0, 2.0]
 
 
+def test_link_features_do_not_grow_with_history() -> None:
+    import numpy as np
+
+    from synchro.nextdata.covariates import AGO_CAP
+
+    rng = random.Random(5)
+    pools = [sorted(rng.sample(range(1, 51), 5)) for _ in range(312)]
+    stars = [sorted(rng.sample(range(1, 13), 2)) for _ in range(312)]
+    couples = link_series(pools, 2)
+    triples = link_series(pools, 3)
+    for name in ("couple_ago_mean", "couple_ago_min", "triple_ago_mean", "triple_ago_min"):
+        values = couples.get(name) or triples[name]
+        assert max(values) <= AGO_CAP
+    assert max(star_couple_ago(stars)) <= AGO_CAP
+    early, late = slice(40, 100), slice(252, 312)
+    for name in ("couple_count_mean", "couple_affinity_mean"):
+        values = np.asarray(couples[name])
+        assert abs(values[early].mean() - values[late].mean()) < 0.003
+        assert values.max() < 0.2
+    ago = np.asarray(couples["couple_ago_mean"][16:])
+    ranks = np.argsort(np.argsort(ago))
+    assert abs(np.corrcoef(ranks, np.arange(len(ago)))[0, 1]) < 0.3
+
+
 def test_frame_uses_civil_years_and_recounts_the_focus() -> None:
     draws = _draws(230, seed=2)
     frame = build_frame(draws, years=["n", "n-1"], focus=50)
