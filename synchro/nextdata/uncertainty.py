@@ -31,9 +31,6 @@ from synchro.analysis.inference import wilson_interval
 
 LEVEL = 0.95
 TAIL = (1.0 - LEVEL) / 2.0
-NUMBER_SLOTS = 5
-NUMBER_POOL = 50
-STAR_SLOTS = 2
 
 
 def _round(value: float | None) -> float | None:

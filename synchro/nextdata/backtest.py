@@ -19,9 +19,10 @@ from synchro.nextdata.covariates import SHAPE_SERIES, grid_shape
 from synchro.nextdata.empirical import recount
 from synchro.nextdata.forecast import _apply_external, _clip, _rank_view, blend_mid, blend_weight
 from synchro.nextdata.panel import Frame
-from synchro.nextdata.persist import score_swaps, snap_grid
+from synchro.nextdata.persist import NUMBER_POOL, NUMBER_SLOTS, STAR_SLOTS, score_swaps, snap_grid
 from synchro.nextdata.project import beam, compose_ranks, stamp_grid
 from synchro.nextdata.steps import CHRONOS_SERIES, MIN_HISTORY
+from synchro.nextdata.uncertainty import chance_hits, mean_interval, versus_all
 
 FIELDS = ("sum", "n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2", *SHAPE_SERIES)
 MODES = ("corpus", "fenetre")
@@ -322,7 +323,10 @@ def retour_report(
     """Métriques du retour sur les pas prêts du focus. Un pas sans ses deux lectures LightGBM est écarté.
 
     Avec Persist, chaque lecture a sa jumelle `<lecture>_persist`, notée sur le même tirage.
+    `versus` compare chaque lecture, tirage par tirage, aux lectures qui ne sont
+    pas des jumelles : une jumelle s’y compare donc à sa lecture d’origine.
     """
+    star_pool = frame.star_pool if frame is not None else 12
     kept: list[dict[str, Any]] = []
     for step in steps:
         if any(mode not in step["readings"] for mode in MODES):
@@ -348,9 +352,12 @@ def retour_report(
     metric_keys.extend(
         [f"{key}_persist" for key in metric_keys if any(f"{key}_persist" in item for item in kept)]
     )
-    metrics = {mode: _metrics(kept, mode) for mode in metric_keys}
-    metrics["persistence"] = _metrics(kept, "persistence")
+    metrics = {mode: _metrics(kept, mode, star_pool) for mode in metric_keys}
+    metrics["persistence"] = _metrics(kept, "persistence", star_pool)
     metrics["mean"] = _sum_only(kept, "mean")
+    sums = {key: _aligned(kept, key, "sum") for key in metrics}
+    for key, gaps in versus_all(sums, _rivals(metrics)).items():
+        metrics[key]["versus"] = gaps
     best = "corpus"
     corpus_mae = metrics["corpus"]["mae"].get("sum")
     window_mae = metrics["fenetre"]["mae"].get("sum")
@@ -366,18 +373,36 @@ def retour_report(
     }
 
 
-def _errors(steps: list[dict[str, Any]], mode: str, field: str) -> list[float]:
-    out = []
+def _aligned(steps: list[dict[str, Any]], mode: str, field: str) -> list[float | None]:
+    """Écart prévu − sorti à chaque pas, None quand la lecture ou le tirage n’a pas ce champ."""
+    out: list[float | None] = []
     for step in steps:
         side = step.get(mode) or {}
         actual = step["actual"]
         if side.get(field) is None or actual.get(field) is None:
+            out.append(None)
             continue
         out.append(float(side[field]) - float(actual[field]))
     return out
 
 
-def _metrics(steps: list[dict[str, Any]], mode: str) -> dict[str, Any]:
+def _errors(steps: list[dict[str, Any]], mode: str, field: str) -> list[float]:
+    return [err for err in _aligned(steps, mode, field) if err is not None]
+
+
+def _rivals(keys: Iterable[str]) -> list[str]:
+    """Lectures auxquelles chacune se compare : toutes, sauf les jumelles Persist."""
+    return [key for key in keys if not key.endswith("_persist")]
+
+
+def _chance(number_hits: list[int], star_hits: list[int], star_pool: int) -> dict[str, Any]:
+    return {
+        "numbers": chance_hits(number_hits, slots=NUMBER_SLOTS, pool=NUMBER_POOL),
+        "stars": chance_hits(star_hits, slots=STAR_SLOTS, pool=star_pool),
+    }
+
+
+def _metrics(steps: list[dict[str, Any]], mode: str, star_pool: int = 12) -> dict[str, Any]:
     mae = {}
     rmse = {}
     for field in FIELDS:
@@ -395,14 +420,23 @@ def _metrics(steps: list[dict[str, Any]], mode: str) -> dict[str, Any]:
     return {
         "mae": mae,
         "rmse": rmse,
+        "mae_sum_ci": mean_interval((abs(err) for err in _errors(steps, mode, "sum")), floor=0.0),
         "hits_numbers": _mae([float(v) for v in number_hits]) if number_hits else None,
         "hits_stars": _mae([float(v) for v in star_hits]) if star_hits else None,
+        "hits_chance": _chance(number_hits, star_hits, star_pool),
     }
 
 
 def _sum_only(steps: list[dict[str, Any]], mode: str) -> dict[str, Any]:
     errs = _errors(steps, mode, "sum")
-    return {"mae": {"sum": _mae(errs)}, "rmse": {"sum": _rmse(errs)}, "hits_numbers": None, "hits_stars": None}
+    return {
+        "mae": {"sum": _mae(errs)},
+        "rmse": {"sum": _rmse(errs)},
+        "mae_sum_ci": mean_interval((abs(err) for err in errs), floor=0.0),
+        "hits_numbers": None,
+        "hits_stars": None,
+        "hits_chance": {"numbers": None, "stars": None},
+    }
 
 
 def _round_map(values: dict[str, float | None]) -> dict[str, float | None]:
@@ -417,6 +451,9 @@ def _public_metrics(metrics: dict[str, dict[str, Any]]) -> dict[str, Any]:
             "rmse": _round_map(block["rmse"]),
             "hits_numbers": None if block["hits_numbers"] is None else round(float(block["hits_numbers"]), 4),
             "hits_stars": None if block["hits_stars"] is None else round(float(block["hits_stars"]), 4),
+            "mae_sum_ci": block.get("mae_sum_ci"),
+            "hits_chance": block.get("hits_chance"),
+            "versus": block.get("versus", {}),
         }
     return out
 
@@ -528,7 +565,7 @@ def shift_report(
         )
     return {
         "shifts": shifts,
-        "summary": _shift_summary(shifts),
+        "summary": _shift_summary(shifts, frame.star_pool),
         "chronos": {"requested": chronos_requested, "used": chronos_used},
     }
 
@@ -572,27 +609,33 @@ def _shift_side(
     }
 
 
-def _shift_summary(shifts: list[dict[str, Any]]) -> dict[str, Any]:
+def _shift_summary(shifts: list[dict[str, Any]], star_pool: int = 12) -> dict[str, Any]:
+    """MAE de somme et communs de chaque lecture sur les décalages, avec leurs marges à 95 %.
+
+    `versus` compare chaque lecture, décalage par décalage, aux lectures qui ne
+    sont pas des jumelles Persist, moyenne et persistance comprises.
+    """
     keys: set[str] = set()
     for shift in shifts:
         keys.update(shift["readings"])
+    ordered = sorted(keys)
+    sums = {key: [((shift["readings"].get(key) or {}).get("errors") or {}).get("sum") for shift in shifts] for key in ordered}
+    versus = versus_all(sums, _rivals(ordered))
     summary: dict[str, Any] = {}
-    for key in sorted(keys):
-        sum_errors = [
-            shift["readings"][key]["errors"]["sum"]
-            for shift in shifts
-            if key in shift["readings"] and shift["readings"][key]["errors"].get("sum") is not None
-        ]
-        number_hits = [
-            shift["readings"][key]["hits_numbers"]
-            for shift in shifts
-            if key in shift["readings"] and shift["readings"][key].get("hits_numbers") is not None
-        ]
+    for key in ordered:
+        sides = [shift["readings"][key] for shift in shifts if key in shift["readings"]]
+        sum_errors = [value for value in sums[key] if value is not None]
+        number_hits = [int(side["hits_numbers"]) for side in sides if side.get("hits_numbers") is not None]
+        star_hits = [int(side["hits_stars"]) for side in sides if side.get("hits_stars") is not None]
         summary[key] = {
             "mae_sum": None if not sum_errors else round(sum(abs(value) for value in sum_errors) / len(sum_errors), 4),
+            "mae_sum_ci": mean_interval((abs(value) for value in sum_errors), floor=0.0),
             "hits_numbers": None
             if not number_hits
             else round(sum(float(value) for value in number_hits) / len(number_hits), 4),
+            "hits_stars": None if not star_hits else round(sum(float(value) for value in star_hits) / len(star_hits), 4),
+            "hits_chance": _chance(number_hits, star_hits, star_pool),
+            "versus": versus[key],
             "count": len(sum_errors),
         }
     return summary

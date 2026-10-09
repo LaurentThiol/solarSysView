@@ -16,6 +16,8 @@ import math
 from bisect import insort
 from typing import Any, Iterable
 
+from synchro.nextdata.uncertainty import share_interval
+
 LEVEL = 0.9
 MIN_STEPS = 9
 FIELDS = (
@@ -113,6 +115,11 @@ def _rate(hits: list[bool]) -> float | None:
     return None if not hits else round(sum(1 for hit in hits if hit) / len(hits), 4)
 
 
+def _share(hits: list[bool], name: str) -> dict[str, Any]:
+    lo, hi = share_interval(sum(1 for hit in hits if hit), len(hits))
+    return {name: _rate(hits), f"{name}_count": len(hits), f"{name}_lo": lo, f"{name}_hi": hi}
+
+
 def coverage(
     pairs: list[tuple[dict[str, dict[str, float]], dict[str, float]]],
     star_pool: int = 12,
@@ -120,7 +127,8 @@ def coverage(
     """Part des tirages dans la bande, brute puis calibrée sur les seuls pas d’avant.
 
     `pairs` suit l’ordre des tirages. La couverture calibrée commence au pas qui
-    a neuf pas d’avant ; elle se mesure donc hors échantillon.
+    a neuf pas d’avant ; elle se mesure donc hors échantillon. Chaque part a ses
+    bornes de Wilson à 95 %.
     """
     below: dict[str, list[float]] = {field: [] for field in FIELDS}
     above: dict[str, list[float]] = {field: [] for field in FIELDS}
@@ -139,13 +147,4 @@ def coverage(
                 held[field].append(moved["lo"] <= value <= moved["hi"])
             insort(below[field], float(band["lo"]) - value)
             insort(above[field], value - float(band["hi"]))
-    return {
-        field: {
-            "raw": _rate(raw[field]),
-            "raw_count": len(raw[field]),
-            "calibrated": _rate(held[field]),
-            "calibrated_count": len(held[field]),
-        }
-        for field in FIELDS
-        if raw[field]
-    }
+    return {field: {**_share(raw[field], "raw"), **_share(held[field], "calibrated")} for field in FIELDS if raw[field]}
