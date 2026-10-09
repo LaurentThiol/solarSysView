@@ -95,7 +95,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Chronos inclus",
-        text: "Médiane zéro-shot sur la somme, la somme des étoiles et n1, mélangée à LightGBM. Le mélange penche vers la lecture qui s’est moins trompée sur le dernier tirage. CatBoost reste seul. Le premier appel télécharge amazon/chronos-t5-small.",
+        text: "Chronos-Bolt prévoit la somme, la somme des étoiles et n1, avec leurs bandes 10–90, sans rien apprendre de l’archive. Ces bandes se mélangent à celles de LightGBM ; n1 rejoint son niveau. Chaque série a son poids, réglé sur les dix tirages d’avant : il penche vers la lecture qui s’y est le moins trompée, et reste à moitié-moitié tant que ces tirages ne sont pas calculés. CatBoost reste seul. ./launch install-nextdata télécharge amazon/chronos-bolt-small. Si Chronos ne répond pas, un bandeau dit pourquoi ; il est retenté au prochain démarrage de l’API.",
       },
       {
         label: "Darts",
@@ -177,7 +177,7 @@ export const NEXTDATA_HELP = {
   chemin: {
     title: "Comment n1…n5 et e1, e2 sont obtenus",
     wide: true,
-    body: "Chaque rang est prévu directement, deux fois. Le niveau est le quantile prévu pour ce rang, seul. Le delta ajoute au dernier rang sorti le pas n − n−1. Le barreau donne leur poids : l’inverse de la largeur de bande, un peu moins pour le delta.\n\nLa chaîne part de n1 et ajoute les écarts g1 à g4 ; pour les étoiles, e1 puis l’écart e2 − e1. Elle reste affichée, sans poids : la médiane d’une somme n’est pas la somme des médianes, et additionner des médianes d’écarts tirait n2…n5 vers le bas (n5 vers 39 quand sa médiane est 44). Ses bandes d’écarts tiennent encore l’espacement : un écart du mélange qui en sort est ramené au bord.\n\nLa somme, puis l’étendue, rapprochent ensuite la grille de leurs cibles, un pas à la fois, sur le rang que ce pas éloigne le moins de son centre, à l’échelle de sa bande. La correction se répartit au lieu de pousser n5 puis n4. La boule est le voisin retenu.",
+    body: "Chaque rang est prévu directement, deux fois. Le niveau est le quantile prévu pour ce rang, seul. Le delta ajoute au dernier rang sorti le pas n − n−1. Le barreau donne leur poids : l’inverse de la largeur de bande, un peu moins pour le delta. Avec Chronos, le niveau de n1 mélange celui de LightGBM et celui de Chronos : la figure donne la médiane de Chronos et sa part.\n\nLa chaîne part de n1 et ajoute les écarts g1 à g4 ; pour les étoiles, e1 puis l’écart e2 − e1. Elle reste affichée, sans poids : la médiane d’une somme n’est pas la somme des médianes, et additionner des médianes d’écarts tirait n2…n5 vers le bas (n5 vers 39 quand sa médiane est 44). Ses bandes d’écarts tiennent encore l’espacement : un écart du mélange qui en sort est ramené au bord.\n\nLa somme, puis l’étendue, rapprochent ensuite la grille de leurs cibles, un pas à la fois, sur le rang que ce pas éloigne le moins de son centre, à l’échelle de sa bande. La correction se répartit au lieu de pousser n5 puis n4. La boule est le voisin retenu.",
   },
   grille: {
     title: "Grille 5+2",
@@ -350,7 +350,7 @@ export const NEXTDATA_TRAINING_HELP = {
   chronos: {
     title: "Chronos inclus",
     wide: true,
-    body: "Même interrupteur que nextData. Sans Chronos, LightGBM et CatBoost partent seuls. Chronos inclus mélange une médiane zéro-shot à LightGBM, sur la somme, la somme des étoiles et n1. Le poids penche vers la lecture qui s’est moins trompée sur le dernier tirage connu, pas sur le tirage noté. CatBoost reste seul.",
+    body: "Même interrupteur que nextData. Sans Chronos, LightGBM et CatBoost partent seuls. Chronos inclus mélange les bandes 10–90 de Chronos-Bolt à celles de LightGBM, sur la somme, la somme des étoiles et le niveau de n1. Chaque série a son poids, réglé sur les dix tirages d’avant le décalage, jamais sur le tirage noté ; moitié-moitié tant qu’ils ne sont pas calculés. CatBoost reste seul. Si Chronos ne répond pas, le bandeau dit pourquoi.",
   },
   delta: {
     title: "Niveaux ou DeltaEvol",

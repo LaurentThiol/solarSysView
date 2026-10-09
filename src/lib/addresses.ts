@@ -507,7 +507,7 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/brain/readings/{id}/notes", "POST", "Brain · note", "Ajouter une note à une lecture du carnet.", "assistants"),
   apiEntry("/api/brain/retrieve", "POST", "Brain · retrieve", "Recherche dans le carnet / la table épinglée.", "assistants"),
   apiEntry("/api/brain/analogs", "POST", "Brain · analogie", "Voisins (dont Jumeaux) pour une fiche.", "assistants"),
-  apiEntry("/api/nextdata/status", "GET", "nextData · statut", "Présence de LightGBM, Darts, Chronos et torch.", "grilles"),
+  apiEntry("/api/nextdata/status", "GET", "nextData · statut", "Présence de LightGBM, Darts, Chronos et torch, et dernier échec de Chronos.", "grilles"),
   apiEntry(
     "/api/nextdata/training",
     "POST",
