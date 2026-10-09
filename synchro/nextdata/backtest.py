@@ -619,7 +619,10 @@ def _shift_summary(shifts: list[dict[str, Any]], star_pool: int = 12) -> dict[st
     for shift in shifts:
         keys.update(shift["readings"])
     ordered = sorted(keys)
-    sums = {key: [((shift["readings"].get(key) or {}).get("errors") or {}).get("sum") for shift in shifts] for key in ordered}
+    sums = {
+        key: [((shift["readings"].get(key) or {}).get("errors") or {}).get("sum") for shift in shifts]
+        for key in ordered
+    }
     versus = versus_all(sums, _rivals(ordered))
     summary: dict[str, Any] = {}
     for key in ordered:
