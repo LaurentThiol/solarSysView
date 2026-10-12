@@ -20,6 +20,7 @@ export const WINDOW_PRESETS = [
   "months_12",
   "year",
   "year_n1",
+  "year_n2",
   "formula",
   "all",
   "custom",
@@ -29,6 +30,9 @@ export type WindowPreset = (typeof WINDOW_PRESETS)[number]
 
 /** Query value for « année n-1 » relative to the latest loaded draw. */
 export const PREV_CALENDAR_YEAR_PARAM = "n-1"
+
+/** Query value for « année n-2 » relative to the latest loaded draw. */
+export const PREV2_CALENDAR_YEAR_PARAM = "n-2"
 
 export const WINDOW_PRESET_LABELS: Record<WindowPreset, string> = {
   last_20: "20 derniers tirages",
@@ -40,6 +44,7 @@ export const WINDOW_PRESET_LABELS: Record<WindowPreset, string> = {
   months_12: "12 mois",
   year: "Année civile",
   year_n1: "Année n-1",
+  year_n2: "Année n-2",
   formula: "Formule actuelle (12 ★)",
   all: "Tout l’historique",
   custom: "Personnalisé",
@@ -174,8 +179,9 @@ export function resolveWindow<T extends { date: string; star_pool?: number; week
   } else if (preset === "year") {
     const start = spec.fromDate ?? `${end.slice(0, 4)}-01-01`
     work = work.filter((d) => d.date >= start)
-  } else if (preset === "year_n1") {
-    const year = (calendarYearOf(end) ?? 0) - 1
+  } else if (preset === "year_n1" || preset === "year_n2") {
+    const offset = preset === "year_n2" ? 2 : 1
+    const year = (calendarYearOf(end) ?? 0) - offset
     const start = spec.fromDate ?? `${year}-01-01`
     const cap = `${year}-12-31`
     work = work.filter((d) => d.date >= start && d.date <= cap)

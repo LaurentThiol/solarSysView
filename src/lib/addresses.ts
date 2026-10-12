@@ -200,6 +200,24 @@ const HARMO_TABS: { id: string; label: string; text: string }[] = [
   },
 ]
 
+const PULSE_TABS: { id: string; label: string; text: string }[] = [
+  {
+    id: "synthese",
+    label: "Synthèse",
+    text: "Grille des 50 boules et des 12 étoiles, colorée par le taux de concordance.",
+  },
+  {
+    id: "fiche",
+    label: "Fiche",
+    text: "Tranches datées d’une boule ou d’une étoile, onde théorique et sorties.",
+  },
+  {
+    id: "groupes",
+    label: "Groupes",
+    text: "Paires et triplets en rotation sur une période commune.",
+  },
+]
+
 function tabEntry(
   href: string,
   label: string,
@@ -328,17 +346,20 @@ const TABS: AddressEntry[] = [
   ...HARMO_TABS.map((tab) =>
     tabEntry(`/harmo?tab=${tab.id}`, `Harmo · ${tab.label}`, tab.text, "lecture")
   ),
+  ...PULSE_TABS.map((tab) =>
+    tabEntry(`/pulse?tab=${tab.id}`, `Pulse · ${tab.label}`, tab.text, "lecture")
+  ),
   tabEntry(
     "/next?tab=couple",
     "Next · Couple",
-    "Schéma 3D des boules 1–50. Le poids d’un couple est la somme des co-sorties, du tirage le plus récent au plus ancien, sur 20, 50, 100, 200, l’année civile ou l’année n−1. Un clic dans Couples relie ce couple dans Chaque numéro.",
+    "Schéma 3D des boules 1–50. Le poids d’un couple est la somme des co-sorties, du tirage le plus récent au plus ancien, sur 20, 50, 100, 200, l’année civile, l’année n−1 ou l’année n−2. Un clic dans Couples relie ce couple dans Chaque numéro.",
     "lecture",
     "tab=couple"
   ),
   tabEntry(
     "/next?tab=triple",
     "Next · Triple",
-    "Schéma 3D des boules 1–50. Le poids d’un triplet est la somme des co-sorties à trois, du tirage le plus récent au plus ancien, sur 20, 50, 100, 200, l’année civile ou l’année n−1. Un clic dans Triplets relie ce triplet dans Chaque numéro.",
+    "Schéma 3D des boules 1–50. Le poids d’un triplet est la somme des co-sorties à trois, du tirage le plus récent au plus ancien, sur 20, 50, 100, 200, l’année civile, l’année n−1 ou l’année n−2. Un clic dans Triplets relie ce triplet dans Chaque numéro.",
     "lecture",
     "tab=triple"
   ),
@@ -464,6 +485,9 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/harmo/orders", "GET", "Harmo · ordres", "Order tracking tacholess sur une crête.", "lecture"),
   apiEntry("/api/harmo/unmix", "GET", "Harmo · mélange", "Séparation raies / crêtes / continuum.", "lecture"),
   apiEntry("/api/harmo/null", "GET", "Harmo · null", "Pics et THD contre des tirages uniformes.", "lecture"),
+  apiEntry("/api/pulse/status", "GET", "Pulse · statut", "Presets, générateurs et bande de périodes en tirages.", "lecture"),
+  apiEntry("/api/pulse/scan", "POST", "Pulse · scan", "Syntonisation des boules et des étoiles sur les presets cochés.", "lecture", "presets, families, weekday"),
+  apiEntry("/api/pulse/detail", "GET", "Pulse · détail", "Onde théorique et sorties d’une tranche.", "lecture", "kind, n, preset, slice, families, weekday"),
   apiEntry("/api/morpho/status", "GET", "Morpho · statut", "Backend VLM / CLIP disponible.", "lecture"),
   apiEntry("/api/morpho/analyze", "POST", "Morpho · analyser", "Détecteurs géométriques sur un glyphe 5×10.", "lecture"),
   apiEntry("/api/morpho/glyphs", "GET", "Morpho · glyphes", "Liste des glyphes pour la fenêtre.", "lecture"),

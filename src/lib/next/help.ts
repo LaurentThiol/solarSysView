@@ -68,6 +68,10 @@ export const NEXT_FIELD_HELP = {
         label: "Année n−1",
         text: "L’année civile précédente, comptée à partir du dernier tirage chargé.",
       },
+      {
+        label: "Année n−2",
+        text: "L’année civile deux ans avant le dernier tirage chargé, du 1er janvier au 31 décembre.",
+      },
     ],
   },
   summary: {

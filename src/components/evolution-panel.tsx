@@ -91,6 +91,7 @@ const PERIODS: { id: DrawWindow; label: string; full: string }[] = [
   { id: "last_50", label: "50 derniers", full: WINDOW_PRESET_LABELS.last_50 },
   { id: "year", label: WINDOW_PRESET_LABELS.year, full: WINDOW_PRESET_LABELS.year },
   { id: "year_n1", label: WINDOW_PRESET_LABELS.year_n1, full: WINDOW_PRESET_LABELS.year_n1 },
+  { id: "year_n2", label: WINDOW_PRESET_LABELS.year_n2, full: WINDOW_PRESET_LABELS.year_n2 },
   { id: "current", label: "Formule actuelle", full: ERA_LABELS.current },
   { id: "all", label: "Tout", full: ERA_LABELS.all },
 ]
@@ -109,7 +110,7 @@ function SketchBridge({
 
 const WINDOW_HELP = {
   title: "Fenêtre de travail",
-  body: "20 ou 50 derniers tirages (tous calendriers), année civile, année n-1, formule actuelle (12 ★), ou tout l’historique. 20/50 se lisent mieux sur la courbe ; l’année et la formule donnent le bruit de fond. La barre reste sous le bandeau pour changer de plage sans remonter.",
+  body: "20 ou 50 derniers tirages (tous calendriers), année civile, année n-1, année n-2, formule actuelle (12 ★), ou tout l’historique. 20/50 se lisent mieux sur la courbe ; l’année et la formule donnent le bruit de fond. La barre reste sous le bandeau pour changer de plage sans remonter.",
 } as const
 
 const MONTH_HELP = {
@@ -248,7 +249,7 @@ function EvolutionContent() {
   const lastWindow = isLastWindow(period)
   const archive = useMemo(() => {
     const merged =
-      period === "year_n1"
+      period === "year_n1" || period === "year_n2"
         ? [...draws].sort((a, b) => b.date.localeCompare(a.date))
         : mergeDraws(draws, DRAWS)
     return filterDrawsByWeekday(merged, weekday)

@@ -124,6 +124,46 @@ def test_year_n1_is_previous_calendar_year():
     assert current["to_date"] == "2026-03-03"
 
 
+def test_year_n2_is_two_calendar_years_back():
+    rows = [
+        {
+            "draw_date": date(2024, 3, 1),
+            "weekday": "vendredi",
+            "numbers": [1, 2, 3, 4, 5],
+            "stars": [1, 2],
+            "star_pool": 12,
+        },
+        {
+            "draw_date": date(2024, 11, 29),
+            "weekday": "vendredi",
+            "numbers": [6, 7, 8, 9, 10],
+            "stars": [1, 2],
+            "star_pool": 12,
+        },
+        {
+            "draw_date": date(2025, 6, 3),
+            "weekday": "mardi",
+            "numbers": [11, 12, 13, 14, 15],
+            "stars": [1, 2],
+            "star_pool": 12,
+        },
+        {
+            "draw_date": date(2026, 1, 2),
+            "weekday": "vendredi",
+            "numbers": [16, 17, 18, 19, 20],
+            "stars": [1, 2],
+            "star_pool": 12,
+        },
+    ]
+    resolved = resolve_window(rows, preset="year_n2", warmup=0)
+    assert resolved["draw_count"] == 2
+    assert resolved["from_date"] == "2024-03-01"
+    assert resolved["to_date"] == "2024-11-29"
+    previous = resolve_window(rows, preset="year_n1", warmup=0)
+    assert previous["from_date"] == "2025-06-03"
+    assert previous["draw_count"] == 1
+
+
 def test_vwap_resets_on_window():
     candles = [
         {"o": 10, "h": 12, "l": 9, "c": 11, "count": 1},

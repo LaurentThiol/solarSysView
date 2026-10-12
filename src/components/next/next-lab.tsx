@@ -75,6 +75,7 @@ const SHORT_LABEL: Record<NextWindowPreset, string> = {
   last_200: "200",
   year: "Année",
   year_n1: "Année n−1",
+  year_n2: "Année n−2",
 }
 
 const COUPLE_COLUMNS: {

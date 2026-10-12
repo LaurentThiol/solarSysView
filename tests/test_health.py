@@ -408,7 +408,9 @@ def test_next_draws_route_forwards_prizes() -> None:
     assert "winners_total_fr" in route
     assert "winners_total_eu" in route
     assert 'raw === "n-1"' in route
+    assert 'raw === "n-2"' in route
     assert 'yearQuery === "n-1"' in route
+    assert 'yearQuery === "n-2"' in route
     explorer = (
         Path(__file__).resolve().parents[1] / "src/components/draws-explorer.tsx"
     ).read_text(encoding="utf-8")
@@ -438,4 +440,6 @@ def test_ui_does_not_stampede_neon_on_every_page() -> None:
     assert "const inflight" in draws
     assert "function loadDraws" in draws
     assert "year_n1" in draws
+    assert "year_n2" in draws
     assert "PREV_CALENDAR_YEAR_PARAM" in draws
+    assert "PREV2_CALENDAR_YEAR_PARAM" in draws

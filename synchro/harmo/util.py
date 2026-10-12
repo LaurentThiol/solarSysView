@@ -12,7 +12,7 @@ import numpy as np
 MIN_SAMPLES = 16
 DISCLAIMER = (
     "Les tirages sont indépendants. Harmo décrit le tracé, pas le prochain "
-    "tirage. Unités : cycles/tirage et cycles/an — pas des hertz."
+    "tirage. Unités : cycles/tirage et cycles/an."
 )
 
 

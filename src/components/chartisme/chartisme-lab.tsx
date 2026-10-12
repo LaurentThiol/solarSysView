@@ -771,7 +771,7 @@ export function ChartismeLab() {
               label="Fenêtre de travail"
               help={{
                 title: "Fenêtre de travail",
-                body: "La zone de tirages qu'on regarde — les 20, 50, 100 derniers, une durée, l'année civile, l'année n-1, tout. Les tirages qui précèdent restent calculés en contexte (le retard d'une boule et la MM20 de la règle d'or ne repartent pas de zéro au premier tirage découpé), mais aucune figure entièrement contenue dans ce contexte n'est listée.",
+                body: "La zone de tirages qu'on regarde — les 20, 50, 100 derniers, une durée, l'année civile, l'année n-1, l'année n-2, tout. Les tirages qui précèdent restent calculés en contexte (le retard d'une boule et la MM20 de la règle d'or ne repartent pas de zéro au premier tirage découpé), mais aucune figure entièrement contenue dans ce contexte n'est listée.",
               }}
             >
               <Select

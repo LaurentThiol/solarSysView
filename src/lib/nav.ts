@@ -101,7 +101,15 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Harmo",
         help: {
           title: "Harmo",
-          body: "Étude harmonique des séries de tirages : mélange réseau / mécanique / acoustique, FFT, STFT, Hilbert. Unités en cycles/tirage, pas des hertz. Le choix du jour (Tous, Mardi, Vendredi, Synthèse) reste sous le bandeau, comme Évolution. Décrit le tracé, pas le prochain tirage.",
+          body: "Étude harmonique des séries de tirages : mélange réseau / mécanique / acoustique, FFT, STFT, Hilbert. Unités en cycles/tirage et cycles/an. Le choix du jour (Tous, Mardi, Vendredi, Synthèse) reste sous le bandeau, comme Évolution. Décrit le tracé, pas le prochain tirage.",
+        },
+      },
+      {
+        href: "/pulse",
+        label: "Pulse",
+        help: {
+          title: "Pulse",
+          body: "Générateurs d’onde sur les présences des boules et des étoiles. Cycle simple, double cycle, rotation de paire ou de triplet. Périodes de 2 à 60 tirages, concordance et tranches datées. Décrit le tracé, pas le prochain tirage.",
         },
       },
       {
@@ -109,7 +117,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Next",
         help: {
           title: "Next",
-          body: "Lecture des tirages réalisés, du plus récent au plus ancien. Couple place les 50 boules selon le poids de leurs co-sorties ; Triple fait de même pour les triplets, trois boules du même tirage. Fenêtres : 20, 50, 100, 200, année civile ou année n−1. Le graphique Évolution dans le temps reprend la même base ; un clic dans Couples ou Triplets relie ce lien dans Chaque numéro. pronosticNext pose le total, les pairs, les décennies et n1–n5 : un champ sans borne reste OFF, puis donne la chance de chaque grille d’après ces lectures reverse, couples et triples compris.",
+          body: "Lecture des tirages réalisés, du plus récent au plus ancien. Couple place les 50 boules selon le poids de leurs co-sorties ; Triple fait de même pour les triplets, trois boules du même tirage. Fenêtres : 20, 50, 100, 200, année civile, année n−1 ou année n−2. Le graphique Évolution dans le temps reprend la même base ; un clic dans Couples ou Triplets relie ce lien dans Chaque numéro. pronosticNext pose le total, les pairs, les décennies et n1–n5 : un champ sans borne reste OFF, puis donne la chance de chaque grille d’après ces lectures reverse, couples et triples compris.",
         },
       },
     ],

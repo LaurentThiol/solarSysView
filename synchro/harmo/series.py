@@ -34,9 +34,9 @@ def notes_for(variable: str, sampling: dict[str, Any]) -> list[dict[str, str]]:
             "id": "units",
             "level": "info",
             "text": (
-                "Pas de hertz : l’axe fréquentiel est en cycles/tirage "
-                "(et cycles/an via le calendrier). Le « réseau 50 Hz » est "
-                "un peigne de raies verrouillé, pas une interpolation kHz."
+                "L’axe fréquentiel est en cycles/tirage "
+                "(et cycles/an via le calendrier). Le réseau est "
+                "un peigne de raies verrouillé sur le calendrier."
             ),
         },
     ]

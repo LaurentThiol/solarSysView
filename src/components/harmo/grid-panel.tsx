@@ -69,7 +69,7 @@ export function GridPanel({
         title="Cepstre (quefrency en tirages)"
         help={{
           title: "Cepstre",
-          body: "Les pics de quefrency estiment une période (donc une fondamentale) sans la fixer à 50 Hz.",
+          body: "Les pics de quefrency estiment une période (donc une fondamentale) en tirages.",
         }}
         yLabel="Quefrency = période en tirages."
       />

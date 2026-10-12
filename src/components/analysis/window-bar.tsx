@@ -69,7 +69,7 @@ export function WindowBar({
           label="Fenêtre de travail"
           help={{
             title: "Fenêtre de travail",
-            body: "Jeu de tirages lu par tous les onglets (Vue, Numéros, Hasard…). Un preset fixe N tirages, une durée, l’année civile ou l’année n-1 ; Personnalisé suit les dates Du / Au.",
+            body: "Jeu de tirages lu par tous les onglets (Vue, Numéros, Hasard…). Un preset fixe N tirages, une durée, l’année civile, l’année n-1 ou l’année n-2 ; Personnalisé suit les dates Du / Au.",
           }}
         >
           <Select value={preset} onValueChange={(v) => onPreset(v as WindowPreset)}>

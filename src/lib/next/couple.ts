@@ -15,6 +15,7 @@ export const NEXT_WINDOW_PRESETS = [
   "last_200",
   "year",
   "year_n1",
+  "year_n2",
 ] as const
 
 export type NextWindowPreset = (typeof NEXT_WINDOW_PRESETS)[number]

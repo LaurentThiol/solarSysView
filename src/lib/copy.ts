@@ -77,7 +77,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Fenêtre de travail",
     group: "fenetre",
-    text: "Jeu de tirages lu par les laboratoires. Les presets (20/50/100 tirages, année civile, année n-1, formule actuelle…) sont les mêmes partout. Le filtre Jour (Tous / Mardi / Vendredi / Synthèse) s’applique avant la fenêtre : 20 derniers mardi = 20 mardis. En Chartisme, l’échelle (longueur d’une figure) est distincte : elle ne change pas la fenêtre.",
+    text: "Jeu de tirages lu par les laboratoires. Les presets (20/50/100 tirages, année civile, année n-1, année n-2, formule actuelle…) sont les mêmes partout. Le filtre Jour (Tous / Mardi / Vendredi / Synthèse) s’applique avant la fenêtre : 20 derniers mardi = 20 mardis. En Chartisme, l’échelle (longueur d’une figure) est distincte : elle ne change pas la fenêtre.",
   },
   {
     term: "Jour de tirage",
@@ -103,6 +103,11 @@ export const GLOSSARY: GlossaryEntry[] = [
     term: "Année n-1",
     group: "fenetre",
     text: "Preset de fenêtre : l’année civile qui précède celle du dernier tirage, du 1er janvier au 31 décembre.",
+  },
+  {
+    term: "Année n-2",
+    group: "fenetre",
+    text: "Preset de fenêtre : l’année civile deux ans avant celle du dernier tirage, du 1er janvier au 31 décembre.",
   },
   {
     term: "Annuel",

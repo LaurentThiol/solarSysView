@@ -72,7 +72,7 @@ const TABS = [
     label: "Réseau",
     help: {
       title: "Réseau",
-      body: "Peigne de raies verrouillé (calendrier, scan de f0, THD, Lomb-Scargle). L’analogue du 50 Hz, pas des hertz.",
+      body: "Peigne de raies verrouillé (calendrier, scan de f0, THD, Lomb-Scargle). L’analogue d’un réseau à raies fixes, en cycles/tirage.",
     },
   },
   {

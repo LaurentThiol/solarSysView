@@ -1,8 +1,7 @@
 """Harmo — étude harmonique des séries de tirages.
 
-Les unités naturelles sont des cycles/tirage et des cycles/an, pas des hertz.
-Le « réseau 50 Hz » est l’analogue d’un peigne de raies verrouillé sur le
-calendrier, pas une interpolation vers une grille kHz.
+Les unités naturelles sont des cycles/tirage et des cycles/an.
+Le réseau est l’analogue d’un peigne de raies verrouillé sur le calendrier.
 """
 
 from __future__ import annotations
@@ -34,7 +33,7 @@ def extras_status() -> dict[str, Any]:
         "disclaimer": (
             "Les tirages sont indépendants. Harmo décrit le tracé d’une série "
             "(somme, retard, présence…), pas le prochain tirage. Les unités sont "
-            "des cycles/tirage et des cycles/an, pas des hertz."
+            "des cycles/tirage et des cycles/an."
         ),
     }
     try:

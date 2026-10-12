@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 
 import {
   PREV_CALENDAR_YEAR_PARAM,
+  PREV2_CALENDAR_YEAR_PARAM,
   filterCalendarYear,
   newestCalendarYear,
 } from "@/lib/analysis-window"
@@ -17,7 +18,7 @@ import {
 
 export type DrawSource = "json" | "neon"
 export type DrawEra = "current" | "all" | "year"
-export type DrawWindow = DrawEra | "last_20" | "last_50" | "year_n1"
+export type DrawWindow = DrawEra | "last_20" | "last_50" | "year_n1" | "year_n2"
 
 type DrawPayload = {
   ok?: boolean
@@ -44,10 +45,10 @@ function loadDraws(query: string): Promise<DrawPayload | null> {
   return promise
 }
 
-function previousCalendarYearDraws(pool: Draw[]) {
+function offsetCalendarYearDraws(pool: Draw[], offset: number) {
   const reference = newestCalendarYear(DRAWS) ?? newestCalendarYear(pool)
   if (reference == null) return []
-  return filterCalendarYear(pool, reference - 1)
+  return filterCalendarYear(pool, reference - offset)
 }
 
 function seedDraws(window: DrawWindow, current: Draw[], weekday: WeekdayScope = "all") {
@@ -55,13 +56,15 @@ function seedDraws(window: DrawWindow, current: Draw[], weekday: WeekdayScope = 
   const pool = filterDrawsByWeekday(raw, weekday)
   if (window === "last_20") return takeLastDraws(pool, 20)
   if (window === "last_50") return takeLastDraws(pool, 50)
-  if (window === "year_n1") return previousCalendarYearDraws(pool)
+  if (window === "year_n1") return offsetCalendarYearDraws(pool, 1)
+  if (window === "year_n2") return offsetCalendarYearDraws(pool, 2)
   return pool
 }
 
 export function drawsQueryFor(window: DrawWindow, weekday: WeekdayScope = "all") {
   const params = new URLSearchParams()
   if (window === "year_n1") params.set("year", PREV_CALENDAR_YEAR_PARAM)
+  else if (window === "year_n2") params.set("year", PREV2_CALENDAR_YEAR_PARAM)
   else if (window === "last_20") params.set("last", "20")
   else if (window === "last_50") params.set("last", "50")
   else if (window !== "year") params.set("era", window)
@@ -90,9 +93,10 @@ export function useDraws(window: DrawWindow = "year", weekday: WeekdayScope = "a
         const items = [...payload.items].sort((a, b) =>
           b.date.localeCompare(a.date)
         )
-        // The API already scoped n-1; do not re-filter against the current-year JSON snapshot.
+        // The API already scoped n-1 or n-2; do not re-filter against the current-year JSON snapshot.
         const scoped = filterDrawsByWeekday(items, weekday)
-        setDraws(window === "year_n1" ? scoped : seedDraws(window, scoped, weekday))
+        const dated = window === "year_n1" || window === "year_n2"
+        setDraws(dated ? scoped : seedDraws(window, scoped, weekday))
         setSource("neon")
       } catch {
         if (!cancelled) {

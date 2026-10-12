@@ -33,6 +33,8 @@ def test_evolution_tables_use_lookback_and_thresholds() -> None:
     assert "starFrequencyTable(filtered, 12, archive)" in panel
     assert 'id: "year_n1"' in panel
     assert "WINDOW_PRESET_LABELS.year_n1" in panel
+    assert 'id: "year_n2"' in panel
+    assert "WINDOW_PRESET_LABELS.year_n2" in panel
     assert "hottest(numberBoard, 10, { minCount: expectedN })" in panel
     assert "minDelay: expectedNDelay" in panel
     assert "exclude: hotNumbers.map((item) => item.value)" in panel

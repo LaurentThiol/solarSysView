@@ -1053,6 +1053,98 @@ def create_app() -> FastAPI:
             lambda: null_report(work, signal, window=window, n_sim=n_sim, seed=seed)
         )
 
+    def _pulse_draws(weekday: str | None) -> tuple[list[dict[str, Any]], str]:
+        from synchro.harmo.archive import bundled_draws
+        from synchro.weekday import filter_draws_by_weekday, normalize_weekday_filter
+
+        day = normalize_weekday_filter(weekday)
+        if db.database_configured():
+            try:
+                return _analysis_draws("all", None, None, day), "neon"
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(503, f"Archive Neon injoignable: {exc}") from exc
+        rows = filter_draws_by_weekday(bundled_draws("all"), day)
+        if not rows:
+            raise HTTPException(
+                503,
+                "Neon non configuré et archive JSON embarquée introuvable.",
+            )
+        return rows, "json"
+
+    @app.get("/api/pulse/status")
+    def pulse_status() -> dict[str, Any]:
+        from synchro.harmo.util import json_safe
+        from synchro.pulse import status_payload
+
+        return json_safe(status_payload())
+
+    @app.post("/api/pulse/scan")
+    async def pulse_scan(request: Request) -> dict[str, Any]:
+        from synchro.harmo.util import json_safe
+        from synchro.pulse import scan_draws
+
+        try:
+            payload = await request.json()
+        except Exception as exc:
+            raise HTTPException(400, "Corps JSON illisible.") from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(400, "Corps JSON illisible.")
+        presets = payload.get("presets")
+        families = payload.get("families")
+        if not isinstance(presets, list) or not isinstance(families, list):
+            raise HTTPException(400, "presets et families sont des listes.")
+        weekday = payload.get("weekday")
+        day = str(weekday) if weekday else None
+        draws, source = _pulse_draws(day)
+        try:
+            body = scan_draws(
+                draws,
+                presets=[str(item) for item in presets],
+                families=[str(item) for item in families],
+                weekday=day,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        body["archive_source"] = source
+        return json_safe(body)
+
+    @app.get("/api/pulse/detail")
+    def pulse_detail(
+        kind: str = Query("ball", pattern="^(ball|star)$"),
+        n: int = Query(1, ge=1, le=50),
+        preset: str = Query("last_100"),
+        slice_id: str = Query(..., alias="slice"),
+        families: str = Query("simple,double"),
+        weekday: str | None = None,
+    ) -> dict[str, Any]:
+        from synchro.harmo.util import json_safe
+        from synchro.pulse import detail_series
+
+        draws, source = _pulse_draws(weekday)
+        try:
+            resolved = resolve_window(draws, preset=preset, warmup=0, weekday=weekday)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        work = list(resolved["work"])
+        if not work:
+            raise HTTPException(404, "Aucun tirage dans la fenêtre.")
+        names = [item.strip() for item in families.split(",") if item.strip()]
+        try:
+            body = detail_series(
+                work,
+                kind=kind,
+                n=n,
+                preset=preset,
+                families=names,
+                slice_id=slice_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        body["archive_source"] = source
+        return json_safe(body)
+
     def _cycles_draws(
         era: str,
         from_date: str | None,

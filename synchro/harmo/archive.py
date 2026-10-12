@@ -1,7 +1,7 @@
 """Repli archive embarquée quand Neon n’est pas configuré.
 
 Même fichier que l’UI (`src/data/euromillions-2026.json`) : scipy peut
-étudier les tirages locaux sans inventer une grille kHz ni exiger la base.
+étudier les tirages locaux sans rééchantillonner les dates ni exiger la base.
 """
 
 from __future__ import annotations

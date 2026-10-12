@@ -81,9 +81,10 @@ function parseLastN(raw: string | null) {
   return n
 }
 
-function parseYearQuery(raw: string | null): number | "n-1" | null {
+function parseYearQuery(raw: string | null): number | "n-1" | "n-2" | null {
   if (!raw) return null
   if (raw === "n-1" || raw === "prev") return "n-1"
+  if (raw === "n-2") return "n-2"
   if (!/^\d{4}$/.test(raw)) return null
   const year = Number.parseInt(raw, 10)
   if (year < 2004 || year > 2100) return null
@@ -138,7 +139,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ok: false,
       items: [],
-      year: yearQuery === "n-1" ? null : yearQuery,
+      year: yearQuery === "n-1" || yearQuery === "n-2" ? null : yearQuery,
       source: "json",
       era,
       last: lastN,
@@ -170,12 +171,14 @@ export async function GET(request: NextRequest) {
       })
     }
     const latestYear = await fetchLatestYear(url)
-    const year =
-      yearQuery === "n-1"
+    const yearOffset = yearQuery === "n-1" ? 1 : yearQuery === "n-2" ? 2 : 0
+    const numericYear = typeof yearQuery === "number" ? yearQuery : null
+    const year: number | null =
+      yearOffset > 0
         ? latestYear != null
-          ? latestYear - 1
+          ? latestYear - yearOffset
           : null
-        : yearQuery ?? latestYear
+        : numericYear ?? latestYear
     if (year == null || year < 2004) {
       return NextResponse.json({ ok: false, items: [], year: null, source: "json" })
     }

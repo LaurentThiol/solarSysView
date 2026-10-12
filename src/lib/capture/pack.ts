@@ -283,7 +283,7 @@ export function packHarmo(input: {
   const summary = [
     `Harmo · ${input.tab} · ${VARIABLE_LABELS[input.variable]}`,
     banner,
-    `Fenêtre FFT ${input.fftWindow} · unités cycles/tirage (pas des hertz)`,
+    `Fenêtre FFT ${input.fftWindow} · unités cycles/tirage`,
     payload?.ok === false
       ? `API : ${payload.error || "indisponible"}`
       : peaks[0]?.cycles_per_draw != null

@@ -23,6 +23,7 @@ PRESETS = (
     "months_12",
     "year",
     "year_n1",
+    "year_n2",
     "formula",
     "all",
     "custom",
@@ -134,9 +135,10 @@ def resolve_window(
     elif preset == "year":
         start = date(end.year, 1, 1)
         work = [d for d in work if as_date(d["draw_date"]) >= start]
-    elif preset == "year_n1":
-        start = date(end.year - 1, 1, 1)
-        cap = date(end.year - 1, 12, 31)
+    elif preset in {"year_n1", "year_n2"}:
+        offset = 2 if preset == "year_n2" else 1
+        start = date(end.year - offset, 1, 1)
+        cap = date(end.year - offset, 12, 31)
         work = [d for d in work if start <= as_date(d["draw_date"]) <= cap]
     elif preset == "formula":
         work = [d for d in work if (_star_pool(d) or 12) >= 12]

@@ -279,7 +279,7 @@ const HARMO: Array<Pick<CatalogEntry, "handle" | "aliases" | "label" | "reading"
     aliases: ["spectre"],
     family: "tf",
     label: "FFT",
-    reading: "Pics en cycles/tirage, pas des hertz. Méfie-toi de Nyquist et des fenêtres courtes.",
+    reading: "Pics en cycles/tirage. Méfie-toi de Nyquist et des fenêtres courtes.",
   },
   {
     handle: "welch",
