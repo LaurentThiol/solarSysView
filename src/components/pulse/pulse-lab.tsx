@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react"
 
+import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { PulseChart } from "@/components/pulse/pulse-chart"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { Button } from "@/components/ui/button"
@@ -30,11 +31,12 @@ import {
   type PulseScan,
   type PulseSlice,
 } from "@/lib/pulse"
+import { PULSE_HELP } from "@/lib/pulse-help"
 
 const TABS = [
-  { id: "synthese", label: "Synthèse" },
-  { id: "fiche", label: "Fiche" },
-  { id: "groupes", label: "Groupes" },
+  { id: "synthese", label: "Synthèse", help: PULSE_HELP.synthese },
+  { id: "fiche", label: "Fiche", help: PULSE_HELP.fiche },
+  { id: "groupes", label: "Groupes", help: PULSE_HELP.groupes },
 ] as const
 
 type TabId = (typeof TABS)[number]["id"]
@@ -50,14 +52,31 @@ function concordanceStyle(value: number) {
   }
 }
 
+function Metric({
+  label,
+  help,
+}: {
+  label: string
+  help: (typeof PULSE_HELP)[keyof typeof PULSE_HELP]
+}) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {label}
+      <HelpTip {...help} />
+    </span>
+  )
+}
+
 function ChannelGrid({
   title,
+  help,
   kind,
   numbers,
   selected,
   onSelect,
 }: {
   title: string
+  help: (typeof PULSE_HELP)[keyof typeof PULSE_HELP]
   kind: PulseKind
   numbers: PulseNumber[]
   selected: string | null
@@ -66,7 +85,9 @@ function ChannelGrid({
   const rows = numbers.filter((item) => item.kind === kind)
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-medium">{title}</h3>
+      <h3 className="text-sm font-medium">
+        <TitleHelp help={help}>{title}</TitleHelp>
+      </h3>
       <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-10">
         {rows.map((item) => {
           const key = `${item.kind}-${item.n}`
@@ -240,7 +261,9 @@ export function PulseLab() {
   }
 
   function chooseNumber(item: PulseNumber) {
-    const slice = [...item.slices].sort((a, b) => b.concordance - a.concordance)[0]
+    const slice = [...item.slices].sort(
+      (a, b) => b.concordance - a.concordance || b.draws - a.draws
+    )[0]
     if (!slice) {
       setSelectedKey(`${item.kind}-${item.n}`)
       setSliceId(null)
@@ -257,12 +280,17 @@ export function PulseLab() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Générateurs et fenêtres</CardTitle>
+          <CardTitle className="text-sm">
+            <TitleHelp help={PULSE_HELP.reglages}>Générateurs et fenêtres</TitleHelp>
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <WeekdayScopeControl value={weekday} onChange={setWeekday} />
+          <WeekdayScopeControl value={weekday} onChange={setWeekday} help={PULSE_HELP.jour} />
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">Générateurs</p>
+            <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              Générateurs
+              <HelpTip {...PULSE_HELP.generateurs} />
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {PULSE_FAMILIES.map((family) => (
                 <Button
@@ -279,7 +307,10 @@ export function PulseLab() {
             </div>
           </div>
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">Échantillons</p>
+            <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              Échantillons
+              <HelpTip {...PULSE_HELP.echantillons} />
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {PULSE_PRESETS.map((preset) => (
                 <Button
@@ -295,16 +326,21 @@ export function PulseLab() {
               ))}
             </div>
           </div>
-          <Button type="button" disabled={!ready} onClick={() => void run()}>
-            {loading ? "Syntonisation…" : "Lancer la syntonisation"}
-          </Button>
+          <HelpWrap help={PULSE_HELP.lancer}>
+            <Button type="button" disabled={!ready} onClick={() => void run()}>
+              {loading ? "Syntonisation…" : "Lancer la syntonisation"}
+            </Button>
+          </HelpWrap>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           {scan?.disclaimer ? (
-            <p className="text-xs text-muted-foreground">{scan.disclaimer}</p>
+            <p className="text-xs text-muted-foreground">
+              {scan.disclaimer} <HelpTip {...PULSE_HELP.avertissement} />
+            </p>
           ) : null}
           <p className="text-xs text-muted-foreground">
             Périodes de 2 à 60 tirages. Le taux vaut 0 % quand la moitié des sorties seulement
-            tombe dans le demi-cycle, et 100 % quand elles y sont toutes.
+            tombe dans le demi-cycle, et 100 % quand elles y sont toutes.{" "}
+            <HelpTip {...PULSE_HELP.concordance} />
           </p>
         </CardContent>
       </Card>
@@ -316,13 +352,14 @@ export function PulseLab() {
             label="Pulse"
             value={tab}
             onValueChange={setTab}
-            items={TABS.map((item) => ({ id: item.id, label: item.label }))}
+            items={TABS.map((item) => ({ id: item.id, label: item.label, help: item.help }))}
           />
           <PillTabPanel idPrefix="pulse" tab={tab}>
             {tab === "synthese" ? (
               <div className="space-y-6">
                 <ChannelGrid
                   title="Boules"
+                  help={PULSE_HELP.boules}
                   kind="ball"
                   numbers={numbers}
                   selected={selectedKey}
@@ -330,41 +367,68 @@ export function PulseLab() {
                 />
                 <ChannelGrid
                   title="Étoiles"
+                  help={PULSE_HELP.etoiles}
                   kind="star"
                   numbers={numbers}
                   selected={selectedKey}
                   onSelect={chooseNumber}
                 />
-                <ul className="space-y-1 text-xs text-muted-foreground">
-                  {(scan.windows ?? []).map((window) => (
-                    <li key={window.preset}>
-                      {PULSE_PRESET_LABELS[window.preset as PulsePreset] ?? window.preset} ·{" "}
-                      {window.draw_count} tirages
-                      {window.from && window.to ? ` · ${window.from} → ${window.to}` : ""}
-                    </li>
-                  ))}
-                </ul>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    <Metric label="Fenêtres lues" help={PULSE_HELP.fenetres} />
+                  </p>
+                  <ul className="space-y-1 text-xs text-muted-foreground">
+                    {(scan.windows ?? []).map((window) => (
+                      <li key={window.preset}>
+                        {PULSE_PRESET_LABELS[window.preset as PulsePreset] ?? window.preset} ·{" "}
+                        {window.draw_count} tirages
+                        {window.from && window.to ? ` · ${window.from} → ${window.to}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             ) : null}
             {tab === "fiche" && selected ? (
               <div className="space-y-4">
                 <div>
                   <h2 className="text-base font-medium">
-                    {pulseChannelLabel(selected.kind, selected.n)}
+                    <TitleHelp help={PULSE_HELP.numero}>
+                      {pulseChannelLabel(selected.kind, selected.n)}
+                    </TitleHelp>
                   </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {pulseGeneratorLabel(selected.generator)}
-                    {selected.period ? ` · période ${selected.period}` : ""} · concordance{" "}
-                    {pulsePercent(selected.concordance)} · R {selected.r.toFixed(2)} · p{" "}
-                    {selected.p < 0.001 ? "< 0,001" : selected.p.toFixed(3)}
+                  <p className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                    <Metric
+                      label={pulseGeneratorLabel(selected.generator)}
+                      help={PULSE_HELP.generateur}
+                    />
+                    <Metric
+                      label={selected.period ? `période ${selected.period}` : "pas de période"}
+                      help={PULSE_HELP.periode}
+                    />
+                    <Metric
+                      label={`concordance ${pulsePercent(selected.concordance)}`}
+                      help={PULSE_HELP.concordance}
+                    />
+                    <Metric label={`R ${selected.r.toFixed(2)}`} help={PULSE_HELP.rayon} />
+                    <Metric
+                      label={`p ${selected.p < 0.001 ? "< 0,001" : selected.p.toFixed(3)}`}
+                      help={PULSE_HELP.p}
+                    />
                   </p>
                   {selected.group_ids.length > 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      Groupes : {selected.group_ids.join(", ")}
+                      <Metric
+                        label={`Groupes : ${selected.group_ids.join(", ")}`}
+                        help={PULSE_HELP.liens}
+                      />
                     </p>
                   ) : null}
                 </div>
                 <div className="flex flex-col gap-2">
+                  <h3 className="text-sm font-medium">
+                    <TitleHelp help={PULSE_HELP.tranches}>Tranches</TitleHelp>
+                  </h3>
                   {selected.slices.map((slice) => (
                     <SliceButton
                       key={slice.id}
@@ -379,17 +443,32 @@ export function PulseLab() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-sm">
-                        Onde et sorties
-                        {detail.slice?.period ? ` · période ${detail.slice.period}` : ""}
-                        {detail.slice ? ` · ${pulsePercent(detail.slice.concordance)}` : ""}
+                        <TitleHelp help={PULSE_HELP.onde}>
+                          Onde et sorties
+                          {detail.slice?.period ? ` · période ${detail.slice.period}` : ""}
+                          {detail.slice ? ` · ${pulsePercent(detail.slice.concordance)}` : ""}
+                        </TitleHelp>
                       </CardTitle>
                       {detail.slice ? (
-                        <p className="text-xs text-muted-foreground">
-                          {pulseGeneratorLabel(detail.slice.generator)} · R {detail.slice.r.toFixed(2)} · p{" "}
-                          {detail.slice.p < 0.001 ? "< 0,001" : detail.slice.p.toFixed(3)}
-                          {pulseDrawCount(detail.slice.hits)
-                            ? ` · ${pulseDrawCount(detail.slice.hits)}`
-                            : ""}
+                        <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <Metric
+                            label={pulseGeneratorLabel(detail.slice.generator)}
+                            help={PULSE_HELP.generateur}
+                          />
+                          <Metric
+                            label={`R ${detail.slice.r.toFixed(2)}`}
+                            help={PULSE_HELP.rayon}
+                          />
+                          <Metric
+                            label={`p ${detail.slice.p < 0.001 ? "< 0,001" : detail.slice.p.toFixed(3)}`}
+                            help={PULSE_HELP.p}
+                          />
+                          {pulseDrawCount(detail.slice.hits) ? (
+                            <Metric
+                              label={pulseDrawCount(detail.slice.hits) ?? ""}
+                              help={PULSE_HELP.sorties}
+                            />
+                          ) : null}
                         </p>
                       ) : null}
                     </CardHeader>
@@ -406,14 +485,24 @@ export function PulseLab() {
               </p>
             ) : null}
             {tab === "groupes" ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                {(scan.groups ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Aucune paire ni triplet pour les générateurs cochés.
-                  </p>
-                ) : (
-                  (scan.groups ?? []).map((group) => <GroupCard key={group.id} group={group} />)
-                )}
+              <div className="space-y-3">
+                <p className="text-xs leading-5 text-muted-foreground">
+                  <Metric label="Période" help={PULSE_HELP.periode} /> commune,{" "}
+                  <Metric label="rotation" help={PULSE_HELP.rotation} /> si elle gagne sur ce cycle,{" "}
+                  <Metric label="concordance" help={PULSE_HELP.concordance} /> du groupe,{" "}
+                  <Metric label="p" help={PULSE_HELP.p} /> la moins petite,{" "}
+                  <Metric label="sorties" help={PULSE_HELP.sorties} /> au plus petit effectif,{" "}
+                  <Metric label="phases" help={PULSE_HELP.phases} /> dans l’ordre du tour.
+                </p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {(scan.groups ?? []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Aucune paire ni triplet pour les générateurs cochés.
+                    </p>
+                  ) : (
+                    (scan.groups ?? []).map((group) => <GroupCard key={group.id} group={group} />)
+                  )}
+                </div>
               </div>
             ) : null}
           </PillTabPanel>
