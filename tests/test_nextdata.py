@@ -949,7 +949,7 @@ def test_chronos_2_reads_both_modes_and_their_covariates_in_one_call(monkeypatch
     assert sorted(corpus["past_covariates"]) == sorted(past_columns(FAMILIES) + clocks)
     assert sorted(corpus["future_covariates"]) == sorted(clocks)
     assert {name: list(values) for name, values in window["future_covariates"].items()} == {name: [frame.horizon[0][name]] for name in clocks}
-    assert part["covariates"] == {"past": 37, "future": 11}
+    assert part["covariates"] == {"past": 37, "future": 15}
     for mode in ("corpus", "fenetre"):
         for name in CHRONOS_SERIES:
             last = float(frame.rows[-1][name])
@@ -1056,10 +1056,10 @@ def test_the_installed_chronos_2_accepts_our_inputs() -> None:
     items = chronos_inputs(frame.rows, frame.horizon, 24, FAMILIES)
     dataset = Chronos2Dataset(items, context_length=8192, prediction_length=1, batch_size=256, output_patch_size=16, mode=DatasetMode.TEST)
     batch = next(iter(dataset))
-    # Deux entrées de 3 cibles et 48 covariables ; seules les 11 horloges sont connues pour le tirage prévu.
-    assert batch["context"].shape[0] == 2 * (3 + 48)
-    assert batch["target_idx_ranges"] == [(0, 3), (51, 54)]
-    assert int(batch["future_covariates"].isfinite().sum()) == 2 * 11
+    # Deux entrées de 3 cibles et 52 covariables ; les 15 futures (horloges et Pulse) sont connues pour le tirage prévu.
+    assert batch["context"].shape[0] == 2 * (3 + 52)
+    assert batch["target_idx_ranges"] == [(0, 3), (55, 58)]
+    assert int(batch["future_covariates"].isfinite().sum()) == 2 * 15
 
 
 def test_training_forwards_chronos_flag(monkeypatch) -> None:

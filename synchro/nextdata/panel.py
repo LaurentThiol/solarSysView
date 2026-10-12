@@ -18,6 +18,7 @@ from synchro.nextdata.covariates import (
     spread_of,
     star_couple_ago,
 )
+from synchro.nextdata.pulse_features import causal_pulse
 from synchro.short_cycle import short_residual
 
 MIN_DRAWS = 24
@@ -286,6 +287,14 @@ def build_frame(
         item = {"date": day.isoformat(), "weekday": _weekday(day, None)}
         item.update(clocks(day))
         horizon.append(item)
+    pools = [int(row["star_pool"]) for row in selected]
+    pools.append(star_pool_for(nxt))
+    pools.append(star_pool_for(following))
+    states = causal_pulse(numbers, stars, pools)
+    for row, state in zip(rows, states):
+        row.update(state)
+    for item, state in zip(horizon, states[len(rows) :]):
+        item.update(state)
     return Frame(
         rows=rows,
         horizon=horizon,

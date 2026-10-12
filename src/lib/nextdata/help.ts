@@ -95,7 +95,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Chronos inclus",
-        text: "Chronos-2 prévoit ensemble la somme, la somme des étoiles et n1, avec leurs bandes 10–90, sans être entraîné sur l’archive : il lit les tirages d’avant et les covariables cochées. Les horloges, calendrier et lune, sont connues pour le tirage prévu ; les autres familles s’arrêtent au dernier tirage sorti. Ces bandes se mélangent à celles de LightGBM ; n1 rejoint son niveau. Chaque série a son poids, réglé sur les dix tirages d’avant : il penche vers la lecture qui s’y est le moins trompée, et reste à moitié-moitié tant que ces tirages ne sont pas calculés. CatBoost reste seul. ./launch install-nextdata télécharge autogluon/chronos-2-small. Si Chronos ne répond pas, un bandeau dit pourquoi ; il est retenté au prochain démarrage de l’API.",
+        text: "Chronos-2 prévoit ensemble la somme, la somme des étoiles et n1, avec leurs bandes 10–90, sans être entraîné sur l’archive : il lit les tirages d’avant et les covariables cochées. Les horloges (calendrier, lune) et Pulse sont connus pour le tirage prévu ; les autres familles s’arrêtent au dernier tirage sorti. Ces bandes se mélangent à celles de LightGBM ; n1 rejoint son niveau. Chaque série a son poids, réglé sur les dix tirages d’avant : il penche vers la lecture qui s’y est le moins trompée, et reste à moitié-moitié tant que ces tirages ne sont pas calculés. CatBoost reste seul. ./launch install-nextdata télécharge autogluon/chronos-2-small. Si Chronos ne répond pas, un bandeau dit pourquoi ; il est retenté au prochain démarrage de l’API.",
       },
       {
         label: "Darts",
@@ -118,7 +118,7 @@ export const NEXTDATA_HELP = {
   covariates: {
     title: "Covariables",
     wide: true,
-    body: "Cases cochées par défaut. Une famille éteinte sort de LightGBM, de CatBoost et de Chronos. Les horloges sont connues avant le tirage. Le reste n’est connu qu’une fois les boules sorties : les modèles ne le voient que jusqu’au dernier tirage.",
+    body: "Cases cochées par défaut. Une famille éteinte sort de LightGBM, de CatBoost et de Chronos. Les horloges et Pulse sont connus avant le tirage. Le reste n’est connu qu’une fois les boules sorties : les modèles ne le voient que jusqu’au dernier tirage.",
     items: [
       {
         label: "Calendrier",
@@ -151,6 +151,10 @@ export const NEXTDATA_HELP = {
       {
         label: "Triples",
         text: "Les 10 triplets réellement sortis, avec les mêmes mesures. Deux étoiles ne forment pas de triple.",
+      },
+      {
+        label: "Pulse",
+        text: "Part des boules, puis des étoiles de l’urne, dont l’onde simple de Pulse est positive au tirage prévu, et la même part pondérée par la concordance. L’ajustement ne voit que les sorties d’avant ce tirage. Le pas d’après prolonge cette onde, il ne la réajuste pas. Cycle double, paires et triplets restent sur la page Pulse.",
       },
     ],
   },
@@ -356,7 +360,7 @@ export const NEXTDATA_HELP = {
   },
   poids: {
     title: "Poids des variables",
-    body: "Les quinze colonnes les plus utilisées pour la somme et pour n1, une liste pour LightGBM et une pour CatBoost. Le nom dit le décalage : lag:sum:2 est la somme d’il y a deux tirages. La famille regroupe calendrier, lune, forme, décennies, delta, répétitions, couples, triples ou la série elle-même. Un gain élevé dit que la colonne a servi à couper les arbres, pas qu’elle annonce le prochain tirage à elle seule.",
+    body: "Les quinze colonnes les plus utilisées pour la somme et pour n1, une liste pour LightGBM et une pour CatBoost. Le nom dit le décalage : lag:sum:2 est la somme d’il y a deux tirages. La famille regroupe calendrier, lune, forme, décennies, delta, répétitions, couples, triples, pulse ou la série elle-même. Un gain élevé dit que la colonne a servi à couper les arbres, pas qu’elle annonce le prochain tirage à elle seule.",
   },
 } satisfies Record<string, HelpCopy>
 

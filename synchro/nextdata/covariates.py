@@ -1,8 +1,9 @@
-"""Covariables d’un tirage réel : horloges, forme, couples et triples.
+"""Covariables d’un tirage réel : horloges, Pulse, forme, couples et triples.
 
-L’index est le rang du tirage. Les horloges sont connues avant le tirage
-(covariables futures). Couples, triples, deltas et retards ne le sont qu’une
-fois le tirage sorti (covariables passées) : leur historique s’arrête avant t.
+L’index est le rang du tirage. Les horloges et Pulse sont connus avant le
+tirage (covariables futures). Couples, triples, deltas et retards ne le sont
+qu’une fois le tirage sorti (covariables passées) : leur historique s’arrête
+avant t.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from datetime import date
 from itertools import combinations
 from typing import Iterable
 
+from synchro.nextdata.pulse_features import FUTURE_PULSE, PULSE_AHEAD
 from synchro.ref.cycles import carrington, lunar_state, schwabe
 from synchro.ref.phases import tropical_fraction
 
@@ -24,6 +26,7 @@ FAMILIES: tuple[str, ...] = (
     "repetitions",
     "couples",
     "triples",
+    "pulse",
 )
 
 TARGETS: tuple[str, ...] = (
@@ -124,6 +127,7 @@ _PAST_BY_FAMILY: dict[str, tuple[str, ...]] = {
 _FUTURE_BY_FAMILY: dict[str, tuple[str, ...]] = {
     "calendrier": FUTURE_CALENDAR,
     "lune": FUTURE_MOON,
+    "pulse": FUTURE_PULSE,
 }
 
 _FAMILY_OF_COLUMN: dict[str, str] = {}
@@ -132,6 +136,8 @@ for _family, _cols in {**_PAST_BY_FAMILY, **_FUTURE_BY_FAMILY}.items():
         _FAMILY_OF_COLUMN[_col] = _family
 for _col in TARGETS:
     _FAMILY_OF_COLUMN[_col] = "series"
+for _col, _ahead in PULSE_AHEAD.items():
+    _FAMILY_OF_COLUMN[_ahead] = "pulse"
 
 
 def normalize_families(selected: Iterable[str] | None) -> list[str]:

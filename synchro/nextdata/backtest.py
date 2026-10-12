@@ -18,6 +18,7 @@ from synchro.nextdata.conformal import calibrate, coverage, truth_of
 from synchro.nextdata.covariates import SHAPE_SERIES, grid_shape
 from synchro.nextdata.empirical import recount
 from synchro.nextdata.forecast import _apply_external, _clip, _rank_view, blend_mid, blend_weight
+from synchro.nextdata.pulse_features import public_pulse
 from synchro.nextdata.panel import Frame
 from synchro.nextdata.persist import NUMBER_POOL, NUMBER_SLOTS, STAR_SLOTS, score_swaps, snap_grid
 from synchro.nextdata.project import beam, compose_ranks, stamp_grid
@@ -560,6 +561,7 @@ def shift_report(
                 "label": f"−{int(lag)}",
                 "date": step["date"],
                 "actual": _public_numbers(actual),
+                "pulse": public_pulse(rows[t]),
                 "readings": readings,
             }
         )

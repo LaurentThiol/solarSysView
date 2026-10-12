@@ -53,6 +53,8 @@ _SOURCES = (
     _PACKAGE / "forecast.py",
     _PACKAGE / "covariates.py",
     _PACKAGE / "panel.py",
+    _PACKAGE / "pulse_features.py",
+    _PACKAGE.parent / "pulse" / "model.py",
     _PACKAGE.parent / "short_cycle.py",
     _PACKAGE.parent / "analysis" / "common.py",
     _PACKAGE.parent / "analysis" / "variables.py",
@@ -216,9 +218,9 @@ def chronos_inputs(
 ) -> list[dict[str, Any]]:
     """Entrées Chronos-2 des deux modes, dans l’ordre de MODES : trois cibles et les covariables cochées.
 
-    Les horloges sont connues pour le tirage prévu, `horizon[0]` ; Chronos-2
-    lit aussi leur historique. Les autres familles s’arrêtent au dernier
-    tirage sorti.
+    Les horloges et Pulse sont connus pour le tirage prévu, `horizon[0]` ;
+    Chronos-2 lit aussi leur historique. Les autres familles s’arrêtent au
+    dernier tirage sorti. Pulse sur ce tirage n’utilise que les sorties d’avant.
     """
     past = past_columns(families)
     future = future_columns(families)

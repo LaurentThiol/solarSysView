@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "../src/lib/nextdata/help.ts"
+import { pulseCaption } from "../src/lib/nextdata/pulse.ts"
 import { shapeCaption } from "../src/lib/nextdata/shape.ts"
 
 const lab = readFileSync(new URL("../src/components/nextdata/nextdata-lab.tsx", import.meta.url), "utf8")
@@ -26,6 +27,14 @@ test("the two trainings, the focus and the recounted base are explained", () => 
   assert.match(NEXTDATA_HELP.focus.body, /50 ou 100/)
   assert.match(NEXTDATA_HELP.covariates.items?.map((item) => item.label).join(" ") ?? "", /Couples/)
   assert.match(NEXTDATA_HELP.covariates.items?.map((item) => item.label).join(" ") ?? "", /Triples/)
+  assert.match(NEXTDATA_HELP.covariates.items?.map((item) => item.label).join(" ") ?? "", /Pulse/)
+  assert.match(NEXTDATA_HELP.covariates.body, /Pulse sont connus avant/)
+  assert.match(lab, /id: "pulse"/)
+  assert.match(training, /id: "pulse"/)
+  assert.equal(
+    pulseCaption({ lobe: 0.54, mass: 0.21, star_lobe: 0.333, star_mass: 0.08 }),
+    "Boules en lobe 54 %, masse 21 % · étoiles 33 %, masse 8 %"
+  )
   assert.match(NEXTDATA_HELP.tabBase.body, /1\/50/)
   assert.match(NEXTDATA_HELP.banner.body, /pas une probabilité de gain FDJ/)
   assert.match(NEXTDATA_HELP.moteur.body, /CatBoost/)

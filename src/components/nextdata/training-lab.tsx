@@ -25,6 +25,7 @@ import {
 } from "@/lib/nextdata/persist"
 import type { Arbitration } from "@/lib/nextdata/rank-path"
 import { progressPercent, type StepProgress } from "@/lib/nextdata/bands"
+import { pulseCaption, type PulseReading } from "@/lib/nextdata/pulse"
 import { formatDecimal } from "@/lib/nextdata/compare"
 import { bandCoverage, deltaNumbers, TRAINING_SHIFT_TOTAL, visibleTrainingShift } from "@/lib/nextdata/training-progress"
 import {
@@ -49,6 +50,7 @@ const FAMILIES: { id: string; label: string }[] = [
   { id: "repetitions", label: "Répétitions" },
   { id: "couples", label: "Couples" },
   { id: "triples", label: "Triples" },
+  { id: "pulse", label: "Pulse" },
 ]
 
 const READINGS = [
@@ -118,6 +120,7 @@ type Shift = {
   label: string
   date: string
   actual: { numbers: number[]; stars: number[]; sum: number | null }
+  pulse?: PulseReading
   readings: Record<string, Side>
 }
 
@@ -144,6 +147,7 @@ type TrainingPayload = {
   shifts?: Shift[]
   summary?: Summary
   estimators?: number
+  pulse?: PulseReading
   progress?: StepProgress
   persist?: PersistInfo | null
 }
@@ -306,6 +310,7 @@ export function TrainingLab() {
 
   const summary = report?.summary ?? {}
   const activeShift = visibleTrainingShift(report?.shifts ?? [], pinnedShift)
+  const pulseNow = families.includes("pulse") ? (activeShift?.pulse ?? report?.pulse) : undefined
   const pathTrace = activeShift?.readings[reading]?.arbitration
   const shifts = report?.shifts ?? []
   const calibrationSteps = shifts.flatMap((shift) => {
@@ -406,6 +411,7 @@ export function TrainingLab() {
                 {family.label}
               </button>
             ))}
+            {pulseNow ? <p className="basis-full text-xs text-muted-foreground">{pulseCaption(pulseNow)}</p> : null}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" disabled={running} onClick={() => void train()}>

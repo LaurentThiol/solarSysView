@@ -43,6 +43,7 @@ from synchro.nextdata.empirical import public_base, recount
 from synchro.nextdata.panel import Frame, build_frame, normalized_draws
 from synchro.nextdata.persist import base_rates, recent_draws, snap_grid
 from synchro.nextdata.project import rank_bands
+from synchro.nextdata.pulse_features import FUTURE_PULSE, PULSE_AHEAD, public_pulse, shifted_pulse
 
 FUTURE_BACK = 4
 FUTURE_FWD = 1
@@ -194,7 +195,11 @@ def vector_at(
     back = min(FUTURE_BACK, lags)
     for offset in range(-back, FUTURE_FWD + 1):
         for name in future_names:
-            values.append(_level(rows, horizon, t + offset, name))
+            # Le décalage +1 ne relit pas la ligne d’après : son Pulse a été
+            # réajusté avec le tirage qu’on prévoit. On prolonge l’onde déjà connue.
+            source = t if name in FUTURE_PULSE and offset > 0 else t + offset
+            column = PULSE_AHEAD[name] if name in FUTURE_PULSE and offset > 0 else name
+            values.append(_level(rows, horizon, source, column))
             names.append(f"fut:{name}:{offset}")
     for name, raw in (lower or {}).items():
         values.append(float(raw))
@@ -524,6 +529,32 @@ def _importance(models: list[tuple[Any, list[str]]], limit: int = 15) -> list[di
     return out
 
 
+def darts_covariate_rows(
+    rows: list[dict[str, Any]],
+    horizon: list[dict[str, Any]],
+    past_names: list[str],
+    future_names: list[str],
+) -> tuple[list[str], list[dict[str, Any]], list[str], list[dict[str, Any]]]:
+    """Covariables Darts. Pulse est décalé d’un cran et sort de la série future.
+
+    Darts lit le futur à t+1 pour toutes les colonnes futures. La ligne t+1
+    a réajusté Pulse avec le tirage t. On le donne donc comme covariable
+    passée : le lag 1 est l’état connu avant t.
+    """
+    clock_names = [name for name in future_names if name not in FUTURE_PULSE]
+    pulse_names = [name for name in future_names if name in FUTURE_PULSE]
+    past_used = [*past_names, *pulse_names]
+    shifted = shifted_pulse(rows, horizon, pulse_names) if pulse_names else [[] for _ in rows]
+    past_rows: list[dict[str, Any]] = []
+    for row, extra in zip(rows, shifted):
+        item = {name: row.get(name, 0.0) for name in past_names}
+        item.update(zip(pulse_names, extra))
+        past_rows.append(item)
+    future_rows = [{name: row.get(name, 0.0) for name in clock_names} for row in rows]
+    future_rows.extend({name: row.get(name, 0.0) for name in clock_names} for row in horizon)
+    return past_used, past_rows, clock_names, future_rows
+
+
 def try_darts_medians(
     rows: list[dict[str, Any]],
     horizon: list[dict[str, Any]],
@@ -560,11 +591,13 @@ def try_darts_medians(
             data = np.asarray([[float(row.get(name) or 0.0) for name in names] for row in source], dtype=float)
             return TimeSeries.from_values(np.nan_to_num(data))
 
-        target = series(rows[start:], target_names)
-        past = series(rows[start:], past_names) if past_names else None
-        future_rows = [{name: row.get(name, 0.0) for name in future_names} for row in rows[start:]]
-        future_rows.extend({name: row.get(name, 0.0) for name in future_names} for row in horizon)
-        future = series(future_rows, future_names) if future_names else None
+        window = rows[start:]
+        target = series(window, target_names)
+        past_used, past_rows, clock_names, future_rows = darts_covariate_rows(
+            window, horizon, past_names, future_names
+        )
+        past = series(past_rows, past_used) if past_used else None
+        future = series(future_rows, clock_names) if clock_names else None
         kwargs: dict[str, Any] = {
             "lags": lags,
             "output_chunk_length": 1,
@@ -607,7 +640,7 @@ def try_darts_medians(
         return None
 
 
-# Sur un cœur, avec les 48 covariables : 0,8 s par pas sur trois ans ; amazon/chronos-2 (120 M) en prend 3,1.
+# Sur un cœur, avec les 52 covariables : 0,8 s par pas sur trois ans ; amazon/chronos-2 (120 M) en prend 3,1.
 CHRONOS_MODEL = "autogluon/chronos-2-small"
 CHRONOS_LEVELS = (0.1, 0.5, 0.9)
 
@@ -864,6 +897,7 @@ def run_forecast(
         "primary": mode_primary,
         "weekday": frame.weekday,
         "covariates": families,
+        "pulse": public_pulse(frame.horizon[0]),
         "next_date": frame.next_date,
         "star_pool": frame.star_pool,
         "anchor_year": frame.anchor_year,
@@ -949,6 +983,7 @@ def run_training(
         "years_present": frame.years_present,
         "weekday": frame.weekday,
         "covariates": families,
+        "pulse": report["shifts"][-1]["pulse"] if report["shifts"] else public_pulse(frame.horizon[0]),
         "anchor_year": frame.anchor_year,
         "estimators": settings.estimators,
         "catboost": catboost_error is None,

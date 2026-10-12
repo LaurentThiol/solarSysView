@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
 import { DRAWS, type Draw } from "@/lib/draws"
+import { pulseCaption, type PulseReading } from "@/lib/nextdata/pulse"
 import {
   BAND_FIELDS,
   calibrationCaption,
@@ -86,6 +87,7 @@ const FAMILIES: { id: string; label: string }[] = [
   { id: "repetitions", label: "Répétitions" },
   { id: "couples", label: "Couples" },
   { id: "triples", label: "Triples" },
+  { id: "pulse", label: "Pulse" },
 ]
 
 const SERIES = [
@@ -185,6 +187,7 @@ type ForecastPayload = {
   years_present: string[]
   primary: "corpus" | "fenetre"
   next_date: string
+  pulse?: PulseReading
   star_pool: number
   engine: string
   catboost?: boolean
@@ -654,6 +657,9 @@ export function NextDataLab() {
                 {family.label}
               </button>
             ))}
+            {families.includes("pulse") && report?.pulse ? (
+              <p className="basis-full text-xs text-muted-foreground">{pulseCaption(report.pulse)}</p>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
