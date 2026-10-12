@@ -122,6 +122,11 @@ def assemble(
                 by_preset.setdefault(str(anchor["preset"]), []).append(anchor)
         for anchors in by_preset.values():
             groups.extend(build_groups(anchors, families))
+        groups.sort(
+            key=lambda item: (float(item["concordance"]), int(item.get("hits") or 0)),
+            reverse=True,
+        )
+        groups = groups[:24]
     linked: dict[tuple[str, int], list[str]] = {}
     for group in groups:
         for member in group["members"]:

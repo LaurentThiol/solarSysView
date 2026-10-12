@@ -18,6 +18,7 @@ import {
   fetchPulseDetail,
   pulseChannelLabel,
   pulseGeneratorLabel,
+  pulseDrawCount,
   pulsePercent,
   scanPulse,
   type PulseDetail,
@@ -139,7 +140,16 @@ function GroupCard({ group }: { group: PulseGroup }) {
         <p>
           {preset} · période {group.period} · {rotation}
         </p>
-        <p>Concordance {pulsePercent(group.concordance)}</p>
+        <p>
+          Concordance {pulsePercent(group.concordance)}
+          {group.p != null ? ` · p ${group.p < 0.001 ? "< 0,001" : group.p.toFixed(3)}` : ""}
+          {pulseDrawCount(group.hits) ? ` · ${pulseDrawCount(group.hits)}` : ""}
+        </p>
+        {group.from && group.to ? (
+          <p>
+            {formatDrawDate(group.from)} → {formatDrawDate(group.to)}
+          </p>
+        ) : null}
         <p>
           Phases{" "}
           {group.members
@@ -377,7 +387,9 @@ export function PulseLab() {
                         <p className="text-xs text-muted-foreground">
                           {pulseGeneratorLabel(detail.slice.generator)} · R {detail.slice.r.toFixed(2)} · p{" "}
                           {detail.slice.p < 0.001 ? "< 0,001" : detail.slice.p.toFixed(3)}
-                          {detail.slice.hits != null ? ` · ${detail.slice.hits} sorties` : ""}
+                          {pulseDrawCount(detail.slice.hits)
+                            ? ` · ${pulseDrawCount(detail.slice.hits)}`
+                            : ""}
                         </p>
                       ) : null}
                     </CardHeader>

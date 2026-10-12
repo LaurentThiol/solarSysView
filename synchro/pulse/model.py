@@ -333,6 +333,8 @@ def analyze_hits(
                     "period": int(fit["period"]),
                     "phase": float(fit["phase"]),
                     "r": float(fit["r"]),
+                    "p": float(fit["p"]),
+                    "hits": int(fit["hits"]),
                     "concordance": float(fit["concordance"]),
                     "hit_times": _hit_times(mask[start:end], start).astype(int).tolist(),
                     "span": int(end - start),
@@ -434,6 +436,13 @@ def _rotation_period(
     return best_period, best_phase, best_score
 
 
+def _group_caution(members: list[dict[str, Any]]) -> tuple[float, int]:
+    """p la moins petite et le plus petit nombre de sorties : un pic sur deux dates ne suffit pas."""
+    probabilities = [float(item.get("p") if item.get("p") is not None else 1.0) for item in members]
+    counts = [int(item.get("hits") or 0) for item in members]
+    return round(max(probabilities, default=1.0), 6), min(counts, default=0)
+
+
 def build_groups(
     anchors: list[dict[str, Any]],
     families: tuple[str, ...] | list[str],
@@ -451,7 +460,10 @@ def build_groups(
             groups.extend(_pairs(rows, kind))
         if "triplet" in wanted:
             groups.extend(_triplets(rows, kind))
-    groups.sort(key=lambda item: float(item["concordance"]), reverse=True)
+    groups.sort(
+        key=lambda item: (float(item["concordance"]), int(item.get("hits") or 0)),
+        reverse=True,
+    )
     return groups[:24]
 
 
@@ -476,6 +488,7 @@ def _pairs(rows: list[dict[str, Any]], kind: str) -> list[dict[str, Any]]:
             numbers = sorted(int(item["n"]) for item in members)
             preset = str(left["preset"])
             prefix = _prefix(kind)
+            caution_p, caution_hits = _group_caution(members)
             found.append(
                 {
                     "id": f"pair-{preset}-{prefix}{numbers[0]}-{prefix}{numbers[1]}",
@@ -485,6 +498,8 @@ def _pairs(rows: list[dict[str, Any]], kind: str) -> list[dict[str, Any]]:
                     "period2": period2,
                     "phase2": _round_phase(phase2),
                     "concordance": round(score, 4),
+                    "p": caution_p,
+                    "hits": caution_hits,
                     "from": left.get("from"),
                     "to": left.get("to"),
                     "members": [
@@ -530,6 +545,7 @@ def _triplets(rows: list[dict[str, Any]], kind: str) -> list[dict[str, Any]]:
                 preset = str(first["preset"])
                 prefix = _prefix(kind)
                 tag = "-".join(f"{prefix}{number}" for number in numbers)
+                caution_p, caution_hits = _group_caution(members)
                 found.append(
                     {
                         "id": f"triplet-{preset}-{tag}",
@@ -537,14 +553,16 @@ def _triplets(rows: list[dict[str, Any]], kind: str) -> list[dict[str, Any]]:
                         "preset": preset,
                         "period": period,
                         "period2": period2,
-                    "phase2": _round_phase(phase2),
-                    "concordance": round(score, 4),
-                    "from": first.get("from"),
-                    "to": first.get("to"),
-                    "members": [
-                        {"kind": kind, "n": int(item["n"]), "phase": _round_phase(phase)}
-                        for item, phase in zip(members, ordered_phases, strict=True)
-                    ],
+                        "phase2": _round_phase(phase2),
+                        "concordance": round(score, 4),
+                        "p": caution_p,
+                        "hits": caution_hits,
+                        "from": first.get("from"),
+                        "to": first.get("to"),
+                        "members": [
+                            {"kind": kind, "n": int(item["n"]), "phase": _round_phase(phase)}
+                            for item, phase in zip(members, ordered_phases, strict=True)
+                        ],
                     }
                 )
     return found

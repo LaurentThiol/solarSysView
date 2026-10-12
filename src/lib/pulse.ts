@@ -84,6 +84,8 @@ export type PulseGroup = {
   period2: number
   phase2: number | null
   concordance: number
+  p?: number
+  hits?: number
   from: string | null
   to: string | null
   members: PulseMember[]
@@ -123,6 +125,12 @@ export type PulseDetail = {
   n?: number
   slice?: PulseSlice
   points?: PulsePoint[]
+}
+
+export function pulseDrawCount(hits: number | null | undefined) {
+  if (hits == null || !Number.isFinite(hits)) return null
+  const count = Math.round(hits)
+  return count === 1 ? "1 sortie" : `${count} sorties`
 }
 
 export function pulsePercent(value: number | null | undefined) {
