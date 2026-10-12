@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
-import math
 from collections import Counter
 from datetime import date
 from typing import Any
 
 from synchro.analysis.combinatorics import rank_probabilities
+from synchro.analysis.inference import binom_two_sided as binom_two_sided_exact
 from synchro.analysis.inference import wilson_interval
+from synchro.fdj import star_pool_for
 from synchro.ranks import RANK_LABELS, evaluate_grid, validate_grid
 
 PLAY_SOURCES = ("combinaisons", "jeux", "pronostic", "manuel")
@@ -165,34 +166,6 @@ def official_p_any_rank(star_pool: int = 12) -> float:
     ranks = rank_probabilities(star_pool)
     p_no = next(float(row["p"]) for row in ranks if row["rank"] is None)
     return 1.0 - p_no
-
-
-def _log_binomial_pmf(k: int, n: int, p: float) -> float:
-    if p <= 0:
-        return 0.0 if k == 0 else -math.inf
-    if p >= 1:
-        return 0.0 if k == n else -math.inf
-    return (
-        math.lgamma(n + 1)
-        - math.lgamma(k + 1)
-        - math.lgamma(n - k + 1)
-        + k * math.log(p)
-        + (n - k) * math.log1p(-p)
-    )
-
-
-def binom_two_sided_exact(successes: int, trials: int, probability: float) -> float:
-    """Test binomial exact bilatéral, en log-factorielles pour éviter l'explosion."""
-    if trials <= 0:
-        return 1.0
-    k = min(trials, max(0, successes))
-    target = _log_binomial_pmf(k, trials, probability)
-    total = 0.0
-    for i in range(trials + 1):
-        value = _log_binomial_pmf(i, trials, probability)
-        if value <= target + 1e-9:
-            total += math.exp(value)
-    return min(1.0, total)
 
 
 def binomial_vs_official(
@@ -366,6 +339,25 @@ def _weighted(items: list[dict[str, Any]]) -> int:
     return sum(normalize_copies(item.get("copies")) for item in items)
 
 
+def _settled_star_pool(item: dict[str, Any]) -> int:
+    """Urne du tirage tranché. À défaut, la formule en vigueur à la date jouée."""
+    draw = item.get("draw") or {}
+    raw = draw.get("star_pool")
+    try:
+        if raw is not None and int(raw) in (9, 11, 12):
+            return int(raw)
+    except (TypeError, ValueError):
+        pass
+    return star_pool_for(parse_play_date(item["play_date"]))
+
+
+def _reference_probability(settled: list[dict[str, Any]]) -> float:
+    """p(au moins un rang) moyen des grilles tranchées, selon l'urne de chaque tirage."""
+    if not settled:
+        return official_p_any_rank()
+    return sum(official_p_any_rank(_settled_star_pool(item)) for item in settled) / len(settled)
+
+
 def summarize_plays(items: list[dict[str, Any]]) -> dict[str, Any]:
     settled = [item for item in items if item.get("status") == "settled"]
     pending = [item for item in items if item.get("status") != "settled"]
@@ -433,7 +425,7 @@ def summarize_plays(items: list[dict[str, Any]]) -> dict[str, Any]:
         rank_rows.append({"rank": None, "label": "Pas de gain", "count": none_count})
 
     p_hat, lo, hi = wilson_interval(win_n, settled_n) if settled_n else (None, None, None)
-    p0 = official_p_any_rank()
+    p0 = _reference_probability(settled)
     settled_dates = {
         str(item.get("play_date"))[:10]
         for item in settled

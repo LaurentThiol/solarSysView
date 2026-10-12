@@ -46,6 +46,13 @@ def test_bollinger_middle_is_sma():
     assert bands["upper"][2] > bands["middle"][2] > bands["lower"][2]
 
 
+def test_bollinger_sigma_divides_by_n():
+    bands = bollinger([1.0, 2.0, 3.0], period=3, k=2.0)
+    sigma = (2.0 / 3.0) ** 0.5
+    assert bands["upper"][2] == approx(2.0 + 2.0 * sigma)
+    assert bands["lower"][2] == approx(2.0 - 2.0 * sigma)
+
+
 def test_macd_histogram_is_line_minus_signal():
     values = [float(i % 7 + 10) for i in range(40)]
     pack = macd(values, fast=3, slow=6, signal=3)

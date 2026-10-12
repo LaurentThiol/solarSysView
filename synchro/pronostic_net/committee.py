@@ -73,15 +73,37 @@ def sigma_scale(abs_z: list[float]) -> float:
 
 
 def project_increasing(mus: list[float], los: list[float], his: list[float]) -> list[float]:
-    """n1 ≤ n2 ≤ … dans les bornes emboîtées de chaque rang."""
+    """n1, n2, … strictement croissants, écart d'au moins 1, dans les bornes de chaque rang."""
     x = [min(his[i], max(los[i], float(mus[i]))) for i in range(len(mus))]
     n = len(x)
     for _ in range(n + 1):
         for i in range(1, n):
-            x[i] = min(his[i], max(los[i], max(x[i], x[i - 1])))
+            x[i] = min(his[i], max(los[i], max(x[i], x[i - 1] + 1.0)))
         for i in range(n - 2, -1, -1):
-            x[i] = min(his[i], max(los[i], min(x[i], x[i + 1])))
+            x[i] = min(his[i], max(los[i], min(x[i], x[i + 1] - 1.0)))
     return x
+
+
+def _strict_integers(values: list[float], los: list[float], his: list[float]) -> list[int]:
+    """Lecture entière jouable : chaque rang dans sa borne, et strictement au-dessus du précédent."""
+    out: list[int] = []
+    previous = int(los[0]) - 1
+    last_hi = int(his[-1])
+    for index, raw in enumerate(values):
+        remain = len(values) - index - 1
+        low = max(int(los[index]), previous + 1)
+        high = min(int(his[index]), last_hi - remain)
+        if low > high:
+            low = high
+        snapped = int(round(float(raw)))
+        snapped = min(high, max(low, snapped))
+        out.append(snapped)
+        previous = snapped
+    return out
+
+
+def _even_count(values: list[int]) -> float:
+    return float(sum(1 for value in values if value % 2 == 0))
 
 
 def clip_sum(mu: float, slot_mus: list[float], slot_sigmas: list[float], lo: float, hi: float) -> float:
@@ -96,7 +118,7 @@ def clip_sum(mu: float, slot_mus: list[float], slot_sigmas: list[float], lo: flo
 
 
 def project_moments(mu: list[float], sigma: list[float]) -> list[float]:
-    """μ jouables : rangs croissants, somme compatible, parité dans ses bornes."""
+    """μ jouables : rangs stricts, somme compatible, parité de la grille entière lue."""
     out = [float(value) for value in mu]
     for pool, slots in (("numbers", NUMBER_SLOTS), ("stars", STAR_SLOTS)):
         los = []
@@ -117,11 +139,12 @@ def project_moments(mu: list[float], sigma: list[float]) -> list[float]:
             lo,
             hi,
         )
-    for index, axis in enumerate(AXES):
-        if axis["kind"] != "parity":
-            continue
-        lo, hi = axis_bounds(axis)
-        out[index] = min(hi, max(lo, out[index]))
+        parity_index = next(
+            index for index, axis in enumerate(AXES) if axis["kind"] == "parity" and axis["pool"] == pool
+        )
+        parity_lo, parity_hi = axis_bounds(AXES[parity_index])
+        parity = _even_count(_strict_integers(ordered, los, his))
+        out[parity_index] = min(parity_hi, max(parity_lo, parity))
     return out
 
 

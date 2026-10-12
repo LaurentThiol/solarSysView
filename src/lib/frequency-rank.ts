@@ -5,14 +5,15 @@ export type FrequencyItem = {
   delayDraws: number
 }
 
-/** Attente géométrique d’une boule : 50 / 5 = 10 tirages. */
+/** Âge moyen d’un numéro : tirages depuis sa dernière sortie. (1 − 5/50) / (5/50) = 9. */
 export function expectedNumberDelay() {
-  return 50 / 5
+  return (50 - 5) / 5
 }
 
-/** Attente géométrique d’une étoile : pool / 2 (6 sur la formule à 12 ★). */
+/** Âge moyen d’une étoile. Sur 12 ★, (1 − 2/12) / (2/12) = 5. */
 export function expectedStarDelay(pool = 12) {
-  return pool > 0 ? pool / 2 : 0
+  if (pool <= 2) return 0
+  return (pool - 2) / 2
 }
 
 export function hottest(

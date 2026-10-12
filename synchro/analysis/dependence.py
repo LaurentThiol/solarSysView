@@ -5,7 +5,13 @@ from collections import Counter
 from typing import Any
 
 from synchro.analysis.common import as_date, numbers_of, ordered_draws
-from synchro.analysis.combinatorics import N_POOL, consecutive_distribution, sum_distribution
+from synchro.analysis.combinatorics import (
+    N_DRAW,
+    N_POOL,
+    consecutive_distribution,
+    inclusion_factor,
+    sum_distribution,
+)
 
 
 def _entropy(probs: list[float]) -> float:
@@ -29,21 +35,24 @@ def pair_matrix(draws: list[dict[str, Any]]) -> dict[str, Any]:
         p_ab = c / n
         p_a = single[a] / n
         p_b = single[b] / n
-        lift = p_ab / (p_a * p_b) if p_a and p_b else 0.0
-        # binary MI on co-occurrence vs independent
+        # Le produit p_a p_b vaut 1 sous l'indépendance. Sans remise, l'urne
+        # co-sort deux boules moins souvent : le lift 1 est ce niveau-là.
+        factor = inclusion_factor(2, N_DRAW, N_POOL)
+        lift = p_ab / (p_a * p_b * factor) if p_a and p_b and factor else 0.0
         p11 = p_ab
         p10 = max(0.0, p_a - p_ab)
         p01 = max(0.0, p_b - p_ab)
         p00 = max(0.0, 1.0 - p11 - p10 - p01)
+        lower = max(0.0, p_a + p_b - 1.0)
+        upper = min(p_a, p_b)
+        q11 = min(upper, max(lower, p_a * p_b * factor))
+        q10 = max(0.0, p_a - q11)
+        q01 = max(0.0, p_b - q11)
+        q00 = max(0.0, 1.0 - p_a - p_b + q11)
         mi = 0.0
-        for pxy, px, py in (
-            (p11, p_a, p_b),
-            (p10, p_a, 1.0 - p_b),
-            (p01, 1.0 - p_a, p_b),
-            (p00, 1.0 - p_a, 1.0 - p_b),
-        ):
-            if pxy > 0 and px > 0 and py > 0:
-                mi += pxy * math.log(pxy / (px * py))
+        for pxy, qx in ((p11, q11), (p10, q10), (p01, q01), (p00, q00)):
+            if pxy > 0 and qx > 0:
+                mi += pxy * math.log(pxy / qx)
         edges.append({"a": a, "b": b, "count": c, "lift": lift, "mi": mi})
     edges.sort(key=lambda e: (-e["lift"], -e["count"], e["a"], e["b"]))
     graph = [e for e in edges if e["lift"] >= 1.4][:40]
@@ -89,5 +98,8 @@ def dependence_report(draws: list[dict[str, Any]]) -> dict[str, Any]:
         "to_date": as_date(ordered[-1]["draw_date"]).isoformat() if ordered else None,
         "pairs": pairs,
         "surprise_top": surprises[:15],
-        "disclaimer": "Co-occurrences et scores de rareté sont descriptifs. H0 = indépendance uniforme.",
+        "disclaimer": (
+            "Le lift vaut 1 quand la paire sort comme dans un tirage uniforme sans remise, "
+            "compte tenu des fréquences observées. H0 = urne 5/50."
+        ),
     }

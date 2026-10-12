@@ -22,6 +22,20 @@ def hypergeometric_match(k: int, drawn: int, pool: int, picked: int) -> float:
     return math.comb(picked, k) * math.comb(miss, need_miss) / math.comb(pool, drawn)
 
 
+def inclusion_factor(width: int, slots: int, pool: int) -> float:
+    """P(width boules précises) / (slots/pool)^width, sous tirage sans remise.
+
+    Le produit des fréquences surestime la co-sortie : pour 2 boules dans 5/50
+    le rapport vaut 40/49. Diviser un lift par ce facteur remet 1 au niveau de l'urne.
+    """
+    if width < 1 or slots < width or pool < width:
+        return 1.0
+    ratio = 1.0
+    for offset in range(width):
+        ratio *= (pool / slots) * ((slots - offset) / (pool - offset))
+    return ratio
+
+
 def p_grid_match(k_numbers: int, s_stars: int, star_pool: int = S_POOL) -> float:
     return hypergeometric_match(k_numbers, N_DRAW, N_POOL, N_DRAW) * hypergeometric_match(
         s_stars, S_DRAW, star_pool, S_DRAW

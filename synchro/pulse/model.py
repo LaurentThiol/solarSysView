@@ -127,7 +127,14 @@ def principal_fit(hits: np.ndarray, offset: int = 0) -> dict[str, Any]:
         if not any(other > int(row["period"]) and other % int(row["period"]) == 0 for other in periods)
     ]
     pool = kept or candidates
-    return max(pool, key=lambda row: (row["r"], row["period"]))
+    chosen = dict(max(pool, key=lambda row: (row["r"], row["period"])))
+    # Le p de Rayleigh vaut pour une période fixée. Ici on a balayé la grille.
+    scanned = len(grid)
+    raw = float(chosen.get("p") if chosen.get("p") is not None else 1.0)
+    chosen["p_raw"] = raw
+    chosen["periods_tested"] = scanned
+    chosen["p"] = min(1.0, raw * scanned) if scanned else raw
+    return chosen
 
 
 def _product_concordance(
@@ -286,8 +293,9 @@ def _round_fit(fit: dict[str, Any]) -> dict[str, Any]:
     for key in ("concordance", "lobe_rate", "r"):
         if out.get(key) is not None:
             out[key] = round(float(out[key]), 4)
-    if out.get("p") is not None:
-        out["p"] = round(float(out["p"]), 6)
+    for key in ("p", "p_raw"):
+        if out.get(key) is not None:
+            out[key] = round(float(out[key]), 6)
     return out
 
 
@@ -373,22 +381,29 @@ def _phase_at(hit_times: list[int], period: int) -> float | None:
     return None if scored["period"] is None else float(scored["phase"])
 
 
-def _compatible_period(left: dict[str, Any], right: dict[str, Any]) -> int | None:
-    if abs(int(left["period"]) - int(right["period"])) > 1:
+def _period_fits(item: dict[str, Any], period: int) -> bool:
+    times = item.get("hit_times") or []
+    if len(times) < 2:
+        return False
+    rescored = score_times(np.asarray(times, dtype=float), period, max(times) + 1)
+    if rescored["period"] is None:
+        return False
+    return float(rescored["r"]) + 1e-9 >= SCORE_RATIO * float(item["r"])
+
+
+def _common_period(members: list[dict[str, Any]]) -> int | None:
+    """Période du membre au plus fort r, si tout le groupe la tient encore."""
+    periods = [int(item["period"]) for item in members]
+    if not periods or max(periods) - min(periods) > 1:
         return None
-    period = int(left["period"] if left["r"] >= right["r"] else right["period"])
-    for item in (left, right):
-        phase = _phase_at(item["hit_times"], period)
-        if phase is None:
-            return None
-        rescored = score_times(
-            np.asarray(item["hit_times"], dtype=float),
-            period,
-            max(item["hit_times"]) + 1,
-        )
-        if float(rescored["r"]) + 1e-9 < SCORE_RATIO * float(item["r"]):
-            return None
+    period = int(max(members, key=lambda item: float(item["r"]))["period"])
+    if any(not _period_fits(item, period) for item in members):
+        return None
     return period
+
+
+def _compatible_period(left: dict[str, Any], right: dict[str, Any]) -> int | None:
+    return _common_period([left, right])
 
 
 def _member_phase(item: dict[str, Any], period: int) -> float:
@@ -423,7 +438,7 @@ def _rotation_period(
                 concordance, _lobe = _product_concordance(
                     times,
                     period,
-                    phases[0],
+                    phases[index],
                     period2,
                     locked,
                 )
@@ -525,13 +540,9 @@ def _triplets(rows: list[dict[str, Any]], kind: str) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     for i, first in enumerate(rows):
         for j, second in enumerate(rows[i + 1 :], start=i + 1):
-            if _compatible_period(first, second) is None:
-                continue
             for third in rows[j + 1 :]:
-                period = _compatible_period(first, second)
-                if period is None or _compatible_period(first, third) is None:
-                    continue
-                if abs(int(second["period"]) - int(third["period"])) > 1:
+                period = _common_period([first, second, third])
+                if period is None:
                     continue
                 trio = (first, second, third)
                 phases = [_member_phase(item, period) for item in trio]

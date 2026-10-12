@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from synchro.analysis.inference import binom_two_sided, chi2_sf, wilson_interval
+from synchro.analysis.inference import bh_fdr, binom_two_sided, wilson_interval
 from synchro.analysis.montecarlo import simulate_draw
 from synchro.morpho.geometry import analyze_draw, detect, jaccard
 from synchro.morpho.lexicon import MOTIF_IDS, label_of
@@ -47,17 +47,13 @@ def anticipate(
     n = len(matches)
     null = _null_rates(n_sim, seed)
     rows: list[dict[str, Any]] = []
-    chi_stat = 0.0
-    chi_df = 0
+    pvalues: list[float] = []
     for motif in MOTIF_IDS:
         observed = sum(1 for nxt in matches if motif in nxt)
         p0 = null[motif]
         p_hat, lo, hi = wilson_interval(observed, n) if n else (None, None, None)
         p_value = binom_two_sided(observed, n, p0) if n and 0 < p0 < 1 else 1.0
-        expected = n * p0
-        if n and expected > 0:
-            chi_stat += (observed - expected) ** 2 / expected
-            chi_df += 1
+        pvalues.append(p_value)
         rows.append(
             {
                 "id": motif,
@@ -72,6 +68,11 @@ def anticipate(
                 "current": motif in current["motifs"],
             }
         )
+    # Les motifs se cumulent : un χ² sur leur somme n'a pas de loi du χ².
+    # Chaque forme a son test exact, et le FDR tient les comparaisons ensemble.
+    flags = bh_fdr(pvalues, q=0.05) if n else [False] * len(rows)
+    for row, flag in zip(rows, flags):
+        row["fdr_reject"] = bool(flag)
     rows.sort(key=lambda r: (0 if r["empirical"] is None else -abs((r["empirical"] or 0) - r["null"])))
     return {
         "ok": True,
@@ -84,8 +85,7 @@ def anticipate(
         "matches": n,
         "min_jaccard": min_jaccard,
         "n_sim": n_sim,
-        "chi2": round(chi_stat, 4),
-        "chi2_df": chi_df,
-        "chi2_p": round(chi2_sf(chi_stat, float(chi_df)), 4) if chi_df else 1.0,
+        "fdr_q": 0.05,
+        "fdr_rejections": sum(1 for flag in flags if flag),
         "classes": rows,
     }

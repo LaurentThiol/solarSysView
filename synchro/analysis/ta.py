@@ -120,12 +120,13 @@ def macd(
     return {"line": line, "signal": signal_line, "histogram": hist}
 
 
-def _sample_std(chunk: list[float]) -> float:
+def _population_std(chunk: list[float]) -> float:
+    """Écart-type de Bollinger : somme des carrés divisée par n."""
     n = len(chunk)
-    if n < 2:
+    if n < 1:
         return 0.0
     mean = sum(chunk) / n
-    var = sum((x - mean) ** 2 for x in chunk) / (n - 1)
+    var = sum((x - mean) ** 2 for x in chunk) / n
     return var ** 0.5
 
 
@@ -142,7 +143,7 @@ def bollinger(
     for i, mid in enumerate(middle):
         if mid is None:
             continue
-        sigma = _sample_std(values[i - p + 1 : i + 1])
+        sigma = _population_std(values[i - p + 1 : i + 1])
         upper[i] = mid + width * sigma
         lower[i] = mid - width * sigma
     return {"middle": middle, "upper": upper, "lower": lower}

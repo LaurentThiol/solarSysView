@@ -27,12 +27,11 @@ en voir une n'apprend presque rien.
 
 from __future__ import annotations
 
-import math
 import random
 from typing import Any, Sequence
 
 from synchro.analysis.common import as_date, numbers_of, ordered_draws, stars_of
-from synchro.analysis.inference import bh_fdr, chi2_sf, wilson_interval
+from synchro.analysis.inference import bh_fdr, binom_two_sided, chi2_sf, frequency_chi_scale, wilson_interval
 from synchro.analysis.tech import activity_from_close
 from synchro.analysis.variables import series
 from synchro.chartisme.catalog import label_of
@@ -299,14 +298,15 @@ def number_signal(
         }
     total = observed_draws * per_draw
     expected = total / size
-    chi = sum((counts[v] - expected) ** 2 / expected for v in range(1, size + 1))
+    raw = sum((counts[v] - expected) ** 2 / expected for v in range(1, size + 1))
+    chi = raw * frequency_chi_scale(size, per_draw)
     p_value = chi2_sf(chi, float(size - 1))
     probability = per_draw / size
     rows: list[dict[str, Any]] = []
     p_values: list[float] = []
     for value in range(1, size + 1):
         rate, low, high = wilson_interval(counts[value], observed_draws)
-        p_ball = _binomial_two_sided(counts[value], observed_draws, probability)
+        p_ball = binom_two_sided(counts[value], observed_draws, probability)
         p_values.append(p_ball)
         rows.append(
             {
@@ -344,33 +344,6 @@ def number_signal(
             else f"Boules retenues après correction BH : {flagged}."
         ),
     }
-
-
-def _binomial_two_sided(successes: int, trials: int, probability: float) -> float:
-    """Test binomial exact bilatéral, en log-factorielles pour éviter l'explosion."""
-    if trials <= 0:
-        return 1.0
-    target = _log_binomial_pmf(successes, trials, probability)
-    total = 0.0
-    for k in range(trials + 1):
-        value = _log_binomial_pmf(k, trials, probability)
-        if value <= target + 1e-9:
-            total += math.exp(value)
-    return min(1.0, total)
-
-
-def _log_binomial_pmf(k: int, n: int, p: float) -> float:
-    if p <= 0:
-        return 0.0 if k == 0 else -math.inf
-    if p >= 1:
-        return 0.0 if k == n else -math.inf
-    return (
-        math.lgamma(n + 1)
-        - math.lgamma(k + 1)
-        - math.lgamma(n - k + 1)
-        + k * math.log(p)
-        + (n - k) * math.log1p(-p)
-    )
 
 
 # --- Taux de base : combien de hasard porte la même figure ? ------------------

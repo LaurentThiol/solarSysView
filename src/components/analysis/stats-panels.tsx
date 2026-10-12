@@ -128,7 +128,8 @@ export function InferencePanel({
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
           Statistique {formatStat(chi.stat)} pour {n} tirages de la fenêtre (espérance{" "}
-          {formatStat(chi.expected)} par boule). Modèle approximatif : p = 5/50.
+          {formatStat(chi.expected)} par boule). χ² à 49 degrés de liberté, multiplié par 49/45
+          pour le tirage de 5 boules sans remise. p = 5/50.
         </CardContent>
       </Card>
       <Card>

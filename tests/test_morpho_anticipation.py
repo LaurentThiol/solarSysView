@@ -38,7 +38,8 @@ def test_anticipate_returns_classes_vs_null() -> None:
     assert report["n_sim"] == 80
     ids = {row["id"] for row in report["classes"]}
     assert "align_h" in ids
-    assert report["chi2_df"] >= 1
+    assert report["fdr_rejections"] >= 0
+    assert all("p_value" in row for row in report["classes"])
     for row in report["classes"]:
         assert 0 <= row["null"] <= 1
         if row["n"]:

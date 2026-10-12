@@ -21,29 +21,43 @@ def chi2_sf(stat: float, df: float) -> float:
     return max(0.0, min(1.0, 1.0 - norm_cdf(z)))
 
 
-def binom_cdf(k: int, n: int, p: float) -> float:
-    if k < 0:
-        return 0.0
-    if k >= n:
-        return 1.0
-    q = 1.0 - p
-    if q == 0:
-        return 0.0 if k < n else 1.0
-    term = q**n
-    total = term
-    for i in range(1, k + 1):
-        term *= (n - i + 1) / i * p / q
-        total += term
-        if total >= 1:
-            return 1.0
-    return min(1.0, total)
+def _log_binomial_pmf(k: int, n: int, p: float) -> float:
+    if p <= 0:
+        return 0.0 if k == 0 else -math.inf
+    if p >= 1:
+        return 0.0 if k == n else -math.inf
+    return (
+        math.lgamma(n + 1)
+        - math.lgamma(k + 1)
+        - math.lgamma(n - k + 1)
+        + k * math.log(p)
+        + (n - k) * math.log1p(-p)
+    )
 
 
 def binom_two_sided(successes: int, n: int, p0: float) -> float:
+    """Test binomial exact bilatéral : somme des P(K=i) au plus égales à P(K=k)."""
     if n <= 0:
         return 1.0
-    observed = binom_cdf(successes, n, p0) if successes <= n * p0 else 1.0 - binom_cdf(successes - 1, n, p0)
-    return min(1.0, 2.0 * min(observed, 1.0 - observed + 1e-15))
+    k = min(n, max(0, int(successes)))
+    target = _log_binomial_pmf(k, n, p0)
+    total = 0.0
+    for i in range(n + 1):
+        value = _log_binomial_pmf(i, n, p0)
+        if value <= target + 1e-9:
+            total += math.exp(value)
+    return min(1.0, total)
+
+
+def frequency_chi_scale(pool: int, drawn: int) -> float:
+    """(N−1)/(N−K) : la statistique de Pearson des N boules a pour espérance N−K.
+
+    Chaque tirage prend K boules sans remise. La comparer à un χ² à N−1 degrés
+    de liberté demande ce facteur, sinon le p est trop grand.
+    """
+    if pool <= drawn:
+        return 1.0
+    return (pool - 1) / (pool - drawn)
 
 
 def wilson_interval(successes: int, n: int, z: float = 1.96) -> tuple[float, float, float]:
@@ -85,16 +99,20 @@ def chi_square_uniform(draws: list[dict[str, Any]]) -> dict[str, Any]:
     n = len(ordered)
     counts = number_frequencies(ordered)
     expected = n * (N_DRAW / N_POOL)
-    stat = 0.0
+    raw = 0.0
     if expected > 0:
-        stat = sum((counts[i] - expected) ** 2 / expected for i in range(1, N_POOL + 1))
+        raw = sum((counts[i] - expected) ** 2 / expected for i in range(1, N_POOL + 1))
+    scale = frequency_chi_scale(N_POOL, N_DRAW)
+    stat = raw * scale
     df = N_POOL - 1
     return {
         "stat": stat,
+        "raw": raw,
+        "scale": scale,
         "df": df,
         "pvalue": chi2_sf(stat, df),
         "expected_per_ball": expected,
-        "model": "approx. χ² : chaque boule a p=5/50 par tirage (sans remise, les counts sont dépendants).",
+        "model": "χ² à 49 ddl après le facteur (49/45) du tirage de 5 boules sans remise.",
     }
 
 
@@ -141,6 +159,7 @@ def mann_whitney(xs: list[float], ys: list[float]) -> dict[str, Any]:
     combined = [(v, 0) for v in xs] + [(v, 1) for v in ys]
     combined.sort(key=lambda t: t[0])
     ranks = [0.0] * len(combined)
+    tie_term = 0.0
     i = 0
     while i < len(combined):
         j = i
@@ -149,11 +168,20 @@ def mann_whitney(xs: list[float], ys: list[float]) -> dict[str, Any]:
         avg = (i + 1 + j + 1) / 2
         for k in range(i, j + 1):
             ranks[k] = avg
+        length = j - i + 1
+        if length > 1:
+            tie_term += length**3 - length
         i = j + 1
     r1 = sum(rank for rank, item in zip(ranks, combined) if item[1] == 0)
     u1 = r1 - n1 * (n1 + 1) / 2
     mu = n1 * n2 / 2
-    sigma = math.sqrt(n1 * n2 * (n1 + n2 + 1) / 12)
+    total = n1 + n2
+    # Correction des ex-aequo : sans elle, la variance est trop grande et le p aussi.
+    base = float(total + 1)
+    if total > 1:
+        base -= tie_term / (total * (total - 1))
+    sigma2 = n1 * n2 / 12.0 * base
+    sigma = math.sqrt(sigma2) if sigma2 > 0 else 0.0
     z = 0.0 if sigma == 0 else (u1 - mu) / sigma
     p = 2 * min(norm_cdf(z), 1.0 - norm_cdf(z))
     return {

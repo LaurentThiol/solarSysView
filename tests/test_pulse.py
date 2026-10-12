@@ -23,6 +23,8 @@ def test_fundamental_keeps_period_not_harmonic() -> None:
     assert fit["period"] == 10
     assert fit["period"] != 5
     assert fit["concordance"] == 1
+    assert fit["periods_tested"] > 1
+    assert fit["p"] == min(1.0, fit["p_raw"] * fit["periods_tested"])
 
 
 def test_period_cap_follows_window_length() -> None:

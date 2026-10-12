@@ -2,6 +2,7 @@ from synchro.analysis.combinatorics import (
     TOTAL_GRIDS,
     consecutive_distribution,
     coupon_collector,
+    inclusion_factor,
     p_grid_match,
     parity_distribution,
     proba_tables,
@@ -30,3 +31,4 @@ def test_combinatorics_invariants():
     assert p_grid_match(5, 2) == tables["ranks"][0]["p"]
     coupon = coupon_collector()
     assert coupon["expected_draws"] > 50 / 5
+    assert abs(inclusion_factor(2, 5, 50) - 40 / 49) < 1e-12

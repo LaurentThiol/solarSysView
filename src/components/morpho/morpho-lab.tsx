@@ -751,8 +751,8 @@ export function MorphoLab() {
             <div className="flex flex-col gap-3">
               <p className="text-sm text-muted-foreground">
                 {anticipation.matches} précédents à Jaccard ≥ {anticipation.min_jaccard} · null {anticipation.n_sim} tirages
-                {"chi2_p" in anticipation && anticipation.chi2_p != null
-                  ? ` · χ² p=${anticipation.chi2_p}`
+                {"fdr_rejections" in anticipation
+                  ? ` · ${anticipation.fdr_rejections} forme${anticipation.fdr_rejections > 1 ? "s" : ""} retenue${anticipation.fdr_rejections > 1 ? "s" : ""} après FDR 5 %`
                   : null}
               </p>
               <div className="overflow-x-auto">

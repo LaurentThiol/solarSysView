@@ -1,8 +1,9 @@
 """LightGBM à lags (le schéma Darts) et chaîne de rangs.
 
 Darts `LightGBMModel`, quand le paquet est là, remplace la médiane temporelle
-du prochain pas. La chaîne n1 → écarts reste en LightGBM direct : le
-conditionnement est dans le même tirage, ce que les lags ne portent pas.
+du prochain pas. La chaîne n1 → écarts reste en LightGBM direct : chaque écart
+voit la prévision du rang d'avant, apprise sur des prévisions passées, pas la
+valeur sortie du même tirage.
 Chronos-2, s’il est installé, lit les mêmes covariables et ne mélange que la
 somme, la somme des étoiles et le niveau de n1, bornes 10–90 comprises.
 Les niveaux n1…n5, e1, e2 et leurs deltas, prévus à part, donnent le centre
@@ -217,6 +218,7 @@ def _design(
     past_names: list[str],
     future_names: list[str],
     lower_names: tuple[str, ...] = (),
+    lower_at: dict[int, dict[str, float]] | None = None,
 ) -> tuple[np.ndarray, list[int], list[str]]:
     matrix: list[list[float]] = []
     used: list[int] = []
@@ -225,7 +227,14 @@ def _design(
     for t in indices:
         if t < need:
             continue
-        lower = {name: float(rows[t][name]) for name in lower_names}
+        known = (lower_at or {}).get(t)
+        if known is None:
+            lower = {name: float(rows[t][name]) for name in lower_names}
+        else:
+            lower = {
+                name: float(known[name]) if name in known else float(rows[t][name])
+                for name in lower_names
+            }
         vec, names = vector_at(
             rows,
             horizon,
@@ -348,6 +357,62 @@ def _fit_one(
     return pred, booster
 
 
+def _predict_matrix(model: Any, library: str, rows: np.ndarray, fallback: float) -> np.ndarray:
+    count = int(rows.shape[0]) if rows.ndim else 0
+    if model is None or count == 0:
+        return np.full(count, fallback, dtype=float)
+    if library == "catboost":
+        pred = np.asarray(model.predict(rows), dtype=float).reshape(-1)
+    else:
+        pred = np.asarray(model.predict(rows, num_threads=1), dtype=float).reshape(-1)
+    return np.where(np.isfinite(pred), pred, fallback)
+
+
+def _past_only_column(
+    x: np.ndarray,
+    y: np.ndarray,
+    weights: np.ndarray,
+    *,
+    library: str,
+    estimators: int,
+) -> np.ndarray:
+    """Prévision de chaque ligne sans son propre y.
+
+    Le premier quart, trop court pour un modèle, reçoit la moyenne des cibles
+    d'avant. Les quarts suivants sont prévus par un modèle ajusté seulement
+    sur ce qui précède. La chaîne s'entraîne donc sur une prévision, comme
+    au moment de servir le pas suivant.
+    """
+    n = int(y.shape[0])
+    out = np.empty(n, dtype=float)
+    if n == 0:
+        return out
+    if n == 1:
+        out[0] = float(y[0])
+    else:
+        out[0] = float(y[1])
+        for index in range(1, n):
+            out[index] = float(y[:index].mean())
+    if n < 32:
+        return out
+    cuts = [cut for cut in (n // 4, n // 2, (3 * n) // 4) if cut >= 16]
+    for index, cut in enumerate(cuts):
+        nxt = cuts[index + 1] if index + 1 < len(cuts) else n
+        if nxt <= cut:
+            continue
+        _pred, model = _fit_one(
+            x[:cut],
+            y[:cut],
+            weights[:cut],
+            x[cut],
+            alpha=0.5,
+            estimators=estimators,
+            library=library,
+        )
+        out[cut:nxt] = _predict_matrix(model, library, x[cut:nxt], float(y[:cut].mean()))
+    return out
+
+
 def _moments_from_alphas(found: dict[float, float], name: str) -> dict[str, float]:
     mid = _clip(name, found.get(0.5, next(iter(found.values()))))
     lo = _clip(name, found.get(0.1, mid))
@@ -429,7 +494,15 @@ def predict_moments(
             importance_models.append((median_model, feat_names))
 
     carried: dict[str, dict[str, float]] = {}
+    past_hat: dict[str, dict[int, float]] = {}
     for name, lowers in CHAIN:
+        lookup = None
+        if lowers:
+            lookup = {
+                t: {key: past_hat[key][t] for key in lowers}
+                for t in indices
+                if all(t in past_hat.get(key, {}) for key in lowers)
+            }
         x_chain, used_chain, chain_names = _design(
             rows,
             horizon,
@@ -439,6 +512,7 @@ def predict_moments(
             past_names=past_names,
             future_names=future_names,
             lower_names=lowers,
+            lower_at=lookup,
         )
         if len(used_chain) < 8:
             raise ValueError("La chaîne de rangs n’a pas assez de lignes.")
@@ -467,6 +541,14 @@ def predict_moments(
                 median_model = model
         moments[name] = _moments_from_alphas(found, name)
         carried[name] = moments[name]
+        column = _past_only_column(
+            x_chain,
+            y,
+            w_chain,
+            library=library,
+            estimators=estimators,
+        )
+        past_hat[name] = {t: float(column[index]) for index, t in enumerate(used_chain)}
         if name == "n1" and median_model is not None:
             importance_models.append((median_model, chain_names))
 
@@ -488,19 +570,19 @@ def predict_moments(
 
     for name in RANK_LEVELS:
         y = np.asarray([float(rows[t][f"d_{name}"]) for t in used], dtype=float)
-        pred, _model = _fit_one(
-            x_time,
-            y,
-            weights,
-            x_next_arr,
-            alpha=0.5,
-            estimators=estimators,
-            library=library,
-        )
-        mid = _clip(f"delta:{name}", pred)
-        level = moments[f"level:{name}"]
-        half = max(0.0, (float(level["hi"]) - float(level["lo"])) / 2.0)
-        moments[f"delta:{name}"] = {"lo": mid - half, "mid": mid, "hi": mid + half}
+        found = {}
+        for alpha in alphas:
+            pred, _model = _fit_one(
+                x_time,
+                y,
+                weights,
+                x_next_arr,
+                alpha=alpha,
+                estimators=estimators,
+                library=library,
+            )
+            found[alpha] = pred
+        moments[f"delta:{name}"] = _moments_from_alphas(found, f"delta:{name}")
 
     return moments, _importance(importance_models), library
 

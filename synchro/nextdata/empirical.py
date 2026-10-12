@@ -7,8 +7,11 @@ from collections import Counter
 from itertools import combinations
 from typing import Any, Iterable
 
+from synchro.analysis.combinatorics import inclusion_factor
+
 LAPLACE = 0.5
 NUMBER_POOL = 50
+NUMBER_SLOTS = 5
 
 
 def _pairs(numbers: Iterable[int]) -> list[tuple[int, int]]:
@@ -84,7 +87,8 @@ def recount(rows: list[dict[str, Any]], *, star_pool: int = 12) -> dict[str, Any
             independent = 1.0
             for single in singles:
                 independent *= (single / n) if n and single else 0.0
-            lift = p_joint / independent if independent else 0.0
+            factor = inclusion_factor(width, NUMBER_SLOTS, NUMBER_POOL)
+            lift = p_joint / (independent * factor) if independent and factor else 0.0
             ago = (n - 1 - last[key]) if n else 0
             item: dict[str, Any] = {
                 "count": int(count),
@@ -117,7 +121,14 @@ def smoothed_share(count: float, draws: int, slots: int, pool: int) -> float:
     return (count + LAPLACE) / (slots * max(draws, 1) + LAPLACE * pool)
 
 
-def smoothed_lift(joint: float, singles: list[float], draws: int) -> float:
+def smoothed_lift(
+    joint: float,
+    singles: list[float],
+    draws: int,
+    *,
+    slots: int = NUMBER_SLOTS,
+    pool: int = NUMBER_POOL,
+) -> float:
     n = max(draws, 1)
     p_joint = (joint + LAPLACE) / (n + LAPLACE)
     independent = 1.0
@@ -125,7 +136,8 @@ def smoothed_lift(joint: float, singles: list[float], draws: int) -> float:
         independent *= (single + LAPLACE) / (n + LAPLACE)
     if independent <= 0:
         return 1.0
-    return p_joint / independent
+    factor = inclusion_factor(len(singles), slots, pool)
+    return p_joint / (independent * factor) if factor else 1.0
 
 
 def log_ball(count: float, draws: int, *, slots: int, pool: int) -> float:

@@ -201,6 +201,22 @@ def test_summarize_weights_copies() -> None:
     assert stats["prize_known"] == 0
 
 
+def test_reference_probability_follows_the_star_pool_of_the_play_date() -> None:
+    old = decorate_play(
+        {
+            "id": 1,
+            "numbers": [1, 2, 3, 4, 5],
+            "stars": [1, 2],
+            "play_date": "2010-01-05",
+            "source": "manuel",
+            "copies": 1,
+        },
+        {"numbers": [1, 2, 3, 4, 5], "stars": [1, 2]},
+    )
+    stats = summarize_plays([old])
+    assert stats["p0"] == official_p_any_rank(9)
+
+
 def test_binomial_two_sided_matches_known_values() -> None:
     assert binom_two_sided_exact(0, 0, 0.1) == 1.0
     assert math.isclose(binom_two_sided_exact(0, 1, 0.5), 1.0, abs_tol=1e-12)

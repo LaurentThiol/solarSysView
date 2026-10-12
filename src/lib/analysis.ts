@@ -453,10 +453,10 @@ export function macd(
   return { line, signal: signalLine, histogram }
 }
 
-function sampleStd(chunk: number[]) {
-  if (chunk.length < 2) return 0
+function populationStd(chunk: number[]) {
+  if (!chunk.length) return 0
   const m = mean(chunk)
-  return Math.sqrt(chunk.reduce((acc, v) => acc + (v - m) ** 2, 0) / (chunk.length - 1))
+  return Math.sqrt(chunk.reduce((acc, v) => acc + (v - m) ** 2, 0) / chunk.length)
 }
 
 export function bollinger(
@@ -475,7 +475,7 @@ export function bollinger(
   for (let i = 0; i < values.length; i += 1) {
     const mid = middle[i]
     if (mid == null) continue
-    const sigma = sampleStd(values.slice(i - p + 1, i + 1))
+    const sigma = populationStd(values.slice(i - p + 1, i + 1))
     upper[i] = mid + k * sigma
     lower[i] = mid - k * sigma
   }
@@ -779,12 +779,17 @@ export function parityReport(draws: AnalysisDraw[]): {
 
 export function chiSquareUniform(draws: AnalysisDraw[]) {
   const n = draws.length
-  const counts = Array(51).fill(0)
+  const pool = 50
+  const drawn = 5
+  const counts = Array(pool + 1).fill(0)
   for (const draw of draws) for (const v of draw.numbers) counts[v] += 1
-  const expected = n * (5 / 50)
-  let stat = 0
-  for (let i = 1; i <= 50; i += 1) stat += (counts[i] - expected) ** 2 / expected
-  return { stat, expected, counts }
+  const expected = n * (drawn / pool)
+  let raw = 0
+  if (expected > 0) {
+    for (let i = 1; i <= pool; i += 1) raw += (counts[i] - expected) ** 2 / expected
+  }
+  const scale = (pool - 1) / (pool - drawn)
+  return { stat: raw * scale, raw, scale, df: pool - 1, expected, counts }
 }
 
 export function bayesBalls(draws: AnalysisDraw[]) {
@@ -814,6 +819,15 @@ export function bayesBalls(draws: AnalysisDraw[]) {
   })
 }
 
+function inclusionFactor(width: number, slots: number, pool: number) {
+  if (width < 1 || slots < width || pool < width) return 1
+  let ratio = 1
+  for (let offset = 0; offset < width; offset += 1) {
+    ratio *= (pool / slots) * ((slots - offset) / (pool - offset))
+  }
+  return ratio
+}
+
 export function pairLift(draws: AnalysisDraw[], limit = 15) {
   const n = draws.length
   const single = Array(51).fill(0)
@@ -832,10 +846,11 @@ export function pairLift(draws: AnalysisDraw[], limit = 15) {
   }
   return [...pair.values()]
     .map((row) => {
-      const pab = row.count / n
-      const pa = single[row.a] / n
-      const pb = single[row.b] / n
-      return { ...row, lift: pa && pb ? pab / (pa * pb) : 0 }
+      const pab = n ? row.count / n : 0
+      const pa = n ? single[row.a] / n : 0
+      const pb = n ? single[row.b] / n : 0
+      const factor = inclusionFactor(2, 5, 50)
+      return { ...row, lift: pa && pb ? pab / (pa * pb * factor) : 0 }
     })
     .sort((a, b) => b.lift - a.lift || b.count - a.count)
     .slice(0, limit)

@@ -12,6 +12,7 @@ from synchro.app import create_app
 from synchro.nextdata.covariates import consecutive_count, link_series, spread_of, star_couple_ago
 from synchro.nextdata.empirical import recount, smoothed_share
 from synchro.nextdata.forecast import (
+    _past_only_column,
     blend_mid,
     blend_weight,
     lag_choice,
@@ -1276,3 +1277,15 @@ def test_training_route_returns_progress(monkeypatch) -> None:
     assert body["progress"] == {"ready": 1, "total": 24, "complete": False}
     assert [shift["x"] for shift in body["shifts"]] == [1]
     assert body["shifts"][0]["readings"]["corpus"]["calibrated"] is False
+
+
+def test_chain_features_do_not_reuse_the_row_target() -> None:
+    import numpy as np
+
+    y = np.linspace(1.0, 20.0, 20)
+    x = y.reshape(-1, 1)
+    weights = np.ones(20)
+    column = _past_only_column(x, y, weights, library="lightgbm", estimators=2)
+    assert column[0] == y[1]
+    assert column[5] == float(y[:5].mean())
+    assert column[5] != y[5]

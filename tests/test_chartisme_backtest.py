@@ -10,12 +10,12 @@ import math
 from random import Random
 from typing import Any
 
+from synchro.analysis.inference import binom_two_sided as _binomial_two_sided
 from synchro.analysis.tech import activity_from_close
 from synchro.analysis.variables import series
 from synchro.chartisme.backtest import (
     BALL_COUNT,
     STAR_COUNT,
-    _binomial_two_sided,
     best_per_window,
     figure_base_rate,
     following_draws,

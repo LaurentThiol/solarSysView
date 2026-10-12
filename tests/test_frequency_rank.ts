@@ -72,7 +72,8 @@ test("overdue skips values already listed as hottest", () => {
   )
 })
 
-test("expected delays are the geometric waits 10 and 6", () => {
-  assert.equal(expectedNumberDelay(), 10)
-  assert.equal(expectedStarDelay(), 6)
+test("expected delays are the mean ages 9 and 5", () => {
+  assert.equal(expectedNumberDelay(), 9)
+  assert.equal(expectedStarDelay(), 5)
+  assert.equal(expectedStarDelay(9), 3.5)
 })

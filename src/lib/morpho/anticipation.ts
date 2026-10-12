@@ -1,3 +1,5 @@
+import { binomTwoSided } from "@/lib/analysis"
+
 import { analyzeDraw, detect, jaccard, type Portrait } from "./geometry"
 import { MOTIF_IDS, labelOf } from "./lexicon"
 
@@ -18,6 +20,20 @@ function mulberry32(seed: number) {
     r ^= r + Math.imul(r ^ (r >>> 7), 61 | r)
     return ((r ^ (r >>> 14)) >>> 0) / 4294967296
   }
+}
+
+function bhFdr(pvalues: number[], q = 0.05): boolean[] {
+  const m = pvalues.length
+  const order = pvalues.map((p, index) => ({ p, index })).sort((a, b) => a.p - b.p)
+  let cutoff = -1
+  order.forEach((item, rank0) => {
+    if (item.p <= (q * (rank0 + 1)) / m) cutoff = rank0 + 1
+  })
+  const reject = Array(m).fill(false)
+  order.forEach((item, rank0) => {
+    if (rank0 + 1 <= cutoff) reject[item.index] = true
+  })
+  return reject
 }
 
 function wilson(successes: number, n: number) {
@@ -59,10 +75,11 @@ export function anticipateLocal(
     for (const motif of portrait.motifs) nullCounts[motif] += 1
   }
   const n = matches.length
-  const classes = MOTIF_IDS.map((id) => {
+  const drafted = MOTIF_IDS.map((id) => {
     const observed = matches.filter((p) => p.motifs.includes(id)).length
     const p0 = nullCounts[id] / nSim
     const w = n ? wilson(observed, n) : { p: null as number | null, lo: null, hi: null }
+    const pValue = n && p0 > 0 && p0 < 1 ? binomTwoSided(observed, n, p0) : 1
     return {
       id,
       label: labelOf(id),
@@ -72,9 +89,12 @@ export function anticipateLocal(
       null: Math.round(p0 * 10000) / 10000,
       observed,
       n,
+      p_value: Math.round(pValue * 10000) / 10000,
       current: current.motifs.includes(id),
     }
-  }).sort((a, b) => {
+  })
+  const flags = n ? bhFdr(drafted.map((row) => row.p_value)) : drafted.map(() => false)
+  const classes = drafted.map((row, index) => ({ ...row, fdr_reject: flags[index] })).sort((a, b) => {
     const da = a.empirical == null ? -1 : Math.abs(a.empirical - a.null)
     const db = b.empirical == null ? -1 : Math.abs(b.empirical - b.null)
     return db - da
@@ -90,6 +110,8 @@ export function anticipateLocal(
     matches: n,
     min_jaccard: minJaccard,
     n_sim: nSim,
+    fdr_q: 0.05,
+    fdr_rejections: flags.filter(Boolean).length,
     classes,
   }
 }

@@ -37,7 +37,9 @@ def test_project_orders_ranks_and_keeps_the_sum_near_them() -> None:
     ranks = out[2:7]
     assert ranks == sorted(ranks)
     assert ranks[0] >= 1 and ranks[-1] <= 50
-    assert all(ranks[i] <= ranks[i + 1] for i in range(4))
+    assert all(ranks[i] + 1 <= ranks[i + 1] + 1e-9 for i in range(4))
+    assert out[1] == 3
+    assert out[8] == 1
     assert abs(out[0] - sum(ranks)) <= 1.0
     assert out[9] <= out[10]
     assert 1 <= out[9] <= 11
