@@ -117,6 +117,12 @@ export type PulsePoint = {
   phase: number
 }
 
+export type PulseTrace = {
+  id: string
+  label: string
+  points: PulsePoint[]
+}
+
 export type PulseDetail = {
   ok: boolean
   error?: string
@@ -136,6 +142,21 @@ export function pulseDrawCount(hits: number | null | undefined) {
 export function pulsePercent(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "—"
   return `${Math.round(value * 100)} %`
+}
+
+export function pulsePLabel(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—"
+  return value < 0.001 ? "< 0,001" : value.toFixed(3)
+}
+
+/** Tranche la plus longue d’un numéro sur un échantillon : c’est l’ancre du groupe. */
+export function anchorSlice(number: PulseNumber, preset: string): PulseSlice | null {
+  const rows = number.slices.filter((slice) => String(slice.preset) === preset)
+  if (rows.length === 0) return null
+  return rows.reduce((best, row) => {
+    if (row.draws !== best.draws) return row.draws > best.draws ? row : best
+    return row.concordance > best.concordance ? row : best
+  })
 }
 
 export function pulseGeneratorLabel(generator: string | null | undefined) {
@@ -213,4 +234,49 @@ export async function fetchPulseDetail(input: {
     }
   }
   return body as PulseDetail
+}
+
+export async function fetchGroupWave(
+  group: PulseGroup,
+  numbers: readonly PulseNumber[],
+  families: readonly PulseFamily[],
+  weekday: WeekdayScope
+): Promise<{ series: PulseTrace[]; error: string | null }> {
+  if (families.length === 0) {
+    return { series: [], error: "Choisir au moins un générateur." }
+  }
+  if (group.members.length === 0) {
+    return { series: [], error: "Groupe sans membre." }
+  }
+  const loaded = await Promise.all(
+    group.members.map(async (member) => {
+      const label = pulseChannelLabel(member.kind, member.n)
+      const number = numbers.find((item) => item.kind === member.kind && item.n === member.n)
+      const slice = number ? anchorSlice(number, group.preset) : null
+      if (!slice) return { trace: null, error: `${label} : tranche absente` }
+      const payload = await fetchPulseDetail({
+        kind: member.kind,
+        n: member.n,
+        preset: String(slice.preset),
+        sliceId: slice.id,
+        families,
+        weekday,
+      })
+      if (!payload.ok || !payload.points?.length) {
+        return { trace: null, error: payload.error || `${label} : tracé impossible` }
+      }
+      const trace: PulseTrace = {
+        id: `${member.kind}-${member.n}`,
+        label,
+        points: payload.points,
+      }
+      return { trace, error: null }
+    })
+  )
+  const series = loaded.flatMap((item) => (item.trace ? [item.trace] : []))
+  const missing = loaded.flatMap((item) => (item.error ? [item.error] : []))
+  if (series.length === 0) {
+    return { series, error: missing[0] ?? "Tracé impossible" }
+  }
+  return { series, error: missing.length > 0 ? missing.join(" · ") : null }
 }

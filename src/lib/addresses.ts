@@ -209,12 +209,12 @@ const PULSE_TABS: { id: string; label: string; text: string }[] = [
   {
     id: "fiche",
     label: "Fiche",
-    text: "Tranches datées d’une boule ou d’une étoile, onde théorique et sorties.",
+    text: "Tranches datées d’une boule ou d’une étoile. L’onde est au-dessus d’un tableau triable : une ligne choisit la tranche tracée.",
   },
   {
     id: "groupes",
     label: "Groupes",
-    text: "Paires et triplets en rotation sur une période commune.",
+    text: "Paires et triplets en rotation. L’onde des membres est au-dessus d’un tableau triable, comme la fiche d’une boule.",
   },
 ]
 

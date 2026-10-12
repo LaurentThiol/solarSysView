@@ -117,11 +117,11 @@ export const PULSE_HELP = {
   },
   fiche: {
     title: "Fiche",
-    body: "Tranches datées du numéro choisi, puis l’onde théorique et les sorties de la tranche affichée.",
+    body: "Onde et sorties de la tranche choisie, au-dessus du tableau. Un clic sur un en-tête trie la colonne, un second clic inverse. Une ligne trace cette tranche.",
   },
   groupes: {
     title: "Groupes",
-    body: "Paires et triplets en rotation, au plus 24, du plus fort taux au plus faible. Boules avec boules, étoiles avec étoiles, et seulement dans un même échantillon. Il faut cocher la rotation voulue, puis relancer.",
+    body: "Paires et triplets en rotation, au plus 24, du plus fort taux au plus faible. L’onde des membres est au-dessus du tableau, comme la fiche d’une boule. Boules avec boules, étoiles avec étoiles, et seulement dans un même échantillon. Il faut cocher la rotation voulue, puis relancer.",
   },
   boules: {
     title: "Boules",
@@ -161,12 +161,12 @@ export const PULSE_HELP = {
   },
   tranches: {
     title: "Tranches",
-    body: "Découpage daté de l’échantillon. Une fenêtre courte reste d’un seul tenant. Les fenêtres longues sont recollées tant que la fondamentale tient et que la phase bouge de moins de 0,15 tour. Le bouton actif charge l’onde de cette tranche.",
+    body: "Découpage daté de l’échantillon, en tableau sous l’onde. Une fenêtre courte reste d’un seul tenant. Les fenêtres longues sont recollées tant que la fondamentale tient et que la phase bouge de moins de 0,15 tour. Un clic sur un en-tête trie la colonne. Une ligne charge l’onde de cette tranche.",
     wide: true,
   },
   onde: {
     title: "Onde et sorties",
-    body: "La tranche active, tirage par tirage. Le demi-cycle positif est la partie haute du trait : c’est elle que la concordance compte. Cycle simple : un cosinus. Double cycle : le produit des deux cosinus.",
+    body: "Tracé au-dessus du tableau. Sur une fiche, la tranche choisie. Sur un groupe, chaque membre a sa courbe et ses barres, sur la tranche la plus longue de l’échantillon. Le demi-cycle positif est la partie haute du trait : c’est elle que la concordance compte. Cycle simple : un cosinus. Double cycle : le produit des deux cosinus.",
     wide: true,
     items: [
       {

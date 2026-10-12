@@ -1,9 +1,10 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { PulseChart } from "@/components/pulse/pulse-chart"
+import { PulseGroupTable, PulseSliceTable } from "@/components/pulse/pulse-table"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,10 +17,12 @@ import {
   PULSE_FAMILY_LABELS,
   PULSE_PRESETS,
   PULSE_PRESET_LABELS,
+  fetchGroupWave,
   fetchPulseDetail,
   pulseChannelLabel,
   pulseGeneratorLabel,
   pulseDrawCount,
+  pulsePLabel,
   pulsePercent,
   scanPulse,
   type PulseDetail,
@@ -30,6 +33,7 @@ import {
   type PulsePreset,
   type PulseScan,
   type PulseSlice,
+  type PulseTrace,
 } from "@/lib/pulse"
 import { PULSE_HELP } from "@/lib/pulse-help"
 
@@ -111,75 +115,13 @@ function ChannelGrid({
   )
 }
 
-function SliceButton({
-  slice,
-  active,
-  onSelect,
-}: {
-  slice: PulseSlice
-  active: boolean
-  onSelect: () => void
-}) {
-  const preset = PULSE_PRESET_LABELS[slice.preset as PulsePreset] ?? slice.preset
-  const range =
-    slice.from && slice.to ? `${formatDrawDate(slice.from)} → ${formatDrawDate(slice.to)}` : "Dates absentes"
-  return (
-    <button
-      type="button"
-      className="rounded-lg border border-border px-3 py-2 text-left text-sm aria-pressed:bg-muted"
-      aria-pressed={active}
-      onClick={onSelect}
-    >
-      <span className="block font-medium">
-        {preset}
-        {slice.period ? ` · période ${slice.period}` : " · pas de période"}
-      </span>
-      <span className="block text-xs text-muted-foreground">
-        {range} · {pulseGeneratorLabel(slice.generator)} · {pulsePercent(slice.concordance)}
-      </span>
-    </button>
-  )
+function presetLabel(preset: string) {
+  return PULSE_PRESET_LABELS[preset as PulsePreset] ?? preset
 }
 
-function GroupCard({ group }: { group: PulseGroup }) {
-  const names = group.members
-    .map((member) => pulseChannelLabel(member.kind, member.n))
-    .join(", ")
-  const preset = PULSE_PRESET_LABELS[group.preset as PulsePreset] ?? group.preset
-  const rotation =
-    group.period2 && group.period2 !== group.period
-      ? `rotation ${group.period2}`
-      : `rotation sur ${group.period}`
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">
-          {pulseGeneratorLabel(group.generator)} · {names}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-1 text-sm text-muted-foreground">
-        <p>
-          {preset} · période {group.period} · {rotation}
-        </p>
-        <p>
-          Concordance {pulsePercent(group.concordance)}
-          {group.p != null ? ` · p ${group.p < 0.001 ? "< 0,001" : group.p.toFixed(3)}` : ""}
-          {pulseDrawCount(group.hits) ? ` · ${pulseDrawCount(group.hits)}` : ""}
-        </p>
-        {group.from && group.to ? (
-          <p>
-            {formatDrawDate(group.from)} → {formatDrawDate(group.to)}
-          </p>
-        ) : null}
-        <p>
-          Phases{" "}
-          {group.members
-            .map((member) => (member.phase == null ? "—" : member.phase.toFixed(2)))
-            .join(" · ")}
-        </p>
-      </CardContent>
-    </Card>
-  )
+function rotationLabel(group: PulseGroup) {
+  if (group.period2 && group.period2 !== group.period) return `rotation ${group.period2}`
+  return `rotation sur ${group.period}`
 }
 
 export function PulseLab() {
@@ -197,20 +139,66 @@ export function PulseLab() {
   const [sliceId, setSliceId] = useState<string | null>(null)
   const [detail, setDetail] = useState<PulseDetail | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
+  const [groupId, setGroupId] = useState<string | null>(null)
+  const [groupSeries, setGroupSeries] = useState<PulseTrace[]>([])
+  const [groupError, setGroupError] = useState<string | null>(null)
   const detailToken = useRef(0)
 
-  const numbers = scan?.numbers ?? []
+  const numbers = useMemo(() => scan?.numbers ?? [], [scan])
+  const groups = useMemo(() => scan?.groups ?? [], [scan])
   const selected = useMemo(
     () => numbers.find((item) => `${item.kind}-${item.n}` === selectedKey) ?? null,
     [numbers, selectedKey]
   )
   const activeSlice =
     selected?.slices.find((item) => item.id === sliceId) ?? selected?.slices[0] ?? null
+  const selectedGroup = useMemo(
+    () => groups.find((item) => item.id === groupId) ?? groups[0] ?? null,
+    [groupId, groups]
+  )
+  const tracedFamilies = useMemo(() => {
+    const picked = (scan?.families ?? []).filter((name): name is PulseFamily =>
+      (PULSE_FAMILIES as readonly string[]).includes(name)
+    )
+    return picked.length > 0 ? picked : families
+  }, [families, scan])
+  const waveKey =
+    tab === "groupes" && selectedGroup && scan?.ok
+      ? `${selectedGroup.id}\n${tracedFamilies.join(",")}\n${weekday}`
+      : ""
+  const [seenWaveKey, setSeenWaveKey] = useState(waveKey)
+  if (waveKey !== seenWaveKey) {
+    setSeenWaveKey(waveKey)
+    setGroupSeries([])
+    setGroupError(null)
+  }
+
+  useEffect(() => {
+    if (!waveKey || !selectedGroup || !scan?.ok) return
+    let cancelled = false
+    void fetchGroupWave(selectedGroup, scan.numbers ?? [], tracedFamilies, weekday)
+      .then((result) => {
+        if (cancelled) return
+        setGroupSeries(result.series)
+        setGroupError(result.error)
+      })
+      .catch((cause: unknown) => {
+        if (cancelled) return
+        setGroupSeries([])
+        setGroupError(cause instanceof Error ? cause.message : "Tracé impossible")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [scan, selectedGroup, tracedFamilies, waveKey, weekday])
 
   async function run() {
     setLoading(true)
     setError(null)
     setDetail(null)
+    setGroupId(null)
+    setGroupSeries([])
+    setGroupError(null)
     try {
       const payload = await scanPulse({ presets, families, weekday })
       if (!payload.ok) {
@@ -272,6 +260,13 @@ export function PulseLab() {
       return
     }
     void openSlice(item, slice)
+  }
+
+  function chooseGroup(group: PulseGroup) {
+    if (group.id === selectedGroup?.id) return
+    setGroupId(group.id)
+    setGroupSeries([])
+    setGroupError(null)
   }
 
   const ready = families.length > 0 && presets.length > 0 && !loading
@@ -411,10 +406,7 @@ export function PulseLab() {
                       help={PULSE_HELP.concordance}
                     />
                     <Metric label={`R ${selected.r.toFixed(2)}`} help={PULSE_HELP.rayon} />
-                    <Metric
-                      label={`p ${selected.p < 0.001 ? "< 0,001" : selected.p.toFixed(3)}`}
-                      help={PULSE_HELP.p}
-                    />
+                    <Metric label={`p ${pulsePLabel(selected.p)}`} help={PULSE_HELP.p} />
                   </p>
                   {selected.group_ids.length > 0 ? (
                     <p className="text-sm text-muted-foreground">
@@ -425,58 +417,47 @@ export function PulseLab() {
                     </p>
                   ) : null}
                 </div>
-                <div className="flex flex-col gap-2">
-                  <h3 className="text-sm font-medium">
-                    <TitleHelp help={PULSE_HELP.tranches}>Tranches</TitleHelp>
-                  </h3>
-                  {selected.slices.map((slice) => (
-                    <SliceButton
-                      key={slice.id}
-                      slice={slice}
-                      active={activeSlice?.id === slice.id}
-                      onSelect={() => void openSlice(selected, slice)}
-                    />
-                  ))}
-                </div>
-                {detailError ? <p className="text-sm text-destructive">{detailError}</p> : null}
-                {detail?.points && detail.points.length > 0 ? (
+                {activeSlice ? (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-sm">
                         <TitleHelp help={PULSE_HELP.onde}>
                           Onde et sorties
-                          {detail.slice?.period ? ` · période ${detail.slice.period}` : ""}
-                          {detail.slice ? ` · ${pulsePercent(detail.slice.concordance)}` : ""}
+                          {activeSlice.period ? ` · période ${activeSlice.period}` : ""}
+                          {` · ${pulsePercent(activeSlice.concordance)}`}
                         </TitleHelp>
                       </CardTitle>
-                      {detail.slice ? (
-                        <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <Metric
+                          label={pulseGeneratorLabel(activeSlice.generator)}
+                          help={PULSE_HELP.generateur}
+                        />
+                        <Metric label={`R ${activeSlice.r.toFixed(2)}`} help={PULSE_HELP.rayon} />
+                        <Metric label={`p ${pulsePLabel(activeSlice.p)}`} help={PULSE_HELP.p} />
+                        {pulseDrawCount(activeSlice.hits) ? (
                           <Metric
-                            label={pulseGeneratorLabel(detail.slice.generator)}
-                            help={PULSE_HELP.generateur}
+                            label={pulseDrawCount(activeSlice.hits) ?? ""}
+                            help={PULSE_HELP.sorties}
                           />
-                          <Metric
-                            label={`R ${detail.slice.r.toFixed(2)}`}
-                            help={PULSE_HELP.rayon}
-                          />
-                          <Metric
-                            label={`p ${detail.slice.p < 0.001 ? "< 0,001" : detail.slice.p.toFixed(3)}`}
-                            help={PULSE_HELP.p}
-                          />
-                          {pulseDrawCount(detail.slice.hits) ? (
-                            <Metric
-                              label={pulseDrawCount(detail.slice.hits) ?? ""}
-                              help={PULSE_HELP.sorties}
-                            />
-                          ) : null}
-                        </p>
-                      ) : null}
+                        ) : null}
+                      </p>
                     </CardHeader>
-                    <CardContent>
-                      <PulseChart points={detail.points} />
+                    <CardContent className="space-y-2">
+                      {detailError ? <p className="text-sm text-destructive">{detailError}</p> : null}
+                      {detail?.points && detail.points.length > 0 ? (
+                        <PulseChart points={detail.points} />
+                      ) : detailError ? null : (
+                        <p className="text-sm text-muted-foreground">Tracé…</p>
+                      )}
                     </CardContent>
                   </Card>
                 ) : null}
+                <PulseSliceTable
+                  slices={selected.slices}
+                  activeId={activeSlice?.id ?? null}
+                  help={PULSE_HELP.tranches}
+                  onSelect={(slice) => void openSlice(selected, slice)}
+                />
               </div>
             ) : null}
             {tab === "fiche" && !selected ? (
@@ -485,25 +466,93 @@ export function PulseLab() {
               </p>
             ) : null}
             {tab === "groupes" ? (
-              <div className="space-y-3">
-                <p className="text-xs leading-5 text-muted-foreground">
-                  <Metric label="Période" help={PULSE_HELP.periode} /> commune,{" "}
-                  <Metric label="rotation" help={PULSE_HELP.rotation} /> si elle gagne sur ce cycle,{" "}
-                  <Metric label="concordance" help={PULSE_HELP.concordance} /> du groupe,{" "}
-                  <Metric label="p" help={PULSE_HELP.p} /> la moins petite,{" "}
-                  <Metric label="sorties" help={PULSE_HELP.sorties} /> au plus petit effectif,{" "}
-                  <Metric label="phases" help={PULSE_HELP.phases} /> dans l’ordre du tour.
+              groups.length === 0 || !selectedGroup ? (
+                <p className="text-sm text-muted-foreground">
+                  Aucune paire ni triplet pour les générateurs cochés.
                 </p>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {(scan.groups ?? []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Aucune paire ni triplet pour les générateurs cochés.
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-base font-medium">
+                      {pulseGeneratorLabel(selectedGroup.generator)} ·{" "}
+                      {selectedGroup.members
+                        .map((member) => pulseChannelLabel(member.kind, member.n))
+                        .join(" · ")}
+                    </h2>
+                    <p className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                      <span>{presetLabel(selectedGroup.preset)}</span>
+                      <Metric
+                        label={`période ${selectedGroup.period}`}
+                        help={PULSE_HELP.periode}
+                      />
+                      <Metric label={rotationLabel(selectedGroup)} help={PULSE_HELP.rotation} />
+                      <Metric
+                        label={`concordance ${pulsePercent(selectedGroup.concordance)}`}
+                        help={PULSE_HELP.concordance}
+                      />
+                      {selectedGroup.p != null ? (
+                        <Metric label={`p ${pulsePLabel(selectedGroup.p)}`} help={PULSE_HELP.p} />
+                      ) : null}
+                      {pulseDrawCount(selectedGroup.hits) ? (
+                        <Metric
+                          label={pulseDrawCount(selectedGroup.hits) ?? ""}
+                          help={PULSE_HELP.sorties}
+                        />
+                      ) : null}
                     </p>
-                  ) : (
-                    (scan.groups ?? []).map((group) => <GroupCard key={group.id} group={group} />)
-                  )}
+                    {selectedGroup.from && selectedGroup.to ? (
+                      <p className="text-sm text-muted-foreground">
+                        {formatDrawDate(selectedGroup.from)} → {formatDrawDate(selectedGroup.to)}
+                      </p>
+                    ) : null}
+                    <p className="text-sm text-muted-foreground">
+                      <Metric
+                        label={`Phases ${selectedGroup.members
+                          .map((member) => (member.phase == null ? "—" : member.phase.toFixed(2)))
+                          .join(" · ")}`}
+                        help={PULSE_HELP.phases}
+                      />
+                    </p>
+                  </div>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">
+                        <TitleHelp help={PULSE_HELP.onde}>
+                          Onde et sorties · période {selectedGroup.period} ·{" "}
+                          {pulsePercent(selectedGroup.concordance)}
+                        </TitleHelp>
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        Chaque courbe est l’onde d’un membre, chaque barre une sortie, sur la tranche la
+                        plus longue de l’échantillon.
+                      </p>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {groupSeries.length > 0 ? <PulseChart series={groupSeries} /> : null}
+                      {groupError ? (
+                        <p
+                          className={
+                            groupSeries.length > 0
+                              ? "text-sm text-muted-foreground"
+                              : "text-sm text-destructive"
+                          }
+                        >
+                          {groupError}
+                        </p>
+                      ) : null}
+                      {groupSeries.length === 0 && !groupError ? (
+                        <p className="text-sm text-muted-foreground">Tracé…</p>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                  <PulseGroupTable
+                    groups={groups}
+                    activeId={selectedGroup.id}
+                    help={PULSE_HELP.groupes}
+                    onSelect={chooseGroup}
+                  />
                 </div>
-              </div>
+              )
             ) : null}
           </PillTabPanel>
         </>
