@@ -354,6 +354,7 @@ def score_grid(
     draws = max(int(base.get("draw_count") or 0), 1)
     number_counts = base.get("number_counts") or {}
     star_counts = base.get("star_counts") or {}
+    star_draw_counts = base.get("star_draw_counts") or {}
     pair_counts = base.get("pair_counts") or {}
     triple_counts = base.get("triple_counts") or {}
 
@@ -364,7 +365,8 @@ def score_grid(
     if stars:
         star_log = 0.0
         for star in stars:
-            star_log += log_ball(float(star_counts.get(star, 0)), draws, slots=2, pool=pool)
+            eligible = max(int(star_draw_counts.get(star, draws)), 1)
+            star_log += log_ball(float(star_counts.get(star, 0)), eligible, slots=2, pool=pool)
         frequency += star_log / len(stars)
 
     couple_log = 0.0

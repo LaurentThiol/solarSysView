@@ -107,12 +107,44 @@ def hits_law(count: int, slots: int, pool: int) -> tuple[float, ...]:
     parmi `pool` en partagent k avec la probabilité C(s, k) C(P − s, s − k) / C(P, s).
     Les tirages sont indépendants : la loi du total est la convolée des `count` lois.
     """
-    one = np.array([math.comb(slots, k) * math.comb(pool - slots, slots - k) for k in range(slots + 1)], dtype=float)
-    one /= math.comb(pool, slots)
+    one = _one_hit_law(int(slots), int(pool))
     law = np.ones(1)
     for _ in range(count):
         law = np.convolve(law, one)
     return tuple(float(mass) for mass in law)
+
+
+def _one_hit_law(slots: int, pool: int) -> np.ndarray:
+    one = np.array(
+        [math.comb(slots, k) * math.comb(pool - slots, slots - k) for k in range(slots + 1)],
+        dtype=float,
+    )
+    return one / math.comb(pool, slots)
+
+
+@lru_cache(maxsize=32)
+def hits_law_mixed(pools: tuple[int, ...], slots: int) -> tuple[float, ...]:
+    """Loi des communs quand la taille de l’urne peut changer entre les tirages."""
+    law = np.ones(1)
+    for pool in pools:
+        law = np.convolve(law, _one_hit_law(int(slots), int(pool)))
+    return tuple(float(mass) for mass in law)
+
+
+def _chance_report(seen: list[int], law: tuple[float, ...], expected: float) -> dict[str, Any]:
+    count = len(seen)
+    cumulative = list(accumulate(law))
+    lo = next(total for total, mass in enumerate(cumulative) if mass >= TAIL - 1e-12)
+    hi = next(total for total, mass in enumerate(cumulative) if mass >= 1.0 - TAIL - 1e-12)
+    observed = sum(seen)
+    return {
+        "observed": _round(observed / count),
+        "expected": _round(expected),
+        "lo": _round(lo / count),
+        "hi": _round(hi / count),
+        "p": _round(min(1.0, math.fsum(law[observed:]))),
+        "count": count,
+    }
 
 
 def chance_hits(hits: Iterable[int], *, slots: int, pool: int) -> dict[str, Any] | None:
@@ -127,18 +159,25 @@ def chance_hits(hits: Iterable[int], *, slots: int, pool: int) -> dict[str, Any]
         return None
     count = len(seen)
     law = hits_law(count, int(slots), int(pool))
-    cumulative = list(accumulate(law))
-    lo = next(total for total, mass in enumerate(cumulative) if mass >= TAIL - 1e-12)
-    hi = next(total for total, mass in enumerate(cumulative) if mass >= 1.0 - TAIL - 1e-12)
-    observed = sum(seen)
-    return {
-        "observed": _round(observed / count),
-        "expected": _round(slots * slots / pool),
-        "lo": _round(lo / count),
-        "hi": _round(hi / count),
-        "p": _round(min(1.0, math.fsum(law[observed:]))),
-        "count": count,
-    }
+    return _chance_report(seen, law, slots * slots / pool)
+
+
+def chance_hits_mixed(
+    hits: Iterable[int],
+    *,
+    slots: int,
+    pools: Iterable[int],
+) -> dict[str, Any] | None:
+    """Même rapport, avec la loi exacte de chaque urne dans l’ordre des tirages."""
+    seen = [int(value) for value in hits]
+    if not seen:
+        return None
+    pool_list = [int(pool) for pool in pools]
+    if len(pool_list) != len(seen):
+        raise ValueError("Un nombre de boules communes et une urne sont attendus par tirage.")
+    law = hits_law_mixed(tuple(pool_list), int(slots))
+    expected = math.fsum(slots * slots / pool for pool in pool_list) / len(pool_list)
+    return _chance_report(seen, law, expected)
 
 
 def share_interval(successes: int, count: int) -> tuple[float | None, float | None]:

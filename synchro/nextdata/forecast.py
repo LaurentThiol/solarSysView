@@ -270,6 +270,7 @@ def run_forecast(
     settings = StepSettings(focus=frame.focus, families=tuple(families), estimators=int(estimators))
     parts = parts_needed(with_chronos)
     n = len(frame.rows)
+    target_pool = star_pool_of(frame.horizon[0] if frame.horizon else None, frame.star_pool)
     order = [n, *reversed(backtest.retour_indices(frame))]
     ready, remaining = ensure_steps(frame, order, settings, parts, limit=chunk or worker_count())
     steps = backtest.assemble(frame, ready, with_chronos=with_chronos)
@@ -281,17 +282,17 @@ def run_forecast(
 
     history = [steps[t] for t in sorted(steps) if frame.focus_start <= t < n]
     walked = backtest.retour_report(history, frame=frame, persist=persist)
-    walked["bands"] = backtest.band_report(history, frame.star_pool)
+    walked["bands"] = backtest.band_report(history, target_pool)
     modes: dict[str, Any] = {}
     views: dict[str, dict[str, dict[str, float]]] = {}
     grids: dict[str, dict[str, Any]] = {}
     for mode in ("corpus", "fenetre"):
-        block, views[mode] = _reading_block(upcoming, mode, history, walked, frame.star_pool)
+        block, views[mode] = _reading_block(upcoming, mode, history, walked, target_pool)
         block["persist"] = _persist_grid(block["grid"], frame, persist)
         grids[mode] = block["grid"]
         cat_key = f"{mode}_catboost"
         if cat_key in upcoming["readings"]:
-            block["catboost"], views[cat_key] = _reading_block(upcoming, cat_key, history, walked, frame.star_pool)
+            block["catboost"], views[cat_key] = _reading_block(upcoming, cat_key, history, walked, target_pool)
             block["catboost"]["persist"] = _persist_grid(block["catboost"]["grid"], frame, persist)
             grids[cat_key] = block["catboost"]["grid"]
         modes[mode] = block
@@ -300,7 +301,7 @@ def run_forecast(
     if catboost_error is None and not any(key.endswith("_catboost") for key in upcoming["readings"]):
         catboost_error = backtest.model_error(ready[n]["parts"], "corpus", "catboost")
     chronos_used = any((modes[mode].get("chronos") or {}).get("available") for mode in modes)
-    base = recount(frame.rows[frame.focus_start :], star_pool=frame.star_pool)
+    base = recount(frame.rows[frame.focus_start :], star_pool=target_pool)
     return {
         "ok": True,
         "focus": frame.focus,
@@ -312,7 +313,7 @@ def run_forecast(
         "covariates": families,
         "pulse": public_pulse(frame.horizon[0]),
         "next_date": frame.next_date,
-        "star_pool": frame.star_pool,
+        "star_pool": target_pool,
         "anchor_year": frame.anchor_year,
         "engine": modes[mode_primary]["engine"],
         "estimators": settings.estimators,

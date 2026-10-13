@@ -127,6 +127,22 @@ def test_star_pool_follows_the_draw_date_when_it_is_missing() -> None:
     assert build_frame(old, focus=24).star_pool == 11
 
 
+def test_star_frequencies_only_count_draws_where_the_star_existed() -> None:
+    rows = [
+        {"numbers": [1, 2, 3, 4, 5], "stars": [1, 2], "star_pool": 11},
+        {"numbers": [6, 7, 8, 9, 10], "stars": [1, 2], "star_pool": 11},
+        {"numbers": [11, 12, 13, 14, 15], "stars": [1, 12], "star_pool": 12},
+        {"numbers": [16, 17, 18, 19, 20], "stars": [1, 12], "star_pool": 12},
+    ]
+
+    base = recount(rows, star_pool=12)
+    stars = {item["n"]: item for item in base["stars"]}
+
+    assert base["star_draw_counts"][1] == 4
+    assert base["star_draw_counts"][12] == 2
+    assert stars[1]["share"] == stars[12]["share"] == 0.5
+
+
 def test_window_loss_ignores_the_three_year_prefix() -> None:
     lags, past = lag_choice(160)
     assert (lags, past) == (16, 8)
@@ -879,6 +895,24 @@ def _offline(monkeypatch, moments=_fake_moments, calls: list | None = None, chro
     monkeypatch.setattr("synchro.nextdata.models.predict_moments", fake)
     monkeypatch.setattr("synchro.nextdata.steps.catboost_import_error", lambda: None)
     monkeypatch.setattr("synchro.nextdata.steps._installed", lambda module: chronos and module == "chronos")
+
+
+def test_forecast_reports_the_upcoming_star_pool_at_a_format_change(monkeypatch) -> None:
+    draws = [
+        {**{key: value for key, value in draw.items() if key != "star_pool"}, "stars": [1, 11]}
+        for draw in _draws(33, start=date(2016, 6, 3), seed=2)
+    ]
+    frame = build_frame(draws, focus=24)
+    assert frame.rows[-1]["date"] == "2016-09-23"
+    assert frame.star_pool == 11
+    assert frame.horizon[0]["star_pool"] == 12
+    _offline(monkeypatch)
+
+    report = run_forecast(draws, focus=24, covariates=["forme"], estimators=2, chunk=1)
+
+    assert report["ok"] is True
+    assert report["star_pool"] == 12
+    assert report["base"]["star_pool"] == 12
 
 
 def test_shift_chronos_is_weighted_on_the_ten_draws_before(monkeypatch) -> None:

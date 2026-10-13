@@ -36,6 +36,7 @@ def recount(rows: list[dict[str, Any]], *, star_pool: int = 12) -> dict[str, Any
     pool = max(2, min(12, int(star_pool)))
     number_counts: Counter[int] = Counter()
     star_counts: Counter[int] = Counter()
+    star_draw_counts: Counter[int] = Counter()
     pair_counts: Counter[tuple[int, int]] = Counter()
     triple_counts: Counter[tuple[int, int, int]] = Counter()
     pair_affinity: dict[tuple[int, int], float] = {}
@@ -46,8 +47,13 @@ def recount(rows: list[dict[str, Any]], *, star_pool: int = 12) -> dict[str, Any
         weight = _affinity(index, n) if n else 1.0
         nums = [int(v) for v in row["numbers"]]
         stars = [int(v) for v in row["stars"]]
+        try:
+            row_pool = max(2, min(pool, int(row.get("star_pool") or pool)))
+        except (TypeError, ValueError):
+            row_pool = pool
         number_counts.update(nums)
         star_counts.update(stars)
+        star_draw_counts.update(range(1, row_pool + 1))
         for pair in _pairs(nums):
             pair_counts[pair] += 1
             pair_affinity[pair] = pair_affinity.get(pair, 0.0) + weight
@@ -57,10 +63,10 @@ def recount(rows: list[dict[str, Any]], *, star_pool: int = 12) -> dict[str, Any
             triple_affinity[triple] = triple_affinity.get(triple, 0.0) + weight
             triple_last[triple] = index
 
-    def share(count: int, slots: int) -> float:
-        if n <= 0:
+    def share(count: int, slots: int, draws: int = n) -> float:
+        if draws <= 0:
             return 0.0
-        return count / (slots * n)
+        return count / (slots * draws)
 
     numbers = [
         {
@@ -74,7 +80,7 @@ def recount(rows: list[dict[str, Any]], *, star_pool: int = 12) -> dict[str, Any
         {
             "n": ball,
             "count": int(star_counts[ball]),
-            "share": share(int(star_counts[ball]), 2),
+            "share": share(int(star_counts[ball]), 2, int(star_draw_counts[ball])),
         }
         for ball in range(1, pool + 1)
     ]
@@ -112,6 +118,7 @@ def recount(rows: list[dict[str, Any]], *, star_pool: int = 12) -> dict[str, Any
         "triples": link_rows(triple_counts, triple_affinity, triple_last, 3),
         "number_counts": {ball: int(number_counts[ball]) for ball in range(1, NUMBER_POOL + 1)},
         "star_counts": {ball: int(star_counts[ball]) for ball in range(1, pool + 1)},
+        "star_draw_counts": {ball: int(star_draw_counts[ball]) for ball in range(1, pool + 1)},
         "pair_counts": {pair: int(count) for pair, count in pair_counts.items()},
         "triple_counts": {triple: int(count) for triple, count in triple_counts.items()},
     }

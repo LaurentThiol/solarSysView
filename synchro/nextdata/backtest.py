@@ -24,7 +24,7 @@ from synchro.nextdata.panel import Frame
 from synchro.nextdata.persist import NUMBER_POOL, NUMBER_SLOTS, STAR_SLOTS, score_swaps, snap_grid
 from synchro.nextdata.project import beam, compose_ranks, stamp_grid
 from synchro.nextdata.steps import MIN_HISTORY
-from synchro.nextdata.uncertainty import chance_hits, mean_interval, versus_all
+from synchro.nextdata.uncertainty import chance_hits, chance_hits_mixed, mean_interval, versus_all
 
 FIELDS = ("sum", "n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2", *SHAPE_SERIES)
 MODES = ("corpus", "fenetre")
@@ -220,6 +220,7 @@ def _assemble(
     out: dict[str, Any] = {
         "t": t,
         "date": rows[t]["date"] if t < len(rows) else frame.next_date,
+        "star_pool": pool,
         "persistence": _actual(last),
         "mean": {"sum": sum(float(row["sum"]) for row in rows[:t]) / t},
         "readings": {},
@@ -319,7 +320,11 @@ def band_report(steps: list[dict[str, Any]], star_pool: int) -> dict[str, Any]:
     """Couverture des bandes sur le retour, brute puis calibrée sur les seuls pas d’avant."""
     out: dict[str, Any] = {}
     for key, _mode, _library in READINGS:
-        pairs = [(step["readings"][key]["view"], step["truth"]) for step in steps if key in step["readings"] and step.get("truth")]
+        pairs = [
+            (step["readings"][key]["view"], step["truth"], int(step.get("star_pool") or star_pool))
+            for step in steps
+            if key in step["readings"] and step.get("truth")
+        ]
         if pairs:
             out[key] = coverage(pairs, star_pool)
     return out
@@ -344,6 +349,7 @@ def retour_report(
             continue
         item: dict[str, Any] = {
             "date": step["date"],
+            "star_pool": int(step.get("star_pool") or star_pool),
             "actual": step["actual"],
             "persistence": step["persistence"],
             "mean": step["mean"],
@@ -406,10 +412,10 @@ def _rivals(keys: Iterable[str]) -> list[str]:
     return [key for key in keys if not key.endswith("_persist")]
 
 
-def _chance(number_hits: list[int], star_hits: list[int], star_pool: int) -> dict[str, Any]:
+def _chance(number_hits: list[int], star_hits: list[int], star_pools: list[int]) -> dict[str, Any]:
     return {
         "numbers": chance_hits(number_hits, slots=NUMBER_SLOTS, pool=NUMBER_POOL),
-        "stars": chance_hits(star_hits, slots=STAR_SLOTS, pool=star_pool),
+        "stars": chance_hits_mixed(star_hits, slots=STAR_SLOTS, pools=star_pools),
     }
 
 
@@ -422,19 +428,21 @@ def _metrics(steps: list[dict[str, Any]], mode: str, star_pool: int = 12) -> dic
         rmse[field] = _rmse(errs)
     number_hits = []
     star_hits = []
+    star_pools = []
     for step in steps:
         side = step.get(mode) or {}
         if not side.get("numbers"):
             continue
         number_hits.append(_hits(side["numbers"], step["actual"]["numbers"]))
         star_hits.append(_hits(side["stars"], step["actual"]["stars"]))
+        star_pools.append(int(step.get("star_pool") or star_pool))
     return {
         "mae": mae,
         "rmse": rmse,
         "mae_sum_ci": mean_interval((abs(err) for err in _errors(steps, mode, "sum")), floor=0.0),
         "hits_numbers": _mae([float(v) for v in number_hits]) if number_hits else None,
         "hits_stars": _mae([float(v) for v in star_hits]) if star_hits else None,
-        "hits_chance": _chance(number_hits, star_hits, star_pool),
+        "hits_chance": _chance(number_hits, star_hits, star_pools),
     }
 
 
@@ -548,7 +556,7 @@ def shift_report(
             "mean": _shift_side({"sum": step["mean"]["sum"]}, actual, None),
         }
         for key, reading in step["readings"].items():
-            view, info = calibrated_view(step, key, history, frame.star_pool)
+            view, info = calibrated_view(step, key, history, int(step.get("star_pool") or frame.star_pool))
             side = _shift_side(reading["packed"], actual, view)
             side["in_band_raw"] = {field: _covers(actual.get(field), reading["view"].get(field)) for field in SHIFT_FIELDS}
             side["calibrated"] = info["calibrated"]
@@ -570,6 +578,7 @@ def shift_report(
                 "x": int(lag),
                 "label": f"−{int(lag)}",
                 "date": step["date"],
+                "star_pool": int(step.get("star_pool") or frame.star_pool),
                 "actual": _public_numbers(actual),
                 "pulse": public_pulse(rows[t]),
                 "readings": readings,
@@ -642,6 +651,11 @@ def _shift_summary(shifts: list[dict[str, Any]], star_pool: int = 12) -> dict[st
         sum_errors = [value for value in sums[key] if value is not None]
         number_hits = [int(side["hits_numbers"]) for side in sides if side.get("hits_numbers") is not None]
         star_hits = [int(side["hits_stars"]) for side in sides if side.get("hits_stars") is not None]
+        star_pools = [
+            int(shift.get("star_pool") or star_pool)
+            for shift in shifts
+            if key in shift["readings"] and shift["readings"][key].get("hits_stars") is not None
+        ]
         summary[key] = {
             "mae_sum": None if not sum_errors else round(sum(abs(value) for value in sum_errors) / len(sum_errors), 4),
             "mae_sum_ci": mean_interval((abs(value) for value in sum_errors), floor=0.0),
@@ -649,7 +663,7 @@ def _shift_summary(shifts: list[dict[str, Any]], star_pool: int = 12) -> dict[st
             if not number_hits
             else round(sum(float(value) for value in number_hits) / len(number_hits), 4),
             "hits_stars": None if not star_hits else round(sum(float(value) for value in star_hits) / len(star_hits), 4),
-            "hits_chance": _chance(number_hits, star_hits, star_pool),
+            "hits_chance": _chance(number_hits, star_hits, star_pools),
             "versus": versus[key],
             "count": len(sum_errors),
         }

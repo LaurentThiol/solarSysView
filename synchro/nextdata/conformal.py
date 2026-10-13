@@ -121,7 +121,7 @@ def _share(hits: list[bool], name: str) -> dict[str, Any]:
 
 
 def coverage(
-    pairs: list[tuple[dict[str, dict[str, float]], dict[str, float]]],
+    pairs: list[tuple[dict[str, dict[str, float]], dict[str, float]] | tuple[dict[str, dict[str, float]], dict[str, float], int]],
     star_pool: int = 12,
 ) -> dict[str, dict[str, Any]]:
     """Part des tirages dans la bande, brute puis calibrée sur les seuls pas d’avant.
@@ -134,7 +134,9 @@ def coverage(
     above: dict[str, list[float]] = {field: [] for field in FIELDS}
     raw: dict[str, list[bool]] = {field: [] for field in FIELDS}
     held: dict[str, list[bool]] = {field: [] for field in FIELDS}
-    for view, actual in pairs:
+    for pair in pairs:
+        view, actual = pair[:2]
+        target_pool = int(pair[2]) if len(pair) > 2 else star_pool
         for field in FIELDS:
             band = view.get(field)
             value = actual.get(field)
@@ -143,7 +145,7 @@ def coverage(
             raw[field].append(float(band["lo"]) <= value <= float(band["hi"]))
             rank = _rank(len(below[field]))
             if rank is not None:
-                moved = _moved(band, below[field][rank - 1], above[field][rank - 1], field, star_pool)
+                moved = _moved(band, below[field][rank - 1], above[field][rank - 1], field, target_pool)
                 held[field].append(moved["lo"] <= value <= moved["hi"])
             insort(below[field], float(band["lo"]) - value)
             insort(above[field], value - float(band["hi"]))

@@ -11,7 +11,9 @@ from scipy import stats
 from synchro.analysis.inference import wilson_interval
 from synchro.nextdata.uncertainty import (
     chance_hits,
+    chance_hits_mixed,
     hits_law,
+    hits_law_mixed,
     mean_interval,
     paired_gap,
     share_interval,
@@ -148,6 +150,20 @@ def test_chance_hits_gives_the_95_range_and_the_odds_of_doing_as_well() -> None:
     stars = chance_hits([0, 1] * 25, slots=2, pool=12)
     assert stars["expected"] == 0.3333
     assert stars["lo"] < 1 / 3 < stars["hi"]
+
+
+def test_star_hit_law_uses_each_historical_pool() -> None:
+    pools = (11, 12)
+    law = hits_law_mixed(pools, 2)
+    expected = ((4 / 11) + (4 / 12)) / 2
+
+    assert sum(law) == pytest.approx(1.0)
+    assert sum(total * mass for total, mass in enumerate(law)) / len(pools) == pytest.approx(expected)
+    report = chance_hits_mixed([0, 1], slots=2, pools=pools)
+    assert report is not None
+    assert report["expected"] == pytest.approx(round(expected, 4))
+    with pytest.raises(ValueError):
+        chance_hits_mixed([0, 1], slots=2, pools=[12])
 
 
 def test_share_interval_is_the_wilson_interval() -> None:
