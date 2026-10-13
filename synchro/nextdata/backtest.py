@@ -17,12 +17,13 @@ from typing import Any, Iterable
 from synchro.nextdata.conformal import calibrate, coverage, truth_of
 from synchro.nextdata.covariates import SHAPE_SERIES, grid_shape
 from synchro.nextdata.empirical import recount
-from synchro.nextdata.forecast import _apply_external, _clip, _rank_view, blend_mid, blend_weight, star_pool_of
+from synchro.nextdata.forecast import _apply_external, _rank_view, blend_mid, blend_weight
+from synchro.nextdata.models import CHRONOS_SERIES, _clip, star_pool_of
 from synchro.nextdata.pulse_features import public_pulse
 from synchro.nextdata.panel import Frame
 from synchro.nextdata.persist import NUMBER_POOL, NUMBER_SLOTS, STAR_SLOTS, score_swaps, snap_grid
 from synchro.nextdata.project import beam, compose_ranks, stamp_grid
-from synchro.nextdata.steps import CHRONOS_SERIES, MIN_HISTORY
+from synchro.nextdata.steps import MIN_HISTORY
 from synchro.nextdata.uncertainty import chance_hits, mean_interval, versus_all
 
 FIELDS = ("sum", "n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2", *SHAPE_SERIES)

@@ -217,7 +217,7 @@ def _fake_moments(rows, horizon, **kwargs):
 def _offline(monkeypatch) -> None:
     """LightGBM et CatBoost remplacés : les pas se calculent sans bibliothèque."""
     monkeypatch.setattr("synchro.nextdata.forecast.lightgbm_import_error", lambda: None)
-    monkeypatch.setattr("synchro.nextdata.steps.predict_moments", _fake_moments)
+    monkeypatch.setattr("synchro.nextdata.models.predict_moments", _fake_moments)
     monkeypatch.setattr("synchro.nextdata.steps.catboost_import_error", lambda: None)
     monkeypatch.setattr("synchro.nextdata.steps._installed", lambda module: False)
 

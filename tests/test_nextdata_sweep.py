@@ -80,7 +80,7 @@ def _offline(monkeypatch, calls: list | None = None) -> None:
         return _fake_moments(rows, horizon, **kwargs)
 
     monkeypatch.setattr("synchro.nextdata.forecast.lightgbm_import_error", lambda: None)
-    monkeypatch.setattr("synchro.nextdata.steps.predict_moments", fake)
+    monkeypatch.setattr("synchro.nextdata.models.predict_moments", fake)
     monkeypatch.setattr("synchro.nextdata.steps.catboost_import_error", lambda: None)
     monkeypatch.setattr("synchro.nextdata.steps._installed", lambda _module: False)
 

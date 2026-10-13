@@ -8,7 +8,8 @@ import numpy as np
 import pytest
 
 from synchro.nextdata.covariates import FUTURE_PULSE, future_columns
-from synchro.nextdata.forecast import darts_covariate_rows, lag_choice, run_forecast, vector_at
+from synchro.nextdata.forecast import run_forecast
+from synchro.nextdata.models import darts_covariate_rows, lag_choice, vector_at
 from synchro.nextdata.panel import build_frame
 from synchro.nextdata.pulse_features import causal_pulse
 from synchro.pulse.model import principal_fit
@@ -144,7 +145,8 @@ def test_darts_reads_pulse_one_step_back_and_keeps_it_out_of_the_future() -> Non
 
 def test_chronos_pulse_at_an_interior_step_is_known_before_the_draw() -> None:
     from synchro.nextdata.covariates import FUTURE_PULSE
-    from synchro.nextdata.steps import chronos_inputs, horizon_of
+    from synchro.nextdata.models import chronos_inputs
+    from synchro.nextdata.steps import horizon_of
 
     draws = _draws(40, seed=8)
     frame = build_frame(draws, focus=24)

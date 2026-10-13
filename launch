@@ -1130,7 +1130,7 @@ cmd_install_nextdata() {
   if chronos_out="$(cd "$ROOT" && MPLBACKEND=Agg "$venv/bin/python" -c '
 import sys
 import numpy as np
-from synchro.nextdata.forecast import CHRONOS_MODEL, chronos_quantiles
+from synchro.nextdata.models import CHRONOS_MODEL, chronos_quantiles
 days = np.arange(33, dtype=float)
 item = {
     "target": np.asarray([days[:32] % 7]),

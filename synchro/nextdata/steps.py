@@ -3,8 +3,9 @@
 Le pronostic, le retour de nextData et nextDataTraining lisent les mêmes pas, au
 même réglage : mêmes arbres, mêmes quantiles, Darts et Chronos compris. Un pas
 ne dépend que des tirages qui le précèdent. Il se calcule une fois, se range
-dans `.nextdata/steps/`, puis se relit ; sa clé change avec ces tirages, le
-réglage, le code des modèles et les versions des bibliothèques.
+dans `.nextdata/steps/`, puis se relit. Sa clé change avec ces tirages, le
+réglage, le code qui fait le morceau (`models` et les lignes qu’il lit) et les
+bibliothèques de ce morceau. Ce fichier-ci, le cache et le pool, n’y entre pas.
 
 LightGBM et CatBoost s’ajustent dans des processus à part, un seul fil chacun,
 comme dans l’API. `SYNCHRO_NEXTDATA_WORKERS` en fixe le nombre ; à 1, tout se
@@ -15,63 +16,44 @@ from __future__ import annotations
 
 import atexit
 import hashlib
+import inspect
 import json
 import multiprocessing
 import os
 import threading
 from concurrent.futures import Future, ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
-from dataclasses import dataclass
 from functools import lru_cache
 from importlib import metadata
 from pathlib import Path
 from typing import Any, Iterable
 
-import numpy as np
-
 from synchro.config import ROOT
-from synchro.nextdata.covariates import future_columns, past_columns
-from synchro.nextdata.forecast import (
-    _installed,
-    catboost_import_error,
-    chronos_error,
-    chronos_quantiles,
-    predict_moments,
-    try_darts_medians,
-)
+from synchro.nextdata.forecast import _installed, catboost_import_error
+from synchro.nextdata.models import MODEL_PARTS, StepSettings, chronos_error, compute_part
 from synchro.nextdata.panel import Frame
 
-MODES = ("corpus", "fenetre")
-QUANTILES = (0.1, 0.5, 0.9)
 MIN_HISTORY = 16
-MODEL_PARTS = ("lightgbm", "catboost")
-CHRONOS_SERIES = ("sum", "star_sum", "n1")
 
 _PACKAGE = Path(__file__).resolve().parent
 _SOURCES = (
-    _PACKAGE / "steps.py",
-    _PACKAGE / "forecast.py",
+    _PACKAGE / "models.py",
     _PACKAGE / "covariates.py",
     _PACKAGE / "panel.py",
     _PACKAGE / "pulse_features.py",
-    _PACKAGE.parent / "pulse" / "model.py",
     _PACKAGE.parent / "short_cycle.py",
     _PACKAGE.parent / "analysis" / "common.py",
     _PACKAGE.parent / "analysis" / "variables.py",
     _PACKAGE.parent / "ref" / "cycles.py",
     _PACKAGE.parent / "ref" / "phases.py",
+    _PACKAGE.parent / "ref" / "seasons.py",
 )
-_LIBRARIES = ("numpy", "lightgbm", "catboost", "u8darts", "darts", "chronos-forecasting", "torch")
-
-
-@dataclass(frozen=True)
-class StepSettings:
-    """Ce qui change un pas, en plus des tirages qui le précèdent."""
-
-    focus: int
-    families: tuple[str, ...]
-    estimators: int
-    quantiles: tuple[float, ...] = QUANTILES
+_LIBRARIES: dict[str, tuple[str, ...]] = {
+    "lightgbm": ("numpy", "lightgbm"),
+    "catboost": ("numpy", "catboost"),
+    "darts": ("numpy", "lightgbm", "scikit-learn", "u8darts", "darts"),
+    "chronos": ("numpy", "torch", "chronos-forecasting"),
+}
 
 
 def cache_dir() -> Path:
@@ -100,13 +82,28 @@ def parts_needed(with_chronos: bool) -> tuple[str, ...]:
     return tuple(parts)
 
 
-@lru_cache(maxsize=1)
-def _fingerprint() -> str:
+def _borrowed() -> str:
+    """Ce que les lignes lisent hors de ces fichiers : la fondamentale Pulse et l’urne d’étoiles par date.
+
+    Le reste de pulse/model.py et de fdj.py sert d’autres pages et ne change aucun pas.
+    """
+    from synchro import fdj
+    from synchro.pulse import model as pulse_model
+
+    pulse = [pulse_model.PERIOD_MIN, pulse_model.PERIOD_MAX, pulse_model.SCORE_FLOOR, pulse_model.SCORE_RATIO]
+    urn = [inspect.getsource(fdj.star_pool_for), fdj.CURRENT_FORMAT_START.isoformat(), fdj.STARS_11_START.isoformat()]
+    return json.dumps([pulse, urn])
+
+
+@lru_cache(maxsize=None)
+def _fingerprint(part: str) -> str:
+    """Code et bibliothèques d’un morceau. L’assemblage, le cache et l’écran n’y entrent pas."""
     digest = hashlib.sha256()
     for path in _SOURCES:
         digest.update(path.name.encode())
         digest.update(path.read_bytes() if path.exists() else b"")
-    for name in _LIBRARIES:
+    digest.update(_borrowed().encode())
+    for name in _LIBRARIES.get(part, ()):
         try:
             version = metadata.version(name)
         except metadata.PackageNotFoundError:
@@ -116,11 +113,11 @@ def _fingerprint() -> str:
 
 
 def prefix_digests(rows: list[dict[str, Any]]) -> list[str]:
-    """Empreinte de rows[:t] pour chaque t de 0 à len(rows)."""
+    """Empreinte de rows[:t] pour chaque t de 0 à len(rows) : dates, boules et urne d’étoiles."""
     digest = hashlib.sha256()
     out = [digest.hexdigest()]
     for row in rows:
-        digest.update(json.dumps([row["date"], row["numbers"], row["stars"]]).encode())
+        digest.update(json.dumps([row["date"], row["numbers"], row["stars"], row.get("star_pool")]).encode())
         out.append(digest.hexdigest())
     return out
 
@@ -136,7 +133,7 @@ def horizon_of(frame: Frame, t: int) -> list[dict[str, Any]]:
 
 def step_key(digest: str, horizon: list[dict[str, Any]], settings: StepSettings, part: str) -> str:
     payload: dict[str, Any] = {
-        "code": _fingerprint(),
+        "code": _fingerprint(part),
         "part": part,
         "draws": digest,
         "horizon": [item["date"] for item in horizon],
@@ -169,83 +166,6 @@ def save_part(key: str, data: Any) -> None:
         os.replace(temp, path)
     except OSError:
         temp.unlink(missing_ok=True)
-
-
-def compute_part(
-    prefix: list[dict[str, Any]],
-    horizon: list[dict[str, Any]],
-    part: str,
-    settings: StepSettings,
-) -> dict[str, Any]:
-    """Un morceau d’un pas, pour les deux modes : LightGBM, CatBoost, Darts ou Chronos."""
-    if part == "chronos":
-        return _chronos_part(prefix, horizon, settings)
-    out: dict[str, Any] = {}
-    for mode in MODES:
-        if part in MODEL_PARTS:
-            try:
-                moments, importance, _engine = predict_moments(
-                    prefix,
-                    horizon,
-                    mode=mode,
-                    focus=settings.focus,
-                    families=settings.families,
-                    estimators=settings.estimators,
-                    quantiles=settings.quantiles,
-                    library=part,
-                )
-            except Exception as exc:
-                out[mode] = {"error": str(exc) or type(exc).__name__}
-            else:
-                out[mode] = {"moments": moments, "importance": importance}
-        elif part == "darts":
-            out[mode] = try_darts_medians(
-                prefix,
-                horizon,
-                mode=mode,
-                focus=settings.focus,
-                families=settings.families,
-            )
-    # Même structure qu’un morceau relu du cache.
-    return json.loads(json.dumps(out))
-
-
-def chronos_inputs(
-    prefix: list[dict[str, Any]],
-    horizon: list[dict[str, Any]],
-    focus: int,
-    families: Iterable[str],
-) -> list[dict[str, Any]]:
-    """Entrées Chronos-2 des deux modes, dans l’ordre de MODES : trois cibles et les covariables cochées.
-
-    Les horloges et Pulse sont connus pour le tirage prévu, `horizon[0]` ;
-    Chronos-2 lit aussi leur historique. Les autres familles s’arrêtent au
-    dernier tirage sorti. Pulse sur ce tirage n’utilise que les sorties d’avant.
-    """
-    past = past_columns(families)
-    future = future_columns(families)
-    windows = {"corpus": prefix, "fenetre": prefix[-focus:]}
-    items: list[dict[str, Any]] = []
-    for mode in MODES:
-        window = windows[mode]
-        item: dict[str, Any] = {"target": np.asarray([[float(row[name]) for row in window] for name in CHRONOS_SERIES])}
-        if past or future:
-            item["past_covariates"] = {col: np.asarray([float(row[col]) for row in window]) for col in past + future}
-        if future:
-            item["future_covariates"] = {col: np.asarray([float(horizon[0][col])]) for col in future}
-        items.append(item)
-    return items
-
-
-def _chronos_part(prefix: list[dict[str, Any]], horizon: list[dict[str, Any]], settings: StepSettings) -> dict[str, Any]:
-    """Bandes 10–90 de Chronos-2 pour les deux modes, en un appel, et les covariables lues. Un échec rend son message."""
-    try:
-        bands = chronos_quantiles(chronos_inputs(prefix, horizon, settings.focus, settings.families))
-    except RuntimeError as exc:
-        return {"error": str(exc)}
-    out: dict[str, Any] = {mode: dict(zip(CHRONOS_SERIES, mode_bands)) for mode, mode_bands in zip(MODES, bands)}
-    out["covariates"] = {"past": len(past_columns(settings.families)), "future": len(future_columns(settings.families))}
-    return json.loads(json.dumps(out))
 
 
 def _part_job(

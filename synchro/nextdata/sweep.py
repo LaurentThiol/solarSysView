@@ -655,7 +655,7 @@ def _inputs(built: list[dict[str, Any]], job: _Job) -> tuple[list[dict[str, Any]
 
 
 def _compute(built: list[dict[str, Any]], job: _Job) -> dict[str, Any]:
-    from synchro.nextdata.steps import StepSettings, compute_part
+    from synchro.nextdata.models import StepSettings, compute_part
 
     prefix, horizon = _inputs(built, job)
     settings = StepSettings(

@@ -11,15 +11,8 @@ from fastapi.testclient import TestClient
 from synchro.app import create_app
 from synchro.nextdata.covariates import consecutive_count, link_series, spread_of, star_couple_ago
 from synchro.nextdata.empirical import recount, smoothed_share
-from synchro.nextdata.forecast import (
-    _past_only_column,
-    blend_mid,
-    blend_weight,
-    lag_choice,
-    loss_indices,
-    row_weight,
-    run_forecast,
-)
+from synchro.nextdata.forecast import blend_mid, blend_weight, run_forecast
+from synchro.nextdata.models import _past_only_column, lag_choice, loss_indices, row_weight
 from synchro.nextdata.panel import build_frame
 from synchro.nextdata.project import beam, compose_ranks, project_numbers
 
@@ -400,7 +393,7 @@ def test_lightgbm_predict_does_not_reopen_the_openmp_pool(monkeypatch) -> None:
 
     import numpy as np
 
-    from synchro.nextdata import forecast as forecast_mod
+    from synchro.nextdata import models as models_mod
 
     calls: dict[str, int | None] = {}
 
@@ -425,11 +418,11 @@ def test_lightgbm_predict_does_not_reopen_the_openmp_pool(monkeypatch) -> None:
     fake.train = train  # type: ignore[attr-defined]
     fake.basic = types.SimpleNamespace(_LIB=_Lib())  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "lightgbm", fake)
-    monkeypatch.setattr(forecast_mod, "_LIGHTGBM_PINNED", False)
+    monkeypatch.setattr(models_mod, "_LIGHTGBM_PINNED", False)
 
     x = np.arange(12, dtype=float).reshape(12, 1)
     y = np.linspace(2.0, 9.0, 12)
-    pred, model = forecast_mod._fit_one(
+    pred, model = models_mod._fit_one(
         x,
         y,
         np.ones(12),
@@ -449,7 +442,7 @@ def test_darts_lightgbm_stays_single_threaded(monkeypatch) -> None:
     import sys
     import types
 
-    from synchro.nextdata.forecast import try_darts_medians
+    from synchro.nextdata.models import try_darts_medians
 
     captured: dict[str, int] = {}
 
@@ -484,7 +477,7 @@ def test_darts_reads_corpus_weights_and_predicts_a_median(monkeypatch) -> None:
 
     import numpy as np
 
-    from synchro.nextdata.forecast import try_darts_medians
+    from synchro.nextdata.models import try_darts_medians
 
     seen: dict[str, object] = {}
 
@@ -755,7 +748,7 @@ def test_chronos_blends_lightgbm_and_leaves_catboost(monkeypatch) -> None:
     draws = _draws(40, seed=11)
     calls: list[dict] = []
     _offline(monkeypatch, calls=calls, chronos=True)
-    monkeypatch.setattr("synchro.nextdata.steps.chronos_quantiles", _chronos_replays(1.6))
+    monkeypatch.setattr("synchro.nextdata.models.chronos_quantiles", _chronos_replays(1.6))
     plain = run_training(draws, focus=24, covariates=["forme"], estimators=2, shift=1)
     calls.clear()
     mixed = run_training(draws, focus=24, covariates=["forme"], estimators=2, shift=1, with_chronos=True)
@@ -808,7 +801,7 @@ def _offline(monkeypatch, moments=_fake_moments, calls: list | None = None, chro
         return moments(rows, horizon, **kwargs)
 
     monkeypatch.setattr("synchro.nextdata.forecast.lightgbm_import_error", lambda: None)
-    monkeypatch.setattr("synchro.nextdata.steps.predict_moments", fake)
+    monkeypatch.setattr("synchro.nextdata.models.predict_moments", fake)
     monkeypatch.setattr("synchro.nextdata.steps.catboost_import_error", lambda: None)
     monkeypatch.setattr("synchro.nextdata.steps._installed", lambda module: chronos and module == "chronos")
 
@@ -821,7 +814,7 @@ def test_shift_chronos_is_weighted_on_the_ten_draws_before(monkeypatch) -> None:
     rows = build_frame(draws, focus=24).rows
     n = len(rows)
     _offline(monkeypatch, chronos=True)
-    monkeypatch.setattr("synchro.nextdata.steps.chronos_quantiles", _chronos_replays())
+    monkeypatch.setattr("synchro.nextdata.models.chronos_quantiles", _chronos_replays())
     monkeypatch.setattr("synchro.nextdata.backtest.blend_weight", lambda lgb, chronos: 0.0)
     report = run_training(draws, focus=24, covariates=["forme"], estimators=2, chunk=100, with_chronos=True)
     reading = report["shifts"][0]["readings"]["corpus"]
@@ -849,7 +842,7 @@ def test_forecast_chronos_is_half_and_half_until_ten_draws_are_ready(monkeypatch
     rows = build_frame(draws, focus=24).rows
     n = len(rows)
     _offline(monkeypatch, chronos=True)
-    monkeypatch.setattr("synchro.nextdata.steps.chronos_quantiles", _chronos_replays())
+    monkeypatch.setattr("synchro.nextdata.models.chronos_quantiles", _chronos_replays())
     monkeypatch.setattr("synchro.nextdata.backtest.blend_weight", lambda lgb, chronos: 0.0)
     alone = run_forecast(draws, focus=24, covariates=["forme"], estimators=2, with_chronos=True, chunk=1)
     first = alone["modes"]["corpus"]["chronos"]
@@ -901,7 +894,7 @@ def _fake_chronos(monkeypatch, fail: Exception | None = None) -> dict[str, list]
 
     import numpy as np
 
-    from synchro.nextdata import forecast as forecast_mod
+    from synchro.nextdata import models as models_mod
 
     seen: dict[str, list] = {"loads": [], "calls": []}
 
@@ -929,15 +922,14 @@ def _fake_chronos(monkeypatch, fail: Exception | None = None) -> dict[str, list]
     torch_mod.tensor = lambda values, dtype=None: list(values)  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "chronos", chronos_mod)
     monkeypatch.setitem(sys.modules, "torch", torch_mod)
-    monkeypatch.setattr(forecast_mod, "_CHRONOS", None)
-    monkeypatch.setattr(forecast_mod, "_CHRONOS_ERROR", None)
+    monkeypatch.setattr(models_mod, "_CHRONOS", None)
+    monkeypatch.setattr(models_mod, "_CHRONOS_ERROR", None)
     return seen
 
 
 def test_chronos_2_reads_both_modes_and_their_covariates_in_one_call(monkeypatch) -> None:
     from synchro.nextdata.covariates import FAMILIES, future_columns, past_columns
-    from synchro.nextdata.forecast import CHRONOS_MODEL
-    from synchro.nextdata.steps import CHRONOS_SERIES, StepSettings, compute_part
+    from synchro.nextdata.models import CHRONOS_MODEL, CHRONOS_SERIES, StepSettings, compute_part
 
     seen = _fake_chronos(monkeypatch)
     frame = build_frame(_draws(40, seed=23), focus=24)
@@ -967,7 +959,8 @@ def test_chronos_covariates_follow_the_families_and_stop_before_the_draw() -> No
     from dataclasses import replace
 
     from synchro.nextdata.covariates import FUTURE_CALENDAR, FUTURE_MOON, PAST_FORME
-    from synchro.nextdata.steps import chronos_inputs, horizon_of
+    from synchro.nextdata.models import chronos_inputs
+    from synchro.nextdata.steps import horizon_of
 
     frame = build_frame(_draws(40, seed=26), focus=24)
     rows = frame.rows
@@ -1002,7 +995,8 @@ def test_a_chronos_failure_is_reported_and_never_cached(monkeypatch) -> None:
     from pathlib import Path
 
     pytest = __import__("pytest")
-    from synchro.nextdata.forecast import chronos_error, chronos_quantiles, run_training
+    from synchro.nextdata.forecast import run_training
+    from synchro.nextdata.models import chronos_error, chronos_quantiles
     from synchro.nextdata.steps import parts_needed
 
     seen = _fake_chronos(monkeypatch, fail=OSError("hub\n  injoignable"))
@@ -1052,7 +1046,7 @@ def test_the_installed_chronos_2_accepts_our_inputs() -> None:
     from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode
 
     from synchro.nextdata.covariates import FAMILIES
-    from synchro.nextdata.steps import chronos_inputs
+    from synchro.nextdata.models import chronos_inputs
 
     params = list(inspect.signature(chronos.Chronos2Pipeline.predict_quantiles).parameters.values())
     assert params[1].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
@@ -1236,6 +1230,26 @@ def test_steps_are_cached_and_keyed_on_earlier_draws(monkeypatch) -> None:
     assert key(draws, part="chronos", estimators=4) == key(draws, part="chronos")
 
 
+def test_the_step_key_reads_the_model_code_not_the_assembly() -> None:
+    from synchro.nextdata import steps
+    from synchro.pulse.model import SCORE_RATIO
+
+    names = {path.name for path in steps._SOURCES}
+    assert {"models.py", "panel.py", "covariates.py", "pulse_features.py", "seasons.py"} <= names
+    assert not names & {"forecast.py", "backtest.py", "steps.py", "sweep.py", "model.py", "fdj.py"}
+    assert all(path.exists() for path in steps._SOURCES)
+    borrowed = steps._borrowed()
+    assert "def star_pool_for" in borrowed
+    assert str(SCORE_RATIO) in borrowed
+    assert steps._fingerprint("lightgbm") != steps._fingerprint("chronos")
+
+    rows = build_frame(_draws(30, seed=2), focus=24).rows
+    other_urn = [dict(row) for row in rows]
+    other_urn[3]["star_pool"] = 11
+    assert steps.prefix_digests(other_urn)[3] == steps.prefix_digests(rows)[3]
+    assert steps.prefix_digests(other_urn)[4] != steps.prefix_digests(rows)[4]
+
+
 def test_each_call_computes_one_chunk(monkeypatch) -> None:
     from synchro.nextdata.forecast import run_forecast
 
@@ -1307,7 +1321,7 @@ def test_a_tight_delta_outweighs_a_wide_level() -> None:
 
 
 def test_darts_window_trains_the_same_rows_as_the_loss() -> None:
-    from synchro.nextdata.forecast import darts_training_window
+    from synchro.nextdata.models import darts_training_window
 
     start, weights = darts_training_window(160, 50, "fenetre")
     assert start == 110 - 16
@@ -1339,7 +1353,7 @@ def test_external_median_keeps_the_quantile_gaps() -> None:
 
 
 def test_star_clip_follows_the_urn() -> None:
-    from synchro.nextdata.forecast import _clip
+    from synchro.nextdata.models import _clip
 
     assert _clip("star_sum", 22.5, 12) == 22.5
     assert _clip("star_sum", 22.5, 11) == 21.0
@@ -1371,8 +1385,8 @@ def test_chronos_quantiles_keep_level_order(monkeypatch) -> None:
 
     import numpy as np
 
-    from synchro.nextdata import forecast as forecast_mod
-    from synchro.nextdata.forecast import chronos_quantiles
+    from synchro.nextdata import models as models_mod
+    from synchro.nextdata.models import chronos_quantiles
 
     torch_mod = types.ModuleType("torch")
     chronos_mod = types.ModuleType("chronos")
@@ -1390,18 +1404,18 @@ def test_chronos_quantiles_keep_level_order(monkeypatch) -> None:
             table = np.asarray([[[9.0, 1.0, 4.0]]], dtype=float)
             return [table], None
 
-    monkeypatch.setattr(forecast_mod, "_CHRONOS", Ordered())
-    monkeypatch.setattr(forecast_mod, "_CHRONOS_ERROR", None)
+    monkeypatch.setattr(models_mod, "_CHRONOS", Ordered())
+    monkeypatch.setattr(models_mod, "_CHRONOS_ERROR", None)
     try:
         assert chronos_quantiles([{"target": [[1.0, 2.0]]}]) == [
             [{"lo": 1.0, "mid": 4.0, "hi": 9.0}, {"lo": 2.0, "mid": 3.0, "hi": 8.0}]
         ]
-        monkeypatch.setattr(forecast_mod, "_CHRONOS", Crossed())
+        monkeypatch.setattr(models_mod, "_CHRONOS", Crossed())
         with pytest.raises(RuntimeError, match="non croissant"):
             chronos_quantiles([{"target": [[1.0]]}])
     finally:
-        monkeypatch.setattr(forecast_mod, "_CHRONOS_ERROR", None)
-        monkeypatch.setattr(forecast_mod, "_CHRONOS", None)
+        monkeypatch.setattr(models_mod, "_CHRONOS_ERROR", None)
+        monkeypatch.setattr(models_mod, "_CHRONOS", None)
 
 
 def test_rows_and_horizon_carry_their_star_pool() -> None:
@@ -1413,11 +1427,11 @@ def test_rows_and_horizon_carry_their_star_pool() -> None:
 
 def test_shared_bins_and_the_level_chain_keep_every_moment(monkeypatch) -> None:
     pytest.importorskip("lightgbm")
-    from synchro.nextdata import forecast
+    from synchro.nextdata import models
 
     frame = build_frame(_draws(90, seed=12), focus=24)
     kwargs = {"mode": "corpus", "focus": 24, "families": ("forme", "delta", "pulse"), "estimators": 4}
-    shared, importance, _engine = forecast.predict_moments(frame.rows, frame.horizon, **kwargs)
+    shared, importance, _engine = models.predict_moments(frame.rows, frame.horizon, **kwargs)
     assert shared["n1"] == shared["level:n1"]
     assert shared["e1"] == shared["level:e1"]
 
@@ -1427,8 +1441,8 @@ def test_shared_bins_and_the_level_chain_keep_every_moment(monkeypatch) -> None:
         built.append(len(y))
         return lgb.Dataset(self.x, label=y, weight=self.weights, free_raw_data=False)
 
-    monkeypatch.setattr(forecast._Binned, "dataset", fresh)
-    alone, alone_importance, _engine = forecast.predict_moments(frame.rows, frame.horizon, **kwargs)
+    monkeypatch.setattr(models._Binned, "dataset", fresh)
+    alone, alone_importance, _engine = models.predict_moments(frame.rows, frame.horizon, **kwargs)
     assert built
     assert alone == shared
     assert alone_importance == importance
