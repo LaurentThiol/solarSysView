@@ -1411,6 +1411,29 @@ def test_rows_and_horizon_carry_their_star_pool() -> None:
     assert frame.horizon[1]["star_pool"] == 12
 
 
+def test_shared_bins_and_the_level_chain_keep_every_moment(monkeypatch) -> None:
+    pytest.importorskip("lightgbm")
+    from synchro.nextdata import forecast
+
+    frame = build_frame(_draws(90, seed=12), focus=24)
+    kwargs = {"mode": "corpus", "focus": 24, "families": ("forme", "delta", "pulse"), "estimators": 4}
+    shared, importance, _engine = forecast.predict_moments(frame.rows, frame.horizon, **kwargs)
+    assert shared["n1"] == shared["level:n1"]
+    assert shared["e1"] == shared["level:e1"]
+
+    built: list[int] = []
+
+    def fresh(self, lgb, y):
+        built.append(len(y))
+        return lgb.Dataset(self.x, label=y, weight=self.weights, free_raw_data=False)
+
+    monkeypatch.setattr(forecast._Binned, "dataset", fresh)
+    alone, alone_importance, _engine = forecast.predict_moments(frame.rows, frame.horizon, **kwargs)
+    assert built
+    assert alone == shared
+    assert alone_importance == importance
+
+
 def test_chain_features_do_not_reuse_the_row_target() -> None:
     import numpy as np
 

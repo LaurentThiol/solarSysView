@@ -172,7 +172,6 @@ def vector_at(
     past_lags: int,
     past_names: list[str],
     future_names: list[str],
-    lower: dict[str, float] | None = None,
 ) -> tuple[list[float], list[str]]:
     values: list[float] = []
     names: list[str] = []
@@ -193,9 +192,6 @@ def vector_at(
             column = PULSE_AHEAD[name] if name in FUTURE_PULSE and offset > 0 else name
             values.append(_level(rows, horizon, source, column))
             names.append(f"fut:{name}:{offset}")
-    for name, raw in (lower or {}).items():
-        values.append(float(raw))
-        names.append(f"same:{name}")
     return values, names
 
 
@@ -208,8 +204,6 @@ def _design(
     past_lags: int,
     past_names: list[str],
     future_names: list[str],
-    lower_names: tuple[str, ...] = (),
-    lower_at: dict[int, dict[str, float]] | None = None,
 ) -> tuple[np.ndarray, list[int], list[str]]:
     matrix: list[list[float]] = []
     used: list[int] = []
@@ -218,14 +212,6 @@ def _design(
     for t in indices:
         if t < need:
             continue
-        known = (lower_at or {}).get(t)
-        if known is None:
-            lower = {name: float(rows[t][name]) for name in lower_names}
-        else:
-            lower = {
-                name: float(known[name]) if name in known else float(rows[t][name])
-                for name in lower_names
-            }
         vec, names = vector_at(
             rows,
             horizon,
@@ -234,7 +220,6 @@ def _design(
             past_lags=past_lags,
             past_names=past_names,
             future_names=future_names,
-            lower=lower,
         )
         matrix.append(vec)
         used.append(t)
@@ -242,6 +227,22 @@ def _design(
         return np.zeros((0, 0), dtype=float), [], names
     data = np.asarray(matrix, dtype=float)
     return np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0), used, names
+
+
+def _with_lowers(
+    base: np.ndarray,
+    used: list[int],
+    names: list[str],
+    rows: list[dict[str, Any]],
+    lower_names: tuple[str, ...],
+    lower_at: dict[int, dict[str, float]],
+) -> tuple[np.ndarray, list[str]]:
+    """La matrice du temps et, en dernier, une colonne `same:` par rang déjà prévu du même tirage."""
+    if not lower_names:
+        return base, names
+    block = [[float(lower_at[t][name]) for name in lower_names] for t in used]
+    extra = np.nan_to_num(np.asarray(block, dtype=float), nan=0.0, posinf=0.0, neginf=0.0)
+    return np.hstack([base, extra]), [*names, *(f"same:{name}" for name in lower_names)]
 
 
 def star_pool_of(source: dict[str, Any] | None, default: int = 12) -> int:
@@ -321,6 +322,27 @@ def _pin_lightgbm(lgb: Any) -> None:
     _LIGHTGBM_PINNED = True
 
 
+class _Binned:
+    """Une matrice et ses poids, binés une seule fois pour tous leurs ajustements LightGBM.
+
+    LightGBM découpe les colonnes sans lire la cible : relancer `train` sur le même
+    Dataset après `set_label` rend les arbres d’un Dataset neuf. Le Pool de CatBoost,
+    lui, ne change pas de cible.
+    """
+
+    def __init__(self, x: np.ndarray, weights: np.ndarray) -> None:
+        self.x = x
+        self.weights = weights
+        self._dataset: Any = None
+
+    def dataset(self, lgb: Any, y: np.ndarray) -> Any:
+        if self._dataset is None:
+            self._dataset = lgb.Dataset(self.x, label=y, weight=self.weights, free_raw_data=False)
+        else:
+            self._dataset.set_label(y)
+        return self._dataset
+
+
 def _fit_one(
     x_train: np.ndarray,
     y_train: np.ndarray,
@@ -330,6 +352,7 @@ def _fit_one(
     alpha: float,
     estimators: int,
     library: str = "lightgbm",
+    binned: _Binned | None = None,
 ):
     fallback = float(np.average(y_train, weights=weights)) if len(y_train) else 0.0
     if len(y_train) < 8 or float(np.std(y_train)) < 1e-8:
@@ -354,7 +377,10 @@ def _fit_one(
     import lightgbm as lgb
 
     _pin_lightgbm(lgb)
-    dataset = lgb.Dataset(x_train, label=y_train, weight=weights, free_raw_data=False)
+    if binned is None:
+        dataset = lgb.Dataset(x_train, label=y_train, weight=weights, free_raw_data=False)
+    else:
+        dataset = binned.dataset(lgb, y_train)
     params = {
         "objective": "quantile",
         "alpha": float(alpha),
@@ -489,119 +515,79 @@ def predict_moments(
         future_names=future_names,
     )
     x_next_arr = np.nan_to_num(np.asarray(x_next, dtype=float), nan=0.0)
+    time_bins = _Binned(x_time, weights) if library == "lightgbm" else None
+
+    def fit_quantiles(
+        x: np.ndarray,
+        y: np.ndarray,
+        w: np.ndarray,
+        x_row: np.ndarray,
+        binned: _Binned | None,
+    ) -> tuple[dict[float, float], Any]:
+        found: dict[float, float] = {}
+        median_model = None
+        for alpha in alphas:
+            pred, model = _fit_one(
+                x, y, w, x_row, alpha=alpha, estimators=estimators, library=library, binned=binned
+            )
+            found[alpha] = pred
+            if alpha == 0.5:
+                median_model = model
+        return found, median_model
 
     moments: dict[str, dict[str, float]] = {}
     importance_models: list[tuple[Any, list[str]]] = []
     for name in TEMPORAL_TARGETS:
         y = np.asarray([float(rows[t][name]) for t in used], dtype=float)
-        found: dict[float, float] = {}
-        median_model = None
-        for alpha in alphas:
-            pred, model = _fit_one(
-                x_time,
-                y,
-                weights,
-                x_next_arr,
-                alpha=alpha,
-                estimators=estimators,
-                library=library,
-            )
-            found[alpha] = pred
-            if alpha == 0.5:
-                median_model = model
+        found, median_model = fit_quantiles(x_time, y, weights, x_next_arr, time_bins)
         moments[name] = _moments_from_alphas(found, name, pool)
         if name == "sum" and median_model is not None:
             importance_models.append((median_model, feat_names))
 
+    levels = {
+        name: fit_quantiles(
+            x_time,
+            np.asarray([float(rows[t][name]) for t in used], dtype=float),
+            weights,
+            x_next_arr,
+            time_bins,
+        )
+        for name in RANK_LEVELS
+    }
+
     carried: dict[str, dict[str, float]] = {}
     past_hat: dict[str, dict[int, float]] = {}
     for name, lowers in CHAIN:
-        lookup = None
+        lookup = {t: {key: past_hat[key][t] for key in lowers} for t in used}
+        x_chain, chain_names = _with_lowers(x_time, used, feat_names, rows, lowers, lookup)
+        lower_now = np.asarray([float(carried[key]["mid"]) for key in lowers], dtype=float)
+        x_vec = np.concatenate([x_next_arr, np.nan_to_num(lower_now, nan=0.0)])
+        y = np.asarray([float(rows[t][name]) for t in used], dtype=float)
         if lowers:
-            lookup = {
-                t: {key: past_hat[key][t] for key in lowers}
-                for t in indices
-                if all(t in past_hat.get(key, {}) for key in lowers)
-            }
-        x_chain, used_chain, chain_names = _design(
-            rows,
-            horizon,
-            indices,
-            lags=lags,
-            past_lags=past_lags,
-            past_names=past_names,
-            future_names=future_names,
-            lower_names=lowers,
-            lower_at=lookup,
-        )
-        if len(used_chain) < 8:
-            raise ValueError("La chaîne de rangs n’a pas assez de lignes.")
-        w_chain = np.asarray([row_weight(t, focus_start, mode) for t in used_chain], dtype=float)
-        lower_now = {key: carried[key]["mid"] for key in lowers}
-        vec, _ = vector_at(
-            rows,
-            horizon,
-            n,
-            lags=lags,
-            past_lags=past_lags,
-            past_names=past_names,
-            future_names=future_names,
-            lower=lower_now,
-        )
-        x_vec = np.nan_to_num(np.asarray(vec, dtype=float), nan=0.0)
-        y = np.asarray([float(rows[t][name]) for t in used_chain], dtype=float)
-        found = {}
-        median_model = None
-        for alpha in alphas:
-            pred, model = _fit_one(
-                x_chain, y, w_chain, x_vec, alpha=alpha, estimators=estimators, library=library
-            )
-            found[alpha] = pred
-            if alpha == 0.5:
-                median_model = model
+            chain_bins = _Binned(x_chain, weights) if library == "lightgbm" else None
+            found, median_model = fit_quantiles(x_chain, y, weights, x_vec, chain_bins)
+        else:
+            # Sans rang d’avant, la chaîne lit la matrice, la cible et les poids du niveau : mêmes arbres.
+            found, median_model = levels[name]
         moments[name] = _moments_from_alphas(found, name, pool)
         carried[name] = moments[name]
         column = _past_only_column(
             x_chain,
             y,
-            w_chain,
+            weights,
             library=library,
             estimators=estimators,
         )
-        past_hat[name] = {t: float(column[index]) for index, t in enumerate(used_chain)}
+        past_hat[name] = {t: float(column[index]) for index, t in enumerate(used)}
         if name == "n1" and median_model is not None:
             importance_models.append((median_model, chain_names))
 
     for name in RANK_LEVELS:
-        y = np.asarray([float(rows[t][name]) for t in used], dtype=float)
-        found = {}
-        for alpha in alphas:
-            pred, _model = _fit_one(
-                x_time,
-                y,
-                weights,
-                x_next_arr,
-                alpha=alpha,
-                estimators=estimators,
-                library=library,
-            )
-            found[alpha] = pred
-        moments[f"level:{name}"] = _moments_from_alphas(found, f"level:{name}", pool)
+        moments[f"level:{name}"] = _moments_from_alphas(levels[name][0], f"level:{name}", pool)
 
     for name in RANK_LEVELS:
         y = np.asarray([float(rows[t][f"d_{name}"]) for t in used], dtype=float)
-        found = {}
-        for alpha in alphas:
-            pred, _model = _fit_one(
-                x_time,
-                y,
-                weights,
-                x_next_arr,
-                alpha=alpha,
-                estimators=estimators,
-                library=library,
-            )
-            found[alpha] = pred
+        found, _model = fit_quantiles(x_time, y, weights, x_next_arr, time_bins)
         moments[f"delta:{name}"] = _moments_from_alphas(found, f"delta:{name}", pool)
 
     return moments, _importance(importance_models), library
