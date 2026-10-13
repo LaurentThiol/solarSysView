@@ -30,6 +30,10 @@ test("the two trainings, the focus and the recounted base are explained", () => 
   assert.match(NEXTDATA_HELP.covariates.items?.map((item) => item.label).join(" ") ?? "", /Pulse/)
   assert.match(NEXTDATA_HELP.covariates.body, /Pulse sont connus avant/)
   assert.match(lab, /id: "pulse"/)
+  assert.match(lab, /formatDecimal\(block\.mae_sum\)/)
+  assert.match(lab, /progress\?\.complete/)
+  assert.match(lab, /metrics\[shown\]\?\.hits_chance/)
+  assert.match(training, /report\.star_pool/)
   assert.match(training, /id: "pulse"/)
   assert.equal(
     pulseCaption({ lobe: 0.54, mass: 0.21, star_lobe: 0.333, star_mass: 0.08 }),

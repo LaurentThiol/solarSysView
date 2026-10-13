@@ -142,6 +142,28 @@ def test_darts_reads_pulse_one_step_back_and_keeps_it_out_of_the_future() -> Non
     assert all("pulse_lobe" not in item for item in future_rows)
 
 
+def test_chronos_pulse_at_an_interior_step_is_known_before_the_draw() -> None:
+    from synchro.nextdata.covariates import FUTURE_PULSE
+    from synchro.nextdata.steps import chronos_inputs, horizon_of
+
+    draws = _draws(40, seed=8)
+    frame = build_frame(draws, focus=24)
+    rows = frame.rows
+    t = len(rows) - 3
+    before = chronos_inputs(rows[:t], horizon_of(frame, t), 24, ("pulse",))
+    future = before[0]["future_covariates"]
+    past = before[0]["past_covariates"]
+    for name in FUTURE_PULSE:
+        assert float(future[name][0]) == pytest.approx(rows[t][name])
+        assert float(past[name][-1]) == pytest.approx(rows[t - 1][name])
+    changed = [dict(row) for row in draws]
+    changed[t] = {**changed[t], "numbers": [1, 2, 3, 4, 5], "stars": [1, 2]}
+    other = build_frame(changed, focus=24)
+    assert other.rows[t]["pulse_lobe"] == pytest.approx(rows[t]["pulse_lobe"])
+    again = chronos_inputs(other.rows[:t], horizon_of(other, t), 24, ("pulse",))
+    assert float(again[0]["future_covariates"]["pulse_lobe"][0]) == pytest.approx(rows[t]["pulse_lobe"])
+
+
 def test_forecast_and_training_accept_the_pulse_family() -> None:
     from synchro.nextdata.forecast import run_training
 
@@ -156,3 +178,4 @@ def test_forecast_and_training_accept_the_pulse_family() -> None:
     assert training["shifts"]
     assert set(training["shifts"][0]["pulse"]) == {"lobe", "mass", "star_lobe", "star_mass"}
     assert training["pulse"] == training["shifts"][-1]["pulse"]
+    assert training["star_pool"] == 12

@@ -11,7 +11,7 @@ import {
 } from "@/lib/nextdata/compare"
 import { persistKey, swappedValues, type PersistSwap } from "@/lib/nextdata/persist"
 import type { GridShape } from "@/lib/nextdata/shape"
-import { chanceOdds, chanceRange, chanceText, type HitsChance } from "@/lib/nextdata/uncertainty"
+import { chanceOdds, chanceRange, chanceText, formatHits, type HitsChance } from "@/lib/nextdata/uncertainty"
 import { cn } from "@/lib/utils"
 
 const NUMBER_RANKS = ["n1", "n2", "n3", "n4", "n5"] as const
@@ -126,13 +126,13 @@ function MeanScore({ numbers, stars, label }: { numbers: number | null; stars: n
   return (
     <div
       className="flex flex-col items-center leading-tight"
-      aria-label={`${label} ${formatDecimal(numbers)} numéros communs sur 5, ${formatDecimal(stars)} étoiles communes sur 2`}
+      aria-label={`${label} ${formatHits(numbers)} numéros communs sur 5, ${formatHits(stars)} étoiles communes sur 2`}
     >
       <span className="font-semibold text-foreground">
-        {formatDecimal(numbers)}
+        {formatHits(numbers)}
         <span className="text-[10px] font-medium text-muted-foreground">/5</span>
       </span>
-      <span className="text-[11px] text-muted-foreground">★ {formatDecimal(stars)}/2</span>
+      <span className="text-[11px] text-muted-foreground">★ {formatHits(stars)}/2</span>
     </div>
   )
 }
@@ -158,11 +158,15 @@ export function TrainingCompare({
   reading,
   chance,
   twinChance,
+  meanHits,
+  twinMeanHits,
 }: {
   shifts: TrainingCompareShift[]
   reading: string
   chance?: HitsChance | null
   twinChance?: HitsChance | null
+  meanHits?: { numbers: number | null; stars: number | null } | null
+  twinMeanHits?: { numbers: number | null; stars: number | null } | null
 }) {
   const rows = shifts.map((shift) => {
     const side = shift.readings[reading]
@@ -178,12 +182,8 @@ export function TrainingCompare({
     }
   })
   const ready = rows.filter((row) => row.forecast)
-  const numberMean = meanOf(ready.map((row) => row.compared.numberHits.length))
-  const starMean = meanOf(ready.map((row) => row.compared.starHits.length))
   const gapMean = (key: ShapeKey) => meanOf(ready.flatMap((row) => (row.compared.gap ? [row.compared.gap[key]] : [])))
   const twins = rows.flatMap((row) => (row.twinCompared ? [row.twinCompared] : []))
-  const twinNumberMean = meanOf(twins.map((item) => item.numberHits.length))
-  const twinStarMean = meanOf(twins.map((item) => item.starHits.length))
   const twinGapMean = (key: ShapeKey) => meanOf(twins.flatMap((item) => (item.gap ? [item.gap[key]] : [])))
 
   return (
@@ -317,7 +317,7 @@ export function TrainingCompare({
                 <ChanceNote chance={chance} />
               </th>
               <td className="border-t border-border px-2 pt-3 text-center">
-                <MeanScore numbers={numberMean} stars={starMean} label="Moyenne" />
+                <MeanScore numbers={meanHits?.numbers ?? null} stars={meanHits?.stars ?? null} label="Moyenne" />
               </td>
               {SHAPE_KEYS.map((key) => {
                 const value = gapMean(key)
@@ -340,7 +340,7 @@ export function TrainingCompare({
                   Moyenne Persist
                 </th>
                 <td className="px-2 pt-2 text-center">
-                  <MeanScore numbers={twinNumberMean} stars={twinStarMean} label="Moyenne Persist" />
+                  <MeanScore numbers={twinMeanHits?.numbers ?? null} stars={twinMeanHits?.stars ?? null} label="Moyenne Persist" />
                 </td>
                 {SHAPE_KEYS.map((key) => {
                   const value = twinGapMean(key)

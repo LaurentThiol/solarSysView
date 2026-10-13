@@ -147,6 +147,7 @@ type TrainingPayload = {
   shifts?: Shift[]
   summary?: Summary
   estimators?: number
+  star_pool?: number
   pulse?: PulseReading
   progress?: StepProgress
   persist?: PersistInfo | null
@@ -327,7 +328,8 @@ export function TrainingLab() {
               actual: shift.actual,
               raw: shift.readings[reading],
               persist: shift.readings[persistKey(reading)],
-            }))
+            })),
+            report.star_pool
           )
         : null,
     [report, reading]
@@ -698,6 +700,14 @@ export function TrainingLab() {
                 reading={reading}
                 chance={summary[reading]?.hits_chance}
                 twinChance={summary[persistKey(reading)]?.hits_chance}
+                meanHits={{
+                  numbers: summary[reading]?.hits_numbers ?? null,
+                  stars: summary[reading]?.hits_stars ?? null,
+                }}
+                twinMeanHits={{
+                  numbers: summary[persistKey(reading)]?.hits_numbers ?? null,
+                  stars: summary[persistKey(reading)]?.hits_stars ?? null,
+                }}
               />
             </CardContent>
           </Card>

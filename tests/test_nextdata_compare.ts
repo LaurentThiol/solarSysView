@@ -64,6 +64,8 @@ test("signed integers match the rank table, means use a french decimal", () => {
 })
 
 test("the training table keeps sorti and prévu on their own rows", () => {
+  assert.match(view, /formatHits/)
+  assert.match(view, /meanHits/)
   assert.match(view, /<table/)
   assert.match(view, /Sorti/)
   assert.match(view, /Prévu/)

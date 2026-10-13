@@ -56,27 +56,18 @@ CLAMPS: dict[str, tuple[float, float]] = {
     "g3": (1.0, 45.0),
     "g4": (1.0, 45.0),
     "parity": (0.0, 5.0),
-    "star_sum": (3.0, 23.0),
-    "e1": (1.0, 11.0),
-    "e_gap": (1.0, 11.0),
     "spread": (4.0, 49.0),
     "consecutive": (0.0, 4.0),
-    "star_spread": (1.0, 11.0),
-    "star_consecutive": (0.0, 1.0),
     "level:n1": (1.0, 46.0),
     "level:n2": (2.0, 47.0),
     "level:n3": (3.0, 48.0),
     "level:n4": (4.0, 49.0),
     "level:n5": (5.0, 50.0),
-    "level:e1": (1.0, 11.0),
-    "level:e2": (2.0, 12.0),
     "delta:n1": (-45.0, 45.0),
     "delta:n2": (-45.0, 45.0),
     "delta:n3": (-45.0, 45.0),
     "delta:n4": (-45.0, 45.0),
     "delta:n5": (-45.0, 45.0),
-    "delta:e1": (-11.0, 11.0),
-    "delta:e2": (-11.0, 11.0),
 }
 
 # Niveaux et deltas : mêmes lags que la somme, sans `same:` ni entrée dans TARGETS.
@@ -253,8 +244,36 @@ def _design(
     return np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0), used, names
 
 
-def _clip(name: str, value: float) -> float:
-    lo, hi = CLAMPS.get(name, (-1e6, 1e6))
+def star_pool_of(source: dict[str, Any] | None, default: int = 12) -> int:
+    """Urne d’étoiles d’un tirage, entre 2 et 12. `default` si le tirage n’en porte pas."""
+    fallback = max(2, min(12, int(default)))
+    if not source or source.get("star_pool") is None:
+        return fallback
+    try:
+        return max(2, min(12, int(source["star_pool"])))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _clamp_span(name: str, star_pool: int = 12) -> tuple[float, float]:
+    """Bornes légales. Les étoiles suivent l’urne ; le pool 12 retrouve les anciennes bornes fixes."""
+    pool = max(2, min(12, int(star_pool)))
+    if name == "star_sum":
+        return 3.0, float(2 * pool - 1)
+    if name in ("e1", "e_gap", "star_spread", "level:e1"):
+        return 1.0, float(pool - 1)
+    if name == "level:e2":
+        return 2.0, float(pool)
+    if name in ("delta:e1", "delta:e2"):
+        span = float(pool - 1)
+        return -span, span
+    if name == "star_consecutive":
+        return 0.0, 1.0
+    return CLAMPS.get(name, (-1e6, 1e6))
+
+
+def _clip(name: str, value: float, star_pool: int = 12) -> float:
+    lo, hi = _clamp_span(name, star_pool)
     if not np.isfinite(value):
         return (lo + hi) / 2.0
     return float(min(hi, max(lo, value)))
@@ -413,10 +432,10 @@ def _past_only_column(
     return out
 
 
-def _moments_from_alphas(found: dict[float, float], name: str) -> dict[str, float]:
-    mid = _clip(name, found.get(0.5, next(iter(found.values()))))
-    lo = _clip(name, found.get(0.1, mid))
-    hi = _clip(name, found.get(0.9, mid))
+def _moments_from_alphas(found: dict[float, float], name: str, star_pool: int = 12) -> dict[str, float]:
+    mid = _clip(name, found.get(0.5, next(iter(found.values()))), star_pool)
+    lo = _clip(name, found.get(0.1, mid), star_pool)
+    hi = _clip(name, found.get(0.9, mid), star_pool)
     if lo > mid:
         lo = mid
     if hi < mid:
@@ -446,6 +465,7 @@ def predict_moments(
     alphas = tuple(sorted(set(quantiles)))
     if 0.5 not in alphas:
         alphas = tuple(sorted(alphas + (0.5,)))
+    pool = star_pool_of(horizon[0] if horizon else None)
 
     x_time, used, feat_names = _design(
         rows,
@@ -489,7 +509,7 @@ def predict_moments(
             found[alpha] = pred
             if alpha == 0.5:
                 median_model = model
-        moments[name] = _moments_from_alphas(found, name)
+        moments[name] = _moments_from_alphas(found, name, pool)
         if name == "sum" and median_model is not None:
             importance_models.append((median_model, feat_names))
 
@@ -539,7 +559,7 @@ def predict_moments(
             found[alpha] = pred
             if alpha == 0.5:
                 median_model = model
-        moments[name] = _moments_from_alphas(found, name)
+        moments[name] = _moments_from_alphas(found, name, pool)
         carried[name] = moments[name]
         column = _past_only_column(
             x_chain,
@@ -566,7 +586,7 @@ def predict_moments(
                 library=library,
             )
             found[alpha] = pred
-        moments[f"level:{name}"] = _moments_from_alphas(found, f"level:{name}")
+        moments[f"level:{name}"] = _moments_from_alphas(found, f"level:{name}", pool)
 
     for name in RANK_LEVELS:
         y = np.asarray([float(rows[t][f"d_{name}"]) for t in used], dtype=float)
@@ -582,7 +602,7 @@ def predict_moments(
                 library=library,
             )
             found[alpha] = pred
-        moments[f"delta:{name}"] = _moments_from_alphas(found, f"delta:{name}")
+        moments[f"delta:{name}"] = _moments_from_alphas(found, f"delta:{name}", pool)
 
     return moments, _importance(importance_models), library
 
@@ -637,6 +657,26 @@ def darts_covariate_rows(
     return past_used, past_rows, clock_names, future_rows
 
 
+def darts_training_window(n: int, focus: int, mode: str) -> tuple[int, list[float]] | None:
+    """Début de série et poids par date, les mêmes lignes que `loss_indices`.
+
+    La série commence `lags` tirages avant la première ligne de perte, pour que
+    les décalages existent. En fenêtre, ce préfixe pèse 0 : il sert de contexte,
+    il n’entre pas dans la perte. None sans huit lignes de perte.
+    """
+    if n <= 0:
+        return None
+    focus_used = max(1, min(int(focus), n))
+    focus_start = n - focus_used
+    lags, _past = lag_choice(n)
+    trained = loss_indices(n, lags, focus_start, mode)
+    if len(trained) < 8:
+        return None
+    start = max(0, trained[0] - lags)
+    weights = [row_weight(start + index, focus_start, mode) for index in range(n - start)]
+    return start, weights
+
+
 def try_darts_medians(
     rows: list[dict[str, Any]],
     horizon: list[dict[str, Any]],
@@ -645,21 +685,25 @@ def try_darts_medians(
     focus: int,
     families: Iterable[str],
 ) -> dict[str, float] | None:
-    """Un pas Darts. None si le paquet ou l’ajustement manque."""
+    """Un pas Darts. None si le paquet ou l’ajustement manque.
+
+    Pulse reste une covariable passée, décalée d’un cran : Darts ne le lit pas
+    dans le futur, où la ligne d’après a déjà réajusté l’onde avec le tirage prévu.
+    """
     try:
         from darts.models import LightGBMModel
     except Exception:
         return None
     n = len(rows)
-    focus_used = max(1, min(int(focus), n))
-    focus_start = n - focus_used
+    fitted = darts_training_window(n, focus, mode)
+    if fitted is None:
+        return None
+    start, weight_values = fitted
     lags, past_lags = lag_choice(n)
     past_names = past_columns(families)
     future_names = future_columns(families)
     target_names = ["sum", "star_sum", "n1", "parity", "spread", "consecutive", "star_consecutive"]
-    start = max(0, focus_start - lags) if mode == "fenetre" else 0
-    if n - start <= lags + 8:
-        return None
+    pool = star_pool_of(horizon[0] if horizon else None)
     try:
         try:
             import lightgbm as lgb
@@ -700,9 +744,7 @@ def try_darts_medians(
             "past_covariates": past,
             "future_covariates": future,
         }
-        if mode == "corpus":
-            weights = [[3.0 if (start + i) >= focus_start else 1.0] for i in range(n - start)]
-            fit_args["sample_weight"] = TimeSeries.from_values(np.asarray(weights, dtype=float))
+        fit_args["sample_weight"] = TimeSeries.from_values(np.asarray(weight_values, dtype=float).reshape(-1, 1))
         try:
             model.fit(**fit_args)
         except TypeError:
@@ -717,7 +759,7 @@ def try_darts_medians(
         values = np.asarray(pred.values(), dtype=float).reshape(-1)
         if values.size < len(target_names):
             return None
-        return {name: _clip(name, float(values[i])) for i, name in enumerate(target_names)}
+        return {name: _clip(name, float(values[i]), pool) for i, name in enumerate(target_names)}
     except Exception:
         return None
 
@@ -763,11 +805,20 @@ def chronos_quantiles(items: list[dict[str, Any]]) -> list[list[dict[str, float]
             tables = [np.asarray(table, dtype=float).reshape(-1, len(CHRONOS_LEVELS)) for table in quantiles]
             if len(tables) != len(items) or not all(np.isfinite(table).all() for table in tables):
                 raise ValueError("quantile manquant ou non fini")
+            bands: list[list[dict[str, float]]] = []
+            for table in tables:
+                rows_out: list[dict[str, float]] = []
+                for row in table:
+                    lo, mid, hi = (float(row[0]), float(row[1]), float(row[2]))
+                    if not lo <= mid <= hi:
+                        raise ValueError("quantile non croissant")
+                    rows_out.append({"lo": lo, "mid": mid, "hi": hi})
+                bands.append(rows_out)
         except Exception as exc:
             detail = " ".join(str(exc).split())
             _CHRONOS_ERROR = f"{type(exc).__name__}: {detail if len(detail) <= 300 else detail[:299] + '…'}"
             raise RuntimeError(_CHRONOS_ERROR) from exc
-    return [[dict(zip(("lo", "mid", "hi"), sorted(float(value) for value in row))) for row in table] for table in tables]
+    return bands
 
 
 def chronos_problem(requested: bool, used: bool) -> str | None:
@@ -802,18 +853,35 @@ def _apply_external(
     *,
     names: tuple[str, ...] = ("sum", "star_sum", "n1", "parity", "spread", "consecutive", "star_consecutive"),
     mix_n1: bool = False,
+    star_pool: int = 12,
 ) -> None:
+    """Remplace la médiane. Si elle sort de la bande, les deux bords suivent du même pas.
+
+    Coller seulement le bord franchi à la médiane ferait d’un quantile 10 % ou
+    90 % la médiane elle-même. Le décalage commun garde l’écart de chaque côté,
+    puis les bornes légales ramènent ce qui dépasse.
+    """
     if not external:
         return
     for name in names:
         if name not in external or name not in moments:
             continue
-        value = _clip(name, external[name])
+        band = moments[name]
+        value = _clip(name, external[name], star_pool)
         if name == "n1" and mix_n1:
-            value = 0.5 * moments[name]["mid"] + 0.5 * value
-        moments[name]["mid"] = value
-        moments[name]["lo"] = min(moments[name]["lo"], value)
-        moments[name]["hi"] = max(moments[name]["hi"], value)
+            value = _clip(name, 0.5 * float(band["mid"]) + 0.5 * value, star_pool)
+        lo = float(band["lo"])
+        hi = float(band["hi"])
+        if value < lo or value > hi:
+            shift = value - float(band["mid"])
+            lo += shift
+            hi += shift
+            floor, ceiling = _clamp_span(name, star_pool)
+            lo = min(value, max(floor, lo))
+            hi = max(value, min(ceiling, hi))
+        band["lo"] = lo
+        band["mid"] = value
+        band["hi"] = hi
 
 
 def _round_moments(moments: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
@@ -879,7 +947,7 @@ def _persist_grid(grid: dict[str, Any], frame: Frame, persist: dict[str, int] | 
         frame.rows,
         radius=persist["radius"],
         limit=persist["limit"],
-        star_pool=frame.star_pool,
+        star_pool=star_pool_of(frame.horizon[0] if frame.horizon else None, frame.star_pool),
     )
     return {
         "grid": {"numbers": snapped["numbers"], "stars": snapped["stars"]},
@@ -1066,6 +1134,7 @@ def run_training(
         "weekday": frame.weekday,
         "covariates": families,
         "pulse": report["shifts"][-1]["pulse"] if report["shifts"] else public_pulse(frame.horizon[0]),
+        "star_pool": frame.star_pool,
         "anchor_year": frame.anchor_year,
         "estimators": settings.estimators,
         "catboost": catboost_error is None,

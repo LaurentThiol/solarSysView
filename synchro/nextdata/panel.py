@@ -291,10 +291,12 @@ def build_frame(
     pools.append(star_pool_for(nxt))
     pools.append(star_pool_for(following))
     states = causal_pulse(numbers, stars, pools)
-    for row, state in zip(rows, states):
+    for row, state, pool in zip(rows, states, pools):
         row.update(state)
-    for item, state in zip(horizon, states[len(rows) :]):
+        row["star_pool"] = int(pool)
+    for item, state, pool in zip(horizon, states[len(rows) :], pools[len(rows) :]):
         item.update(state)
+        item["star_pool"] = int(pool)
     return Frame(
         rows=rows,
         horizon=horizon,

@@ -514,16 +514,14 @@ export function NextDataLab() {
   }
 
   const maxCount = Math.max(1, ...(report?.base.numbers.map((item) => item.count) ?? [1]))
-  const lowest = report ? lowestAgainstNext(report.backtest.metrics) : null
+  const progress = report?.progress ?? null
+  const lowest = report && progress?.complete ? lowestAgainstNext(report.backtest.metrics) : null
   const runnerUp = undecidedRunnerUp(lowest)
   const lowestTail = runnerUp ? `, sans écart tranché avec « ${retourLabel(runnerUp)} »` : ""
-  const retourChance = report
-    ? RETOUR_READINGS.map((item) => report.backtest.metrics[item.id]?.hits_chance).find((chance) => chance?.numbers)
-    : null
   const shown: RetourId =
     library === "catboost" && report?.modes[primary].catboost ? (`${primary}_catboost` as const) : primary
+  const retourChance = report ? report.backtest.metrics[shown]?.hits_chance : null
   const shownBlock = library === "catboost" && report?.modes[primary].catboost ? report.modes[primary].catboost : report?.modes[primary]
-  const progress = report?.progress ?? null
   const shownBands = report?.backtest.bands?.[shown]
   const persistInfo = report?.persist ?? null
   const persistMoved = Boolean(shownBlock?.persist?.swaps.length)
@@ -737,14 +735,14 @@ export function NextDataLab() {
                             <TitleHelp help={NEXTDATA_HELP.grille}>{MODE_LABEL[mode]}</TitleHelp>
                             <span className="text-xs font-normal text-muted-foreground">
                               {active ? "mise en avant" : "comparaison"}
-                              {block.mae_sum != null ? ` · MAE somme ${block.mae_sum}` : ""}
+                              {block.mae_sum != null ? ` · MAE somme ${formatDecimal(block.mae_sum)}` : ""}
                             </span>
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="flex flex-col gap-4">
                           <div className={cn("flex flex-col gap-2 rounded-xl p-2", active && library === "lightgbm" && "bg-primary/5")}>
                             <p className="text-xs font-medium text-muted-foreground">
-                              LightGBM{block.mae_sum != null ? ` · MAE somme ${block.mae_sum}` : ""}
+                              LightGBM{block.mae_sum != null ? ` · MAE somme ${formatDecimal(block.mae_sum)}` : ""}
                               {block.engine === "darts" ? " · Darts" : ""}
                               {block.chronos?.available ? ` · ${chronosShare(block.chronos)}` : ""}
                             </p>
@@ -757,7 +755,7 @@ export function NextDataLab() {
                           {block.catboost && (
                             <div className={cn("flex flex-col gap-2 rounded-xl p-2", active && library === "catboost" && "bg-primary/5")}>
                               <p className="text-xs font-medium text-muted-foreground">
-                                CatBoost{block.catboost.mae_sum != null ? ` · MAE somme ${block.catboost.mae_sum}` : ""}
+                                CatBoost{block.catboost.mae_sum != null ? ` · MAE somme ${formatDecimal(block.catboost.mae_sum)}` : ""}
                               </p>
                               <ForecastBalls grid={block.catboost.grid} quantiles={block.catboost.quantiles} active={active && library === "catboost"} />
                               <p className="text-xs tabular-nums text-muted-foreground">{shapeCaption(block.catboost.grid.numbers, block.catboost.grid.stars)}</p>

@@ -478,7 +478,7 @@ def test_darts_lightgbm_stays_single_threaded(monkeypatch) -> None:
 
 
 def test_darts_reads_corpus_weights_and_predicts_a_median(monkeypatch) -> None:
-    """Le faux Darts refuse des poids hors TimeSeries, comme darts 0.41."""
+    """Les deux modes passent des poids TimeSeries : 3 sur le focus en corpus, 0 puis 1 en fenêtre."""
     import sys
     import types
 
@@ -531,7 +531,10 @@ def test_darts_reads_corpus_weights_and_predicts_a_median(monkeypatch) -> None:
     assert set(weights[: -frame.focus]) == {1.0}
     window = try_darts_medians(frame.rows, frame.horizon, mode="fenetre", focus=frame.focus, families=["forme"])
     assert window is not None
-    assert seen["weights"] is None
+    window_weights = seen["weights"].values().reshape(-1)  # type: ignore[union-attr]
+    # Quinze tirages de contexte avant le focus, poids 0, puis le focus à 1.
+    assert window_weights[:15].tolist() == [0.0] * 15
+    assert set(window_weights[15:].tolist()) == {1.0}
 
 
 def test_status_does_not_import_darts_or_torch() -> None:
@@ -879,14 +882,14 @@ def test_chronos_blends_the_three_quantiles_and_leaves_the_chain() -> None:
         "star_sum": {"lo": 10.0, "mid": 14.0, "hi": 18.0},
         "n1": {"lo": 2.0, "mid": 8.0, "hi": 14.0},
     }
-    note = backtest._blend_chronos(frame, "corpus", moments, {"chronos": {"corpus": bands}}, [])
+    note = backtest._blend_chronos(frame, "corpus", moments, {"chronos": {"corpus": bands}}, [], frame.star_pool)
     assert note["window"] == 0
     assert note["weights"] == {"sum": 0.5, "star_sum": 0.5, "n1": 0.5}
     assert moments["sum"] == {"lo": 100.0, "mid": 115.0, "hi": 130.0}
     assert moments["star_sum"] == {"lo": 9.0, "mid": 12.0, "hi": 15.0}
     assert moments["level:n1"] == {"lo": 3.0, "mid": 7.0, "hi": 11.0}
     assert moments["n1"] == {"lo": 3.0, "mid": 5.0, "hi": 7.0}
-    failed = backtest._blend_chronos(frame, "corpus", moments, {"chronos": {"error": "OSError: hub"}}, [])
+    failed = backtest._blend_chronos(frame, "corpus", moments, {"chronos": {"error": "OSError: hub"}}, [], frame.star_pool)
     assert failed == {"available": False, "weight": 1.0}
 
 
@@ -1277,6 +1280,132 @@ def test_training_route_returns_progress(monkeypatch) -> None:
     assert body["progress"] == {"ready": 1, "total": 24, "complete": False}
     assert [shift["x"] for shift in body["shifts"]] == [1]
     assert body["shifts"][0]["readings"]["corpus"]["calibrated"] is False
+
+
+def test_a_tight_delta_outweighs_a_wide_level() -> None:
+    """Le poids est prior / largeur. La bande du delta est la sienne, pas celle du niveau."""
+    moments = {
+        "n1": {"lo": 1, "mid": 8, "hi": 20},
+        "g1": {"lo": 1, "mid": 8, "hi": 20},
+        "g2": {"lo": 1, "mid": 8, "hi": 20},
+        "g3": {"lo": 1, "mid": 8, "hi": 20},
+        "g4": {"lo": 1, "mid": 8, "hi": 20},
+        "e1": {"lo": 1, "mid": 3, "hi": 6},
+        "e_gap": {"lo": 1, "mid": 4, "hi": 8},
+        "level:n1": {"lo": 0, "mid": 5, "hi": 10},
+        "delta:n1": {"lo": -0.5, "mid": 0, "hi": 0.5},
+    }
+    _out, trace = compose_ranks(moments, {"n1": 12, "n2": 20, "n3": 28, "n4": 36, "n5": 44})
+    assert trace is not None
+    weights = trace["numbers"][0]["weights"]
+    assert weights["delta"] == pytest.approx(0.8824, abs=1e-4)
+    assert weights["level"] == pytest.approx(0.1176, abs=1e-4)
+    assert weights["delta"] > weights["level"]
+
+
+def test_darts_window_trains_the_same_rows_as_the_loss() -> None:
+    from synchro.nextdata.forecast import darts_training_window
+
+    start, weights = darts_training_window(160, 50, "fenetre")
+    assert start == 110 - 16
+    assert weights[:16] == [0.0] * 16
+    assert weights[16:] == [1.0] * 50
+    corpus_start, corpus_weights = darts_training_window(160, 50, "corpus")
+    assert corpus_start == 0
+    assert corpus_weights[109] == 1.0
+    assert corpus_weights[110] == 3.0
+    short_start, short_weights = darts_training_window(100, 5, "fenetre") or (None, [])
+    assert short_start == 0
+    assert short_weights[94] == 0.0
+    assert short_weights[95] == 1.0
+    assert darts_training_window(8, 5, "corpus") is None
+
+
+def test_external_median_keeps_the_quantile_gaps() -> None:
+    from synchro.nextdata.forecast import _apply_external
+
+    inside = {"sum": {"lo": 80.0, "mid": 100.0, "hi": 120.0}}
+    _apply_external(inside, {"sum": 110})
+    assert inside["sum"] == {"lo": 80.0, "mid": 110.0, "hi": 120.0}
+    outside = {"sum": {"lo": 80.0, "mid": 100.0, "hi": 120.0}}
+    _apply_external(outside, {"sum": 140})
+    assert outside["sum"] == {"lo": 120.0, "mid": 140.0, "hi": 160.0}
+    capped = {"n1": {"lo": 20.0, "mid": 30.0, "hi": 40.0}}
+    _apply_external(capped, {"n1": 50})
+    assert capped["n1"] == {"lo": 36.0, "mid": 46.0, "hi": 46.0}
+
+
+def test_star_clip_follows_the_urn() -> None:
+    from synchro.nextdata.forecast import _clip
+
+    assert _clip("star_sum", 22.5, 12) == 22.5
+    assert _clip("star_sum", 22.5, 11) == 21.0
+    assert _clip("level:e2", 12, 9) == 9.0
+    assert _clip("e1", 10, 9) == 8.0
+    assert _clip("sum", 10, 9) == 15.0
+    assert _clip("delta:e2", 11, 11) == 10.0
+
+
+def test_sum_mae_scores_the_played_grid() -> None:
+    from synchro.nextdata.backtest import _metrics
+
+    step = {
+        "actual": {"sum": 100.0, "numbers": [1, 2, 3, 4, 5], "stars": [1, 2]},
+        "corpus": {
+            "sum": 90.0,
+            "sum_model": 80.0,
+            "numbers": [10, 20, 30, 40, 50],
+            "stars": [1, 2],
+        },
+    }
+    metrics = _metrics([step], "corpus", 12)
+    assert metrics["mae"]["sum"] == 10.0
+
+
+def test_chronos_quantiles_keep_level_order(monkeypatch) -> None:
+    import sys
+    import types
+
+    import numpy as np
+
+    from synchro.nextdata import forecast as forecast_mod
+    from synchro.nextdata.forecast import chronos_quantiles
+
+    torch_mod = types.ModuleType("torch")
+    chronos_mod = types.ModuleType("chronos")
+    chronos_mod.BaseChronosPipeline = object  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "torch", torch_mod)
+    monkeypatch.setitem(sys.modules, "chronos", chronos_mod)
+
+    class Ordered:
+        def predict_quantiles(self, items, prediction_length=1, quantile_levels=None):
+            table = np.asarray([[[1.0, 4.0, 9.0], [2.0, 3.0, 8.0]]], dtype=float)
+            return [table], None
+
+    class Crossed:
+        def predict_quantiles(self, items, prediction_length=1, quantile_levels=None):
+            table = np.asarray([[[9.0, 1.0, 4.0]]], dtype=float)
+            return [table], None
+
+    monkeypatch.setattr(forecast_mod, "_CHRONOS", Ordered())
+    monkeypatch.setattr(forecast_mod, "_CHRONOS_ERROR", None)
+    try:
+        assert chronos_quantiles([{"target": [[1.0, 2.0]]}]) == [
+            [{"lo": 1.0, "mid": 4.0, "hi": 9.0}, {"lo": 2.0, "mid": 3.0, "hi": 8.0}]
+        ]
+        monkeypatch.setattr(forecast_mod, "_CHRONOS", Crossed())
+        with pytest.raises(RuntimeError, match="non croissant"):
+            chronos_quantiles([{"target": [[1.0]]}])
+    finally:
+        monkeypatch.setattr(forecast_mod, "_CHRONOS_ERROR", None)
+        monkeypatch.setattr(forecast_mod, "_CHRONOS", None)
+
+
+def test_rows_and_horizon_carry_their_star_pool() -> None:
+    frame = build_frame(_draws(30, seed=4), focus=24)
+    assert frame.rows[-1]["star_pool"] == 12
+    assert frame.horizon[0]["star_pool"] == 12
+    assert frame.horizon[1]["star_pool"] == 12
 
 
 def test_chain_features_do_not_reuse_the_row_target() -> None:

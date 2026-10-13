@@ -496,19 +496,16 @@ def _rank_reading(
     chain_lo, chain_mid, chain_hi = chain
     parts: list[tuple[str, float, float, float]] = []
     level = moments.get(f"level:{name}")
-    level_width: float | None = None
     if level:
-        level_lo, level_mid, level_hi = _band(level, chain_mid)
-        level_width = max(level_hi - level_lo, 1e-6)
-        parts.append(("level", level_mid, level_width, _LEVEL_PRIOR))
+        _level_lo, level_mid, level_hi = _band(level, chain_mid)
+        parts.append(("level", level_mid, max(level_hi - _level_lo, 1e-6), _LEVEL_PRIOR))
     delta = moments.get(f"delta:{name}")
     last = _previous_rank(previous, name)
     delta_level: float | None = None
     if delta and last is not None:
-        _, delta_mid, _ = _band(delta, 0.0)
+        delta_lo, delta_mid, delta_hi = _band(delta, 0.0)
         delta_level = last + delta_mid
-        width = level_width if level_width is not None else max(_band(delta, 0.0)[2] - _band(delta, 0.0)[0], 1e-6)
-        parts.append(("delta", delta_level, width, _DELTA_PRIOR))
+        parts.append(("delta", delta_level, max(delta_hi - delta_lo, 1e-6), _DELTA_PRIOR))
     if not parts:
         parts.append(("chain", chain_mid, max(chain_hi - chain_lo, 1e-6), _CHAIN_PRIOR))
     weights = _mix_weights(parts)

@@ -17,7 +17,7 @@ from typing import Any, Iterable
 from synchro.nextdata.conformal import calibrate, coverage, truth_of
 from synchro.nextdata.covariates import SHAPE_SERIES, grid_shape
 from synchro.nextdata.empirical import recount
-from synchro.nextdata.forecast import _apply_external, _clip, _rank_view, blend_mid, blend_weight
+from synchro.nextdata.forecast import _apply_external, _clip, _rank_view, blend_mid, blend_weight, star_pool_of
 from synchro.nextdata.pulse_features import public_pulse
 from synchro.nextdata.panel import Frame
 from synchro.nextdata.persist import NUMBER_POOL, NUMBER_SLOTS, STAR_SLOTS, score_swaps, snap_grid
@@ -89,7 +89,7 @@ def persist_side(frame: Frame, t: int, reading: dict[str, Any], persist: dict[st
         frame.rows[max(0, t - 2) : t],
         radius=persist["radius"],
         limit=persist["limit"],
-        star_pool=frame.star_pool,
+        star_pool=_target_pool(frame, t),
     )
     packed = _pack(snapped["numbers"], snapped["stars"], reading["packed"].get("sum_model"))
     swaps = snapped["swaps"]
@@ -122,7 +122,14 @@ def _chronos_bands(parts: dict[str, Any], mode: str) -> dict[str, dict[str, floa
     return None
 
 
-def _lightgbm_mids(parts: dict[str, Any], mode: str) -> dict[str, float] | None:
+def _target_pool(frame: Frame, t: int) -> int:
+    """Urne du tirage noté, ou celle du prochain tirage quand t est l’horizon."""
+    if t < len(frame.rows):
+        return star_pool_of(frame.rows[t], frame.star_pool)
+    return star_pool_of(frame.horizon[0] if frame.horizon else None, frame.star_pool)
+
+
+def _lightgbm_mids(parts: dict[str, Any], mode: str, star_pool: int) -> dict[str, float] | None:
     """Médianes LightGBM que Chronos rejoint, Darts compris, avant tout mélange."""
     block = _model_block(parts, mode, "lightgbm")
     if block is None:
@@ -132,7 +139,7 @@ def _lightgbm_mids(parts: dict[str, Any], mode: str) -> dict[str, float] | None:
         return None
     darts = (parts.get("darts") or {}).get(mode)
     if darts:
-        _apply_external(moments, darts, names=("sum", "star_sum"))
+        _apply_external(moments, darts, names=("sum", "star_sum"), star_pool=star_pool)
     return {name: float(moments[target]["mid"]) for name, target in CHRONOS_TARGETS.items()}
 
 
@@ -145,7 +152,7 @@ def _chronos_weights(
     totals = {name: [0.0, 0.0] for name in CHRONOS_SERIES}
     count = 0
     for t, step in window:
-        mids = _lightgbm_mids(step["parts"], mode)
+        mids = _lightgbm_mids(step["parts"], mode, _target_pool(frame, t))
         bands = _chronos_bands(step["parts"], mode)
         if mids is None or bands is None or t >= len(frame.rows):
             continue
@@ -167,6 +174,7 @@ def _blend_chronos(
     moments: dict[str, dict[str, float]],
     parts: dict[str, Any],
     window: list[tuple[int, dict[str, Any]]],
+    star_pool: int,
 ) -> dict[str, Any]:
     """Chronos rejoint LightGBM sur la somme, la somme des étoiles et le niveau de n1, bornes 10–90 comprises.
 
@@ -181,7 +189,7 @@ def _blend_chronos(
         if target not in moments:
             continue
         moments[target] = {
-            key: _clip(target, blend_mid(moments[target][key], bands[name][key], weights[name]))
+            key: _clip(target, blend_mid(moments[target][key], bands[name][key], weights[name]), star_pool)
             for key in ("lo", "mid", "hi")
         }
     return {
@@ -206,7 +214,8 @@ def _assemble(
     rows = frame.rows
     parts = step["parts"]
     last = rows[t - 1]
-    base = recount(rows[max(0, t - frame.focus) : t], star_pool=frame.star_pool)
+    pool = _target_pool(frame, t)
+    base = recount(rows[max(0, t - frame.focus) : t], star_pool=pool)
     out: dict[str, Any] = {
         "t": t,
         "date": rows[t]["date"] if t < len(rows) else frame.next_date,
@@ -227,14 +236,14 @@ def _assemble(
         if library == "lightgbm":
             darts = (parts.get("darts") or {}).get(mode)
             if darts:
-                _apply_external(moments, darts, mix_n1=True)
+                _apply_external(moments, darts, mix_n1=True, star_pool=pool)
                 engine = "darts"
             if with_chronos:
-                chronos = _blend_chronos(frame, mode, moments, parts, window)
+                chronos = _blend_chronos(frame, mode, moments, parts, window, pool)
         composed, trace = compose_ranks(moments, last)
         if trace is not None and chronos and chronos["available"]:
             trace["numbers"][0]["chronos"] = {"value": chronos["n1"], "share": round(1.0 - chronos["weights"]["n1"], 4)}
-        ranked = beam(composed, base, star_pool=frame.star_pool)
+        ranked = beam(composed, base, star_pool=pool)
         if not ranked:
             continue
         best = ranked[0]
@@ -245,7 +254,7 @@ def _assemble(
             "library": library,
             "engine": engine,
             "moments": composed,
-            "view": _rank_view(composed, frame.star_pool),
+            "view": _rank_view(composed, pool),
             "grid": {"numbers": best["numbers"], "stars": best["stars"], "score": best["score"]},
             "alternates": ranked[1:],
             "packed": packed,
