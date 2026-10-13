@@ -9,15 +9,17 @@ la machine reste sous le plafond.
 
 from __future__ import annotations
 
+import atexit
 import math
 import multiprocessing
 import os
+import threading
 import time
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from concurrent.futures.process import BrokenProcessPool
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from synchro.nextdata.covariates import normalize_families
 from synchro.nextdata.panel import YEAR_KEYS
@@ -370,31 +372,35 @@ def run_sweep(
     limit = _clamp_limit(load_limit)
     wanted = tuple(int(lag) for lag in (lags if lags is not None else range(1, 11)))
     variants = main_effects(focus=int(focus), years=years, covariates=covariates, with_chronos=with_chronos)
+    frame_for = _frames(draws, weekday)
     try:
-        anchor_frame = _frame(draws, variants[0], weekday)
+        anchor_frame = frame_for(variants[0])
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
     anchor_dates = shift_dates(anchor_frame, wanted)
     if not anchor_dates:
         return {"ok": False, "error": "Pas assez de tirages pour un décalage."}
 
-    built = [
-        _prepare(draws, variant, weekday, anchor_dates, wanted, int(estimators)) for variant in variants
-    ]
+    built = [_prepare(frame_for, variant, anchor_dates, wanted, int(estimators)) for variant in variants]
+    found: dict[str, Any] = {}
     cpu_before = read_cpu_times()
     memory = read_memory_free()
     cap = process_cap(os.cpu_count() or 1, limit)
-    finished, allowed, parallel = _compute_missing(built, budget=max(0.0, float(budget)), cap=cap, limit=limit)
+    finished, allowed, parallel = _compute_missing(
+        built, found, budget=max(0.0, float(budget)), cap=cap, limit=limit
+    )
     cpu_after = read_cpu_times()
     if cpu_before is None or cpu_after is None:
         cpu = load_ratio()
     else:
         cpu = cpu_ratio(cpu_before, cpu_after)
-    rows = [_public_row(item, anchor_dates, persist) for item in built]
+    rows = [_public_row(item, anchor_dates, persist, found) for item in built]
     decision = _attach_verdicts(rows)
     for row in rows:
         row.pop("_series", None)
-    ready, total = _census(built)
+    ready, total = _census(built, found)
+    if total > 0 and ready >= total:
+        _close_sweep_pool()
     leader = decision["leader"]
     if leader is not None:
         leader = {"id": leader["id"], "label": leader["label"], "reading": leader["reading"]}
@@ -431,16 +437,25 @@ def _clamp_limit(value: float) -> float:
     return min(0.95, max(0.5, limit))
 
 
-def _frame(draws: list[dict[str, Any]], variant: Variant, weekday: str | None) -> Any:
+def _frames(draws: list[dict[str, Any]], weekday: str | None) -> Callable[[Variant], Any]:
+    """Un cadre par jeu d’années, partagé par les lignes : le focus ne change que la queue lue."""
     from synchro.nextdata.panel import build_frame
 
-    return build_frame(draws, years=variant.years, focus=variant.focus, weekday=weekday)
+    built: dict[tuple[str, ...], Any] = {}
+
+    def frame_for(variant: Variant) -> Any:
+        base = built.get(variant.years)
+        if base is None:
+            base = built[variant.years] = build_frame(draws, years=variant.years, focus=variant.focus, weekday=weekday)
+        used = max(1, min(int(variant.focus), len(base.rows)))
+        return replace(base, focus=used, focus_start=len(base.rows) - used)
+
+    return frame_for
 
 
 def _prepare(
-    draws: list[dict[str, Any]],
+    frame_for: Callable[[Variant], Any],
     variant: Variant,
-    weekday: str | None,
     anchor_dates: list[str],
     lags: tuple[int, ...],
     estimators: int,
@@ -449,7 +464,7 @@ def _prepare(
 
     item: dict[str, Any] = {"variant": variant, "status": "pending", "detail": None, "frame": None, "keys": []}
     try:
-        frame = _frame(draws, variant, weekday)
+        frame = frame_for(variant)
     except ValueError as exc:
         item["status"] = "short"
         item["detail"] = str(exc)
@@ -484,6 +499,7 @@ def _prepare(
 
 def _compute_missing(
     built: list[dict[str, Any]],
+    found: dict[str, Any],
     *,
     budget: float,
     cap: int,
@@ -491,17 +507,18 @@ def _compute_missing(
 ) -> tuple[int, int, bool]:
     from synchro.nextdata.steps import worker_count
 
-    pending = _pending_jobs(built)
+    pending = _pending_jobs(built, found)
     if not pending or budget <= 0:
         return 0, 1, False
     parallel = worker_count() > 1 and cap > 1
     if not parallel:
-        return _run_inline(built, pending, budget), 1, False
-    finished, allowed = _run_pool(built, pending, budget=budget, cap=cap, limit=limit)
+        return _run_inline(built, pending, budget, found), 1, False
+    finished, allowed = _run_pool(built, pending, budget=budget, cap=cap, limit=limit, found=found)
     return finished, allowed, True
 
 
-def _pending_jobs(built: list[dict[str, Any]]) -> list[_Job]:
+def _pending_jobs(built: list[dict[str, Any]], found: dict[str, Any]) -> list[_Job]:
+    """Morceaux à calculer, décalage par décalage. Ceux du cache rejoignent `found`, lus une fois."""
     from synchro.nextdata.steps import load_part
 
     seen: set[str] = set()
@@ -516,10 +533,13 @@ def _pending_jobs(built: list[dict[str, Any]]) -> list[_Job]:
         key=lambda row: (row[0], row[1], row[2], row[3]),
     )
     for lag, _chronos, index, part, t, key in ordered:
-        if key in seen or load_part(key) is not None:
-            seen.add(key)
+        if key in seen:
             continue
         seen.add(key)
+        data = load_part(key)
+        if data is not None:
+            found[key] = data
+            continue
         settings = built[index]["settings"]
         jobs.append(
             _Job(
@@ -539,15 +559,51 @@ def _pending_jobs(built: list[dict[str, Any]]) -> list[_Job]:
     return jobs
 
 
-def _run_inline(built: list[dict[str, Any]], jobs: list[_Job], budget: float) -> int:
+def _run_inline(built: list[dict[str, Any]], jobs: list[_Job], budget: float, found: dict[str, Any]) -> int:
     deadline = time.monotonic() + budget
     done = 0
     for job in jobs:
         if time.monotonic() >= deadline:
             break
-        _finish(job, _compute(built, job))
+        _finish(job, _compute(built, job), found)
         done += 1
     return done
+
+
+_SWEEP_POOL: ProcessPoolExecutor | None = None
+_SWEEP_SIZE = 0
+_SWEEP_LOCK = threading.Lock()
+
+
+def _sweep_pool(cap: int) -> ProcessPoolExecutor | None:
+    """Le pool de Méga, gardé d’une tranche à l’autre : ses processus n’importent les modèles qu’une fois."""
+    global _SWEEP_POOL, _SWEEP_SIZE
+    with _SWEEP_LOCK:
+        if _SWEEP_POOL is not None and _SWEEP_SIZE != cap:
+            _SWEEP_POOL.shutdown(wait=False, cancel_futures=True)
+            _SWEEP_POOL = None
+        if _SWEEP_POOL is None:
+            try:
+                _SWEEP_POOL = ProcessPoolExecutor(
+                    max_workers=cap,
+                    mp_context=multiprocessing.get_context("spawn"),
+                )
+            except (OSError, ValueError):
+                return None
+            _SWEEP_SIZE = cap
+        return _SWEEP_POOL
+
+
+@atexit.register
+def _close_sweep_pool(broken: ProcessPoolExecutor | None = None) -> None:
+    """Ferme le pool de Méga, parcours fini ou processus mort. `broken` ne ferme que ce pool-là."""
+    global _SWEEP_POOL
+    with _SWEEP_LOCK:
+        if broken is not None and _SWEEP_POOL is not broken:
+            return
+        if _SWEEP_POOL is not None:
+            _SWEEP_POOL.shutdown(wait=False, cancel_futures=True)
+        _SWEEP_POOL = None
 
 
 def _run_pool(
@@ -557,71 +613,71 @@ def _run_pool(
     budget: float,
     cap: int,
     limit: float,
+    found: dict[str, Any],
 ) -> tuple[int, int]:
+    """Les arbres dans le pool, sous le plafond de charge ; Chronos dans l’API, un pas à la fois, en même temps.
+
+    Chronos reste dans le processus de l’API : son modèle y est déjà chargé, et
+    son échec y est noté, si bien que la tranche suivante ne le redemande plus.
+    """
     from synchro.nextdata.steps import _part_job
 
     deadline = time.monotonic() + budget
-    pending = list(jobs)
+    pending = [job for job in jobs if job.part != "chronos"]
+    chronos = [job for job in jobs if job.part == "chronos"]
+    pool = _sweep_pool(cap)
+    if pool is None:
+        return _run_inline(built, jobs, budget, found), 1
     allowed = 1
     finished = 0
     cpu_mark = read_cpu_times()
     blind = blind_machine()
     broken = False
-    try:
-        pool: ProcessPoolExecutor | None = ProcessPoolExecutor(
-            max_workers=cap,
-            mp_context=multiprocessing.get_context("spawn"),
-        )
-    except (OSError, ValueError):
-        return _run_inline(built, jobs, max(0.0, deadline - time.monotonic())), 1
     inflight: dict[Any, _Job] = {}
-    try:
-        while pending or inflight:
-            cpu_mark, cpu = _delta(cpu_mark)
-            memory = read_memory_free()
-            if blind:
-                allowed = cap
-            else:
-                allowed = next_allowance(len(inflight), allowed, cpu, memory, cap=cap, limit=limit)
-            now = time.monotonic()
-            while pending and len(inflight) < allowed and now < deadline:
-                if cpu is not None and cpu > limit and inflight:
-                    break
-                if memory is not None and memory < MEMORY_FLOOR and inflight:
-                    break
-                job = _take_next(pending, {item.part for item in inflight.values()})
-                if job is None:
-                    break
-                prefix, horizon = _inputs(built, job)
-                assert pool is not None
-                inflight[pool.submit(_part_job, prefix, horizon, job.part, job.settings)] = job
-            if not inflight:
+    while pending or inflight or chronos:
+        cpu_mark, cpu = _delta(cpu_mark)
+        memory = read_memory_free()
+        if blind:
+            allowed = cap
+        else:
+            allowed = next_allowance(len(inflight), allowed, cpu, memory, cap=cap, limit=limit)
+        now = time.monotonic()
+        while pending and len(inflight) < allowed and now < deadline:
+            if cpu is not None and cpu > limit and inflight:
                 break
-            done, _waiting = wait(set(inflight), timeout=0.4, return_when=FIRST_COMPLETED)
-            if not done:
-                continue
-            for future in done:
-                job = inflight.pop(future)
-                try:
-                    data = future.result()
-                except BrokenProcessPool:
-                    broken = True
-                    pending.extend(inflight.values())
-                    pending.append(job)
-                    inflight.clear()
-                    break
-                except Exception:
-                    data = None
-                if isinstance(data, dict):
-                    _finish(job, data)
-                finished += 1
-            if broken:
+            if memory is not None and memory < MEMORY_FLOOR and inflight:
                 break
-    finally:
-        if pool is not None:
-            pool.shutdown(wait=False, cancel_futures=True)
+            job = pending.pop(0)
+            prefix, horizon = _inputs(built, job)
+            inflight[pool.submit(_part_job, prefix, horizon, job.part, job.settings)] = job
+        if chronos and time.monotonic() < deadline:
+            job = chronos.pop(0)
+            _finish(job, _compute(built, job), found)
+            finished += 1
+        elif not inflight:
+            break
+        if not inflight:
+            continue
+        done, _waiting = wait(set(inflight), timeout=0.4, return_when=FIRST_COMPLETED)
+        for future in done:
+            job = inflight.pop(future)
+            try:
+                data = future.result()
+            except BrokenProcessPool:
+                broken = True
+                pending[:0] = [job, *inflight.values()]
+                inflight.clear()
+                break
+            except Exception:
+                data = None
+            if isinstance(data, dict):
+                _finish(job, data, found)
+            finished += 1
+        if broken:
+            break
     if broken:
-        finished += _run_inline(built, pending, max(0.0, deadline - time.monotonic()))
+        _close_sweep_pool(pool)
+        finished += _run_inline(built, pending + chronos, max(0.0, deadline - time.monotonic()), found)
         return finished, 1
     return finished, allowed
 
@@ -634,17 +690,6 @@ def _delta(mark: tuple[int, int] | None) -> tuple[tuple[int, int] | None, float 
     if mark is None:
         return now, None
     return now, cpu_ratio(mark, now)
-
-
-def _take_next(pending: list[_Job], running: set[str]) -> _Job | None:
-    """Le prochain morceau, dans l’ordre. Chronos attend que le pool soit libre, et le bloque."""
-    if not pending:
-        return None
-    job = pending[0]
-    if job.part == "chronos" or "chronos" in running:
-        if running:
-            return None
-    return pending.pop(0)
 
 
 def _inputs(built: list[dict[str, Any]], job: _Job) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -667,17 +712,16 @@ def _compute(built: list[dict[str, Any]], job: _Job) -> dict[str, Any]:
     return compute_part(prefix, horizon, job.part, settings)
 
 
-def _finish(job: _Job, data: dict[str, Any]) -> None:
+def _finish(job: _Job, data: dict[str, Any], found: dict[str, Any]) -> None:
     from synchro.nextdata.steps import save_part
 
     if job.part == "chronos" and "error" in data:
         return
     save_part(job.key, data)
+    found[job.key] = data
 
 
-def _census(built: list[dict[str, Any]]) -> tuple[int, int]:
-    from synchro.nextdata.steps import load_part
-
+def _census(built: list[dict[str, Any]], found: dict[str, Any]) -> tuple[int, int]:
     seen: set[str] = set()
     ready = total = 0
     for item in built:
@@ -686,12 +730,17 @@ def _census(built: list[dict[str, Any]]) -> tuple[int, int]:
                 continue
             seen.add(key)
             total += 1
-            if load_part(key) is not None:
+            if key in found:
                 ready += 1
     return ready, total
 
 
-def _public_row(item: dict[str, Any], anchor_dates: list[str], persist: dict[str, int] | None) -> dict[str, Any]:
+def _public_row(
+    item: dict[str, Any],
+    anchor_dates: list[str],
+    persist: dict[str, int] | None,
+    found: dict[str, Any],
+) -> dict[str, Any]:
     variant: Variant = item["variant"]
     published: dict[str, Any] = {
         "id": variant.id,
@@ -715,7 +764,7 @@ def _public_row(item: dict[str, Any], anchor_dates: list[str], persist: dict[str
     }
     if item.get("frame") is None or not item.get("keys"):
         return published
-    report = _report(item, persist)
+    report = _report(item, persist, found)
     shifts = report["shifts"]
     published["shifts_ready"] = len(shifts)
     published["summary"] = report["summary"]
@@ -746,25 +795,24 @@ def _series(shifts: list[dict[str, Any]], dates: list[str]) -> dict[str, list[fl
     }
 
 
-def _report(item: dict[str, Any], persist: dict[str, int] | None) -> dict[str, Any]:
+def _report(item: dict[str, Any], persist: dict[str, int] | None, found: dict[str, Any]) -> dict[str, Any]:
     from synchro.nextdata import backtest
-    from synchro.nextdata.steps import _combined, load_part
+    from synchro.nextdata.steps import _combined
 
     frame = item["frame"]
     by_t: dict[int, dict[str, str]] = {}
-    found: dict[int, dict[str, Any]] = {}
+    loaded: dict[int, dict[str, Any]] = {}
     lags: list[int] = []
     for lag, t, part, key in item["keys"]:
         if lag not in lags:
             lags.append(lag)
         by_t.setdefault(t, {})[part] = key
-        data = load_part(key)
-        if data is not None:
-            found.setdefault(t, {})[part] = data
+        if key in found:
+            loaded.setdefault(t, {})[part] = found[key]
     ready: dict[int, dict[str, Any]] = {}
     parts = item["parts"]
     for t, keys in by_t.items():
-        block = found.get(t) or {}
+        block = loaded.get(t) or {}
         if len(block) != len(parts):
             continue
         ready[t] = {"key": _combined(keys, block), "parts": block}

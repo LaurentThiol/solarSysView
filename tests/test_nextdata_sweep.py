@@ -304,16 +304,85 @@ def test_sweep_route_keeps_the_training_focus(monkeypatch) -> None:
     assert captured["with_chronos"] is False
 
 
-def test_chronos_waits_until_the_pool_is_idle() -> None:
-    from synchro.nextdata.sweep import _Job, _take_next
+class _InlinePool:
+    """Pool sans processus : chaque morceau se calcule à l’envoi, et sa partie reste notée."""
 
-    pending = [
-        _Job("tree", "lightgbm", 1, 10, 0, {}),
-        _Job("slow", "chronos", 1, 10, 0, {}),
-    ]
-    first = _take_next(pending, set())
-    assert first is not None and first.part == "lightgbm"
-    assert _take_next(pending, {"lightgbm"}) is None
-    alone = _take_next(pending, set())
-    assert alone is not None and alone.part == "chronos"
-    assert pending == []
+    def __init__(self) -> None:
+        self.parts: list[str] = []
+
+    def submit(self, fn, prefix, horizon, part, settings):
+        from concurrent.futures import Future
+
+        self.parts.append(part)
+        future: Future = Future()
+        future.set_result(fn(prefix, horizon, part, settings))
+        return future
+
+
+def test_the_trees_share_the_pool_and_chronos_stays_in_the_api(monkeypatch) -> None:
+    from synchro.nextdata import sweep
+
+    calls: list[dict] = []
+    _offline(monkeypatch, calls)
+    monkeypatch.setattr("synchro.nextdata.steps._installed", lambda module: module == "chronos")
+    asked: list[int] = []
+
+    def chronos(items: list[dict]) -> list[list[dict[str, float]]]:
+        asked.append(len(items))
+        return [[{"lo": 1.0, "mid": 2.0, "hi": 3.0}] * 3 for _ in items]
+
+    monkeypatch.setattr("synchro.nextdata.models.chronos_quantiles", chronos)
+    pool = _InlinePool()
+    monkeypatch.setattr(sweep, "_sweep_pool", lambda cap: pool)
+    monkeypatch.setattr(sweep, "blind_machine", lambda: True)
+    monkeypatch.setattr(sweep.os, "cpu_count", lambda: 8)
+    monkeypatch.setenv("SYNCHRO_NEXTDATA_WORKERS", "3")
+    report = run_sweep(
+        _draws(40, seed=3),
+        focus=50,
+        covariates=["forme", "delta"],
+        estimators=2,
+        with_chronos=True,
+        budget=60,
+        lags=(1,),
+    )
+    assert report["ok"] is True
+    assert report["progress"]["complete"] is True
+    assert report["load"]["parallel"] is True
+    assert report["load"]["cap"] == 6
+    assert report["load"]["allowed"] == 6
+    assert pool.parts
+    assert "chronos" not in pool.parts
+    assert asked and set(asked) == {2}
+    anchor = next(row for row in report["rows"] if row["anchor"])
+    assert anchor["with_chronos"] is True
+    assert anchor["status"] == "ready"
+
+
+def test_rows_with_the_same_years_share_one_frame(monkeypatch) -> None:
+    from synchro.nextdata import panel
+
+    _offline(monkeypatch)
+    built: list[tuple] = []
+    original = panel.build_frame
+
+    def counted(draws, **kwargs):
+        built.append(tuple(kwargs.get("years") or ()))
+        return original(draws, **kwargs)
+
+    monkeypatch.setattr(panel, "build_frame", counted)
+    report = run_sweep(
+        _draws(160, start=date(2023, 6, 2), seed=4),
+        focus=50,
+        years=["n", "n-1", "n-2"],
+        covariates=["forme", "delta", "lune"],
+        estimators=2,
+        budget=0,
+        lags=(1,),
+    )
+    assert report["ok"] is True
+    assert len(report["rows"]) == 1 + 1 + 2 + 3
+    assert sorted(built) == sorted({("n",), ("n", "n-1"), ("n", "n-1", "n-2")})
+    focus_row = next(row for row in report["rows"] if row["id"] == "focus-100")
+    assert focus_row["focus"] == 100
+    assert focus_row["status"] != "misaligned"
