@@ -263,6 +263,20 @@ def read_memory_free(path: str | Path = "/proc/meminfo") -> float | None:
         return None
 
 
+def load_ratio() -> float | None:
+    """Charge moyenne d’une minute rapportée aux cœurs : la mesure de macOS, qui n’a pas /proc/stat."""
+    try:
+        one = float(os.getloadavg()[0])
+    except (AttributeError, OSError):
+        return None
+    return max(0.0, min(1.0, one / max(1, os.cpu_count() or 1)))
+
+
+def blind_machine() -> bool:
+    """Ni /proc/stat ni charge moyenne : seul le plafond borne le pool."""
+    return read_cpu_times() is None and load_ratio() is None
+
+
 def holm_adjust(p_values: list[tuple[str, float]], *, alpha: float = 0.05) -> dict[str, dict[str, Any]]:
     """Correction de Holm. Un p qui ne passe pas ferme les suivants, du plus petit au plus grand."""
     ordered = sorted(((str(key), float(p)) for key, p in p_values), key=lambda item: (item[1], item[0]))
@@ -372,7 +386,10 @@ def run_sweep(
     cap = process_cap(os.cpu_count() or 1, limit)
     finished, allowed, parallel = _compute_missing(built, budget=max(0.0, float(budget)), cap=cap, limit=limit)
     cpu_after = read_cpu_times()
-    cpu = None if cpu_before is None or cpu_after is None else cpu_ratio(cpu_before, cpu_after)
+    if cpu_before is None or cpu_after is None:
+        cpu = load_ratio()
+    else:
+        cpu = cpu_ratio(cpu_before, cpu_after)
     rows = [_public_row(item, anchor_dates, persist) for item in built]
     decision = _attach_verdicts(rows)
     for row in rows:
@@ -548,6 +565,7 @@ def _run_pool(
     allowed = 1
     finished = 0
     cpu_mark = read_cpu_times()
+    blind = blind_machine()
     broken = False
     try:
         pool: ProcessPoolExecutor | None = ProcessPoolExecutor(
@@ -561,7 +579,10 @@ def _run_pool(
         while pending or inflight:
             cpu_mark, cpu = _delta(cpu_mark)
             memory = read_memory_free()
-            allowed = next_allowance(len(inflight), allowed, cpu, memory, cap=cap, limit=limit)
+            if blind:
+                allowed = cap
+            else:
+                allowed = next_allowance(len(inflight), allowed, cpu, memory, cap=cap, limit=limit)
             now = time.monotonic()
             while pending and len(inflight) < allowed and now < deadline:
                 if cpu is not None and cpu > limit and inflight:
@@ -606,8 +627,11 @@ def _run_pool(
 
 
 def _delta(mark: tuple[int, int] | None) -> tuple[tuple[int, int] | None, float | None]:
+    """Charge depuis la dernière lecture de /proc/stat ; sans /proc/stat, la charge moyenne d’une minute."""
     now = read_cpu_times()
-    if mark is None or now is None:
+    if now is None:
+        return None, load_ratio()
+    if mark is None:
         return now, None
     return now, cpu_ratio(mark, now)
 

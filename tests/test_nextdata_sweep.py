@@ -162,6 +162,30 @@ def test_the_load_governor_opens_and_closes_slots() -> None:
     assert parse_memory_free("MemTotal: 1000 kB\n") is None
 
 
+def test_without_proc_the_governor_reads_the_load_average(monkeypatch) -> None:
+    from synchro.nextdata import sweep
+
+    monkeypatch.setattr(sweep, "read_cpu_times", lambda path="/proc/stat": None)
+    monkeypatch.setattr(sweep.os, "getloadavg", lambda: (1.0, 0.5, 0.25))
+    monkeypatch.setattr(sweep.os, "cpu_count", lambda: 4)
+    assert sweep.load_ratio() == pytest.approx(0.25)
+    mark, cpu = sweep._delta(None)
+    assert mark is None
+    assert cpu == pytest.approx(0.25)
+    assert sweep.blind_machine() is False
+    allowed = 1
+    for _ in range(4):
+        allowed = next_allowance(allowed, allowed, cpu, None, cap=3)
+    assert allowed == 3
+
+    def missing() -> tuple[float, float, float]:
+        raise OSError("pas de charge moyenne")
+
+    monkeypatch.setattr(sweep.os, "getloadavg", missing)
+    assert sweep.load_ratio() is None
+    assert sweep.blind_machine() is True
+
+
 def test_holm_keeps_only_a_gap_that_survives_the_others() -> None:
     adjusted = holm_adjust([("a", 0.01), ("b", 0.04), ("c", 0.20)])
     assert adjusted["a"]["reject"] is True
