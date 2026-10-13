@@ -167,6 +167,7 @@ def test_chronos_pulse_at_an_interior_step_is_known_before_the_draw() -> None:
 def test_forecast_and_training_accept_the_pulse_family() -> None:
     from synchro.nextdata.forecast import run_training
 
+    pytest.importorskip("lightgbm")
     draws = _draws(40, seed=11)
     forecast = run_forecast(draws, focus=24, covariates=["pulse"], estimators=2, chunk=100)
     assert forecast["ok"] is True

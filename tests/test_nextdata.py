@@ -542,6 +542,7 @@ def test_status_does_not_import_darts_or_torch() -> None:
 
     from synchro.nextdata.forecast import dependency_status, lightgbm_hint
 
+    pytest.importorskip("lightgbm")
     before = set(sys.modules)
     status = dependency_status()
     loaded = set(sys.modules) - before
@@ -1089,6 +1090,7 @@ def test_blend_keeps_lightgbm_when_chronos_is_absent() -> None:
 
 
 def test_two_modes_forecast_real_draws() -> None:
+    pytest.importorskip("lightgbm")
     report = run_forecast(
         _draws(36, seed=4),
         focus=24,
@@ -1134,6 +1136,7 @@ def test_two_modes_forecast_real_draws() -> None:
 
 
 def test_status_and_focus_guard(monkeypatch) -> None:
+    pytest.importorskip("lightgbm")
     monkeypatch.setenv("SYNCHRO_NEXTDATA_ESTIMATORS", "3")
     client = TestClient(create_app())
     status = client.get("/api/nextdata/status")
