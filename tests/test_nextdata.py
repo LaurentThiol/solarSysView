@@ -1568,6 +1568,32 @@ def test_shared_bins_and_the_level_chain_keep_every_moment(monkeypatch) -> None:
     assert alone_importance == importance
 
 
+def test_catboost_fits_its_quantiles_in_one_model(monkeypatch) -> None:
+    catboost = pytest.importorskip("catboost")
+    from synchro.nextdata import models
+    from synchro.nextdata.covariates import TEMPORAL_TARGETS
+
+    losses: list[str] = []
+    original = catboost.CatBoostRegressor.fit
+
+    def counted(self, *args, **kwargs):
+        losses.append(self.get_params()["loss_function"])
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(catboost.CatBoostRegressor, "fit", counted)
+    frame = build_frame(_draws(90, seed=13), focus=24)
+    moments, importance, _engine = models.predict_moments(
+        frame.rows, frame.horizon, mode="corpus", focus=24, families=("forme",), estimators=4, library="catboost"
+    )
+    multi = [loss for loss in losses if loss.startswith("MultiQuantile")]
+    assert len(multi) == len(TEMPORAL_TARGETS) + 5 + 2 * len(models.RANK_LEVELS)
+    assert set(multi) == {"MultiQuantile:alpha=0.1,0.5,0.9"}
+    assert set(losses) - set(multi) == {"Quantile:alpha=0.5"}
+    for name in ("sum", "level:n3", "delta:e2", "g2", "e_gap"):
+        assert moments[name]["lo"] <= moments[name]["mid"] <= moments[name]["hi"]
+    assert importance
+
+
 def test_chain_features_do_not_reuse_the_row_target() -> None:
     import numpy as np
 

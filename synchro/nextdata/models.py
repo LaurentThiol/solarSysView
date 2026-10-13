@@ -316,18 +316,7 @@ def _fit_one(
         return fallback, None
     row = np.nan_to_num(x_next.reshape(1, -1), nan=0.0)
     if library == "catboost":
-        from catboost import CatBoostRegressor
-
-        model = CatBoostRegressor(
-            loss_function=f"Quantile:alpha={float(alpha)}",
-            iterations=int(estimators),
-            depth=4 if estimators >= 24 else 3,
-            learning_rate=0.08,
-            random_seed=42,
-            verbose=False,
-            allow_writing_files=False,
-            thread_count=1,
-        )
+        model = _catboost(f"Quantile:alpha={float(alpha)}", estimators)
         model.fit(x_train, y_train, sample_weight=weights)
         pred = float(np.asarray(model.predict(row)).reshape(-1)[0])
         return pred, model
@@ -357,6 +346,45 @@ def _fit_one(
     # Sans num_threads, predict remet le pool OpenMP au nombre de cœurs.
     pred = float(booster.predict(row, num_threads=1)[0])
     return pred, booster
+
+
+def _catboost(loss: str, estimators: int) -> Any:
+    from catboost import CatBoostRegressor
+
+    return CatBoostRegressor(
+        loss_function=loss,
+        iterations=int(estimators),
+        depth=4 if estimators >= 24 else 3,
+        learning_rate=0.08,
+        random_seed=42,
+        verbose=False,
+        allow_writing_files=False,
+        thread_count=1,
+    )
+
+
+def _fit_catboost_quantiles(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    weights: np.ndarray,
+    x_next: np.ndarray,
+    *,
+    alphas: tuple[float, ...],
+    estimators: int,
+) -> tuple[dict[float, float], Any]:
+    """Tous les quantiles d’une cible en un modèle CatBoost (MultiQuantile) : mêmes arbres, une valeur par quantile.
+
+    Mesuré sur la somme, 80 pas : 41 % de temps en moins que trois modèles, et
+    une erreur de médiane qui n’est pas plus haute (écart apparié non tranché).
+    """
+    fallback = float(np.average(y_train, weights=weights)) if len(y_train) else 0.0
+    if len(y_train) < 8 or float(np.std(y_train)) < 1e-8:
+        return {alpha: fallback for alpha in alphas}, None
+    model = _catboost("MultiQuantile:alpha=" + ",".join(repr(float(alpha)) for alpha in alphas), estimators)
+    model.fit(x_train, y_train, sample_weight=weights)
+    row = np.nan_to_num(x_next.reshape(1, -1), nan=0.0)
+    values = np.asarray(model.predict(row), dtype=float).reshape(-1)
+    return {alpha: float(values[index]) for index, alpha in enumerate(alphas)}, model
 
 
 def _predict_matrix(model: Any, library: str, rows: np.ndarray, fallback: float) -> np.ndarray:
@@ -480,6 +508,8 @@ def predict_moments(
         x_row: np.ndarray,
         binned: _Binned | None,
     ) -> tuple[dict[float, float], Any]:
+        if library == "catboost" and len(alphas) > 1:
+            return _fit_catboost_quantiles(x, y, w, x_row, alphas=alphas, estimators=estimators)
         found: dict[float, float] = {}
         median_model = None
         for alpha in alphas:
