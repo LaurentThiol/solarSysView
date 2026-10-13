@@ -141,6 +141,7 @@ def test_star_frequencies_only_count_draws_where_the_star_existed() -> None:
     assert base["star_draw_counts"][1] == 4
     assert base["star_draw_counts"][12] == 2
     assert stars[1]["share"] == stars[12]["share"] == 0.5
+    assert smoothed_share(0, 0, 2, 12) == pytest.approx(1 / 12)
 
 
 def test_window_loss_ignores_the_three_year_prefix() -> None:

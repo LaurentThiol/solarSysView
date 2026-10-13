@@ -365,7 +365,7 @@ def score_grid(
     if stars:
         star_log = 0.0
         for star in stars:
-            eligible = max(int(star_draw_counts.get(star, draws)), 1)
+            eligible = max(int(star_draw_counts.get(star, draws)), 0)
             star_log += log_ball(float(star_counts.get(star, 0)), eligible, slots=2, pool=pool)
         frequency += star_log / len(stars)
 

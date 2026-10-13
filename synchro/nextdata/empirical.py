@@ -125,7 +125,7 @@ def recount(rows: list[dict[str, Any]], *, star_pool: int = 12) -> dict[str, Any
 
 
 def smoothed_share(count: float, draws: int, slots: int, pool: int) -> float:
-    return (count + LAPLACE) / (slots * max(draws, 1) + LAPLACE * pool)
+    return (count + LAPLACE) / (slots * max(draws, 0) + LAPLACE * pool)
 
 
 def smoothed_lift(
