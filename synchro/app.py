@@ -2848,6 +2848,53 @@ def create_app() -> FastAPI:
         )
         return report
 
+    @app.post("/api/nextdata/sweep")
+    async def nextdata_sweep(request: Request) -> dict[str, Any]:
+        try:
+            payload = await request.json()
+        except Exception as exc:
+            raise HTTPException(400, "nextDataTraining n’a pas reçu une requête lisible.") from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(400, "Le corps nextDataTraining doit être un objet.")
+        focus = payload.get("focus", 50)
+        if focus not in (50, 100):
+            raise HTTPException(400, "Le focus est 50 ou 100.")
+        years = payload.get("years")
+        if years is not None and not isinstance(years, list):
+            raise HTTPException(400, "Les années se cochent dans une liste.")
+        covariates = payload.get("covariates")
+        if covariates is not None and not isinstance(covariates, list):
+            raise HTTPException(400, "Les covariables se cochent dans une liste.")
+        weekday = payload.get("weekday")
+        from synchro.nextdata.persist import parse_persist
+
+        try:
+            persist = parse_persist(payload.get("persist"))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        draws = payload.get("draws")
+        if not isinstance(draws, list) or not draws:
+            try:
+                draws = [db.serialize_draw(row) for row in db.all_draws(era="current")]
+            except Exception as exc:
+                raise HTTPException(503, f"Tirages indisponibles : {exc}") from exc
+        from starlette.concurrency import run_in_threadpool
+        from synchro.nextdata.sweep import run_sweep
+
+        report = await run_in_threadpool(
+            lambda: run_sweep(
+                draws,
+                focus=int(focus),
+                years=years,
+                weekday=weekday if isinstance(weekday, str) else None,
+                covariates=covariates,
+                estimators=_nextdata_estimators(),
+                with_chronos=payload.get("with_chronos") is True,
+                persist=persist,
+            )
+        )
+        return report
+
     if WEB_DIR.exists():
         app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
 

@@ -405,4 +405,9 @@ export const NEXTDATA_TRAINING_HELP = {
     wide: true,
     body: "Même interrupteur que nextData. Chaque lecture garde sa grille et reçoit une jumelle Persist, notée sur le même tirage avec les mêmes bandes. Sur dix décalages, il y a rarement plus d’une vingtaine d’échanges : le net tient presque toujours dans la marge du hasard. La table de l’archive, calculée sur tous les tirages reçus, est la mesure qui compte. Sur la courbe de somme, le pointillé est la jumelle de la lecture choisie.",
   },
+  mega: {
+    title: "Méga",
+    wide: true,
+    body: "Compare le réglage affiché à ses voisins : l’autre focus, les autres profondeurs d’années, et chaque covariable retirée une à une. Le jour et le nombre d’arbres restent ceux des boutons, pour que la ligne retenue se rejoue telle quelle sur nextData. Chronos n’entre que s’il est déjà inclus, et ses pas restent seuls sur la machine.\n\nLes lignes sont notées sur les dix mêmes décalages. Une variante n’est retenue que si son erreur de somme, lecture Corpus, reste sous celle du réglage affiché sur tout l’intervalle, après correction de Holm. Sinon le réglage affiché tient. La MAE seule est dans le tableau : sur dix décalages elle bouge d’environ ±6 points, et la plus petite ne suffit pas.\n\nLes ajustements partagent le cache des pas. Plusieurs tournent en parallèle, tant que la charge de la machine reste sous 80 %. Un clic sur une ligne remet ses boutons : Entraîner relit alors le cache.",
+  },
 } satisfies Record<string, HelpCopy>

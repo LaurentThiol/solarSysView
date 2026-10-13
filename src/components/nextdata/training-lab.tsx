@@ -8,6 +8,7 @@ import { PersistArchive, PersistControl, PersistPairCard } from "@/components/ne
 import { RankPath } from "@/components/nextdata/rank-path"
 import { StepMeter } from "@/components/nextdata/step-meter"
 import { TrainingCompare } from "@/components/nextdata/training-compare"
+import { TrainingSweep } from "@/components/nextdata/training-sweep"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
@@ -28,6 +29,7 @@ import { progressPercent, type StepProgress } from "@/lib/nextdata/bands"
 import { pulseCaption, type PulseReading } from "@/lib/nextdata/pulse"
 import { formatDecimal } from "@/lib/nextdata/compare"
 import { bandCoverage, deltaNumbers, TRAINING_SHIFT_TOTAL, visibleTrainingShift } from "@/lib/nextdata/training-progress"
+import type { SweepPayload, SweepRow } from "@/lib/nextdata/sweep"
 import {
   coverageRange,
   formatCoverage,
@@ -172,10 +174,13 @@ export function TrainingLab() {
   const [persistSetting, setPersistSetting] = useState<PersistSetting | null>(null)
   const [reading, setReading] = useState<ReadingId>("corpus")
   const [pinnedShift, setPinnedShift] = useState<number | null>(null)
+  const [mega, setMega] = useState(false)
   const [running, setRunning] = useState(false)
+  const [sweeping, setSweeping] = useState(false)
   const [progress, setProgress] = useState<StepProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<TrainingPayload | null>(null)
+  const [sweep, setSweep] = useState<SweepPayload | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -300,14 +305,81 @@ export function TrainingLab() {
     }
   }
 
+  function applySweepRow(row: SweepRow) {
+    if (row.focus === 50 || row.focus === 100) setFocus(row.focus)
+    if (row.years.length) setYears(row.years)
+    if (row.covariates.length) setFamilies(row.covariates)
+    setWithChronos(row.with_chronos)
+  }
+
+  async function compare() {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    setSweeping(true)
+    setError(null)
+    setSweep(null)
+    setProgress(null)
+    const body = JSON.stringify({
+      focus,
+      years,
+      weekday,
+      covariates: families,
+      with_chronos: withChronos,
+      persist: persistSetting,
+      draws: draws.map((draw) => ({
+        date: draw.date,
+        weekday: draw.weekday,
+        numbers: draw.numbers,
+        stars: draw.stars,
+        star_pool: draw.star_pool,
+      })),
+    })
+    let ready = -1
+    try {
+      for (;;) {
+        const response = await fetch("/api/nextdata/sweep", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          signal: controller.signal,
+          body,
+        })
+        const payload = (await response.json()) as SweepPayload
+        if (!response.ok || payload.ok === false) {
+          setError(payload.error || "La comparaison n’a pas abouti.")
+          return
+        }
+        setSweep(payload)
+        const step = payload.progress ?? null
+        setProgress(step)
+        if (!step || step.complete) return
+        if (step.ready <= ready) {
+          setError("Le calcul n’avance plus : un pas échoue à chaque tranche.")
+          return
+        }
+        ready = step.ready
+      }
+    } catch (err) {
+      if (controller.signal.aborted) return
+      setError(err instanceof Error ? err.message : "API injoignable")
+    } finally {
+      if (abortRef.current === controller) {
+        setSweeping(false)
+        setProgress(null)
+      }
+    }
+  }
+
   function stop() {
     abortRef.current?.abort()
     abortRef.current = null
     setRunning(false)
+    setSweeping(false)
     setProgress(null)
   }
 
   const percent = progressPercent(progress)
+  const busy = running || sweeping
 
   const summary = report?.summary ?? {}
   const activeShift = visibleTrainingShift(report?.shifts ?? [], pinnedShift)
@@ -395,6 +467,18 @@ export function TrainingLab() {
             </HelpWrap>
           </div>
           <PersistControl value={persistSetting} onChange={setPersistSetting} help={NEXTDATA_HELP.persist} />
+          <div className="flex flex-wrap items-center gap-2" data-mega-switch>
+            <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Parcours
+              <HelpTip {...NEXTDATA_TRAINING_HELP.mega} />
+            </span>
+            <Button type="button" size="sm" variant={mega ? "ghost" : "secondary"} disabled={busy} onClick={() => setMega(false)}>
+              Un réglage
+            </Button>
+            <Button type="button" size="sm" variant={mega ? "secondary" : "ghost"} disabled={busy} onClick={() => setMega(true)}>
+              Méga
+            </Button>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Covariables
@@ -416,10 +500,15 @@ export function TrainingLab() {
             {pulseNow ? <p className="basis-full text-xs text-muted-foreground">{pulseCaption(pulseNow)}</p> : null}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" disabled={running} onClick={() => void train()}>
+            <Button type="button" disabled={busy} onClick={() => void train()}>
               {running ? (progress ? `Pas ${progress.ready} sur ${progress.total}…` : "Premiers décalages…") : "Entraîner"}
             </Button>
-            {running && (
+            {mega && (
+              <Button type="button" disabled={busy} onClick={() => void compare()}>
+                {sweeping ? (progress ? `Morceaux ${progress.ready} sur ${progress.total}…` : "Premiers décalages…") : "Comparer"}
+              </Button>
+            )}
+            {busy && (
               <Button type="button" size="sm" variant="ghost" onClick={stop}>
                 Arrêter
               </Button>
@@ -428,16 +517,20 @@ export function TrainingLab() {
               {draws.length} tirages · {source === "neon" ? "archive synchronisée" : "jeu embarqué"}
             </span>
           </div>
-          {running && (
+          {busy && (
             <StepMeter
               percent={percent}
-              ariaLabel="Avancement de l’entraînement"
+              ariaLabel={sweeping ? "Avancement de la comparaison" : "Avancement de l’entraînement"}
               label={
-                !progress
-                  ? "Les décalages −1, −2… partent d’abord"
-                  : (report?.shifts?.length ?? 0) < TRAINING_SHIFT_TOTAL
-                    ? `Pas ${progress.ready} sur ${progress.total} : les décalages d’abord`
-                    : `Pas ${progress.ready} sur ${progress.total} : les tirages d’avant, pour le calibrage`
+                sweeping
+                  ? !progress
+                    ? "Le décalage −1 de chaque réglage part d’abord"
+                    : `Morceaux ${progress.ready} sur ${progress.total}`
+                  : !progress
+                    ? "Les décalages −1, −2… partent d’abord"
+                    : (report?.shifts?.length ?? 0) < TRAINING_SHIFT_TOTAL
+                      ? `Pas ${progress.ready} sur ${progress.total} : les décalages d’abord`
+                      : `Pas ${progress.ready} sur ${progress.total} : les tirages d’avant, pour le calibrage`
               }
             />
           )}
@@ -445,8 +538,14 @@ export function TrainingLab() {
         </CardContent>
       </Card>
 
-      {!report && !running && (
-        <p className="text-sm text-muted-foreground">Lancez l’entraînement pour voir les dix écarts.</p>
+      {mega && sweep?.rows?.length ? <TrainingSweep report={sweep} onApply={applySweepRow} /> : null}
+
+      {!report && !running && !sweep?.rows?.length && (
+        <p className="text-sm text-muted-foreground">
+          {mega
+            ? "Comparez le réglage affiché à ses voisins, ou entraînez un seul réglage."
+            : "Lancez l’entraînement pour voir les dix écarts."}
+        </p>
       )}
 
       {report?.shifts && (
