@@ -258,7 +258,7 @@ def run_forecast(
         return {"ok": False, "error": str(exc), **dependency_status()}
 
     from synchro.nextdata import backtest
-    from synchro.nextdata.steps import StepSettings, ensure_steps, parts_needed, worker_count
+    from synchro.nextdata.steps import StepSettings, compute_state, ensure_steps, parts_needed, worker_count
 
     settings = StepSettings(focus=frame.focus, families=tuple(families), estimators=int(estimators))
     parts = parts_needed(with_chronos)
@@ -323,6 +323,7 @@ def run_forecast(
             "error": chronos_problem(with_chronos, chronos_used),
         },
         "progress": {"ready": len(ready), "total": len(order), "complete": remaining == 0},
+        "compute": compute_state(),
         "persist": persist_info(draws, frame, persist),
     }
 
@@ -357,7 +358,7 @@ def run_training(
         return {"ok": False, "error": str(exc), **dependency_status()}
 
     from synchro.nextdata import backtest
-    from synchro.nextdata.steps import MIN_HISTORY, StepSettings, ensure_steps, parts_needed, worker_count
+    from synchro.nextdata.steps import MIN_HISTORY, StepSettings, compute_state, ensure_steps, parts_needed, worker_count
 
     settings = StepSettings(focus=frame.focus, families=tuple(families), estimators=int(estimators))
     parts = parts_needed(with_chronos)
@@ -402,6 +403,7 @@ def run_training(
             "total": len(order),
             "complete": remaining == 0,
         },
+        "compute": compute_state(),
         "persist": info,
     }
 

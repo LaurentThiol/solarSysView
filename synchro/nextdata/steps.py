@@ -30,7 +30,7 @@ from typing import Any, Iterable
 
 from synchro.config import ROOT
 from synchro.nextdata.forecast import _installed, catboost_import_error
-from synchro.nextdata.models import MODEL_PARTS, StepSettings, chronos_error, compute_part
+from synchro.nextdata.models import MODEL_PARTS, StepSettings, chronos_error, chronos_parts, compute_part
 from synchro.nextdata.panel import Frame
 
 MIN_HISTORY = 16
@@ -188,14 +188,17 @@ def _part_job(
 
 
 _POOL: ProcessPoolExecutor | None = None
-_POOL_OFF = False
 _POOL_LOCK = threading.Lock()
+_POOL_RESTARTS = 2
+_POOL_DEATHS = 0
+# Le plus long d’abord : un CatBoost lancé en dernier tiendrait seul la tranche.
+_PART_ORDER = {"catboost": 0, "lightgbm": 1, "darts": 2, "chronos": 3}
 
 
 def _pool() -> ProcessPoolExecutor | None:
     global _POOL
     with _POOL_LOCK:
-        if _POOL_OFF:
+        if _POOL_DEATHS > _POOL_RESTARTS:
             return None
         if _POOL is None:
             try:
@@ -208,14 +211,28 @@ def _pool() -> ProcessPoolExecutor | None:
         return _POOL
 
 
-def _drop_pool() -> None:
-    """Un processus de calcul est mort : la suite se calcule dans l’API."""
-    global _POOL, _POOL_OFF
+def _drop_pool(broken: ProcessPoolExecutor | None) -> None:
+    """Un processus de calcul est mort : le pool repart, deux fois au plus ; ensuite, tout se calcule dans l’API.
+
+    Tous les calculs en cours sur ce pool échouent ensemble : seul le premier compte.
+    """
+    global _POOL, _POOL_DEATHS
     with _POOL_LOCK:
+        if broken is not None and _POOL is not broken:
+            return
         if _POOL is not None:
             _POOL.shutdown(wait=False, cancel_futures=True)
         _POOL = None
-        _POOL_OFF = True
+        _POOL_DEATHS += 1
+
+
+def compute_state() -> dict[str, Any]:
+    """Où les pas se calculent : `workers` processus, ou l’API seule (`inline`), et les reprises du pool."""
+    workers = worker_count()
+    with _POOL_LOCK:
+        deaths = _POOL_DEATHS
+    inline = workers <= 1 or deaths > _POOL_RESTARTS
+    return {"workers": 1 if inline else workers, "inline": inline, "restarts": deaths}
 
 
 @atexit.register
@@ -234,6 +251,7 @@ def _compute(
     for t, keys, found in batch:
         done[t] = dict(found)
         jobs.extend((t, part, key) for part, key in keys.items() if part not in found)
+    jobs.sort(key=lambda job: _PART_ORDER.get(job[1], len(_PART_ORDER)))
     pool = _pool() if worker_count() > 1 and any(part in MODEL_PARTS for _t, part, _key in jobs) else None
     futures: list[tuple[Future, tuple[int, str, str]]] = []
     inline: list[tuple[int, str, str]] = []
@@ -257,15 +275,21 @@ def _compute(
             save_part(key, data)
         done[t][part] = data
 
+    chronos_jobs = [job for job in inline if job[1] == "chronos"]
     for job in inline:
         t, part, _key = job
-        keep(job, compute_part(frame.rows[:t], horizon_of(frame, t), part, settings))
+        if part != "chronos":
+            keep(job, compute_part(frame.rows[:t], horizon_of(frame, t), part, settings))
+    if chronos_jobs:
+        found = chronos_parts([(frame.rows[:t], horizon_of(frame, t)) for t, _part, _key in chronos_jobs], settings)
+        for job, data in zip(chronos_jobs, found):
+            keep(job, data)
     for future, job in futures:
         t, part, _key = job
         try:
             data = future.result()
         except BrokenProcessPool:
-            _drop_pool()
+            _drop_pool(pool)
             data = compute_part(frame.rows[:t], horizon_of(frame, t), part, settings)
         except Exception:
             data = compute_part(frame.rows[:t], horizon_of(frame, t), part, settings)

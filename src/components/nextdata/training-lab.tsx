@@ -25,7 +25,7 @@ import {
   type PersistSwap,
 } from "@/lib/nextdata/persist"
 import type { Arbitration } from "@/lib/nextdata/rank-path"
-import { progressPercent, type StepProgress } from "@/lib/nextdata/bands"
+import { computeCaption, progressPercent, type ComputeState, type StepProgress } from "@/lib/nextdata/bands"
 import { pulseCaption, type PulseReading } from "@/lib/nextdata/pulse"
 import { formatDecimal } from "@/lib/nextdata/compare"
 import { bandCoverage, deltaNumbers, TRAINING_SHIFT_TOTAL, visibleTrainingShift } from "@/lib/nextdata/training-progress"
@@ -152,6 +152,7 @@ type TrainingPayload = {
   star_pool?: number
   pulse?: PulseReading
   progress?: StepProgress
+  compute?: ComputeState
   persist?: PersistInfo | null
 }
 
@@ -532,6 +533,7 @@ export function TrainingLab() {
                       ? `Pas ${progress.ready} sur ${progress.total} : les décalages d’abord`
                       : `Pas ${progress.ready} sur ${progress.total} : les tirages d’avant, pour le calibrage`
               }
+              note={sweeping ? undefined : computeCaption(report?.compute)}
             />
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}

@@ -20,6 +20,9 @@ export type Calibration = {
 
 export type StepProgress = { ready: number; total: number; complete: boolean }
 
+/** Où les pas se calculent : `workers` processus, ou l’API seule. `restarts` compte les arrêts du pool. */
+export type ComputeState = { workers: number; inline: boolean; restarts: number }
+
 export const BAND_FIELDS = [
   { key: "sum", label: "Somme" },
   { key: "n1", label: "n1" },
@@ -41,6 +44,17 @@ export const BAND_FIELDS = [
 export function formatShare(rate: number | null | undefined) {
   if (rate == null || !Number.isFinite(rate)) return "—"
   return `${Math.round(rate * 100)} %`
+}
+
+/** Sous la barre : rien quand le pool tourne, sinon ce qui ralentit le calcul. */
+export function computeCaption(state: ComputeState | null | undefined) {
+  if (!state) return ""
+  if (state.inline && state.restarts > 0) {
+    return `Les processus de calcul se sont arrêtés ${state.restarts} fois : la suite tourne dans l’API, sur un seul cœur.`
+  }
+  if (state.inline) return "Calcul dans l’API, sur un seul cœur : SYNCHRO_NEXTDATA_WORKERS vaut 1."
+  if (state.restarts > 0) return `Un processus de calcul s’est arrêté : le pool est reparti (${state.restarts} fois).`
+  return ""
 }
 
 export function progressPercent(progress: StepProgress | null | undefined) {

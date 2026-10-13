@@ -10,10 +10,12 @@ export function StepMeter({
   percent,
   label,
   ariaLabel,
+  note,
 }: {
   percent: number
   label: string
   ariaLabel: string
+  note?: string
 }) {
   const [elapsed, setElapsed] = useState(0)
 
@@ -73,6 +75,7 @@ export function StepMeter({
           </>
         )}
       </div>
+      {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
     </div>
   )
 }

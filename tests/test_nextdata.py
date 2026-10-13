@@ -1250,6 +1250,78 @@ def test_the_step_key_reads_the_model_code_not_the_assembly() -> None:
     assert steps.prefix_digests(other_urn)[4] != steps.prefix_digests(rows)[4]
 
 
+class _QuietPool:
+    """Pool sans processus : chaque calcul rend aussitôt une erreur de modèle, et l’ordre d’envoi reste noté."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        del args, kwargs
+        self.parts: list[str] = []
+
+    def submit(self, fn, prefix, horizon, part, settings):
+        from concurrent.futures import Future
+
+        del fn, prefix, horizon, settings
+        self.parts.append(part)
+        future: Future = Future()
+        future.set_result({"corpus": {"error": "pool"}, "fenetre": {"error": "pool"}})
+        return future
+
+    def shutdown(self, wait: bool = True, cancel_futures: bool = False) -> None:
+        del wait, cancel_futures
+
+
+def test_a_broken_pool_restarts_twice_then_stays_in_the_api(monkeypatch) -> None:
+    from synchro.nextdata import steps
+
+    monkeypatch.setenv("SYNCHRO_NEXTDATA_WORKERS", "3")
+    monkeypatch.setattr(steps, "ProcessPoolExecutor", _QuietPool)
+    monkeypatch.setattr(steps, "_POOL", None)
+    monkeypatch.setattr(steps, "_POOL_DEATHS", 0)
+    first = steps._pool()
+    assert first is not None
+    assert steps.compute_state() == {"workers": 3, "inline": False, "restarts": 0}
+    steps._drop_pool(first)
+    steps._drop_pool(first)
+    assert steps.compute_state() == {"workers": 3, "inline": False, "restarts": 1}
+    for _ in range(2):
+        steps._drop_pool(steps._pool())
+    assert steps._pool() is None
+    assert steps.compute_state() == {"workers": 1, "inline": True, "restarts": 3}
+    monkeypatch.setenv("SYNCHRO_NEXTDATA_WORKERS", "1")
+    monkeypatch.setattr(steps, "_POOL_DEATHS", 0)
+    assert steps.compute_state() == {"workers": 1, "inline": True, "restarts": 0}
+
+
+def test_catboost_leaves_first_and_chronos_steps_share_one_call(monkeypatch) -> None:
+    from synchro.nextdata import steps
+    from synchro.nextdata.models import StepSettings
+
+    _offline(monkeypatch, chronos=True)
+    seen: list[int] = []
+
+    def replay(items: list[dict]) -> list[list[dict[str, float]]]:
+        seen.append(len(items))
+        return _chronos_replays()(items)
+
+    monkeypatch.setattr("synchro.nextdata.models.chronos_quantiles", replay)
+    monkeypatch.setenv("SYNCHRO_NEXTDATA_WORKERS", "3")
+    pool = _QuietPool()
+    monkeypatch.setattr(steps, "_pool", lambda: pool)
+    frame = build_frame(_draws(40, seed=19), focus=24)
+    settings = StepSettings(focus=frame.focus, families=("forme",), estimators=2)
+    n = len(frame.rows)
+    ready, remaining = steps.ensure_steps(
+        frame, [n - 1, n - 2, n - 3], settings, ("lightgbm", "catboost", "chronos"), limit=3
+    )
+    assert remaining == 0
+    assert pool.parts == ["catboost"] * 3 + ["lightgbm"] * 3
+    assert seen == [6]
+    for t in ready:
+        chronos = ready[t]["parts"]["chronos"]
+        assert set(chronos) == {"corpus", "fenetre", "covariates"}
+        assert chronos["corpus"]["sum"]["mid"] == frame.rows[t - 1]["sum"]
+
+
 def test_each_call_computes_one_chunk(monkeypatch) -> None:
     from synchro.nextdata.forecast import run_forecast
 

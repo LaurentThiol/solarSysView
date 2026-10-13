@@ -17,10 +17,12 @@ import { pulseCaption, type PulseReading } from "@/lib/nextdata/pulse"
 import {
   BAND_FIELDS,
   calibrationCaption,
+  computeCaption,
   formatShare,
   progressPercent,
   type BandCoverage,
   type Calibration,
+  type ComputeState,
   type StepProgress,
 } from "@/lib/nextdata/bands"
 import { chronosBanner, chronosShare, type ChronosNote, type ChronosStatus } from "@/lib/nextdata/chronos"
@@ -211,6 +213,7 @@ type ForecastPayload = {
   dependencies?: { ready?: boolean; install?: string }
   estimators?: number
   progress?: StepProgress
+  compute?: ComputeState
   persist?: PersistInfo | null
   chronos?: ChronosStatus
 }
@@ -687,6 +690,7 @@ export function NextDataLab() {
                   ? `Pas ${progress.ready} sur ${progress.total} : le prochain tirage, puis le retour`
                   : "Calcul du prochain tirage…"
               }
+              note={computeCaption(report?.compute)}
             />
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}

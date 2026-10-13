@@ -830,12 +830,37 @@ def chronos_inputs(
     return items
 
 
+def chronos_parts(
+    batch: list[tuple[list[dict[str, Any]], list[dict[str, Any]]]],
+    settings: StepSettings,
+) -> list[dict[str, Any]]:
+    """Morceaux Chronos de plusieurs pas, (préfixe, horizon) chacun, en un seul appel à Chronos-2.
+
+    Chaque pas a ses deux modes et la liste des covariables lues. Un échec rend
+    son message, à chaque pas.
+    """
+    items = [
+        item
+        for prefix, horizon in batch
+        for item in chronos_inputs(prefix, horizon, settings.focus, settings.families)
+    ]
+    if not items:
+        return []
+    try:
+        bands = chronos_quantiles(items)
+    except RuntimeError as exc:
+        return [{"error": str(exc)} for _ in batch]
+    covariates = {"past": len(past_columns(settings.families)), "future": len(future_columns(settings.families))}
+    width = len(MODES)
+    out: list[dict[str, Any]] = []
+    for index in range(len(batch)):
+        modes = bands[index * width : (index + 1) * width]
+        part: dict[str, Any] = {mode: dict(zip(CHRONOS_SERIES, mode_bands)) for mode, mode_bands in zip(MODES, modes)}
+        part["covariates"] = dict(covariates)
+        out.append(json.loads(json.dumps(part)))
+    return out
+
+
 def _chronos_part(prefix: list[dict[str, Any]], horizon: list[dict[str, Any]], settings: StepSettings) -> dict[str, Any]:
     """Bandes 10–90 de Chronos-2 pour les deux modes, en un appel, et les covariables lues. Un échec rend son message."""
-    try:
-        bands = chronos_quantiles(chronos_inputs(prefix, horizon, settings.focus, settings.families))
-    except RuntimeError as exc:
-        return {"error": str(exc)}
-    out: dict[str, Any] = {mode: dict(zip(CHRONOS_SERIES, mode_bands)) for mode, mode_bands in zip(MODES, bands)}
-    out["covariates"] = {"past": len(past_columns(settings.families)), "future": len(future_columns(settings.families))}
-    return json.loads(json.dumps(out))
+    return chronos_parts([(prefix, horizon)], settings)[0]
