@@ -1292,7 +1292,7 @@ def test_a_broken_pool_restarts_twice_then_stays_in_the_api(monkeypatch) -> None
     assert steps.compute_state() == {"workers": 1, "inline": True, "restarts": 0}
 
 
-def test_catboost_leaves_first_and_chronos_steps_share_one_call(monkeypatch) -> None:
+def test_catboost_leaves_first_and_chronos_reads_one_step_per_call(monkeypatch) -> None:
     from synchro.nextdata import steps
     from synchro.nextdata.models import StepSettings
 
@@ -1315,7 +1315,7 @@ def test_catboost_leaves_first_and_chronos_steps_share_one_call(monkeypatch) -> 
     )
     assert remaining == 0
     assert pool.parts == ["catboost"] * 3 + ["lightgbm"] * 3
-    assert seen == [6]
+    assert seen == [2, 2, 2]
     for t in ready:
         chronos = ready[t]["parts"]["chronos"]
         assert set(chronos) == {"corpus", "fenetre", "covariates"}

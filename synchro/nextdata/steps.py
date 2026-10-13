@@ -30,7 +30,7 @@ from typing import Any, Iterable
 
 from synchro.config import ROOT
 from synchro.nextdata.forecast import _installed, catboost_import_error
-from synchro.nextdata.models import MODEL_PARTS, StepSettings, chronos_error, chronos_parts, compute_part
+from synchro.nextdata.models import MODEL_PARTS, StepSettings, chronos_error, compute_part
 from synchro.nextdata.panel import Frame
 
 MIN_HISTORY = 16
@@ -275,15 +275,9 @@ def _compute(
             save_part(key, data)
         done[t][part] = data
 
-    chronos_jobs = [job for job in inline if job[1] == "chronos"]
     for job in inline:
         t, part, _key = job
-        if part != "chronos":
-            keep(job, compute_part(frame.rows[:t], horizon_of(frame, t), part, settings))
-    if chronos_jobs:
-        found = chronos_parts([(frame.rows[:t], horizon_of(frame, t)) for t, _part, _key in chronos_jobs], settings)
-        for job, data in zip(chronos_jobs, found):
-            keep(job, data)
+        keep(job, compute_part(frame.rows[:t], horizon_of(frame, t), part, settings))
     for future, job in futures:
         t, part, _key = job
         try:
