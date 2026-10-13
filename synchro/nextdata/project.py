@@ -327,6 +327,7 @@ def score_grid(
     base: dict[str, Any],
 ) -> float:
     """Plus le score est haut, plus la grille colle aux rangs, à l’étendue, aux consécutifs et à la base."""
+    pool = int(base.get("star_pool") or 12)
     mids, scales, _ = rank_scales(moments)
     distance = 0.0
     for index, number in enumerate(numbers):
@@ -340,6 +341,12 @@ def score_grid(
     distance += abs(even - parity_mid) / max(1.0, parity_hi - parity_lo)
     distance += _shape_distance(spread_of(numbers), moments.get("spread"))
     distance += _shape_distance(consecutive_count(numbers), moments.get("consecutive"))
+    star_bands = rank_bands(moments, pool)
+    for index, star in enumerate(stars[:2], start=1):
+        band = star_bands[f"e{index}"]
+        distance += abs(star - float(band["mid"])) / max(1.0, float(band["hi"]) - float(band["lo"]))
+    star_sum_lo, star_sum_mid, star_sum_hi = _band(moments.get("star_sum"), float(sum(stars)))
+    distance += abs(sum(stars) - star_sum_mid) / max(1.0, star_sum_hi - star_sum_lo)
     star_spread_moment = moments.get("star_spread") or moments.get("e_gap")
     distance += _shape_distance(spread_of(stars), star_spread_moment)
     distance += _shape_distance(consecutive_count(stars), moments.get("star_consecutive"))
@@ -349,7 +356,6 @@ def score_grid(
     star_counts = base.get("star_counts") or {}
     pair_counts = base.get("pair_counts") or {}
     triple_counts = base.get("triple_counts") or {}
-    pool = int(base.get("star_pool") or 12)
 
     frequency = 0.0
     for number in numbers:
@@ -540,6 +546,14 @@ def _gap_trace(name: str, raw: float, moment: dict[str, float] | None) -> tuple[
     )
 
 
+def _center_band(moment: dict[str, float] | None, value: float) -> dict[str, float]:
+    """Conserve la bande apprise tout en garantissant qu’elle contient son nouveau centre."""
+    lo, _, hi = _band(moment, value)
+    out = dict(moment or {})
+    out.update({"lo": min(lo, value), "mid": value, "hi": max(hi, value)})
+    return out
+
+
 def compose_ranks(
     moments: dict[str, dict[str, float]],
     previous: dict[str, Any] | None,
@@ -595,17 +609,11 @@ def compose_ranks(
         star_rows[index]["clipped"] = _round4(value)
 
     out = dict(moments)
-    out["n1"] = dict(moments.get("n1") or {"lo": held_n1, "mid": held_n1, "hi": held_n1})
-    out["n1"]["mid"] = held_numbers[0]
+    out["n1"] = _center_band(moments.get("n1"), held_numbers[0])
     for index, name in enumerate(_NUMBER_GAPS):
-        current = moments.get(name) or {"lo": gap_values[index], "mid": gap_values[index], "hi": gap_values[index]}
-        out[name] = dict(current)
-        out[name]["mid"] = gap_values[index]
-    out["e1"] = dict(moments.get("e1") or {"lo": held_e1, "mid": held_e1, "hi": held_e1})
-    out["e1"]["mid"] = held_stars[0]
-    current_gap = moments.get("e_gap") or {"lo": star_gap_value, "mid": star_gap_value, "hi": star_gap_value}
-    out["e_gap"] = dict(current_gap)
-    out["e_gap"]["mid"] = star_gap_value
+        out[name] = _center_band(moments.get(name), gap_values[index])
+    out["e1"] = _center_band(moments.get("e1"), held_stars[0])
+    out["e_gap"] = _center_band(moments.get("e_gap"), star_gap_value)
 
     _, sum_mid, _ = _band(moments.get("sum"), float(sum(held_numbers)))
     _, star_sum_mid, _ = _band(moments.get("star_sum"), float(sum(held_stars)))

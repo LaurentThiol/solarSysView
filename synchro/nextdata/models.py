@@ -387,12 +387,24 @@ def _fit_catboost_quantiles(
     return {alpha: float(values[index]) for index, alpha in enumerate(alphas)}, model
 
 
-def _predict_matrix(model: Any, library: str, rows: np.ndarray, fallback: float) -> np.ndarray:
+def _predict_matrix(
+    model: Any,
+    library: str,
+    rows: np.ndarray,
+    fallback: float,
+    *,
+    output_index: int | None = None,
+) -> np.ndarray:
     count = int(rows.shape[0]) if rows.ndim else 0
     if model is None or count == 0:
         return np.full(count, fallback, dtype=float)
     if library == "catboost":
-        pred = np.asarray(model.predict(rows), dtype=float).reshape(-1)
+        raw = np.asarray(model.predict(rows), dtype=float)
+        if output_index is None:
+            pred = raw.reshape(-1)
+        else:
+            table = raw.reshape(count, -1)
+            pred = table[:, output_index] if output_index < table.shape[1] else np.full(count, fallback)
     else:
         pred = np.asarray(model.predict(rows, num_threads=1), dtype=float).reshape(-1)
     return np.where(np.isfinite(pred), pred, fallback)
@@ -412,6 +424,7 @@ def _past_only_column(
     library: str,
     estimators: int,
     prior: np.ndarray,
+    quantiles: tuple[float, ...] = (0.1, 0.5, 0.9),
 ) -> np.ndarray:
     """Prévision de chaque ligne sans son propre y, ni celui des lignes d’après.
 
@@ -429,16 +442,34 @@ def _past_only_column(
         nxt = cuts[index + 1] if index + 1 < len(cuts) else n
         if nxt <= cut:
             continue
-        _pred, model = _fit_one(
-            x[:cut],
-            y[:cut],
-            weights[:cut],
-            x[cut],
-            alpha=0.5,
-            estimators=estimators,
-            library=library,
+        output_index = None
+        if library == "catboost" and len(quantiles) > 1:
+            _found, model = _fit_catboost_quantiles(
+                x[:cut],
+                y[:cut],
+                weights[:cut],
+                x[cut],
+                alphas=quantiles,
+                estimators=estimators,
+            )
+            output_index = quantiles.index(0.5)
+        else:
+            _pred, model = _fit_one(
+                x[:cut],
+                y[:cut],
+                weights[:cut],
+                x[cut],
+                alpha=0.5,
+                estimators=estimators,
+                library=library,
+            )
+        out[cut:nxt] = _predict_matrix(
+            model,
+            library,
+            x[cut:nxt],
+            float(y[:cut].mean()),
+            output_index=output_index,
         )
-        out[cut:nxt] = _predict_matrix(model, library, x[cut:nxt], float(y[:cut].mean()))
     return out
 
 
@@ -564,6 +595,7 @@ def predict_moments(
             library=library,
             estimators=estimators,
             prior=prior_means(rows, name, used),
+            quantiles=alphas,
         )
         past_hat[name] = {t: float(column[index]) for index, t in enumerate(used)}
         if name == "n1" and median_model is not None:

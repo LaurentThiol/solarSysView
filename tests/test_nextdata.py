@@ -266,6 +266,38 @@ def test_compose_clips_a_gap_and_keeps_ranks_increasing() -> None:
     assert trace["sum_target"] == 100
 
 
+def test_composed_rank_bands_keep_their_new_centres() -> None:
+    def band(lo: float, mid: float, hi: float) -> dict[str, float]:
+        return {"lo": lo, "mid": mid, "hi": hi}
+
+    moments = {
+        "n1": band(1, 2, 3),
+        "g1": band(4, 5, 6),
+        "g2": band(4, 5, 6),
+        "g3": band(4, 5, 6),
+        "g4": band(4, 5, 6),
+        "e1": band(1, 2, 3),
+        "e_gap": band(2, 3, 4),
+        "sum": band(60, 80, 100),
+        "star_sum": band(3, 7, 12),
+    }
+    for rank, center in zip(("n1", "n2", "n3", "n4", "n5", "e1", "e2"), (40, 10, 15, 20, 25, 9, 11)):
+        moments[f"level:{rank}"] = band(center - 1, center, center + 1)
+        moments[f"delta:{rank}"] = band(-1, 0, 1)
+
+    out, trace = compose_ranks(
+        moments,
+        {"n1": 40, "n2": 10, "n3": 15, "n4": 20, "n5": 25, "e1": 9, "e2": 11},
+    )
+
+    assert trace is not None
+    assert trace["numbers"][0]["clipped"] == 40
+    assert trace["stars"][0]["clipped"] == 9
+    for name in ("n1", "g1", "g2", "g3", "g4", "e1", "e_gap"):
+        assert out[name]["lo"] <= out[name]["mid"] <= out[name]["hi"]
+    assert project_numbers(out)[0][0] > 3
+
+
 def test_direct_ranks_are_not_pulled_down_by_the_chain() -> None:
     """Sept partout dans la chaîne donne n5 = 35 ; la prévision directe dit 44, la grille la suit."""
     from synchro.nextdata.project import project_numbers
@@ -384,6 +416,44 @@ def test_score_follows_predicted_spread_and_consecutive() -> None:
     close_bare = score_grid(tight, [3, 4], bare, base)
     far_bare = score_grid(loose, [3, 8], bare, base)
     assert close - far > (close_bare - far_bare) + 5
+
+
+def test_score_follows_predicted_star_ranks_and_sum() -> None:
+    from synchro.nextdata.project import score_grid
+
+    def band(mid: float, width: float = 1.0) -> dict[str, float]:
+        return {"lo": mid - width, "mid": mid, "hi": mid + width}
+
+    moments = {
+        "n1": band(5, 20),
+        "g1": band(5, 20),
+        "g2": band(5, 20),
+        "g3": band(5, 20),
+        "g4": band(5, 20),
+        "sum": band(75, 80),
+        "parity": band(2, 5),
+        "spread": band(20, 49),
+        "consecutive": band(0, 4),
+        "e1": band(1),
+        "e_gap": band(2),
+        "level:e1": band(1),
+        "level:e2": band(3),
+        "star_sum": band(4),
+        "star_consecutive": band(0, 1),
+    }
+    base = {
+        "draw_count": 1,
+        "number_counts": {},
+        "star_counts": {},
+        "pair_counts": {},
+        "triple_counts": {},
+        "star_pool": 12,
+    }
+
+    close = score_grid([5, 10, 15, 20, 25], [1, 3], moments, base)
+    far = score_grid([5, 10, 15, 20, 25], [9, 11], moments, base)
+
+    assert close > far
 
 
 def test_lightgbm_predict_does_not_reopen_the_openmp_pool(monkeypatch) -> None:
@@ -1590,9 +1660,10 @@ def test_catboost_fits_its_quantiles_in_one_model(monkeypatch) -> None:
         frame.rows, frame.horizon, mode="corpus", focus=24, families=("forme",), estimators=4, library="catboost"
     )
     multi = [loss for loss in losses if loss.startswith("MultiQuantile")]
-    assert len(multi) == len(TEMPORAL_TARGETS) + 5 + 2 * len(models.RANK_LEVELS)
+    full_models = len(TEMPORAL_TARGETS) + 5 + 2 * len(models.RANK_LEVELS)
+    assert len(multi) == full_models + 3 * len(models.CHAIN)
     assert set(multi) == {"MultiQuantile:alpha=0.1,0.5,0.9"}
-    assert set(losses) - set(multi) == {"Quantile:alpha=0.5"}
+    assert set(losses) == set(multi)
     for name in ("sum", "level:n3", "delta:e2", "g2", "e_gap"):
         assert moments[name]["lo"] <= moments[name]["mid"] <= moments[name]["hi"]
     assert importance
