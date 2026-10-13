@@ -370,6 +370,12 @@ def _predict_matrix(model: Any, library: str, rows: np.ndarray, fallback: float)
     return np.where(np.isfinite(pred), pred, fallback)
 
 
+def prior_means(rows: list[dict[str, Any]], name: str, used: list[int]) -> np.ndarray:
+    """Moyenne de `name` sur tous les tirages d’avant chaque ligne, ceux d’avant la première ligne apprise compris."""
+    totals = np.concatenate([[0.0], np.cumsum([float(row[name]) for row in rows])])
+    return np.asarray([totals[t] / max(t, 1) for t in used], dtype=float)
+
+
 def _past_only_column(
     x: np.ndarray,
     y: np.ndarray,
@@ -377,24 +383,17 @@ def _past_only_column(
     *,
     library: str,
     estimators: int,
+    prior: np.ndarray,
 ) -> np.ndarray:
-    """Prévision de chaque ligne sans son propre y.
+    """Prévision de chaque ligne sans son propre y, ni celui des lignes d’après.
 
-    Le premier quart, trop court pour un modèle, reçoit la moyenne des cibles
-    d'avant. Les quarts suivants sont prévus par un modèle ajusté seulement
-    sur ce qui précède. La chaîne s'entraîne donc sur une prévision, comme
-    au moment de servir le pas suivant.
+    Le premier quart, trop court pour un modèle, reçoit `prior`, la moyenne de
+    la cible sur les tirages d’avant. Les quarts suivants sont prévus par un
+    modèle ajusté seulement sur ce qui précède. La chaîne s'entraîne donc sur
+    une prévision, comme au moment de servir le pas suivant.
     """
     n = int(y.shape[0])
-    out = np.empty(n, dtype=float)
-    if n == 0:
-        return out
-    if n == 1:
-        out[0] = float(y[0])
-    else:
-        out[0] = float(y[1])
-        for index in range(1, n):
-            out[index] = float(y[:index].mean())
+    out = np.asarray(prior, dtype=float).copy()
     if n < 32:
         return out
     cuts = [cut for cut in (n // 4, n // 2, (3 * n) // 4) if cut >= 16]
@@ -534,6 +533,7 @@ def predict_moments(
             weights,
             library=library,
             estimators=estimators,
+            prior=prior_means(rows, name, used),
         )
         past_hat[name] = {t: float(column[index]) for index, t in enumerate(used)}
         if name == "n1" and median_model is not None:

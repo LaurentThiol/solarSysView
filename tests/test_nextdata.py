@@ -1571,10 +1571,19 @@ def test_shared_bins_and_the_level_chain_keep_every_moment(monkeypatch) -> None:
 def test_chain_features_do_not_reuse_the_row_target() -> None:
     import numpy as np
 
+    from synchro.nextdata.models import prior_means
+
+    earlier = [2.0, 4.0, 6.0]
     y = np.linspace(1.0, 20.0, 20)
+    rows = [{"n1": value} for value in [*earlier, *y]]
+    used = list(range(3, 23))
+    prior = prior_means(rows, "n1", used)
+    assert prior[0] == pytest.approx(4.0)
+    assert prior[5] == pytest.approx(np.mean([*earlier, *y[:5]]))
     x = y.reshape(-1, 1)
     weights = np.ones(20)
-    column = _past_only_column(x, y, weights, library="lightgbm", estimators=2)
-    assert column[0] == y[1]
-    assert column[5] == float(y[:5].mean())
+    column = _past_only_column(x, y, weights, library="lightgbm", estimators=2, prior=prior)
+    assert column[0] == pytest.approx(4.0)
+    assert column[0] != y[1]
+    assert column[5] == pytest.approx(prior[5])
     assert column[5] != y[5]
