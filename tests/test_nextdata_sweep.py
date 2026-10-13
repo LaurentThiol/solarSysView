@@ -327,8 +327,9 @@ def test_sweep_route_keeps_the_training_focus(monkeypatch) -> None:
     )
     assert accepted.status_code == 200, accepted.text
     assert captured == {"focus": 100, "with_chronos": True}
-    client.post("/api/nextdata/sweep", json={"focus": 50, "with_chronos": "oui", "draws": _draws(30)})
-    assert captured["with_chronos"] is False
+    invalid = client.post("/api/nextdata/sweep", json={"focus": 50, "with_chronos": "oui", "draws": _draws(30)})
+    assert invalid.status_code == 400
+    assert captured["with_chronos"] is True
 
 
 class _InlinePool:
