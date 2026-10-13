@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
-import type { Draw } from "@/lib/draws"
 import { pulseCaption, type PulseReading } from "@/lib/nextdata/pulse"
 import {
   BAND_FIELDS,
@@ -416,12 +415,6 @@ export function NextDataLab() {
     setReport(null)
   }, [settingsKey])
 
-  useEffect(() => {
-    if (library === "catboost" && ((report && !report.catboost) || status?.catboost === false)) {
-      setLibrary("lightgbm")
-    }
-  }, [library, report, status?.catboost])
-
   const marked = useMemo(() => {
     const block = report?.modes[primary]
     const grid = library === "catboost" && block?.catboost ? block.catboost.grid : block?.grid
@@ -494,6 +487,7 @@ export function NextDataLab() {
           return
         }
         if (runSettingsRef.current !== runSettings) return
+        if (library === "catboost" && !payload.modes[primary]?.catboost) setLibrary("lightgbm")
         setReport(payload)
         const progress = payload.progress
         if (!progress || progress.complete) return
