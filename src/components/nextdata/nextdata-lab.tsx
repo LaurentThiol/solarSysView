@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { PillTabPanel, PillTabs } from "@/components/ui/pill-tabs"
-import { DRAWS, type Draw } from "@/lib/draws"
+import type { Draw } from "@/lib/draws"
 import { pulseCaption, type PulseReading } from "@/lib/nextdata/pulse"
 import {
   BAND_FIELDS,
@@ -68,6 +68,7 @@ import {
   type Verdict,
 } from "@/lib/nextdata/uncertainty"
 import { defaultStoredSpec, writeStoredSpec } from "@/lib/jeux"
+import { useDraws } from "@/lib/use-draws"
 import { useLabTab } from "@/lib/use-lab-tab"
 import { cn } from "@/lib/utils"
 
@@ -346,8 +347,7 @@ function SeriesChart({
 export function NextDataLab() {
   const router = useRouter()
   const [tab, selectTab] = useLabTab(TAB_IDS, "pronostic")
-  const [draws, setDraws] = useState<Draw[]>(DRAWS)
-  const [source, setSource] = useState("json")
+  const { draws, source, loading: drawsLoading } = useDraws("current")
   const [status, setStatus] = useState<{
     ready?: boolean
     install?: string
@@ -372,6 +372,20 @@ export function NextDataLab() {
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<ForecastPayload | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const runSettingsRef = useRef<string | null>(null)
+  const settingsKey = useMemo(
+    () =>
+      JSON.stringify({
+        focus,
+        years: [...years].sort(),
+        weekday,
+        covariates: [...families].sort(),
+        withChronos,
+        persist: persistSetting,
+        draws: draws.map((draw) => [draw.date, draw.numbers, draw.stars, draw.star_pool]),
+      }),
+    [draws, families, focus, persistSetting, weekday, withChronos, years]
+  )
 
   useEffect(() => {
     return () => abortRef.current?.abort()
@@ -379,19 +393,6 @@ export function NextDataLab() {
 
   useEffect(() => {
     let cancelled = false
-    void (async () => {
-      try {
-        const drawRes = await fetch("/api/draws?era=current", { cache: "no-store" })
-        if (cancelled || !drawRes.ok) return
-        const body = (await drawRes.json()) as { items?: Draw[]; source?: string }
-        if (Array.isArray(body.items) && body.items.length >= 24) {
-          setDraws(body.items)
-          setSource(body.source || "neon")
-        }
-      } catch {
-        /* le jeu embarqué reste affiché */
-      }
-    })()
     void (async () => {
       try {
         const statusRes = await fetch("/api/nextdata/status", { cache: "no-store" })
@@ -405,6 +406,21 @@ export function NextDataLab() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!runSettingsRef.current || runSettingsRef.current === settingsKey) return
+    abortRef.current?.abort()
+    abortRef.current = null
+    runSettingsRef.current = null
+    setRunning(false)
+    setReport(null)
+  }, [settingsKey])
+
+  useEffect(() => {
+    if (library === "catboost" && ((report && !report.catboost) || status?.catboost === false)) {
+      setLibrary("lightgbm")
+    }
+  }, [library, report, status?.catboost])
 
   const marked = useMemo(() => {
     const block = report?.modes[primary]
@@ -441,8 +457,11 @@ export function NextDataLab() {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
+    const runSettings = settingsKey
+    runSettingsRef.current = runSettings
     setRunning(true)
     setError(null)
+    setReport(null)
     const body = JSON.stringify({
       focus,
       years,
@@ -474,6 +493,7 @@ export function NextDataLab() {
           setError(payload.error || "Le pronostic n’a pas abouti.")
           return
         }
+        if (runSettingsRef.current !== runSettings) return
         setReport(payload)
         const progress = payload.progress
         if (!progress || progress.complete) return
@@ -499,6 +519,10 @@ export function NextDataLab() {
 
   function sendToJeux(withPersist = false) {
     const block = report?.modes[primary]
+    if (library === "catboost" && !block?.catboost) {
+      setError("La grille CatBoost n’est pas disponible ; choisissez LightGBM.")
+      return
+    }
     const chosen = library === "catboost" && block?.catboost ? block.catboost : block
     const grid = withPersist ? chosen?.persist?.grid : chosen?.grid
     if (!grid) return
@@ -565,7 +589,14 @@ export function NextDataLab() {
               <HelpTip {...NEXTDATA_HELP.focus} />
             </span>
             {([50, 100] as const).map((value) => (
-              <Button key={value} type="button" size="sm" variant={focus === value ? "default" : "outline"} onClick={() => setFocus(value)}>
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={focus === value ? "default" : "outline"}
+                disabled={running}
+                onClick={() => setFocus(value)}
+              >
                 {value}
               </Button>
             ))}
@@ -580,6 +611,7 @@ export function NextDataLab() {
                 size="sm"
                 variant={years.includes(year) ? "default" : "outline"}
                 aria-disabled={year === "n" || undefined}
+                disabled={running}
                 title={year === "n" ? "n reste cochée : ses tirages précèdent le prochain" : undefined}
                 onClick={() => toggleYear(year)}
               >
@@ -610,7 +642,7 @@ export function NextDataLab() {
               type="button"
               size="sm"
               variant={library === "catboost" ? "default" : "outline"}
-              disabled={status?.catboost === false && !report?.catboost}
+              disabled={status?.catboost !== true && !report?.catboost}
               onClick={() => setLibrary("catboost")}
             >
               CatBoost
@@ -623,12 +655,25 @@ export function NextDataLab() {
               <HelpTip {...NEXTDATA_HELP.jour} />
             </span>
             {(["tous", "mardi", "vendredi"] as const).map((day) => (
-              <Button key={day} type="button" size="sm" variant={weekday === day ? "secondary" : "ghost"} onClick={() => setWeekday(day)}>
+              <Button
+                key={day}
+                type="button"
+                size="sm"
+                variant={weekday === day ? "secondary" : "ghost"}
+                disabled={running}
+                onClick={() => setWeekday(day)}
+              >
                 {day === "tous" ? "Tous" : day === "mardi" ? "Mardi" : "Vendredi"}
               </Button>
             ))}
             <HelpWrap help={NEXTDATA_HELP.moteur}>
-              <Button type="button" size="sm" variant={withChronos ? "secondary" : "ghost"} onClick={() => setWithChronos((value) => !value)}>
+              <Button
+                type="button"
+                size="sm"
+                variant={withChronos ? "secondary" : "ghost"}
+                disabled={running}
+                onClick={() => setWithChronos((value) => !value)}
+              >
                 {withChronos ? "Chronos inclus" : "Sans Chronos"}
               </Button>
             </HelpWrap>
@@ -639,7 +684,7 @@ export function NextDataLab() {
             </HelpWrap>
           </div>
 
-          <PersistControl value={persistSetting} onChange={setPersistSetting} help={NEXTDATA_HELP.persist} />
+          <PersistControl value={persistSetting} onChange={setPersistSetting} help={NEXTDATA_HELP.persist} disabled={running} />
 
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -650,6 +695,7 @@ export function NextDataLab() {
               <button
                 key={family.id}
                 type="button"
+                disabled={running}
                 onClick={() => toggleFamily(family.id)}
                 className={cn(
                   "rounded-full border px-2.5 py-1 text-xs",
@@ -666,7 +712,11 @@ export function NextDataLab() {
 
           <div className="flex flex-wrap items-center gap-3">
             <HelpWrap help={NEXTDATA_HELP.run}>
-              <Button type="button" disabled={running || status?.ready === false} onClick={() => void pronostiquer()}>
+              <Button
+                type="button"
+                disabled={running || drawsLoading || draws.length < 24 || status?.ready === false}
+                onClick={() => void pronostiquer()}
+              >
                 {!running ? "Pronostiquer" : progress ? `Pas ${progress.ready} sur ${progress.total}…` : "Calcul du prochain tirage…"}
               </Button>
             </HelpWrap>
@@ -676,7 +726,9 @@ export function NextDataLab() {
               </Button>
             )}
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              {draws.length} tirages · {source === "neon" ? "archive synchronisée" : "jeu embarqué"}
+              {drawsLoading
+                ? "Chargement de l’archive synchronisée…"
+                : `${draws.length} tirages · ${source === "neon" ? "archive synchronisée" : "jeu embarqué"}`}
               {status?.darts ? " · Darts" : ""}
               {status?.chronos && !status.chronos_error && !report?.chronos?.error ? " · Chronos" : ""}
               <HelpTip {...NEXTDATA_HELP.source} />
@@ -694,6 +746,12 @@ export function NextDataLab() {
               note={computeCaption(report?.compute)}
             />
           )}
+          {!drawsLoading && source === "json" ? (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+              Archive synchronisée indisponible : le jeu embarqué s’arrête au {draws[0]?.date ?? "—"}. Le calcul reste possible,
+              mais il ne tient pas compte des tirages suivants.
+            </p>
+          ) : null}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>

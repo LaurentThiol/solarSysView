@@ -2734,6 +2734,12 @@ def create_app() -> FastAPI:
         except ValueError:
             return 32
 
+    def _nextdata_chronos(payload: dict[str, Any]) -> bool:
+        raw = payload.get("with_chronos", False)
+        if not isinstance(raw, bool):
+            raise HTTPException(400, "Chronos s’active avec un booléen.")
+        return raw
+
     @app.get("/api/nextdata/status")
     def nextdata_status() -> dict[str, Any]:
         from synchro.nextdata import dependency_status
@@ -2767,6 +2773,7 @@ def create_app() -> FastAPI:
             persist = parse_persist(payload.get("persist"))
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        with_chronos = _nextdata_chronos(payload)
         draws = payload.get("draws")
         if not isinstance(draws, list) or not draws:
             try:
@@ -2784,7 +2791,7 @@ def create_app() -> FastAPI:
                 primary=str(primary),
                 weekday=weekday if isinstance(weekday, str) else None,
                 covariates=covariates,
-                with_chronos=bool(payload.get("with_chronos")),
+                with_chronos=with_chronos,
                 estimators=_nextdata_estimators(),
                 persist=persist,
             )
@@ -2824,6 +2831,7 @@ def create_app() -> FastAPI:
             persist = parse_persist(payload.get("persist"))
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        with_chronos = _nextdata_chronos(payload)
         draws = payload.get("draws")
         if not isinstance(draws, list) or not draws:
             try:
@@ -2842,7 +2850,7 @@ def create_app() -> FastAPI:
                 covariates=covariates,
                 estimators=_nextdata_estimators(),
                 shift=shift,
-                with_chronos=payload.get("with_chronos") is True,
+                with_chronos=with_chronos,
                 persist=persist,
             )
         )
@@ -2872,6 +2880,7 @@ def create_app() -> FastAPI:
             persist = parse_persist(payload.get("persist"))
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        with_chronos = _nextdata_chronos(payload)
         draws = payload.get("draws")
         if not isinstance(draws, list) or not draws:
             try:
@@ -2889,7 +2898,7 @@ def create_app() -> FastAPI:
                 weekday=weekday if isinstance(weekday, str) else None,
                 covariates=covariates,
                 estimators=_nextdata_estimators(),
-                with_chronos=payload.get("with_chronos") is True,
+                with_chronos=with_chronos,
                 persist=persist,
             )
         )

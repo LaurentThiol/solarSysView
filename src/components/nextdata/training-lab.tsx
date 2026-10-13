@@ -12,7 +12,6 @@ import { TrainingSweep } from "@/components/nextdata/training-sweep"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
-import { DRAWS, type Draw } from "@/lib/draws"
 import { chronosBanner, type ChronosStatus } from "@/lib/nextdata/chronos"
 import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "@/lib/nextdata/help"
 import {
@@ -41,6 +40,7 @@ import {
   type PairedGap,
   type Verdict,
 } from "@/lib/nextdata/uncertainty"
+import { useDraws } from "@/lib/use-draws"
 import { cn } from "@/lib/utils"
 
 const FAMILIES: { id: string; label: string }[] = [
@@ -165,8 +165,7 @@ function tone(value: number | null | undefined) {
 }
 
 export function TrainingLab() {
-  const [draws, setDraws] = useState<Draw[]>(DRAWS)
-  const [source, setSource] = useState("json")
+  const { draws, source, loading: drawsLoading } = useDraws("current")
   const [focus, setFocus] = useState<50 | 100>(50)
   const [years, setYears] = useState<string[]>(["n", "n-1", "n-2"])
   const [weekday, setWeekday] = useState<"tous" | "mardi" | "vendredi">("tous")
@@ -184,30 +183,38 @@ export function TrainingLab() {
   const [report, setReport] = useState<TrainingPayload | null>(null)
   const [sweep, setSweep] = useState<SweepPayload | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const runSettingsRef = useRef<string | null>(null)
+  const settingsKey = useMemo(
+    () =>
+      JSON.stringify({
+        focus,
+        years: [...years].sort(),
+        weekday,
+        covariates: [...families].sort(),
+        withChronos,
+        persist: persistSetting,
+        draws: draws.map((draw) => [draw.date, draw.numbers, draw.stars, draw.star_pool]),
+      }),
+    [draws, families, focus, persistSetting, weekday, withChronos, years]
+  )
 
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const response = await fetch("/api/draws?era=current", { cache: "no-store" })
-        if (cancelled || !response.ok) return
-        const body = (await response.json()) as { items?: Draw[]; source?: string }
-        if (Array.isArray(body.items) && body.items.length >= 24) {
-          setDraws(body.items)
-          setSource(body.source || "neon")
-        }
-      } catch {
-        /* le jeu embarqué reste affiché */
-      }
-    })()
     return () => {
-      cancelled = true
+      abortRef.current?.abort()
     }
   }, [])
 
   useEffect(() => {
-    return () => abortRef.current?.abort()
-  }, [])
+    if (!runSettingsRef.current || runSettingsRef.current === settingsKey) return
+    abortRef.current?.abort()
+    abortRef.current = null
+    runSettingsRef.current = null
+    setRunning(false)
+    setSweeping(false)
+    setProgress(null)
+    setReport(null)
+    setSweep(null)
+  }, [settingsKey])
 
   const chartRows = useMemo(() => {
     const rows = (report?.shifts ?? []).map((shift) => {
@@ -249,6 +256,8 @@ export function TrainingLab() {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
+    const runSettings = settingsKey
+    runSettingsRef.current = runSettings
     setRunning(true)
     setError(null)
     setReport(null)
@@ -286,6 +295,7 @@ export function TrainingLab() {
         if (payload.catboost === false && (reading === "corpus_catboost" || reading === "fenetre_catboost")) {
           setReading("corpus")
         }
+        if (runSettingsRef.current !== runSettings) return
         setReport(payload)
         const step = payload.progress ?? null
         setProgress(step)
@@ -302,7 +312,6 @@ export function TrainingLab() {
     } finally {
       if (abortRef.current === controller) {
         setRunning(false)
-        setProgress(null)
       }
     }
   }
@@ -318,6 +327,8 @@ export function TrainingLab() {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
+    const runSettings = settingsKey
+    runSettingsRef.current = runSettings
     setSweeping(true)
     setError(null)
     setSweep(null)
@@ -351,6 +362,7 @@ export function TrainingLab() {
           setError(payload.error || "La comparaison n’a pas abouti.")
           return
         }
+        if (runSettingsRef.current !== runSettings) return
         setSweep(payload)
         const step = payload.progress ?? null
         setProgress(step)
@@ -367,7 +379,6 @@ export function TrainingLab() {
     } finally {
       if (abortRef.current === controller) {
         setSweeping(false)
-        setProgress(null)
       }
     }
   }
@@ -377,7 +388,6 @@ export function TrainingLab() {
     abortRef.current = null
     setRunning(false)
     setSweeping(false)
-    setProgress(null)
   }
 
   const percent = progressPercent(progress)
@@ -425,7 +435,14 @@ export function TrainingLab() {
               <HelpTip {...NEXTDATA_HELP.focus} />
             </span>
             {([50, 100] as const).map((value) => (
-              <Button key={value} type="button" size="sm" variant={focus === value ? "default" : "outline"} onClick={() => setFocus(value)}>
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={focus === value ? "default" : "outline"}
+                disabled={busy}
+                onClick={() => setFocus(value)}
+              >
                 {value}
               </Button>
             ))}
@@ -440,6 +457,7 @@ export function TrainingLab() {
                 size="sm"
                 variant={years.includes(year) ? "default" : "outline"}
                 aria-disabled={year === "n" || undefined}
+                disabled={busy}
                 title={year === "n" ? "n reste cochée : ses tirages précèdent le prochain" : undefined}
                 onClick={() => toggleYear(year)}
               >
@@ -453,12 +471,25 @@ export function TrainingLab() {
               <HelpTip {...NEXTDATA_HELP.jour} />
             </span>
             {(["tous", "mardi", "vendredi"] as const).map((day) => (
-              <Button key={day} type="button" size="sm" variant={weekday === day ? "secondary" : "ghost"} onClick={() => setWeekday(day)}>
+              <Button
+                key={day}
+                type="button"
+                size="sm"
+                variant={weekday === day ? "secondary" : "ghost"}
+                disabled={busy}
+                onClick={() => setWeekday(day)}
+              >
                 {day === "tous" ? "Tous" : day === "mardi" ? "Mardi" : "Vendredi"}
               </Button>
             ))}
             <HelpWrap help={NEXTDATA_TRAINING_HELP.chronos}>
-              <Button type="button" size="sm" variant={withChronos ? "secondary" : "ghost"} onClick={() => setWithChronos((value) => !value)}>
+              <Button
+                type="button"
+                size="sm"
+                variant={withChronos ? "secondary" : "ghost"}
+                disabled={busy}
+                onClick={() => setWithChronos((value) => !value)}
+              >
                 {withChronos ? "Chronos inclus" : "Sans Chronos"}
               </Button>
             </HelpWrap>
@@ -468,7 +499,7 @@ export function TrainingLab() {
               </Button>
             </HelpWrap>
           </div>
-          <PersistControl value={persistSetting} onChange={setPersistSetting} help={NEXTDATA_HELP.persist} />
+          <PersistControl value={persistSetting} onChange={setPersistSetting} help={NEXTDATA_HELP.persist} disabled={busy} />
           <div className="flex flex-wrap items-center gap-2" data-mega-switch>
             <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Parcours
@@ -490,6 +521,7 @@ export function TrainingLab() {
               <button
                 key={family.id}
                 type="button"
+                disabled={busy}
                 onClick={() => toggleFamily(family.id)}
                 className={cn(
                   "rounded-full border px-2.5 py-1 text-xs",
@@ -502,11 +534,11 @@ export function TrainingLab() {
             {pulseNow ? <p className="basis-full text-xs text-muted-foreground">{pulseCaption(pulseNow)}</p> : null}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" disabled={busy} onClick={() => void train()}>
+            <Button type="button" disabled={busy || drawsLoading || draws.length < 24} onClick={() => void train()}>
               {running ? (progress ? `Pas ${progress.ready} sur ${progress.total}…` : "Premiers décalages…") : "Entraîner"}
             </Button>
             {mega && (
-              <Button type="button" disabled={busy} onClick={() => void compare()}>
+              <Button type="button" disabled={busy || drawsLoading || draws.length < 24} onClick={() => void compare()}>
                 {sweeping ? (progress ? `Morceaux ${progress.ready} sur ${progress.total}…` : "Premiers décalages…") : "Comparer"}
               </Button>
             )}
@@ -516,7 +548,9 @@ export function TrainingLab() {
               </Button>
             )}
             <span className="text-xs text-muted-foreground">
-              {draws.length} tirages · {source === "neon" ? "archive synchronisée" : "jeu embarqué"}
+              {drawsLoading
+                ? "Chargement de l’archive synchronisée…"
+                : `${draws.length} tirages · ${source === "neon" ? "archive synchronisée" : "jeu embarqué"}`}
             </span>
           </div>
           {busy && (
@@ -537,6 +571,18 @@ export function TrainingLab() {
               note={sweeping ? undefined : computeCaption(report?.compute)}
             />
           )}
+          {!busy && progress && !progress.complete ? (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+              Résultats partiels : {progress.ready} morceaux prêts sur {progress.total}. Relancez le calcul pour obtenir les
+              verdicts finaux.
+            </p>
+          ) : null}
+          {!drawsLoading && source === "json" ? (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+              Archive synchronisée indisponible : le jeu embarqué s’arrête au {draws[0]?.date ?? "—"}. Les mesures restent
+              possibles, mais elles n’incluent pas les tirages suivants.
+            </p>
+          ) : null}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>

@@ -26,6 +26,7 @@ export function TrainingSweep({
 }) {
   const rows = sortSweepRows(report.rows ?? [])
   const banner = sweepBanner(report)
+  const complete = report.progress?.complete === true
   const showPersist = rows.some((row) => row.summary?.corpus_persist)
   return (
     <Card data-sweep>
@@ -88,15 +89,22 @@ export function TrainingSweep({
                 return (
                   <tr
                     key={row.id}
-                    className={cn("border-b border-border/70", row.holm?.retained && "bg-primary/5")}
+                    className={cn("border-b border-border/70", complete && row.holm?.retained && "bg-primary/5")}
                     data-sweep-row={row.id}
-                    data-retained={row.holm?.retained ? "true" : undefined}
+                    data-retained={complete && row.holm?.retained ? "true" : undefined}
                   >
                     <td className="px-2 py-2">
-                      <Button type="button" size="sm" variant="ghost" className="h-auto px-1 py-0.5" onClick={() => onApply(row)}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-auto px-1 py-0.5"
+                        disabled={!complete || aside}
+                        onClick={() => onApply(row)}
+                      >
                         {row.label}
                       </Button>
-                      {row.holm?.retained ? <span className="ml-1 text-chart-2">retenu</span> : null}
+                      {complete && row.holm?.retained ? <span className="ml-1 text-chart-2">retenu</span> : null}
                       {row.detail ? <span className="mt-1 block text-muted-foreground">{row.detail}</span> : null}
                     </td>
                     <td className="px-2 py-2 tabular-nums">{row.focus}</td>
@@ -111,8 +119,8 @@ export function TrainingSweep({
                         {aside ? "—" : maeCell(row.summary, reading.id)}
                       </td>
                     ))}
-                    <td className="px-2 py-2">{aside ? "—" : anchorVerdict(row)}</td>
-                    <td className="px-2 py-2">{aside ? "—" : versusText(corpus?.versus?.persistence)}</td>
+                    <td className="px-2 py-2">{aside || !complete ? "—" : anchorVerdict(row)}</td>
+                    <td className="px-2 py-2">{aside || !complete ? "—" : versusText(corpus?.versus?.persistence)}</td>
                     {showPersist ? (
                       <td className="px-2 py-2 tabular-nums">
                         {aside ? "—" : maeCell(row.summary, "corpus_persist")}

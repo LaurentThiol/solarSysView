@@ -401,11 +401,12 @@ def run_sweep(
     else:
         cpu = cpu_ratio(cpu_before, cpu_after)
     rows = [_public_row(item, anchor_dates, persist, found) for item in built]
-    decision = _attach_verdicts(rows)
+    ready, total = _census(built, found)
+    complete = total > 0 and ready >= total
+    decision = _attach_verdicts(rows) if complete else {"leader": None, "held": True, "holm": {}}
     for row in rows:
         row.pop("_series", None)
-    ready, total = _census(built, found)
-    if total > 0 and ready >= total:
+    if complete:
         _close_sweep_pool()
     leader = decision["leader"]
     if leader is not None:
@@ -427,7 +428,7 @@ def run_sweep(
             "cap": cap,
             "parallel": parallel,
         },
-        "progress": {"ready": ready, "total": total, "complete": total > 0 and ready >= total},
+        "progress": {"ready": ready, "total": total, "complete": complete},
         "wave": finished,
         "note": NOTE + (CHRONOS_NOTE if with_chronos else ""),
     }

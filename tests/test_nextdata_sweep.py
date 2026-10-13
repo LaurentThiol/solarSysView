@@ -280,6 +280,32 @@ def test_a_sweep_stops_before_its_budget(monkeypatch) -> None:
     assert report["progress"]["complete"] is False
     assert report["progress"]["total"] > report["progress"]["ready"] == 0
     assert report["wave"] == 0
+    assert report["leader"] is None
+    assert report["held"] is True
+    assert all(row["holm"] is None and row["versus_anchor"] is None for row in report["rows"])
+
+
+def test_a_partial_sweep_never_publishes_a_provisional_verdict(monkeypatch) -> None:
+    from synchro.nextdata import sweep
+
+    calls: list[dict] = []
+    _offline(monkeypatch, calls)
+    monkeypatch.setattr(sweep, "_census", lambda _built, _found: (1, 2))
+
+    report = run_sweep(
+        _draws(40, seed=5),
+        focus=50,
+        covariates=["forme", "delta"],
+        estimators=2,
+        budget=60,
+        lags=(1,),
+    )
+
+    assert calls
+    assert report["progress"] == {"ready": 1, "total": 2, "complete": False}
+    assert report["leader"] is None
+    assert report["held"] is True
+    assert all(row["holm"] is None and row["versus_anchor"] is None for row in report["rows"])
 
 
 def test_sweep_route_keeps_the_training_focus(monkeypatch) -> None:

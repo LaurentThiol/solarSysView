@@ -1229,6 +1229,16 @@ def test_training_forwards_chronos_flag(monkeypatch) -> None:
     assert captured["with_chronos"] is False
 
 
+def test_nextdata_routes_reject_non_boolean_chronos_flags() -> None:
+    client = TestClient(create_app())
+    body = {"focus": 50, "with_chronos": "false", "draws": _draws(30)}
+
+    for path in ("forecast", "training", "sweep"):
+        response = client.post(f"/api/nextdata/{path}", json=body)
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Chronos s’active avec un booléen."
+
+
 def test_blend_keeps_lightgbm_when_chronos_is_absent() -> None:
     assert blend_mid(12.0, None, 0.2) == 12.0
     assert blend_mid(10.0, 0.0, 0.5) == 5.0

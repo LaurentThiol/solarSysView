@@ -30,10 +30,12 @@ export function PersistControl({
   value,
   onChange,
   help,
+  disabled = false,
 }: {
   value: PersistSetting | null
   onChange: (next: PersistSetting | null) => void
   help: HelpCopy
+  disabled?: boolean
 }) {
   const limit = value?.limit ?? 1
   return (
@@ -42,7 +44,14 @@ export function PersistControl({
         Persist
         <HelpTip {...help} />
       </span>
-      <Button type="button" size="sm" variant={value ? "ghost" : "secondary"} aria-pressed={!value} onClick={() => onChange(null)}>
+      <Button
+        type="button"
+        size="sm"
+        variant={value ? "ghost" : "secondary"}
+        aria-pressed={!value}
+        disabled={disabled}
+        onClick={() => onChange(null)}
+      >
         Sans
       </Button>
       {PERSIST_RADII.map((radius) => (
@@ -52,6 +61,7 @@ export function PersistControl({
           size="sm"
           variant={value?.radius === radius ? "secondary" : "ghost"}
           aria-pressed={value?.radius === radius}
+          disabled={disabled}
           onClick={() => onChange({ radius, limit })}
         >
           {radiusLabel(radius)}
@@ -65,7 +75,7 @@ export function PersistControl({
           size="sm"
           variant={value?.limit === count ? "secondary" : "ghost"}
           aria-pressed={value?.limit === count}
-          disabled={!value}
+          disabled={disabled || !value}
           onClick={() => value && onChange({ ...value, limit: count })}
         >
           {count === 1 ? "1 numéro" : "2 numéros"}
