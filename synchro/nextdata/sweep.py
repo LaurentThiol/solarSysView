@@ -655,7 +655,17 @@ def _run_pool(
                 break
             job = pending.pop(0)
             prefix, horizon = _inputs(built, job)
-            inflight[pool.submit(_part_job, prefix, horizon, job.part, job.settings)] = job
+            try:
+                inflight[pool.submit(_part_job, prefix, horizon, job.part, job.settings)] = job
+            except RuntimeError:
+                # Un autre parcours a fini et fermé le pool partagé : la tranche continue dans l’API.
+                pending.insert(0, job)
+                broken = True
+                break
+        if broken:
+            pending[:0] = list(inflight.values())
+            inflight.clear()
+            break
         if chronos and time.monotonic() < deadline:
             job = chronos.pop(0)
             _finish(job, _compute(built, job), found)

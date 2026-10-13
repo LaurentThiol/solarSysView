@@ -361,6 +361,26 @@ def test_the_trees_share_the_pool_and_chronos_stays_in_the_api(monkeypatch) -> N
     assert "moitié-moitié" in report["note"]
 
 
+def test_a_pool_closed_by_another_sweep_falls_back_to_the_api(monkeypatch) -> None:
+    from synchro.nextdata import sweep
+
+    class Closed:
+        def submit(self, *args, **kwargs):
+            raise RuntimeError("cannot schedule new futures after shutdown")
+
+    calls: list[dict] = []
+    _offline(monkeypatch, calls)
+    monkeypatch.setattr(sweep, "_sweep_pool", lambda cap: Closed())
+    monkeypatch.setattr(sweep, "blind_machine", lambda: True)
+    monkeypatch.setenv("SYNCHRO_NEXTDATA_WORKERS", "3")
+    monkeypatch.setattr(sweep.os, "cpu_count", lambda: 8)
+    report = run_sweep(_draws(40, seed=5), focus=50, covariates=["forme", "delta"], estimators=2, budget=60, lags=(1,))
+    assert report["ok"] is True
+    assert report["progress"]["complete"] is True
+    assert report["load"]["allowed"] == 1
+    assert calls
+
+
 def test_rows_with_the_same_years_share_one_frame(monkeypatch) -> None:
     from synchro.nextdata import panel
 
