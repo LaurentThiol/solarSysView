@@ -1125,6 +1125,11 @@ cmd_install_nextdata() {
   if ! MPLBACKEND=Agg "$venv/bin/python" -c 'import catboost' 2>/dev/null; then
     warn "CatBoost ne se charge pas. LightGBM reste disponible."
   fi
+  local darts_err
+  if ! darts_err="$(MPLBACKEND=Agg "$venv/bin/python" -c 'from darts.models import LightGBMModel' 2>&1)"; then
+    warn "Darts ne se charge pas : LightGBM garde sa médiane."
+    printf '%s\n' "$darts_err" | tail -n 1 >&2
+  fi
   local chronos_out
   info "Chronos : téléchargement du modèle et premier appel…"
   if chronos_out="$(cd "$ROOT" && MPLBACKEND=Agg "$venv/bin/python" -c '
@@ -1275,7 +1280,12 @@ nextdata_doctor() {
   fi
   # Ne pas importer Darts / Chronos / torch ici : le chargement peut bloquer le Mac.
   if MPLBACKEND=Agg "$py" -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("darts") else 1)'; then
-    ok "nextData : Darts installé (chargé au pronostic, pas au démarrage)"
+    # Darts charge ses modèles torch dès que torch est là : sans Lightning, son import échoue.
+    if MPLBACKEND=Agg "$py" -c 'import importlib.util as u,sys; sys.exit(1 if u.find_spec("torch") and not u.find_spec("pytorch_lightning") else 0)'; then
+      ok "nextData : Darts installé (chargé au pronostic, pas au démarrage)"
+    else
+      warn "nextData : Darts ne se chargera pas, torch est là sans Lightning — ./launch install-nextdata"
+    fi
   else
     printf '%snextData : Darts absent — la chaîne LightGBM directe reste disponible (./launch install-nextdata)%s\n' \
       "$C_DIM" "$C_RESET"

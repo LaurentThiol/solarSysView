@@ -5,6 +5,9 @@
 # L’extra [all] tirerait Prophet et un second jeu de dépendances en conflit
 # avec le torch de Morpho, Chartisme et Cycles.
 u8darts>=0.30
+# Dès que torch est là, darts.models charge ses modèles torch, qui importent
+# Lightning : sans lui, `from darts.models import LightGBMModel` échoue.
+pytorch-lightning>=2.0
 lightgbm>=4.3
 catboost>=1.2
 # Chronos-2 et ses covariables arrivent avec la 2.0.
