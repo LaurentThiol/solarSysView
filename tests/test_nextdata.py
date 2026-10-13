@@ -463,6 +463,7 @@ def test_darts_lightgbm_stays_single_threaded(monkeypatch) -> None:
     darts_mod.TimeSeries = TimeSeries  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "darts", darts_mod)
     monkeypatch.setitem(sys.modules, "darts.models", models)
+    monkeypatch.setattr("synchro.nextdata.models._DARTS_ERROR", None)
 
     draws = _draws(40, seed=1)
     frame = build_frame(draws, focus=24)
@@ -512,6 +513,7 @@ def test_darts_reads_corpus_weights_and_predicts_a_median(monkeypatch) -> None:
     darts_mod.TimeSeries = TimeSeries  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "darts", darts_mod)
     monkeypatch.setitem(sys.modules, "darts.models", models)
+    monkeypatch.setattr("synchro.nextdata.models._DARTS_ERROR", None)
 
     frame = build_frame(_draws(60, seed=14), focus=24)
     corpus = try_darts_medians(frame.rows, frame.horizon, mode="corpus", focus=frame.focus, families=["forme"])
@@ -1022,6 +1024,49 @@ def test_a_chronos_failure_is_reported_and_never_cached(monkeypatch) -> None:
         chronos_quantiles([{"target": [[1.0, 2.0, 3.0]]}])
     assert len(seen["loads"]) == 1
     assert seen["calls"] == []
+
+
+def test_a_darts_failure_is_reported_and_never_cached(monkeypatch) -> None:
+    import json
+    import os
+    import sys
+    import types
+    from pathlib import Path
+
+    from synchro.nextdata import models
+    from synchro.nextdata.forecast import dependency_status, run_training
+    from synchro.nextdata.steps import parts_needed
+
+    class Broken:
+        def __init__(self, **kwargs: object) -> None:
+            del kwargs
+
+        def fit(self, **kwargs: object) -> None:
+            raise RuntimeError("ajustement\n  impossible")
+
+    darts_mod = types.ModuleType("darts")
+    darts_models = types.ModuleType("darts.models")
+    darts_models.LightGBMModel = Broken  # type: ignore[attr-defined]
+    darts_mod.models = darts_models  # type: ignore[attr-defined]
+    darts_mod.TimeSeries = types.SimpleNamespace(from_values=lambda values: values)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "darts", darts_mod)
+    monkeypatch.setitem(sys.modules, "darts.models", darts_models)
+    monkeypatch.setattr(models, "_DARTS_ERROR", None)
+    _offline(monkeypatch)
+    monkeypatch.setattr("synchro.nextdata.steps._installed", lambda module: module == "darts")
+    report = run_training(_draws(40, seed=25), focus=24, covariates=["forme"], estimators=2, chunk=100)
+    assert report["progress"]["complete"] is True
+    assert models.darts_error() == "RuntimeError: ajustement impossible"
+    assert report["darts"]["error"] == (
+        "Darts n’a pas répondu (RuntimeError: ajustement impossible) ; LightGBM garde sa médiane. "
+        "Il sera retenté au prochain démarrage de l’API."
+    )
+    assert dependency_status()["darts_error"] == models.darts_error()
+    saved = [json.loads(path.read_text(encoding="utf-8")) for path in Path(os.environ["SYNCHRO_NEXTDATA_CACHE"]).rglob("*.json")]
+    assert saved
+    assert not any(set(part) == {"error"} for part in saved)
+    assert "darts" not in parts_needed(False)
+    assert all(shift["readings"]["corpus"]["numbers"] for shift in report["shifts"])
 
 
 def test_chronos_missing_is_said_plainly(monkeypatch) -> None:

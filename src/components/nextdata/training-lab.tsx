@@ -154,6 +154,7 @@ type TrainingPayload = {
   progress?: StepProgress
   compute?: ComputeState
   persist?: PersistInfo | null
+  darts?: { error?: string | null }
 }
 
 function tone(value: number | null | undefined) {
@@ -553,6 +554,7 @@ export function TrainingLab() {
       {report?.shifts && (
         <>
           {chronosBanner(report.chronos) && <p className="text-sm text-muted-foreground">{chronosBanner(report.chronos)}</p>}
+          {report.darts?.error ? <p className="text-sm text-muted-foreground">{report.darts.error}</p> : null}
           <div className="flex flex-wrap items-start gap-3">
             {READINGS.filter((item) => summary[item.id]).map((item) => {
               const entry = summary[item.id]

@@ -713,9 +713,13 @@ def _compute(built: list[dict[str, Any]], job: _Job) -> dict[str, Any]:
 
 
 def _finish(job: _Job, data: dict[str, Any], found: dict[str, Any]) -> None:
+    from synchro.nextdata.models import note_darts_error
     from synchro.nextdata.steps import save_part
 
-    if job.part == "chronos" and "error" in data:
+    if job.part in ("chronos", "darts") and "error" in data:
+        # Darts tourne dans le pool : son échec doit aussi être noté dans l’API, qui ne le redemandera plus.
+        if job.part == "darts":
+            note_darts_error(str(data["error"]))
         return
     save_part(job.key, data)
     found[job.key] = data

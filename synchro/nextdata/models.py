@@ -582,9 +582,10 @@ def darts_covariate_rows(
 ) -> tuple[list[str], list[dict[str, Any]], list[str], list[dict[str, Any]]]:
     """Covariables Darts. Pulse est décalé d’un cran et sort de la série future.
 
-    Darts lit le futur à t+1 pour toutes les colonnes futures. La ligne t+1
-    a réajusté Pulse avec le tirage t. On le donne donc comme covariable
-    passée : le lag 1 est l’état connu avant t.
+    Darts lit les horloges aux décalages −4 à 0 : le tirage prévu est son futur 0,
+    là où la lecture directe va jusqu’à +1. Pulse passe en covariable passée :
+    son lag 1 est l’état connu avant le tirage prévu, et aucun décalage futur
+    ne peut lire une onde déjà réajustée avec ce tirage.
     """
     clock_names = [name for name in future_names if name not in FUTURE_PULSE]
     pulse_names = [name for name in future_names if name in FUTURE_PULSE]
@@ -628,14 +629,17 @@ def try_darts_medians(
     focus: int,
     families: Iterable[str],
 ) -> dict[str, float] | None:
-    """Un pas Darts. None si le paquet ou l’ajustement manque.
+    """Un pas Darts. None quand l’histoire n’a pas huit lignes de perte, ou quand Darts a échoué.
 
-    Pulse reste une covariable passée, décalée d’un cran : Darts ne le lit pas
-    dans le futur, où la ligne d’après a déjà réajusté l’onde avec le tirage prévu.
+    Un échec (import, ajustement, prévision) reste noté (`darts_error`) : les
+    pas suivants partent sans Darts, jusqu’au redémarrage de l’API.
     """
+    if _DARTS_ERROR is not None:
+        return None
     try:
         from darts.models import LightGBMModel
-    except Exception:
+    except Exception as exc:
+        note_darts_error(_short_error(exc))
         return None
     n = len(rows)
     fitted = darts_training_window(n, focus, mode)
@@ -701,10 +705,29 @@ def try_darts_medians(
         )
         values = np.asarray(pred.values(), dtype=float).reshape(-1)
         if values.size < len(target_names):
-            return None
+            raise ValueError(f"{values.size} valeurs prévues pour {len(target_names)} cibles")
         return {name: _clip(name, float(values[i]), pool) for i, name in enumerate(target_names)}
-    except Exception:
+    except Exception as exc:
+        note_darts_error(_short_error(exc))
         return None
+
+
+_DARTS_ERROR: str | None = None
+
+
+def darts_error() -> str | None:
+    """Pourquoi Darts n’a pas répondu dans ce processus. Il n’est retenté qu’au redémarrage de l’API."""
+    return _DARTS_ERROR
+
+
+def note_darts_error(message: str) -> None:
+    global _DARTS_ERROR
+    _DARTS_ERROR = message
+
+
+def _short_error(exc: BaseException) -> str:
+    detail = " ".join(str(exc).split())
+    return f"{type(exc).__name__}: {detail if len(detail) <= 300 else detail[:299] + '…'}"
 
 
 # Sur un cœur, avec les 52 covariables : 0,8 s par pas sur trois ans ; amazon/chronos-2 (120 M) en prend 3,1.
@@ -758,8 +781,7 @@ def chronos_quantiles(items: list[dict[str, Any]]) -> list[list[dict[str, float]
                     rows_out.append({"lo": lo, "mid": mid, "hi": hi})
                 bands.append(rows_out)
         except Exception as exc:
-            detail = " ".join(str(exc).split())
-            _CHRONOS_ERROR = f"{type(exc).__name__}: {detail if len(detail) <= 300 else detail[:299] + '…'}"
+            _CHRONOS_ERROR = _short_error(exc)
             raise RuntimeError(_CHRONOS_ERROR) from exc
     return bands
 
@@ -799,6 +821,8 @@ def compute_part(
                 focus=settings.focus,
                 families=settings.families,
             )
+    if part == "darts" and darts_error() is not None:
+        return {"error": darts_error()}
     # Même structure qu’un morceau relu du cache.
     return json.loads(json.dumps(out))
 

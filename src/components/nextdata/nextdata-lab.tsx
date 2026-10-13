@@ -216,6 +216,7 @@ type ForecastPayload = {
   compute?: ComputeState
   persist?: PersistInfo | null
   chronos?: ChronosStatus
+  darts?: { error?: string | null }
 }
 
 function rowSide(row: BacktestRow, key: string): StepSide | null {
@@ -716,6 +717,7 @@ export function NextDataLab() {
                   {shownBlock?.calibration ? ` ${calibrationCaption(shownBlock.calibration)}` : ""}
                 </p>
                 {chronosBanner(report.chronos) && <p className="text-sm text-muted-foreground">{chronosBanner(report.chronos)}</p>}
+                {report.darts?.error ? <p className="text-sm text-muted-foreground">{report.darts.error}</p> : null}
                 {persistInfo && (
                   <div className="flex flex-col gap-1" data-persist-recent>
                     {persistInfo.recent?.length ? <RecentNote recent={persistInfo.recent} /> : null}

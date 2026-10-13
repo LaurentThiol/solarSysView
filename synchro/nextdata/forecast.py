@@ -16,7 +16,7 @@ from typing import Any, Iterable
 
 from synchro.nextdata.covariates import SHAPE_SERIES, TEMPORAL_TARGETS, grid_shape, normalize_families
 from synchro.nextdata.empirical import public_base, recount
-from synchro.nextdata.models import _clamp_span, _clip, chronos_error, star_pool_of
+from synchro.nextdata.models import _clamp_span, _clip, chronos_error, darts_error, star_pool_of
 from synchro.nextdata.panel import Frame, build_frame, normalized_draws
 from synchro.nextdata.persist import base_rates, recent_draws, snap_grid
 from synchro.nextdata.project import rank_bands
@@ -59,6 +59,7 @@ def dependency_status() -> dict[str, Any]:
         "lightgbm_error": error,
         "hint": lightgbm_hint(error),
         "darts": _installed("darts"),
+        "darts_error": darts_error(),
         "chronos": _installed("chronos"),
         "chronos_error": chronos_error(),
         "torch": _installed("torch"),
@@ -87,6 +88,14 @@ def chronos_problem(requested: bool, used: bool) -> str | None:
     if error is None:
         return None
     return f"Chronos n’a pas répondu ({error}) ; il sera retenté au prochain démarrage de l’API."
+
+
+def darts_problem() -> str | None:
+    """Ce que la page dit quand Darts a échoué dans ce processus : LightGBM garde sa médiane."""
+    error = darts_error()
+    if error is None:
+        return None
+    return f"Darts n’a pas répondu ({error}) ; LightGBM garde sa médiane. Il sera retenté au prochain démarrage de l’API."
 
 
 def blend_weight(mae_lgb: float, mae_chronos: float) -> float:
@@ -320,6 +329,7 @@ def run_forecast(
             "used": chronos_used,
             "error": chronos_problem(with_chronos, chronos_used),
         },
+        "darts": {"error": darts_problem()},
         "progress": {"ready": len(ready), "total": len(order), "complete": remaining == 0},
         "compute": compute_state(),
         "persist": persist_info(draws, frame, persist),
@@ -396,6 +406,7 @@ def run_training(
         "catboost_error": catboost_error,
         "dependencies": dependency_status(),
         **report,
+        "darts": {"error": darts_problem()},
         "progress": {
             "ready": sum(1 for t in order if t in ready),
             "total": len(order),

@@ -30,7 +30,7 @@ from typing import Any, Iterable
 
 from synchro.config import ROOT
 from synchro.nextdata.forecast import _installed, catboost_import_error
-from synchro.nextdata.models import MODEL_PARTS, StepSettings, chronos_error, compute_part
+from synchro.nextdata.models import MODEL_PARTS, StepSettings, chronos_error, compute_part, darts_error
 from synchro.nextdata.panel import Frame
 
 MIN_HISTORY = 16
@@ -75,7 +75,7 @@ def parts_needed(with_chronos: bool) -> tuple[str, ...]:
     parts = ["lightgbm"]
     if catboost_import_error() is None:
         parts.append("catboost")
-    if _installed("darts"):
+    if _installed("darts") and darts_error() is None:
         parts.append("darts")
     if with_chronos and _installed("chronos") and chronos_error() is None:
         parts.append("chronos")
@@ -270,8 +270,8 @@ def _compute(
 
     def keep(job: tuple[int, str, str], data: dict[str, Any]) -> None:
         t, part, key = job
-        # Un échec de Chronos tient à l’installation ou au réseau : rangé, il ne serait jamais retenté.
-        if not (part == "chronos" and "error" in data):
+        # Un échec de Chronos ou de Darts tient à l’installation ou au réseau : rangé, il ne serait jamais retenté.
+        if not (part in ("chronos", "darts") and "error" in data):
             save_part(key, data)
         done[t][part] = data
 
