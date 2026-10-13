@@ -250,6 +250,7 @@ def test_sweep_fills_the_cache_once(monkeypatch) -> None:
     assert dropped["versus_anchor"]["corpus"]["count"] == 1
     assert first["held"] is True
     assert first["leader"] is None
+    assert "Chronos" not in first["note"]
 
     second = run_sweep(draws, **kwargs)
     assert len(calls) == fitted
@@ -357,6 +358,7 @@ def test_the_trees_share_the_pool_and_chronos_stays_in_the_api(monkeypatch) -> N
     anchor = next(row for row in report["rows"] if row["anchor"])
     assert anchor["with_chronos"] is True
     assert anchor["status"] == "ready"
+    assert "moitié-moitié" in report["note"]
 
 
 def test_rows_with_the_same_years_share_one_frame(monkeypatch) -> None:

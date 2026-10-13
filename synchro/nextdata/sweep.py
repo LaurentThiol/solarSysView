@@ -52,6 +52,12 @@ NOTE = (
     "que si son erreur de somme, lecture Corpus, reste sous celle de ce réglage "
     "sur tout l’intervalle, après correction de Holm."
 )
+# Une ligne ne calcule que ses dix décalages : la fenêtre de Chronos (dix pas d’avant) n’est jamais pleine.
+CHRONOS_NOTE = (
+    " Chronos s’y mélange moitié-moitié : ses poids se règlent sur les dix tirages "
+    "d’avant, que le parcours ne calcule pas. La MAE du réglage affiché peut donc "
+    "s’écarter de celle d’Entraîner."
+)
 
 
 @dataclass(frozen=True)
@@ -423,7 +429,7 @@ def run_sweep(
         },
         "progress": {"ready": ready, "total": total, "complete": total > 0 and ready >= total},
         "wave": finished,
-        "note": NOTE,
+        "note": NOTE + (CHRONOS_NOTE if with_chronos else ""),
     }
 
 
