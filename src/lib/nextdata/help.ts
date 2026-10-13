@@ -99,7 +99,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Darts",
-        text: "S’il est installé, il remplace la médiane temporelle LightGBM du prochain pas. La chaîne des rangs reste LightGBM. Darts n’est pas chargé à l’ouverture de la page.",
+        text: "S’il est installé, il remplace la médiane temporelle LightGBM du prochain pas, avec les mêmes arbres. La chaîne des rangs reste LightGBM. Darts n’est pas chargé à l’ouverture de la page ; s’il échoue, la page dit pourquoi et LightGBM garde sa médiane.",
       },
       {
         label: "Étendue et consécutifs",

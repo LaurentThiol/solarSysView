@@ -520,6 +520,9 @@ def test_darts_reads_corpus_weights_and_predicts_a_median(monkeypatch) -> None:
     assert corpus is not None
     assert seen["kwargs"]["likelihood"] == "quantile"  # type: ignore[index]
     assert seen["kwargs"]["quantiles"] == [0.5]  # type: ignore[index]
+    assert seen["kwargs"]["n_estimators"] == 32  # type: ignore[index]
+    assert seen["kwargs"]["num_leaves"] == 15  # type: ignore[index]
+    assert seen["kwargs"]["min_child_samples"] == 2  # type: ignore[index]
     weights = seen["weights"].values().reshape(-1)  # type: ignore[union-attr]
     assert len(weights) == len(frame.rows)
     assert set(weights[-frame.focus :]) == {3.0}
@@ -1273,6 +1276,7 @@ def test_steps_are_cached_and_keyed_on_earlier_draws(monkeypatch) -> None:
     assert key(earlier) != key(draws)
     assert key(draws, estimators=4) != key(draws)
     assert key(draws, part="chronos", estimators=4) == key(draws, part="chronos")
+    assert key(draws, part="darts", estimators=4) != key(draws, part="darts")
 
 
 def test_the_step_key_reads_the_model_code_not_the_assembly() -> None:

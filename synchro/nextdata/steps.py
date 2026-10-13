@@ -140,8 +140,9 @@ def step_key(digest: str, horizon: list[dict[str, Any]], settings: StepSettings,
         "focus": int(settings.focus),
         "families": sorted(settings.families),
     }
-    if part in MODEL_PARTS:
+    if part in MODEL_PARTS or part == "darts":
         payload["estimators"] = int(settings.estimators)
+    if part in MODEL_PARTS:
         payload["quantiles"] = [float(value) for value in settings.quantiles]
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 

@@ -658,9 +658,13 @@ def try_darts_medians(
     mode: str,
     focus: int,
     families: Iterable[str],
+    estimators: int = 32,
 ) -> dict[str, float] | None:
     """Un pas Darts. None quand l’histoire n’a pas huit lignes de perte, ou quand Darts a échoué.
 
+    Les arbres sont ceux de `_fit_one` : mêmes nombre, feuilles, profondeur et
+    tirages. Avec ses réglages par défaut (100 arbres, 31 feuilles), la médiane
+    de somme de la fenêtre se trompait plus que la moyenne des tirages d’avant.
     Un échec (import, ajustement, prévision) reste noté (`darts_error`) : les
     pas suivants partent sans Darts, jusqu’au redémarrage de l’API.
     """
@@ -710,6 +714,14 @@ def try_darts_medians(
             # Sans likelihood, Darts ajuste un L2 : une moyenne, pas la médiane qu’il remplace.
             "likelihood": "quantile",
             "quantiles": [0.5],
+            "n_estimators": int(estimators),
+            "num_leaves": 15 if estimators >= 24 else 7,
+            "max_depth": 4,
+            "min_child_samples": 2,
+            "colsample_bytree": 0.85,
+            "subsample": 0.9,
+            "subsample_freq": 1,
+            "force_col_wise": True,
         }
         if past is not None:
             kwargs["lags_past_covariates"] = past_lags
@@ -850,6 +862,7 @@ def compute_part(
                 mode=mode,
                 focus=settings.focus,
                 families=settings.families,
+                estimators=settings.estimators,
             )
     if part == "darts" and darts_error() is not None:
         return {"error": darts_error()}
