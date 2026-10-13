@@ -14,7 +14,7 @@ from __future__ import annotations
 import importlib.util
 from typing import Any, Iterable
 
-from synchro.nextdata.covariates import SHAPE_SERIES, grid_shape, normalize_families
+from synchro.nextdata.covariates import SHAPE_SERIES, TEMPORAL_TARGETS, grid_shape, normalize_families
 from synchro.nextdata.empirical import public_base, recount
 from synchro.nextdata.models import _clamp_span, _clip, chronos_error, star_pool_of
 from synchro.nextdata.panel import Frame, build_frame, normalized_draws
@@ -107,15 +107,15 @@ def _apply_external(
     moments: dict[str, dict[str, float]],
     external: dict[str, float] | None,
     *,
-    names: tuple[str, ...] = ("sum", "star_sum", "n1", "parity", "spread", "consecutive", "star_consecutive"),
-    mix_n1: bool = False,
+    names: tuple[str, ...] = TEMPORAL_TARGETS,
     star_pool: int = 12,
 ) -> None:
-    """Remplace la médiane. Si elle sort de la bande, les deux bords suivent du même pas.
+    """Remplace la médiane temporelle. Si elle sort de la bande, les deux bords suivent du même pas.
 
     Coller seulement le bord franchi à la médiane ferait d’un quantile 10 % ou
     90 % la médiane elle-même. Le décalage commun garde l’écart de chaque côté,
-    puis les bornes légales ramènent ce qui dépasse.
+    puis les bornes légales ramènent ce qui dépasse. Les rangs ne sont pas
+    touchés : leur centre est le niveau et le delta de LightGBM.
     """
     if not external:
         return
@@ -124,8 +124,6 @@ def _apply_external(
             continue
         band = moments[name]
         value = _clip(name, external[name], star_pool)
-        if name == "n1" and mix_n1:
-            value = _clip(name, 0.5 * float(band["mid"]) + 0.5 * value, star_pool)
         lo = float(band["lo"])
         hi = float(band["hi"])
         if value < lo or value > hi:

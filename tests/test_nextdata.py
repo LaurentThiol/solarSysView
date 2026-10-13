@@ -1419,9 +1419,12 @@ def test_external_median_keeps_the_quantile_gaps() -> None:
     outside = {"sum": {"lo": 80.0, "mid": 100.0, "hi": 120.0}}
     _apply_external(outside, {"sum": 140})
     assert outside["sum"] == {"lo": 120.0, "mid": 140.0, "hi": 160.0}
-    capped = {"n1": {"lo": 20.0, "mid": 30.0, "hi": 40.0}}
-    _apply_external(capped, {"n1": 50})
-    assert capped["n1"] == {"lo": 36.0, "mid": 46.0, "hi": 46.0}
+    capped = {"spread": {"lo": 30.0, "mid": 40.0, "hi": 45.0}}
+    _apply_external(capped, {"spread": 55})
+    assert capped["spread"] == {"lo": 39.0, "mid": 49.0, "hi": 49.0}
+    ranks = {"n1": {"lo": 20.0, "mid": 30.0, "hi": 40.0}, "level:n1": {"lo": 3.0, "mid": 8.0, "hi": 14.0}}
+    _apply_external(ranks, {"n1": 2.0, "sum": 120.0})
+    assert ranks == {"n1": {"lo": 20.0, "mid": 30.0, "hi": 40.0}, "level:n1": {"lo": 3.0, "mid": 8.0, "hi": 14.0}}
 
 
 def test_star_clip_follows_the_urn() -> None:

@@ -237,7 +237,7 @@ def _assemble(
         if library == "lightgbm":
             darts = (parts.get("darts") or {}).get(mode)
             if darts:
-                _apply_external(moments, darts, mix_n1=True, star_pool=pool)
+                _apply_external(moments, darts, star_pool=pool)
                 engine = "darts"
             if with_chronos:
                 chronos = _blend_chronos(frame, mode, moments, parts, window, pool)
