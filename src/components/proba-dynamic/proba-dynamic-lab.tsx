@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { HelpTip, TitleHelp } from "@/components/help"
@@ -8,6 +8,7 @@ import { ChargeBoard } from "@/components/proba-dynamic/charge-board"
 import { SiteHeaderSlot } from "@/components/site-header-slot"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { PillTabs } from "@/components/ui/pill-tabs"
+import type { Draw } from "@/lib/draws"
 import { PROBA_DYNAMIC_HELP } from "@/lib/proba-dynamic-help"
 import {
   NUMBER_POOL,
@@ -18,12 +19,15 @@ import {
   parsePinned,
   parseProbaDir,
   parseProbaSort,
+  type ProbaBoards,
   type ProbaDir,
   type ProbaKind,
   type ProbaSort,
 } from "@/lib/proba-dynamic"
 import { useDraws } from "@/lib/use-draws"
+import { cn } from "@/lib/utils"
 import { useWeekdayScope } from "@/lib/use-weekday-scope"
+import type { WeekdayScope } from "@/lib/weekday-scope"
 
 const SORTS = [
   { id: "dizaines", label: "Dizaines", help: PROBA_DYNAMIC_HELP.dizaines },
@@ -39,12 +43,39 @@ function sortId(sort: ProbaSort, dir: ProbaDir): SortId {
   return sort
 }
 
+function CalcLight({ thinking }: { thinking: boolean }) {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+      aria-live="polite"
+    >
+      <span className="relative inline-flex size-2.5" aria-hidden="true">
+        {thinking ? (
+          <>
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-warn opacity-75" />
+            <span className="relative inline-flex size-2.5 rounded-full bg-warn" />
+          </>
+        ) : (
+          <span className="relative inline-flex size-2.5 rounded-full bg-ok" />
+        )}
+      </span>
+      {thinking ? "Calcul" : "À jour"}
+    </span>
+  )
+}
+
 export function ProbaDynamicLab() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [weekday, setWeekday] = useWeekdayScope()
-  const { draws } = useDraws("all", weekday)
+  const { draws, loading } = useDraws("all", weekday)
+  const [busy, setBusy] = useState(true)
+  const [view, setView] = useState<ProbaBoards | null>(null)
+  const [readyDraws, setReadyDraws] = useState<Draw[] | null>(null)
+  const [readyWeekday, setReadyWeekday] = useState<WeekdayScope | null>(null)
+  const seenWeekday = useRef(weekday)
+  const requestId = useRef(0)
   const sort = parseProbaSort(searchParams.get("tri"))
   const dir = parseProbaDir(searchParams.get("sens"))
   const numberPin = parsePinned(searchParams.get("n"), NUMBER_POOL)
@@ -99,14 +130,68 @@ export function ProbaDynamicLab() {
     [numberPin, replace, searchParams, starPin]
   )
 
-  const { boards, referenceDelay } = useMemo(() => buildProbaBoards(draws), [draws])
+  const onWeekday = useCallback(
+    (next: WeekdayScope) => {
+      if (next === weekday) return
+      seenWeekday.current = next
+      requestId.current += 1
+      setBusy(true)
+      setWeekday(next)
+    },
+    [setWeekday, weekday]
+  )
+
+  useEffect(() => {
+    if (seenWeekday.current === weekday) return
+    seenWeekday.current = weekday
+    requestId.current += 1
+    setBusy(true)
+  }, [weekday])
+
+  // Le jour part avant l'archive : useDraws ne remet pas loading à vrai.
+  // Le voyant jaunit tout de suite, et les échelles se recalculent après peinture.
+  useEffect(() => {
+    if (loading) return
+    const id = requestId.current
+    const stamp = seenWeekday.current
+    const series = draws
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      if (cancelled || requestId.current !== id) return
+      const next = buildProbaBoards(series)
+      if (cancelled || requestId.current !== id) return
+      setView(next)
+      setReadyDraws(series)
+      setReadyWeekday(stamp)
+      setBusy(false)
+    }, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [draws, loading])
+
+  const boards = view?.boards ?? []
+  const thinking = loading || busy || readyWeekday !== weekday || readyDraws !== draws
   const numberOrder = useMemo(
-    () => orderBalls(ballValues(NUMBER_POOL), (value) => referenceDelay.number[value - 1] ?? 0, sort, dir),
-    [dir, referenceDelay.number, sort]
+    () =>
+      orderBalls(
+        ballValues(NUMBER_POOL),
+        (value) => view?.referenceDelay.number[value - 1] ?? 0,
+        sort,
+        dir
+      ),
+    [dir, sort, view]
   )
   const starOrder = useMemo(
-    () => orderBalls(ballValues(STAR_POOL), (value) => referenceDelay.star[value - 1] ?? 0, sort, dir),
-    [dir, referenceDelay.star, sort]
+    () =>
+      orderBalls(
+        ballValues(STAR_POOL),
+        (value) => view?.referenceDelay.star[value - 1] ?? 0,
+        sort,
+        dir
+      ),
+    [dir, sort, view]
   )
 
   return (
@@ -133,7 +218,8 @@ export function ProbaDynamicLab() {
                 items={SORTS}
               />
             </div>
-            <WeekdayScopeControl value={weekday} onChange={setWeekday} compact inline help={PROBA_DYNAMIC_HELP.jour} />
+            <WeekdayScopeControl value={weekday} onChange={onWeekday} compact inline help={PROBA_DYNAMIC_HELP.jour} />
+            <CalcLight thinking={thinking} />
           </div>
         </div>
       </SiteHeaderSlot>
@@ -169,7 +255,10 @@ export function ProbaDynamicLab() {
         </span>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div
+        className={cn("grid gap-4 xl:grid-cols-2", thinking && boards.length > 0 && "opacity-60")}
+        aria-busy={thinking}
+      >
         {boards.map((board) => (
           <ChargeBoard
             key={board.preset}

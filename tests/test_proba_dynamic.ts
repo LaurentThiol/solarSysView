@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -132,4 +133,21 @@ test("the counter sort reads the end of the last 50, not another scale", () => {
   assert.equal(mixed.boards[0].starsHidden, true)
   assert.match(mixed.boards[0].starNote ?? "", /Rupture/)
   assert.equal(mixed.boards[0].stars, null)
+})
+
+test("the lab shows a yellow calculation light and a green settled light", () => {
+  const lab = readFileSync(
+    new URL("../src/components/proba-dynamic/proba-dynamic-lab.tsx", import.meta.url),
+    "utf8"
+  )
+  assert.match(lab, /Calcul/)
+  assert.match(lab, /À jour/)
+  assert.match(lab, /animate-ping/)
+  assert.match(lab, /bg-warn/)
+  assert.match(lab, /bg-ok/)
+  assert.match(lab, /aria-live="polite"/)
+  assert.match(lab, /aria-busy=\{thinking\}/)
+  assert.match(lab, /if \(next === weekday\) return/)
+  assert.match(lab, /window\.setTimeout/)
+  assert.doesNotMatch(lab, /useMemo\(\(\) => buildProbaBoards/)
 })
