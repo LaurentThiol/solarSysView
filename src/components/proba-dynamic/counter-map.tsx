@@ -231,8 +231,10 @@ void main() {
 const FLAT_VERT = `#version 300 es
 layout(location = 0) in vec3 aPos;
 uniform mat4 uMvp;
+uniform float uPointSize;
 void main() {
   gl_Position = uMvp * vec4(aPos, 1.0);
+  gl_PointSize = uPointSize;
 }`
 
 const FLAT_FRAG = `#version 300 es
@@ -427,8 +429,30 @@ export function CounterMap({
     const hot = cssRgb(map.kind === "star" ? "--star" : "--chart-2")
     const over = cssRgb("--destructive")
     const pin = cssRgb("--chart-1")
+    const mark = cssRgb("--foreground")
     const background = cssRgb("--canvas")
     const planeColor = cssRgb("--muted-foreground")
+    const markBuffer = gl.createBuffer()
+    gl.bindBuffer(gl.ARRAY_BUFFER, markBuffer)
+    gl.bufferData(gl.ARRAY_BUFFER, 18 * 4, gl.DYNAMIC_DRAW)
+    let hoverCell: { column: number; slot: number } | null = null
+
+    const cellCorner = (column: number, slot: number, stepColumn: number, stepSlot: number) => {
+      const nextColumn = Math.min(tCount - 1, Math.max(0, column + stepColumn))
+      const nextSlot = Math.min(zCount - 1, Math.max(0, slot + stepSlot))
+      const here = (column * zCount + slot) * 3
+      const there = (nextColumn * zCount + nextSlot) * 3
+      if (nextColumn === column && nextSlot === slot) {
+        const dx = stepColumn === 0 ? 0 : Math.sign(stepColumn) * (X_SPAN / Math.max(1, tCount - 1)) * 0.45
+        const dz = stepSlot === 0 ? 0 : Math.sign(stepSlot) * (Z_SPAN / Math.max(1, zCount - 1)) * 0.45
+        return [positions[here] + dx, positions[here + 1] + 0.03, positions[here + 2] + dz]
+      }
+      return [
+        (positions[here] + positions[there]) / 2,
+        (positions[here + 1] + positions[there + 1]) / 2 + 0.03,
+        (positions[here + 2] + positions[there + 2]) / 2,
+      ]
+    }
 
     const bindSurface = () => {
       gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
@@ -503,11 +527,40 @@ export function CounterMap({
       gl.disableVertexAttribArray(2)
       gl.disableVertexAttribArray(3)
       gl.uniformMatrix4fv(gl.getUniformLocation(flatProgram, "uMvp"), false, mvp)
+      gl.uniform1f(gl.getUniformLocation(flatProgram, "uPointSize"), 1)
       gl.uniform4f(gl.getUniformLocation(flatProgram, "uColor"), planeColor[0], planeColor[1], planeColor[2], 0.35)
       gl.drawArrays(gl.TRIANGLES, 0, 6)
       gl.disable(gl.POLYGON_OFFSET_FILL)
       gl.depthMask(true)
       gl.disable(gl.BLEND)
+
+      if (hoverCell) {
+        const west = cellCorner(hoverCell.column, hoverCell.slot, -1, 0)
+        const north = cellCorner(hoverCell.column, hoverCell.slot, 0, 1)
+        const east = cellCorner(hoverCell.column, hoverCell.slot, 1, 0)
+        const south = cellCorner(hoverCell.column, hoverCell.slot, 0, -1)
+        const patch = new Float32Array([
+          ...west, ...north, ...east,
+          ...west, ...east, ...south,
+        ])
+        gl.enable(gl.POLYGON_OFFSET_FILL)
+        gl.polygonOffset(-3, -3)
+        gl.bindBuffer(gl.ARRAY_BUFFER, markBuffer)
+        gl.bufferData(gl.ARRAY_BUFFER, patch, gl.DYNAMIC_DRAW)
+        gl.enableVertexAttribArray(0)
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0)
+        gl.uniform4f(gl.getUniformLocation(flatProgram, "uColor"), mark[0], mark[1], mark[2], 1)
+        gl.drawArrays(gl.TRIANGLES, 0, 6)
+        gl.disable(gl.POLYGON_OFFSET_FILL)
+        const center = (hoverCell.column * zCount + hoverCell.slot) * 3
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array([positions[center], positions[center + 1] + 0.045, positions[center + 2]]),
+          gl.DYNAMIC_DRAW
+        )
+        gl.uniform1f(gl.getUniformLocation(flatProgram, "uPointSize"), 16)
+        gl.drawArrays(gl.POINTS, 0, 1)
+      }
     }
     drawRef.current = draw
 
@@ -578,8 +631,16 @@ export function CounterMap({
       if (!dragging) {
         const hit = readHit(event)
         if (!hit || !wrapRef.current) {
+          if (hoverCell) {
+            hoverCell = null
+            draw()
+          }
           setHover(null)
           return
+        }
+        if (!hoverCell || hoverCell.column !== hit.column || hoverCell.slot !== hit.slot) {
+          hoverCell = { column: hit.column, slot: hit.slot }
+          draw()
         }
         const cell = map.columns[hit.column][hit.slot]
         const wrap = wrapRef.current.getBoundingClientRect()
@@ -604,6 +665,7 @@ export function CounterMap({
       moved = Math.hypot(dx, dy)
       cameraRef.current.yaw = originYaw + dx * 0.008
       cameraRef.current.pitch = Math.max(-1.05, Math.min(1.2, originPitch + dy * 0.008))
+      hoverCell = null
       setHover(null)
       draw()
     }
@@ -622,13 +684,25 @@ export function CounterMap({
       draw()
     }
 
+    const clearHover = () => {
+      if (!hoverCell) return
+      hoverCell = null
+      setHover(null)
+      draw()
+    }
     const onPointerCancel = () => {
       dragging = false
+      clearHover()
+    }
+    const onPointerLeave = () => {
+      if (dragging) return
+      clearHover()
     }
     canvas.addEventListener("pointerdown", onPointerDown)
     canvas.addEventListener("pointermove", onPointerMove)
     canvas.addEventListener("pointerup", onPointerUp)
     canvas.addEventListener("pointercancel", onPointerCancel)
+    canvas.addEventListener("pointerleave", onPointerLeave)
     canvas.addEventListener("wheel", onWheel, { passive: false })
     const observer = new ResizeObserver(() => resize())
     observer.observe(canvas)
@@ -641,6 +715,7 @@ export function CounterMap({
       canvas.removeEventListener("pointermove", onPointerMove)
       canvas.removeEventListener("pointerup", onPointerUp)
       canvas.removeEventListener("pointercancel", onPointerCancel)
+      canvas.removeEventListener("pointerleave", onPointerLeave)
       canvas.removeEventListener("wheel", onWheel)
       drawRef.current = () => {}
       gl.deleteBuffer(positionBuffer)
@@ -649,6 +724,7 @@ export function CounterMap({
       gl.deleteBuffer(indexAttr)
       gl.deleteBuffer(elementBuffer)
       gl.deleteBuffer(planeBuffer)
+      gl.deleteBuffer(markBuffer)
       gl.deleteTexture(colorTex)
       gl.deleteRenderbuffer(depthRb)
       gl.deleteFramebuffer(pickFbo)
