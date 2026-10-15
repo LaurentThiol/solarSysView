@@ -5,11 +5,21 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { HelpTip, TitleHelp } from "@/components/help"
 import { ChargeBoard } from "@/components/proba-dynamic/charge-board"
+import { CounterMap } from "@/components/proba-dynamic/counter-map"
 import { SiteHeaderSlot } from "@/components/site-header-slot"
 import { WeekdayScopeControl } from "@/components/weekday-scope-control"
 import { PillTabs } from "@/components/ui/pill-tabs"
 import type { Draw } from "@/lib/draws"
 import { PROBA_DYNAMIC_HELP } from "@/lib/proba-dynamic-help"
+import {
+  buildProbaMap,
+  MAP_SCALE_LABELS,
+  MAP_SCALES,
+  parseMapKind,
+  parseMapScale,
+  type MapScale,
+  type ProbaMap,
+} from "@/lib/proba-map"
 import {
   NUMBER_POOL,
   STAR_POOL,
@@ -34,12 +44,21 @@ const SORTS = [
   { id: "unites", label: "Unités", help: PROBA_DYNAMIC_HELP.unites },
   { id: "compteur-asc", label: "Compteur croissant", help: PROBA_DYNAMIC_HELP.compteur },
   { id: "compteur-desc", label: "Compteur décroissant", help: PROBA_DYNAMIC_HELP.compteur },
+  { id: "map", label: "Carte", help: PROBA_DYNAMIC_HELP.carte },
+] as const
+
+const MAP_SCALE_ITEMS = MAP_SCALES.map((id) => ({ id, label: MAP_SCALE_LABELS[id] }))
+const BANDS = [
+  { id: "numeros", label: "Numéros", help: PROBA_DYNAMIC_HELP.numeros },
+  { id: "etoiles", label: "Étoiles", help: PROBA_DYNAMIC_HELP.etoiles },
 ] as const
 
 type SortId = (typeof SORTS)[number]["id"]
+type BandId = (typeof BANDS)[number]["id"]
 
 function sortId(sort: ProbaSort, dir: ProbaDir): SortId {
   if (sort === "compteur") return dir === "asc" ? "compteur-asc" : "compteur-desc"
+  if (sort === "map") return "map"
   return sort
 }
 
@@ -74,10 +93,19 @@ export function ProbaDynamicLab() {
   const [view, setView] = useState<ProbaBoards | null>(null)
   const [readyDraws, setReadyDraws] = useState<Draw[] | null>(null)
   const [readyWeekday, setReadyWeekday] = useState<WeekdayScope | null>(null)
+  const [mapView, setMapView] = useState<ProbaMap | null>(null)
+  const [readyMap, setReadyMap] = useState<{
+    draws: Draw[]
+    weekday: WeekdayScope
+    scale: MapScale
+    kind: ProbaKind
+  } | null>(null)
   const seenWeekday = useRef(weekday)
   const requestId = useRef(0)
   const sort = parseProbaSort(searchParams.get("tri"))
   const dir = parseProbaDir(searchParams.get("sens"))
+  const mapScale = parseMapScale(searchParams.get("echelle"))
+  const mapKind = parseMapKind(searchParams.get("bande"))
   const numberPin = parsePinned(searchParams.get("n"), NUMBER_POOL)
   const starPin = parsePinned(searchParams.get("e"), STAR_POOL)
   const pinned =
@@ -107,10 +135,33 @@ export function ProbaDynamicLab() {
       } else if (id === "compteur-asc") {
         params.set("tri", "compteur")
         params.set("sens", "asc")
-      } else {
+      } else if (id === "compteur-desc") {
         params.set("tri", "compteur")
         params.delete("sens")
+      } else {
+        params.set("tri", "map")
+        params.delete("sens")
       }
+      replace(params)
+    },
+    [replace, searchParams]
+  )
+
+  const selectScale = useCallback(
+    (id: MapScale) => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (id === "tout") params.delete("echelle")
+      else params.set("echelle", id)
+      replace(params)
+    },
+    [replace, searchParams]
+  )
+
+  const selectBand = useCallback(
+    (id: BandId) => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (id === "numeros") params.delete("bande")
+      else params.set("bande", "etoiles")
       replace(params)
     },
     [replace, searchParams]
@@ -171,8 +222,47 @@ export function ProbaDynamicLab() {
     }
   }, [draws, loading])
 
+  const mapStale =
+    sort === "map" &&
+    (readyMap == null ||
+      readyMap.draws !== draws ||
+      readyMap.weekday !== weekday ||
+      readyMap.scale !== mapScale ||
+      readyMap.kind !== mapKind)
+
+  useEffect(() => {
+    if (loading || sort !== "map") return
+    if (readyDraws !== draws || readyWeekday !== weekday) return
+    if (
+      readyMap != null &&
+      readyMap.draws === draws &&
+      readyMap.weekday === weekday &&
+      readyMap.scale === mapScale &&
+      readyMap.kind === mapKind
+    ) {
+      return
+    }
+    const id = requestId.current
+    const series = draws
+    const scale = mapScale
+    const kind = mapKind
+    const stamp = weekday
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      if (cancelled || requestId.current !== id) return
+      const next = buildProbaMap(series, scale, kind)
+      if (cancelled || requestId.current !== id) return
+      setMapView(next)
+      setReadyMap({ draws: series, weekday: stamp, scale, kind })
+    }, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [draws, loading, mapKind, mapScale, readyDraws, readyMap, readyWeekday, sort, weekday])
+
   const boards = view?.boards ?? []
-  const thinking = loading || busy || readyWeekday !== weekday || readyDraws !== draws
+  const thinking = loading || busy || readyWeekday !== weekday || readyDraws !== draws || mapStale
   const numberOrder = useMemo(
     () =>
       orderBalls(
@@ -219,6 +309,40 @@ export function ProbaDynamicLab() {
               />
             </div>
             <WeekdayScopeControl value={weekday} onChange={onWeekday} compact inline help={PROBA_DYNAMIC_HELP.jour} />
+            {sort === "map" ? (
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                  Échelle
+                  <HelpTip {...PROBA_DYNAMIC_HELP.echelle} />
+                </span>
+                <PillTabs
+                  label="Échelle de la carte"
+                  mode="chips"
+                  compact
+                  wrap
+                  value={mapScale}
+                  onValueChange={selectScale}
+                  items={MAP_SCALE_ITEMS}
+                />
+              </div>
+            ) : null}
+            {sort === "map" ? (
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                  Bande
+                  <HelpTip {...PROBA_DYNAMIC_HELP.bande} />
+                </span>
+                <PillTabs
+                  label="Bande de la carte"
+                  mode="chips"
+                  compact
+                  wrap
+                  value={mapKind === "star" ? "etoiles" : "numeros"}
+                  onValueChange={selectBand}
+                  items={BANDS}
+                />
+              </div>
+            ) : null}
             <CalcLight thinking={thinking} />
           </div>
         </div>
@@ -256,20 +380,31 @@ export function ProbaDynamicLab() {
       </div>
 
       <div
-        className={cn("grid gap-4 xl:grid-cols-2", thinking && boards.length > 0 && "opacity-60")}
+        className={cn(
+          sort === "map" ? "space-y-4" : "grid gap-4 xl:grid-cols-2",
+          thinking && (sort === "map" ? mapView != null && !mapStale : boards.length > 0) && "opacity-60"
+        )}
         aria-busy={thinking}
       >
-        {boards.map((board) => (
-          <ChargeBoard
-            key={board.preset}
-            board={board}
-            numberOrder={numberOrder}
-            starOrder={starOrder}
-            sort={sort}
-            pinned={pinned}
-            onPin={onPin}
-          />
-        ))}
+        {sort === "map" ? (
+          mapView != null && !mapStale ? (
+            <CounterMap map={mapView} pinned={pinned} onPin={onPin} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Calcul de la carte…</p>
+          )
+        ) : (
+          boards.map((board) => (
+            <ChargeBoard
+              key={board.preset}
+              board={board}
+              numberOrder={numberOrder}
+              starOrder={starOrder}
+              sort={sort}
+              pinned={pinned}
+              onPin={onPin}
+            />
+          ))
+        )}
       </div>
     </div>
   )

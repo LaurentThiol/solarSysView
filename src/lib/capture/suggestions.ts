@@ -85,6 +85,7 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
   if (lab === "probadynamic") {
     return [
       "Décris les dents de scie : quelles boules accumulent 1/50 ou 1/12, et lesquelles viennent d’être remises à zéro ?",
+      "Sur la carte, les crêtes suivent-elles le moindre écart avec les trois voisines, ou seulement le rang du compteur ?",
       "Le bord droit des échelles 50, 100, 200 et de l’année est-il le même, et que change n−1 ou n−2 ?",
       "Rappelle que ce compteur décrit l’archive. Le tirage suivant reste uniforme.",
     ]

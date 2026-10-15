@@ -371,6 +371,13 @@ const TABS: AddressEntry[] = [
     "tri=compteur"
   ),
   tabEntry(
+    "/probadynamic?tri=map",
+    "probaDynamic · Carte",
+    "Surface 3D : un pas par tirage, hauteur = compteur. Les 50 cases suivent le moindre écart avec les trois voisines du tirage précédent. La même boule peut occuper plusieurs cases.",
+    "lecture",
+    "tri=map"
+  ),
+  tabEntry(
     "/next?tab=couple",
     "Next · Couple",
     "Schéma 3D des boules 1–50. Le poids d’un couple est la somme des co-sorties, du tirage le plus récent au plus ancien, sur 20, 50, 100, 200, l’année civile, l’année n−1 ou l’année n−2. Un clic dans Couples relie ce couple dans Chaque numéro.",

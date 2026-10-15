@@ -9,9 +9,11 @@ import {
   buildProbaBoards,
   observeBand,
   orderBalls,
+  parseProbaSort,
   type ProbaDraw,
 } from "../src/lib/proba-dynamic.ts"
-import { chargePhrase } from "../src/lib/proba-dynamic-help.ts"
+import { chargePhrase, mapPhrase } from "../src/lib/proba-dynamic-help.ts"
+import { buildCounterMap, buildProbaMap, parseMapKind, parseMapScale } from "../src/lib/proba-map.ts"
 
 function close(actual: number, expected: number) {
   assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} ≈ ${expected}`)
@@ -133,6 +135,131 @@ test("the counter sort reads the end of the last 50, not another scale", () => {
   assert.equal(mixed.boards[0].starsHidden, true)
   assert.match(mixed.boards[0].starNote ?? "", /Rupture/)
   assert.equal(mixed.boards[0].stars, null)
+})
+
+test("the map seeds slots by charge and breaks ties by ball number", () => {
+  const columns = buildCounterMap([
+    { value: 3, series: [0.5, 0] },
+    { value: 1, series: [0.5, 0] },
+    { value: 2, series: [0.1, 0] },
+  ])
+  assert.deepEqual(
+    columns[0].map((cell) => cell.ball),
+    [2, 1, 3]
+  )
+  assert.equal(columns[0][0].cost, 0)
+  assert.deepEqual(columns[0][0].neighbors, [])
+  assert.equal(parseProbaSort("map"), "map")
+  assert.deepEqual(orderBalls([3, 1, 2], () => 9, "map", "desc"), [1, 2, 3])
+})
+
+test("each slot takes the least absolute deviation from the adjacent past values", () => {
+  const columns = buildCounterMap([
+    { value: 1, series: [0, 10, 1] },
+    { value: 2, series: [1, 1.1, 5] },
+    { value: 3, series: [2, 0, 1.1] },
+  ])
+  const next = columns[1]
+  assert.equal(next[0].ball, 3)
+  close(next[0].cost, 1)
+  assert.deepEqual(next[0].neighbors, [0, 1])
+  assert.equal(next[1].ball, 2)
+  close(next[1].cost, 2.1)
+  assert.deepEqual(next[1].neighbors, [0, 1, 2])
+  assert.equal(next[2].ball, 2)
+  close(next[2].cost, 1)
+  assert.deepEqual(next[2].neighbors, [1, 2])
+  assert.equal(next.filter((cell) => cell.ball === 2).length, 2)
+  // La troisième colonne lit les voisines du tirage juste avant, pas la graine.
+  assert.equal(columns[2][1].ball, 3)
+})
+
+test("an equal cost keeps the smaller ball number", () => {
+  const columns = buildCounterMap([
+    { value: 2, series: [1, 1] },
+    { value: 1, series: [0, 1] },
+    { value: 3, series: [2, 5] },
+  ])
+  assert.deepEqual(
+    columns[0].map((cell) => cell.ball),
+    [1, 2, 3]
+  )
+  assert.equal(columns[1][1].ball, 1)
+  close(columns[1][1].cost, 2)
+  assert.match(
+    mapPhrase({
+      kind: "number",
+      ball: 1,
+      date: "2026-01-06",
+      slot: 1,
+      slots: 3,
+      charge: 1,
+      cost: 2,
+      neighbors: [0, 1, 2],
+    }),
+    /voisines/
+  )
+  assert.match(
+    mapPhrase({
+      kind: "number",
+      ball: 1,
+      date: "2026-01-02",
+      slot: 0,
+      slots: 3,
+      charge: 0,
+      cost: 0,
+      neighbors: [],
+    }),
+    /premier tirage/
+  )
+})
+
+test("map columns follow draw order and ignore calendar gaps", () => {
+  const map = buildProbaMap(
+    [
+      draw("2024-06-01", [1, 2, 3, 4, 5]),
+      draw("2020-01-01", [1, 2, 3, 4, 6]),
+    ],
+    "tout",
+    "number"
+  )
+  assert.deepEqual(map.dates, ["2020-01-01", "2024-06-01"])
+  assert.equal(map.columns.length, map.dates.length)
+  assert.equal(map.columns[0].length, 50)
+  assert.equal(map.pool, 50)
+
+  const year = buildProbaMap(
+    [
+      draw("2025-12-30", [1, 2, 3, 4, 5]),
+      draw("2026-01-02", [1, 2, 3, 4, 6]),
+      draw("2026-01-06", [1, 2, 3, 4, 7]),
+    ],
+    "year",
+    "number"
+  )
+  assert.deepEqual(year.dates, ["2026-01-02", "2026-01-06"])
+  assert.equal(year.columns.length, 2)
+
+  const stars = buildProbaMap([draw("2026-01-02", [1, 2, 3, 4, 5], [1, 2])], "tout", "star")
+  assert.equal(stars.columns[0].length, 12)
+  close(stars.expected, 5 / 12)
+
+  const mixed = buildProbaMap(
+    [
+      draw("2026-01-02", [1, 2, 3, 4, 5], [1, 2], 11),
+      draw("2026-01-06", [1, 2, 3, 4, 5], [1, 2], 12),
+    ],
+    "tout",
+    "star"
+  )
+  assert.equal(mixed.starsHidden, true)
+  assert.equal(mixed.columns.length, 0)
+  assert.match(mixed.starNote ?? "", /Rupture|pool/)
+
+  assert.equal(parseMapScale("last_50"), "last_50")
+  assert.equal(parseMapScale("ailleurs"), "tout")
+  assert.equal(parseMapKind("etoiles"), "star")
+  assert.equal(parseMapKind(null), "number")
 })
 
 test("the lab shows a yellow calculation light and a green settled light", () => {

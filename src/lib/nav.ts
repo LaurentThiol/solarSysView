@@ -117,7 +117,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "probaDynamic",
         help: {
           title: "probaDynamic",
-          body: "Chaque tirage sans le numéro ajoute 1/50, sans l’étoile ajoute 1/12. La sortie remet ce compteur à zéro. Six échelles : 50, 100, 200, année civile, n−1, n−2. Tri par dizaines, par unités, ou par le compteur des 50 derniers. Lecture d’archive : le tirage suivant reste uniforme.",
+          body: "Chaque tirage sans le numéro ajoute 1/50, sans l’étoile ajoute 1/12. La sortie remet ce compteur à zéro. Six échelles : 50, 100, 200, année civile, n−1, n−2. Tri par dizaines, par unités, ou par le compteur des 50 derniers. La carte aligne les tirages en abscisse, le compteur en hauteur, et 50 cases en profondeur selon le moindre écart avec les trois voisines du tirage précédent. Lecture d’archive : le tirage suivant reste uniforme.",
         },
       },
       {

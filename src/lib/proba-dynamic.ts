@@ -39,7 +39,7 @@ export const PROBA_SCALE_LABELS: Record<ProbaScale, string> = {
   year_n2: "n−2",
 }
 
-export const PROBA_SORTS = ["dizaines", "unites", "compteur"] as const
+export const PROBA_SORTS = ["dizaines", "unites", "compteur", "map"] as const
 export type ProbaSort = (typeof PROBA_SORTS)[number]
 export type ProbaDir = "asc" | "desc"
 export type ProbaKind = "number" | "star"
@@ -272,6 +272,7 @@ export function orderBalls(
   return [...values].sort((a, b) => {
     if (sort === "dizaines") return decadeIndex(a) - decadeIndex(b) || a - b
     if (sort === "unites") return unitRank(a) - unitRank(b) || a - b
+    if (sort === "map") return a - b
     const primary = dir === "asc" ? delayOf(a) - delayOf(b) : delayOf(b) - delayOf(a)
     return primary || a - b
   })
@@ -282,7 +283,7 @@ export function ballValues(pool: number) {
 }
 
 export function parseProbaSort(value: string | null | undefined): ProbaSort {
-  if (value === "unites" || value === "compteur" || value === "dizaines") return value
+  if (value === "unites" || value === "compteur" || value === "dizaines" || value === "map") return value
   return "dizaines"
 }
 
