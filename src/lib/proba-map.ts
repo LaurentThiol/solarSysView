@@ -3,8 +3,8 @@
  * X est l’index du tirage, pas l’écart de calendrier.
  * Y est le compteur brut.
  * Z : une case par boule. La première colonne range les compteurs.
- * Ensuite chaque case prend le compteur du jour le plus proche
- * des cases voisines au tirage d’avant. La même boule peut revenir.
+ * Ensuite chaque compteur du jour est posé une seule fois, là où
+ * la somme des écarts aux cases voisines du tirage passé est minimale.
  */
 
 import { resolveWindow } from "@/lib/analysis-window"
@@ -37,6 +37,8 @@ export const MAP_SCALE_LABELS: Record<MapScale, string> = {
 
 /** En dessous, deux coûts sont le même écart. 1/50 reste un vrai écart. */
 const COST_TIE = 1e-9
+/** À écart égal, le plus petit numéro passe. Trop petit pour changer un vrai écart. */
+const BALL_BIAS = 1e-12
 
 export type MapSource = {
   value: number
@@ -73,6 +75,62 @@ export function parseMapScale(value: string | null | undefined): MapScale {
 
 export function parseMapKind(value: string | null | undefined): ProbaKind {
   return value === "etoiles" ? "star" : "number"
+}
+
+/**
+ * Affectation de coût minimum (Kuhn–Munkres).
+ * `cost` est n×n, ligne = case, colonne = boule. Retourne l’index de boule par case.
+ */
+function minCostAssign(cost: Float64Array, n: number, slotOf: Int16Array) {
+  const u = new Float64Array(n + 1)
+  const v = new Float64Array(n + 1)
+  const parent = new Int32Array(n + 1)
+  const way = new Int32Array(n + 1)
+  const minv = new Float64Array(n + 1)
+  const used = new Uint8Array(n + 1)
+
+  for (let row = 1; row <= n; row += 1) {
+    parent[0] = row
+    let column = 0
+    minv.fill(Number.POSITIVE_INFINITY)
+    used.fill(0)
+    do {
+      used[column] = 1
+      const current = parent[column]
+      let delta = Number.POSITIVE_INFINITY
+      let next = 0
+      for (let candidate = 1; candidate <= n; candidate += 1) {
+        if (used[candidate]) continue
+        const value = cost[(current - 1) * n + (candidate - 1)] - u[current] - v[candidate]
+        if (value < minv[candidate]) {
+          minv[candidate] = value
+          way[candidate] = column
+        }
+        if (minv[candidate] < delta) {
+          delta = minv[candidate]
+          next = candidate
+        }
+      }
+      for (let candidate = 0; candidate <= n; candidate += 1) {
+        if (used[candidate]) {
+          u[parent[candidate]] += delta
+          v[candidate] -= delta
+        } else {
+          minv[candidate] -= delta
+        }
+      }
+      column = next
+    } while (parent[column] !== 0)
+    do {
+      const previous = way[column]
+      parent[column] = parent[previous]
+      column = previous
+    } while (column !== 0)
+  }
+
+  for (let column = 1; column <= n; column += 1) {
+    if (parent[column] !== 0) slotOf[parent[column] - 1] = column - 1
+  }
 }
 
 function drawCountOf(rows: readonly MapSource[]) {
@@ -116,33 +174,46 @@ export function buildCounterMap(rows: readonly MapSource[]): MapCell[][] {
   }
   columns.push(first)
 
+  const matrix = new Float64Array(pool * pool)
+  const chosen = new Int16Array(pool)
   for (let draw = 1; draw < draws; draw += 1) {
     const base = draw * pool
+    const leftOf = new Float64Array(pool)
+    const rightOf = new Float64Array(pool)
+    const hasLeft = new Uint8Array(pool)
+    const hasRight = new Uint8Array(pool)
+    for (let slot = 0; slot < pool; slot += 1) {
+      if (slot > 0) {
+        leftOf[slot] = previous[slot - 1]
+        hasLeft[slot] = 1
+      }
+      if (slot + 1 < pool) {
+        rightOf[slot] = previous[slot + 1]
+        hasRight[slot] = 1
+      }
+      for (let index = 0; index < pool; index += 1) {
+        const value = charge[base + index]
+        let deviation = Math.abs(value - previous[slot])
+        if (hasLeft[slot]) deviation += Math.abs(value - leftOf[slot])
+        if (hasRight[slot]) deviation += Math.abs(value - rightOf[slot])
+        matrix[slot * pool + index] = deviation + ballOf[index] * BALL_BIAS
+      }
+    }
+    minCostAssign(matrix, pool, chosen)
     const column: MapCell[] = new Array(pool)
     // Figée : une case ne doit pas lire une voisine déjà réassignée sur ce tirage.
     const next = new Float64Array(pool)
     for (let slot = 0; slot < pool; slot += 1) {
-      const left = slot > 0 ? previous[slot - 1] : null
-      const middle = previous[slot]
-      const right = slot + 1 < pool ? previous[slot + 1] : null
-      let best = 0
-      let bestCost = Number.POSITIVE_INFINITY
-      let bestBall = Number.POSITIVE_INFINITY
-      for (let index = 0; index < pool; index += 1) {
-        const value = charge[base + index]
-        let cost = Math.abs(value - middle)
-        if (left != null) cost += Math.abs(value - left)
-        if (right != null) cost += Math.abs(value - right)
-        const ball = ballOf[index]
-        if (cost < bestCost - COST_TIE || (Math.abs(cost - bestCost) <= COST_TIE && ball < bestBall)) {
-          best = index
-          bestCost = cost
-          bestBall = ball
-        }
-      }
-      const value = charge[base + best]
-      const neighbors = [left, middle, right].filter((item): item is number => item != null)
-      column[slot] = { ball: bestBall, charge: value, cost: bestCost, neighbors }
+      const index = chosen[slot]
+      const value = charge[base + index]
+      const neighbors = [
+        hasLeft[slot] ? leftOf[slot] : null,
+        previous[slot],
+        hasRight[slot] ? rightOf[slot] : null,
+      ].filter((item): item is number => item != null)
+      let deviation = 0
+      for (const neighbor of neighbors) deviation += Math.abs(value - neighbor)
+      column[slot] = { ball: ballOf[index], charge: value, cost: deviation, neighbors }
       next[slot] = value
     }
     previous.set(next)

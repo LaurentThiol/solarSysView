@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils"
 
 const X_SPAN = 2.4
 const Z_SPAN = 1.15
-const Y_GAIN = 0.7
+const Y_GAIN = 1.15
 const DEFAULT_YAW = -0.72
 const DEFAULT_PITCH = 0.58
 
@@ -29,15 +29,17 @@ function formatMapDate(isoDate: string) {
 }
 
 function cssRgb(token: string): [number, number, number] {
-  const style = getComputedStyle(document.documentElement)
-  const probe = document.createElement("span")
-  probe.style.display = "none"
-  probe.style.color = style.getPropertyValue(token).trim() || "gray"
-  document.body.appendChild(probe)
-  const parsed = getComputedStyle(probe).color.match(/[\d.]+/g)
-  probe.remove()
-  if (!parsed || parsed.length < 3) return [0.5, 0.5, 0.5]
-  return [Number(parsed[0]) / 255, Number(parsed[1]) / 255, Number(parsed[2]) / 255]
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(token).trim() || "gray"
+  const probe = document.createElement("canvas")
+  probe.width = 1
+  probe.height = 1
+  const ctx = probe.getContext("2d", { willReadFrequently: true })
+  if (!ctx) return [0.5, 0.5, 0.5]
+  ctx.fillStyle = "#000"
+  ctx.fillStyle = raw
+  ctx.fillRect(0, 0, 1, 1)
+  const pixel = ctx.getImageData(0, 0, 1, 1).data
+  return [pixel[0] / 255, pixel[1] / 255, pixel[2] / 255]
 }
 
 function Saw({
@@ -206,7 +208,7 @@ void main() {
   float nLen = length(vNormal);
   float shade = nLen < 1e-4
     ? 1.0
-    : 0.42 + 0.58 * clamp(dot(vNormal / nLen, normalize(uLight)), 0.0, 1.0);
+    : 0.72 + 0.28 * clamp(dot(vNormal / nLen, normalize(uLight)), 0.0, 1.0);
   color *= shade;
   if (vPin > 0.5) color = mix(color, uPin, 0.78);
   fragColor = vec4(color, 1.0);
@@ -509,15 +511,19 @@ export function CounterMap({
     }
     drawRef.current = draw
 
+    let sizedW = 0
+    let sizedH = 0
     const resize = () => {
       const rect = canvas.getBoundingClientRect()
       const dpr = Math.min(2, window.devicePixelRatio || 1)
       const width = Math.max(1, Math.round(rect.width * dpr))
       const heightPx = Math.max(1, Math.round(rect.height * dpr))
-      if (canvas.width !== width || canvas.height !== heightPx) {
+      if (canvas.width !== width || canvas.height !== heightPx || sizedW !== width || sizedH !== heightPx) {
         canvas.width = width
         canvas.height = heightPx
         resizeTargets(width, heightPx)
+        sizedW = width
+        sizedH = heightPx
       }
       draw()
     }

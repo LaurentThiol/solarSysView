@@ -153,25 +153,32 @@ test("the map seeds slots by charge and breaks ties by ball number", () => {
   assert.deepEqual(orderBalls([3, 1, 2], () => 9, "map", "desc"), [1, 2, 3])
 })
 
-test("each slot takes the least absolute deviation from the adjacent past values", () => {
+test("each column places every counter once, nearest the adjacent past values", () => {
   const columns = buildCounterMap([
     { value: 1, series: [0, 10, 1] },
     { value: 2, series: [1, 1.1, 5] },
     { value: 3, series: [2, 0, 1.1] },
   ])
   const next = columns[1]
-  assert.equal(next[0].ball, 3)
+  assert.deepEqual(
+    next.map((cell) => cell.ball),
+    [3, 2, 1]
+  )
   close(next[0].cost, 1)
   assert.deepEqual(next[0].neighbors, [0, 1])
-  assert.equal(next[1].ball, 2)
   close(next[1].cost, 2.1)
   assert.deepEqual(next[1].neighbors, [0, 1, 2])
-  assert.equal(next[2].ball, 2)
-  close(next[2].cost, 1)
+  close(next[2].cost, Math.abs(10 - 1) + Math.abs(10 - 2))
   assert.deepEqual(next[2].neighbors, [1, 2])
-  assert.equal(next.filter((cell) => cell.ball === 2).length, 2)
-  // La troisième colonne lit les voisines du tirage juste avant, pas la graine.
-  assert.equal(columns[2][1].ball, 3)
+  assert.deepEqual(
+    next.map((cell) => cell.ball).sort((a, b) => a - b),
+    [1, 2, 3]
+  )
+  // La troisième colonne lit les voisines du tirage juste avant : [0, 1.1, 10].
+  assert.deepEqual(
+    columns[2].map((cell) => cell.ball),
+    [1, 3, 2]
+  )
 })
 
 test("an equal cost keeps the smaller ball number", () => {

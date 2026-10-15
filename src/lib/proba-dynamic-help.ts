@@ -30,7 +30,7 @@ export const PROBA_DYNAMIC_HELP = {
   },
   carte: {
     title: "Carte",
-    body: "Les tirages se suivent en abscisse, un pas par tirage, sans les vides du calendrier. La hauteur est le compteur, non lissé. Les cases en profondeur ne sont pas attachées à une boule. Au premier tirage elles vont du plus petit compteur au plus grand. Ensuite chaque case prend le compteur du jour le plus proche de la médiane de ses trois voisines au tirage d’avant — deux voisines au bord. La même boule peut remplir plusieurs cases. À égalité, le plus petit numéro gagne.",
+    body: "Les tirages se suivent en abscisse, un pas par tirage, sans les vides du calendrier. La hauteur est le compteur, non lissé. Les cases en profondeur ne sont pas attachées à une boule. Au premier tirage elles vont du plus petit compteur au plus grand. Ensuite chaque compteur du jour est posé une seule fois : le placement minimise la somme des écarts avec les cases voisines du tirage d’avant — trois au milieu, deux au bord. À égalité, le plus petit numéro gagne.",
   },
   echelle: {
     title: "Échelle de la carte",
