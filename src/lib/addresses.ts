@@ -350,6 +350,27 @@ const TABS: AddressEntry[] = [
     tabEntry(`/pulse?tab=${tab.id}`, `Pulse · ${tab.label}`, tab.text, "lecture")
   ),
   tabEntry(
+    "/probadynamic?tri=dizaines",
+    "probaDynamic · Dizaines",
+    "Numéros groupés 1–10, 11–20, 21–30, 31–40, 41–50. Étoiles : 1–10, puis 11–12. Le compteur ajoute 1/50 ou 1/12 par absence et revient à zéro à la sortie.",
+    "lecture",
+    "tri=dizaines"
+  ),
+  tabEntry(
+    "/probadynamic?tri=unites",
+    "probaDynamic · Unités",
+    "Groupes du chiffre des unités, de 1 à 9 puis 0. L’étoile 11 suit le 1, l’étoile 12 suit le 2.",
+    "lecture",
+    "tri=unites"
+  ),
+  tabEntry(
+    "/probadynamic?tri=compteur",
+    "probaDynamic · Compteur",
+    "Ordre croissant ou décroissant du compteur au bord droit des 50 derniers tirages. Les six échelles gardent cet ordre.",
+    "lecture",
+    "tri=compteur"
+  ),
+  tabEntry(
     "/next?tab=couple",
     "Next · Couple",
     "Schéma 3D des boules 1–50. Le poids d’un couple est la somme des co-sorties, du tirage le plus récent au plus ancien, sur 20, 50, 100, 200, l’année civile, l’année n−1 ou l’année n−2. Un clic dans Couples relie ce couple dans Chaque numéro.",

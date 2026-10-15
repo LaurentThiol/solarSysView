@@ -82,6 +82,13 @@ export function suggestionsFor(lab: LabId, tab?: string | null): string[] {
       "Sépare description du glyphe et anticipation P(forme suivante | contexte).",
     ]
   }
+  if (lab === "probadynamic") {
+    return [
+      "Décris les dents de scie : quelles boules accumulent 1/50 ou 1/12, et lesquelles viennent d’être remises à zéro ?",
+      "Le bord droit des échelles 50, 100, 200 et de l’année est-il le même, et que change n−1 ou n−2 ?",
+      "Rappelle que ce compteur décrit l’archive. Le tirage suivant reste uniforme.",
+    ]
+  }
   if (lab === "next") {
     return [
       "Décris le schéma : quelles boules sont proches parce qu’elles sont sorties ensemble récemment dans cette fenêtre ?",

@@ -53,7 +53,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     home: "/analyse",
     help: {
       title: "Lecture",
-      body: "Laboratoires qui décrivent l’archive : indicateurs, formes, relief, figures, harmoniques, cycles comparés, proximité des boules.",
+      body: "Laboratoires qui décrivent l’archive : indicateurs, formes, relief, figures, harmoniques, cycles comparés, proximité des boules, compteurs d’observateur.",
     },
     items: [
       {
@@ -110,6 +110,14 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         help: {
           title: "Pulse",
           body: "Générateurs d’onde sur les présences des boules et des étoiles. Cycle simple, double cycle, rotation de paire ou de triplet. Périodes de 2 à 60 tirages, concordance et tranches datées. Décrit le tracé, pas le prochain tirage.",
+        },
+      },
+      {
+        href: "/probadynamic",
+        label: "probaDynamic",
+        help: {
+          title: "probaDynamic",
+          body: "Chaque tirage sans le numéro ajoute 1/50, sans l’étoile ajoute 1/12. La sortie remet ce compteur à zéro. Six échelles : 50, 100, 200, année civile, n−1, n−2. Tri par dizaines, par unités, ou par le compteur des 50 derniers. Lecture d’archive : le tirage suivant reste uniforme.",
         },
       },
       {

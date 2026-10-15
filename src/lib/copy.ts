@@ -205,6 +205,11 @@ export const GLOSSARY: GlossaryEntry[] = [
     text: "Nombre de tirages consécutifs sans gagnant du jackpot. 0 le soir où quelqu’un gagne. Distinct du 0/+1 des boules, qui dit seulement s’il y a report.",
   },
   {
+    term: "probaDynamic",
+    group: "lecture",
+    text: "Compteur d’observateur. Chaque tirage sans un numéro ajoute 1/50 ; chaque tirage sans une étoile ajoute 1/12. La sortie remet la case à zéro. Les échelles 50, 100, 200, année civile, n−1 et n−2 montrent la trajectoire. Le tri par compteur lit le bord droit des 50 derniers tirages. Le trait 9/50 (numéro) et 5/12 (étoile) est l’écart moyen sous la loi uniforme. Ce n’est pas une chance de sortie.",
+  },
+  {
     term: "Conversation",
     group: "assistants",
     text: "Fil de l’onglet IA autour d’une capture. Distinct d’une figure chartiste et d’une entrée du carnet Brain.",

@@ -37,6 +37,7 @@ export type LabId =
   | "harmo"
   | "cycles"
   | "next"
+  | "probadynamic"
   | "admin"
   | "ia"
   | "brain"
@@ -98,6 +99,7 @@ export function labFromPath(pathname: string): LabId {
   if (pathname.startsWith("/harmo")) return "harmo"
   if (pathname.startsWith("/cycles")) return "cycles"
   if (pathname.startsWith("/next")) return "next"
+  if (pathname.startsWith("/probadynamic")) return "probadynamic"
   if (pathname.startsWith("/admin")) return "admin"
   if (pathname.startsWith("/ia")) return "ia"
   if (pathname.startsWith("/brain")) return "brain"
@@ -118,6 +120,7 @@ export function labLabel(lab: LabId) {
     harmo: "Harmo",
     cycles: "Cycles",
     next: "Next",
+    probadynamic: "probaDynamic",
     admin: "Admin",
     ia: "IA",
     brain: "Brain",
