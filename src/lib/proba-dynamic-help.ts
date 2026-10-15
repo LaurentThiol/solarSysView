@@ -40,6 +40,10 @@ export const PROBA_DYNAMIC_HELP = {
     title: "Bande",
     body: "Numéros : 50 cases, pas de 1/50, trait 9/50. Étoiles : 12 cases, pas de 1/12, trait 5/12. Une échelle qui mélange deux pools d’étoiles ne dessine pas les étoiles.",
   },
+  plancher: {
+    title: "Plancher",
+    body: "Hauteur du plan translucide, en absences. 9 est l’écart moyen d’un numéro, 5 celui d’une étoile. Le curseur déplace ce repère sur le relief et sur la dent de scie. Il ne change pas le compteur.",
+  },
   dizaines: {
     title: "Dizaines",
     body: "Numéros par groupes 1–10, 11–20, 21–30, 31–40, 41–50. Les étoiles se coupent en 1–10, puis 11–12.",

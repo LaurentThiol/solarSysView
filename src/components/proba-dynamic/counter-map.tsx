@@ -2,19 +2,29 @@
 
 import { useEffect, useRef, useState } from "react"
 
+import { HelpTip } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatFr } from "@/lib/frequency-board"
 import { MAP_SCALE_LABELS, type ProbaMap } from "@/lib/proba-map"
-import { mapPhrase } from "@/lib/proba-dynamic-help"
+import { PROBA_DYNAMIC_HELP, mapPhrase } from "@/lib/proba-dynamic-help"
 import type { ProbaKind } from "@/lib/proba-dynamic"
 import { cn } from "@/lib/utils"
 
 const X_SPAN = 2.4
 const Z_SPAN = 1.15
 const Y_GAIN = 1.15
+const MIN_DIST = 0.07
+const MAX_DIST = 36
+/** Un cran de molette (~100 px) rapproche d’environ un tiers. */
+const ZOOM_WHEEL = 0.0036
+const FLOOR_MAX = 80
 const DEFAULT_YAW = -0.72
 const DEFAULT_PITCH = 0.58
+
+function lawDelay(kind: ProbaKind) {
+  return kind === "number" ? 9 : 5
+}
 
 type Pin = { kind: ProbaKind; value: number }
 type Hover = { left: number; top: number; phrase: string }
@@ -265,10 +275,18 @@ export function CounterMap({
   const [phrase, setPhrase] = useState("Glisser pour tourner, molette pour zoomer.")
   const [failed, setFailed] = useState<string | null>(null)
   const pinBall = pinned?.kind === map.kind ? pinned.value : null
+  const [floorChoice, setFloorChoice] = useState<{ kind: ProbaKind; delay: number } | null>(null)
+  const floorDelay = floorChoice?.kind === map.kind ? floorChoice.delay : lawDelay(map.kind)
+  const floorRef = useRef(floorDelay)
 
   useEffect(() => {
     onPinRef.current = onPin
   }, [onPin])
+
+  useEffect(() => {
+    floorRef.current = floorDelay
+    drawRef.current()
+  }, [floorDelay])
 
   useEffect(() => {
     let cancelled = false
@@ -492,7 +510,8 @@ export function CounterMap({
         targetY + camera.dist * Math.sin(camera.pitch),
         camera.dist * cy * Math.cos(camera.yaw),
       ]
-      return multiply(perspective(0.9, aspect, 0.05, 80), lookAt(eye, [0, targetY, 0]))
+      const near = Math.min(0.05, Math.max(0.004, camera.dist * 0.15))
+      return multiply(perspective(0.9, aspect, near, 80), lookAt(eye, [0, targetY, 0]))
     }
 
     const draw = () => {
@@ -521,7 +540,20 @@ export function CounterMap({
       gl.enable(gl.POLYGON_OFFSET_FILL)
       gl.polygonOffset(-1, -1)
       gl.useProgram(flatProgram)
+      const yPlane = (floorRef.current / map.pool) * Y_GAIN
       gl.bindBuffer(gl.ARRAY_BUFFER, planeBuffer)
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([
+          -X_SPAN / 2, yPlane, -Z_SPAN / 2,
+          X_SPAN / 2, yPlane, -Z_SPAN / 2,
+          X_SPAN / 2, yPlane, Z_SPAN / 2,
+          -X_SPAN / 2, yPlane, -Z_SPAN / 2,
+          X_SPAN / 2, yPlane, Z_SPAN / 2,
+          -X_SPAN / 2, yPlane, Z_SPAN / 2,
+        ]),
+        gl.DYNAMIC_DRAW
+      )
       gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0)
       gl.disableVertexAttribArray(1)
       gl.disableVertexAttribArray(2)
@@ -680,7 +712,11 @@ export function CounterMap({
     const onWheel = (event: WheelEvent) => {
       event.preventDefault()
       const camera = cameraRef.current
-      camera.dist = Math.max(1.4, Math.min(32, camera.dist * Math.exp(event.deltaY * 0.0011)))
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1
+      camera.dist = Math.max(
+        MIN_DIST,
+        Math.min(MAX_DIST, camera.dist * Math.exp(event.deltaY * unit * ZOOM_WHEEL))
+      )
       draw()
     }
 
@@ -784,6 +820,27 @@ export function CounterMap({
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-3">
+        <label className="flex min-w-0 max-w-md flex-col gap-1 text-xs text-muted-foreground">
+          <span className="inline-flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1">
+              Plancher
+              <HelpTip {...PROBA_DYNAMIC_HELP.plancher} />
+            </span>
+            <span className="tabular-nums text-foreground">
+              {floorDelay} absence{floorDelay > 1 ? "s" : ""} · {formatFr(floorDelay / map.pool, 2)}
+            </span>
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={FLOOR_MAX}
+            step={1}
+            value={floorDelay}
+            aria-label="Hauteur du plancher, en absences"
+            onChange={(event) => setFloorChoice({ kind: map.kind, delay: Number(event.target.value) })}
+            className="accent-primary"
+          />
+        </label>
         <div ref={wrapRef} className="relative">
           <canvas
             ref={canvasRef}
@@ -807,7 +864,7 @@ export function CounterMap({
         <p className="text-xs text-muted-foreground">
           X : {formatMapDate(map.dates[0])} → {formatMapDate(map.dates[map.dates.length - 1])},{" "}
           {map.dates.length} tirages, un pas chacun. Y : compteur. Z : {map.pool} cases, du plus petit
-          compteur devant au premier tirage. Le plan est le trait {map.kind === "number" ? "9/50" : "5/12"}.
+          compteur devant au premier tirage. Le plancher est à {floorDelay} absence{floorDelay > 1 ? "s" : ""}.
         </p>
         <div>
           <p className="text-xs text-muted-foreground">
@@ -815,9 +872,11 @@ export function CounterMap({
               ? `Dent de scie brute, ${noun} ${pinBall}.`
               : "Cliquez une case pour épingler sa dent de scie brute."}
           </p>
-          {series.length > 0 ? <Saw series={series} expected={map.expected} tone={map.kind} /> : null}
           {series.length > 0 ? (
-            <p className="text-xs text-muted-foreground">Trait {formatFr(map.expected, 2)}.</p>
+            <Saw series={series} expected={floorDelay / map.pool} tone={map.kind} />
+          ) : null}
+          {series.length > 0 ? (
+            <p className="text-xs text-muted-foreground">Trait {formatFr(floorDelay / map.pool, 2)}.</p>
           ) : null}
         </div>
       </CardContent>
