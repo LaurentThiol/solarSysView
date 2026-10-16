@@ -22,9 +22,8 @@ type Gap = {
 }
 
 type Report = {
-  mask: Fit
-  relief: Fit
-  null: { mask: Gap; relief: Gap }
+  surface: Fit
+  null: { surface: Gap }
   phrase: string
 }
 
@@ -64,6 +63,11 @@ function LogLog({
   )
 }
 
+function formatScale(value: number) {
+  if (!Number.isFinite(value)) return "—"
+  return formatFr(value, Number.isInteger(value) ? 0 : 3)
+}
+
 function readingLine(title: string, fit: Fit, gap: Gap) {
   const dimension = fit.dimension == null ? "pas de pente" : formatFr(fit.dimension, 2)
   const stderr = fit.stderr == null ? "" : ` ± ${formatFr(fit.stderr, 2)}`
@@ -72,18 +76,15 @@ function readingLine(title: string, fit: Fit, gap: Gap) {
     fit.n_scales === 0
       ? "aucune échelle"
       : `${fit.n_scales} échelle${fit.n_scales > 1 ? "s" : ""}`
-  const span = fit.scales.length > 0 ? `, de ${fit.scales[0]} à ${fit.scales[fit.scales.length - 1]}` : ""
+  const span =
+    fit.scales.length > 0
+      ? `, de ${formatScale(fit.scales[0])} à ${formatScale(fit.scales[fit.scales.length - 1])}`
+      : ""
   const delta = gap.delta == null ? "—" : formatSignedFr(gap.delta, 2)
   return `${title} · ${dimension}${stderr} · R² ${determination} · ${scaleCount}${span} · écart au mélange ${delta}`
 }
 
-export function FractalReadout({
-  columns,
-  floor,
-}: {
-  columns: readonly (readonly { charge: number }[])[]
-  floor: number
-}) {
+export function FractalReadout({ columns }: { columns: readonly (readonly { charge: number }[])[] }) {
   const [report, setReport] = useState<Report | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(true)
@@ -97,7 +98,7 @@ export function FractalReadout({
       void fetch("/api/analysis/fractal", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ height, floor }),
+        body: JSON.stringify({ height }),
         signal: controller.signal,
         cache: "no-store",
       })
@@ -105,16 +106,15 @@ export function FractalReadout({
           const body = (await response.json().catch(() => null)) as
             | (Partial<Report> & { detail?: unknown; error?: unknown })
             | null
-          if (!response.ok || !body?.mask || !body.relief || typeof body.phrase !== "string") {
+          if (!response.ok || !body?.surface || typeof body.phrase !== "string") {
             const detail = body && typeof body.detail === "string" ? body.detail : null
             const message = body && typeof body.error === "string" ? body.error : null
             throw new Error(detail || message || "Comptage indisponible.")
           }
           if (controller.signal.aborted) return
           setReport({
-            mask: body.mask,
-            relief: body.relief,
-            null: body.null ?? { mask: { delta: null }, relief: { delta: null } },
+            surface: body.surface,
+            null: body.null ?? { surface: { delta: null } },
             phrase: body.phrase,
           })
           setError(null)
@@ -134,7 +134,7 @@ export function FractalReadout({
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [columns, floor])
+  }, [columns])
 
   return (
     <section className={cn("space-y-2", pending && report && "opacity-60")} aria-busy={pending}>
@@ -143,25 +143,15 @@ export function FractalReadout({
         <HelpTip {...PROBA_DYNAMIC_HELP.comptage} />
       </p>
       {report ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <p className="text-xs text-muted-foreground">{readingLine("Masque", report.mask, report.null.mask)}</p>
-            <LogLog
-              scales={report.mask.scales}
-              counts={report.mask.counts}
-              label="log(N) en fonction de log(1/ε), masque"
-            />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">
-              {readingLine("Relief", report.relief, report.null.relief)}
-            </p>
-            <LogLog
-              scales={report.relief.scales}
-              counts={report.relief.counts}
-              label="log(N) en fonction de log(1/ε), relief"
-            />
-          </div>
+        <div>
+          <p className="text-xs text-muted-foreground">
+            {readingLine("Surface", report.surface, report.null.surface)}
+          </p>
+          <LogLog
+            scales={report.surface.scales}
+            counts={report.surface.counts}
+            label="log(N) en fonction de log(1/ε), surface 3D"
+          />
         </div>
       ) : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}

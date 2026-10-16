@@ -646,13 +646,12 @@ def create_app() -> FastAPI:
             raise HTTPException(400, "Grille trop grande.")
         try:
             grid = np.asarray(raw, dtype=float)
-            level = float(payload.get("floor"))
         except (TypeError, ValueError) as exc:
-            raise HTTPException(400, "height et floor sont numériques.") from exc
-        if grid.ndim != 2 or not np.isfinite(grid).all() or not np.isfinite(level):
-            raise HTTPException(400, "height et floor sont numériques.")
+            raise HTTPException(400, "height est une grille numérique.") from exc
+        if grid.ndim != 2 or not np.isfinite(grid).all():
+            raise HTTPException(400, "height est une grille numérique.")
         try:
-            body = fractal_report(grid, level)
+            body = fractal_report(grid)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         return json_safe(body)

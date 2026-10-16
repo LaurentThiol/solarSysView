@@ -55,7 +55,7 @@ export const PROBA_DYNAMIC_HELP = {
   },
   comptage: {
     title: "Comptage de boîtes",
-    body: "Le masque compte les cases dont le compteur atteint le plancher. Le relief mesure la rugosité de la surface : 2 si elle est plate, vers 3 si elle remplit le volume. Le mélange remet les compteurs au hasard dans chaque tirage, sans changer leurs valeurs. Un écart négatif veut dire que les hauts se regroupent, ou que le placement a lissé. L’axe des cases, 50 ou 12, est court : sans assez d’échelles, une pente stable et un R² au-dessus de 0,99, il n’y a pas de régime fractal. Ce n’est pas une chance de sortie.",
+    body: "Le comptage couvre les triangles du relief 3D, dans le même repère que la vue. Il mesure la surface, pas les lignes de la grille. Une nappe plate vaut 2. Plus la surface se plisse dans le volume, plus le chiffre monte vers 3. Le plancher translucide ne change pas ce calcul. Le mélange redistribue les compteurs dans chaque tirage et reconstruit la surface : un écart négatif veut dire que ce placement a lissé. Sans assez d’échelles, une pente stable et un R² au-dessus de 0,99, il n’y a pas de régime fractal. Ce n’est pas une chance de sortie.",
   },
   dizaines: {
     title: "Dizaines",

@@ -12,6 +12,7 @@ import { PROBA_DYNAMIC_HELP, mapPhrase } from "@/lib/proba-dynamic-help"
 import { PROBA_FLOOR_OFF, probaFloorDelay, type ProbaKind } from "@/lib/proba-dynamic"
 import { cn } from "@/lib/utils"
 
+/** Repère du relief. synchro/fractal/boxcount.py reprend ces trois valeurs. */
 const X_SPAN = 2.4
 const Z_SPAN = 1.15
 const Y_GAIN = 1.15
@@ -887,7 +888,7 @@ export function CounterMap({
             ? "Le plancher est effacé."
             : `Le plancher est à ${floorShown} absence${floorShown > 1 ? "s" : ""}.`}
         </p>
-        <FractalReadout columns={map.columns} floor={floorDelay / map.pool} />
+        <FractalReadout columns={map.columns} />
         <div>
           <p className="text-xs text-muted-foreground">
             {pinBall != null

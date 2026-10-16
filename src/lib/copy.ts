@@ -212,7 +212,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Comptage de boîtes",
     group: "lecture",
-    text: "Mesure de forme sur la carte probaDynamic. Le masque compte les cases au-dessus du plancher. Le relief mesure la rugosité de la surface. Le mélange redistribue les compteurs dans chaque tirage. Sans assez d’échelles sur l’axe des cases, le chiffre n’est pas un régime fractal. Ce n’est pas une chance de sortie.",
+    text: "Mesure de forme sur le relief 3D de la carte probaDynamic. Le comptage suit les triangles dessinés, pas la grille en plan. 2 pour une nappe plate, vers 3 si la surface remplit le volume. Le mélange redistribue les compteurs dans chaque tirage. Sans assez d’échelles, le chiffre n’est pas un régime fractal. Ce n’est pas une chance de sortie.",
   },
   {
     term: "Conversation",
