@@ -260,10 +260,14 @@ export function CounterMap({
   map,
   pinned,
   onPin,
+  floorDelay,
+  onFloor,
 }: {
   map: ProbaMap
   pinned: Pin | null
   onPin: (kind: ProbaKind, value: number) => void
+  floorDelay?: number
+  onFloor: (delay: number) => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -276,19 +280,18 @@ export function CounterMap({
   const [phrase, setPhrase] = useState("Glisser pour tourner, molette pour zoomer.")
   const [failed, setFailed] = useState<string | null>(null)
   const pinBall = pinned?.kind === map.kind ? pinned.value : null
-  const [floorByKind, setFloorByKind] = useState<Partial<Record<ProbaKind, number>>>({})
-  const floorDelay = floorByKind[map.kind] ?? lawDelay(map.kind)
-  const floorShown = probaFloorDelay(floorDelay)
-  const floorRef = useRef(floorDelay)
+  const resolvedFloor = floorDelay ?? lawDelay(map.kind)
+  const floorShown = probaFloorDelay(resolvedFloor)
+  const floorRef = useRef(resolvedFloor)
 
   useEffect(() => {
     onPinRef.current = onPin
   }, [onPin])
 
   useEffect(() => {
-    floorRef.current = floorDelay
+    floorRef.current = resolvedFloor
     drawRef.current()
-  }, [floorDelay])
+  }, [resolvedFloor])
 
   useEffect(() => {
     let cancelled = false
@@ -845,13 +848,10 @@ export function CounterMap({
             min={0}
             max={PROBA_FLOOR_OFF}
             step={1}
-            value={floorDelay}
+            value={resolvedFloor}
             aria-label="Hauteur du plancher, en absences"
             aria-valuetext={floorShown == null ? "effacé" : `${floorShown} absences`}
-            onChange={(event) => {
-              const delay = Number(event.target.value)
-              setFloorByKind((current) => ({ ...current, [map.kind]: delay }))
-            }}
+            onChange={(event) => onFloor(Number(event.target.value))}
             className="accent-primary"
           />
         </label>

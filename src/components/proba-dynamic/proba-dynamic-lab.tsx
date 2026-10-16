@@ -127,6 +127,7 @@ export function ProbaDynamicLab() {
   const [remembered, setRemembered] = useState({ number: numberPin ?? 1, star: starPin ?? 1 })
   const [bandChoice, setBandChoice] = useState<BandId>(starPin != null ? "etoiles" : "numeros")
   const [autoScroll, setAutoScroll] = useState(false)
+  const [floorByKind, setFloorByKind] = useState<Partial<Record<ProbaKind, number>>>({})
   const pinRef = useRef(pin)
   const rememberedRef = useRef(remembered)
   const skipUrl = useRef(false)
@@ -613,7 +614,16 @@ export function ProbaDynamicLab() {
       >
         {sort === "map" ? (
           mapView != null && !mapStale ? (
-            <CounterMap map={mapView} pinned={pin} onPin={onPin} />
+            <CounterMap
+              map={mapView}
+              pinned={pin}
+              onPin={onPin}
+              floorDelay={floorByKind[mapView.kind]}
+              onFloor={(delay) => {
+                const kind = mapView.kind
+                setFloorByKind((current) => (current[kind] === delay ? current : { ...current, [kind]: delay }))
+              }}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">Calcul de la carte…</p>
           )
