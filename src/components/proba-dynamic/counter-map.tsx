@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 
 import { HelpTip } from "@/components/help"
+import { FractalReadout } from "@/components/proba-dynamic/fractal-readout"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatFr } from "@/lib/frequency-board"
@@ -886,6 +887,7 @@ export function CounterMap({
             ? "Le plancher est effacé."
             : `Le plancher est à ${floorShown} absence${floorShown > 1 ? "s" : ""}.`}
         </p>
+        <FractalReadout columns={map.columns} floor={floorDelay / map.pool} />
         <div>
           <p className="text-xs text-muted-foreground">
             {pinBall != null

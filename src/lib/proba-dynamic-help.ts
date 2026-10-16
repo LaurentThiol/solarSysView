@@ -53,6 +53,10 @@ export const PROBA_DYNAMIC_HELP = {
     title: "Curseur",
     body: "Choisit un numéro de 1 à 50, ou une étoile de 1 à 12. Le pas est une boule, plus fin qu’un clic sur le relief. Auto avance d’une boule à la suivante et reprend à 1 après la dernière.",
   },
+  comptage: {
+    title: "Comptage de boîtes",
+    body: "Le masque compte les cases dont le compteur atteint le plancher. Le relief mesure la rugosité de la surface : 2 si elle est plate, vers 3 si elle remplit le volume. Le mélange remet les compteurs au hasard dans chaque tirage, sans changer leurs valeurs. Un écart négatif veut dire que les hauts se regroupent, ou que le placement a lissé. L’axe des cases, 50 ou 12, est court : sans assez d’échelles, une pente stable et un R² au-dessus de 0,99, il n’y a pas de régime fractal. Ce n’est pas une chance de sortie.",
+  },
   dizaines: {
     title: "Dizaines",
     body: "Numéros par groupes 1–10, 11–20, 21–30, 31–40, 41–50. Les étoiles se coupent en 1–10, puis 11–12.",

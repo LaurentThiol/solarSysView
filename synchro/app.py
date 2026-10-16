@@ -623,6 +623,40 @@ def create_app() -> FastAPI:
     def analysis_proba() -> dict[str, Any]:
         return proba_tables()
 
+    @app.post("/api/analysis/fractal")
+    async def analysis_fractal(request: Request) -> dict[str, Any]:
+        import numpy as np
+
+        from synchro.fractal.boxcount import fractal_report
+        from synchro.harmo.util import json_safe
+
+        try:
+            payload = await request.json()
+        except Exception as exc:
+            raise HTTPException(400, "Corps JSON illisible.") from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(400, "Corps JSON illisible.")
+        raw = payload.get("height")
+        if not isinstance(raw, list) or not raw or not all(isinstance(row, list) and row for row in raw):
+            raise HTTPException(400, "height est une grille rectangulaire.")
+        width = len(raw[0])
+        if any(len(row) != width for row in raw):
+            raise HTTPException(400, "height est une grille rectangulaire.")
+        if len(raw) > 20000 or width > 200 or len(raw) * width > 2_000_000:
+            raise HTTPException(400, "Grille trop grande.")
+        try:
+            grid = np.asarray(raw, dtype=float)
+            level = float(payload.get("floor"))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, "height et floor sont numériques.") from exc
+        if grid.ndim != 2 or not np.isfinite(grid).all() or not np.isfinite(level):
+            raise HTTPException(400, "height et floor sont numériques.")
+        try:
+            body = fractal_report(grid, level)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return json_safe(body)
+
     @app.get("/api/analysis/variables")
     def analysis_variables(
         name: str = Query("sum"),

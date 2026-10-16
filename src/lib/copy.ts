@@ -210,6 +210,11 @@ export const GLOSSARY: GlossaryEntry[] = [
     text: "Compteur d’observateur. Chaque tirage sans un numéro ajoute 1/50 ; chaque tirage sans une étoile ajoute 1/12. La sortie remet la case à zéro. Les échelles 50, 100, 200, année civile, n−1 et n−2 montrent la trajectoire. Le tri par compteur lit le bord droit des 50 derniers tirages. La carte pose un pas par tirage en abscisse, le compteur en hauteur, et range les cases en profondeur par le moindre écart avec les trois voisines du tirage précédent. Le trait 9/50 (numéro) et 5/12 (étoile) est l’écart moyen sous la loi uniforme. Ce n’est pas une chance de sortie.",
   },
   {
+    term: "Comptage de boîtes",
+    group: "lecture",
+    text: "Mesure de forme sur la carte probaDynamic. Le masque compte les cases au-dessus du plancher. Le relief mesure la rugosité de la surface. Le mélange redistribue les compteurs dans chaque tirage. Sans assez d’échelles sur l’axe des cases, le chiffre n’est pas un régime fractal. Ce n’est pas une chance de sortie.",
+  },
+  {
     term: "Conversation",
     group: "assistants",
     text: "Fil de l’onglet IA autour d’une capture. Distinct d’une figure chartiste et d’une entrée du carnet Brain.",

@@ -4,11 +4,11 @@ import { apiBase, HEALTH_TIMEOUT_MS } from "@/lib/api-base"
 
 export const dynamic = "force-dynamic"
 
-export async function GET(
+async function proxy(
   request: NextRequest,
-  context: { params: Promise<{ path: string[] }> }
+  path: string[],
+  method: "GET" | "POST"
 ) {
-  const { path } = await context.params
   const suffix = (path || []).join("/")
   const base = apiBase()
   if (!base) {
@@ -19,9 +19,14 @@ export async function GET(
   }
   const search = request.nextUrl.search
   const timeout =
-    suffix === "montecarlo" || suffix === "lab" ? 60_000 : HEALTH_TIMEOUT_MS
+    suffix === "montecarlo" || suffix === "lab" || suffix === "fractal"
+      ? 60_000
+      : HEALTH_TIMEOUT_MS
   try {
     const response = await fetch(`${base}/api/analysis/${suffix}${search}`, {
+      method,
+      headers: method === "POST" ? { "content-type": "application/json" } : undefined,
+      body: method === "POST" ? await request.text() : undefined,
       cache: "no-store",
       signal: AbortSignal.timeout(timeout),
     })
@@ -36,4 +41,23 @@ export async function GET(
       { status: 503 }
     )
   }
+}
+
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await context.params
+  return proxy(request, path, "GET")
+}
+
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await context.params
+  if ((path || []).join("/") !== "fractal") {
+    return NextResponse.json({ ok: false, error: "Méthode refusée" }, { status: 405 })
+  }
+  return proxy(request, path, "POST")
 }
