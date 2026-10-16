@@ -1,7 +1,9 @@
 "use client"
 
+import { HelpTip, TitleHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { NEXTDATA_SWEEP_HELP } from "@/lib/nextdata/help"
 import { formatHits, maeInterval, versusText } from "@/lib/nextdata/uncertainty"
 import {
   anchorVerdict,
@@ -31,7 +33,9 @@ export function TrainingSweep({
   return (
     <Card data-sweep>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Synthèse Méga</CardTitle>
+        <CardTitle className="text-base">
+          <TitleHelp help={NEXTDATA_SWEEP_HELP.synthese}>Synthèse Méga</TitleHelp>
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {banner ? (
@@ -40,44 +44,69 @@ export function TrainingSweep({
           </p>
         ) : null}
         {report.note ? <p className="text-xs leading-5 text-muted-foreground">{report.note}</p> : null}
-        {report.load ? <p className="text-xs tabular-nums text-muted-foreground">{loadLabel(report.load)}</p> : null}
+        {report.load ? (
+          <p className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground">
+            {loadLabel(report.load)}
+            <HelpTip {...NEXTDATA_SWEEP_HELP.charge} />
+          </p>
+        ) : null}
         <div className="max-w-full overflow-x-auto">
           <table className="w-full min-w-[64rem] border-collapse text-left text-xs" data-sweep-table>
             <thead>
               <tr className="border-b border-border text-muted-foreground">
                 <th className="px-2 py-2 font-medium" scope="col">
-                  Réglage
+                  <TitleHelp help={NEXTDATA_SWEEP_HELP.reglage} className="whitespace-nowrap">
+                    Réglage
+                  </TitleHelp>
                 </th>
                 <th className="px-2 py-2 font-medium" scope="col">
-                  Focus
+                  <TitleHelp help={NEXTDATA_SWEEP_HELP.focus} className="whitespace-nowrap">
+                    Focus
+                  </TitleHelp>
                 </th>
                 <th className="px-2 py-2 font-medium" scope="col">
-                  Années
+                  <TitleHelp help={NEXTDATA_SWEEP_HELP.annees} className="whitespace-nowrap">
+                    Années
+                  </TitleHelp>
                 </th>
                 <th className="px-2 py-2 font-medium" scope="col">
-                  Covariables
+                  <TitleHelp help={NEXTDATA_SWEEP_HELP.covariables} className="whitespace-nowrap">
+                    Covariables
+                  </TitleHelp>
                 </th>
                 {SWEEP_READINGS.map((reading) => (
-                  <th key={reading.id} className="px-2 py-2 font-medium" scope="col" title={reading.label}>
-                    {reading.short}
+                  <th key={reading.id} className="px-2 py-2 font-medium" scope="col">
+                    <TitleHelp help={NEXTDATA_SWEEP_HELP.mae} className="whitespace-nowrap">
+                      {reading.short}
+                    </TitleHelp>
                   </th>
                 ))}
                 <th className="px-2 py-2 font-medium" scope="col">
-                  vs affiché
+                  <TitleHelp help={NEXTDATA_SWEEP_HELP.versusAffiche} className="whitespace-nowrap">
+                    vs affiché
+                  </TitleHelp>
                 </th>
                 <th className="px-2 py-2 font-medium" scope="col">
-                  vs persistance
+                  <TitleHelp help={NEXTDATA_SWEEP_HELP.versusPersistance} className="whitespace-nowrap">
+                    vs persistance
+                  </TitleHelp>
                 </th>
                 {showPersist ? (
-                  <th className="px-2 py-2 font-medium" scope="col" title="Jumelle Persist de Corpus">
-                    Persist
+                  <th className="px-2 py-2 font-medium" scope="col">
+                    <TitleHelp help={NEXTDATA_SWEEP_HELP.persist} className="whitespace-nowrap">
+                      Persist
+                    </TitleHelp>
                   </th>
                 ) : null}
                 <th className="px-2 py-2 font-medium" scope="col">
-                  Communs
+                  <TitleHelp help={NEXTDATA_SWEEP_HELP.communs} className="whitespace-nowrap">
+                    Communs
+                  </TitleHelp>
                 </th>
                 <th className="px-2 py-2 font-medium" scope="col">
-                  Décalages
+                  <TitleHelp help={NEXTDATA_SWEEP_HELP.decalages} className="whitespace-nowrap">
+                    Décalages
+                  </TitleHelp>
                 </th>
               </tr>
             </thead>

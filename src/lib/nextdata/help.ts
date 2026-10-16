@@ -1,5 +1,5 @@
 /**
- * Aide contextuelle de Grilles · nextData.
+ * Aide contextuelle de Grilles · nextData, de nextDataTraining et de la Synthèse Méga.
  * Chaque entrée est le texte du point d’exclamation.
  */
 
@@ -408,6 +408,197 @@ export const NEXTDATA_TRAINING_HELP = {
   mega: {
     title: "Méga",
     wide: true,
-    body: "Compare le réglage affiché à ses voisins : l’autre focus, les autres profondeurs d’années, et chaque covariable retirée une à une. Le jour et le nombre d’arbres restent ceux des boutons, pour que la ligne retenue se rejoue telle quelle sur nextData. Chronos n’entre que s’il est déjà inclus ; il se calcule dans l’API, un pas à la fois, pendant que les arbres tournent. Il s’y mélange moitié-moitié, faute des dix tirages d’avant qui règlent ses poids : avec Chronos, la MAE du réglage affiché peut s’écarter de celle d’Entraîner.\n\nLes lignes sont notées sur les dix mêmes décalages. Une variante n’est retenue que si son erreur de somme, lecture Corpus, reste sous celle du réglage affiché sur tout l’intervalle, après correction de Holm. Sinon le réglage affiché tient. La MAE seule est dans le tableau : sur dix décalages elle bouge d’environ ±6 points, et la plus petite ne suffit pas.\n\nLes ajustements partagent le cache des pas. Plusieurs tournent en parallèle, tant que la charge de la machine reste sous 80 % ; sans /proc (macOS), la charge se lit sur la moyenne d’une minute. Un clic sur une ligne remet ses boutons : Entraîner relit alors le cache.",
+    body: "Compare le réglage affiché à ses voisins, un facteur à la fois. L’autre focus, 50 ou 100. Les autres profondeurs d’années : n seule, puis n et n−1, puis n, n−1 et n−2. Chaque covariable retirée seule, dès que deux familles au moins sont cochées. Le jour reste celui du bouton. Le nombre d’arbres est celui du pronostic, le même pour toutes les lignes, pour que la ligne retenue se rejoue telle quelle sur nextData. Chronos n’entre que s’il est déjà inclus.\n\nLes lignes sont notées sur les dix mêmes décalages, ceux du réglage affiché. −1 prévoit le dernier tirage, −10 celui d’il y a dix tirages. Le nombre d’une colonne LGB ou CB est l’erreur absolue moyenne de la somme des cinq numéros. Le tri, le mot « retenu » et le bandeau ne lisent que LightGBM · trois ans, la lecture Corpus.\n\nUne variante est retenue seulement si, sur ces dix dates, son erreur de somme Corpus reste sous celle du réglage affiché sur tout l’intervalle à 95 %, après correction de Holm. Plusieurs lignes peuvent l’être : le bandeau nomme celle dont l’écart moyen est le plus négatif. Sinon le réglage affiché tient. Sur dix décalages, une MAE bouge d’environ ±6 points. Le verdict demande l’intervalle entier. La case la plus basse peut rester non tranchée.\n\nLes ajustements partagent le cache des pas. Plusieurs tournent en parallèle, tant que la charge de la machine reste sous 80 % ; sans /proc (macOS), la charge se lit sur la moyenne d’une minute. Un clic sur une ligne remet ses boutons. Entraîner relit alors le cache.",
+    items: [
+      {
+        label: "Lecture Corpus",
+        text: "LightGBM appris sur toutes les années cochées. Hors focus, chaque tirage pèse 1. Dans le focus, il pèse 3. Seule cette lecture départage les lignes. Fenêtre seule et CatBoost restent dans le tableau.",
+      },
+      {
+        label: "Écart apparié",
+        text: "À chaque décalage, on retranche l’erreur absolue de somme du réglage affiché à celle de la variante. « vs affiché » donne la moyenne de ces écarts et son intervalle de Student à 95 % : le test de Diebold et Mariano à un pas. Un nombre négatif : la variante est plus près de la somme sortie. « Erreur plus basse » : tout l’intervalle est sous zéro. « Erreur plus haute » : il est au-dessus. « Non tranché » : il contient zéro.",
+      },
+      {
+        label: "Holm",
+        text: "Chaque variante est un test. On les classe du p le plus petit au plus grand. Le premier est jugé à 5 % divisé par le nombre de lignes comparées. Le suivant, à 5 % divisé par le nombre encore en lice. Dès qu’une ligne ne passe pas, les suivantes non plus. Une case qui lisait « erreur plus basse » ou « erreur plus haute » devient alors « non tranché après Holm ».",
+      },
+      {
+        label: "Chronos",
+        text: "S’il est inclus, il se mélange à LightGBM sur la somme, la somme des étoiles et le niveau de n1, moitié-moitié : les dix tirages d’avant qui règlent ses poids ne sont pas calculés dans ce parcours. Il tourne dans l’API, un pas à la fois, pendant que les arbres avancent. CatBoost garde sa somme. La MAE du réglage affiché peut donc s’écarter de celle d’Entraîner.",
+      },
+      {
+        label: "Tirets",
+        text: "Une ligne trop courte n’a pas les 24 tirages du corpus. Une ligne décalée ne porte pas les mêmes dix dates : ses cases restent vides, et Holm ne la voit pas. Tant qu’un morceau manque, « vs affiché » et « vs persistance » restent en tirets, même si une MAE est déjà écrite.",
+      },
+    ],
+  },
+} satisfies Record<string, HelpCopy>
+
+export const NEXTDATA_SWEEP_HELP = {
+  synthese: {
+    title: "Synthèse Méga",
+    wide: true,
+    body: "Le tableau note le réglage des boutons et ses voisins sur les mêmes dix décalages. Chaque ligne ne change qu’un facteur : l’autre focus, une autre profondeur d’années, ou une covariable retirée. Le jour reste celui du bouton, le nombre d’arbres celui du pronostic.\n\nLa première ligne est le réglage affiché, même quand sa MAE est plus haute. Les autres suivent l’erreur de somme de LightGBM · trois ans, de la plus basse à la plus haute. À erreur égale, l’ordre suit l’alphabet français des libellés. Une erreur manquante passe en bas.\n\nLe bandeau ne nomme un gagnant qu’une fois toutes les lignes complètes. « Comparaison en cours » : des décalages manquent encore. Un libellé « se trompe moins… après correction de Holm » : cette ligne est la retenue dont l’écart moyen est le plus négatif. « Le réglage affiché tient » : aucune variante ne reste sous lui sur tout l’intervalle, une fois Holm appliqué. Plusieurs lignes peuvent porter le mot « retenu » et le fond teinté. Le bandeau n’en nomme qu’une.\n\nLa phrase grise sous le bandeau répète la règle. Avec Chronos, elle ajoute que le mélange est moitié-moitié, et que la MAE du réglage affiché peut s’écarter de celle d’Entraîner. La ligne de charge dit ce que la machine faisait pendant la dernière tranche.",
+    items: [
+      {
+        label: "Ce qui décide",
+        text: "Seule la lecture Corpus, LightGBM · trois ans, entre dans le tri, dans « vs affiché » et dans Holm. La fenêtre, CatBoost, Persist, les numéros communs et la persistance restent des lectures à côté.",
+      },
+      {
+        label: "L’écart qui retient",
+        text: "Pour chaque date, |erreur de somme de la ligne| − |erreur de somme du réglage affiché|. La moyenne de ces dix écarts a un intervalle de Student à 95 %. La ligne est retenue si cet intervalle est tout entier sous zéro et si son p passe la correction de Holm. Le plus négatif des écarts retenus est celui du bandeau.",
+      },
+      {
+        label: "Pendant le calcul",
+        text: "Une MAE, des communs ou un compte de décalages peuvent déjà s’afficher. « vs affiché » et « vs persistance » attendent que chaque morceau de chaque ligne soit prêt. Le bouton d’une ligne s’ouvre à ce moment-là.",
+      },
+      {
+        label: "Rejouer la ligne",
+        text: "Le clic remet le focus, les années, les covariables et Chronos. Une ligne trop courte ou décalée ne se rejoue pas. Entraîner relit les pas déjà au cache.",
+      },
+    ],
+  },
+  reglage: {
+    title: "Réglage",
+    wide: true,
+    body: "Le nom de la ligne, et le seul facteur qui la sépare du réglage affiché. La première ligne reprend les boutons tels quels : focus, années, covariables, et Chronos s’il est déjà inclus. Chaque autre ligne n’en change qu’un.\n\nLe mot « retenu » et le fond teinté arrivent ensemble, parcours fini : Holm garde cette ligne, et son erreur de somme Corpus est plus basse que celle du réglage affiché sur tout l’intervalle. Le bouton reprend le focus, les années, les covariables et Chronos de la ligne. Il s’ouvre quand le parcours est fini. Une ligne vide reste fermée. La petite ligne grise sous le nom est la raison d’une ligne vide.",
+    items: [
+      {
+        label: "Focus 50 ou Focus 100",
+        text: "L’autre fenêtre. Les années et les covariables restent celles des boutons. Les dix dates notées aussi.",
+      },
+      {
+        label: "Années",
+        text: "Une profondeur qui n’est pas celle des boutons. Il y en a trois : n ; n, n−1 ; n, n−1, n−2. n, l’année du dernier tirage, reste toujours. La profondeur déjà affichée n’a pas de seconde ligne : c’est la première.",
+      },
+      {
+        label: "Sans une famille",
+        text: "Cette covariable sort de LightGBM, de CatBoost et de Chronos. Les autres restent. Ces lignes n’apparaissent que si au moins deux familles sont cochées.",
+      },
+      {
+        label: "Ligne vide",
+        text: "« Il faut au moins 24 tirages » : le corpus de ces années est trop court. « Ces années ne portent pas les mêmes tirages » : les dix dates ne sont pas celles du réglage affiché. Les cases de valeur sont des tirets, et Holm ignore la ligne.",
+      },
+    ],
+  },
+  focus: {
+    title: "Focus",
+    wide: true,
+    body: "50 ou 100 : la longueur de focus demandée pour la ligne, après le filtre du jour. Ce nombre change ce que les modèles apprennent. Les dix dates notées restent celles du réglage affiché : −1 à −10 sont les dix derniers tirages de ce corpus, et ces dix tirages sont dans la fenêtre. Si le corpus est plus court que le focus affiché, l’apprentissage s’arrête au dernier tirage disponible : Focus 50 et Focus 100 apprennent alors la même queue.",
+    items: [
+      {
+        label: "Trois ans, poids ×3",
+        text: "LightGBM apprend sur les années cochées. Hors focus, chaque tirage pèse 1. Dans le focus, il pèse 3. Passer de 50 à 100 allonge la zone qui pèse trois. C’est la lecture Corpus, celle du verdict.",
+      },
+      {
+        label: "Fenêtre seule",
+        text: "La perte ne voit que ces 50 ou 100 tirages, à poids égal. Les tirages d’avant le focus restent lisibles par les décalages, comme Darts et comme sur nextData. Élargir le focus allonge donc aussi cette fenêtre.",
+      },
+      {
+        label: "Même queue",
+        text: "Les dix sommes comparées sont celles des mêmes tirages. Le focus ne décale pas le calendrier noté. Il change le poids, et le nombre de tirages que la fenêtre seule apprend.",
+      },
+    ],
+  },
+  annees: {
+    title: "Années",
+    wide: true,
+    body: "Profondeur demandée, dans l’ordre n, n−1, n−2. n est l’année civile du dernier tirage synchronisé, n−1 l’année d’avant, n−2 celle d’encore avant. Le signe moins fait partie du nom de la profondeur.",
+    items: [
+      {
+        label: "Ce qui sort du corpus",
+        text: "Retirer n−1 ou n−2 retire ses tirages de l’apprentissage, et de la mémoire des couples, des triples et des retards. Une année cochée sans tirage n’entre pas dans l’apprentissage. Le libellé garde la profondeur demandée, pas la liste des années réellement remplies.",
+      },
+      {
+        label: "Mêmes dix dates",
+        text: "La ligne n’est notée que si ses dix derniers tirages sont exactement ceux du réglage affiché. Sinon la ligne grise dit que ces années ne portent pas les mêmes tirages, et les valeurs restent en tirets : deux calendriers ne se comparent pas.",
+      },
+    ],
+  },
+  covariables: {
+    title: "Covariables",
+    wide: true,
+    body: "« Celles des boutons » : les familles cochées au-dessus. C’est le cas du réglage affiché, de l’autre focus et des autres années. « Sans » suivi d’un nom : cette seule famille est éteinte, les autres restent.",
+    items: [
+      {
+        label: "Familles",
+        text: "Calendrier, Lune, Forme, Décennies, Delta, Répétitions, Couples, Triples, Pulse. Une famille éteinte sort de LightGBM, de CatBoost et de Chronos. Les horloges et Pulse sont connus pour le tirage prévu. Les autres familles ne sont vues que jusqu’au dernier tirage sorti.",
+      },
+      {
+        label: "Ce qui ne varie pas",
+        text: "Le jour de tirage reste celui du bouton, mardi, vendredi ou les deux. Le nombre d’arbres est celui du pronostic, 32 sauf autre réglage du serveur, quantiles 10, 50 et 90. Ils ne sont pas des colonnes : toutes les lignes les partagent, et le cache des pas aussi.",
+      },
+    ],
+  },
+  mae: {
+    title: "MAE de somme",
+    wide: true,
+    body: "Erreur absolue moyenne de la somme des cinq numéros, en points de somme. À chaque décalage, l’erreur est la valeur absolue de prévu moins sorti. La case est la moyenne de ces erreurs, avec une décimale : 12,26 s’affiche 12,3. Plus le nombre est bas, plus la somme de la grille collait aux sommes déjà sorties.\n\nLe survol de la case LGB · 3 ans donne l’intervalle de Student à 95 % de cette moyenne, avec un degré de liberté de moins que le nombre de décalages entrés dans la moyenne. Le bas est ramené à 0 : une erreur absolue moyenne ne descend pas en dessous. Sur dix décalages, l’intervalle s’étend souvent d’environ ±6 points. Deux cases proches peuvent encore se départager par paires, dans « vs affiché ».\n\nPendant le calcul, la case montre la moyenne des décalages déjà prêts pour cette ligne. Le verdict attend que toutes les lignes soient complètes. Une ligne trop courte ou décalée reste en tirets.",
+    items: [
+      {
+        label: "LGB · 3 ans",
+        text: "LightGBM, trois ans, poids ×3 dans le focus. C’est la lecture Corpus. Seule cette colonne trie les lignes, pose le mot « retenu » et alimente « vs affiché » et « vs persistance ». Les communs sont aussi ceux de cette grille.",
+      },
+      {
+        label: "LGB · fenêtre",
+        text: "Le même LightGBM, appris seulement sur les 50 ou 100 tirages du focus, à poids égal. Sa MAE ne départage pas les lignes.",
+      },
+      {
+        label: "CB · 3 ans et CB · fenêtre",
+        text: "CatBoost, sur les mêmes décalages, les mêmes quantiles et les mêmes covariables. Chronos ne se mélange pas à ces deux lectures. Un tiret : CatBoost n’a pas produit la grille.",
+      },
+      {
+        label: "Darts et Chronos",
+        text: "S’il est installé, Darts remplace la médiane temporelle LightGBM du pas, sur la somme et la somme des étoiles. La chaîne des rangs reste LightGBM. Si Chronos est inclus, ses bandes se mélangent à celles de LightGBM, sur la somme, la somme des étoiles et le niveau de n1. Dans ce tableau le poids reste moitié-moitié : les dix tirages d’avant qui le règlent ne sont pas calculés. La somme, donc la MAE, peut s’écarter de celle du bouton Entraîner.",
+      },
+    ],
+  },
+  versusAffiche: {
+    title: "Contre le réglage affiché",
+    wide: true,
+    body: "Écart d’erreur de somme, lecture Corpus, entre cette ligne et la première. À chaque décalage commun : |somme prévue de la ligne − somme sortie| − |somme prévue du réglage affiché − somme sortie|. La case donne la moyenne de ces écarts, son intervalle de Student à 95 %, et le mot qui va avec. C’est le test de Diebold et Mariano à un pas. Apparier retire le bruit du tirage : une somme sortie très haute trompe les deux lignes ensemble, et l’intervalle est bien plus étroit que celui de deux MAE prises chacune de leur côté.\n\nUn exemple de case : « erreur plus basse (-2,5 ; IC -4,0 à -1,0) ». -2,5 est l’écart moyen, en points de somme. L’intervalle va de -4,0 à -1,0. La première ligne est le repère : sa case reste un tiret. Les autres cases restent des tirets tant qu’un morceau du parcours manque. Avec un seul décalage, l’intervalle n’existe pas et la case dit « un seul tirage ».",
+    items: [
+      {
+        label: "Erreur plus basse",
+        text: "Tout l’intervalle est sous zéro. La ligne se trompe moins que le réglage affiché. C’est la condition de sens pour le mot « retenu ». Holm doit encore laisser passer le p.",
+      },
+      {
+        label: "Erreur plus haute",
+        text: "Tout l’intervalle est au-dessus de zéro. Le réglage affiché se trompe moins. Si Holm laisse passer ce p, le mot reste « erreur plus haute ». La ligne n’est pas surlignée.",
+      },
+      {
+        label: "Non tranché",
+        text: "L’intervalle contient zéro. Ces décalages ne départagent pas les deux lectures. C’est aussi le cas quand un seul décalage ne trace pas d’intervalle.",
+      },
+      {
+        label: "Non tranché après Holm",
+        text: "L’intervalle était tout entier d’un côté, puis le p ne passe plus une fois les autres lignes prises en compte. Exemple : « non tranché après Holm (-1,0 ; IC -2,0 à -0,1) ». Holm classe les p du plus petit au plus grand. Le premier est jugé à 5 % divisé par le nombre de lignes comparées. Chaque suivant, à 5 % divisé par le nombre encore en lice. Dès qu’une ligne ne passe pas, les suivantes non plus. Le mot « retenu » n’est posé que si Holm passe et que le verdict est « erreur plus basse ».",
+      },
+    ],
+  },
+  versusPersistance: {
+    title: "Contre la persistance",
+    wide: true,
+    body: "Même écart apparié que « vs affiché », lecture Corpus contre la persistance, sur les décalages de la ligne. La persistance rejoue la somme du tirage juste avant la coupure. À chaque date : |erreur Corpus| − |erreur de la persistance|. « Erreur plus basse » : Corpus se trompe moins que rejouer le tirage d’avant, sur tout l’intervalle de Student à 95 %.\n\nLe mot « retenu » se décide dans « vs affiché ». Cette colonne est le repère sans modèle. Sur des tirages au hasard, la persistance se trompe d’environ 35 points de somme, la moyenne des sommes d’environ 25 : passer sous la persistance est le repère le plus facile. La case attend la fin du parcours. Un écart négatif veut dire que Corpus est plus près de la somme sortie. L’intervalle qui contient zéro laisse « non tranché ».",
+  },
+  persist: {
+    title: "Jumelle Persist",
+    wide: true,
+    body: "MAE de somme de la jumelle Persist de la lecture Corpus, sur les mêmes décalages, avec une décimale. Le modèle ne change pas. Après la grille, un numéro prévu à ±1, ±2 ou ±3 d’une boule de n−1 ou de n−2 cède sa place à cette boule, dans le rayon et le nombre d’échanges des boutons Persist. La somme de la grille jumelle peut donc bouger, et son erreur aussi.\n\nLa colonne apparaît quand Persist est armé et qu’une ligne a pu noter sa jumelle. Le mot « retenu » se décide dans « vs affiché », sur la grille sans ces échanges. Le coût boule à boule, gagné si la boule reprise sort et pas celle qu’elle remplace, se lit sur la carte Avec et sans Persist.",
+  },
+  communs: {
+    title: "Numéros communs",
+    wide: true,
+    body: "Moyenne, sur les décalages déjà prêts, du nombre de numéros de la grille Corpus qui figurent dans les cinq numéros sortis. Le compte de chaque tirage va de 0 à 5. La case a deux décimales : 0,58 est un peu plus d’un demi-numéro par tirage.\n\nLa grille est celle de LightGBM · trois ans, la même que la ligne Prévu de l’entraînement. Une boule compte quand son numéro est sorti, quel que soit le rang. Les étoiles ne sont pas dans cette case. Une grille prise au hasard en partage 0,50 : cinq numéros prévus et cinq sortis parmi cinquante, soit 5×5/50.\n\nLe mot « retenu » se décide sur l’erreur de somme. Une ligne peut avoir plus de communs et une erreur de somme plus haute. Le bandeau suit la somme.",
+  },
+  decalages: {
+    title: "Décalages prêts",
+    wide: true,
+    body: "Décalages dont tous les morceaux sont au cache, sur les décalages demandés pour cette ligne. 10/10 : −1 à −10 sont notés. −1 cache le dernier tirage et le prévoit. −10 se place dix tirages plus tôt et prévoit celui qui venait juste après. L’apprentissage s’arrête avant le tirage noté.\n\nUn décalage est prêt quand chaque morceau du pas est là : LightGBM, CatBoost s’il est installé, Darts s’il est installé, Chronos s’il est inclus et disponible. La barre du parcours compte ces morceaux une seule fois quand plusieurs lignes partagent le même pas. La case compte les décalages de la ligne, pas les morceaux.\n\n0/10 : aucun décalage de la ligne n’est encore prêt. La MAE déjà affichée sur 7/10 ne porte que sur ces sept dates. Le verdict et le clic attendent que chaque ligne affichable soit au complet. Un tiret : la ligne n’a aucun décalage à noter, parce qu’elle est trop courte ou que ses dates ne sont pas celles du réglage affiché.",
+  },
+  charge: {
+    title: "Charge du parcours",
+    wide: true,
+    body: "Ce que la machine faisait pendant la dernière tranche, et combien de calculs d’arbres cette tranche s’autorisait.\n\n« Charge 42 % » est la part du temps CPU qui n’était pas en attente, lue entre le début et la fin de la tranche. Sans /proc, c’est la charge moyenne d’une minute divisée par le nombre de cœurs : la lecture de macOS. « Charge — » : aucune des deux mesures n’a pu être lue.\n\n« 3 processus sur 6 » : la tranche pouvait faire tourner trois calculs d’arbres, le plafond est six. Le plafond est 80 % des cœurs, au moins un. Un créneau de plus s’ouvre sous 60 % de CPU, tant que la mémoire libre, quand elle est lisible, reste au moins à 20 %. Entre 60 et 80 %, le nombre reste celui déjà ouvert. Au-dessus de 80 % de CPU, ou sous 20 % de mémoire libre, aucun processus nouveau ne s’ouvre. « 1 processus » : le calcul reste dans l’API, sans pool.\n\nChronos ne compte pas dans ces processus. Il reste dans l’API, un pas à la fois, pendant que les arbres tournent. Chaque appel dure au plus vingt-cinq secondes, puis la page redemande la suite : la charge est celle de la tranche qui vient de finir. Un pas déjà au cache n’est pas réajusté.",
   },
 } satisfies Record<string, HelpCopy>

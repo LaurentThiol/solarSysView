@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { NEXTDATA_TRAINING_HELP } from "../src/lib/nextdata/help.ts"
+import { NEXTDATA_SWEEP_HELP, NEXTDATA_TRAINING_HELP } from "../src/lib/nextdata/help.ts"
 import {
   SWEEP_READINGS,
   anchorVerdict,
@@ -120,4 +120,45 @@ test("the training page wires Méga to the sweep route", () => {
   assert.equal(SWEEP_READINGS[0].short, "LGB · 3 ans")
   assert.match(table, /reading\.short/)
   assert.match(proxy, /suffix === "sweep"/)
+})
+
+test("Synthèse Méga explains the logic of each value", () => {
+  const keys = [
+    "synthese",
+    "reglage",
+    "focus",
+    "annees",
+    "covariables",
+    "mae",
+    "versusAffiche",
+    "versusPersistance",
+    "persist",
+    "communs",
+    "decalages",
+    "charge",
+  ] as const
+  for (const key of keys) {
+    assert.match(table, new RegExp(`NEXTDATA_SWEEP_HELP\\.${key}\\b`), key)
+    assert.ok(NEXTDATA_SWEEP_HELP[key].title.trim().length > 0, key)
+    assert.ok(NEXTDATA_SWEEP_HELP[key].body.trim().length > 80, key)
+  }
+  assert.match(table, /TitleHelp help=\{NEXTDATA_SWEEP_HELP\.synthese\}/)
+  assert.match(NEXTDATA_SWEEP_HELP.synthese.body, /Holm/)
+  assert.match(NEXTDATA_SWEEP_HELP.mae.body, /erreur absolue moyenne/)
+  assert.match(NEXTDATA_SWEEP_HELP.mae.body, /12,26 s’affiche 12,3/)
+  assert.match(NEXTDATA_SWEEP_HELP.versusAffiche.body, /Diebold et Mariano/)
+  assert.match(NEXTDATA_SWEEP_HELP.versusAffiche.body, /\|somme prévue de la ligne/)
+  assert.match(NEXTDATA_SWEEP_HELP.versusAffiche.items?.map((item) => item.label).join(" ") ?? "", /Holm/)
+  assert.match(NEXTDATA_SWEEP_HELP.versusPersistance.body, /rejoue la somme/)
+  assert.match(NEXTDATA_SWEEP_HELP.communs.body, /0,50/)
+  assert.match(NEXTDATA_SWEEP_HELP.communs.body, /5×5\/50/)
+  assert.match(NEXTDATA_SWEEP_HELP.decalages.body, /10\/10/)
+  assert.match(NEXTDATA_SWEEP_HELP.charge.body, /80 %/)
+  assert.match(NEXTDATA_SWEEP_HELP.charge.body, /60 %/)
+  assert.match(NEXTDATA_SWEEP_HELP.focus.body, /même queue/)
+  assert.match(NEXTDATA_TRAINING_HELP.mega.body, /Holm/)
+  assert.match(NEXTDATA_TRAINING_HELP.mega.body, /80 %/)
+  assert.match(NEXTDATA_TRAINING_HELP.mega.body, /lecture Corpus/)
+  assert.match(NEXTDATA_TRAINING_HELP.mega.items?.map((item) => item.label).join(" ") ?? "", /Holm/)
+  assert.match(NEXTDATA_TRAINING_HELP.mega.items?.map((item) => item.label).join(" ") ?? "", /Écart apparié/)
 })
