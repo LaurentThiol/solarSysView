@@ -16,6 +16,7 @@ import {
   weekdayLinesOff,
   weekdayOverlayField,
   weekdayOverlayFieldsFor,
+  weekdayPointMark,
   weekdaySeriesPhrase,
   weekdaySplitFields,
 } from "../src/lib/weekday-scope.ts"
@@ -112,6 +113,19 @@ test("weekday overlays keep one pair per series", () => {
     "Mardi (cyan) et vendredi (rose) : n1 et n2, chacun soir par soir."
   )
   assert.equal(weekdayDayLineCaption([]), "")
+})
+
+test("mixed series marks friday with a diamond and tuesday with a circle", () => {
+  assert.equal(weekdayPointMark("mardi"), "circle")
+  assert.equal(weekdayPointMark("MARDI"), "circle")
+  assert.equal(weekdayPointMark("vendredi"), "diamond")
+  assert.equal(weekdayPointMark("VENDREDI"), "diamond")
+  assert.equal(weekdayPointMark("lundi"), "circle")
+  assert.equal(weekdayPointMark(null), "circle")
+  assert.equal(weekdayPointMark(undefined), "circle")
+  const chart = readFileSync(new URL("../src/components/draw-chart.tsx", import.meta.url), "utf8")
+  assert.match(chart, /mixedDays[\s\S]{0,180}SeriesDayDot/)
+  assert.match(chart, /mixedDays \? <WeekdayPointLegend \/>/)
 })
 
 test("evolution keeps mardi and vendredi off until the pills are clicked", () => {

@@ -135,7 +135,12 @@ import {
   type TripleChartLink,
   type TripleNumberLink,
 } from "@/lib/next/triple-chart"
-import { WeekdaySeriesLines, WeekdaySplitLegend } from "@/components/weekday-split"
+import {
+  SeriesDayDot,
+  WeekdayPointLegend,
+  WeekdaySeriesLines,
+  WeekdaySplitLegend,
+} from "@/components/weekday-split"
 import {
   WEEKDAY_LINE_COLOR,
   normalizeDrawWeekday,
@@ -2411,13 +2416,24 @@ export function DrawChart({
                     connectNulls={false}
                     isAnimationActive={false}
                     dot={
-                      key === "rank1"
-                        ? { r: 3 }
-                        : series.length > 24
-                          ? { r: 2 }
-                          : { r: 3 }
+                      mixedDays
+                        ? (props) => (
+                            <SeriesDayDot
+                              {...props}
+                              r={key === "rank1" ? 3 : series.length > 24 ? 2 : 3}
+                            />
+                          )
+                        : key === "rank1"
+                          ? { r: 3 }
+                          : series.length > 24
+                            ? { r: 2 }
+                            : { r: 3 }
                     }
-                    activeDot={{ r: 4 }}
+                    activeDot={
+                      mixedDays
+                        ? (props) => <SeriesDayDot {...props} r={4} />
+                        : { r: 4 }
+                    }
                   />
                 ))}
                 {smaPeriod > 0 && showSma
@@ -2890,6 +2906,7 @@ export function DrawChart({
               </ComposedChart>
             </ChartContainer>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              {mixedDays ? <WeekdayPointLegend /> : null}
               {showDayLines ? (
                 <WeekdaySplitLegend
                   metric={weekdaySeriesPhrase(splitLabels)}

@@ -8,6 +8,7 @@ import {
   WEEKDAY_LINE_COLOR,
   weekdayLineDash,
   weekdayOverlayField,
+  weekdayPointMark,
   type DrawWeekday,
 } from "@/lib/weekday-scope"
 import { cn } from "@/lib/utils"
@@ -50,6 +51,66 @@ export function WeekdayDot({
       stroke="var(--background)"
       strokeWidth={1}
     />
+  )
+}
+
+type SeriesDayDotProps = {
+  cx?: number | null
+  cy?: number | null
+  r?: number
+  fill?: string
+  stroke?: string
+  payload?: { weekday?: string | null }
+}
+
+/** La série porte sa couleur sur `stroke`. Le `fill` par défaut de Recharts est blanc. */
+function seriesDotColor(fill: string | undefined, stroke: string | undefined) {
+  const strokeColor = typeof stroke === "string" && stroke && stroke !== "none" ? stroke : null
+  const fillColor = typeof fill === "string" && fill && fill !== "none" ? fill : null
+  const fillIsBlank = fillColor == null || fillColor === "#fff" || fillColor === "#ffffff"
+  if (strokeColor && fillIsBlank) return strokeColor
+  return fillColor ?? strokeColor ?? "currentColor"
+}
+
+/** Point de la série mixte : rond le mardi, losange le vendredi, couleur de la série. */
+export function SeriesDayDot({ cx, cy, r = 3, fill, stroke, payload }: SeriesDayDotProps) {
+  if (cx == null || cy == null || Number.isNaN(cx) || Number.isNaN(cy)) return <g />
+  const color = seriesDotColor(fill, stroke)
+  const radius = typeof r === "number" && Number.isFinite(r) && r > 0 ? r : 3
+  const edge = { fill: color, stroke: "var(--background)", strokeWidth: 1 }
+  if (weekdayPointMark(payload?.weekday) === "diamond") {
+    const arm = radius + 1.25
+    return (
+      <polygon
+        points={`${cx},${cy - arm} ${cx + arm},${cy} ${cx},${cy + arm} ${cx - arm},${cy}`}
+        {...edge}
+      />
+    )
+  }
+  return <circle cx={cx} cy={cy} r={radius} {...edge} />
+}
+
+/** Légende fixe des points, quand mardi et vendredi partagent la même courbe. */
+export function WeekdayPointLegend() {
+  return (
+    <span
+      className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border px-2 py-1 text-xs"
+      data-weekday-point-legend
+    >
+      <span className="inline-flex items-center gap-1.5">
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden className="shrink-0">
+          <circle cx="6" cy="6" r="3.5" fill="currentColor" />
+        </svg>
+        Mardi
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden className="shrink-0">
+          <polygon points="6,1 11,6 6,11 1,6" fill="currentColor" />
+        </svg>
+        Vendredi
+      </span>
+      <span className="text-muted-foreground">La couleur reste celle de la série.</span>
+    </span>
   )
 }
 

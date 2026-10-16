@@ -39,6 +39,13 @@ export function weekdayLineDash(day: DrawWeekday): string | undefined {
   return day === "vendredi" ? "6 3" : undefined
 }
 
+/** Forme du point sur une série mixte : losange le vendredi, rond les autres soirs. */
+export function weekdayPointMark(
+  weekday: string | null | undefined
+): "circle" | "diamond" {
+  return normalizeDrawWeekday(weekday) === "vendredi" ? "diamond" : "circle"
+}
+
 /** Valeur du soir, ou null pour l’autre soir et les mesures absentes. */
 export function weekdaySplitFields(
   weekday: string | null | undefined,
