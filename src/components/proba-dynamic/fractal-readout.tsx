@@ -7,23 +7,20 @@ import { formatFr, formatSignedFr } from "@/lib/frequency-board"
 import { PROBA_DYNAMIC_HELP } from "@/lib/proba-dynamic-help"
 import { cn } from "@/lib/utils"
 
-type Fit = {
-  dimension: number | null
-  stderr: number | null
-  r_squared: number | null
-  scales: number[]
-  counts: number[]
-  sufficient: boolean
-  n_scales: number
-}
-
 type Gap = {
   delta: number | null
 }
 
+type Roughness = {
+  exponent: number | null
+  lags: number[]
+  gamma: number[]
+}
+
 type Report = {
-  surface: Fit
-  null: { surface: Gap }
+  area: { ratio: number }
+  roughness: Roughness
+  null: { area: Gap; roughness: Gap }
   phrase: string
 }
 
@@ -37,7 +34,8 @@ function LogLog({
   label: string
 }) {
   if (scales.length < 2 || counts.length !== scales.length) return null
-  const xs = scales.map((scale) => Math.log(1 / scale))
+  if (scales.some((scale) => scale <= 0) || counts.some((count) => count <= 0)) return null
+  const xs = scales.map((scale) => Math.log(scale))
   const ys = counts.map((count) => Math.log(count))
   const minX = Math.min(...xs)
   const maxX = Math.max(...xs)
@@ -63,25 +61,8 @@ function LogLog({
   )
 }
 
-function formatScale(value: number) {
-  if (!Number.isFinite(value)) return "—"
-  return formatFr(value, Number.isInteger(value) ? 0 : 3)
-}
-
-function readingLine(title: string, fit: Fit, gap: Gap) {
-  const dimension = fit.dimension == null ? "pas de pente" : formatFr(fit.dimension, 2)
-  const stderr = fit.stderr == null ? "" : ` ± ${formatFr(fit.stderr, 2)}`
-  const determination = fit.r_squared == null ? "—" : formatFr(fit.r_squared, 3)
-  const scaleCount =
-    fit.n_scales === 0
-      ? "aucune échelle"
-      : `${fit.n_scales} échelle${fit.n_scales > 1 ? "s" : ""}`
-  const span =
-    fit.scales.length > 0
-      ? `, de ${formatScale(fit.scales[0])} à ${formatScale(fit.scales[fit.scales.length - 1])}`
-      : ""
-  const delta = gap.delta == null ? "—" : formatSignedFr(gap.delta, 2)
-  return `${title} · ${dimension}${stderr} · R² ${determination} · ${scaleCount}${span} · écart au mélange ${delta}`
+function gapText(gap: Gap) {
+  return gap.delta == null ? "—" : formatSignedFr(gap.delta, 2)
 }
 
 export function FractalReadout({ columns }: { columns: readonly (readonly { charge: number }[])[] }) {
@@ -106,15 +87,16 @@ export function FractalReadout({ columns }: { columns: readonly (readonly { char
           const body = (await response.json().catch(() => null)) as
             | (Partial<Report> & { detail?: unknown; error?: unknown })
             | null
-          if (!response.ok || !body?.surface || typeof body.phrase !== "string") {
+          if (!response.ok || !body?.area || !body.roughness || typeof body.phrase !== "string") {
             const detail = body && typeof body.detail === "string" ? body.detail : null
             const message = body && typeof body.error === "string" ? body.error : null
             throw new Error(detail || message || "Comptage indisponible.")
           }
           if (controller.signal.aborted) return
           setReport({
-            surface: body.surface,
-            null: body.null ?? { surface: { delta: null } },
+            area: body.area,
+            roughness: body.roughness,
+            null: body.null ?? { area: { delta: null }, roughness: { delta: null } },
             phrase: body.phrase,
           })
           setError(null)
@@ -145,12 +127,17 @@ export function FractalReadout({ columns }: { columns: readonly (readonly { char
       {report ? (
         <div>
           <p className="text-xs text-muted-foreground">
-            {readingLine("Surface", report.surface, report.null.surface)}
+            {`Aire · ${formatFr(report.area.ratio, 2)} · écart au mélange ${gapText(report.null.area)}`}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {`Rugosité · ${
+              report.roughness.exponent == null ? "pas de pente" : formatFr(report.roughness.exponent, 2)
+            } · écart au mélange ${gapText(report.null.roughness)}`}
           </p>
           <LogLog
-            scales={report.surface.scales}
-            counts={report.surface.counts}
-            label="log(N) en fonction de log(1/ε), surface 3D"
+            scales={report.roughness.lags}
+            counts={report.roughness.gamma}
+            label="log(γ) en fonction de log(écart), variogramme"
           />
         </div>
       ) : null}

@@ -9,12 +9,15 @@ from synchro.app import create_app
 from synchro.fractal.boxcount import (
     X_SPAN,
     Y_GAIN,
+    Z_SPAN,
     binary_box_count,
     column_shuffle,
     fractal_report,
+    mesh_area_ratio,
     mesh_box_count,
     mesh_scales,
     surface_box_count,
+    variogram_roughness,
 )
 
 
@@ -78,9 +81,50 @@ def test_short_axis_has_no_fractal_regime() -> None:
     report = fractal_report(height, 0.5)
     assert fit["sufficient"] is False
     assert report["surface"]["sufficient"] is False
+    assert report["roughness"]["sufficient"] is False
+    assert report["area"]["ratio"] > 1.0
     assert "fractale" not in report["phrase"]
-    assert "pas de régime fractal" in report["phrase"].lower()
+    assert "dimension" not in report["phrase"].lower()
+    assert "pas de régime" in report["phrase"].lower()
     assert "masque" not in report["phrase"].lower()
+
+
+def test_flat_area_is_one_and_plane_matches_its_slope() -> None:
+    flat = mesh_area_ratio(np.zeros((90, 48)))
+    assert abs(flat["ratio"] - 1.0) <= 1e-9
+    draws = 90
+    g = 0.8
+    x = np.linspace(0.0, X_SPAN, draws)
+    plane = (g * x / Y_GAIN)[:, None] * np.ones(48)
+    tilted = mesh_area_ratio(plane)
+    assert abs(tilted["ratio"] - np.sqrt(1.0 + g * g)) <= 1e-6
+
+    slots = np.linspace(0.0, 1.0, 48)
+    sheet = np.tile(slots, (draws, 1))
+    slot_slope = Y_GAIN / Z_SPAN
+    assert abs(mesh_area_ratio(sheet)["ratio"] - np.sqrt(1.0 + slot_slope**2)) <= 1e-6
+
+
+def test_variogram_of_a_ramp_is_smooth_and_noise_is_rough() -> None:
+    slots = np.linspace(0.0, 1.0, 48)
+    ramp = np.tile(slots, (90, 1))
+    smooth = variogram_roughness(ramp)
+    assert smooth["exponent"] is not None
+    assert smooth["exponent"] <= 0.02
+    assert smooth["sufficient"] is True
+    assert smooth["lags"] == [1, 2, 4, 8]
+
+    noise = variogram_roughness(np.random.default_rng(0).random((90, 48)))
+    assert noise["exponent"] > smooth["exponent"] + 0.5
+    assert noise["sufficient"] is False
+
+
+def test_shuffle_raises_area_and_roughness() -> None:
+    slots = np.linspace(0.0, 1.0, 48)
+    height = np.tile(slots, (90, 1))
+    shuffled = column_shuffle(height, np.random.default_rng(1))
+    assert mesh_area_ratio(shuffled)["ratio"] > mesh_area_ratio(height)["ratio"] + 0.2
+    assert variogram_roughness(shuffled)["exponent"] > variogram_roughness(height)["exponent"] + 0.4
 
 
 def test_mesh_flat_is_two_and_a_plane_stays_a_sheet() -> None:
@@ -172,9 +216,17 @@ def test_fractal_endpoint() -> None:
     assert response.status_code == 200
     body = response.json()
     assert abs(body["surface"]["dimension"] - 2.0) <= 1e-6
+    assert abs(body["area"]["ratio"] - 1.0) <= 1e-9
+    assert body["roughness"]["exponent"] == 0.0
+    assert body["roughness"]["flat"] is True
     assert "fractale" not in body["phrase"]
+    assert "nappe plate" in body["phrase"].lower()
     assert "masque" not in body["phrase"].lower()
     assert body["null"]["surface"]["count"] == 32
+    assert body["null"]["area"]["count"] == 32
+    assert body["null"]["roughness"]["count"] == 32
     moved = client.post("/api/analysis/fractal", json={"height": height, "floor": 40})
     assert moved.status_code == 200
-    assert moved.json()["surface"]["dimension"] == body["surface"]["dimension"]
+    moved_body = moved.json()
+    assert moved_body["surface"]["dimension"] == body["surface"]["dimension"]
+    assert moved_body["area"]["ratio"] == body["area"]["ratio"]

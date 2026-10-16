@@ -1,9 +1,9 @@
-"""Comptage de boîtes d’un masque et du relief 3D.
+"""Lectures d’un relief de compteurs.
 
-Le relief compté sur la carte est le maillage triangulé, dans le même
-repère que la vue. Une nappe plate a pour dimension 2. Une surface qui
-se plisse dans le volume tend vers 3. Le côté des cubes part du pas du
-maillage et double tant qu’il reste inférieur au quart du petit côté.
+L’aire compare les triangles du maillage à une nappe plate, dans le
+repère de la vue. La rugosité est un variogramme des compteurs, sans
+ce repère. Le comptage de cubes reste disponible : il n’est une
+dimension que si la pente tient sur assez d’échelles.
 """
 
 from __future__ import annotations
@@ -120,15 +120,105 @@ def mesh_box_count(height: np.ndarray) -> dict[str, Any]:
     return _fit_counts(scales, counted, saturate_at=-1, integral_scales=False)
 
 
+def _vec_norm(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> np.ndarray:
+    return np.sqrt(x * x + y * y + z * z)
+
+
+def mesh_area_ratio(height: np.ndarray) -> dict[str, Any]:
+    """Aire des triangles du relief, divisée par l’aire de la nappe plate.
+
+    Les facettes sont les deux triangles du canvas. Une nappe plate vaut 1.
+    """
+    grid = np.asarray(height, dtype=float)
+    if grid.ndim != 2:
+        raise ValueError("Le relief est une grille.")
+    if grid.shape[0] < 2 or grid.shape[1] < 2:
+        raise ValueError("La grille a besoin d’au moins deux tirages et deux cases.")
+    if not np.isfinite(grid).all():
+        raise ValueError("Le relief contient une valeur non finie.")
+    draws, slots = grid.shape
+    dx = X_SPAN / (draws - 1)
+    dz = Z_SPAN / (slots - 1)
+    y = grid * Y_GAIN
+    dy_ac = y[1:, :-1] - y[:-1, :-1]
+    dy_ab = y[:-1, 1:] - y[:-1, :-1]
+    area_acb = 0.5 * _vec_norm(dy_ac * dz, dx * dz, dx * dy_ab)
+    y_b = y[:-1, 1:]
+    y_c = y[1:, :-1]
+    y_d = y[1:, 1:]
+    dy_bc = y_c - y_b
+    dy_bd = y_d - y_b
+    area_bcd = 0.5 * _vec_norm(dz * dy_bd, dx * dz, dx * (dy_bd - dy_bc))
+    mesh = float(np.sum(area_acb) + np.sum(area_bcd))
+    flat = float(X_SPAN * Z_SPAN)
+    return {"ratio": mesh / flat, "mesh": mesh, "flat": flat}
+
+
+def variogram_roughness(height: np.ndarray) -> dict[str, Any]:
+    """Rugosité des compteurs. 0 : lisse. 1 : aussi rugueux que le pas.
+
+    γ(h) est la moyenne des carrés d’écarts, à parts égales entre l’axe
+    des tirages et l’axe des cases. L’exposant local compare h = 1 et
+    h = 2. La pente sur 1, 2, 4… n’est un régime que si le log-log est droit.
+    """
+    grid = np.asarray(height, dtype=float)
+    if grid.ndim != 2:
+        raise ValueError("Le relief est une grille.")
+    if grid.shape[0] < 2 or grid.shape[1] < 2:
+        raise ValueError("La grille a besoin d’au moins deux tirages et deux cases.")
+    if not np.isfinite(grid).all():
+        raise ValueError("Le relief contient une valeur non finie.")
+    lags = _variogram_lags(grid.shape)
+    kept_lags: list[int] = []
+    gammas: list[float] = []
+    for lag in lags:
+        gamma = _gamma_at(grid, lag)
+        if gamma is None or gamma <= 0.0 or not np.isfinite(gamma):
+            continue
+        kept_lags.append(lag)
+        gammas.append(gamma)
+    if not kept_lags:
+        return _rough_payload(0.0, None, None, None, [], [], False, None, None, None, flat=True)
+    local_slope = None
+    exponent = None
+    if len(kept_lags) >= 2:
+        local_slope = float(
+            (np.log(gammas[1]) - np.log(gammas[0])) / (np.log(kept_lags[1]) - np.log(kept_lags[0]))
+        )
+        exponent = _clamp_roughness(local_slope)
+    fit_exponent = None
+    stderr = None
+    r_squared = None
+    spread = None
+    ratio = None
+    sufficient = False
+    if len(kept_lags) >= 2:
+        slope, stderr, r_squared, spread, ratio, sufficient = _power_fit(kept_lags, gammas)
+        fit_exponent = _clamp_roughness(slope)
+    return _rough_payload(
+        exponent,
+        local_slope,
+        fit_exponent,
+        stderr,
+        kept_lags,
+        gammas,
+        sufficient,
+        r_squared,
+        spread,
+        ratio,
+        flat=False,
+    )
+
+
 def fractal_report(
     height: np.ndarray,
     _floor: float | None = None,
     rng: np.random.Generator | None = None,
 ) -> dict[str, Any]:
-    """Surface 3D du relief, et écart à 32 mélanges de cases.
+    """Aire, rugosité, cubes, et écart à 32 mélanges de cases.
 
-    Le plancher translucide de la vue ne coupe pas le maillage : `_floor`
-    est ignoré.
+    Le plancher translucide de la vue ne coupe pas ces lectures : `_floor`
+    est ignoré. La phrase cite l’aire et la rugosité.
     """
     grid = np.asarray(height, dtype=float)
     if grid.ndim != 2 or grid.shape[0] < 2 or grid.shape[1] < 2:
@@ -136,19 +226,31 @@ def fractal_report(
     if not np.isfinite(grid).all():
         raise ValueError("La grille contient une valeur non finie.")
     generator = np.random.default_rng(0) if rng is None else rng
+    area = mesh_area_ratio(grid)
+    rough = variogram_roughness(grid)
     surface = mesh_box_count(grid)
-    null_dims: list[float] = []
+    area_null: list[float] = []
+    rough_null: list[float] = []
+    surface_null: list[float] = []
     for _ in range(NULL_REPEATS):
         shuffled = column_shuffle(grid, generator)
+        area_null.append(float(mesh_area_ratio(shuffled)["ratio"]))
+        exponent = variogram_roughness(shuffled)["exponent"]
+        if exponent is not None:
+            rough_null.append(float(exponent))
         dimension = mesh_box_count(shuffled)["dimension"]
         if dimension is not None:
-            null_dims.append(float(dimension))
-    gap = _null_stats(null_dims, surface["dimension"])
+            surface_null.append(float(dimension))
+    area_gap = _null_stats(area_null, area["ratio"])
+    rough_gap = _null_stats(rough_null, rough["exponent"])
+    surface_gap = _null_stats(surface_null, surface["dimension"])
     return {
+        "area": area,
+        "roughness": rough,
         "surface": surface,
-        "null": {"surface": gap},
+        "null": {"area": area_gap, "roughness": rough_gap, "surface": surface_gap},
         "shape": [int(grid.shape[0]), int(grid.shape[1])],
-        "phrase": _phrase(surface, gap),
+        "phrase": _phrase(area, area_gap, rough, rough_gap),
     }
 
 
@@ -617,57 +719,162 @@ def _fmt(value: float | None, digits: int) -> str:
     return text
 
 
-def _fmt_scale(scale: float) -> str:
-    value = float(scale)
-    if abs(value - round(value)) < 1e-9:
-        return str(int(round(value)))
-    return _fmt(value, 3)
+def _variogram_lags(shape: tuple[int, int]) -> list[int]:
+    short = min(int(shape[0]), int(shape[1]))
+    limit = max(short // 4, 1)
+    lags: list[int] = []
+    lag = 1
+    while lag <= limit and lag < short:
+        lags.append(lag)
+        if short // 4 < 1:
+            break
+        lag *= 2
+    return lags
 
 
-def _reason(fit: dict[str, Any]) -> str:
-    if fit["dimension"] is None or fit["n_scales"] < MIN_SCALES:
-        return "Le relief est trop petit pour plusieurs échelles."
-    ratio = fit["scale_ratio"]
+def _gamma_at(grid: np.ndarray, lag: int) -> float | None:
+    parts: list[float] = []
+    if grid.shape[0] > lag:
+        diff = grid[lag:, :] - grid[:-lag, :]
+        parts.append(float(np.mean(diff * diff)))
+    if grid.shape[1] > lag:
+        diff = grid[:, lag:] - grid[:, :-lag]
+        parts.append(float(np.mean(diff * diff)))
+    if not parts:
+        return None
+    return float(np.mean(parts))
+
+
+def _clamp_roughness(log_slope: float) -> float:
+    """1 − H, avec γ ~ h^(2H). Borné entre 0 et 1."""
+    return float(np.clip(1.0 - 0.5 * log_slope, 0.0, 1.0))
+
+
+def _power_fit(lags: list[int], gammas: list[float]) -> tuple[float, float | None, float, float | None, float, bool]:
+    x = np.log(np.asarray(lags, dtype=float))
+    y = np.log(np.asarray(gammas, dtype=float))
+    if len(lags) >= 4:
+        coeff, covariance = np.polyfit(x, y, 1, cov=True)
+        stderr = float(np.sqrt(max(float(covariance[0, 0]), 0.0)))
+        if not np.isfinite(stderr):
+            stderr = None
+    else:
+        coeff = np.polyfit(x, y, 1)
+        stderr = None
+    slope = float(coeff[0])
+    intercept = float(coeff[1])
+    predicted = slope * x + intercept
+    residual = float(np.sum((y - predicted) ** 2))
+    total = float(np.sum((y - y.mean()) ** 2))
+    r_squared = 1.0 if total == 0.0 else 1.0 - residual / total
+    local = np.diff(y) / np.diff(x)
+    spread = float(local.max() - local.min()) if local.size else None
+    ratio = float(lags[-1] / lags[0])
+    sufficient = bool(
+        len(lags) >= MIN_SCALES
+        and ratio >= MIN_RATIO
+        and r_squared > MIN_R2
+        and spread is not None
+        and spread < MAX_SLOPE_SPREAD
+    )
+    return slope, stderr, float(r_squared), spread, ratio, sufficient
+
+
+def _rough_payload(
+    exponent: float | None,
+    local_slope: float | None,
+    fit_exponent: float | None,
+    stderr: float | None,
+    lags: list[int],
+    gammas: list[float],
+    sufficient: bool,
+    r_squared: float | None,
+    slope_spread: float | None,
+    scale_ratio: float | None,
+    flat: bool,
+) -> dict[str, Any]:
+    return {
+        "exponent": exponent,
+        "local_slope": local_slope,
+        "fit_exponent": fit_exponent,
+        "stderr": stderr,
+        "r_squared": r_squared,
+        "lags": lags,
+        "gamma": gammas,
+        "sufficient": sufficient,
+        "n_lags": len(lags),
+        "scale_ratio": scale_ratio,
+        "slope_spread": slope_spread,
+        "flat": flat,
+    }
+
+
+def _gap_clause(gap: dict[str, Any], low: str, high: str) -> str:
+    delta = gap.get("delta")
+    if delta is None or abs(float(delta)) < 0.05:
+        return ""
+    tail = low if float(delta) < 0 else high
+    return f", écart au mélange {_fmt(float(delta), 2)}. {tail}"
+
+
+def _area_sentence(area: dict[str, Any], gap: dict[str, Any]) -> str:
+    clause = _gap_clause(
+        gap,
+        "Le placement a réduit la surface.",
+        "La surface est plus étendue que le mélange.",
+    )
+    if clause:
+        return f"Aire {_fmt(area['ratio'], 2)}{clause}"
+    return f"Aire {_fmt(area['ratio'], 2)}."
+
+
+def _rough_reason(rough: dict[str, Any]) -> str:
+    if rough["n_lags"] < MIN_SCALES:
+        return "Le relief est trop petit pour plusieurs écarts."
+    ratio = rough["scale_ratio"]
     if ratio is None or ratio < MIN_RATIO:
-        return "Le relief est trop petit pour plusieurs échelles."
-    r_squared = fit["r_squared"]
+        return "Le relief est trop petit pour plusieurs écarts."
+    r_squared = rough["r_squared"]
     if r_squared is None or r_squared <= MIN_R2:
         return "L’ajustement ne tient pas."
-    spread = fit["slope_spread"]
+    spread = rough["slope_spread"]
     if spread is None or spread >= MAX_SLOPE_SPREAD:
-        return "La pente change d’échelle."
-    return "La dimension est entière."
+        return "La pente change d’écart."
+    return ""
 
 
-def _reading(name: str, fit: dict[str, Any], gap: dict[str, Any]) -> str:
-    if fit["dimension"] is None:
-        sentence = f"{name} : pas de pente. Pas de régime fractal. {_reason(fit)}"
+def _rough_sentence(rough: dict[str, Any], gap: dict[str, Any]) -> str:
+    if rough["flat"]:
+        sentence = "Rugosité 0,00. Nappe plate."
+    elif rough["exponent"] is None:
+        sentence = "Rugosité : pas de pente. Pas de régime. Le relief est trop petit pour plusieurs écarts."
     else:
-        uncertainty = "" if fit["stderr"] is None else f" ± {_fmt(fit['stderr'], 2)}"
-        scales = fit["scales"]
-        span = f"{_fmt_scale(scales[0])} à {_fmt_scale(scales[-1])}" if scales else "—"
-        if fit["sufficient"]:
-            sentence = (
-                f"{name} : dimension fractale {_fmt(fit['dimension'], 2)}{uncertainty}, "
-                f"R² {_fmt(fit['r_squared'], 3)}, {fit['n_scales']} échelles de {span}. "
+        sentence = f"Rugosité {_fmt(rough['exponent'], 2)} au pas d’une case"
+        if rough["sufficient"]:
+            lags = rough["lags"]
+            span = f"{lags[0]} à {lags[-1]}" if lags else "—"
+            sentence += (
+                f". Pente du variogramme {_fmt(rough['fit_exponent'], 2)}, "
+                f"R² {_fmt(rough['r_squared'], 3)}, {rough['n_lags']} écarts de {span}. "
                 "La pente tient."
             )
         else:
-            sentence = (
-                f"{name} : dimension {_fmt(fit['dimension'], 2)}{uncertainty}, "
-                f"R² {_fmt(fit['r_squared'], 3)}, {fit['n_scales']} échelles de {span}. "
-                f"Pas de régime fractal. {_reason(fit)}"
-            )
+            sentence += f". Pas de régime. {_rough_reason(rough)}"
     delta = gap.get("delta")
     if delta is None or abs(float(delta)) < 0.05:
         return sentence
     tail = (
-        "La surface est plus lisse que le mélange."
-        if delta < 0
-        else "La surface est plus rugueuse que le mélange."
+        "Le placement a lissé."
+        if float(delta) < 0
+        else "Le placement est plus rugueux que le mélange."
     )
     return f"{sentence} Écart au mélange {_fmt(float(delta), 2)}. {tail}"
 
 
-def _phrase(surface_fit: dict[str, Any], surface_gap: dict[str, Any]) -> str:
-    return _reading("Surface", surface_fit, surface_gap)
+def _phrase(
+    area: dict[str, Any],
+    area_gap: dict[str, Any],
+    rough: dict[str, Any],
+    rough_gap: dict[str, Any],
+) -> str:
+    return f"{_area_sentence(area, area_gap)} {_rough_sentence(rough, rough_gap)}"

@@ -55,7 +55,7 @@ export const PROBA_DYNAMIC_HELP = {
   },
   comptage: {
     title: "Comptage de boîtes",
-    body: "Le comptage couvre les triangles du relief 3D, dans le même repère que la vue. Il mesure la surface, pas les lignes de la grille. Une nappe plate vaut 2. Plus la surface se plisse dans le volume, plus le chiffre monte vers 3. Le plancher translucide ne change pas ce calcul. Le mélange redistribue les compteurs dans chaque tirage et reconstruit la surface : un écart négatif veut dire que ce placement a lissé. Sans assez d’échelles, une pente stable et un R² au-dessus de 0,99, il n’y a pas de régime fractal. Ce n’est pas une chance de sortie.",
+    body: "Deux lectures du relief. L’aire compare les triangles dessinés à une nappe plate : 1 si le relief est plat, davantage s’il se plisse. La rugosité lit les écarts de compteur d’une case à l’autre, sans le zoom de la vue : 0 si le voisinage est lisse, 1 s’il est aussi rugueux que le pas. Le mélange redistribue les compteurs dans chaque tirage. Un écart négatif veut dire que le placement a réduit la surface, ou qu’il a lissé. La pente du variogramme n’est citée que si elle est droite sur assez d’écarts. Ce n’est pas une chance de sortie.",
   },
   dizaines: {
     title: "Dizaines",

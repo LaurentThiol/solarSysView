@@ -212,7 +212,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Comptage de boîtes",
     group: "lecture",
-    text: "Mesure de forme sur le relief 3D de la carte probaDynamic. Le comptage suit les triangles dessinés, pas la grille en plan. 2 pour une nappe plate, vers 3 si la surface remplit le volume. Le mélange redistribue les compteurs dans chaque tirage. Sans assez d’échelles, le chiffre n’est pas un régime fractal. Ce n’est pas une chance de sortie.",
+    text: "Deux lectures du relief probaDynamic. L’aire compare les triangles à une nappe plate. La rugosité mesure les écarts de compteur entre cases voisines : 0 si c’est lisse, 1 si c’est aussi rugueux que le pas. Le mélange redistribue les compteurs dans chaque tirage. La pente n’est citée que si elle tient. Ce n’est pas une chance de sortie.",
   },
   {
     term: "Conversation",
