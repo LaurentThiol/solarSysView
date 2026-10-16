@@ -21,7 +21,12 @@ const MAX_DIST = 36
 /** Un cran de molette (~100 px) rapproche d’environ un tiers. */
 const ZOOM_WHEEL = 0.0036
 const DEFAULT_YAW = -0.72
-const DEFAULT_PITCH = 0.58
+/**
+ * Assez haut pour lire la pente en profondeur.
+ * À 0.58 le relief est une falaise : somme et moyenne ont la même crête,
+ * brut n’est qu’un filet. 1.02 montre le bord bas de la somme et la rampe du brut.
+ */
+const DEFAULT_PITCH = 1.02
 
 function lawDelay(kind: ProbaKind) {
   return kind === "number" ? 9 : 5
@@ -388,9 +393,9 @@ export function CounterMap({
     const height = Math.max(peak, map.expected, 1) * Y_GAIN
     const radius = Math.hypot(X_SPAN / 2, height * 0.55, Z_SPAN / 2)
     const framed: Camera = {
-      yaw: mapViewYaw(map.placement, DEFAULT_YAW),
+      yaw: mapViewYaw(DEFAULT_YAW),
       pitch: DEFAULT_PITCH,
-      dist: Math.min(28, Math.max(2.4, (radius / Math.tan(0.45)) * 1.25)),
+      dist: Math.min(28, Math.max(2.4, (radius / Math.tan(0.45)) * 1.05)),
     }
     frameRef.current = framed
     const frameKey = `${map.placement}:${map.scale}:${map.kind}:${map.dates.length}:${map.dates[0] ?? ""}:${map.dates.at(-1) ?? ""}`
@@ -546,21 +551,26 @@ export function CounterMap({
       const shownFloor = probaFloorDelay(floorRef.current)
       if (shownFloor != null) {
         const yPlane = (shownFloor / map.pool) * Y_GAIN
+        const x0 = -X_SPAN / 2
+        const x1 = X_SPAN / 2
+        const z0 = -Z_SPAN / 2
+        const z1 = Z_SPAN / 2
         gl.enable(gl.BLEND)
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
         gl.depthMask(false)
+        // Biais constant : le facteur de pente (-1) avalait les faces du relief.
         gl.enable(gl.POLYGON_OFFSET_FILL)
-        gl.polygonOffset(-1, -1)
+        gl.polygonOffset(0, -1)
         gl.bindBuffer(gl.ARRAY_BUFFER, planeBuffer)
         gl.bufferData(
           gl.ARRAY_BUFFER,
           new Float32Array([
-            -X_SPAN / 2, yPlane, -Z_SPAN / 2,
-            X_SPAN / 2, yPlane, -Z_SPAN / 2,
-            X_SPAN / 2, yPlane, Z_SPAN / 2,
-            -X_SPAN / 2, yPlane, -Z_SPAN / 2,
-            X_SPAN / 2, yPlane, Z_SPAN / 2,
-            -X_SPAN / 2, yPlane, Z_SPAN / 2,
+            x0, yPlane, z0,
+            x1, yPlane, z0,
+            x1, yPlane, z1,
+            x0, yPlane, z0,
+            x1, yPlane, z1,
+            x0, yPlane, z1,
           ]),
           gl.DYNAMIC_DRAW
         )
@@ -569,8 +579,24 @@ export function CounterMap({
         gl.disableVertexAttribArray(2)
         gl.disableVertexAttribArray(3)
         gl.uniform1f(gl.getUniformLocation(flatProgram, "uPointSize"), 1)
-        gl.uniform4f(gl.getUniformLocation(flatProgram, "uColor"), planeColor[0], planeColor[1], planeColor[2], 0.35)
+        gl.uniform4f(gl.getUniformLocation(flatProgram, "uColor"), planeColor[0], planeColor[1], planeColor[2], 0.07)
         gl.drawArrays(gl.TRIANGLES, 0, 6)
+        const xCuts = 4
+        const zCuts = 3
+        const lines: number[] = []
+        const yLine = yPlane + 0.012
+        for (let step = 0; step <= zCuts; step += 1) {
+          const z = z0 + (step / zCuts) * Z_SPAN
+          lines.push(x0, yLine, z, x1, yLine, z)
+        }
+        for (let step = 0; step <= xCuts; step += 1) {
+          const x = x0 + (step / xCuts) * X_SPAN
+          lines.push(x, yLine, z0, x, yLine, z1)
+        }
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(lines), gl.DYNAMIC_DRAW)
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0)
+        gl.uniform4f(gl.getUniformLocation(flatProgram, "uColor"), planeColor[0], planeColor[1], planeColor[2], 0.45)
+        gl.drawArrays(gl.LINES, 0, lines.length / 3)
         gl.disable(gl.POLYGON_OFFSET_FILL)
         gl.depthMask(true)
         gl.disable(gl.BLEND)

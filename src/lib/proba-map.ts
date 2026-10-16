@@ -97,13 +97,13 @@ export function parseMapPlacement(value: string | null | undefined): MapPlacemen
 
 /**
  * Azimut de la vue 3/4.
- * Brut range les grands compteurs vers +Z, le côté de cette vue.
- * Le relief y est une falaise et se voit de profil.
- * On part donc de l’autre bout : les petits compteurs sont devant.
+ * Chaque pose range les grands compteurs vers +Z. L’azimut historique
+ * regarde ce côté : le relief est une falaise et se voit de profil.
+ * Somme et moyenne deviennent le même ruban, brut disparaît.
+ * On part de l’autre bout, pour les trois : les petits compteurs sont devant.
  */
-export function mapViewYaw(placement: MapPlacement, frontYaw: number) {
-  if (placement === "brut") return -Math.PI - frontYaw
-  return frontYaw
+export function mapViewYaw(frontYaw: number) {
+  return -Math.PI - frontYaw
 }
 
 /**
