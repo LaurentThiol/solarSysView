@@ -89,6 +89,7 @@ const CHART_TABS = [
 const PERIODS: { id: DrawWindow; label: string; full: string }[] = [
   { id: "last_20", label: "20 derniers", full: WINDOW_PRESET_LABELS.last_20 },
   { id: "last_50", label: "50 derniers", full: WINDOW_PRESET_LABELS.last_50 },
+  { id: "last_100", label: "100 derniers", full: WINDOW_PRESET_LABELS.last_100 },
   { id: "year", label: WINDOW_PRESET_LABELS.year, full: WINDOW_PRESET_LABELS.year },
   { id: "year_n1", label: WINDOW_PRESET_LABELS.year_n1, full: WINDOW_PRESET_LABELS.year_n1 },
   { id: "year_n2", label: WINDOW_PRESET_LABELS.year_n2, full: WINDOW_PRESET_LABELS.year_n2 },
@@ -110,16 +111,16 @@ function SketchBridge({
 
 const WINDOW_HELP = {
   title: "Fenêtre de travail",
-  body: "20 ou 50 derniers tirages (tous calendriers), année civile, année n-1, année n-2, formule actuelle (12 ★), ou tout l’historique. 20/50 se lisent mieux sur la courbe ; l’année et la formule donnent le bruit de fond. La barre reste sous le bandeau pour changer de plage sans remonter.",
+  body: "20, 50 ou 100 derniers tirages (tous calendriers), année civile, année n-1, année n-2, formule actuelle (12 ★), ou tout l’historique. 20/50/100 se lisent mieux sur la courbe ; l’année et la formule donnent le bruit de fond. La barre reste sous le bandeau pour changer de plage sans remonter.",
 } as const
 
 const MONTH_HELP = {
   title: "Mois",
-  body: "Affine la courbe et les fréquences à un mois civil. Masqué sur 20/50 tirages : ces fenêtres sont déjà bornées.",
+  body: "Affine la courbe et les fréquences à un mois civil. Masqué sur 20/50/100 tirages : ces fenêtres sont déjà bornées.",
 } as const
 
 function isLastWindow(period: DrawWindow) {
-  return period === "last_20" || period === "last_50"
+  return period === "last_20" || period === "last_50" || period === "last_100"
 }
 
 function EvolutionWindowBar({
@@ -267,6 +268,7 @@ function EvolutionContent() {
     let scoped = archive
     if (period === "last_20") scoped = takeLastDraws(archive, 20)
     else if (period === "last_50") scoped = takeLastDraws(archive, 50)
+    else if (period === "last_100") scoped = takeLastDraws(archive, 100)
     else if (period === "year") {
       const year = newestCalendarYear(archive)
       scoped = year != null ? filterCalendarYear(archive, year) : archive
@@ -388,9 +390,7 @@ function EvolutionContent() {
           value={String(filtered.length)}
           hint={
             lastWindow
-              ? period === "last_20"
-                ? "20 derniers"
-                : "50 derniers"
+              ? (PERIODS.find((item) => item.id === period)?.label ?? "période choisie")
               : activeMonth === "all"
                 ? "période choisie"
                 : "mois filtré"

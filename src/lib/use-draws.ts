@@ -18,7 +18,7 @@ import {
 
 export type DrawSource = "json" | "neon"
 export type DrawEra = "current" | "all" | "year"
-export type DrawWindow = DrawEra | "last_20" | "last_50" | "year_n1" | "year_n2"
+export type DrawWindow = DrawEra | "last_20" | "last_50" | "last_100" | "year_n1" | "year_n2"
 
 type DrawPayload = {
   ok?: boolean
@@ -56,6 +56,7 @@ function seedDraws(window: DrawWindow, current: Draw[], weekday: WeekdayScope = 
   const pool = filterDrawsByWeekday(raw, weekday)
   if (window === "last_20") return takeLastDraws(pool, 20)
   if (window === "last_50") return takeLastDraws(pool, 50)
+  if (window === "last_100") return takeLastDraws(pool, 100)
   if (window === "year_n1") return offsetCalendarYearDraws(pool, 1)
   if (window === "year_n2") return offsetCalendarYearDraws(pool, 2)
   return pool
@@ -67,6 +68,7 @@ export function drawsQueryFor(window: DrawWindow, weekday: WeekdayScope = "all")
   else if (window === "year_n2") params.set("year", PREV2_CALENDAR_YEAR_PARAM)
   else if (window === "last_20") params.set("last", "20")
   else if (window === "last_50") params.set("last", "50")
+  else if (window === "last_100") params.set("last", "100")
   else if (window !== "year") params.set("era", window)
   const day = weekdayApiValue(weekday)
   if (day) params.set(WEEKDAY_API_PARAM, day)

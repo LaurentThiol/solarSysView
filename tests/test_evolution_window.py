@@ -19,6 +19,16 @@ def test_evolution_window_pins_under_the_banner() -> None:
     assert "sous le bandeau" in panel
     assert 'label: "20 derniers"' in panel
     assert "full: WINDOW_PRESET_LABELS.last_20" in panel
+    periods = panel.split("const PERIODS", 1)[1].split("function SketchBridge", 1)[0]
+    ids = [
+        line.split('id: "', 1)[1].split('"', 1)[0]
+        for line in periods.splitlines()
+        if 'id: "' in line
+    ]
+    assert ids[ids.index("last_50") + 1] == "last_100"
+    between = periods.split('id: "last_50"', 1)[1].split('id: "year"', 1)[0]
+    assert 'label: "100 derniers"' in between
+    assert "WINDOW_PRESET_LABELS.last_100" in between
     assert "SITE_HEADER_SLOT_ID" in header
     assert "--site-header-height" in header
     assert 'SITE_HEADER_SLOT_ID = "site-header-slot"' in slot
