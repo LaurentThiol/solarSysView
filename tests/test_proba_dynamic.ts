@@ -22,6 +22,7 @@ import { chargePhrase, mapPhrase } from "../src/lib/proba-dynamic-help.ts"
 import {
   buildCounterMap,
   buildProbaMap,
+  mapViewYaw,
   parseMapKind,
   parseMapPlacement,
   parseMapScale,
@@ -284,6 +285,12 @@ test("sum puts a lip before zero, mean and raw rank the counters", () => {
   assert.equal(parseMapPlacement("brut"), "brut")
   assert.equal(parseMapPlacement("ailleurs"), "somme")
   assert.equal(parseMapPlacement(null), "somme")
+  const frontYaw = -0.72
+  assert.equal(mapViewYaw("somme", frontYaw), frontYaw)
+  assert.equal(mapViewYaw("moyenne", frontYaw), frontYaw)
+  assert.ok(Math.cos(mapViewYaw("brut", frontYaw)) < 0)
+  assert.ok(Math.sin(mapViewYaw("brut", frontYaw)) < 0)
+  assert.ok(Math.cos(frontYaw) > 0)
   assert.equal(buildProbaMap([draw("2026-01-02", [1, 2, 3, 4, 5])], "tout", "number", "brut").placement, "brut")
   assert.equal(buildProbaMap([draw("2026-01-02", [1, 2, 3, 4, 5])], "tout", "number").placement, "somme")
 })
@@ -366,6 +373,8 @@ test("the floor cursor erases the plane at the right end and the ball cursor loo
   assert.match(map, /shownFloor != null/)
   assert.match(map, /PROBA_FLOOR_OFF/)
   assert.match(map, /effacé/)
+  assert.match(map, /mapViewYaw\(map\.placement, DEFAULT_YAW\)/)
+  assert.match(map, /\$\{map\.placement\}/)
 })
 
 test("the lab shows a yellow calculation light and a green settled light", () => {

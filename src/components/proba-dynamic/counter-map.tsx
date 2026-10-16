@@ -7,7 +7,7 @@ import { FractalReadout } from "@/components/proba-dynamic/fractal-readout"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatFr } from "@/lib/frequency-board"
-import { MAP_SCALE_LABELS, type ProbaMap } from "@/lib/proba-map"
+import { MAP_SCALE_LABELS, mapViewYaw, type ProbaMap } from "@/lib/proba-map"
 import { PROBA_DYNAMIC_HELP, mapPhrase } from "@/lib/proba-dynamic-help"
 import { PROBA_FLOOR_OFF, probaFloorDelay, type ProbaKind } from "@/lib/proba-dynamic"
 import { cn } from "@/lib/utils"
@@ -388,12 +388,12 @@ export function CounterMap({
     const height = Math.max(peak, map.expected, 1) * Y_GAIN
     const radius = Math.hypot(X_SPAN / 2, height * 0.55, Z_SPAN / 2)
     const framed: Camera = {
-      yaw: DEFAULT_YAW,
+      yaw: mapViewYaw(map.placement, DEFAULT_YAW),
       pitch: DEFAULT_PITCH,
       dist: Math.min(28, Math.max(2.4, (radius / Math.tan(0.45)) * 1.25)),
     }
     frameRef.current = framed
-    const frameKey = `${map.scale}:${map.kind}:${map.dates.length}:${map.dates[0] ?? ""}:${map.dates.at(-1) ?? ""}`
+    const frameKey = `${map.placement}:${map.scale}:${map.kind}:${map.dates.length}:${map.dates[0] ?? ""}:${map.dates.at(-1) ?? ""}`
     if (framedKey.current !== frameKey) {
       framedKey.current = frameKey
       cameraRef.current = { ...framed }

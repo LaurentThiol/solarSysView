@@ -96,6 +96,17 @@ export function parseMapPlacement(value: string | null | undefined): MapPlacemen
 }
 
 /**
+ * Azimut de la vue 3/4.
+ * Brut range les grands compteurs vers +Z, le côté de cette vue.
+ * Le relief y est une falaise et se voit de profil.
+ * On part donc de l’autre bout : les petits compteurs sont devant.
+ */
+export function mapViewYaw(placement: MapPlacement, frontYaw: number) {
+  if (placement === "brut") return -Math.PI - frontYaw
+  return frontYaw
+}
+
+/**
  * Affectation de coût minimum (Kuhn–Munkres).
  * `cost` est n×n, ligne = case, colonne = boule. Retourne l’index de boule par case.
  */
