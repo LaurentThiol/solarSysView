@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from sklearn.tree import DecisionTreeClassifier, export_text
+
+if TYPE_CHECKING:
+    from sklearn.tree import DecisionTreeClassifier
 
 
 def dump_tree(clf: DecisionTreeClassifier) -> dict[str, Any]:
@@ -114,4 +116,6 @@ def _split(node: int, name: str, label: str, sense: str, threshold: float) -> di
 
 
 def tree_text(clf: DecisionTreeClassifier, feature_names: list[str]) -> str:
+    from sklearn.tree import export_text
+
     return export_text(clf, feature_names=feature_names, decimals=2, show_weights=True)

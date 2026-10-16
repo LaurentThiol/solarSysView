@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Any, Sequence
 
 import numpy as np
-from sklearn.model_selection import TimeSeriesSplit
 
 from synchro.decision_tree.measures import parse_feature_name
 from synchro.decision_tree.questions import SERIES_FR
@@ -132,6 +131,8 @@ def select_windows(
     n = len(train_y)
     n_splits = 3 if n >= 40 else (2 if n >= 16 else 0)
     if n_splits and scored:
+        from sklearn.model_selection import TimeSeriesSplit
+
         splitter = TimeSeriesSplit(n_splits=n_splits)
         for train_idx, valid_idx in splitter.split(np.arange(n)):
             floor = min(max(1, int(min_leaf)), max(1, len(train_idx) // 2))

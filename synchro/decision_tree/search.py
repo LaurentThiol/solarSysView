@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import Any, Callable
 
 import numpy as np
-from sklearn.model_selection import TimeSeriesSplit
-from sklearn.tree import DecisionTreeClassifier
 
 from synchro.decision_tree.questions import binarize, cut_candidates, holdout_cut
 from synchro.decision_tree.windows import select_windows
@@ -49,6 +47,9 @@ def choose_params(
 
     Le contrôle n'est pas dans `x_train` / `y_train` : le modifier ne change rien.
     """
+    from sklearn.model_selection import TimeSeriesSplit
+    from sklearn.tree import DecisionTreeClassifier
+
     depth_max = max(2, min(4, int(max_depth)))
     depths = list(range(2, depth_max + 1))
     floor = leaf_floor(int(len(y_train)))
@@ -169,6 +170,8 @@ def fit_holdout(
     feature_names: list[str] | None = None,
     window_mode: str | None = None,
 ) -> dict[str, Any]:
+    from sklearn.tree import DecisionTreeClassifier
+
     learned_label = label_cut == "learned"
     n = len(raw) if learned_label and raw is not None else len(y)
     if n < 24:

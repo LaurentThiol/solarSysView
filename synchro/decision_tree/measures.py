@@ -450,7 +450,8 @@ def _bollinger_np(values: np.ndarray, period: int) -> np.ndarray:
         return out
     windows = _windows(values, p)
     mid = windows.mean(axis=1)
-    sigma = np.sqrt(windows.var(axis=1, ddof=1)) if p >= 2 else np.zeros(len(mid))
+    # Écart-type de population (÷ n), le même que percent_b et ta.bollinger.
+    sigma = np.sqrt(windows.var(axis=1, ddof=0))
     cur = values[p - 1 :]
     width = 4.0 * sigma
     scored = np.full(len(cur), 0.5, dtype=float)

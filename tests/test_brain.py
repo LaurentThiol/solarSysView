@@ -353,7 +353,7 @@ def test_brain_specialist_demo_is_wired() -> None:
     assert "Annuler" in bar
     assert "BrainSpecialistsLab" in page
     assert "/brain/specialistes" in nav
-    assert "/brain?demo=specialistes" in readme
+    assert "/brain/specialistes?demo=1" in readme
     assert "/brain/specialistes" in readme
     assert "weekday={weekday}" in panel or "inferSpecialist(slug, era, weekday)" in panel
 

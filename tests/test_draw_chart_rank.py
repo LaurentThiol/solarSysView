@@ -35,7 +35,7 @@ def test_sum_numbers_wires_rank1_like_each_number() -> None:
     assert 'keys.find((key) => key !== "rank1")' not in chart
     assert 'keys.includes("rank1")' in chart
     assert 'mode === "eachNumber" || mode === "sumNumbers"' in lib
-    assert "sur « Somme des numéros » et « Chaque numéro »" in readme
+    assert "Sur « Somme des numéros » et « Chaque numéro »" in readme
     assert (
         "« Somme des numéros » et « Chaque numéro » superposent la ligne 1er rang"
         in chart

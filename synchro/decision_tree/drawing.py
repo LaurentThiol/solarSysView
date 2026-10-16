@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from sklearn.tree import DecisionTreeClassifier
+
+if TYPE_CHECKING:
+    from sklearn.tree import DecisionTreeClassifier
 
 
 PAPER = "#f4f1ea"
