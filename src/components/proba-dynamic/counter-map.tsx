@@ -8,7 +8,7 @@ import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/componen
 import { formatFr } from "@/lib/frequency-board"
 import { MAP_SCALE_LABELS, type ProbaMap } from "@/lib/proba-map"
 import { PROBA_DYNAMIC_HELP, mapPhrase } from "@/lib/proba-dynamic-help"
-import type { ProbaKind } from "@/lib/proba-dynamic"
+import { PROBA_FLOOR_OFF, probaFloorDelay, type ProbaKind } from "@/lib/proba-dynamic"
 import { cn } from "@/lib/utils"
 
 const X_SPAN = 2.4
@@ -18,7 +18,6 @@ const MIN_DIST = 0.07
 const MAX_DIST = 36
 /** Un cran de molette (~100 px) rapproche d’environ un tiers. */
 const ZOOM_WHEEL = 0.0036
-const FLOOR_MAX = 80
 const DEFAULT_YAW = -0.72
 const DEFAULT_PITCH = 0.58
 
@@ -58,19 +57,19 @@ function Saw({
   tone,
 }: {
   series: readonly number[]
-  expected: number
+  expected: number | null
   tone: ProbaKind
 }) {
   if (series.length === 0) return null
   const width = 640
   const height = 72
-  const peak = Math.max(1, expected, ...series)
+  const peak = Math.max(1, expected ?? 0, ...series)
   const xOf = (index: number) => (series.length === 1 ? 0 : (index / (series.length - 1)) * width)
   const yOf = (value: number) => height - 4 - (value / peak) * (height - 10)
   const path = series
     .map((value, index) => `${index === 0 ? "M" : "L"}${xOf(index).toFixed(2)},${yOf(value).toFixed(2)}`)
     .join(" ")
-  const yExpected = yOf(expected)
+  const yExpected = expected == null ? null : yOf(expected)
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
@@ -78,15 +77,17 @@ function Saw({
       role="img"
       aria-label="Dent de scie brute du compteur épinglé"
     >
-      <line
-        x1="0"
-        x2={width}
-        y1={yExpected}
-        y2={yExpected}
-        stroke="var(--muted-foreground)"
-        strokeDasharray="4 4"
-        strokeWidth="1"
-      />
+      {yExpected != null ? (
+        <line
+          x1="0"
+          x2={width}
+          y1={yExpected}
+          y2={yExpected}
+          stroke="var(--muted-foreground)"
+          strokeDasharray="4 4"
+          strokeWidth="1"
+        />
+      ) : null}
       <path d={path} fill="none" stroke="currentColor" strokeWidth="1.6" />
     </svg>
   )
@@ -275,8 +276,9 @@ export function CounterMap({
   const [phrase, setPhrase] = useState("Glisser pour tourner, molette pour zoomer.")
   const [failed, setFailed] = useState<string | null>(null)
   const pinBall = pinned?.kind === map.kind ? pinned.value : null
-  const [floorChoice, setFloorChoice] = useState<{ kind: ProbaKind; delay: number } | null>(null)
-  const floorDelay = floorChoice?.kind === map.kind ? floorChoice.delay : lawDelay(map.kind)
+  const [floorByKind, setFloorByKind] = useState<Partial<Record<ProbaKind, number>>>({})
+  const floorDelay = floorByKind[map.kind] ?? lawDelay(map.kind)
+  const floorShown = probaFloorDelay(floorDelay)
   const floorRef = useRef(floorDelay)
 
   useEffect(() => {
@@ -534,39 +536,45 @@ export function CounterMap({
       gl.uniform3fv(gl.getUniformLocation(surfaceProgram, "uLight"), [0.22, 0.9, 0.36])
       gl.drawElements(gl.TRIANGLES, indexCount, gl.UNSIGNED_INT, 0)
 
-      gl.enable(gl.BLEND)
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-      gl.depthMask(false)
-      gl.enable(gl.POLYGON_OFFSET_FILL)
-      gl.polygonOffset(-1, -1)
       gl.useProgram(flatProgram)
-      const yPlane = (floorRef.current / map.pool) * Y_GAIN
-      gl.bindBuffer(gl.ARRAY_BUFFER, planeBuffer)
-      gl.bufferData(
-        gl.ARRAY_BUFFER,
-        new Float32Array([
-          -X_SPAN / 2, yPlane, -Z_SPAN / 2,
-          X_SPAN / 2, yPlane, -Z_SPAN / 2,
-          X_SPAN / 2, yPlane, Z_SPAN / 2,
-          -X_SPAN / 2, yPlane, -Z_SPAN / 2,
-          X_SPAN / 2, yPlane, Z_SPAN / 2,
-          -X_SPAN / 2, yPlane, Z_SPAN / 2,
-        ]),
-        gl.DYNAMIC_DRAW
-      )
-      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0)
-      gl.disableVertexAttribArray(1)
-      gl.disableVertexAttribArray(2)
-      gl.disableVertexAttribArray(3)
       gl.uniformMatrix4fv(gl.getUniformLocation(flatProgram, "uMvp"), false, mvp)
-      gl.uniform1f(gl.getUniformLocation(flatProgram, "uPointSize"), 1)
-      gl.uniform4f(gl.getUniformLocation(flatProgram, "uColor"), planeColor[0], planeColor[1], planeColor[2], 0.35)
-      gl.drawArrays(gl.TRIANGLES, 0, 6)
-      gl.disable(gl.POLYGON_OFFSET_FILL)
-      gl.depthMask(true)
-      gl.disable(gl.BLEND)
+      const shownFloor = probaFloorDelay(floorRef.current)
+      if (shownFloor != null) {
+        const yPlane = (shownFloor / map.pool) * Y_GAIN
+        gl.enable(gl.BLEND)
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+        gl.depthMask(false)
+        gl.enable(gl.POLYGON_OFFSET_FILL)
+        gl.polygonOffset(-1, -1)
+        gl.bindBuffer(gl.ARRAY_BUFFER, planeBuffer)
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array([
+            -X_SPAN / 2, yPlane, -Z_SPAN / 2,
+            X_SPAN / 2, yPlane, -Z_SPAN / 2,
+            X_SPAN / 2, yPlane, Z_SPAN / 2,
+            -X_SPAN / 2, yPlane, -Z_SPAN / 2,
+            X_SPAN / 2, yPlane, Z_SPAN / 2,
+            -X_SPAN / 2, yPlane, Z_SPAN / 2,
+          ]),
+          gl.DYNAMIC_DRAW
+        )
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0)
+        gl.disableVertexAttribArray(1)
+        gl.disableVertexAttribArray(2)
+        gl.disableVertexAttribArray(3)
+        gl.uniform1f(gl.getUniformLocation(flatProgram, "uPointSize"), 1)
+        gl.uniform4f(gl.getUniformLocation(flatProgram, "uColor"), planeColor[0], planeColor[1], planeColor[2], 0.35)
+        gl.drawArrays(gl.TRIANGLES, 0, 6)
+        gl.disable(gl.POLYGON_OFFSET_FILL)
+        gl.depthMask(true)
+        gl.disable(gl.BLEND)
+      }
 
       if (hoverCell) {
+        gl.disableVertexAttribArray(1)
+        gl.disableVertexAttribArray(2)
+        gl.disableVertexAttribArray(3)
         const west = cellCorner(hoverCell.column, hoverCell.slot, -1, 0)
         const north = cellCorner(hoverCell.column, hoverCell.slot, 0, 1)
         const east = cellCorner(hoverCell.column, hoverCell.slot, 1, 0)
@@ -827,17 +835,23 @@ export function CounterMap({
               <HelpTip {...PROBA_DYNAMIC_HELP.plancher} />
             </span>
             <span className="tabular-nums text-foreground">
-              {floorDelay} absence{floorDelay > 1 ? "s" : ""} · {formatFr(floorDelay / map.pool, 2)}
+              {floorShown == null
+                ? "effacé"
+                : `${floorShown} absence${floorShown > 1 ? "s" : ""} · ${formatFr(floorShown / map.pool, 2)}`}
             </span>
           </span>
           <input
             type="range"
             min={0}
-            max={FLOOR_MAX}
+            max={PROBA_FLOOR_OFF}
             step={1}
             value={floorDelay}
             aria-label="Hauteur du plancher, en absences"
-            onChange={(event) => setFloorChoice({ kind: map.kind, delay: Number(event.target.value) })}
+            aria-valuetext={floorShown == null ? "effacé" : `${floorShown} absences`}
+            onChange={(event) => {
+              const delay = Number(event.target.value)
+              setFloorByKind((current) => ({ ...current, [map.kind]: delay }))
+            }}
             className="accent-primary"
           />
         </label>
@@ -864,19 +878,22 @@ export function CounterMap({
         <p className="text-xs text-muted-foreground">
           X : {formatMapDate(map.dates[0])} → {formatMapDate(map.dates[map.dates.length - 1])},{" "}
           {map.dates.length} tirages, un pas chacun. Y : compteur. Z : {map.pool} cases, du plus petit
-          compteur devant au premier tirage. Le plancher est à {floorDelay} absence{floorDelay > 1 ? "s" : ""}.
+          compteur devant au premier tirage.{" "}
+          {floorShown == null
+            ? "Le plancher est effacé."
+            : `Le plancher est à ${floorShown} absence${floorShown > 1 ? "s" : ""}.`}
         </p>
         <div>
           <p className="text-xs text-muted-foreground">
             {pinBall != null
               ? `Dent de scie brute, ${noun} ${pinBall}.`
-              : "Cliquez une case pour épingler sa dent de scie brute."}
+              : "Le curseur ou un clic épingle la dent de scie brute."}
           </p>
           {series.length > 0 ? (
-            <Saw series={series} expected={floorDelay / map.pool} tone={map.kind} />
+            <Saw series={series} expected={floorShown == null ? null : floorShown / map.pool} tone={map.kind} />
           ) : null}
-          {series.length > 0 ? (
-            <p className="text-xs text-muted-foreground">Trait {formatFr(floorDelay / map.pool, 2)}.</p>
+          {series.length > 0 && floorShown != null ? (
+            <p className="text-xs text-muted-foreground">Trait {formatFr(floorShown / map.pool, 2)}.</p>
           ) : null}
         </div>
       </CardContent>

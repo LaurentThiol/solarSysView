@@ -18,6 +18,25 @@ export const STAR_EXPECTED_CHARGE = 5 / STAR_POOL
 /** Probabilité de manquer la boule à un tirage. */
 export const NUMBER_MISS_RATE = (NUMBER_POOL - 5) / NUMBER_POOL
 export const STAR_MISS_RATE = (STAR_POOL - 2) / STAR_POOL
+/** Dernier retard encore dessiné. Le cran d’après efface le plancher. */
+export const PROBA_FLOOR_MAX = 80
+export const PROBA_FLOOR_OFF = PROBA_FLOOR_MAX + 1
+
+/** Retard du plan translucide, ou null quand le curseur l’a effacé. */
+export function probaFloorDelay(delay: number): number | null {
+  if (!Number.isFinite(delay)) return null
+  const step = Math.round(delay)
+  if (step < 0 || step > PROBA_FLOOR_MAX) return null
+  return step
+}
+
+/** Boule suivante, de 1 à `pool`, puis retour à 1. */
+export function nextPinnedBall(value: number, pool: number) {
+  const size = Math.max(1, Math.floor(pool))
+  const current = Math.floor(value)
+  if (current < 1 || current >= size) return 1
+  return current + 1
+}
 
 export const PROBA_SCALES = [
   "last_50",

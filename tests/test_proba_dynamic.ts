@@ -4,12 +4,18 @@ import test from "node:test"
 
 import {
   NUMBER_MISS_RATE,
+  NUMBER_POOL,
+  PROBA_FLOOR_MAX,
+  PROBA_FLOOR_OFF,
   STAR_MISS_RATE,
+  STAR_POOL,
   ballValues,
   buildProbaBoards,
+  nextPinnedBall,
   observeBand,
   orderBalls,
   parseProbaSort,
+  probaFloorDelay,
   type ProbaDraw,
 } from "../src/lib/proba-dynamic.ts"
 import { chargePhrase, mapPhrase } from "../src/lib/proba-dynamic-help.ts"
@@ -267,6 +273,38 @@ test("map columns follow draw order and ignore calendar gaps", () => {
   assert.equal(parseMapScale("ailleurs"), "tout")
   assert.equal(parseMapKind("etoiles"), "star")
   assert.equal(parseMapKind(null), "number")
+})
+
+test("the floor cursor erases the plane at the right end and the ball cursor loops", () => {
+  assert.equal(probaFloorDelay(0), 0)
+  assert.equal(probaFloorDelay(9), 9)
+  assert.equal(probaFloorDelay(PROBA_FLOOR_MAX), PROBA_FLOOR_MAX)
+  assert.equal(probaFloorDelay(PROBA_FLOOR_OFF), null)
+  assert.equal(probaFloorDelay(Number.NaN), null)
+  assert.equal(nextPinnedBall(1, NUMBER_POOL), 2)
+  assert.equal(nextPinnedBall(NUMBER_POOL, NUMBER_POOL), 1)
+  assert.equal(nextPinnedBall(STAR_POOL, STAR_POOL), 1)
+  assert.equal(nextPinnedBall(0, STAR_POOL), 1)
+
+  const page = readFileSync(new URL("../src/app/probadynamic/page.tsx", import.meta.url), "utf8")
+  assert.doesNotMatch(page, /Lecture d/)
+  assert.doesNotMatch(page, /note=/)
+
+  const lab = readFileSync(
+    new URL("../src/components/proba-dynamic/proba-dynamic-lab.tsx", import.meta.url),
+    "utf8"
+  )
+  assert.match(lab, /Défilement automatique/)
+  assert.match(lab, /nextPinnedBall/)
+  assert.match(lab, /aria-pressed=\{autoScroll\}/)
+
+  const map = readFileSync(
+    new URL("../src/components/proba-dynamic/counter-map.tsx", import.meta.url),
+    "utf8"
+  )
+  assert.match(map, /shownFloor != null/)
+  assert.match(map, /PROBA_FLOOR_OFF/)
+  assert.match(map, /effacé/)
 })
 
 test("the lab shows a yellow calculation light and a green settled light", () => {

@@ -246,7 +246,7 @@ export function ChargeBoard({
   }
 
   return (
-    <Card>
+    <Card data-proba-board="">
       <CardHeader>
         <CardTitle className="text-base font-medium" id={labelId}>
           <TitleHelp help={PROBA_DYNAMIC_HELP.echelles}>{board.label}</TitleHelp>
@@ -286,8 +286,9 @@ export function ChargeBoard({
                     type="button"
                     aria-pressed={active}
                     aria-label={`${noun} ${slot.value}, compteur ${formatFr(charge, 2)}`}
+                    data-proba-pin={active ? "true" : undefined}
                     className={cn(
-                      "absolute right-0 left-0 flex items-center justify-between rounded-sm px-1 text-[10px] leading-none tabular-nums",
+                      "absolute right-0 left-0 flex scroll-mt-[var(--proba-stick,9rem)] items-center justify-between rounded-sm px-1 text-[10px] leading-none tabular-nums",
                       active ? "bg-accent text-accent-foreground" : "hover:bg-muted"
                     )}
                     style={{ top: slot.y, height: ROW }}
@@ -335,7 +336,7 @@ export function ChargeBoard({
             {phrase ??
               (pinned
                 ? "Ancien à gauche. La dent de scie est celle de la boule épinglée."
-                : "Ancien à gauche. Un clic épingle la dent de scie.")}
+                : "Ancien à gauche. Le curseur ou un clic épingle la dent de scie.")}
           </p>
         ) : null}
       </CardContent>

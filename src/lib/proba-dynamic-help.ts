@@ -42,7 +42,11 @@ export const PROBA_DYNAMIC_HELP = {
   },
   plancher: {
     title: "Plancher",
-    body: "Hauteur du plan translucide, en absences. 9 est l’écart moyen d’un numéro, 5 celui d’une étoile. Le curseur déplace ce repère sur le relief et sur la dent de scie. Il ne change pas le compteur.",
+    body: "Hauteur du plan translucide, en absences. 9 est l’écart moyen d’un numéro, 5 celui d’une étoile. Le curseur déplace ce repère sur le relief et sur la dent de scie. À fond à droite, le plan disparaît. Il ne change pas le compteur.",
+  },
+  curseur: {
+    title: "Curseur",
+    body: "Choisit un numéro de 1 à 50, ou une étoile de 1 à 12. Le pas est une boule, plus fin qu’un clic sur le relief. Auto avance d’une boule à la suivante et reprend à 1 après la dernière.",
   },
   dizaines: {
     title: "Dizaines",
@@ -66,7 +70,7 @@ export const PROBA_DYNAMIC_HELP = {
   },
   dent: {
     title: "Dent de scie",
-    body: "Un clic épingle la boule. Chaque échelle trace alors son compteur, de l’ancien tirage au plus récent, avec le trait de l’écart moyen. Sur la carte, la dent de scie brute de la boule épinglée est tracée sous le relief. Un second clic retire l’épingle.",
+    body: "Un clic épingle la boule. Le curseur fait la même chose, de une en une. Chaque échelle trace alors son compteur, de l’ancien tirage au plus récent, avec le trait de l’écart moyen. Sur la carte, la dent de scie brute de la boule épinglée est tracée sous le relief. Un second clic retire l’épingle.",
   },
   jour: {
     title: "Jour",
