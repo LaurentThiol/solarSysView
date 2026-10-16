@@ -14,10 +14,14 @@ import type { Draw } from "@/lib/draws"
 import { PROBA_DYNAMIC_HELP } from "@/lib/proba-dynamic-help"
 import {
   buildProbaMap,
+  MAP_PLACEMENT_LABELS,
+  MAP_PLACEMENTS,
   MAP_SCALE_LABELS,
   MAP_SCALES,
   parseMapKind,
+  parseMapPlacement,
   parseMapScale,
+  type MapPlacement,
   type MapScale,
   type ProbaMap,
 } from "@/lib/proba-map"
@@ -50,6 +54,7 @@ const SORTS = [
 ] as const
 
 const MAP_SCALE_ITEMS = MAP_SCALES.map((id) => ({ id, label: MAP_SCALE_LABELS[id] }))
+const MAP_PLACEMENT_ITEMS = MAP_PLACEMENTS.map((id) => ({ id, label: MAP_PLACEMENT_LABELS[id] }))
 const BANDS = [
   { id: "numeros", label: "Numéros", help: PROBA_DYNAMIC_HELP.numeros },
   { id: "etoiles", label: "Étoiles", help: PROBA_DYNAMIC_HELP.etoiles },
@@ -108,6 +113,7 @@ export function ProbaDynamicLab() {
     weekday: WeekdayScope
     scale: MapScale
     kind: ProbaKind
+    placement: MapPlacement
   } | null>(null)
   const seenWeekday = useRef(weekday)
   const requestId = useRef(0)
@@ -115,6 +121,7 @@ export function ProbaDynamicLab() {
   const dir = parseProbaDir(searchParams.get("sens"))
   const mapScale = parseMapScale(searchParams.get("echelle"))
   const mapKind = parseMapKind(searchParams.get("bande"))
+  const mapPlacement = parseMapPlacement(searchParams.get("pose"))
   const numberPin = parsePinned(searchParams.get("n"), NUMBER_POOL)
   const starPin = parsePinned(searchParams.get("e"), STAR_POOL)
   const urlPin: Pin | null =
@@ -204,6 +211,16 @@ export function ProbaDynamicLab() {
         skipUrl.current = true
         holdUrlUntil.current = Date.now() + 1600
       }
+      replace(params)
+    },
+    [replace, searchParams]
+  )
+
+  const selectPlacement = useCallback(
+    (id: MapPlacement) => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (id === "somme") params.delete("pose")
+      else params.set("pose", id)
       replace(params)
     },
     [replace, searchParams]
@@ -389,7 +406,8 @@ export function ProbaDynamicLab() {
       readyMap.draws !== draws ||
       readyMap.weekday !== weekday ||
       readyMap.scale !== mapScale ||
-      readyMap.kind !== mapKind)
+      readyMap.kind !== mapKind ||
+      readyMap.placement !== mapPlacement)
 
   useEffect(() => {
     if (loading || sort !== "map") return
@@ -399,7 +417,8 @@ export function ProbaDynamicLab() {
       readyMap.draws === draws &&
       readyMap.weekday === weekday &&
       readyMap.scale === mapScale &&
-      readyMap.kind === mapKind
+      readyMap.kind === mapKind &&
+      readyMap.placement === mapPlacement
     ) {
       return
     }
@@ -407,20 +426,21 @@ export function ProbaDynamicLab() {
     const series = draws
     const scale = mapScale
     const kind = mapKind
+    const placement = mapPlacement
     const stamp = weekday
     let cancelled = false
     const timer = window.setTimeout(() => {
       if (cancelled || requestId.current !== id) return
-      const next = buildProbaMap(series, scale, kind)
+      const next = buildProbaMap(series, scale, kind, placement)
       if (cancelled || requestId.current !== id) return
       setMapView(next)
-      setReadyMap({ draws: series, weekday: stamp, scale, kind })
+      setReadyMap({ draws: series, weekday: stamp, scale, kind, placement })
     }, 0)
     return () => {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [draws, loading, mapKind, mapScale, readyDraws, readyMap, readyWeekday, sort, weekday])
+  }, [draws, loading, mapKind, mapPlacement, mapScale, readyDraws, readyMap, readyWeekday, sort, weekday])
 
   const boards = view?.boards ?? []
   const thinking = loading || busy || readyWeekday !== weekday || readyDraws !== draws || mapStale
@@ -501,6 +521,23 @@ export function ProbaDynamicLab() {
                   value={mapKind === "star" ? "etoiles" : "numeros"}
                   onValueChange={selectBand}
                   items={BANDS}
+                />
+              </div>
+            ) : null}
+            {sort === "map" ? (
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                  Pose
+                  <HelpTip {...PROBA_DYNAMIC_HELP.pose} />
+                </span>
+                <PillTabs
+                  label="Pose de la carte"
+                  mode="chips"
+                  compact
+                  wrap
+                  value={mapPlacement}
+                  onValueChange={selectPlacement}
+                  items={MAP_PLACEMENT_ITEMS}
                 />
               </div>
             ) : null}

@@ -5,6 +5,7 @@
 import type { HelpCopy } from "@/components/help"
 import { formatFr } from "@/lib/frequency-board"
 import type { ProbaKind } from "@/lib/proba-dynamic"
+import type { MapPlacement } from "@/lib/proba-map"
 
 function formatChargeDate(isoDate: string) {
   return new Intl.DateTimeFormat("fr-FR", {
@@ -30,7 +31,11 @@ export const PROBA_DYNAMIC_HELP = {
   },
   carte: {
     title: "Carte",
-    body: "Les tirages se suivent en abscisse, un pas par tirage, sans les vides du calendrier. La hauteur est le compteur, non lissé. Les cases en profondeur ne sont pas attachées à une boule. Au premier tirage elles vont du plus petit compteur au plus grand. Ensuite chaque compteur du jour est posé une seule fois : le placement minimise la somme des écarts avec les cases voisines du tirage d’avant — trois au milieu, deux au bord. À égalité, le plus petit numéro gagne.",
+    body: "Les tirages se suivent en abscisse, un pas par tirage, sans les vides du calendrier. La hauteur est le compteur, non lissé. Les cases en profondeur ne sont pas attachées à une boule. Au premier tirage elles vont du plus petit compteur au plus grand. Ensuite Pose choisit la règle. À égalité, le plus petit numéro gagne.",
+  },
+  pose: {
+    title: "Pose",
+    body: "Somme minimise la somme des écarts aux voisines du tirage d’avant, trois au milieu et deux au bord : le bord est moins cher et peut recevoir un compteur trop bas. Moyenne divise cet écart par le nombre de voisines, le bord pèse comme le milieu, et le numéro épinglé reste suivi. Brut retrie chaque colonne par compteur, sans voisines : les zéros devant, le maximum au fond, et la trace épinglée saute de case. La hauteur reste le compteur, non lissé.",
   },
   echelle: {
     title: "Échelle de la carte",
@@ -107,10 +112,13 @@ export function mapPhrase(input: {
   charge: number
   cost: number
   neighbors: readonly number[]
+  placement?: MapPlacement
 }) {
   const noun = input.kind === "number" ? "Numéro" : "Étoile"
   const head = `${formatChargeDate(input.date)} · case ${input.slot + 1}/${input.slots} · ${noun} ${input.ball} · compteur ${formatFr(input.charge, 2)}`
+  if (input.placement === "brut") return `${head} · colonne rangée par compteur, sans voisines`
   if (input.neighbors.length === 0) return `${head} · premier tirage, cases rangées par compteur`
   const refs = input.neighbors.map((value) => formatFr(value, 2)).join(", ")
-  return `${head} · voisines ${refs} · écart ${formatFr(input.cost, 2)}`
+  const gap = input.placement === "moyenne" ? "écart moyen" : "écart"
+  return `${head} · voisines ${refs} · ${gap} ${formatFr(input.cost, 2)}`
 }

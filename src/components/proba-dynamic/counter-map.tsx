@@ -698,6 +698,7 @@ export function CounterMap({
           charge: cell.charge,
           cost: cell.cost,
           neighbors: cell.neighbors,
+          placement: map.placement,
         })
         setHover({ left: Math.max(8, left), top: Math.max(8, top), phrase: text })
         setPhrase(text)
@@ -877,8 +878,10 @@ export function CounterMap({
         </p>
         <p className="text-xs text-muted-foreground">
           X : {formatMapDate(map.dates[0])} → {formatMapDate(map.dates[map.dates.length - 1])},{" "}
-          {map.dates.length} tirages, un pas chacun. Y : compteur. Z : {map.pool} cases, du plus petit
-          compteur devant au premier tirage.{" "}
+          {map.dates.length} tirages, un pas chacun. Y : compteur. Z : {map.pool} cases,{" "}
+          {map.placement === "brut"
+            ? "du plus petit compteur devant au plus grand, chaque tirage."
+            : "du plus petit compteur devant au premier tirage."}{" "}
           {floorShown == null
             ? "Le plancher est effacé."
             : `Le plancher est à ${floorShown} absence${floorShown > 1 ? "s" : ""}.`}

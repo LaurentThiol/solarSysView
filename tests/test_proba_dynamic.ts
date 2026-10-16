@@ -19,7 +19,13 @@ import {
   type ProbaDraw,
 } from "../src/lib/proba-dynamic.ts"
 import { chargePhrase, mapPhrase } from "../src/lib/proba-dynamic-help.ts"
-import { buildCounterMap, buildProbaMap, parseMapKind, parseMapScale } from "../src/lib/proba-map.ts"
+import {
+  buildCounterMap,
+  buildProbaMap,
+  parseMapKind,
+  parseMapPlacement,
+  parseMapScale,
+} from "../src/lib/proba-map.ts"
 
 function close(actual: number, expected: number) {
   assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} ≈ ${expected}`)
@@ -225,6 +231,61 @@ test("an equal cost keeps the smaller ball number", () => {
     }),
     /premier tirage/
   )
+})
+
+test("sum puts a lip before zero, mean and raw rank the counters", () => {
+  const rows = [
+    { value: 1, series: [0, 0] },
+    { value: 2, series: [0, 0.02] },
+    { value: 3, series: [0, 0.2] },
+    { value: 4, series: [1, 1] },
+  ]
+  const charges = (placement: "somme" | "moyenne" | "brut") =>
+    buildCounterMap(rows, placement)[1].map((cell) => cell.charge)
+  assert.deepEqual(charges("somme"), [0.02, 0, 0.2, 1])
+  assert.deepEqual(charges("moyenne"), [0, 0.02, 0.2, 1])
+  const raw = buildCounterMap(rows, "brut")
+  assert.deepEqual(
+    raw[1].map((cell) => cell.charge),
+    [0, 0.02, 0.2, 1]
+  )
+  assert.equal(raw[1][0].cost, 0)
+  assert.deepEqual(raw[1][0].neighbors, [])
+  assert.equal(raw[1][3].ball, 4)
+  assert.match(
+    mapPhrase({
+      kind: "number",
+      ball: 1,
+      date: "2026-01-06",
+      slot: 0,
+      slots: 4,
+      charge: 0,
+      cost: 0,
+      neighbors: [],
+      placement: "brut",
+    }),
+    /sans voisines/
+  )
+  assert.match(
+    mapPhrase({
+      kind: "number",
+      ball: 2,
+      date: "2026-01-06",
+      slot: 1,
+      slots: 4,
+      charge: 0.02,
+      cost: 0.02,
+      neighbors: [0, 0, 0.2],
+      placement: "moyenne",
+    }),
+    /écart moyen/
+  )
+  assert.equal(parseMapPlacement("moyenne"), "moyenne")
+  assert.equal(parseMapPlacement("brut"), "brut")
+  assert.equal(parseMapPlacement("ailleurs"), "somme")
+  assert.equal(parseMapPlacement(null), "somme")
+  assert.equal(buildProbaMap([draw("2026-01-02", [1, 2, 3, 4, 5])], "tout", "number", "brut").placement, "brut")
+  assert.equal(buildProbaMap([draw("2026-01-02", [1, 2, 3, 4, 5])], "tout", "number").placement, "somme")
 })
 
 test("map columns follow draw order and ignore calendar gaps", () => {

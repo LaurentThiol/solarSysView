@@ -373,7 +373,7 @@ const TABS: AddressEntry[] = [
   tabEntry(
     "/probadynamic?tri=map",
     "probaDynamic · Carte",
-    "Surface 3D : un pas par tirage, hauteur = compteur. Chaque compteur est placé une fois, au plus près des trois voisines du tirage précédent.",
+    "Surface 3D : un pas par tirage, hauteur = compteur. Pose choisit la somme des écarts aux voisines, leur moyenne, ou le tri brut de chaque colonne.",
     "lecture",
     "tri=map"
   ),
