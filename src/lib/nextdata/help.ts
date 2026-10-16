@@ -516,7 +516,7 @@ export const NEXTDATA_SWEEP_HELP = {
     ],
   },
   covariables: {
-    title: "Covariables",
+    title: "Covariables de la ligne",
     wide: true,
     body: "« Celles des boutons » : les familles cochées au-dessus. C’est le cas du réglage affiché, de l’autre focus et des autres années. « Sans » suivi d’un nom : cette seule famille est éteinte, les autres restent.",
     items: [

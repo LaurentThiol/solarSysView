@@ -161,4 +161,5 @@ test("Synthèse Méga explains the logic of each value", () => {
   assert.match(NEXTDATA_TRAINING_HELP.mega.body, /lecture Corpus/)
   assert.match(NEXTDATA_TRAINING_HELP.mega.items?.map((item) => item.label).join(" ") ?? "", /Holm/)
   assert.match(NEXTDATA_TRAINING_HELP.mega.items?.map((item) => item.label).join(" ") ?? "", /Écart apparié/)
+  assert.equal(NEXTDATA_SWEEP_HELP.covariables.title, "Covariables de la ligne")
 })
