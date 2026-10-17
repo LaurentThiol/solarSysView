@@ -4,6 +4,6 @@
   "area": "Journal",
   "title": "Update des PR passées",
   "body": "Le bouton Update relit GitHub et les fichiers du dépôt, puis ajoute les PR mergées qui ne sont pas encore dans une fiche. Le titre et le texte déjà réécrits restent en place. Une fiche masquée ne revient pas. Dependabot est laissé de côté. Quand la base a rattrapé la liste, le bandeau dit combien de PR passées elle couvre.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 317,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/317"
 }
