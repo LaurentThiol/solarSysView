@@ -1852,6 +1852,34 @@ def update_dev_journal(entry_id: int, fields: dict[str, Any]) -> dict[str, Any] 
     return stored
 
 
+def list_dev_journal_all() -> list[dict[str, Any]]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM dev_journal ORDER BY happened_on DESC, id DESC")
+            return [dict(row) for row in cur.fetchall()]
+
+
+def set_dev_journal_prs(entry_id: int, prs: list[dict[str, Any]], happened_on: Any) -> dict[str, Any] | None:
+    """Ajoute des PR à une fiche. Le titre et le texte restent ceux de la page."""
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE dev_journal
+                   SET prs = %(prs)s,
+                       happened_on = %(happened_on)s,
+                       updated_at = now()
+                 WHERE id = %(id)s
+                RETURNING *
+                """,
+                {"id": entry_id, "prs": Jsonb(prs), "happened_on": happened_on},
+            )
+            row = cur.fetchone()
+            stored = dict(row) if row else None
+        conn.commit()
+    return stored
+
+
 def import_dev_journal() -> int:
     from psycopg.errors import UniqueViolation
 

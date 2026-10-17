@@ -660,6 +660,13 @@ const APIS: AddressEntry[] = [
     "Corrige le texte ou masque la fiche. Le masquage survit au réimport.",
     "systeme"
   ),
+  apiEntry(
+    "/api/journal/update",
+    "POST",
+    "Journal · Update",
+    "Ajoute les PR mergées qui manquent. Le texte déjà réécrit reste en place.",
+    "systeme"
+  ),
   apiEntry("/api/admin/sync", "POST", "Admin · synchro FDJ", "Lance une synchro archive depuis l’UI Admin.", "systeme"),
   apiEntry("/api/admin/test", "POST", "Admin · test secret", "Vérifie Neon / API / un service.", "systeme"),
   apiEntry(

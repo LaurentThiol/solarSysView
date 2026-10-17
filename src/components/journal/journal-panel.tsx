@@ -33,6 +33,7 @@ export function JournalPanel() {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [updating, setUpdating] = useState(false)
 
   const load = useCallback(async () => {
     setError(null)
@@ -168,6 +169,22 @@ export function JournalPanel() {
     }
   }
 
+  async function updateJournal() {
+    setUpdating(true)
+    setError(null)
+    try {
+      const response = await fetch("/api/journal/update", { method: "POST" })
+      const payload = (await response.json()) as { items?: JournalEntry[]; message?: string; error?: string }
+      if (!response.ok) throw new Error(payload.error || "Update refusé")
+      if (payload.items) setItems(payload.items)
+      setNotice(payload.message || "Les PR passées sont à jour.")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "échec")
+    } finally {
+      setUpdating(false)
+    }
+  }
+
   if (loading) return <p className="text-sm text-muted-foreground">Chargement du journal…</p>
 
   return (
@@ -208,11 +225,19 @@ export function JournalPanel() {
         <p className="text-sm text-muted-foreground">
           {visible.length} fiche{visible.length > 1 ? "s" : ""}
         </p>
-        <div className="sm:ml-auto">
+        <div className="flex gap-2 sm:ml-auto">
           <Button
             type="button"
             variant="outline"
-            disabled={readonly}
+            disabled={readonly || updating}
+            onClick={() => void updateJournal()}
+          >
+            {updating ? "Update…" : "Update"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={readonly || updating}
             onClick={() => {
               setEditing(null)
               setCreating((open) => !open)

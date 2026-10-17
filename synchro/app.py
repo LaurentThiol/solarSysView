@@ -2961,6 +2961,15 @@ def create_app() -> FastAPI:
         )
         return report
 
+    @app.post("/api/journal/update")
+    def journal_update() -> dict[str, Any]:
+        from synchro.journal_sync import apply_journal_update
+
+        try:
+            return _json(apply_journal_update())
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+
     @app.get("/api/journal")
     def journal_list() -> dict[str, Any]:
         try:
