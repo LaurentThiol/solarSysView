@@ -10,6 +10,7 @@ import {
   annualYDomain,
   monthEndX,
   monthMeanDeltas,
+  sameSenseRate,
   sameSenseSegmentKey,
   sameSenseSegmentKeys,
   THEORETICAL_NUMBER_SUM,
@@ -223,6 +224,52 @@ test("an evening beyond three days stays uncolored", () => {
     sensePoint("2025-01-14", 120, "mardi"),
   ]
   assert.equal(sameSenseSegmentKeys(newer, older).size, 0)
+  const missing = sameSenseRate(newer, older)
+  assert.equal(missing.compared, 0)
+  assert.equal(missing.same, 0)
+  assert.equal(missing.rate, null)
+})
+
+test("similarity rate is the share of paired segments that move the same way", () => {
+  const newer = [
+    sensePoint("2026-01-02", 100, "vendredi"),
+    sensePoint("2026-01-06", 130, "mardi"),
+    sensePoint("2026-01-09", 90, "vendredi"),
+  ]
+  const older = [
+    sensePoint("2025-01-03", 80, "vendredi"),
+    sensePoint("2025-01-07", 110, "mardi"),
+    sensePoint("2025-01-10", 140, "vendredi"),
+  ]
+  const mixed = sameSenseRate(newer, older)
+  assert.equal(mixed.compared, 2)
+  assert.equal(mixed.same, 1)
+  assert.equal(mixed.rate, 0.5)
+  assert.equal(mixed.keys.has(sameSenseSegmentKey("2026-01-02", "2026-01-06")), true)
+  assert.equal(mixed.keys.has(sameSenseSegmentKey("2025-01-03", "2025-01-07")), true)
+  assert.equal(mixed.keys.has(sameSenseSegmentKey("2026-01-06", "2026-01-09")), false)
+  assert.equal(sameSenseSegmentKeys(newer, older).size, mixed.keys.size)
+
+  const opposite = sameSenseRate(
+    [sensePoint("2026-01-02", 130, "vendredi"), sensePoint("2026-01-06", 100, "mardi")],
+    [sensePoint("2025-01-03", 80, "vendredi"), sensePoint("2025-01-07", 110, "mardi")]
+  )
+  assert.equal(opposite.compared, 1)
+  assert.equal(opposite.same, 0)
+  assert.equal(opposite.rate, 0)
+  assert.equal(opposite.keys.size, 0)
+
+  const flat = sameSenseRate(
+    [sensePoint("2026-01-02", 100, "vendredi"), sensePoint("2026-01-06", 100, "mardi")],
+    [sensePoint("2025-01-03", 80, "vendredi"), sensePoint("2025-01-07", 110, "mardi")]
+  )
+  assert.equal(flat.compared, 1)
+  assert.equal(flat.same, 0)
+  assert.equal(flat.rate, 0)
+
+  const short = sameSenseRate([sensePoint("2026-01-02", 100, "vendredi")], older)
+  assert.equal(short.compared, 0)
+  assert.equal(short.rate, null)
 })
 
 test("evolution exposes the annual submenu", () => {
@@ -243,6 +290,12 @@ test("evolution exposes the annual submenu", () => {
   assert.match(view, /data-annual-synthese="continu"/)
   assert.match(view, /data-annual-same-sense/)
   assert.match(view, /Même sens/)
+  assert.match(view, /data-annual-similarity/)
+  assert.match(view, /data-annual-similarity-pair=\{pair\.id\}/)
+  assert.match(view, /id: "n\/n-1"/)
+  assert.match(view, /id: "n-1\/n-2"/)
+  assert.match(view, /label: "n\/n−1"/)
+  assert.match(view, /label: "n−1\/n−2"/)
   assert.match(view, /trait continu/)
   assert.doesNotMatch(view, /data-annual-synthese-mean/)
   assert.match(view, /Aucun soir sélectionné/)
@@ -253,4 +306,7 @@ test("evolution exposes the annual submenu", () => {
   assert.match(page, /Annuel/)
   const glossary = readFileSync(new URL("../src/lib/copy.ts", import.meta.url), "utf8")
   assert.match(glossary, /Mardi et vendredi se sélectionnent/)
+  assert.match(glossary, /taux de similitude/)
+  assert.match(glossary, /n\/n−1/)
+  assert.match(glossary, /n−1\/n−2/)
 })

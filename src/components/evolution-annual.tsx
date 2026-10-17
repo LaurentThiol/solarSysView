@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 
-import { TitleHelp, type HelpCopy } from "@/components/help"
+import { HelpTip, TitleHelp, type HelpCopy } from "@/components/help"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   annualLagZones,
@@ -17,9 +17,10 @@ import {
   ANNUAL_MONTHS,
   annualMonthMean,
   annualPants,
+  sameSenseRate,
   sameSenseSegmentKey,
-  sameSenseSegmentKeys,
   THEORETICAL_NUMBER_SUM,
+  type SameSenseRate,
   type AnnualBar,
   type AnnualLane,
   type AnnualRole,
@@ -40,6 +41,8 @@ Le trait vertical est la moyenne théorique, 128. L’échelle est commune et re
 
 Mardi (cyan) et vendredi (rose) se sélectionnent ici. Sur Tous, les deux pastilles sont éteintes : un clic les affiche. Le bandeau Mardi ou Vendredi allume ce soir ; l’autre reste éteint et se rallume d’un clic. Les deux soirs restent chargés. Synthèse trace un trait continu qui passe par la somme de chaque tirage, mardi et vendredi, de janvier à décembre. Chaque point est un jour de tirage. Un segment de ce trait passe au vert sur n et sur n−1 quand la somme monte, ou baisse, dans le même sens que le segment de l’autre année, au même soir, à trois jours près. Le chiffre à droite du mois reste la moyenne de ces tirages, même si une soirée est masquée.
 
+Similitude, au-dessus du graphique, est la part des segments appariés qui vont dans ce même sens. n/n−1 compare n à n−1. n−1/n−2 compare n−1 à n−2. Un écart nul compte comme un sens différent. Un soir sans vis-à-vis ne compte pas. Le vert ne marque que n/n−1. Synthèse allumée, les deux taux suivent le trait continu, même si une soirée est masquée. Aucun soir allumé, ils lisent mardi et vendredi. Un soir seul, ils ne lisent que ce soir.
+
 « en cours » : l’année n n’a pas encore de tirage en décembre. Δ, à droite, compare les moyennes de mois affichées (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. La fenêtre 20 / 50 / année ne coupe pas ces trois années.
 
 Décalage compare des suites de 6 à 10 tirages, 8 au départ. Une suite est une chaîne de sens consécutifs, par exemple 2 monte + 3 baisse + 3 monte. Un pas monte s’il dépasse l’écart-type de l’année, baisse s’il le dépasse vers le bas, stable sinon. La corrélation croisée cherche un écart de −21 à +21 jours, n contre n−1, puis n−1 contre n−2, au tirage le plus proche à trois jours près. On le retient si la chaîne est la même, si |r| dépasse l’alignement sans décalage, et s’il dépasse le 95e centile du nul qui réordonne l’autre année. La zone porte alors cette phrase. Sinon la lecture est « pas de décalage retenu ». Les mois absents d’un côté ne sont pas comparés. Synthèse allumée, Décalage suit le trait continu : mardi et vendredi, même si une soirée est masquée. Mardi et vendredi ensemble, l’écart entre les soirs est de trois ou quatre jours.
@@ -57,6 +60,26 @@ const DELTA_TITLE = [
   "Moyenne du mois : n moins n−1",
   "Moyenne du mois : n−1 moins n−2",
 ] as const
+
+const SIMILARITY_PAIRS = [
+  { id: "n/n-1", label: "n/n−1" },
+  { id: "n-1/n-2", label: "n−1/n−2" },
+] as const
+
+const EMPTY_KEYS = new Set<string>()
+const EMPTY_RATE: SameSenseRate = { compared: 0, same: 0, rate: null, keys: EMPTY_KEYS }
+
+const SIMILARITY_HELP: HelpCopy = {
+  title: "Similitude",
+  wide: true,
+  body: `Part des segments appariés qui montent, ou baissent, dans le même sens.
+
+n/n−1 compare l’année n à n−1. n−1/n−2 compare n−1 à n−2. Un segment relie deux tirages qui se suivent dans la série affichée. Il trouve le même soir de l’autre année, au jour le plus proche, à trois jours au plus. Ces deux soirs doivent aussi se suivre de l’autre côté.
+
+Le taux est le nombre de segments de même sens, divisé par le nombre de segments qui ont trouvé ce vis-à-vis. Un écart nul compte comme un sens différent. Un soir sans vis-à-vis ne compte pas. Le vert du trait Synthèse marque les segments de n/n−1. Le second taux suit la même règle, sans couleur.
+
+Synthèse allumée, la série est le trait continu : mardi et vendredi, même si une soirée est masquée. Aucun soir allumé, le taux lit quand même mardi et vendredi. Un soir seul, il ne lit que ce soir. Lecture d’archive. Ce n’est pas une probabilité du prochain tirage.`,
+}
 
 const VB_W = 980
 const LABEL_W = 46
@@ -125,10 +148,19 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
     () => model.lanes.map((lane) => (picks.synthese ? synthesePoints(lane) : [])),
     [model.lanes, picks.synthese]
   )
-  const sameSense = useMemo(
-    () => (picks.synthese ? sameSenseSegmentKeys(lines[0] ?? [], lines[1] ?? []) : new Set<string>()),
-    [lines, picks.synthese]
+  const similaritySeries = useMemo(
+    () =>
+      model.lanes.map((lane) => similarityPoints(lane, picks)),
+    [model.lanes, picks]
   )
+  const similarity = useMemo(
+    () => [
+      sameSenseRate(similaritySeries[0] ?? [], similaritySeries[1] ?? []),
+      sameSenseRate(similaritySeries[1] ?? [], similaritySeries[2] ?? []),
+    ],
+    [similaritySeries]
+  )
+  const sameSense = picks.synthese ? (similarity[0]?.keys ?? EMPTY_KEYS) : EMPTY_KEYS
   const lagSeries = useMemo(
     () => model.lanes.map((lane) => lagPoints(lane, picks)),
     [model.lanes, picks]
@@ -175,8 +207,9 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
           Barres horizontales. n, n−1 et n−2 sont en tête. Mardi et vendredi se choisissent, éteints
           sur Tous.
           Synthèse relie chaque tirage par un trait continu. Un segment vert : n et n−1 vont dans
-          le même sens. Décalage lit un écart zonal sur des suites de 6 à 10 tirages. Trait
-          horizontal en fin de mois, trait vertical à 128.
+          le même sens. Similitude donne cette part en n/n−1 et en n−1/n−2. Décalage lit un
+          écart zonal sur des suites de 6 à 10 tirages. Trait horizontal en fin de mois, trait
+          vertical à 128.
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -249,6 +282,36 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
             Même sens
           </span>
           {archive.loading ? <span>Chargement des trois années…</span> : null}
+        </div>
+
+        <div
+          data-annual-similarity
+          className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm tabular-nums"
+        >
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            Similitude
+            <HelpTip {...SIMILARITY_HELP} />
+          </span>
+          {SIMILARITY_PAIRS.map((pair, index) => {
+            const rate = similarity[index] ?? EMPTY_RATE
+            const text = formatSimilarity(rate)
+            return (
+              <span
+                key={pair.id}
+                data-annual-similarity-pair={pair.id}
+                data-same={rate.same}
+                data-compared={rate.compared}
+                title={similarityTitle(pair.label, rate)}
+                className="inline-flex items-baseline gap-2"
+              >
+                <span className="text-xs text-muted-foreground">{pair.label}</span>
+                <span className="font-medium text-foreground">{text.percent}</span>
+                {text.count ? (
+                  <span className="text-xs text-muted-foreground">{text.count}</span>
+                ) : null}
+              </span>
+            )
+          })}
         </div>
 
         <div className="overflow-x-auto">
@@ -400,9 +463,11 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
         ) : null}
         <p className="text-xs leading-5 text-muted-foreground">
           Δ suit les moyennes affichées : les soirs allumés, ou mardi + vendredi si Synthèse est
-          allumée. Positif, la moyenne la plus récente est plus haute. Décalage, s’il est allumé,
-          pose le décalage retenu sur la colonne la plus récente de la paire. Synthèse allumée, il
-          suit le trait continu. r décrit l’archive, pas le prochain tirage.{" "}
+          allumée. Positif, la moyenne la plus récente est plus haute. Similitude est la part des
+          segments appariés de même sens, n/n−1 puis n−1/n−2. Aucun soir allumé, elle lit
+          mardi et vendredi. Un soir seul, elle ne lit que ce soir. Décalage,
+          s’il est allumé, pose le décalage retenu sur la colonne la plus récente de la paire.
+          Synthèse allumée, il suit le trait continu. r décrit l’archive, pas le prochain tirage.{" "}
           {archive.source === "neon" ? "Source Neon." : "Source fichier local."}
           {localGap
             ? " n−1 et n−2 restent vides tant que l’archive distante ne répond pas."
@@ -953,6 +1018,11 @@ function zoneUnder(zones: readonly LagZone[], x: number): LagZone | null {
   return best
 }
 
+function similarityPoints(lane: AnnualLane, picks: DayPicks): AnnualBar[] {
+  if (picks.synthese || (!picks.mardi && !picks.vendredi)) return synthesePoints(lane)
+  return visibleBars(lane, picks)
+}
+
 function synthesePoints(lane: AnnualLane): AnnualBar[] {
   return lane.bars.filter((bar) => bar.weekday === "mardi" || bar.weekday === "vendredi")
 }
@@ -983,6 +1053,21 @@ function formatInt(value: number) {
 
 function formatR(value: number) {
   return value.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function formatSimilarity(rate: SameSenseRate): { percent: string; count: string } {
+  if (rate.rate == null) return { percent: "—", count: "" }
+  return {
+    percent: `${Math.round(rate.rate * 100).toLocaleString("fr-FR")} %`,
+    count: `${rate.same.toLocaleString("fr-FR")}/${rate.compared.toLocaleString("fr-FR")}`,
+  }
+}
+
+function similarityTitle(label: string, rate: SameSenseRate) {
+  if (rate.rate == null) return `${label} · aucun segment apparié`
+  const sameWord = rate.same > 1 ? "segments" : "segment"
+  const comparedWord = rate.compared > 1 ? "appariés" : "apparié"
+  return `${label} · ${rate.same.toLocaleString("fr-FR")} ${sameWord} de même sens sur ${rate.compared.toLocaleString("fr-FR")} ${comparedWord}`
 }
 
 function formatDelta(value: number | null) {

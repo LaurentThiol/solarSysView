@@ -123,38 +123,70 @@ export function sameSenseSegmentKey(fromDate: string, toDate: string): string {
   return `${fromDate}>${toDate}`
 }
 
+export type SameSenseRate = {
+  /** Segments de la série la plus récente qui ont un vis-à-vis. */
+  compared: number
+  /** Parmi eux, ceux qui montent ou baissent dans le même sens. */
+  same: number
+  /** same / compared. Null s’il n’y a aucun segment apparié. */
+  rate: number | null
+  keys: Set<string>
+}
+
 /**
- * Segments de n et de n−1 dont la somme va dans le même sens.
- * Un tirage de n s’apparie au même soir de n−1, au jour le plus proche
+ * Taux de similitude entre deux années.
+ * Un tirage s’apparie au même soir de l’année précédente, au jour le plus proche
  * dans le repère (mois − 1) × 31 + jour, à trois jours au plus.
- * Les deux bouts d’un segment tombent sur deux tirages consécutifs de n−1.
- * Un écart nul reste hors du vert.
+ * Les deux bouts d’un segment tombent sur deux tirages consécutifs de l’autre année.
+ * Le taux est la part de ces segments appariés qui vont dans le même sens.
+ * Un écart nul compte comme un sens différent. Un soir sans vis-à-vis ne compte pas.
+ * `keys` marque les deux côtés des segments de même sens, pour le trait vert.
  */
-export function sameSenseSegmentKeys(
+export function sameSenseRate(
   newer: readonly SameSensePoint[],
   older: readonly SameSensePoint[],
   toleranceDays = SAME_SENSE_DAY_TOLERANCE
-): Set<string> {
+): SameSenseRate {
   const left = chronological(newer)
   const right = chronological(older)
   const keys = new Set<string>()
-  if (left.length < 2 || right.length < 2) return keys
+  if (left.length < 2 || right.length < 2) {
+    return { compared: 0, same: 0, rate: null, keys }
+  }
   const tolerance = Math.max(0, toleranceDays)
+  let compared = 0
+  let same = 0
   for (let index = 0; index < left.length - 1; index += 1) {
     const from = left[index]
     const to = left[index + 1]
     const fromIndex = nearestSameEvening(from, right, tolerance)
     const toIndex = nearestSameEvening(to, right, tolerance)
     if (fromIndex == null || toIndex == null || toIndex !== fromIndex + 1) continue
+    compared += 1
     const newerDelta = to.sum - from.sum
     const olderDelta = right[toIndex].sum - right[fromIndex].sum
     if (newerDelta === 0 || olderDelta === 0 || Math.sign(newerDelta) !== Math.sign(olderDelta)) {
       continue
     }
+    same += 1
     keys.add(sameSenseSegmentKey(from.date, to.date))
     keys.add(sameSenseSegmentKey(right[fromIndex].date, right[toIndex].date))
   }
-  return keys
+  return {
+    compared,
+    same,
+    rate: compared === 0 ? null : same / compared,
+    keys,
+  }
+}
+
+/** Segments dont la somme va dans le même sens. Voir `sameSenseRate`. */
+export function sameSenseSegmentKeys(
+  newer: readonly SameSensePoint[],
+  older: readonly SameSensePoint[],
+  toleranceDays = SAME_SENSE_DAY_TOLERANCE
+): Set<string> {
+  return sameSenseRate(newer, older, toleranceDays).keys
 }
 
 export function annualYDomain(
