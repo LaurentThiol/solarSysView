@@ -65,6 +65,14 @@ TEMPORAL_TARGETS: tuple[str, ...] = (
 )
 SHAPE_SERIES: tuple[str, ...] = ("spread", "consecutive", "star_spread", "star_consecutive")
 
+# Retards du tirage, du plus court au plus long. Cinq numéros, deux étoiles.
+NUMBER_DELAY_SLOTS = 5
+STAR_DELAY_SLOTS = 2
+NUMBER_DELAYS = tuple(f"delay_{rank}" for rank in range(1, NUMBER_DELAY_SLOTS + 1))
+STAR_DELAYS = tuple(f"star_delay_{rank}" for rank in range(1, STAR_DELAY_SLOTS + 1))
+# Dix liens d’une grille 5 : C(5, 2) et C(5, 3). Chacun trié, pas moyenné.
+LINK_SLOTS = 10
+
 PAST_FORME = (
     "spread",
     "high_low",
@@ -72,7 +80,8 @@ PAST_FORME = (
     "star_consecutive",
     "centroid",
     "short_residual",
-    "mean_delay",
+    *NUMBER_DELAYS,
+    *STAR_DELAYS,
 )
 PAST_DECADES = ("d0", "d1", "d2", "d3", "d4", "decade_occupied")
 PAST_DELTA = (
@@ -88,21 +97,20 @@ PAST_DELTA = (
 )
 # Les comptes du bloc Persist d’Évolution : numéros puis étoiles, contre n−1 et n−2.
 PAST_REPEATS = ("repeat_count", "repeat_count_2", "star_repeat_count", "star_repeat_count_2")
-PAST_COUPLES = (
-    "couple_ago_mean",
-    "couple_ago_min",
-    "couple_count_mean",
-    "couple_affinity_mean",
-    "couple_overlap",
-    "star_couple_ago",
-)
-PAST_TRIPLES = (
-    "triple_ago_mean",
-    "triple_ago_min",
-    "triple_count_mean",
-    "triple_affinity_mean",
-    "triple_overlap",
-)
+
+
+def _link_names(prefix: str) -> tuple[str, ...]:
+    """Dix anciennetés, dix parts, dix affinités, puis le minimum et le recouvrement."""
+    ranked = tuple(
+        f"{prefix}_{kind}_{rank}"
+        for kind in ("ago", "count", "affinity")
+        for rank in range(1, LINK_SLOTS + 1)
+    )
+    return (*ranked, f"{prefix}_ago_min", f"{prefix}_overlap")
+
+
+PAST_COUPLES = (*_link_names("couple"), "star_couple_ago")
+PAST_TRIPLES = _link_names("triple")
 FUTURE_CALENDAR = (
     "weekday_mardi",
     "month",
@@ -258,6 +266,15 @@ def _combos(values: list[int], width: int) -> list[tuple[int, ...]]:
 AGO_CAP = 25
 
 
+def _sorted_slots(values: list[float], slots: int) -> list[float]:
+    """Du plus petit au plus grand. Une grille courte est complétée par des zéros."""
+    padded = [float(value) for value in values]
+    if len(padded) < slots:
+        padded.extend([0.0] * (slots - len(padded)))
+    padded.sort()
+    return padded[:slots]
+
+
 def link_series(pools: list[list[int]], width: int) -> dict[str, list[float]]:
     """Ancienneté, part, affinité et recouvrement des co-sorties réelles.
 
@@ -268,14 +285,18 @@ def link_series(pools: list[list[int]], width: int) -> dict[str, list[float]]:
     une part, rapportée aux t tirages lus. L’affinité d’une occurrence à
     l’indice i vaut i+1 (le plus récent pèse t, le plus ancien 1, comme
     `coupleRankWeight`) et se rapporte à son maximum t(t+1)/2.
+
+    Les dix valeurs de chaque mesure sont gardées, triées. Deux grilles de
+    même moyenne ne se confondent plus. Le minimum d’ancienneté et le
+    recouvrement restent à part.
     """
     prefix = "couple" if width == 2 else "triple"
     history: dict[tuple[int, ...], list[int]] = {}
     previous: set[tuple[int, ...]] = set()
-    ago_mean: list[float] = []
+    ago_rows: list[list[float]] = []
+    count_rows: list[list[float]] = []
+    affinity_rows: list[list[float]] = []
     ago_min: list[float] = []
-    count_mean: list[float] = []
-    affinity_mean: list[float] = []
     overlap: list[float] = []
     for index, pool in enumerate(pools):
         keys = _combos(pool, width)
@@ -294,22 +315,22 @@ def link_series(pools: list[list[int]], width: int) -> dict[str, list[float]]:
                 agos.append(float(min(index, AGO_CAP)))
                 counts.append(0.0)
                 affinities.append(0.0)
-        width_now = max(len(keys), 1)
-        ago_mean.append(sum(agos) / width_now if agos else 0.0)
+        ago_rows.append(_sorted_slots(agos, LINK_SLOTS))
+        count_rows.append(_sorted_slots(counts, LINK_SLOTS))
+        affinity_rows.append(_sorted_slots(affinities, LINK_SLOTS))
         ago_min.append(min(agos) if agos else 0.0)
-        count_mean.append(sum(counts) / width_now if counts else 0.0)
-        affinity_mean.append(sum(affinities) / width_now if affinities else 0.0)
         overlap.append(float(len(set(keys) & previous)))
         for key in keys:
             history.setdefault(key, []).append(index)
         previous = set(keys)
-    return {
-        f"{prefix}_ago_mean": ago_mean,
+    out: dict[str, list[float]] = {
         f"{prefix}_ago_min": ago_min,
-        f"{prefix}_count_mean": count_mean,
-        f"{prefix}_affinity_mean": affinity_mean,
         f"{prefix}_overlap": overlap,
     }
+    for kind, rows in (("ago", ago_rows), ("count", count_rows), ("affinity", affinity_rows)):
+        for rank in range(LINK_SLOTS):
+            out[f"{prefix}_{kind}_{rank + 1}"] = [row[rank] for row in rows]
+    return out
 
 
 def star_couple_ago(stars: list[list[int]]) -> list[float]:
@@ -328,18 +349,22 @@ def star_couple_ago(stars: list[list[int]]) -> list[float]:
     return out
 
 
-def mean_delay(pools: list[list[int]]) -> list[float]:
-    """Retard moyen des numéros de ce tirage, mesuré avant de les revoir."""
+def delay_profile(pools: list[list[int]], slots: int) -> list[list[float]]:
+    """Retards des boules de ce tirage, du plus court au plus long.
+
+    Comptés avant de les revoir : tirages depuis la sortie précédente, ou
+    depuis le début du corpus si la boule n’est pas encore sortie. Une grille
+    courte est complétée par des zéros. La moyenne de ces retards n’est pas
+    une colonne.
+    """
     last: dict[int, int] = {}
-    out: list[float] = []
+    out: list[list[float]] = []
+    width = max(1, int(slots))
     for index, pool in enumerate(pools):
-        if not pool:
-            out.append(0.0)
-            continue
         delays = [float(index - last[n]) if n in last else float(index) for n in pool]
-        out.append(sum(delays) / len(delays))
         for number in pool:
             last[number] = index
+        out.append(_sorted_slots(delays, width))
     return out
 
 

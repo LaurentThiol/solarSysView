@@ -130,7 +130,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Forme",
-        text: "Écart max−min des numéros, hauts et bas, consécutifs des numéros et des étoiles, centre, résidu de cycle court, retard moyen des cinq numéros sortis. L’étendue des étoiles est l’écart e2 − e1, déjà prévu avec les rangs.",
+        text: "Écart max−min des numéros, hauts et bas, consécutifs des numéros et des étoiles, centre, résidu de cycle court. Les cinq retards des numéros sortis, du plus court au plus long, et les deux retards des étoiles, de même. Chacun est le nombre de tirages depuis la sortie précédente, compté avant de revoir la boule. L’étendue des étoiles est l’écart e2 − e1, déjà prévu avec les rangs.",
       },
       {
         label: "Décennies",
@@ -146,11 +146,11 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Couples",
-        text: "Les 10 paires réellement sorties parmi les cinq numéros. Ancienneté plafonnée à 25 tirages, part des tirages d’avant où la paire est sortie, affinité de rang rapportée à son maximum, et recouvrement avec le tirage précédent. Rien ne grandit avec la longueur de l’historique : un compte brut monterait avec le temps, une tendance qu’un arbre ne sait pas prolonger. L’historique s’arrête avant le tirage en cours. La paire d’étoiles a sa propre ancienneté, plafonnée de même.",
+        text: "Les 10 paires réellement sorties parmi les cinq numéros. Leurs dix anciennetés, leurs dix parts et leurs dix affinités sont gardées triées, de la plus petite à la plus grande. L’ancienneté est plafonnée à 25 tirages. La part est rapportée aux tirages lus, l’affinité à son maximum : rien ne grandit avec la longueur de l’historique. Le plus petit retard de paire et le recouvrement avec le tirage précédent restent à part. L’historique s’arrête avant le tirage en cours. La paire d’étoiles garde sa propre ancienneté, plafonnée de même.",
       },
       {
         label: "Triples",
-        text: "Les 10 triplets réellement sortis, avec les mêmes mesures. Deux étoiles ne forment pas de triple.",
+        text: "Les 10 triplets réellement sortis, avec les mêmes dix valeurs triées. Deux étoiles ne forment pas de triple.",
       },
       {
         label: "Pulse",

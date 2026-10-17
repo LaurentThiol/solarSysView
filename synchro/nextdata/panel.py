@@ -10,10 +10,14 @@ from synchro.analysis.common import as_date
 from synchro.analysis.variables import decade_hist
 from synchro.fdj import star_pool_for
 from synchro.nextdata.covariates import (
+    NUMBER_DELAYS,
+    NUMBER_DELAY_SLOTS,
+    STAR_DELAYS,
+    STAR_DELAY_SLOTS,
     clocks,
     consecutive_count,
+    delay_profile,
     link_series,
-    mean_delay,
     repeat_counts,
     spread_of,
     star_couple_ago,
@@ -192,7 +196,8 @@ def build_frame(
         decades.append(bins)
     centroid = [sums[t] / 5.0 for t in range(len(selected))]
     residual = [float(value) for value in short_residual(sums)]
-    delays = mean_delay(numbers)
+    number_delays = delay_profile(numbers, NUMBER_DELAY_SLOTS)
+    star_delays = delay_profile(stars, STAR_DELAY_SLOTS)
     repeats = repeat_counts(numbers)
     repeats_2 = repeat_counts(numbers, 2)
     star_repeats = repeat_counts(stars)
@@ -244,7 +249,8 @@ def build_frame(
             "star_consecutive": star_consecutive[index],
             "centroid": centroid[index],
             "short_residual": residual[index],
-            "mean_delay": delays[index],
+            **{name: number_delays[index][offset] for offset, name in enumerate(NUMBER_DELAYS)},
+            **{name: star_delays[index][offset] for offset, name in enumerate(STAR_DELAYS)},
             "repeat_count": repeats[index],
             "repeat_count_2": repeats_2[index],
             "star_repeat_count": star_repeats[index],

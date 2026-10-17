@@ -46,6 +46,11 @@ test("the two trainings, the focus and the recounted base are explained", () => 
     "Boules 17 18 % p 0,012 · 4 12 % p 0,400 · étoiles 3 20 % p < 0,001"
   )
   assert.match(NEXTDATA_HELP.covariates.items?.find((item) => item.label === "Pulse")?.text ?? "", /propre onde/)
+  assert.match(NEXTDATA_HELP.covariates.items?.find((item) => item.label === "Forme")?.text ?? "", /cinq retards/)
+  assert.match(NEXTDATA_HELP.covariates.items?.find((item) => item.label === "Forme")?.text ?? "", /deux retards des étoiles/)
+  assert.doesNotMatch(NEXTDATA_HELP.covariates.items?.find((item) => item.label === "Forme")?.text ?? "", /retard moyen/)
+  assert.match(NEXTDATA_HELP.covariates.items?.find((item) => item.label === "Couples")?.text ?? "", /triées/)
+  assert.match(NEXTDATA_HELP.covariates.items?.find((item) => item.label === "Triples")?.text ?? "", /dix valeurs triées/)
   assert.match(NEXTDATA_HELP.tabBase.body, /1\/50/)
   assert.match(NEXTDATA_HELP.banner.body, /pas une probabilité de gain FDJ/)
   assert.match(NEXTDATA_HELP.moteur.body, /CatBoost/)

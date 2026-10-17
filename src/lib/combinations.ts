@@ -521,7 +521,15 @@ function itemsFor(
     .filter((item): item is FrequencyItem => item != null)
 }
 
+export type GridBallRead = {
+  n: number
+  delay: number
+  count: number
+}
+
 export type GridProfile = {
+  numberReads: GridBallRead[]
+  starReads: GridBallRead[]
   numberDelays: number[]
   starDelays: number[]
   numberDelayMean: number | null
@@ -551,8 +559,18 @@ export function profileGrid(
 ): GridProfile {
   const numbers = itemsFor(grid.numbers, numberStats)
   const stars = itemsFor(grid.stars, starStats)
-  const numberDelays = numbers.map((item) => item.delayDraws)
-  const starDelays = stars.map((item) => item.delayDraws)
+  const numberReads = numbers.map((item) => ({
+    n: item.value,
+    delay: item.delayDraws,
+    count: item.count,
+  }))
+  const starReads = stars.map((item) => ({
+    n: item.value,
+    delay: item.delayDraws,
+    count: item.count,
+  }))
+  const numberDelays = numberReads.map((item) => item.delay)
+  const starDelays = starReads.map((item) => item.delay)
   const sums = draws.map((draw) =>
     draw.numbers.reduce((total, value) => total + value, 0)
   )
@@ -560,6 +578,8 @@ export function profileGrid(
   const starSum = grid.stars.reduce((total, value) => total + value, 0)
   const even = evenCount(grid.numbers)
   return {
+    numberReads,
+    starReads,
     numberDelays,
     starDelays,
     numberDelayMean: mean(numberDelays),

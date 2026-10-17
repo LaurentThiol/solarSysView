@@ -175,12 +175,12 @@ const HELP = {
     body: "Intervalle de confiance à 95 % sur le taux empirique wins/N. Large si la fenêtre est courte.",
   },
   delayMean: {
-    title: "Retard moyen",
-    body: "Moyenne (puis min–max) des retards des boules de cette grille, puis des étoiles.",
+    title: "Retard et sorties de chaque numéro",
+    body: "Retard et nombre de sorties de chaque numéro choisi. La moyenne des retards et la moyenne des sorties, à côté de l’attendu N × 5/50, restent en légende.",
   },
   totals: {
-    title: "Totaux vs attendu",
-    body: "Sorties moyennes des numéros choisis, comparées à N × 5/50 (même lecture pour les étoiles vs N × 2/12).",
+    title: "Retard et sorties de chaque étoile",
+    body: "Retard et nombre de sorties de chaque étoile choisie. La moyenne des retards et la moyenne des sorties, à côté de l’attendu N × 2/12, restent en légende.",
   },
   sum: {
     title: "Somme / percentile",
@@ -378,6 +378,34 @@ function SumBoundField({
         />
       </div>
     </LabelHelp>
+  )
+}
+
+function BallReads({
+  title,
+  help,
+  reads,
+  caption,
+}: {
+  title: string
+  help: HelpCopy
+  reads: Array<{ n: number; delay: number; count: number }>
+  caption: string
+}) {
+  return (
+    <div className="flex flex-col gap-1 sm:col-span-2">
+      <p className="text-xs tracking-wide text-muted-foreground uppercase">
+        <TitleHelp help={help}>{title}</TitleHelp>
+      </p>
+      <ul className="flex flex-col gap-0.5 text-sm tabular-nums">
+        {reads.map((read) => (
+          <li key={read.n}>
+            {read.n} · retard {formatStat(read.delay, 0)} · {formatStat(read.count, 0)} sorties
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted-foreground">{caption}</p>
+    </div>
   )
 }
 
@@ -1209,20 +1237,17 @@ export function CombinaisonsPanel() {
                 value={`${formatPct(profile.empirical.wilson.lo, 1)} – ${formatPct(profile.empirical.wilson.hi, 1)}`}
                 help={HELP.wilson}
               />
-              <StatHelp
-                label="Retard n°"
-                value={`${formatStat(profile.numberDelayMean, 1)} (${formatExtent(profile.numberDelayExtent.min, profile.numberDelayExtent.max)})`}
+              <BallReads
+                title="Chaque numéro"
                 help={HELP.delayMean}
+                reads={profile.numberReads}
+                caption={`Moyenne des retards ${formatStat(profile.numberDelayMean, 1)} (${formatExtent(profile.numberDelayExtent.min, profile.numberDelayExtent.max)}). Moyenne des sorties ${formatStat(profile.numberCountMean, 1)} / ${formatStat(profile.expectedNumbers, 1)}.`}
               />
-              <StatHelp
-                label="Retard ★"
-                value={`${formatStat(profile.starDelayMean, 1)} (${formatExtent(profile.starDelayExtent.min, profile.starDelayExtent.max)})`}
-                help={HELP.delayMean}
-              />
-              <StatHelp
-                label="Totaux n°"
-                value={`${formatStat(profile.numberCountMean, 1)} / ${formatStat(profile.expectedNumbers, 1)}`}
+              <BallReads
+                title="Chaque étoile"
                 help={HELP.totals}
+                reads={profile.starReads}
+                caption={`Moyenne des retards ${formatStat(profile.starDelayMean, 1)} (${formatExtent(profile.starDelayExtent.min, profile.starDelayExtent.max)}). Moyenne des sorties ${formatStat(profile.starCountMean, 1)} / ${formatStat(profile.expectedStars, 1)}.`}
               />
               <StatHelp
                 label="Somme"

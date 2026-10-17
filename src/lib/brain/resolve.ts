@@ -301,11 +301,12 @@ function resolveCombinaisons(ctx: ResolveContext, entry: CatalogEntry): BrainFic
     return finish({
       ...base,
       last: {
-        numberDelayMean: roundish(profile.numberDelayMean, 2),
-        starDelayMean: roundish(profile.starDelayMean, 2),
-        delays: profile.numberDelays.join(","),
+        numberDelays: profile.numberReads.map((read) => `${read.n}:${read.delay}`).join(","),
+        starDelays: profile.starReads.map((read) => `${read.n}:${read.delay}`).join(","),
+        numberCounts: profile.numberReads.map((read) => `${read.n}:${read.count}`).join(","),
+        starCounts: profile.starReads.map((read) => `${read.n}:${read.count}`).join(","),
       },
-      summary: `Retards boules moy. ${roundish(profile.numberDelayMean, 2)} · étoiles ${roundish(profile.starDelayMean, 2)}`,
+      summary: `Retards ${profile.numberReads.map((read) => `${read.n}·${read.delay}`).join(" ")} · étoiles ${profile.starReads.map((read) => `${read.n}·${read.delay}`).join(" ")}`,
     })
   }
   return finish({

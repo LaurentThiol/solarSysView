@@ -9,7 +9,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from synchro.app import create_app
-from synchro.nextdata.covariates import consecutive_count, link_series, spread_of, star_couple_ago
+from synchro.nextdata.covariates import (
+    LINK_SLOTS,
+    consecutive_count,
+    delay_profile,
+    link_series,
+    spread_of,
+    star_couple_ago,
+)
 from synchro.nextdata.empirical import recount, smoothed_share
 from synchro.nextdata.forecast import blend_mid, blend_weight, run_forecast
 from synchro.nextdata.models import _past_only_column, lag_choice, loss_indices, row_weight
@@ -36,19 +43,26 @@ def _draws(count: int, start: date = date(2024, 1, 2), seed: int = 0) -> list[di
     return rows
 
 
+def _ranked(series: dict[str, list[float]], prefix: str, kind: str, index: int) -> list[float]:
+    return [series[f"{prefix}_{kind}_{rank}"][index] for rank in range(1, LINK_SLOTS + 1)]
+
+
 def test_couple_and_triple_history_stops_before_the_draw() -> None:
     pools = [[1, 2, 3, 4, 5], [1, 2, 6, 7, 8], [9, 10, 11, 12, 13]]
     couples = link_series(pools, 2)
     triples = link_series(pools, 3)
-    assert couples["couple_ago_mean"][0] == 0
-    assert couples["couple_count_mean"][0] == 0
-    assert couples["couple_affinity_mean"][0] == 0
+    assert _ranked(couples, "couple", "ago", 0) == [0.0] * LINK_SLOTS
+    assert _ranked(couples, "couple", "count", 0) == [0.0] * LINK_SLOTS
+    assert _ranked(couples, "couple", "affinity", 0) == [0.0] * LINK_SLOTS
     assert couples["couple_overlap"][1] == 1
-    assert couples["couple_ago_mean"][1] == 1
-    assert abs(couples["couple_count_mean"][1] - 0.1) < 1e-9
+    # À t = 1, les dix paires ont l’ancienneté 1. Une seule a déjà été vue : sa part vaut 1, les autres 0.
+    assert _ranked(couples, "couple", "ago", 1) == [1.0] * LINK_SLOTS
+    counts = _ranked(couples, "couple", "count", 1)
+    assert counts == [0.0] * (LINK_SLOTS - 1) + [1.0]
+    assert abs(sum(counts) / LINK_SLOTS - 0.1) < 1e-9
     assert couples["couple_overlap"][2] == 0
     alone = link_series(pools[:1], 2)
-    assert alone["couple_ago_mean"][0] == couples["couple_ago_mean"][0]
+    assert _ranked(alone, "couple", "ago", 0) == _ranked(couples, "couple", "ago", 0)
     assert triples["triple_overlap"][1] == 0
     assert star_couple_ago([[1, 2], [1, 2], [3, 4]]) == [0.0, 1.0, 2.0]
 
@@ -63,18 +77,96 @@ def test_link_features_do_not_grow_with_history() -> None:
     stars = [sorted(rng.sample(range(1, 13), 2)) for _ in range(312)]
     couples = link_series(pools, 2)
     triples = link_series(pools, 3)
-    for name in ("couple_ago_mean", "couple_ago_min", "triple_ago_mean", "triple_ago_min"):
-        values = couples.get(name) or triples[name]
-        assert max(values) <= AGO_CAP
+    for prefix, series in (("couple", couples), ("triple", triples)):
+        for rank in range(1, LINK_SLOTS + 1):
+            assert max(series[f"{prefix}_ago_{rank}"]) <= AGO_CAP
+        assert max(series[f"{prefix}_ago_min"]) <= AGO_CAP
     assert max(star_couple_ago(stars)) <= AGO_CAP
     early, late = slice(40, 100), slice(252, 312)
-    for name in ("couple_count_mean", "couple_affinity_mean"):
-        values = np.asarray(couples[name])
+    for kind in ("count", "affinity"):
+        # La moyenne des dix rangs est l’ancienne colonne. Elle ne suit toujours pas t.
+        values = np.column_stack([couples[f"couple_{kind}_{rank}"] for rank in range(1, LINK_SLOTS + 1)]).mean(axis=1)
         assert abs(values[early].mean() - values[late].mean()) < 0.003
         assert values.max() < 0.2
-    ago = np.asarray(couples["couple_ago_mean"][16:])
+    ago = np.column_stack([couples[f"couple_ago_{rank}"] for rank in range(1, LINK_SLOTS + 1)]).mean(axis=1)[16:]
     ranks = np.argsort(np.argsort(ago))
     assert abs(np.corrcoef(ranks, np.arange(len(ago)))[0, 1]) < 0.3
+
+
+def test_same_mean_delay_keeps_number_and_star_profiles() -> None:
+    """Un long retard et quatre courts n’est pas cinq retards moyens. Les étoiles non plus."""
+    long_wait = [[1, 10, 11, 12, 13]]
+    long_wait += [[20 + (index % 5), 30, 31, 32, 33] for index in range(1, 19)]
+    long_wait += [[2, 3, 4, 5, 14], [1, 2, 3, 4, 5]]
+    even = [[40, 41, 42, 43, 44] for _ in range(12)]
+    even.append([15, 45, 46, 47, 48])
+    even += [[40, 41, 42, 43, 44] for _ in range(3)]
+    even.append([6, 7, 8, 9, 25])
+    even += [[40, 41, 42, 43, 44] for _ in range(3)]
+    even.append([6, 7, 8, 9, 15])
+    left = delay_profile(long_wait, 5)[-1]
+    right = delay_profile(even, 5)[-1]
+    assert left == [1.0, 1.0, 1.0, 1.0, 20.0]
+    assert right == [4.0, 4.0, 4.0, 4.0, 8.0]
+    assert left != right
+    assert sum(left) == sum(right)
+
+    spread = [[3, 4]] + [[2, 5]] + [[6, 7] for _ in range(9)] + [[1, 8], [1, 2]]
+    paired = [[3, 4] for _ in range(6)] + [[1, 2]] + [[5, 6] for _ in range(5)] + [[1, 2]]
+    spread_stars = delay_profile(spread, 2)[-1]
+    paired_stars = delay_profile(paired, 2)[-1]
+    assert spread_stars == [1.0, 11.0]
+    assert paired_stars == [6.0, 6.0]
+    assert spread_stars != paired_stars
+    assert sum(spread_stars) == sum(paired_stars)
+
+
+def test_same_mean_couple_age_keeps_the_sorted_profile() -> None:
+    """Dix anciennetés de moyenne 4 ne sont pas dix fois 4."""
+    quiet = [22, 23, 24, 25, 26]
+    other = [27, 28, 29, 30, 31]
+    later = [17, 18, 19, 20, 21]
+    spread = [
+        [1, 2, 4, 5, 16],
+        quiet,
+        other,
+        [3, 5, 13, 14, 15],
+        [3, 4, 10, 11, 12],
+        later,
+        [1, 2, 4, 8, 9],
+        [1, 2, 3, 6, 7],
+        [1, 2, 3, 4, 5],
+    ]
+    flat = [
+        quiet,
+        other,
+        later,
+        [32, 33, 34, 35, 36],
+        [1, 2, 3, 4, 5],
+        [37, 38, 39, 40, 41],
+        [42, 43, 44, 45, 46],
+        [47, 48, 49, 50, 10],
+        [1, 2, 3, 4, 5],
+    ]
+    spread_ages = _ranked(link_series(spread, 2), "couple", "ago", 8)
+    flat_ages = _ranked(link_series(flat, 2), "couple", "ago", 8)
+    assert spread_ages == [1.0, 1.0, 1.0, 2.0, 2.0, 4.0, 5.0, 8.0, 8.0, 8.0]
+    assert flat_ages == [4.0] * LINK_SLOTS
+    assert sum(spread_ages) == sum(flat_ages)
+
+
+def test_frame_delay_columns_follow_each_ball() -> None:
+    draws = _draws(40, seed=3)
+    frame = build_frame(draws, focus=24)
+    numbers = [row["numbers"] for row in frame.rows]
+    stars = [row["stars"] for row in frame.rows]
+    expected = delay_profile(numbers, 5)
+    star_expected = delay_profile(stars, 2)
+    for index, row in enumerate(frame.rows):
+        assert [row[f"delay_{rank}"] for rank in range(1, 6)] == expected[index]
+        assert [row[f"star_delay_{rank}"] for rank in range(1, 3)] == star_expected[index]
+        ages = [row[f"couple_ago_{rank}"] for rank in range(1, LINK_SLOTS + 1)]
+        assert ages == sorted(ages)
 
 
 def test_year_n_stays_in_the_corpus() -> None:
@@ -98,7 +190,9 @@ def test_frame_uses_civil_years_and_recounts_the_focus() -> None:
     assert all(not row["date"].startswith(str(frame.anchor_year - 2)) for row in frame.rows)
     assert frame.focus == 50
     assert frame.focus_start == len(frame.rows) - 50
-    assert frame.rows[0]["couple_count_mean"] == 0
+    assert all(frame.rows[0][f"couple_count_{rank}"] == 0 for rank in range(1, LINK_SLOTS + 1))
+    assert "mean_delay" not in frame.rows[0]
+    assert "couple_ago_mean" not in frame.rows[0]
     assert len(frame.horizon) == 2
     mardi = build_frame(draws, years=["n", "n-1", "n-2"], focus=50, weekday="mardi")
     assert mardi.weekday == "mardi"
