@@ -53,14 +53,17 @@ function zone(partial: Partial<LagZone> & Pick<LagZone, "startIndex" | "endIndex
   }
 }
 
-test("suite length runs from 6 to 10 and starts at 8", () => {
-  assert.deepEqual(SUITE_LENGTHS, [6, 7, 8, 9, 10])
+test("suite length runs from 3 to 10 and starts at 8", () => {
+  assert.deepEqual(SUITE_LENGTHS, [3, 4, 5, 6, 7, 8, 9, 10])
   assert.equal(DEFAULT_SUITE_LENGTH, 8)
   assert.equal(NULL_PERMUTATIONS, 200)
   assert.equal(clampSuiteLength(8), 8)
+  assert.equal(clampSuiteLength(3), 3)
+  assert.equal(clampSuiteLength(4), 4)
+  assert.equal(clampSuiteLength(5), 5)
   assert.equal(clampSuiteLength(6), 6)
   assert.equal(clampSuiteLength(10), 10)
-  assert.equal(clampSuiteLength(5), 8)
+  assert.equal(clampSuiteLength(2), 8)
   assert.equal(clampSuiteLength(11), 8)
 })
 
@@ -141,6 +144,23 @@ test("a month missing on one side is not compared", () => {
     permutations: 10,
   })
   assert.equal(zones.length, 0)
+})
+
+test("lengths 3, 4 and 5 read a short suite", () => {
+  for (const length of [3, 4, 5]) {
+    const sums = Array.from({ length }, (_, index) => (index % 2 === 0 ? 40 : 180))
+    const newer = daily(2026, 5, 4, sums)
+    const older = daily(2025, 5, 4, sums)
+    const zones = annualLagZones(newer, older, { length, permutations: 12, seed: 5 })
+    assert.equal(zones.length, 1, `length ${length}`)
+    assert.equal(zones[0]?.kept, false)
+    assert.equal(zones[0]?.fromDate, newer[0]?.date)
+    assert.equal(zones[0]?.toDate, newer[newer.length - 1]?.date)
+    assert.ok(Math.abs((zones[0]?.r0 ?? 0) - 1) < 1e-9)
+  }
+  const three = daily(2026, 5, 4, [10, 80, 20])
+  const olderThree = daily(2025, 5, 4, [10, 80, 20])
+  assert.equal(annualLagZones(three, olderThree, { length: 4, permutations: 8 }).length, 0)
 })
 
 test("length 6 reads a short suite and length 8 ignores it", () => {
@@ -236,6 +256,9 @@ test("the annual chart exposes the lag control", () => {
   assert.match(view, /pas de décalage retenu/)
   assert.match(view, /95e centile du nul/)
   assert.match(view, /SUITE_LENGTHS/)
+  assert.match(view, /suites de 3 à 10 tirages/)
+  assert.match(glossary, /suites de 3 à 10 tirages/)
+  assert.match(panel, /suites de 3 à 10 tirages/)
   assert.match(view, /picks\.synthese \? synthesePoints\(lane\) : visibleBars\(lane, picks\)/)
   assert.match(view, /data-annual-lag-series/)
   assert.match(view, /data-annual-synthese="continu"/)

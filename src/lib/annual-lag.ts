@@ -1,6 +1,6 @@
 /**
  * Décalage zonal sur Annuel.
- * Une suite de 6 à 10 tirages se lit comme une chaîne de sens.
+ * Une suite de 3 à 10 tirages se lit comme une chaîne de sens.
  * La corrélation croisée cherche un écart en jours, zone par zone.
  * Sans alias `@/` (tests Node).
  */
@@ -8,7 +8,7 @@
 import { annualBarX } from "./annual-sum"
 import { seriesSigma } from "./chartisme/sense"
 
-export const SUITE_LENGTHS = [6, 7, 8, 9, 10] as const
+export const SUITE_LENGTHS = [3, 4, 5, 6, 7, 8, 9, 10] as const
 export const DEFAULT_SUITE_LENGTH = 8
 export const LAG_LIMIT_DAYS = 21
 export const PAIR_TOLERANCE_DAYS = 3

@@ -81,7 +81,7 @@ const CHART_TABS = [
     label: "Annuel",
     help: {
       title: "Annuel",
-      body: "Somme des 5 numéros en barres horizontales. Les années n, n−1 et n−2 sont en tête. Mardi et vendredi se sélectionnent sur le graphique ; sur Tous, les deux pastilles sont éteintes. Synthèse relie chaque tirage, mardi et vendredi, par un trait continu. Un segment vert : n et n−1 vont dans le même sens. Similitude affiche cette part en n/n−1 et en n−1/n−2. Décalage compare des suites de 6 à 10 tirages entre n et n−1, puis n−1 et n−2. Synthèse allumée, il suit ce trait, même si une soirée est masquée. Un trait horizontal ferme chaque mois. La fenêtre 20 / 50 / année ne coupe pas ces trois années.",
+      body: "Somme des 5 numéros en barres horizontales. Les années n, n−1 et n−2 sont en tête. Mardi et vendredi se sélectionnent sur le graphique ; sur Tous, les deux pastilles sont éteintes. Synthèse relie chaque tirage, mardi et vendredi, par un trait continu. Un segment vert : n et n−1 vont dans le même sens. Similitude affiche cette part en n/n−1 et en n−1/n−2. Décalage compare des suites de 3 à 10 tirages entre n et n−1, puis n−1 et n−2. Synthèse allumée, il suit ce trait, même si une soirée est masquée. Un trait horizontal ferme chaque mois. La fenêtre 20 / 50 / année ne coupe pas ces trois années.",
     },
   },
 ] as const

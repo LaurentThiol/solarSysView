@@ -45,7 +45,7 @@ Similitude, au-dessus du graphique, est la part des segments appariés qui vont 
 
 « en cours » : l’année n n’a pas encore de tirage en décembre. Δ, à droite, compare les moyennes de mois affichées (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. La fenêtre 20 / 50 / année ne coupe pas ces trois années.
 
-Décalage compare des suites de 6 à 10 tirages, 8 au départ. Une suite est une chaîne de sens consécutifs, par exemple 2 monte + 3 baisse + 3 monte. Un pas monte s’il dépasse l’écart-type de l’année, baisse s’il le dépasse vers le bas, stable sinon. La corrélation croisée cherche un écart de −21 à +21 jours, n contre n−1, puis n−1 contre n−2, au tirage le plus proche à trois jours près. On le retient si la chaîne est la même, si |r| dépasse l’alignement sans décalage, et s’il dépasse le 95e centile du nul qui réordonne l’autre année. La zone porte alors cette phrase. Sinon la lecture est « pas de décalage retenu ». Les mois absents d’un côté ne sont pas comparés. Synthèse allumée, Décalage suit le trait continu : mardi et vendredi, même si une soirée est masquée. Mardi et vendredi ensemble, l’écart entre les soirs est de trois ou quatre jours.
+Décalage compare des suites de 3 à 10 tirages, 8 au départ. Une suite est une chaîne de sens consécutifs, par exemple 2 monte + 3 baisse + 3 monte. Un pas monte s’il dépasse l’écart-type de l’année, baisse s’il le dépasse vers le bas, stable sinon. La corrélation croisée cherche un écart de −21 à +21 jours, n contre n−1, puis n−1 contre n−2, au tirage le plus proche à trois jours près. On le retient si la chaîne est la même, si |r| dépasse l’alignement sans décalage, et s’il dépasse le 95e centile du nul qui réordonne l’autre année. La zone porte alors cette phrase. Sinon la lecture est « pas de décalage retenu ». Les mois absents d’un côté ne sont pas comparés. Synthèse allumée, Décalage suit le trait continu : mardi et vendredi, même si une soirée est masquée. Mardi et vendredi ensemble, l’écart entre les soirs est de trois ou quatre jours.
 
 Lecture d’archive. Les tirages restent indépendants. r n’est pas une probabilité du prochain tirage.`,
 }
@@ -208,7 +208,7 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
           sur Tous.
           Synthèse relie chaque tirage par un trait continu. Un segment vert : n et n−1 vont dans
           le même sens. Similitude donne cette part en n/n−1 et en n−1/n−2. Décalage lit un
-          écart zonal sur des suites de 6 à 10 tirages. Trait horizontal en fin de mois, trait
+          écart zonal sur des suites de 3 à 10 tirages. Trait horizontal en fin de mois, trait
           vertical à 128.
         </p>
       </CardHeader>
