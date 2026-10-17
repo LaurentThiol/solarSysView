@@ -90,6 +90,7 @@ def test_seed_lists_every_merged_pr_with_a_date() -> None:
     assert len(numbers) == len(set(numbers))
     assert 1 in numbers
     assert 312 in numbers
+    assert 313 in numbers
     assert all(point["merged_on"] for entry in documents for point in entry["prs"])
     assert all(entry["source"] == "seed" for entry in documents)
 

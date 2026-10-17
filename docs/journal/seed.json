@@ -234,7 +234,7 @@
     "happened_on": "2026-10-17",
     "area": "Évolution",
     "title": "Évolution",
-    "body": "Évolution commence par le graphique des tirages, puis les fenêtres, le pair/impair, les moyennes et Bollinger, les gains et le bloc DeltaEvol (écarts, cohérence, hasard). Mardi et vendredi se distinguent sur les courbes, y compris en rond et en losange, et Annuel additionne les numéros sur n, n−1 et n−2 avec fins de mois, décalage zonal, segments verts et taux de similitude. La fenêtre de travail reste sous le bandeau, jusqu’aux 100 derniers après les 50. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "body": "Évolution commence par le graphique des tirages, puis les fenêtres, le pair/impair, les moyennes et Bollinger, les gains et le bloc DeltaEvol (écarts, cohérence, hasard). Mardi et vendredi se distinguent sur les courbes, y compris en rond et en losange, et Annuel additionne les numéros sur n, n−1 et n−2 avec fins de mois, décalage zonal sur des suites de 3 à 10, segments verts et taux de similitude. La fenêtre de travail reste sous le bandeau, jusqu’aux 100 derniers après les 50. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
     "prs": [
       {
         "number": 4,
@@ -511,6 +511,12 @@
         "title": "Annuel : taux de similitude n/n−1 et n−1/n−2",
         "merged_on": "2026-10-17",
         "url": "https://github.com/LaurentThiol/Synchro/pull/312"
+      },
+      {
+        "number": 313,
+        "title": "Annuel : suites de décalage 3, 4 et 5",
+        "merged_on": "2026-10-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/313"
       }
     ],
     "source": "seed"
