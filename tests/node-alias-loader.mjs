@@ -33,3 +33,14 @@ export async function resolve(specifier, context, nextResolve) {
   }
   throw lastError
 }
+
+/** Node 22 exige l’attribut `type: json` pour importer l’archive des tirages. */
+export async function load(url, context, nextLoad) {
+  if (url.endsWith(".json")) {
+    return nextLoad(url, {
+      ...context,
+      importAttributes: { ...context.importAttributes, type: "json" },
+    })
+  }
+  return nextLoad(url, context)
+}
