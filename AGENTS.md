@@ -42,8 +42,10 @@ Dans le corps de la PR, recopie le brouillon sous le titre `Journal`.
 
 La page lit Neon. `./launch` importe les fichiers une fois : un slug déjà présent n’est pas réécrit, pour garder les corrections faites dans l’interface.
 
-## Automation Cursor (réglage humain, une fois)
+## Commentaire automatique
 
-Ce bloc n’est pas une tâche de PR. Ne le mets pas en œuvre dans une PR.
+[`.github/workflows/journal.yml`](.github/workflows/journal.yml) commente un brouillon une seule fois, à l’ouverture, à la remise en revue, ou à une poussée. Ça inclut une PR encore en draft. Le commentaire porte la marque `synchro-journal-draft`. S’il est déjà là, l’action s’arrête.
 
-Pour les PR qui ne viennent pas d’un agent : sur [cursor.com/automations](https://cursor.com/automations), déclencheur GitHub « Pull request opened » seulement, dépôt Synchro, outil « Comment on pull request ». Prompt : si le corps a déjà une section Journal ou si `docs/journal/inbox` contient déjà cette branche, ne rien faire ; sinon commenter un brouillon (zone, titre, paragraphe) et demander de le confirmer dans Système / Journal. Ne pas ouvrir de seconde PR.
+Elle ne commente pas non plus quand le corps contient déjà `Journal : inchangé`, une section Journal rédigée (plus que le modèle vide), ou un fichier `docs/journal/inbox/<slug>.json`. Dependabot est ignoré. Un diff limité aux tests, au formatage, aux dépendances ou au journal seul reçoit `Journal : inchangé`.
+
+Le déclencheur Cursor « Pull request opened » ne voit pas une PR en draft : cet événement est « Draft opened ». Un réglage qui n’a que « Pull request opened » reste donc muet sur les PR des agents, et une poussée sur une PR déjà ouverte ne le réveille pas. L’action du dépôt couvre ces deux cas. Ne pas ajouter en plus une automation Cursor sur le même dépôt : elle commenterait en double. Si elle existe déjà, la désactiver.

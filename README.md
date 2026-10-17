@@ -393,7 +393,7 @@ En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, défini
 
 ## Journal (`/journal`)
 
-Suivi des modifications du logiciel, distinct du journal des mises (Jeux). Une fiche par zone résume les PR mergées ; la timeline place chaque PR sur la date de merge et la ligne de sa zone. La recherche et le filtre de zone agissent ensemble sur la liste et les points. Le texte se réécrit dans la page (Neon). Au prochain `./launch`, les fichiers `docs/journal` sont importés sans écraser une fiche déjà présente. L’accès suit Admin : ouvert en local, `ADMIN_PASSWORD` dès que le site est exposé.
+Suivi des modifications du logiciel, distinct du journal des mises (Jeux). Une fiche par zone résume les PR mergées ; la timeline place chaque PR sur la date de merge et la ligne de sa zone. La recherche et le filtre de zone agissent ensemble sur la liste et les points. Le texte se réécrit dans la page (Neon). Au prochain `./launch`, les fichiers `docs/journal` sont importés sans écraser une fiche déjà présente. L’accès suit Admin : ouvert en local, `ADMIN_PASSWORD` dès que le site est exposé. Si une PR n’a pas de brouillon, [l’action Journal](.github/workflows/journal.yml) en commente un, y compris quand la PR est encore en draft.
 
 ## Schémas (`/schemas`)
 
