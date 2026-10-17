@@ -1056,7 +1056,7 @@ def test_chronos_2_reads_both_modes_and_their_covariates_in_one_call(monkeypatch
     assert sorted(corpus["past_covariates"]) == sorted(past_columns(FAMILIES) + clocks)
     assert sorted(corpus["future_covariates"]) == sorted(clocks)
     assert {name: list(values) for name, values in window["future_covariates"].items()} == {name: [frame.horizon[0][name]] for name in clocks}
-    assert part["covariates"] == {"past": 37, "future": 15}
+    assert part["covariates"] == {"past": len(past_columns(FAMILIES)), "future": len(future_columns(FAMILIES))}
     for mode in ("corpus", "fenetre"):
         for name in CHRONOS_SERIES:
             last = float(frame.rows[-1][name])
@@ -1198,7 +1198,7 @@ def test_the_installed_chronos_2_accepts_our_inputs() -> None:
     chronos = pytest.importorskip("chronos")
     from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode
 
-    from synchro.nextdata.covariates import FAMILIES
+    from synchro.nextdata.covariates import FAMILIES, future_columns, past_columns
     from synchro.nextdata.models import chronos_inputs
 
     params = list(inspect.signature(chronos.Chronos2Pipeline.predict_quantiles).parameters.values())
@@ -1208,10 +1208,11 @@ def test_the_installed_chronos_2_accepts_our_inputs() -> None:
     items = chronos_inputs(frame.rows, frame.horizon, 24, FAMILIES)
     dataset = Chronos2Dataset(items, context_length=8192, prediction_length=1, batch_size=256, output_patch_size=16, mode=DatasetMode.TEST)
     batch = next(iter(dataset))
-    # Deux entrées de 3 cibles et 52 covariables ; les 15 futures (horloges et Pulse) sont connues pour le tirage prévu.
-    assert batch["context"].shape[0] == 2 * (3 + 52)
-    assert batch["target_idx_ranges"] == [(0, 3), (55, 58)]
-    assert int(batch["future_covariates"].isfinite().sum()) == 2 * 15
+    # Deux entrées de 3 cibles et les covariables ; les futures (horloges et Pulse) sont connues pour le tirage prévu.
+    width = 3 + len(past_columns(FAMILIES)) + len(future_columns(FAMILIES))
+    assert batch["context"].shape[0] == 2 * width
+    assert batch["target_idx_ranges"] == [(0, 3), (width, width + 3)]
+    assert int(batch["future_covariates"].isfinite().sum()) == 2 * len(future_columns(FAMILIES))
 
 
 def test_training_forwards_chronos_flag(monkeypatch) -> None:

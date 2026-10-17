@@ -1,10 +1,14 @@
 /** Lecture Pulse affichée à côté des covariables de nextData. */
 
+export type PulsePick = {
+  n: number
+  pi: number
+  p: number
+}
+
 export type PulseReading = {
-  lobe: number
-  mass: number
-  star_lobe: number
-  star_mass: number
+  balls: PulsePick[]
+  stars: PulsePick[]
 }
 
 function share(value: number) {
@@ -12,7 +16,19 @@ function share(value: number) {
   return `${Math.round(value * 100)} %`
 }
 
-/** Quatre parts du tirage visé : boules et étoiles, en lobe et en masse. */
+function pLabel(value: number) {
+  if (!Number.isFinite(value)) return "—"
+  if (value < 0.001) return "< 0,001"
+  return value.toFixed(3).replace(".", ",")
+}
+
+function pickLabel(pick: PulsePick) {
+  return `${pick.n} ${share(pick.pi)} p ${pLabel(pick.p)}`
+}
+
+/** Chaque numéro retenu, avec son π et son p. L’ordre est celui du π. */
 export function pulseCaption(pulse: PulseReading) {
-  return `Boules en lobe ${share(pulse.lobe)}, masse ${share(pulse.mass)} · étoiles ${share(pulse.star_lobe)}, masse ${share(pulse.star_mass)}`
+  const balls = (pulse.balls ?? []).filter((pick) => pick.n > 0).map(pickLabel).join(" · ")
+  const stars = (pulse.stars ?? []).filter((pick) => pick.n > 0).map(pickLabel).join(" · ")
+  return `Boules ${balls || "—"} · étoiles ${stars || "—"}`
 }

@@ -837,7 +837,12 @@ def _report(item: dict[str, Any], persist: dict[str, int] | None, found: dict[st
         if len(block) != len(parts):
             continue
         ready[t] = {"key": _combined(keys, block), "parts": block}
-    steps = backtest.assemble(frame, ready, with_chronos=item["variant"].with_chronos)
+    steps = backtest.assemble(
+        frame,
+        ready,
+        with_chronos=item["variant"].with_chronos,
+        pulse="pulse" in item["variant"].families,
+    )
     return backtest.shift_report(
         frame,
         steps,

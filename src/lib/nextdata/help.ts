@@ -154,7 +154,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Pulse",
-        text: "Part des boules, puis des étoiles de l’urne, dont l’onde simple de Pulse est positive au tirage prévu, et la même part pondérée par la concordance. L’ajustement ne voit que les sorties d’avant ce tirage. Le pas d’après prolonge cette onde, il ne la réajuste pas. Cycle double, paires et triplets restent sur la page Pulse.",
+        text: "Chaque boule, puis chaque étoile de l’urne, a sa propre onde simple, ajustée sur ses seules sorties d’avant le tirage. π est sa probabilité fréquentielle au tirage prévu : le taux de ses sorties quand son onde a le même signe, ramené vers 5/50, ou 2 sur l’urne, quand son p de Rayleigh est grand. Les colonnes nomment les cinq boules et les deux étoiles de plus fort π, avec ce π, puis la somme, n1, l’étendue et la parité de ces boules, la somme et e1 de ces étoiles. Le faisceau ajoute le log π de chaque numéro de la grille, le sien. Éteindre Pulse retire ces colonnes et ce terme. Le pas d’après prolonge l’onde de chaque numéro, il ne la réajuste pas. Cycle double, paires et triplets restent sur la page Pulse.",
       },
     ],
   },

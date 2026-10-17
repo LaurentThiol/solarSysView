@@ -804,7 +804,7 @@ def _short_error(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {detail if len(detail) <= 300 else detail[:299] + '…'}"
 
 
-# Sur un cœur, avec les 52 covariables : 0,8 s par pas sur trois ans ; amazon/chronos-2 (120 M) en prend 3,1.
+# Sur un cœur, avec toutes les familles : 0,8 s par pas sur trois ans ; amazon/chronos-2 (120 M) en prend 3,1.
 CHRONOS_MODEL = "autogluon/chronos-2-small"
 CHRONOS_LEVELS = (0.1, 0.5, 0.9)
 

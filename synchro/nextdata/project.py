@@ -325,8 +325,12 @@ def score_grid(
     stars: list[int],
     moments: dict[str, dict[str, float]],
     base: dict[str, Any],
+    pulse: dict[str, Any] | None = None,
 ) -> float:
-    """Plus le score est haut, plus la grille colle aux rangs, à l’étendue, aux consécutifs et à la base."""
+    """Plus le score est haut, plus la grille colle aux rangs, à l’étendue, aux consécutifs et à la base.
+
+    Pulse, s’il est passé, ajoute le log π de chaque numéro de la grille : le sien.
+    """
     pool = int(base.get("star_pool") or 12)
     mids, scales, _ = rank_scales(moments)
     distance = 0.0
@@ -400,7 +404,25 @@ def score_grid(
         )
     if triples:
         triple_log /= len(triples)
-    return -distance + frequency + couple_log + triple_log
+    return -distance + frequency + couple_log + triple_log + _pulse_log(numbers, stars, pulse)
+
+
+def _pulse_log(numbers: list[int], stars: list[int], pulse: dict[str, Any] | None) -> float:
+    """Somme des log π. Chaque boule et chaque étoile apporte le sien."""
+    if not pulse:
+        return 0.0
+    balls = pulse.get("pi") or []
+    star_pi = pulse.get("star_pi") or []
+    total = 0.0
+    for number in numbers:
+        slot = int(number) - 1
+        if 0 <= slot < len(balls):
+            total += math.log(max(float(balls[slot]), 1e-6))
+    for star in stars:
+        slot = int(star) - 1
+        if 0 <= slot < len(star_pi):
+            total += math.log(max(float(star_pi[slot]), 1e-6))
+    return total
 
 
 def _pair_list(numbers: list[int]):
@@ -649,6 +671,7 @@ def beam(
     *,
     star_pool: int = 12,
     radius: int = 3,
+    pulse: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Centre projeté, puis voisins à ±1…±3 sur un rang. Le meilleur score d’abord."""
     pool = max(2, min(12, int(star_pool or base.get("star_pool") or 12)))
@@ -697,7 +720,7 @@ def beam(
                 {
                     "numbers": list(nums),
                     "stars": list(star),
-                    "score": round(score_grid(nums, star, moments, base), 6),
+                    "score": round(score_grid(nums, star, moments, base, pulse), 6),
                 }
             )
     ranked.sort(key=lambda item: (-item["score"], item["numbers"], item["stars"]))

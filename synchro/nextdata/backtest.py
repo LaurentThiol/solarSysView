@@ -19,7 +19,7 @@ from synchro.nextdata.covariates import SHAPE_SERIES, grid_shape
 from synchro.nextdata.empirical import recount
 from synchro.nextdata.forecast import _apply_external, _rank_view, blend_mid, blend_weight
 from synchro.nextdata.models import CHRONOS_SERIES, _clip, star_pool_of
-from synchro.nextdata.pulse_features import public_pulse
+from synchro.nextdata.pulse_features import public_pulse, pulse_of
 from synchro.nextdata.panel import Frame
 from synchro.nextdata.persist import NUMBER_POOL, NUMBER_SLOTS, STAR_SLOTS, score_swaps, snap_grid
 from synchro.nextdata.project import beam, compose_ranks, stamp_grid
@@ -211,6 +211,7 @@ def _assemble(
     step: dict[str, Any],
     window: list[tuple[int, dict[str, Any]]],
     with_chronos: bool,
+    pulse: bool,
 ) -> dict[str, Any]:
     rows = frame.rows
     parts = step["parts"]
@@ -245,7 +246,8 @@ def _assemble(
         composed, trace = compose_ranks(moments, last)
         if trace is not None and chronos and chronos["available"]:
             trace["numbers"][0]["chronos"] = {"value": chronos["n1"], "share": round(1.0 - chronos["weights"]["n1"], 4)}
-        ranked = beam(composed, base, star_pool=pool)
+        source = rows[t] if t < len(rows) else frame.horizon[0]
+        ranked = beam(composed, base, star_pool=pool, pulse=pulse_of(source) if pulse else None)
         if not ranked:
             continue
         best = ranked[0]
@@ -272,23 +274,40 @@ _MEMO_LIMIT = 4096
 _MEMO_LOCK = threading.Lock()
 
 
+def _pulse_key(frame: Frame, t: int, pulse: bool) -> tuple[tuple[float, ...], tuple[float, ...]] | None:
+    if not pulse:
+        return None
+    source = frame.rows[t] if t < len(frame.rows) else frame.horizon[0]
+    state = pulse_of(source) or {}
+    return (tuple(state.get("pi") or ()), tuple(state.get("star_pi") or ()))
+
+
 def _memo(
     frame: Frame,
     t: int,
     step: dict[str, Any],
     window: list[tuple[int, dict[str, Any]]],
     with_chronos: bool,
+    pulse: bool,
 ) -> dict[str, Any]:
     """Un pas assemblé ne change pas tant que ses morceaux et ceux des pas qui règlent Chronos ne changent pas. Lecture seule."""
     used = window if with_chronos else []
     target = None if t >= len(frame.rows) else (tuple(frame.rows[t]["numbers"]), tuple(frame.rows[t]["stars"]))
-    key = (step["key"], tuple(past["key"] for _t, past in used), bool(with_chronos), frame.focus, frame.star_pool, target)
+    key = (
+        step["key"],
+        tuple(past["key"] for _t, past in used),
+        bool(with_chronos),
+        frame.focus,
+        frame.star_pool,
+        target,
+        _pulse_key(frame, t, pulse),
+    )
     with _MEMO_LOCK:
         hit = _MEMO.get(key)
         if hit is not None:
             _MEMO.move_to_end(key)
             return hit
-    built = _assemble(frame, t, step, used, with_chronos)
+    built = _assemble(frame, t, step, used, with_chronos, pulse)
     with _MEMO_LOCK:
         _MEMO[key] = built
         while len(_MEMO) > _MEMO_LIMIT:
@@ -296,11 +315,27 @@ def _memo(
     return built
 
 
-def assemble(frame: Frame, ready: dict[int, dict[str, Any]], *, with_chronos: bool = False) -> dict[int, dict[str, Any]]:
-    """Les pas prêts, assemblés. Les poids de Chronos se règlent sur les CHRONOS_WINDOW pas prêts d’avant."""
+def assemble(
+    frame: Frame,
+    ready: dict[int, dict[str, Any]],
+    *,
+    with_chronos: bool = False,
+    pulse: bool = False,
+) -> dict[int, dict[str, Any]]:
+    """Les pas prêts, assemblés. Les poids de Chronos se règlent sur les CHRONOS_WINDOW pas prêts d’avant.
+
+    `pulse` ajoute au faisceau le log π de chaque numéro choisi. Sans la famille, le terme est absent.
+    """
     order = sorted(ready)
     return {
-        t: _memo(frame, t, ready[t], [(p, ready[p]) for p in order[max(0, index - CHRONOS_WINDOW) : index]], with_chronos)
+        t: _memo(
+            frame,
+            t,
+            ready[t],
+            [(p, ready[p]) for p in order[max(0, index - CHRONOS_WINDOW) : index]],
+            with_chronos,
+            pulse,
+        )
         for index, t in enumerate(order)
     }
 

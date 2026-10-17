@@ -36,9 +36,16 @@ test("the two trainings, the focus and the recounted base are explained", () => 
   assert.match(training, /report\.star_pool/)
   assert.match(training, /id: "pulse"/)
   assert.equal(
-    pulseCaption({ lobe: 0.54, mass: 0.21, star_lobe: 0.333, star_mass: 0.08 }),
-    "Boules en lobe 54 %, masse 21 % · étoiles 33 %, masse 8 %"
+    pulseCaption({
+      balls: [
+        { n: 17, pi: 0.18, p: 0.012 },
+        { n: 4, pi: 0.12, p: 0.4 },
+      ],
+      stars: [{ n: 3, pi: 0.2, p: 0.0004 }],
+    }),
+    "Boules 17 18 % p 0,012 · 4 12 % p 0,400 · étoiles 3 20 % p < 0,001"
   )
+  assert.match(NEXTDATA_HELP.covariates.items?.find((item) => item.label === "Pulse")?.text ?? "", /propre onde/)
   assert.match(NEXTDATA_HELP.tabBase.body, /1\/50/)
   assert.match(NEXTDATA_HELP.banner.body, /pas une probabilité de gain FDJ/)
   assert.match(NEXTDATA_HELP.moteur.body, /CatBoost/)

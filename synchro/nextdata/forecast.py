@@ -273,7 +273,7 @@ def run_forecast(
     target_pool = star_pool_of(frame.horizon[0] if frame.horizon else None, frame.star_pool)
     order = [n, *reversed(backtest.retour_indices(frame))]
     ready, remaining = ensure_steps(frame, order, settings, parts, limit=chunk or worker_count())
-    steps = backtest.assemble(frame, ready, with_chronos=with_chronos)
+    steps = backtest.assemble(frame, ready, with_chronos=with_chronos, pulse="pulse" in families)
     upcoming = steps[n]
     for mode in ("corpus", "fenetre"):
         if mode not in upcoming["readings"]:
@@ -384,7 +384,7 @@ def run_training(
     else:
         order = targets + [t for t in retour if t not in targets]
         ready, remaining = ensure_steps(frame, order, settings, parts, limit=chunk or worker_count())
-    steps = backtest.assemble(frame, ready, with_chronos=with_chronos)
+    steps = backtest.assemble(frame, ready, with_chronos=with_chronos, pulse="pulse" in families)
     report = backtest.shift_report(frame, steps, lags=lags, chronos_requested=with_chronos, persist=persist)
     report["chronos"]["error"] = chronos_problem(with_chronos, report["chronos"]["used"])
     catboost_error = catboost_import_error()
