@@ -18,7 +18,13 @@ type AuthSnap = {
   needsPassword: boolean
 }
 
-export function AdminGate({ children }: { children: ReactNode }) {
+export function AdminGate({
+  children,
+  prompt = "Entrez ADMIN_PASSWORD pour afficher l’évolution des tirages.",
+}: {
+  children: ReactNode
+  prompt?: string
+}) {
   const [auth, setAuth] = useState<AuthSnap | null>(null)
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -73,7 +79,7 @@ export function AdminGate({ children }: { children: ReactNode }) {
           <CardTitle>Accès admin</CardTitle>
           <CardDescription>
             {auth.needsPassword
-              ? "Entrez ADMIN_PASSWORD pour afficher l’évolution des tirages."
+              ? prompt
               : "Définissez ADMIN_PASSWORD dans .env (ou ouvrez l’UI en local sur 127.0.0.1)."}
           </CardDescription>
         </CardHeader>

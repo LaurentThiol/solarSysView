@@ -296,6 +296,25 @@ CREATE TABLE IF NOT EXISTS lexicon_readings (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS lexicon_readings_created ON lexicon_readings (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS dev_journal (
+    id              BIGSERIAL PRIMARY KEY,
+    slug            TEXT NOT NULL UNIQUE,
+    happened_on     DATE NOT NULL,
+    area            TEXT NOT NULL,
+    title           TEXT NOT NULL,
+    body            TEXT NOT NULL,
+    pr_number       INTEGER,
+    pr_url          TEXT,
+    prs             JSONB NOT NULL DEFAULT '[]'::jsonb,
+    source          TEXT NOT NULL DEFAULT 'dev',
+    hidden          BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS dev_journal_happened ON dev_journal (happened_on DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS dev_journal_pr_number
+    ON dev_journal (pr_number) WHERE pr_number IS NOT NULL;
 """
 
 _pool: ConnectionPool | None = None
@@ -499,6 +518,7 @@ def init_db() -> None:
         conn.commit()
     backfill_prizes_from_raw()
     backfill_winner_totals()
+    import_dev_journal()
 
 
 def backfill_prizes_from_raw() -> int:
@@ -1762,3 +1782,125 @@ def insert_lexicon_reading(reading: dict[str, Any]) -> None:
                 {"id": reading["id"], "payload": Jsonb(reading)},
             )
         conn.commit()
+
+
+def list_dev_journal() -> list[dict[str, Any]]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM dev_journal
+                WHERE hidden = FALSE
+                ORDER BY happened_on DESC, id DESC
+                """
+            )
+            return [dict(row) for row in cur.fetchall()]
+
+
+def get_dev_journal(entry_id: int) -> dict[str, Any] | None:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM dev_journal WHERE id = %s", (entry_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
+def insert_dev_journal(entry: dict[str, Any]) -> dict[str, Any]:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO dev_journal
+                    (slug, happened_on, area, title, body, pr_number, pr_url, prs, source)
+                VALUES
+                    (%(slug)s, %(happened_on)s, %(area)s, %(title)s, %(body)s,
+                     %(pr_number)s, %(pr_url)s, %(prs)s, %(source)s)
+                RETURNING *
+                """,
+                _journal_params(entry),
+            )
+            stored = dict(cur.fetchone())
+        conn.commit()
+    return stored
+
+
+def update_dev_journal(entry_id: int, fields: dict[str, Any]) -> dict[str, Any] | None:
+    allowed = {"area", "title", "body", "hidden"}
+    assignments = ["updated_at = now()"]
+    params: dict[str, Any] = {"id": entry_id}
+    for key, value in fields.items():
+        if key not in allowed:
+            continue
+        assignments.append(f"{key} = %({key})s")
+        params[key] = value
+    if len(assignments) == 1:
+        return get_dev_journal(entry_id)
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                UPDATE dev_journal
+                SET {", ".join(assignments)}
+                WHERE id = %(id)s
+                RETURNING *
+                """,
+                params,
+            )
+            row = cur.fetchone()
+            stored = dict(row) if row else None
+        conn.commit()
+    return stored
+
+
+def import_dev_journal() -> int:
+    from psycopg.errors import UniqueViolation
+
+    from synchro.journal import entries_to_insert, load_journal_documents
+
+    documents = load_journal_documents()
+    inserted = 0
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT slug, pr_number FROM dev_journal")
+            rows = list(cur.fetchall())
+            pending = entries_to_insert(
+                {row["slug"] for row in rows},
+                {row["pr_number"] for row in rows if row["pr_number"] is not None},
+                documents,
+            )
+            for entry in pending:
+                cur.execute("SAVEPOINT journal_row")
+                try:
+                    cur.execute(
+                        """
+                        INSERT INTO dev_journal
+                            (slug, happened_on, area, title, body, pr_number, pr_url, prs, source)
+                        VALUES
+                            (%(slug)s, %(happened_on)s, %(area)s, %(title)s, %(body)s,
+                             %(pr_number)s, %(pr_url)s, %(prs)s, %(source)s)
+                        ON CONFLICT (slug) DO NOTHING
+                        RETURNING id
+                        """,
+                        _journal_params(entry),
+                    )
+                    if cur.fetchone():
+                        inserted += 1
+                    cur.execute("RELEASE SAVEPOINT journal_row")
+                except UniqueViolation:
+                    cur.execute("ROLLBACK TO SAVEPOINT journal_row")
+        conn.commit()
+    return inserted
+
+
+def _journal_params(entry: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "slug": entry["slug"],
+        "happened_on": entry["happened_on"],
+        "area": entry["area"],
+        "title": entry["title"],
+        "body": entry["body"],
+        "pr_number": entry.get("pr_number"),
+        "pr_url": entry.get("pr_url"),
+        "prs": Jsonb(entry.get("prs") or []),
+        "source": entry.get("source") or "dev",
+    }

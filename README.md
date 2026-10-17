@@ -55,7 +55,7 @@ Dans l’UI, les pages s’ouvrent depuis le **menu burger** (raccourci **g** ho
 | **Lecture** | Analyse `/analyse`, Morpho `/morpho`, Relief `/relief`, Chartisme `/chartisme`, Cycles `/cycles`, Harmo `/harmo`, Next `/next` |
 | **Grilles** | Combinaisons `/combinaisons`, Pronostic `/pronostic`, nextData `/nextdata`, nextDataTraining `/nextdatatraining`, Jeux `/jeux` |
 | **Assistants** | Brain `/brain`, Spécialistes `/brain/specialistes`, decisionTree `/brain/decision-tree`, Dictionnaire `/brain/dictionnaire`, Réf `/ref`, IA `/ia` |
-| **Système** | Admin `/admin`, Schémas `/schemas` |
+| **Système** | Admin `/admin`, Schémas `/schemas`, Journal `/journal` |
 
 Le bandeau garde le burger, **Synchro**, le nom de la page courante, et les pastilles **Santé** / Aide / Glossaire / Adresse / Capture. Une pastille **Santé** (clic pour le détail API / Neon / GitHub / LLM) refait les contrôles au chargement, au focus, et périodiquement. La pastille Neon affiche la **date de dernière synchro** (`MAJ …`). Ton ambre = tirages en retard : un clic en local lance le rattrapage. GitHub en retard ouvre **Admin**. **Aide** (raccourci **?**) affiche les points d’exclamation des champs. **Glossaire** (raccourci **l**) ouvre Vocabulaire / Probabilités / Mémo / Chartisme (`?glossaire=`). **Adresse** (raccourci **a**, `?adresse=1`) liste les pages, onglets `?tab=` et fonctions API. **Capture** (raccourci **c**) empaquette le visuel et les données de la fenêtre pour IA ou un PDF. Les anciens `/analyse?tab=proba|memo|adresse` sont réécrits vers ces overlays. **Échap** ferme le menu, le glossaire, l’annuaire, une capture ou une démo. Le bouton **Quitter** (localhost uniquement) arrête l’API et l’interface.
 
@@ -391,6 +391,10 @@ La carte **Failles** inventorie le dépôt avec Syft (lockfile npm, et le `.venv
 
 En local sur `127.0.0.1`, l’accès est ouvert. Si l’UI est exposée, définissez `ADMIN_PASSWORD`. Sur Netlify, les secrets se configurent dans les variables d’environnement du site.
 
+## Journal (`/journal`)
+
+Suivi des modifications du logiciel, distinct du journal des mises (Jeux). Une fiche par zone résume les PR mergées ; la timeline place chaque PR sur la date de merge et la ligne de sa zone. La recherche et le filtre de zone agissent ensemble sur la liste et les points. Le texte se réécrit dans la page (Neon). Au prochain `./launch`, les fichiers `docs/journal` sont importés sans écraser une fiche déjà présente. L’accès suit Admin : ouvert en local, `ADMIN_PASSWORD` dès que le site est exposé.
+
 ## Schémas (`/schemas`)
 
 Lecteur des schémas Mermaid versionnés dans [`docs/schemas`](docs/schemas/README.md). Texte éclairci, recherche dans les libellés, liens en toutes lettres, zoom, plein écran, export PNG du cadre. Un fichier = un schéma (contexte, conteneurs, composants, flux). Modules versionnés : [Pronostic](docs/schemas/pronostic/README.md), [decisionTree](docs/schemas/decision-tree/README.md).
@@ -479,6 +483,7 @@ Un workflow GitHub `sync-fdj` peut tourner le mardi et le vendredi à 21h45 (heu
 - `GET|POST /api/llm/usage` · `POST /api/llm/ping`
 - `GET /api/startup` — contrôles du bandeau (API, Neon, GitHub, LLM ; `refresh=1`)
 - `GET|POST /api/github` — état du dépôt ; POST pour fetch / mise à jour
+- `GET|POST /api/journal` · `PATCH /api/journal/{id}` — journal des modifications (texte, masquage)
 - `GET|POST /api/admin` · `POST /api/admin/login` · `POST /api/admin/sync` · `POST /api/admin/test`
 - `GET /api/admin/dependencies` — npm, pip, GitHub Actions (`refresh=1` relit les registres)
 - `GET /api/admin/supply-chain` — Syft + Grype (`refresh=1` lance le scan local)

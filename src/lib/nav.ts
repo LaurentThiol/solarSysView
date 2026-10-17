@@ -246,7 +246,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     home: "/admin",
     help: {
       title: "Système",
-      body: "Secrets, synchro FDJ, mises à jour et schémas fonctionnels. Capture et Aide restent des outils du bandeau.",
+      body: "Secrets, synchro FDJ, mises à jour, journal des modifications et schémas fonctionnels. Capture et Aide restent des outils du bandeau.",
     },
     items: [
       {
@@ -263,6 +263,14 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         help: {
           title: "Schémas",
           body: "Lecteur des schémas Mermaid versionnés dans docs/schemas. Texte éclairci, recherche dans les libellés, export PNG du cadre, liens en toutes lettres, zoom et plein écran.",
+        },
+      },
+      {
+        href: "/journal",
+        label: "Journal",
+        help: {
+          title: "Journal",
+          body: "Suivi des modifications de Synchro : synthèse des PR, timeline et recherche. Le texte se réécrit ici. Distinct du journal des mises, dans Jeux.",
         },
       },
     ],

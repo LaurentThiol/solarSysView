@@ -50,7 +50,6 @@ yarn-error.log*
 
 # lanceur local
 .run/
-AGENTS.md
 CLAUDE.md
 .playwright-mcp/
 

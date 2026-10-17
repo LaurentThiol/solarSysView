@@ -447,6 +447,30 @@ def _init_db_background() -> None:
         pass
 
 
+class JournalPrIn(BaseModel):
+    number: int
+    title: str
+    merged_on: str
+    url: str = ""
+
+
+class JournalIn(BaseModel):
+    area: str
+    title: str
+    body: str
+    happened_on: str | None = None
+    pr_number: int | None = None
+    pr_url: str | None = None
+    prs: list[JournalPrIn] | None = None
+
+
+class JournalPatch(BaseModel):
+    area: str | None = None
+    title: str | None = None
+    body: str | None = None
+    hidden: bool | None = None
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     threading.Thread(target=_init_db_background, name="synchro-init-db", daemon=True).start()
@@ -2936,6 +2960,55 @@ def create_app() -> FastAPI:
             )
         )
         return report
+
+    @app.get("/api/journal")
+    def journal_list() -> dict[str, Any]:
+        try:
+            rows = db.list_dev_journal()
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return {"items": [_json(db.serialize_row(row, drop=())) for row in rows], "readonly": False}
+
+    @app.post("/api/journal")
+    def journal_create(payload: JournalIn) -> dict[str, Any]:
+        from synchro.journal import JournalError, entry_for_create
+
+        try:
+            entry = entry_for_create(payload.model_dump())
+            stored = db.insert_dev_journal(entry)
+        except JournalError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return {"ok": True, "item": _json(db.serialize_row(stored, drop=()))}
+
+    @app.patch("/api/journal/{entry_id}")
+    def journal_patch(entry_id: int, payload: JournalPatch) -> dict[str, Any]:
+        fields: dict[str, Any] = {}
+        if payload.area is not None:
+            area = payload.area.strip()
+            if not area:
+                raise HTTPException(400, "La zone est vide.")
+            fields["area"] = area
+        if payload.title is not None:
+            title = payload.title.strip()
+            if not title:
+                raise HTTPException(400, "Le titre est vide.")
+            fields["title"] = title
+        if payload.body is not None:
+            body = payload.body.strip()
+            if not body:
+                raise HTTPException(400, "Le texte est vide.")
+            fields["body"] = body
+        if payload.hidden is not None:
+            fields["hidden"] = payload.hidden
+        try:
+            stored = db.update_dev_journal(entry_id, fields)
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        if stored is None:
+            raise HTTPException(404, "Fiche introuvable")
+        return {"ok": True, "item": _json(db.serialize_row(stored, drop=()))}
 
     if WEB_DIR.exists():
         app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")

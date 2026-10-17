@@ -646,6 +646,20 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/github", "GET · POST", "GitHub", "État du dépôt ; POST pour fetch / mise à jour.", "systeme", "refresh=1"),
   apiEntry("/api/admin", "GET · POST", "Admin", "Secrets, tests, git. POST enregistre un secret.", "systeme"),
   apiEntry("/api/admin/login", "POST", "Admin · login", "Session mot de passe (ADMIN_PASSWORD).", "systeme"),
+  apiEntry(
+    "/api/journal",
+    "GET · POST",
+    "Journal des modifications",
+    "Fiches de suivi (synthèse des PR, texte éditable). GET lit Neon, ou les fichiers si l’API est absente.",
+    "systeme"
+  ),
+  apiEntry(
+    "/api/journal/{id}",
+    "PATCH",
+    "Une fiche du journal",
+    "Corrige le texte ou masque la fiche. Le masquage survit au réimport.",
+    "systeme"
+  ),
   apiEntry("/api/admin/sync", "POST", "Admin · synchro FDJ", "Lance une synchro archive depuis l’UI Admin.", "systeme"),
   apiEntry("/api/admin/test", "POST", "Admin · test secret", "Vérifie Neon / API / un service.", "systeme"),
   apiEntry(

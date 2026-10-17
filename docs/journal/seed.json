@@ -1,0 +1,1908 @@
+[
+  {
+    "slug": "socle",
+    "happened_on": "2026-10-16",
+    "area": "Socle",
+    "title": "Socle",
+    "body": "Synchro démarre le 2 septembre 2026 : API Python, Neon, Netlify, lanceur local et bandeau de statut. Le consentement 18+, le bouton Quitter, le menu burger et les overlays Glossaire et Adresse structurent ensuite l’interface, rendue responsive. Le filtre de jour (tous, mardi, vendredi, synthèse) devient commun. Le module Tube est ajouté puis retiré. Les correctifs Neon, Ollama et de calcul, ainsi que les tests de démo, restent dans cette fiche. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 1,
+        "title": "Synchro EuroMillions : Python local, Neon, Netlify",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/1"
+      },
+      {
+        "number": 2,
+        "title": "Lanceur local type PaxVideo avec vérifications de statut",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/2"
+      },
+      {
+        "number": 5,
+        "title": "Bouton Quitter dans le bandeau pour arrêter proprement",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/5"
+      },
+      {
+        "number": 6,
+        "title": "Fix du test Neon : SET statement_timeout = $1",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/6"
+      },
+      {
+        "number": 12,
+        "title": "Consentement 18+ au démarrage, plus de disclaimer sur Analyse",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/12"
+      },
+      {
+        "number": 22,
+        "title": "Aide contextuelle sur chaque champ et bouton",
+        "merged_on": "2026-09-10",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/22"
+      },
+      {
+        "number": 38,
+        "title": "Corriger LayoutProps et le python3 du test launch",
+        "merged_on": "2026-09-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/38"
+      },
+      {
+        "number": 39,
+        "title": "Lanceur local : reload, logs, restart, .env HOST/PORT",
+        "merged_on": "2026-09-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/39"
+      },
+      {
+        "number": 60,
+        "title": "fix: Neon WINDOW réservé et LLM local injoignable",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/60"
+      },
+      {
+        "number": 61,
+        "title": "fix: pastille LLM local toujours éteinte",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/61"
+      },
+      {
+        "number": 62,
+        "title": "fix: ECONNREFUSED 11434 — démarrer Ollama au launch",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/62"
+      },
+      {
+        "number": 63,
+        "title": "feat: contrôler l’installation Ollama dès ./launch",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/63"
+      },
+      {
+        "number": 64,
+        "title": "fix: ne plus inonder la console du navigateur (Ollama, favicon, clés React)",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/64"
+      },
+      {
+        "number": 66,
+        "title": "fix: Neon ne bloque plus l’UI quand une connexion du pool meurt",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/66"
+      },
+      {
+        "number": 81,
+        "title": "Rendre Synchro responsive",
+        "merged_on": "2026-09-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/81"
+      },
+      {
+        "number": 84,
+        "title": "Garder le bouton Quitter visible en plein écran",
+        "merged_on": "2026-09-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/84"
+      },
+      {
+        "number": 85,
+        "title": "Ergonomie : bandeau groupé, chrome unifié, vocabulaire",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/85"
+      },
+      {
+        "number": 88,
+        "title": "Menu burger pour les sections, pastilles de connexion toujours visibles",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/88"
+      },
+      {
+        "number": 91,
+        "title": "Fix: Évolution en double dans le bandeau après la PR #85",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/91"
+      },
+      {
+        "number": 93,
+        "title": "Bandeau : burger et nom de page, plus de familles",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/93"
+      },
+      {
+        "number": 94,
+        "title": "Bandeau : Synchro | page, tiroir indenté, sans Échap ou g",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/94"
+      },
+      {
+        "number": 110,
+        "title": "Menu burger : retirer « Aller à »",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/110"
+      },
+      {
+        "number": 119,
+        "title": "Glossaire et Adresse : overlays du bandeau",
+        "merged_on": "2026-09-20",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/119"
+      },
+      {
+        "number": 127,
+        "title": "Jour de tirage : Tous / Mardi / Vendredi / Synthèse",
+        "merged_on": "2026-09-21",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/127"
+      },
+      {
+        "number": 193,
+        "title": "Tube : tube de flux 2D sur la somme, étirement / cisaillement / compression",
+        "merged_on": "2026-09-29",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/193"
+      },
+      {
+        "number": 217,
+        "title": "Tube : gains appris, asymétrie, ellipse et formule complète",
+        "merged_on": "2026-09-29",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/217"
+      },
+      {
+        "number": 220,
+        "title": "Tube : retire le module",
+        "merged_on": "2026-10-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/220"
+      },
+      {
+        "number": 278,
+        "title": "Quitter : le badge Compiling ne plante plus la page",
+        "merged_on": "2026-10-09",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/278"
+      },
+      {
+        "number": 288,
+        "title": "Corrige les anomalies de calcul de Synchro",
+        "merged_on": "2026-10-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/288"
+      },
+      {
+        "number": 307,
+        "title": "pytest : démo Spécialistes, 1er rang, sklearn et Bollinger",
+        "merged_on": "2026-10-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/307"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "tirage",
+    "happened_on": "2026-09-18",
+    "area": "Tirage",
+    "title": "Tirage",
+    "body": "L’onglet Tirage ouvre les archives EuroMillions, avec synchro automatique FDJ vers Neon et rattrapage au lancement. Les rapports de tous les rangs, puis les totaux de gagnants France et Europe sur 13 rangs, complètent la fiche. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 8,
+        "title": "Onglet Tirage pour les archives EuroMillions",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/8"
+      },
+      {
+        "number": 9,
+        "title": "Synchro auto des derniers tirages FDJ → Neon",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/9"
+      },
+      {
+        "number": 10,
+        "title": "Fix ./launch exiting during the FDJ catch-up check",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/10"
+      },
+      {
+        "number": 86,
+        "title": "FDJ: rapports de tous les rangs dans Neon et l’UI",
+        "merged_on": "2026-09-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/86"
+      },
+      {
+        "number": 89,
+        "title": "Tirage: totaux de gagnants FR+EU (13 rangs)",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/89"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "evolution",
+    "happened_on": "2026-10-17",
+    "area": "Évolution",
+    "title": "Évolution",
+    "body": "Évolution commence par le graphique des tirages, puis les fenêtres, le pair/impair, les moyennes et Bollinger, les gains et le bloc DeltaEvol (écarts, cohérence, hasard). Mardi et vendredi se distinguent sur les courbes, y compris en rond et en losange, et Annuel additionne les numéros sur n, n−1 et n−2 avec fins de mois, décalage zonal, segments verts et taux de similitude. La fenêtre de travail reste sous le bandeau, jusqu’aux 100 derniers après les 50. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 4,
+        "title": "Graphique des valeurs de tirage dans le temps",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/4"
+      },
+      {
+        "number": 13,
+        "title": "Onglet Évolution admin : courbe, numéros et étoiles les plus sortis",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/13"
+      },
+      {
+        "number": 23,
+        "title": "Évolution : fenêtres 20 et 50 tirages",
+        "merged_on": "2026-09-10",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/23"
+      },
+      {
+        "number": 27,
+        "title": "Fiche d’aide n1–n5 sur Évolution",
+        "merged_on": "2026-09-11",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/27"
+      },
+      {
+        "number": 28,
+        "title": "Overlay number and star sums on the Evolution chart",
+        "merged_on": "2026-09-11",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/28"
+      },
+      {
+        "number": 32,
+        "title": "Évolution : courbe de suivi pair/impair (numéros et étoiles)",
+        "merged_on": "2026-09-12",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/32"
+      },
+      {
+        "number": 57,
+        "title": "Évolution : SMA et Bollinger optionnels sur chaque n",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/57"
+      },
+      {
+        "number": 67,
+        "title": "Évolution: SMA et Bollinger sur Forme",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/67"
+      },
+      {
+        "number": 83,
+        "title": "Évolution : dessin libre chartiste (aimant, gabarit, capture IA)",
+        "merged_on": "2026-09-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/83"
+      },
+      {
+        "number": 90,
+        "title": "Évolution: ligne gagnant 1er rang sur chaque numéro",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/90"
+      },
+      {
+        "number": 106,
+        "title": "Évolution : tableaux chaud/retard pertinents et triés décroissant",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/106"
+      },
+      {
+        "number": 107,
+        "title": "Évolution : ligne 1er rang aussi sur la somme des numéros",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/107"
+      },
+      {
+        "number": 112,
+        "title": "Évolution : fenêtre année n-1",
+        "merged_on": "2026-09-19",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/112"
+      },
+      {
+        "number": 113,
+        "title": "Évolution : bloc « gains dans le temps »",
+        "merged_on": "2026-09-19",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/113"
+      },
+      {
+        "number": 115,
+        "title": "Évolution : log, mardi/vendredi, report, masse empilée, dessin",
+        "merged_on": "2026-09-19",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/115"
+      },
+      {
+        "number": 116,
+        "title": "Évolution : feu vert / feu rouge pour le bouton log",
+        "merged_on": "2026-09-19",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/116"
+      },
+      {
+        "number": 120,
+        "title": "Évolution : fenêtre de travail fixe sous le bandeau",
+        "merged_on": "2026-09-20",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/120"
+      },
+      {
+        "number": 121,
+        "title": "Évolution : retirer le bloc Tirages de la fenêtre",
+        "merged_on": "2026-09-20",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/121"
+      },
+      {
+        "number": 128,
+        "title": "Évolution : mardi et vendredi lisibles sur les courbes",
+        "merged_on": "2026-09-21",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/128"
+      },
+      {
+        "number": 134,
+        "title": "Synthèse : divergence mardi / vendredi",
+        "merged_on": "2026-09-22",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/134"
+      },
+      {
+        "number": 135,
+        "title": "Synthèse : aide sur les champs de Divergence",
+        "merged_on": "2026-09-22",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/135"
+      },
+      {
+        "number": 136,
+        "title": "Évolution : le bandeau garde fenêtre, jour et mois visibles",
+        "merged_on": "2026-09-22",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/136"
+      },
+      {
+        "number": 138,
+        "title": "Synthèse : dates de tirage sur le graphique Divergence",
+        "merged_on": "2026-09-22",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/138"
+      },
+      {
+        "number": 140,
+        "title": "Évolution : onglet Bouncing",
+        "merged_on": "2026-09-22",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/140"
+      },
+      {
+        "number": 152,
+        "title": "Évolution : bloc DeltaEvol (écarts n − n−1)",
+        "merged_on": "2026-09-24",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/152"
+      },
+      {
+        "number": 153,
+        "title": "DeltaEvol : glissement, histogramme et mélange",
+        "merged_on": "2026-09-24",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/153"
+      },
+      {
+        "number": 154,
+        "title": "DeltaEvol : |Δ| de n1–n5 et e1–e2 contre le hasard théorique",
+        "merged_on": "2026-09-24",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/154"
+      },
+      {
+        "number": 155,
+        "title": "DeltaEvol : cohérence des variations n1–n5 et e1–e2",
+        "merged_on": "2026-09-24",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/155"
+      },
+      {
+        "number": 166,
+        "title": "Évolution : aligner l'axe, la SMA et les valeurs des points",
+        "merged_on": "2026-09-25",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/166"
+      },
+      {
+        "number": 168,
+        "title": "Évolution : lâcher l’aimant du dessin libre (Option / Hors courbe)",
+        "merged_on": "2026-09-26",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/168"
+      },
+      {
+        "number": 178,
+        "title": "Évolution : mardi et vendredi ne restent plus collés à n1",
+        "merged_on": "2026-09-27",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/178"
+      },
+      {
+        "number": 195,
+        "title": "DeltaEvol : dessin libre sur les écarts",
+        "merged_on": "2026-09-29",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/195"
+      },
+      {
+        "number": 218,
+        "title": "Évolution : mardi et vendredi sur chaque série visible",
+        "merged_on": "2026-09-29",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/218"
+      },
+      {
+        "number": 244,
+        "title": "Évolution : trait fin à chaque fin de mois",
+        "merged_on": "2026-10-05",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/244"
+      },
+      {
+        "number": 246,
+        "title": "Évolution : onglet Annuel, somme des numéros sur trois années",
+        "merged_on": "2026-10-05",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/246"
+      },
+      {
+        "number": 247,
+        "title": "Évolution : Annuel en barres horizontales, n à n−2 en tête",
+        "merged_on": "2026-10-05",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/247"
+      },
+      {
+        "number": 249,
+        "title": "Évolution : Mardi et Vendredi sélectionnables, synthèse des deux soirs",
+        "merged_on": "2026-10-05",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/249"
+      },
+      {
+        "number": 250,
+        "title": "Évolution : trait continu de chaque tirage sur Annuel",
+        "merged_on": "2026-10-05",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/250"
+      },
+      {
+        "number": 258,
+        "title": "Évolution : décalage zonal sur Annuel",
+        "merged_on": "2026-10-06",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/258"
+      },
+      {
+        "number": 259,
+        "title": "Évolution : Décalage suit la synthèse seule",
+        "merged_on": "2026-10-07",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/259"
+      },
+      {
+        "number": 270,
+        "title": "Évolution : bloc Persist sous DeltaEvol",
+        "merged_on": "2026-10-08",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/270"
+      },
+      {
+        "number": 271,
+        "title": "Évolution : Mardi et Vendredi éteints à l’affichage",
+        "merged_on": "2026-10-08",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/271"
+      },
+      {
+        "number": 306,
+        "title": "Évolution : 100 derniers après 50 dans la fenêtre",
+        "merged_on": "2026-10-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/306"
+      },
+      {
+        "number": 309,
+        "title": "Évolution : mardi en rond, vendredi en losange",
+        "merged_on": "2026-10-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/309"
+      },
+      {
+        "number": 311,
+        "title": "Annuel : segments verts quand n et n−1 vont dans le même sens",
+        "merged_on": "2026-10-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/311"
+      },
+      {
+        "number": 312,
+        "title": "Annuel : taux de similitude n/n−1 et n−1/n−2",
+        "merged_on": "2026-10-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/312"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "analyse",
+    "happened_on": "2026-09-30",
+    "area": "Analyse",
+    "title": "Analyse",
+    "body": "Le laboratoire d’analyse apporte les indicateurs techniques, la lecture numéro par numéro et étoile par étoile, le lift et les densités. Jumeaux compare les empreintes, avec une démo guidée et un envoi vers Brain. Bouncing règle la sévérité et la dérivée des arches. Forme compte les décennies, et Fréquences remplace les horloges par un tableau triable. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 11,
+        "title": "Laboratoire d’analyse des tirages EuroMillions",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/11"
+      },
+      {
+        "number": 14,
+        "title": "Indicateurs techniques (SMA, EMA, RSI, MACD, Bollinger, ATR) sur /analyse",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/14"
+      },
+      {
+        "number": 19,
+        "title": "Laboratoire TA : onglets et fenêtre temporelle",
+        "merged_on": "2026-09-09",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/19"
+      },
+      {
+        "number": 20,
+        "title": "Analyse numéro par numéro et pair/impair",
+        "merged_on": "2026-09-10",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/20"
+      },
+      {
+        "number": 21,
+        "title": "Analyse étoile par étoile et pair/impair des étoiles",
+        "merged_on": "2026-09-10",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/21"
+      },
+      {
+        "number": 24,
+        "title": "Analyse: mardi/vendredi, lift numéro×étoile, densités étoiles, heatmap de retard",
+        "merged_on": "2026-09-10",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/24"
+      },
+      {
+        "number": 25,
+        "title": "Ajouter présence et retard d’une étoile dans Variable",
+        "merged_on": "2026-09-11",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/25"
+      },
+      {
+        "number": 26,
+        "title": "Fiche d’aide pour le bandeau de mesure (Analyse)",
+        "merged_on": "2026-09-11",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/26"
+      },
+      {
+        "number": 105,
+        "title": "Horloges : 6 h = attendu, rouge au-delà de 2×",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/105"
+      },
+      {
+        "number": 109,
+        "title": "Analyse : onglet Jumeaux (empreintes de tirage)",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/109"
+      },
+      {
+        "number": 111,
+        "title": "Analyse : démo guidée Jumeaux",
+        "merged_on": "2026-09-19",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/111"
+      },
+      {
+        "number": 114,
+        "title": "Analyse : épingler un jumeau vers Brain et `?query=`",
+        "merged_on": "2026-09-19",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/114"
+      },
+      {
+        "number": 117,
+        "title": "Analyse : Probabilités et Mémo dans Glossaire",
+        "merged_on": "2026-09-19",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/117"
+      },
+      {
+        "number": 118,
+        "title": "Analyse : onglet Adresse à côté du Glossaire",
+        "merged_on": "2026-09-19",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/118"
+      },
+      {
+        "number": 122,
+        "title": "Analyse : affichage lisible des paires à plus fort lift",
+        "merged_on": "2026-09-20",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/122"
+      },
+      {
+        "number": 123,
+        "title": "Analyse : corriger les axes du nuage somme × étendue",
+        "merged_on": "2026-09-20",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/123"
+      },
+      {
+        "number": 125,
+        "title": "Analyse : enveloppe théorique et teinte d’ancienneté sur le nuage",
+        "merged_on": "2026-09-21",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/125"
+      },
+      {
+        "number": 142,
+        "title": "Bouncing : curseurs de sévérité",
+        "merged_on": "2026-09-23",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/142"
+      },
+      {
+        "number": 180,
+        "title": "Bouncing : tenir compte de la dérivée des arches",
+        "merged_on": "2026-09-27",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/180"
+      },
+      {
+        "number": 184,
+        "title": "Forme : nombre de décennies observées par tirage",
+        "merged_on": "2026-09-28",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/184"
+      },
+      {
+        "number": 219,
+        "title": "Fréquences : tableau triable à la place des horloges",
+        "merged_on": "2026-09-30",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/219"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "morpho",
+    "happened_on": "2026-09-15",
+    "area": "Morpho",
+    "title": "Morpho",
+    "body": "Morpho pose les glyphes 5×10, le lexique de formes, les règles et l’anticipation, avec Moondream en local. Les correctifs portent sur les backends VLM, CUDA/MPS, accelerate et transformers 5. Un backend Ollama peut aussi lire les glyphes. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 15,
+        "title": "Morpho : glyphes, règles, anticipation, Moondream local",
+        "merged_on": "2026-09-03",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/15"
+      },
+      {
+        "number": 16,
+        "title": "Fix du lancement Moondream (backends VLM manquants)",
+        "merged_on": "2026-09-03",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/16"
+      },
+      {
+        "number": 17,
+        "title": "Fix Moondream CUDA/MPS load missing accelerate",
+        "merged_on": "2026-09-03",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/17"
+      },
+      {
+        "number": 18,
+        "title": "Fix chargement Moondream (transformers 5 / all_tied_weights_keys)",
+        "merged_on": "2026-09-04",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/18"
+      },
+      {
+        "number": 65,
+        "title": "Morpho: backend VLM Ollama pour les glyphes",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/65"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "relief",
+    "happened_on": "2026-09-18",
+    "area": "Relief",
+    "title": "Relief",
+    "body": "Relief dessine une ligne n1 vers n5 par tirage, d’abord en plaques puis en lignes, avec couleur selon la hauteur. Le calque des rangs dans le temps, les tiges masquables, l’écartement, les marqueurs boule ou point et le zoom à 200 complètent la carte. Le remplissage des surfaces reste optionnel. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 51,
+        "title": "Relief : carte 3D des tirages, couleur selon la hauteur",
+        "merged_on": "2026-09-14",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/51"
+      },
+      {
+        "number": 53,
+        "title": "Relief : plaques 5×10 lisibles, plus de collines fusionnées",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/53"
+      },
+      {
+        "number": 54,
+        "title": "Relief: lignes n1→n5 au lieu des plaques Morpho",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/54"
+      },
+      {
+        "number": 56,
+        "title": "Relief: calque rangs dans le temps et tiges masquables",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/56"
+      },
+      {
+        "number": 58,
+        "title": "Relief: le curseur Écarter les tirages se voit à l’écran",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/58"
+      },
+      {
+        "number": 59,
+        "title": "Relief: marqueurs boule/point et zoom plus serré à 200",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/59"
+      },
+      {
+        "number": 104,
+        "title": "Relief : remplissage optionnel des surfaces « rangs dans le temps »",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/104"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "chartisme",
+    "happened_on": "2026-09-27",
+    "area": "Chartisme",
+    "title": "Chartisme",
+    "body": "Chartisme détecte les figures sur les courbes, avec atelier d’étiquetage, rétro-test et règles par rang. Le seuil se règle en rareté, le sens de la fenêtre se nomme, et la reconnaissance se fait en trois couches. Le dessin libre (aimant, rails, segment, médiane) partage la même géométrie. Le jour affiché aligne la recherche avec Morpho et Évolution. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 33,
+        "title": "Add a Chartisme tab: 17 figures, a labelling workshop and two networks",
+        "merged_on": "2026-09-12",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/33"
+      },
+      {
+        "number": 34,
+        "title": "Chartisme : fenêtre d'étude courte, échelles déduites, rétro-test borné",
+        "merged_on": "2026-09-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/34"
+      },
+      {
+        "number": 35,
+        "title": "Chartisme : suivre n1 à n5 et e1, e2 séparément, et pouvoir leur écrire des règles distinctes",
+        "merged_on": "2026-09-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/35"
+      },
+      {
+        "number": 36,
+        "title": "Chartisme : taux de base par remaniement, écarts entre rangs, simultanéité entre courbes",
+        "merged_on": "2026-09-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/36"
+      },
+      {
+        "number": 40,
+        "title": "Chartisme : régler le seuil en rareté visée, et cartographier les 142 courbes",
+        "merged_on": "2026-09-14",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/40"
+      },
+      {
+        "number": 49,
+        "title": "Chartisme: la détection ne vide plus le tracé",
+        "merged_on": "2026-09-14",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/49"
+      },
+      {
+        "number": 80,
+        "title": "Chartisme: sélectionner une lecture depuis le bandeau du tracé",
+        "merged_on": "2026-09-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/80"
+      },
+      {
+        "number": 82,
+        "title": "Chartisme: lire le contexte comme du passé sur le tracé",
+        "merged_on": "2026-09-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/82"
+      },
+      {
+        "number": 87,
+        "title": "Chartisme : tunnel droit, segment libre en droite, dessins synthèse des courbes",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/87"
+      },
+      {
+        "number": 92,
+        "title": "Chartisme : canal (deux rails parallèles) à la place du tunnel droit",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/92"
+      },
+      {
+        "number": 95,
+        "title": "Dessin libre : Alt démagnétise l’arrivée hors courbe",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/95"
+      },
+      {
+        "number": 96,
+        "title": "Dessin libre : tous les points de la courbe d’origine sont sélectionnables",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/96"
+      },
+      {
+        "number": 97,
+        "title": "Dessin libre : Alt démagnétise toutes les figures",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/97"
+      },
+      {
+        "number": 99,
+        "title": "Dessin libre : le bandeau Coordonnées ne recouvre plus la courbe",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/99"
+      },
+      {
+        "number": 101,
+        "title": "Rails chartistes : une géométrie pour canal, rectangle et triangles",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/101"
+      },
+      {
+        "number": 102,
+        "title": "Dessin libre : reprendre un point pour le déplacer",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/102"
+      },
+      {
+        "number": 131,
+        "title": "Dessin libre : deux droites parallèles",
+        "merged_on": "2026-09-21",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/131"
+      },
+      {
+        "number": 132,
+        "title": "Aligne Morpho et Chartisme sur le jour choisi",
+        "merged_on": "2026-09-22",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/132"
+      },
+      {
+        "number": 133,
+        "title": "Chartisme : fiche, lectures et seuil d'ensemble",
+        "merged_on": "2026-09-22",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/133"
+      },
+      {
+        "number": 137,
+        "title": "Jour affiché : overlay Évolution, entraînement, recherche Chartisme",
+        "merged_on": "2026-09-22",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/137"
+      },
+      {
+        "number": 163,
+        "title": "Chartisme : reconnaissance en trois couches",
+        "merged_on": "2026-09-25",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/163"
+      },
+      {
+        "number": 165,
+        "title": "Chartisme : indicateur de lecture et évolution entre fenêtres",
+        "merged_on": "2026-09-25",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/165"
+      },
+      {
+        "number": 167,
+        "title": "Chartisme : nommer le sens de la fenêtre",
+        "merged_on": "2026-09-26",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/167"
+      },
+      {
+        "number": 169,
+        "title": "Chartisme : un bloc pour le sens de la courbe",
+        "merged_on": "2026-09-26",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/169"
+      },
+      {
+        "number": 170,
+        "title": "Dessin libre : aide de Médiane et Hors courbe",
+        "merged_on": "2026-09-26",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/170"
+      },
+      {
+        "number": 173,
+        "title": "Chartisme : corriger l'hydratation du titre SVG",
+        "merged_on": "2026-09-26",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/173"
+      },
+      {
+        "number": 176,
+        "title": "Glossaire : courbes et figures chartistes, avec leur dessin",
+        "merged_on": "2026-09-26",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/176"
+      },
+      {
+        "number": 177,
+        "title": "Sens local : la corde résume, la chaîne porte les virages",
+        "merged_on": "2026-09-26",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/177"
+      },
+      {
+        "number": 179,
+        "title": "Dessin libre : le deuxième clic fixe le segment",
+        "merged_on": "2026-09-27",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/179"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "cycles",
+    "happened_on": "2026-09-29",
+    "area": "Cycles",
+    "title": "Cycles",
+    "body": "Cycles compare les horloges des modules avec un TFT : base, horloges groupées et quantiles. L’abscisse de Courbe et horloges s’affiche en jour/mois, et l’aide couvre les champs manquants. Le cycle court mesure les arches de 4 à 8 tirages. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 161,
+        "title": "Cycles : comparer les horloges des modules avec un TFT",
+        "merged_on": "2026-09-25",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/161"
+      },
+      {
+        "number": 162,
+        "title": "Cycles : lecture TFT avec base, horloges groupées et quantiles ordonnés",
+        "merged_on": "2026-09-25",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/162"
+      },
+      {
+        "number": 174,
+        "title": "Cycle court : étendue des arches de 4 à 8 tirages",
+        "merged_on": "2026-09-26",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/174"
+      },
+      {
+        "number": 215,
+        "title": "Cycles : aide en ligne des champs manquants",
+        "merged_on": "2026-09-29",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/215"
+      },
+      {
+        "number": 216,
+        "title": "Cycles : l'abscisse de Courbe et horloges s'affiche en jour/mois",
+        "merged_on": "2026-09-29",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/216"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "harmo",
+    "happened_on": "2026-09-21",
+    "area": "Harmo",
+    "title": "Harmo",
+    "body": "Harmo étudie les séries en mélange réseau, mécanique et acoustique. Un correctif rétablit la réponse du démixage 500. Le choix du jour se place sous le bandeau, comme sur Évolution. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 37,
+        "title": "Harmo : étude harmonique des tirages",
+        "merged_on": "2026-09-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/37"
+      },
+      {
+        "number": 42,
+        "title": "Harmo : corriger la 500 unmix (« réponse invalide »)",
+        "merged_on": "2026-09-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/42"
+      },
+      {
+        "number": 130,
+        "title": "Harmo : choix du jour sous le bandeau",
+        "merged_on": "2026-09-21",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/130"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "pulse",
+    "happened_on": "2026-10-12",
+    "area": "Pulse",
+    "title": "Pulse",
+    "body": "Pulse pose des générateurs d’onde sur les présences des boules et des étoiles, avec un preset année n−2. L’aide en ligne décrit les réglages. La fiche montre un tableau triable, l’onde au-dessus et le graphique des groupes. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 283,
+        "title": "Pulse : générateurs d’onde et preset année n-2",
+        "merged_on": "2026-10-12",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/283"
+      },
+      {
+        "number": 284,
+        "title": "Pulse renseigne l’aide en ligne",
+        "merged_on": "2026-10-12",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/284"
+      },
+      {
+        "number": 285,
+        "title": "Pulse : tableau triable sur la fiche, onde au-dessus, graphique des groupes",
+        "merged_on": "2026-10-12",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/285"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "probadynamic",
+    "happened_on": "2026-10-17",
+    "area": "probaDynamic",
+    "title": "probaDynamic",
+    "body": "probaDynamic compte 1/50 sans le numéro et 1/12 sans l’étoile, remis à zéro à la sortie. La carte 3D aligne les tirages, la hauteur du compteur et la profondeur du relief, avec survol, zoom, plancher et trois poses. Le comptage de boîtes, l’aire et la rugosité lisent ce relief. Un voyant passe du jaune au vert pendant le calcul. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 294,
+        "title": "probaDynamic : compteur d’observateur 1/50 et 1/12",
+        "merged_on": "2026-10-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/294"
+      },
+      {
+        "number": 295,
+        "title": "probaDynamic : voyant de calcul jaune puis vert",
+        "merged_on": "2026-10-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/295"
+      },
+      {
+        "number": 296,
+        "title": "probaDynamic : carte 3D du compteur",
+        "merged_on": "2026-10-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/296"
+      },
+      {
+        "number": 297,
+        "title": "probaDynamic : la case survolée s’allume sur la carte",
+        "merged_on": "2026-10-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/297"
+      },
+      {
+        "number": 298,
+        "title": "probaDynamic : zoom plus proche et plancher réglable",
+        "merged_on": "2026-10-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/298"
+      },
+      {
+        "number": 299,
+        "title": "probaDynamic : curseur de boule, défilement et plancher effaçable",
+        "merged_on": "2026-10-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/299"
+      },
+      {
+        "number": 300,
+        "title": "probaDynamic : trois poses pour la carte",
+        "merged_on": "2026-10-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/300"
+      },
+      {
+        "number": 301,
+        "title": "probaDynamic : comptage de boîtes sur la carte",
+        "merged_on": "2026-10-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/301"
+      },
+      {
+        "number": 302,
+        "title": "probaDynamic : le comptage de boîtes suit le relief 3D",
+        "merged_on": "2026-10-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/302"
+      },
+      {
+        "number": 303,
+        "title": "probaDynamic : aire et rugosité du relief",
+        "merged_on": "2026-10-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/303"
+      },
+      {
+        "number": 305,
+        "title": "probaDynamic : la pose brut se lit en relief",
+        "merged_on": "2026-10-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/305"
+      },
+      {
+        "number": 308,
+        "title": "probaDynamic : les trois poses de la carte se distinguent",
+        "merged_on": "2026-10-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/308"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "next",
+    "happened_on": "2026-10-05",
+    "area": "Next",
+    "title": "Next",
+    "body": "Next lit les tirages réalisés du plus récent au plus ancien. Couple place les boules selon leurs co-sorties, Triple fait de même pour les triplets, avec tri des colonnes et sélecteur de compte. L’indicateur reverse marque la lecture à rebours. pronosticNext est un sous-menu. Le schéma Plan est retiré. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 221,
+        "title": "Next : proximité des boules sur les tirages réalisés",
+        "merged_on": "2026-10-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/221"
+      },
+      {
+        "number": 222,
+        "title": "Next : retire le schéma Plan",
+        "merged_on": "2026-10-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/222"
+      },
+      {
+        "number": 223,
+        "title": "Next : indicateur reverse sur la lecture à rebours",
+        "merged_on": "2026-10-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/223"
+      },
+      {
+        "number": 224,
+        "title": "Next : aide contextuelle sur tous les champs de Couple",
+        "merged_on": "2026-10-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/224"
+      },
+      {
+        "number": 225,
+        "title": "Next : Évolution dans le temps relie le couple dans Chaque numéro",
+        "merged_on": "2026-10-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/225"
+      },
+      {
+        "number": 226,
+        "title": "Next : le choix 1er rang reste éteint",
+        "merged_on": "2026-10-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/226"
+      },
+      {
+        "number": 227,
+        "title": "Next : trier les colonnes de Couples",
+        "merged_on": "2026-10-03",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/227"
+      },
+      {
+        "number": 228,
+        "title": "Next : Triple pour les triplets",
+        "merged_on": "2026-10-03",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/228"
+      },
+      {
+        "number": 229,
+        "title": "Next : sous-menu pronosticNext",
+        "merged_on": "2026-10-03",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/229"
+      },
+      {
+        "number": 230,
+        "title": "Next : tri des colonnes du tableau Triplets",
+        "merged_on": "2026-10-03",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/230"
+      },
+      {
+        "number": 243,
+        "title": "Next : sélecteur de compte pour Couples et Triplets",
+        "merged_on": "2026-10-05",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/243"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "combinaisons",
+    "happened_on": "2026-09-18",
+    "area": "Combinaisons",
+    "title": "Combinaisons",
+    "body": "Combinaisons compose des grilles EuroMillions, avec la forme (décennies, étendue, consécutifs) et l’intersection des contraintes. Les grilles enregistrées se renomment. Une bande somme mini–max cadre les propositions, et l’horloge remplace la teinte sur la grille. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 29,
+        "title": "Onglet Combinaisons EuroMillions",
+        "merged_on": "2026-09-11",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/29"
+      },
+      {
+        "number": 30,
+        "title": "Réduire le tableau P(gain) officielle",
+        "merged_on": "2026-09-11",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/30"
+      },
+      {
+        "number": 31,
+        "title": "Bande somme mini–max Auto/Manuel pour les propositions",
+        "merged_on": "2026-09-11",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/31"
+      },
+      {
+        "number": 50,
+        "title": "Forme de grille (décennies, étendue, consécutifs) et intersection Combinaisons",
+        "merged_on": "2026-09-14",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/50"
+      },
+      {
+        "number": 52,
+        "title": "Forme de grille (décennies, étendue, consécutifs) et intersection Combinaisons",
+        "merged_on": "2026-09-14",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/52"
+      },
+      {
+        "number": 68,
+        "title": "Combinaisons : renommer les grilles enregistrées",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/68"
+      },
+      {
+        "number": 103,
+        "title": "Grilles : horloge iPhone à la place de la teinte",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/103"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "pronostic",
+    "happened_on": "2026-09-29",
+    "area": "Pronostic",
+    "title": "Pronostic",
+    "body": "Pronostic réduit l’univers 5+2 par couches, dont une couche issue de DeltaEvol. L’onglet Historique note les tirages passés avec une marge d’erreur. Un comité de réseaux tourne en parallèle, montre ses têtes et un plan de résidus, sans figer la page. Les schémas Mermaid décrivent le flux. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 139,
+        "title": "Pronostic : réduire l’univers 5+2 par couches",
+        "merged_on": "2026-09-22",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/139"
+      },
+      {
+        "number": 143,
+        "title": "Pronostic : onglet Historique sur les 100 derniers tirages",
+        "merged_on": "2026-09-23",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/143"
+      },
+      {
+        "number": 144,
+        "title": "Pronostic : marge d’erreur sur chaque tirage passé",
+        "merged_on": "2026-09-23",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/144"
+      },
+      {
+        "number": 145,
+        "title": "Pronostic : comité de réseaux, σ recalée et deux marges",
+        "merged_on": "2026-09-23",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/145"
+      },
+      {
+        "number": 146,
+        "title": "Pronostic : le comité accepte l’archive au lieu de répondre 422",
+        "merged_on": "2026-09-23",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/146"
+      },
+      {
+        "number": 147,
+        "title": "Pronostic : un délai au lancement n’est pas une absence de Python",
+        "merged_on": "2026-09-23",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/147"
+      },
+      {
+        "number": 148,
+        "title": "Pronostic : le comité finit l’archive et montre ses têtes",
+        "merged_on": "2026-09-23",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/148"
+      },
+      {
+        "number": 149,
+        "title": "Pronostic : les trois séries du comité tournent en parallèle",
+        "merged_on": "2026-09-23",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/149"
+      },
+      {
+        "number": 150,
+        "title": "Pronostic : renforcer l’aide de l’onglet Historique",
+        "merged_on": "2026-09-23",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/150"
+      },
+      {
+        "number": 151,
+        "title": "Pronostic : plan et grille des résidus",
+        "merged_on": "2026-09-23",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/151"
+      },
+      {
+        "number": 156,
+        "title": "Pronostic : interrupteur du calcul et page qui ne se fige plus",
+        "merged_on": "2026-09-24",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/156"
+      },
+      {
+        "number": 157,
+        "title": "Pronostic : couche Pas issue de DeltaEvol",
+        "merged_on": "2026-09-24",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/157"
+      },
+      {
+        "number": 188,
+        "title": "Pronostic : schémas Mermaid et lecteur Système",
+        "merged_on": "2026-09-29",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/188"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "nextdata",
+    "happened_on": "2026-10-17",
+    "area": "nextData",
+    "title": "nextData",
+    "body": "nextData ajoute au menu deux lectures LightGBM puis CatBoost pour une grille 5+2. L’aide décrit chaque réglage. Chronos revient (Bolt, puis Chronos-2 sur les covariables cochées), avec intervalles à 95 % et contrôle des rangs. L’onde Pulse connue avant le tirage reste celle de chaque numéro. Darts et torch ne se chargent plus à l’ouverture. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 251,
+        "title": "Grilles : menu nextData, pronostic LightGBM",
+        "merged_on": "2026-10-06",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/251"
+      },
+      {
+        "number": 252,
+        "title": "nextData : ne plus charger Darts ni torch à l’ouverture",
+        "merged_on": "2026-10-06",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/252"
+      },
+      {
+        "number": 253,
+        "title": "nextData : aide contextuelle sur chaque réglage",
+        "merged_on": "2026-10-06",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/253"
+      },
+      {
+        "number": 254,
+        "title": "nextData : CatBoost en complément de LightGBM",
+        "merged_on": "2026-10-06",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/254"
+      },
+      {
+        "number": 260,
+        "title": "Grilles : étendue et consécutifs d’Évolution dans nextData",
+        "merged_on": "2026-10-07",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/260"
+      },
+      {
+        "number": 268,
+        "title": "Grilles : arbitrer n1…n5 et e1, e2 avec les écarts",
+        "merged_on": "2026-10-08",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/268"
+      },
+      {
+        "number": 274,
+        "title": "nextData : Persist reprend une boule de n−1 ou n−2, et mesure ce que l’échange coûte",
+        "merged_on": "2026-10-09",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/274"
+      },
+      {
+        "number": 276,
+        "title": "nextData : animer la barre pendant le calcul",
+        "merged_on": "2026-10-09",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/276"
+      },
+      {
+        "number": 277,
+        "title": "nextData : rangs prévus directement, grille non déformée, Fenêtre seule sur tout le focus",
+        "merged_on": "2026-10-09",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/277"
+      },
+      {
+        "number": 279,
+        "title": "nextData : Chronos répond de nouveau (Chronos-Bolt), dit pourquoi quand il échoue, poids réglé sur dix tirages",
+        "merged_on": "2026-10-09",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/279"
+      },
+      {
+        "number": 280,
+        "title": "nextData : couples et triples sans dérive avec l'historique, année n toujours cochée",
+        "merged_on": "2026-10-09",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/280"
+      },
+      {
+        "number": 281,
+        "title": "nextData : Chronos-2 lit les covariables cochées (horloges connues d’avance, le reste en historique)",
+        "merged_on": "2026-10-09",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/281"
+      },
+      {
+        "number": 282,
+        "title": "nextData : intervalles à 95 % sur le retour et les décalages, verdicts appariés",
+        "merged_on": "2026-10-09",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/282"
+      },
+      {
+        "number": 286,
+        "title": "nextData lit l’onde Pulse connue avant le tirage",
+        "merged_on": "2026-10-12",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/286"
+      },
+      {
+        "number": 289,
+        "title": "nextData : contrôle des calculs de rangs, Darts et Chronos",
+        "merged_on": "2026-10-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/289"
+      },
+      {
+        "number": 292,
+        "title": "Audite et corrige la régression nextData",
+        "merged_on": "2026-10-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/292"
+      },
+      {
+        "number": 310,
+        "title": "nextData : le Pulse reste celui de chaque numéro",
+        "merged_on": "2026-10-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/310"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "nextdatatraining",
+    "happened_on": "2026-10-16",
+    "area": "nextDataTraining",
+    "title": "nextDataTraining",
+    "body": "nextDataTraining recule le même réglage de 1 à 10 tirages et montre l’écart au tirage sorti, avec avancement réel, Chronos et DeltaEvol. Le tableau Prévu et sorti, les bandes calibrées et le mode Méga comparent les réglages. OpenMP ne prend plus tous les cœurs. L’aide de Synthèse Méga détaille chaque valeur. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 255,
+        "title": "Grilles : nextDataTraining sur les dix tirages d’avant",
+        "merged_on": "2026-10-06",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/255"
+      },
+      {
+        "number": 256,
+        "title": "Grilles : nextDataTraining affiche l’avancement réel",
+        "merged_on": "2026-10-06",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/256"
+      },
+      {
+        "number": 257,
+        "title": "Grilles : nextDataTraining reprend Chronos et DeltaEvol",
+        "merged_on": "2026-10-06",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/257"
+      },
+      {
+        "number": 261,
+        "title": "Grilles : tableau Prévu et sorti dans nextDataTraining",
+        "merged_on": "2026-10-07",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/261"
+      },
+      {
+        "number": 265,
+        "title": "Grilles : nextDataTraining ne fork plus OpenMP sur tous les cœurs",
+        "merged_on": "2026-10-08",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/265"
+      },
+      {
+        "number": 269,
+        "title": "Grilles : la figure d’entraînement suit chaque décalage",
+        "merged_on": "2026-10-08",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/269"
+      },
+      {
+        "number": 273,
+        "title": "nextData / nextDataTraining : corriger Chronos, Darts, les bandes de rangs et les repères du retour",
+        "merged_on": "2026-10-08",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/273"
+      },
+      {
+        "number": 275,
+        "title": "nextData : un seul réglage pour le pronostic, le retour et nextDataTraining, et bandes calibrées (méthode conforme)",
+        "merged_on": "2026-10-09",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/275"
+      },
+      {
+        "number": 290,
+        "title": "Mode Méga pour comparer les réglages de nextDataTraining",
+        "merged_on": "2026-10-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/290"
+      },
+      {
+        "number": 291,
+        "title": "nextData / nextDataTraining : erreurs, cohérence et vitesse",
+        "merged_on": "2026-10-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/291"
+      },
+      {
+        "number": 304,
+        "title": "nextDataTraining : l’aide de Synthèse Méga détaille chaque valeur",
+        "merged_on": "2026-10-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/304"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "jeux",
+    "happened_on": "2026-09-16",
+    "area": "Jeux",
+    "title": "Jeux",
+    "body": "Jeux évalue des grilles au compteur combinatoire. histoJeux consigne les mises dans Neon, les relit contre le tirage FDJ et les compare à un test binomial. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 47,
+        "title": "Jeux : espace d’évaluation combinatoire des grilles",
+        "merged_on": "2026-09-14",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/47"
+      },
+      {
+        "number": 70,
+        "title": "histoJeux : journal Neon, test binomial et spec Jeux",
+        "merged_on": "2026-09-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/70"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "brain",
+    "happened_on": "2026-09-17",
+    "area": "Brain",
+    "title": "Brain",
+    "body": "Brain épingle un catalogue nommé, tient un journal et une mémoire locale, avec un agent manuel. L’interface, le dessin du cerveau et la démo guidée (Suivant / Annuler) rendent l’onglet lisible. Le vocabulaire pair/impair remplace l’ancien libellé. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 55,
+        "title": "Brain : catalog nommé, journal, mémoire locale et agent manuel",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/55"
+      },
+      {
+        "number": 69,
+        "title": "Brain: une interface plus claire et ludique",
+        "merged_on": "2026-09-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/69"
+      },
+      {
+        "number": 71,
+        "title": "Brain: un dessin de cerveau plus soigné",
+        "merged_on": "2026-09-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/71"
+      },
+      {
+        "number": 74,
+        "title": "Brain: démo concrète des fonctions de l’onglet",
+        "merged_on": "2026-09-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/74"
+      },
+      {
+        "number": 75,
+        "title": "Brain: pop-up Suivant / Annuler entre les phases de la démo",
+        "merged_on": "2026-09-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/75"
+      },
+      {
+        "number": 79,
+        "title": "Brain: paire-impair partout (plus pere-impair)",
+        "merged_on": "2026-09-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/79"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "specialistes",
+    "happened_on": "2026-09-23",
+    "area": "Spécialistes",
+    "title": "Spécialistes",
+    "body": "Les spécialistes sont de petits réseaux par série (parité, somme…), avec une démo guidée, un roster graphique et un bureau visuel partagé avec la table de Brain. L’aide décrit les indicateurs. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 72,
+        "title": "Brain: spécialistes par série (parité, somme…)",
+        "merged_on": "2026-09-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/72"
+      },
+      {
+        "number": 76,
+        "title": "Brain: démo guidée des Spécialistes",
+        "merged_on": "2026-09-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/76"
+      },
+      {
+        "number": 78,
+        "title": "Brain: roster graphique des spécialistes",
+        "merged_on": "2026-09-17",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/78"
+      },
+      {
+        "number": 108,
+        "title": "Spécialistes : décrire les indicateurs dans l’aide",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/108"
+      },
+      {
+        "number": 141,
+        "title": "Brain : bureau visuel pour la table et les spécialistes",
+        "merged_on": "2026-09-23",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/141"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "decision-tree",
+    "happened_on": "2026-09-29",
+    "area": "decisionTree",
+    "title": "decisionTree",
+    "body": "decisionTree cherche un seuil de flux et le compare à des remaniements de l’archive. Le tableau du flux s’affiche avant la coupure. Les questions portent sur les séries n2–n5 et e1–e2, apprises sur la fenêtre d’apprentissage. L’aide nomme chaque commande, et des schémas décrivent read_flux. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 181,
+        "title": "decisionTree : seuil de flux prouvé par remaniement",
+        "merged_on": "2026-09-28",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/181"
+      },
+      {
+        "number": 182,
+        "title": "decisionTree : l’aide en ligne nomme chaque commande",
+        "merged_on": "2026-09-28",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/182"
+      },
+      {
+        "number": 183,
+        "title": "decisionTree : l’aide du bandeau explique le seuil de flux",
+        "merged_on": "2026-09-28",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/183"
+      },
+      {
+        "number": 185,
+        "title": "decisionTree : le tableau du flux, avant la coupure",
+        "merged_on": "2026-09-28",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/185"
+      },
+      {
+        "number": 186,
+        "title": "decisionTree : n2–n5 et e1–e2 comme questions d’une série",
+        "merged_on": "2026-09-28",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/186"
+      },
+      {
+        "number": 187,
+        "title": "decisionTree : coupe, fenêtres et indicateurs appris sur l’apprentissage",
+        "merged_on": "2026-09-28",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/187"
+      },
+      {
+        "number": 194,
+        "title": "decisionTree : schémas complets de read_flux",
+        "merged_on": "2026-09-29",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/194"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "dictionnaire",
+    "happened_on": "2026-09-26",
+    "area": "Dictionnaire",
+    "title": "Dictionnaire",
+    "body": "Le dictionnaire tient des fiches de concepts : épisodes de sens, lecture 20/50/100, vignette et équation. Une fiche se ferme quand l’horizon est passé. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 171,
+        "title": "Dictionnaire : épisodes de sens et lecture 20/50/100",
+        "merged_on": "2026-09-26",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/171"
+      },
+      {
+        "number": 172,
+        "title": "Dictionnaire : vignette et équation lisibles",
+        "merged_on": "2026-09-26",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/172"
+      },
+      {
+        "number": 175,
+        "title": "Dictionnaire : fermer les issues quand l'horizon est passé",
+        "merged_on": "2026-09-26",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/175"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "ref",
+    "happened_on": "2026-10-05",
+    "area": "Réf",
+    "title": "Réf",
+    "body": "Réf place les cycles lunaire et solaire dans Assistants, avec un plan des phases et des grandeurs du tirage. Les jackpots et les solstices d’été et d’hiver, puis les équinoxes, marquent le nuage Phase × tirage. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 158,
+        "title": "Réf : cycles lunaire et solaire dans Assistants",
+        "merged_on": "2026-09-24",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/158"
+      },
+      {
+        "number": 159,
+        "title": "Réf : plan 2D des phases et grandeurs du tirage",
+        "merged_on": "2026-09-24",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/159"
+      },
+      {
+        "number": 160,
+        "title": "Réf : courbe des tirages sur les graphiques de phase",
+        "merged_on": "2026-09-25",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/160"
+      },
+      {
+        "number": 164,
+        "title": "Réf : marqueur des jackpots sur Phase × tirage",
+        "merged_on": "2026-09-25",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/164"
+      },
+      {
+        "number": 245,
+        "title": "Réf : solstices d'été et d'hiver",
+        "merged_on": "2026-10-05",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/245"
+      },
+      {
+        "number": 248,
+        "title": "Réf : traits de solstice et d'équinoxe sur Phase × tirage",
+        "merged_on": "2026-10-05",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/248"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "ia",
+    "happened_on": "2026-09-21",
+    "area": "IA",
+    "title": "IA",
+    "body": "L’onglet IA lit une capture : graphique, question, choix du modèle, flux de réponse et comparaison. Les lectures se renomment, s’exportent ou se suppriment. Un pronostic reste une hypothèse. En local, Qwen2.5-VL voit puis le texte raisonne, en deux passes. La capture garde la courbe observée. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 41,
+        "title": "Capture de lecture : visuel + données, onglet IA et PDF",
+        "merged_on": "2026-09-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/41"
+      },
+      {
+        "number": 43,
+        "title": "IA lecture : garder le graphique et la question",
+        "merged_on": "2026-09-14",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/43"
+      },
+      {
+        "number": 44,
+        "title": "IA : choix du modèle disponible",
+        "merged_on": "2026-09-13",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/44"
+      },
+      {
+        "number": 45,
+        "title": "IA : flux de la réponse et comparaison de deux modèles",
+        "merged_on": "2026-09-14",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/45"
+      },
+      {
+        "number": 46,
+        "title": "IA : gérer les lectures (renommer, supprimer, exporter)",
+        "merged_on": "2026-09-14",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/46"
+      },
+      {
+        "number": 48,
+        "title": "Capture : garder la courbe observée dans le visuel IA",
+        "merged_on": "2026-09-14",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/48"
+      },
+      {
+        "number": 73,
+        "title": "Brain/IA : autoriser un pronostic d’hypothèse",
+        "merged_on": "2026-09-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/73"
+      },
+      {
+        "number": 77,
+        "title": "Brain/IA: renforcer le chat Ollama (natif, ranking, Approfondir)",
+        "merged_on": "2026-09-16",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/77"
+      },
+      {
+        "number": 124,
+        "title": "IA : garder le Select de modèle toujours contrôlé",
+        "merged_on": "2026-09-21",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/124"
+      },
+      {
+        "number": 126,
+        "title": "IA locale : Qwen2.5-VL voit, puis le texte raisonne",
+        "merged_on": "2026-09-21",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/126"
+      },
+      {
+        "number": 129,
+        "title": "IA locale : fiabiliser les deux passes vision puis texte",
+        "merged_on": "2026-09-21",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/129"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "admin",
+    "happened_on": "2026-10-15",
+    "area": "Admin",
+    "title": "Admin",
+    "body": "La page Admin relie Neon, les API et le bandeau GitHub, puis suit les jetons et les modèles locaux. La carte Failles lance Syft et Grype et exporte le rapport en Markdown ou PDF. Le dossier .cursor reste ignoré par git. L’audit npm et les scripts d’installation approuvés sont notés ici. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 3,
+        "title": "Page admin services (Neon, Google, OpenAI, Brave) et bandeau Neon/GitHub",
+        "merged_on": "2026-09-02",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/3"
+      },
+      {
+        "number": 98,
+        "title": "Admin : suivi des jetons et des locales LLM",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/98"
+      },
+      {
+        "number": 100,
+        "title": "Admin : le VLM Morpho chargé n’apparaît plus absent",
+        "merged_on": "2026-09-18",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/100"
+      },
+      {
+        "number": 190,
+        "title": "npm : audit propre et scripts d’installation approuvés",
+        "merged_on": "2026-09-29",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/190"
+      },
+      {
+        "number": 262,
+        "title": "Admin : carte Failles (Syft et Grype)",
+        "merged_on": "2026-10-08",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/262"
+      },
+      {
+        "number": 264,
+        "title": "Admin : exporter les failles en Markdown ou PDF",
+        "merged_on": "2026-10-08",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/264"
+      },
+      {
+        "number": 293,
+        "title": "Git : ignore le dossier local .cursor",
+        "merged_on": "2026-10-15",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/293"
+      }
+    ],
+    "source": "seed"
+  },
+  {
+    "slug": "schemas",
+    "happened_on": "2026-10-08",
+    "area": "Schémas",
+    "title": "Schémas",
+    "body": "Le lecteur de schémas Mermaid s’ouvre dans Système, avec sommaire indenté, contraste, plein écran et liste des liens. Le README est aligné sur le menu et l’API. Synthèse rédigée à partir des titres mergés, pas d’une relecture de chaque diff.",
+    "prs": [
+      {
+        "number": 189,
+        "title": "Système : lecteur des schémas Mermaid",
+        "merged_on": "2026-09-29",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/189"
+      },
+      {
+        "number": 191,
+        "title": "Schémas : indenter les sous-menus du sommaire",
+        "merged_on": "2026-09-29",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/191"
+      },
+      {
+        "number": 214,
+        "title": "Schéma : contraste, plein écran et liste des liens",
+        "merged_on": "2026-09-29",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/214"
+      },
+      {
+        "number": 272,
+        "title": "Docs : aligner le README sur le menu et l’API",
+        "merged_on": "2026-10-08",
+        "url": "https://github.com/LaurentThiol/Synchro/pull/272"
+      }
+    ],
+    "source": "seed"
+  }
+]
