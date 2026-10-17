@@ -17,6 +17,8 @@ import {
   ANNUAL_MONTHS,
   annualMonthMean,
   annualPants,
+  sameSenseSegmentKey,
+  sameSenseSegmentKeys,
   THEORETICAL_NUMBER_SUM,
   type AnnualBar,
   type AnnualLane,
@@ -36,7 +38,7 @@ Les mois descendent, de janvier à décembre, et ont la même hauteur. Le jour p
 
 Le trait vertical est la moyenne théorique, 128. L’échelle est commune et resserrée sur les sommes observées : elle ne part pas de 0, pour que l’écart se voie. Elle ne bouge pas quand un soir s’éteint.
 
-Mardi (cyan) et vendredi (rose) se sélectionnent ici. Sur Tous, les deux pastilles sont éteintes : un clic les affiche. Le bandeau Mardi ou Vendredi allume ce soir ; l’autre reste éteint et se rallume d’un clic. Les deux soirs restent chargés. Synthèse trace un trait continu qui passe par la somme de chaque tirage, mardi et vendredi, de janvier à décembre. Chaque point est un jour de tirage. Le chiffre à droite du mois reste la moyenne de ces tirages, même si une soirée est masquée.
+Mardi (cyan) et vendredi (rose) se sélectionnent ici. Sur Tous, les deux pastilles sont éteintes : un clic les affiche. Le bandeau Mardi ou Vendredi allume ce soir ; l’autre reste éteint et se rallume d’un clic. Les deux soirs restent chargés. Synthèse trace un trait continu qui passe par la somme de chaque tirage, mardi et vendredi, de janvier à décembre. Chaque point est un jour de tirage. Un segment de ce trait passe au vert sur n et sur n−1 quand la somme monte, ou baisse, dans le même sens que le segment de l’autre année, au même soir, à trois jours près. Le chiffre à droite du mois reste la moyenne de ces tirages, même si une soirée est masquée.
 
 « en cours » : l’année n n’a pas encore de tirage en décembre. Δ, à droite, compare les moyennes de mois affichées (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. La fenêtre 20 / 50 / année ne coupe pas ces trois années.
 
@@ -123,6 +125,10 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
     () => model.lanes.map((lane) => (picks.synthese ? synthesePoints(lane) : [])),
     [model.lanes, picks.synthese]
   )
+  const sameSense = useMemo(
+    () => (picks.synthese ? sameSenseSegmentKeys(lines[0] ?? [], lines[1] ?? []) : new Set<string>()),
+    [lines, picks.synthese]
+  )
   const lagSeries = useMemo(
     () => model.lanes.map((lane) => lagPoints(lane, picks)),
     [model.lanes, picks]
@@ -168,8 +174,9 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
         <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
           Barres horizontales. n, n−1 et n−2 sont en tête. Mardi et vendredi se choisissent, éteints
           sur Tous.
-          Synthèse relie chaque tirage par un trait continu. Décalage lit un écart zonal sur des
-          suites de 6 à 10 tirages. Trait horizontal en fin de mois, trait vertical à 128.
+          Synthèse relie chaque tirage par un trait continu. Un segment vert : n et n−1 vont dans
+          le même sens. Décalage lit un écart zonal sur des suites de 6 à 10 tirages. Trait
+          horizontal en fin de mois, trait vertical à 128.
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -234,6 +241,13 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
             <span className="inline-block h-px w-6 bg-foreground/30" />
             Fin de mois
           </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block h-0.5 w-6 rounded-full"
+              style={{ background: "var(--chart-3)" }}
+            />
+            Même sens
+          </span>
           {archive.loading ? <span>Chargement des trois années…</span> : null}
         </div>
 
@@ -283,6 +297,7 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
                 bars={visibleBars(lane, picks)}
                 readout={readouts[index] ?? []}
                 points={lines[index] ?? []}
+                sameSense={sameSense}
                 zones={lagOn ? (lagZones[index] ?? []) : []}
                 loading={archive.loading && lane.bars.length === 0}
                 activeDate={tip && tip.year === lane.year ? tip.bar.date : null}
@@ -457,6 +472,7 @@ function YearColumn({
   bars,
   readout,
   points,
+  sameSense,
   zones,
   loading,
   activeDate,
@@ -469,6 +485,7 @@ function YearColumn({
   bars: readonly AnnualBar[]
   readout: readonly MonthReadout[]
   points: readonly AnnualBar[]
+  sameSense: ReadonlySet<string>
   zones: readonly LagZone[]
   loading: boolean
   activeDate: string | null
@@ -557,18 +574,26 @@ function YearColumn({
       ))}
       {points.length > 0 ? (
         <g data-annual-synthese="continu" pointerEvents="none">
-          {points.length > 1 ? (
-            <polyline
-              points={points
-                .map((bar) => `${sumX(index, bar.sum, yMin, yMax)},${yTime(bar.x)}`)
-                .join(" ")}
-              fill="none"
-              stroke="var(--foreground)"
-              strokeWidth={1.7}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          ) : null}
+          {points.length > 1
+            ? points.slice(0, -1).map((bar, pointIndex) => {
+                const next = points[pointIndex + 1]
+                if (!next) return null
+                const same = sameSense.has(sameSenseSegmentKey(bar.date, next.date))
+                return (
+                  <line
+                    key={`${bar.date}>${next.date}`}
+                    x1={sumX(index, bar.sum, yMin, yMax)}
+                    y1={yTime(bar.x)}
+                    x2={sumX(index, next.sum, yMin, yMax)}
+                    y2={yTime(next.x)}
+                    stroke={same ? "var(--chart-3)" : "var(--foreground)"}
+                    strokeWidth={1.7}
+                    strokeLinecap="round"
+                    data-annual-same-sense={same ? `${bar.date}>${next.date}` : undefined}
+                  />
+                )
+              })
+            : null}
           {points.map((bar) => {
             const highlighted = activeDate === bar.date
             return (

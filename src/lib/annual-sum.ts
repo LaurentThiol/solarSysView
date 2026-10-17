@@ -107,6 +107,56 @@ export function monthEndX(month: number): number {
   return clampMonth(month) / 12
 }
 
+/** Même seuil que le décalage zonal : soir le plus proche, à trois jours au plus. */
+export const SAME_SENSE_DAY_TOLERANCE = 3
+
+export type SameSensePoint = {
+  date: string
+  weekday: string
+  sum: number
+  month: number
+  day: number
+}
+
+/** Clé d’un segment entre deux tirages consécutifs. */
+export function sameSenseSegmentKey(fromDate: string, toDate: string): string {
+  return `${fromDate}>${toDate}`
+}
+
+/**
+ * Segments de n et de n−1 dont la somme va dans le même sens.
+ * Un tirage de n s’apparie au même soir de n−1, au jour le plus proche
+ * dans le repère (mois − 1) × 31 + jour, à trois jours au plus.
+ * Les deux bouts d’un segment tombent sur deux tirages consécutifs de n−1.
+ * Un écart nul reste hors du vert.
+ */
+export function sameSenseSegmentKeys(
+  newer: readonly SameSensePoint[],
+  older: readonly SameSensePoint[],
+  toleranceDays = SAME_SENSE_DAY_TOLERANCE
+): Set<string> {
+  const left = chronological(newer)
+  const right = chronological(older)
+  const keys = new Set<string>()
+  if (left.length < 2 || right.length < 2) return keys
+  const tolerance = Math.max(0, toleranceDays)
+  for (let index = 0; index < left.length - 1; index += 1) {
+    const from = left[index]
+    const to = left[index + 1]
+    const fromIndex = nearestSameEvening(from, right, tolerance)
+    const toIndex = nearestSameEvening(to, right, tolerance)
+    if (fromIndex == null || toIndex == null || toIndex !== fromIndex + 1) continue
+    const newerDelta = to.sum - from.sum
+    const olderDelta = right[toIndex].sum - right[fromIndex].sum
+    if (newerDelta === 0 || olderDelta === 0 || Math.sign(newerDelta) !== Math.sign(olderDelta)) {
+      continue
+    }
+    keys.add(sameSenseSegmentKey(from.date, to.date))
+    keys.add(sameSenseSegmentKey(right[fromIndex].date, right[toIndex].date))
+  }
+  return keys
+}
+
 export function annualYDomain(
   sums: readonly number[],
   theoretical = THEORETICAL_NUMBER_SUM
@@ -253,6 +303,37 @@ function numberSum(values: readonly number[] | undefined): number | null {
 function average(values: readonly number[]): number | null {
   if (values.length === 0) return null
   return values.reduce((total, value) => total + value, 0) / values.length
+}
+
+function chronological<T extends { date: string }>(points: readonly T[]): T[] {
+  return [...points].sort((a, b) => a.date.localeCompare(b.date))
+}
+
+/** Jour dans le mois de 31 cases du graphique annuel. */
+function chartSlot(month: number, day: number): number {
+  return (clampMonth(month) - 1) * 31 + Math.min(31, Math.max(1, day))
+}
+
+function nearestSameEvening(
+  point: SameSensePoint,
+  older: readonly SameSensePoint[],
+  tolerance: number
+): number | null {
+  if (!point.weekday) return null
+  const target = chartSlot(point.month, point.day)
+  let best = -1
+  let bestDist = tolerance + 1
+  for (let index = 0; index < older.length; index += 1) {
+    const other = older[index]
+    if (other.weekday !== point.weekday) continue
+    const dist = Math.abs(chartSlot(other.month, other.day) - target)
+    if (dist < bestDist) {
+      best = index
+      bestDist = dist
+    }
+  }
+  if (best < 0 || bestDist > tolerance) return null
+  return best
 }
 
 function clampMonth(month: number) {

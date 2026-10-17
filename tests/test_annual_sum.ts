@@ -10,8 +10,11 @@ import {
   annualYDomain,
   monthEndX,
   monthMeanDeltas,
+  sameSenseSegmentKey,
+  sameSenseSegmentKeys,
   THEORETICAL_NUMBER_SUM,
   type AnnualDraw,
+  type SameSensePoint,
 } from "../src/lib/annual-sum.ts"
 
 function draw(
@@ -142,6 +145,86 @@ test("month mean follows the selected evenings", () => {
   assert.equal(annualMonthMean(bars, 2, ["mardi"]).count, 0)
 })
 
+function sensePoint(
+  date: string,
+  sum: number,
+  weekday: "mardi" | "vendredi"
+): SameSensePoint {
+  return {
+    date,
+    sum,
+    weekday,
+    month: Number(date.slice(5, 7)),
+    day: Number(date.slice(8, 10)),
+  }
+}
+
+test("same-direction segments pair the same evening within three days", () => {
+  const newer = [
+    sensePoint("2026-01-02", 100, "vendredi"),
+    sensePoint("2026-01-06", 130, "mardi"),
+  ]
+  const olderUp = [
+    sensePoint("2025-01-03", 80, "vendredi"),
+    sensePoint("2025-01-07", 110, "mardi"),
+  ]
+  const rising = sameSenseSegmentKeys(newer, olderUp)
+  assert.equal(rising.has(sameSenseSegmentKey("2026-01-02", "2026-01-06")), true)
+  assert.equal(rising.has(sameSenseSegmentKey("2025-01-03", "2025-01-07")), true)
+
+  const olderDown = [
+    sensePoint("2025-01-03", 140, "vendredi"),
+    sensePoint("2025-01-07", 90, "mardi"),
+  ]
+  assert.equal(sameSenseSegmentKeys(newer, olderDown).size, 0)
+
+  const falling = sameSenseSegmentKeys(
+    [sensePoint("2026-01-02", 130, "vendredi"), sensePoint("2026-01-06", 100, "mardi")],
+    olderDown
+  )
+  assert.equal(falling.has(sameSenseSegmentKey("2026-01-02", "2026-01-06")), true)
+  assert.equal(falling.has(sameSenseSegmentKey("2025-01-03", "2025-01-07")), true)
+
+  const flat = sameSenseSegmentKeys(
+    [sensePoint("2026-01-02", 100, "vendredi"), sensePoint("2026-01-06", 100, "mardi")],
+    olderUp
+  )
+  assert.equal(flat.size, 0)
+  const olderFlat = sameSenseSegmentKeys(newer, [
+    sensePoint("2025-01-03", 80, "vendredi"),
+    sensePoint("2025-01-07", 80, "mardi"),
+  ])
+  assert.equal(olderFlat.size, 0)
+})
+
+test("a nearer tuesday does not replace the friday two days away", () => {
+  const newer = [
+    sensePoint("2026-01-02", 100, "vendredi"),
+    sensePoint("2026-01-06", 130, "mardi"),
+  ]
+  const older = [
+    sensePoint("2025-01-03", 200, "mardi"),
+    sensePoint("2025-01-04", 110, "vendredi"),
+    sensePoint("2025-01-07", 140, "mardi"),
+  ]
+  const keys = sameSenseSegmentKeys(newer, older)
+  assert.equal(keys.has(sameSenseSegmentKey("2026-01-02", "2026-01-06")), true)
+  assert.equal(keys.has(sameSenseSegmentKey("2025-01-04", "2025-01-07")), true)
+  assert.equal(keys.has(sameSenseSegmentKey("2025-01-03", "2025-01-07")), false)
+})
+
+test("an evening beyond three days stays uncolored", () => {
+  const newer = [
+    sensePoint("2026-01-02", 100, "vendredi"),
+    sensePoint("2026-01-06", 140, "mardi"),
+  ]
+  const older = [
+    sensePoint("2025-01-10", 90, "vendredi"),
+    sensePoint("2025-01-14", 120, "mardi"),
+  ]
+  assert.equal(sameSenseSegmentKeys(newer, older).size, 0)
+})
+
 test("evolution exposes the annual submenu", () => {
   const panel = readFileSync(new URL("../src/components/evolution-panel.tsx", import.meta.url), "utf8")
   const view = readFileSync(new URL("../src/components/evolution-annual.tsx", import.meta.url), "utf8")
@@ -158,6 +241,8 @@ test("evolution exposes the annual submenu", () => {
   assert.match(view, /Survolez une barre/)
   assert.match(view, /aria-pressed/)
   assert.match(view, /data-annual-synthese="continu"/)
+  assert.match(view, /data-annual-same-sense/)
+  assert.match(view, /Même sens/)
   assert.match(view, /trait continu/)
   assert.doesNotMatch(view, /data-annual-synthese-mean/)
   assert.match(view, /Aucun soir sélectionné/)
