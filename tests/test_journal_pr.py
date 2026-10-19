@@ -1,13 +1,17 @@
 """Brouillon de journal posté sur une pull request."""
 
+import json
 from pathlib import Path
 
+from synchro.journal import parse_journal_entry
 from synchro.journal_pr import (
     INCHANGE,
     area_of,
     branch_slug,
     comment_for_pull_request,
+    document_for_pull_request,
     journal_section_is_filled,
+    main,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +21,23 @@ TEMPLATE = """## Journal
 
 Journal :
 """
+
+
+def _document(**overrides: object) -> dict | None:
+    payload = {
+        "title": "Annuel : segments verts",
+        "body": TEMPLATE,
+        "branch": "cursor/annual-same-sense-e231",
+        "files": ["src/components/evolution-annual.tsx", "tests/test_annual_lag.ts"],
+        "commits": ["Annuel : segments verts quand n et n−1 vont dans le même sens"],
+        "number": 311,
+        "url": "https://github.com/LaurentThiol/Synchro/pull/311",
+        "author": "LaurentThiol",
+        "inbox_exists": False,
+        "happened_on": "2026-10-17",
+    }
+    payload.update(overrides)
+    return document_for_pull_request(**payload)  # type: ignore[arg-type]
 
 
 def _comment(**overrides: object) -> str | None:
@@ -105,6 +126,51 @@ def test_workflow_runs_on_draft_open() -> None:
     assert "opened" in workflow
     assert "synchronize" in workflow
     assert "synchro-journal-draft" in workflow
+    assert "contents: write" in workflow
+    assert 'git push origin "HEAD:${HEAD_REF}"' in workflow
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "Draft opened" in agents
     assert ".github/workflows/journal.yml" in agents
+    assert "sans attendre une confirmation" in agents
+    assert "attends la confirmation" not in agents
+
+
+def test_missing_file_is_written_even_when_the_section_is_filled() -> None:
+    document = _document()
+    assert document is not None
+    assert document["slug"] == "annual-same-sense-e231"
+    assert document["area"] == "Évolution"
+    assert document["pr_number"] == 311
+    filled = "## Journal\n\nZone : Évolution\nTitre : Segments verts\n\nLe trait vert suit le même sens.\n"
+    still = _document(body=filled)
+    assert still is not None
+    assert _comment(body=filled) is None
+    assert _document(inbox_exists=True) is None
+    assert _document(body=f"{TEMPLATE}\n{INCHANGE}\n") is None
+    assert _document(files=["tests/test_annual_lag.ts"], title="tests : le profil") is None
+
+
+def test_main_writes_the_inbox_once(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    pr = {
+        "title": "Annuel : segments verts",
+        "body": TEMPLATE,
+        "head": {"ref": "cursor/annual-same-sense-e231"},
+        "created_at": "2026-10-17T12:00:00Z",
+        "number": 311,
+        "html_url": "https://github.com/LaurentThiol/Synchro/pull/311",
+        "user": {"login": "LaurentThiol"},
+    }
+    pr_path = tmp_path / "pr.json"
+    files_path = tmp_path / "files.txt"
+    commits_path = tmp_path / "commits.txt"
+    comment_path = tmp_path / "comment.md"
+    pr_path.write_text(json.dumps(pr), encoding="utf-8")
+    files_path.write_text("src/components/evolution-annual.tsx\n", encoding="utf-8")
+    commits_path.write_text("Annuel : segments verts\n", encoding="utf-8")
+    assert main([str(pr_path), str(files_path), str(commits_path), str(comment_path)]) == 0
+    inbox = tmp_path / "docs" / "journal" / "inbox" / "annual-same-sense-e231.json"
+    parse_journal_entry(json.loads(inbox.read_text(encoding="utf-8")), source="agent", origin=inbox.name)
+    inbox.write_text("{", encoding="utf-8")
+    assert main([str(pr_path), str(files_path), str(commits_path), str(comment_path)]) == 0
+    assert inbox.read_text(encoding="utf-8") == "{"

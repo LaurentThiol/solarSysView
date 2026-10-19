@@ -85,14 +85,15 @@ def test_existing_pr_number_is_skipped() -> None:
 
 def test_seed_lists_every_merged_pr_with_a_date() -> None:
     documents = load_journal_documents(ROOT)
-    assert len(documents) >= 20
+    seed = [entry for entry in documents if entry["source"] == "seed"]
+    assert len(seed) >= 20
     numbers = [point["number"] for entry in documents for point in entry["prs"]]
     assert len(numbers) == len(set(numbers))
     assert 1 in numbers
     assert 312 in numbers
     assert 313 in numbers
     assert all(point["merged_on"] for entry in documents for point in entry["prs"])
-    assert all(entry["source"] == "seed" for entry in documents)
+    assert all(entry["source"] == "agent" for entry in documents if entry["source"] != "seed")
 
 
 def test_agents_instructions_are_tracked() -> None:

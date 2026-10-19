@@ -14,7 +14,7 @@ Journal : inchangé
 
 ## Comment l’écrire
 
-En session interactive, montre le brouillon et attends la confirmation avant de créer le fichier.
+Écris le fichier dans le même changement que la PR, sans attendre une confirmation. La page Journal sert à corriger le texte ensuite.
 
 Le numéro de PR n’existe pas encore au moment du commit. Nomme le fichier d’après la branche :
 
@@ -42,10 +42,15 @@ Dans le corps de la PR, recopie le brouillon sous le titre `Journal`.
 
 La page lit Neon. `./launch` importe les fichiers une fois : un slug déjà présent n’est pas réécrit, pour garder les corrections faites dans l’interface.
 
-## Commentaire automatique
+## Ce qui part tout seul
 
-[`.github/workflows/journal.yml`](.github/workflows/journal.yml) commente un brouillon une seule fois, à l’ouverture, à la remise en revue, ou à une poussée. Ça inclut une PR encore en draft. Le commentaire porte la marque `synchro-journal-draft`. S’il est déjà là, l’action s’arrête.
+Le déclencheur du tableau de bord Cursor « Pull request opened » ne voit pas une PR en draft : cet événement est « Draft opened ». Un réglage qui n’a que « Pull request opened » reste muet sur les PR des agents, et une poussée sur une PR déjà ouverte ne le réveille pas. Aucune automation de ce dépôt n’a tourné. Ce déclencheur ne remplit pas le journal.
 
-Elle ne commente pas non plus quand le corps contient déjà `Journal : inchangé`, une section Journal rédigée (plus que le modèle vide), ou un fichier `docs/journal/inbox/<slug>.json`. Dependabot est ignoré. Un diff limité aux tests, au formatage, aux dépendances ou au journal seul reçoit `Journal : inchangé`.
+Deux chemins le font, sans ce tableau de bord :
 
-Le déclencheur Cursor « Pull request opened » ne voit pas une PR en draft : cet événement est « Draft opened ». Un réglage qui n’a que « Pull request opened » reste donc muet sur les PR des agents, et une poussée sur une PR déjà ouverte ne le réveille pas. L’action du dépôt couvre ces deux cas. Ne pas ajouter en plus une automation Cursor sur le même dépôt : elle commenterait en double. Si elle existe déjà, la désactiver.
+1. L’agent lit ce fichier et dépose `docs/journal/inbox/<slug>.json` avant d’ouvrir la PR.
+2. [`.github/workflows/journal.yml`](.github/workflows/journal.yml) part à l’ouverture, à la remise en revue et à chaque poussée, y compris sur un draft. Si le fichier d’inbox manque, elle le commit sur la branche. Elle commente une seule fois, avec la marque `synchro-journal-draft`.
+
+Elle ne commente pas quand cette marque est déjà là, quand le corps contient `Journal : inchangé`, une section Journal rédigée (plus que le modèle vide), ou quand le fichier d’inbox existe. Elle ne crée pas de fiche dans ces cas non plus, sauf le fichier manquant alors que la section est déjà rédigée : le fichier part, le commentaire non. Dependabot est ignoré. Un diff limité aux tests, au formatage, aux dépendances ou au journal seul reçoit `Journal : inchangé`.
+
+Ne pas ajouter une automation Cursor en plus : elle commenterait en double. Si elle existe et ne réagit qu’à « Pull request opened », elle ne voit pas les drafts.

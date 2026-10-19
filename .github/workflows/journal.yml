@@ -5,7 +5,7 @@ on:
     types: [opened, reopened, ready_for_review, synchronize]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 concurrency:
@@ -19,6 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
@@ -43,6 +44,31 @@ jobs:
             echo "post=true" >> "$GITHUB_OUTPUT"
           else
             echo "post=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$(git status --porcelain -- docs/journal/inbox)" ]; then
+            echo "inbox=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "inbox=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Déposer la fiche
+        if: steps.draft.outputs.inbox == 'true'
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- docs/journal/inbox
+          git commit -m "Journal : fiche déposée pour cette PR"
+          if [ "$SAME_REPO" != "true" ]; then
+            echo "Branche hors dépôt, la fiche reste dans le commentaire." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if git push origin "HEAD:${HEAD_REF}"; then
+            echo "Fiche poussée sur ${HEAD_REF}." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Le jeton n’a pas pu pousser la fiche. Elle est dans le commentaire." >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Commenter une fois
         if: steps.draft.outputs.post == 'true'

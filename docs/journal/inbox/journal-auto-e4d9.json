@@ -1,0 +1,9 @@
+{
+  "slug": "journal-auto-e4d9",
+  "happened_on": "2026-10-19",
+  "area": "Journal",
+  "title": "La fiche part sans le tableau de bord Cursor",
+  "body": "Le déclencheur « Pull request opened » ne démarre pas sur une PR en draft, et aucune automation Cursor n’a tourné sur ce dépôt. L’agent écrit maintenant la fiche dans le même changement, sans attendre une confirmation. L’action GitHub, déjà lancée à l’ouverture d’un draft, dépose le fichier d’inbox sur la branche quand il manque, puis commente une seule fois. Une section Journal déjà rédigée n’empêche plus ce dépôt de fichier. Une PR de dépendances, de formatage ou limitée au journal reste « Journal : inchangé ».",
+  "pr_number": null,
+  "pr_url": null
+}

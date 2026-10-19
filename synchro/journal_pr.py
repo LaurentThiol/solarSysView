@@ -1,7 +1,8 @@
 """Brouillon de journal pour une pull request, sans appel réseau.
 
-L’action GitHub commente une fois. Le déclencheur Cursor « Pull request opened »
-ignore les PR encore en draft : ce module ne fait pas cette distinction.
+L’action GitHub commente une fois et, si le fichier manque, l’écrit dans
+docs/journal/inbox. Le déclencheur Cursor « Pull request opened » ignore les
+PR encore en draft : ce module ne fait pas cette distinction.
 """
 
 from __future__ import annotations
@@ -242,35 +243,110 @@ def comment_for_pull_request(
     happened_on: str,
 ) -> str | None:
     """Texte du commentaire, ou None si la PR a déjà son journal."""
-    if _is_dependabot(author, title):
-        return None
-    if inbox_exists or journal_section_is_filled(body):
-        return None
+    comment, _document = draft_for_pull_request(
+        title=title,
+        body=body,
+        branch=branch,
+        files=files,
+        commits=commits,
+        number=number,
+        url=url,
+        author=author,
+        inbox_exists=inbox_exists,
+        happened_on=happened_on,
+    )
+    return comment
+
+
+def document_for_pull_request(
+    *,
+    title: str,
+    body: str | None,
+    branch: str,
+    files: list[str],
+    commits: list[str],
+    number: int | None,
+    url: str | None,
+    author: str | None,
+    inbox_exists: bool,
+    happened_on: str,
+) -> dict[str, Any] | None:
+    """Fiche d’inbox à déposer, ou None si elle existe déjà ou si rien n’est à noter."""
+    _comment, document = draft_for_pull_request(
+        title=title,
+        body=body,
+        branch=branch,
+        files=files,
+        commits=commits,
+        number=number,
+        url=url,
+        author=author,
+        inbox_exists=inbox_exists,
+        happened_on=happened_on,
+    )
+    return document
+
+
+def draft_for_pull_request(
+    *,
+    title: str,
+    body: str | None,
+    branch: str,
+    files: list[str],
+    commits: list[str],
+    number: int | None,
+    url: str | None,
+    author: str | None,
+    inbox_exists: bool,
+    happened_on: str,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Commentaire GitHub, et fiche JSON si le fichier d’inbox manque encore.
+
+    Une section Journal déjà rédigée empêche le commentaire, pas le fichier :
+    le tableau de bord Cursor ne dépose rien, l’action le fait à sa place.
+    « Journal : inchangé » empêche les deux.
+    """
+    if _is_dependabot(author, title) or _explicit_skip(body):
+        return None, None
+    filled = journal_section_is_filled(body)
     area, primary_paths, also = _classify(files)
     if area is None:
-        return f"<!-- {MARKER} -->\n{INCHANGE}\n"
-    paragraph = _paragraph(title, area, primary_paths, commits, also)
-    slug = branch_slug(branch)
-    payload: dict[str, Any] = {
-        "slug": slug,
-        "happened_on": happened_on,
-        "area": area,
-        "title": title.strip(),
-        "body": paragraph,
-        "pr_number": number,
-        "pr_url": url,
-    }
-    dumped = json.dumps(payload, ensure_ascii=False, indent=2)
-    return (
+        if inbox_exists or filled:
+            return None, None
+        return f"<!-- {MARKER} -->\n{INCHANGE}\n", None
+    document = None
+    if not inbox_exists:
+        paragraph = _paragraph(title, area, primary_paths, commits, also)
+        slug = branch_slug(branch)
+        document = {
+            "slug": slug,
+            "happened_on": happened_on,
+            "area": area,
+            "title": title.strip(),
+            "body": paragraph,
+            "pr_number": number if isinstance(number, int) else None,
+            "pr_url": url if isinstance(url, str) and url.strip() else None,
+        }
+    if inbox_exists or filled or document is None:
+        return None, document
+    dumped = json.dumps(document, ensure_ascii=False, indent=2)
+    slug = str(document["slug"])
+    comment = (
         f"<!-- {MARKER} -->\n"
         "## Journal\n\n"
         f"Zone : {area}\n"
         f"Titre : {title.strip()}\n\n"
-        f"{paragraph}\n\n"
-        "À confirmer dans Système / Journal. "
-        f"Le fichier va dans `docs/journal/inbox/{slug}.json` :\n\n"
+        f"{document['body']}\n\n"
+        "La fiche est déposée sur la branche. Le texte se corrige dans Système / Journal. "
+        f"`docs/journal/inbox/{slug}.json` :\n\n"
         f"```json\n{dumped}\n```\n"
     )
+    return comment, document
+
+
+def _explicit_skip(body: str | None) -> bool:
+    stripped = re.sub(r"<!--.*?-->", "", body or "", flags=re.S)
+    return INCHANGE in stripped
 
 
 def _is_dependabot(author: str | None, title: str) -> bool:
@@ -354,7 +430,8 @@ def main(argv: list[str] | None = None) -> int:
     created = str(pr.get("created_at") or "")
     happened = created[:10] if len(created) >= 10 else "1970-01-01"
     user = pr.get("user") or {}
-    comment = comment_for_pull_request(
+    inbox_path = Path("docs/journal/inbox") / f"{slug}.json"
+    comment, document = draft_for_pull_request(
         title=str(pr.get("title") or ""),
         body=pr.get("body"),
         branch=branch,
@@ -363,13 +440,16 @@ def main(argv: list[str] | None = None) -> int:
         number=pr.get("number"),
         url=pr.get("html_url"),
         author=user.get("login") if isinstance(user, dict) else None,
-        inbox_exists=(Path("docs/journal/inbox") / f"{slug}.json").is_file(),
+        inbox_exists=inbox_path.is_file(),
         happened_on=happened,
     )
     if comment:
         out_path.write_text(comment, encoding="utf-8")
     elif out_path.exists():
         out_path.unlink()
+    if document is not None and not inbox_path.exists():
+        inbox_path.parent.mkdir(parents=True, exist_ok=True)
+        inbox_path.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return 0
 
 
