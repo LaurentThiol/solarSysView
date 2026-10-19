@@ -4,6 +4,6 @@
   "area": "Évolution",
   "title": "Le 1er du mois s’écrit 1er",
   "body": "Dans Chaque numéro, l’infobulle du 1er septembre affichait « mardi 1 septembre 2026 ». Elle écrit maintenant « mardi 1er septembre 2026 ». La même formulation, partout où la date d’un tirage est écrite en toutes lettres, prend « 1er » le premier jour du mois. Les autres jours, l’axe en 01/09 et les numéros du tirage restent identiques.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 320,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/320"
 }
