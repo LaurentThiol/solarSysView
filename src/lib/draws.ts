@@ -457,13 +457,17 @@ export function formatSyncStamp(iso: string | null | undefined): string | null {
   }).format(date)
 }
 
+/** Date de tirage. Le 1er du mois s’écrit « 1er », comme le reste des libellés. */
 export function formatDrawDate(isoDate: string) {
   return new Intl.DateTimeFormat("fr-FR", {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(new Date(`${isoDate}T12:00:00`))
+  })
+    .formatToParts(new Date(`${isoDate}T12:00:00`))
+    .map((part) => (part.type === "day" && part.value === "1" ? "1er" : part.value))
+    .join("")
 }
 
 export function formatShortDate(isoDate: string) {

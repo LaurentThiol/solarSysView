@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  formatDrawDate,
   formatEuro,
   formatJackpot,
   formatRank1Step,
@@ -55,6 +56,17 @@ test("parsePrizeTiers keeps numeric ranks and drops junk", () => {
       prize: null,
     },
   ])
+})
+
+test("formatDrawDate writes the first of the month as 1er", () => {
+  assert.equal(formatDrawDate("2026-09-01"), "mardi 1er septembre 2026")
+  assert.equal(formatDrawDate("2026-05-01"), "vendredi 1er mai 2026")
+  assert.equal(formatDrawDate("2026-01-01"), "jeudi 1er janvier 2026")
+  assert.equal(formatDrawDate("2026-02-01"), "dimanche 1er février 2026")
+  assert.equal(formatDrawDate("2026-10-01"), "jeudi 1er octobre 2026")
+  assert.equal(formatDrawDate("2026-09-11"), "vendredi 11 septembre 2026")
+  assert.equal(formatDrawDate("2026-09-21"), "lundi 21 septembre 2026")
+  assert.equal(formatDrawDate("2026-10-31"), "samedi 31 octobre 2026")
 })
 
 test("formatJackpot reports a rolled jackpot", () => {
