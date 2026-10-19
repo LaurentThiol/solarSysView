@@ -1,0 +1,9 @@
+{
+  "slug": "annuel-suivi-meme-sens",
+  "happened_on": "2026-10-19",
+  "area": "Évolution",
+  "title": "Annuel : suivi du retard ou de l’avance",
+  "body": "Sous Similitude, Annuel trace un schéma du même sens au fil de l’année, pour n/n−1 et pour n−1/n−2. La ligne est l’attente depuis le dernier segment de même sens. Le trait pointillé est l’écart moyen entre deux mêmes sens. Au-dessus, le même sens est en retard. En dessous, il est en avance. Les barres, le taux, le vert du trait Synthèse et le décalage zonal restent les mêmes.",
+  "pr_number": null,
+  "pr_url": null
+}

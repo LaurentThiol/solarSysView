@@ -17,9 +17,16 @@ import {
   ANNUAL_MONTHS,
   annualMonthMean,
   annualPants,
+  formatSenseGap,
+  formatSenseMoment,
+  formatSenseTrack,
   sameSenseRate,
   sameSenseSegmentKey,
+  sameSenseTrack,
   THEORETICAL_NUMBER_SUM,
+  type SenseReading,
+  type SenseTrack,
+  type SenseTrackStep,
   type SameSenseRate,
   type AnnualBar,
   type AnnualLane,
@@ -42,6 +49,8 @@ Le trait vertical est la moyenne théorique, 128. L’échelle est commune et re
 Mardi (cyan) et vendredi (rose) se sélectionnent ici. Sur Tous, les deux pastilles sont éteintes : un clic les affiche. Le bandeau Mardi ou Vendredi allume ce soir ; l’autre reste éteint et se rallume d’un clic. Les deux soirs restent chargés. Synthèse trace un trait continu qui passe par la somme de chaque tirage, mardi et vendredi, de janvier à décembre. Chaque point est un jour de tirage. Un segment de ce trait passe au vert sur n et sur n−1 quand la somme monte, ou baisse, dans le même sens que le segment de l’autre année, au même soir, à trois jours près. Le chiffre à droite du mois reste la moyenne de ces tirages, même si une soirée est masquée.
 
 Similitude, au-dessus du graphique, est la part des segments appariés qui vont dans ce même sens. n/n−1 compare n à n−1. n−1/n−2 compare n−1 à n−2. Un écart nul compte comme un sens différent. Un soir sans vis-à-vis ne compte pas. Le vert ne marque que n/n−1. Synthèse allumée, les deux taux suivent le trait continu, même si une soirée est masquée. Aucun soir allumé, ils lisent mardi et vendredi. Un soir seul, ils ne lisent que ce soir.
+
+Suivi, sous Similitude, est le schéma de cette attente. L’écart courant compte les segments appariés depuis le dernier même sens. Il retombe à zéro sur un même sens. Le trait pointillé est l’écart moyen entre deux mêmes sens. Au-dessus, le même sens est en retard. En dessous, il est en avance. Deux mêmes sens au moins fixent la moyenne. Avant cela, le schéma montre l’écart, sans dire retard ni avance. n/n−1 et n−1/n−2 ont chacun leur ligne. Le suivi lit la même série que Similitude.
 
 « en cours » : l’année n n’a pas encore de tirage en décembre. Δ, à droite, compare les moyennes de mois affichées (n moins n−1, puis n−1 moins n−2), pas des totaux. Un mois avec peu de tirages bouge davantage. La fenêtre 20 / 50 / année ne coupe pas ces trois années.
 
@@ -81,7 +90,27 @@ Le taux est le nombre de segments de même sens, divisé par le nombre de segmen
 Synthèse allumée, la série est le trait continu : mardi et vendredi, même si une soirée est masquée. Aucun soir allumé, le taux lit quand même mardi et vendredi. Un soir seul, il ne lit que ce soir. Lecture d’archive. Ce n’est pas une probabilité du prochain tirage.`,
 }
 
+const TRACK_HELP: HelpCopy = {
+  title: "Suivi du même sens",
+  wide: true,
+  body: `Schéma du retard ou de l’avance du même sens, sur les mêmes segments que Similitude.
+
+L’écart courant compte les segments appariés depuis le dernier même sens. Il retombe à zéro quand le segment va dans le même sens. Le trait pointillé est l’écart moyen entre deux mêmes sens. Au-dessus, le même sens est en retard. En dessous, il est en avance. Le point vert marque un même sens.
+
+Deux mêmes sens au moins fixent cette moyenne. Avant cela, le schéma montre l’écart, sans dire retard ni avance. Un écart nul compte comme un sens différent : il allonge l’attente. Un soir sans vis-à-vis ne compte pas.
+
+n/n−1 et n−1/n−2 ont chacun leur ligne. Synthèse allumée, ou aucun soir allumé, le suivi lit mardi et vendredi. Un soir seul, il ne lit que ce soir. Lecture d’archive. Ce n’est pas une probabilité du prochain tirage.`,
+}
+
 const VB_W = 980
+const SENSE_LABEL_W = 78
+const SENSE_PAD_R = 8
+const SENSE_ROW_H = 48
+const SENSE_AXIS_H = 18
+const SENSE_PAD_T = 2
+const SENSE_PLOT_X = SENSE_LABEL_W
+const SENSE_PLOT_W = VB_W - SENSE_LABEL_W - SENSE_PAD_R
+const SENSE_VB_H = SENSE_PAD_T + 2 * SENSE_ROW_H + SENSE_AXIS_H
 const LABEL_W = 46
 const DELTA_W = 46
 const PAD_R = 8
@@ -109,6 +138,11 @@ type Tip =
   | { kind: "bar"; bar: AnnualBar; year: number }
   | { kind: "synthese"; bar: AnnualBar; year: number }
 
+type SenseTip = {
+  pair: number
+  index: number
+}
+
 function picksFor(scope: WeekdayScope): DayPicks {
   if (scope === "mardi") return { mardi: true, vendredi: false, synthese: false }
   if (scope === "vendredi") return { mardi: false, vendredi: true, synthese: false }
@@ -132,6 +166,7 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
   )
   const [picks, setPicks] = useState<DayPicks>(() => picksFor(weekday))
   const [tip, setTip] = useState<Tip | null>(null)
+  const [senseTip, setSenseTip] = useState<SenseTip | null>(null)
   const [lagOn, setLagOn] = useState(false)
   const [suiteLength, setSuiteLength] = useState(DEFAULT_SUITE_LENGTH)
   const [seededWeekday, setSeededWeekday] = useState(weekday)
@@ -139,6 +174,7 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
     setSeededWeekday(weekday)
     setPicks(picksFor(weekday))
     setTip(null)
+    setSenseTip(null)
   }
   const readouts = useMemo(
     () => model.lanes.map((lane) => monthReadout(lane, picks)),
@@ -161,6 +197,14 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
     [similaritySeries]
   )
   const sameSense = picks.synthese ? (similarity[0]?.keys ?? EMPTY_KEYS) : EMPTY_KEYS
+  const senseTracks = useMemo(
+    () => [
+      sameSenseTrack(similaritySeries[0] ?? [], similaritySeries[1] ?? []),
+      sameSenseTrack(similaritySeries[1] ?? [], similaritySeries[2] ?? []),
+    ],
+    [similaritySeries]
+  )
+  const senseHover = senseTip ? senseStepAt(senseTracks, senseTip) : null
   const lagSeries = useMemo(
     () => model.lanes.map((lane) => lagPoints(lane, picks)),
     [model.lanes, picks]
@@ -183,6 +227,7 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
   function togglePick(key: keyof DayPicks) {
     setPicks((current) => ({ ...current, [key]: !current[key] }))
     setTip(null)
+    setSenseTip(null)
   }
   const summary = model.lanes
     .map((lane) => {
@@ -207,9 +252,9 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
           Barres horizontales. n, n−1 et n−2 sont en tête. Mardi et vendredi se choisissent, éteints
           sur Tous.
           Synthèse relie chaque tirage par un trait continu. Un segment vert : n et n−1 vont dans
-          le même sens. Similitude donne cette part en n/n−1 et en n−1/n−2. Décalage lit un
-          écart zonal sur des suites de 3 à 10 tirages. Trait horizontal en fin de mois, trait
-          vertical à 128.
+          le même sens. Similitude donne cette part en n/n−1 et en n−1/n−2. Suivi trace le
+          retard ou l’avance de ce même sens. Décalage lit un écart zonal sur des suites de 3 à
+          10 tirages. Trait horizontal en fin de mois, trait vertical à 128.
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -312,6 +357,47 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
               </span>
             )
           })}
+        </div>
+
+        <div data-annual-sense-track className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              Suivi
+              <HelpTip {...TRACK_HELP} />
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-px w-6 border-t border-dashed border-muted-foreground" />
+              Écart moyen
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2 w-3 rounded-[1px]" style={{ background: "var(--chart-3)" }} />
+              Avance
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2 w-3 rounded-[1px]" style={{ background: "var(--chart-4)" }} />
+              Retard
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "var(--chart-3)" }} />
+              Même sens
+            </span>
+          </div>
+          <SenseTrackSchema
+            tracks={senseTracks}
+            hover={senseTip}
+            onHover={(next) => setSenseTip((current) => (sameSenseTip(current, next) ? current : next))}
+          />
+          <p data-annual-sense-detail aria-live="polite" className="min-h-5 text-xs leading-5 tabular-nums">
+            {senseHover ? (
+              <SenseTrackDetail
+                label={SIMILARITY_PAIRS[senseHover.pair]?.label ?? ""}
+                step={senseHover.step}
+                meanGap={senseHover.meanGap}
+              />
+            ) : (
+              <span className="text-muted-foreground">Survolez le suivi pour lire l’écart à une date.</span>
+            )}
+          </p>
         </div>
 
         <div className="overflow-x-auto">
@@ -465,7 +551,8 @@ export function EvolutionAnnual({ weekday }: { weekday: WeekdayScope }) {
           Δ suit les moyennes affichées : les soirs allumés, ou mardi + vendredi si Synthèse est
           allumée. Positif, la moyenne la plus récente est plus haute. Similitude est la part des
           segments appariés de même sens, n/n−1 puis n−1/n−2. Aucun soir allumé, elle lit
-          mardi et vendredi. Un soir seul, elle ne lit que ce soir. Décalage,
+          mardi et vendredi. Un soir seul, elle ne lit que ce soir. Suivi compare l’écart
+          courant à l’écart moyen : au-dessus, retard, en dessous, avance. Décalage,
           s’il est allumé, pose le décalage retenu sur la colonne la plus récente de la paire.
           Synthèse allumée, il suit le trait continu. r décrit l’archive, pas le prochain tirage.{" "}
           {archive.source === "neon" ? "Source Neon." : "Source fichier local."}
@@ -826,6 +913,336 @@ function SyntheseSwatch({ muted }: { muted: boolean }) {
       style={{ opacity: muted ? 0.35 : 1 }}
     />
   )
+}
+
+function SenseTrackSchema({
+  tracks,
+  hover,
+  onHover,
+}: {
+  tracks: readonly SenseTrack[]
+  hover: SenseTip | null
+  onHover: (tip: SenseTip | null) => void
+}) {
+  const summary = SIMILARITY_PAIRS.map((pair, index) => {
+    const track = tracks[index]
+    return `${pair.label} ${track ? formatSenseTrack(track) : "—"}`
+  }).join(". ")
+  return (
+    <>
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm tabular-nums">
+        {SIMILARITY_PAIRS.map((pair, index) => {
+          const track = tracks[index] ?? EMPTY_TRACK
+          const gap = track.gap == null ? "—" : formatSenseGap(track.gap)
+          const mean = track.meanGap == null ? "—" : formatSenseGap(track.meanGap)
+          return (
+            <span
+              key={pair.id}
+              data-annual-sense-headline={pair.id}
+              title={`${pair.label} · écart ${gap} · moyenne ${mean}`}
+              className="inline-flex items-baseline gap-2"
+            >
+              <span className="text-xs text-muted-foreground">{pair.label}</span>
+              <span className="font-medium" style={{ color: senseReadingFill(track.reading) }}>
+                {formatSenseTrack(track)}
+              </span>
+            </span>
+          )
+        })}
+      </div>
+      <div className="overflow-x-auto">
+        <svg
+          viewBox={`0 0 ${VB_W} ${SENSE_VB_H}`}
+          data-annual-sense-schema
+          className="h-auto w-full min-w-[760px]"
+          role="img"
+          aria-label={`Suivi du retard ou de l’avance du même sens. ${summary}`}
+          style={{ fontFamily: "inherit" }}
+        >
+          {SIMILARITY_PAIRS.map((pair, index) => (
+            <SenseTrackRow
+              key={pair.id}
+              pairId={pair.id}
+              label={pair.label}
+              index={index}
+              track={tracks[index] ?? EMPTY_TRACK}
+              hoverIndex={hover?.pair === index ? hover.index : null}
+              onHover={onHover}
+            />
+          ))}
+          {ANNUAL_MONTHS.map((month) => (
+            <text
+              key={month.month}
+              x={senseX((month.month - 0.5) / 12)}
+              y={SENSE_PAD_T + 2 * SENSE_ROW_H + 12}
+              textAnchor="middle"
+              fill="var(--muted-foreground)"
+              fontSize="8"
+            >
+              {month.label}
+            </text>
+          ))}
+        </svg>
+      </div>
+    </>
+  )
+}
+
+function SenseTrackRow({
+  pairId,
+  label,
+  index,
+  track,
+  hoverIndex,
+  onHover,
+}: {
+  pairId: string
+  label: string
+  index: number
+  track: SenseTrack
+  hoverIndex: number | null
+  onHover: (tip: SenseTip | null) => void
+}) {
+  const rowTop = SENSE_PAD_T + index * SENSE_ROW_H
+  const innerTop = rowTop + 6
+  const innerBot = rowTop + SENSE_ROW_H - 6
+  const innerH = innerBot - innerTop
+  const maxGap = Math.max(0, track.meanGap ?? 0, ...track.steps.map((step) => step.gap))
+  const maxY = Math.max(1, maxGap * 1.12)
+  const yOf = (gap: number) => innerBot - (gap / maxY) * innerH
+  const xs = track.steps.map((step) => senseX(step.x))
+  const tail = xs.length === 0 ? senseX(0) : Math.min(senseX(1), xs[xs.length - 1] + 10)
+  const hovered = hoverIndex == null ? null : (track.steps[hoverIndex] ?? null)
+  const meanGap = track.meanGap
+  return (
+    <g
+      data-annual-sense-row={pairId}
+      data-sense-reading={track.reading ?? "none"}
+      data-sense-gap={track.gap ?? ""}
+      data-sense-mean={track.meanGap ?? ""}
+    >
+      {ANNUAL_MONTHS.map((month) =>
+        month.month % 2 === 0 ? (
+          <rect
+            key={month.month}
+            x={senseX((month.month - 1) / 12)}
+            y={innerTop}
+            width={SENSE_PLOT_W / 12}
+            height={innerH}
+            fill="var(--muted)"
+            opacity={0.4}
+          />
+        ) : null
+      )}
+      <line
+        x1={SENSE_PLOT_X}
+        x2={SENSE_PLOT_X + SENSE_PLOT_W}
+        y1={yOf(0)}
+        y2={yOf(0)}
+        stroke="var(--foreground)"
+        strokeOpacity={0.15}
+      />
+      {meanGap != null
+        ? track.steps.map((step, stepIndex) => {
+            const x1 = xs[stepIndex] ?? senseX(step.x)
+            const x2 = stepIndex + 1 < xs.length ? xs[stepIndex + 1] : tail
+            if (x2 <= x1 || Math.abs(step.gap - meanGap) < 0.05) return null
+            const above = step.gap > meanGap
+            const yHigh = yOf(Math.max(step.gap, meanGap))
+            const yLow = yOf(Math.min(step.gap, meanGap))
+            return (
+              <rect
+                key={`${step.date}-${stepIndex}`}
+                x={x1}
+                y={yHigh}
+                width={x2 - x1}
+                height={Math.max(0, yLow - yHigh)}
+                fill={above ? "var(--chart-4)" : "var(--chart-3)"}
+                fillOpacity={above ? 0.28 : 0.22}
+                data-annual-sense-band={above ? "retard" : "avance"}
+              />
+            )
+          })
+        : null}
+      {meanGap != null ? (
+        <g data-annual-sense-mean={pairId}>
+          <line
+            x1={SENSE_PLOT_X}
+            x2={SENSE_PLOT_X + SENSE_PLOT_W}
+            y1={yOf(meanGap)}
+            y2={yOf(meanGap)}
+            stroke="var(--muted-foreground)"
+            strokeWidth={1.15}
+            strokeDasharray="3 3"
+          />
+          <text
+            x={SENSE_PLOT_X + SENSE_PLOT_W - 2}
+            y={Math.max(innerTop + 8, yOf(meanGap) - 3)}
+            textAnchor="end"
+            fill="var(--muted-foreground)"
+            fontSize="8"
+          >
+            {formatSenseGap(meanGap)}
+          </text>
+        </g>
+      ) : null}
+      {xs.length > 0 ? (
+        <path
+          d={senseStepPath(xs, track.steps, yOf, tail)}
+          fill="none"
+          stroke="var(--foreground)"
+          strokeWidth={1.4}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      ) : (
+        <text
+          x={SENSE_PLOT_X + SENSE_PLOT_W / 2}
+          y={rowTop + SENSE_ROW_H / 2 + 3}
+          textAnchor="middle"
+          fill="var(--muted-foreground)"
+          fontSize="10"
+        >
+          aucun segment apparié
+        </text>
+      )}
+      {track.steps.map((step, stepIndex) =>
+        step.same ? (
+          <circle
+            key={`${step.date}-${stepIndex}`}
+            data-annual-sense-hit={step.date}
+            cx={xs[stepIndex]}
+            cy={yOf(0)}
+            r={hoverIndex === stepIndex ? 3.2 : 2.1}
+            fill="var(--chart-3)"
+          />
+        ) : null
+      )}
+      {hovered ? (
+        <line
+          x1={senseX(hovered.x)}
+          x2={senseX(hovered.x)}
+          y1={innerTop}
+          y2={innerBot}
+          stroke="var(--foreground)"
+          strokeOpacity={0.35}
+          pointerEvents="none"
+        />
+      ) : null}
+      <text x={4} y={rowTop + SENSE_ROW_H / 2 + 3} fill="var(--muted-foreground)" fontSize="11">
+        {label}
+      </text>
+      <rect
+        x={SENSE_PLOT_X}
+        y={rowTop}
+        width={SENSE_PLOT_W}
+        height={SENSE_ROW_H}
+        fill="transparent"
+        style={{ cursor: "crosshair" }}
+        onPointerMove={(event) => onHover(nearestSenseTip(event, index, track))}
+        onPointerLeave={() => onHover(null)}
+      />
+    </g>
+  )
+}
+
+function SenseTrackDetail({
+  label,
+  step,
+  meanGap,
+}: {
+  label: string
+  step: SenseTrackStep
+  meanGap: number | null
+}) {
+  const moment = formatSenseMoment(step.gap, meanGap)
+  return (
+    <>
+      <span className="text-foreground">{label}</span>
+      <span className="text-muted-foreground"> · {formatDrawDate(step.date)} · </span>
+      <span className="text-foreground">{step.same ? "même sens" : "sens différent"}</span>
+      <span className="text-muted-foreground"> · écart {formatSenseGap(step.gap)}</span>
+      {meanGap == null ? (
+        <span className="text-muted-foreground"> · moyenne pas encore fixée · {moment}</span>
+      ) : (
+        <>
+          <span className="text-muted-foreground"> · moyenne {formatSenseGap(meanGap)} · </span>
+          <span className="text-foreground">{moment}</span>
+        </>
+      )}
+    </>
+  )
+}
+
+const EMPTY_TRACK: SenseTrack = {
+  steps: [],
+  meanGap: null,
+  gap: null,
+  reading: null,
+  delta: null,
+}
+
+function senseX(unit: number) {
+  return SENSE_PLOT_X + Math.min(1, Math.max(0, unit)) * SENSE_PLOT_W
+}
+
+function senseStepPath(
+  xs: readonly number[],
+  steps: readonly SenseTrackStep[],
+  yOf: (gap: number) => number,
+  tail: number
+) {
+  const first = steps[0]
+  if (!first || xs.length === 0) return ""
+  let path = `M ${xs[0]} ${yOf(first.gap)}`
+  for (let index = 1; index < steps.length; index += 1) {
+    path += ` H ${xs[index]} V ${yOf(steps[index].gap)}`
+  }
+  return `${path} H ${tail}`
+}
+
+function senseReadingFill(reading: SenseReading | null) {
+  if (reading === "avance") return "var(--chart-3)"
+  if (reading === "retard") return "var(--chart-4)"
+  return "var(--muted-foreground)"
+}
+
+function nearestSenseTip(
+  event: React.PointerEvent<SVGRectElement>,
+  pair: number,
+  track: SenseTrack
+): SenseTip | null {
+  const svg = event.currentTarget.ownerSVGElement
+  const matrix = svg?.getScreenCTM()
+  if (!svg || !matrix || track.steps.length === 0) return null
+  const point = svg.createSVGPoint()
+  point.x = event.clientX
+  point.y = event.clientY
+  const local = point.matrixTransform(matrix.inverse())
+  const unit = (local.x - SENSE_PLOT_X) / SENSE_PLOT_W
+  let best = -1
+  let bestDist = 0.03
+  for (let index = 0; index < track.steps.length; index += 1) {
+    const dist = Math.abs(track.steps[index].x - unit)
+    if (dist < bestDist) {
+      best = index
+      bestDist = dist
+    }
+  }
+  if (best < 0) return null
+  return { pair, index: best }
+}
+
+function sameSenseTip(current: SenseTip | null, next: SenseTip | null) {
+  if (current == null || next == null) return current === next
+  return current.pair === next.pair && current.index === next.index
+}
+
+function senseStepAt(tracks: readonly SenseTrack[], tip: SenseTip) {
+  const track = tracks[tip.pair]
+  const step = track?.steps[tip.index]
+  if (!track || !step) return null
+  return { pair: tip.pair, step, meanGap: track.meanGap }
 }
 
 function useAnnualArchive() {

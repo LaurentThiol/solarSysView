@@ -8,11 +8,14 @@ import {
   annualMonthMean,
   annualPants,
   annualYDomain,
+  formatSenseMoment,
+  formatSenseTrack,
   monthEndX,
   monthMeanDeltas,
   sameSenseRate,
   sameSenseSegmentKey,
   sameSenseSegmentKeys,
+  sameSenseTrack,
   THEORETICAL_NUMBER_SUM,
   type AnnualDraw,
   type SameSensePoint,
@@ -272,6 +275,108 @@ test("similarity rate is the share of paired segments that move the same way", (
   assert.equal(short.rate, null)
 })
 
+function tuesdaySeries(year: number, sums: readonly number[]) {
+  const dates = [
+    "01-06",
+    "01-13",
+    "01-20",
+    "01-27",
+    "02-03",
+    "02-10",
+    "02-17",
+    "02-24",
+  ]
+  return sums.map((sum, index) => sensePoint(`${year}-${dates[index]}`, sum, "mardi"))
+}
+
+test("same-sense track reads delay against the mean gap", () => {
+  const newer = tuesdaySeries(2026, [100, 110, 120, 110, 120, 110])
+  const older = tuesdaySeries(2025, [50, 60, 50, 60, 70, 80])
+  const track = sameSenseTrack(newer, older)
+  assert.deepEqual(
+    track.steps.map((step) => step.gap),
+    [0, 1, 2, 0, 1]
+  )
+  assert.deepEqual(
+    track.steps.map((step) => step.same),
+    [true, false, false, true, false]
+  )
+  assert.equal(track.steps[0]?.x, annualBarX(1, 13))
+  assert.equal(track.meanGap, 2)
+  assert.equal(track.gap, 1)
+  assert.equal(track.reading, "avance")
+  assert.equal(track.delta, 1)
+  assert.equal(formatSenseTrack(track), "avance 1")
+  assert.equal(formatSenseMoment(3, 1), "retard 2")
+  assert.equal(formatSenseMoment(2, 2), "égal")
+
+  const rate = sameSenseRate(newer, older)
+  assert.equal(track.steps.length, rate.compared)
+  assert.equal(track.steps.filter((step) => step.same).length, rate.same)
+})
+
+test("same-sense track waits for two hits before naming retard or avance", () => {
+  const oneHit = sameSenseTrack(
+    tuesdaySeries(2026, [100, 110, 120, 130, 140]),
+    tuesdaySeries(2025, [50, 60, 50, 40, 30])
+  )
+  assert.deepEqual(
+    oneHit.steps.map((step) => step.gap),
+    [0, 1, 2, 3]
+  )
+  assert.equal(oneHit.meanGap, null)
+  assert.equal(oneHit.reading, null)
+  assert.equal(formatSenseTrack(oneHit), "écart 3")
+
+  const late = sameSenseTrack(
+    tuesdaySeries(2026, [100, 110, 100, 90, 100, 90, 80]),
+    tuesdaySeries(2025, [50, 60, 70, 60, 50, 60, 70])
+  )
+  assert.deepEqual(
+    late.steps.map((step) => step.gap),
+    [0, 1, 0, 1, 2, 3]
+  )
+  assert.equal(late.meanGap, 1)
+  assert.equal(late.reading, "retard")
+  assert.equal(late.delta, -2)
+  assert.equal(formatSenseTrack(late), "retard 2")
+
+  const level = sameSenseTrack(
+    tuesdaySeries(2026, [100, 110, 120]),
+    tuesdaySeries(2025, [40, 50, 60])
+  )
+  assert.deepEqual(
+    level.steps.map((step) => step.gap),
+    [0, 0]
+  )
+  assert.equal(level.meanGap, 0)
+  assert.equal(level.reading, "egal")
+  assert.equal(formatSenseTrack(level), "égal")
+
+  const leading = sameSenseTrack(
+    tuesdaySeries(2026, [100, 90, 80, 90]),
+    tuesdaySeries(2025, [50, 60, 70, 80])
+  )
+  assert.deepEqual(
+    leading.steps.map((step) => step.same),
+    [false, false, true]
+  )
+  assert.equal(leading.meanGap, null)
+  assert.equal(leading.gap, 0)
+  assert.equal(formatSenseTrack(leading), "écart 0")
+
+  const empty = sameSenseTrack([], [])
+  assert.equal(empty.steps.length, 0)
+  assert.equal(empty.gap, null)
+  assert.equal(formatSenseTrack(empty), "—")
+
+  const far = sameSenseTrack(
+    [sensePoint("2026-01-02", 100, "vendredi"), sensePoint("2026-01-06", 140, "mardi")],
+    [sensePoint("2025-01-10", 90, "vendredi"), sensePoint("2025-01-14", 120, "mardi")]
+  )
+  assert.equal(far.steps.length, 0)
+})
+
 test("evolution exposes the annual submenu", () => {
   const panel = readFileSync(new URL("../src/components/evolution-panel.tsx", import.meta.url), "utf8")
   const view = readFileSync(new URL("../src/components/evolution-annual.tsx", import.meta.url), "utf8")
@@ -290,6 +395,12 @@ test("evolution exposes the annual submenu", () => {
   assert.match(view, /data-annual-synthese="continu"/)
   assert.match(view, /data-annual-same-sense/)
   assert.match(view, /Même sens/)
+  assert.match(view, /data-annual-sense-track/)
+  assert.match(view, /data-annual-sense-schema/)
+  assert.match(view, /data-annual-sense-headline/)
+  assert.match(view, /Suivi/)
+  assert.match(view, /Écart moyen/)
+  assert.match(view, /Survolez le suivi/)
   assert.match(view, /data-annual-similarity/)
   assert.match(view, /data-annual-similarity-pair=\{pair\.id\}/)
   assert.match(view, /id: "n\/n-1"/)
@@ -309,4 +420,6 @@ test("evolution exposes the annual submenu", () => {
   assert.match(glossary, /taux de similitude/)
   assert.match(glossary, /n\/n−1/)
   assert.match(glossary, /n−1\/n−2/)
+  assert.match(glossary, /écart moyen/)
+  assert.match(panel, /Suivi trace le retard/)
 })

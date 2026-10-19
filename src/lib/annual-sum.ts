@@ -147,37 +147,173 @@ export function sameSenseRate(
   older: readonly SameSensePoint[],
   toleranceDays = SAME_SENSE_DAY_TOLERANCE
 ): SameSenseRate {
+  const pairs = sameSensePairs(newer, older, toleranceDays)
+  const keys = new Set<string>()
+  let same = 0
+  for (const pair of pairs) {
+    if (!pair.same) continue
+    same += 1
+    keys.add(sameSenseSegmentKey(pair.fromDate, pair.toDate))
+    keys.add(sameSenseSegmentKey(pair.olderFromDate, pair.olderToDate))
+  }
+  return {
+    compared: pairs.length,
+    same,
+    rate: pairs.length === 0 ? null : same / pairs.length,
+    keys,
+  }
+}
+
+export type SenseReading = "avance" | "retard" | "egal"
+
+export type SenseTrackStep = {
+  date: string
+  month: number
+  day: number
+  /** Même repère que les barres : 0 au 1er janvier, 1 au 31 décembre. */
+  x: number
+  same: boolean
+  /**
+   * Segments appariés depuis le dernier même sens.
+   * 0 quand ce segment est de même sens.
+   * Avant le premier, segments depuis le début de la série appariée.
+   */
+  gap: number
+}
+
+export type SenseTrack = {
+  steps: SenseTrackStep[]
+  /** Moyenne des attentes fermées entre deux mêmes sens. Null s’il y en a moins de deux. */
+  meanGap: number | null
+  /** Écart après le dernier segment. Null sans segment apparié. */
+  gap: number | null
+  reading: SenseReading | null
+  /** meanGap − gap. Positif : avance. Négatif : retard. */
+  delta: number | null
+}
+
+const SENSE_GAP_EQUAL = 0.05
+
+/**
+ * Suivi du même sens.
+ * L’écart courant compte les segments appariés depuis le dernier même sens.
+ * L’écart moyen est la moyenne de ces attentes, d’un même sens au suivant.
+ * Au-dessus, retard. En dessous, avance. Deux mêmes sens au moins fixent la moyenne.
+ */
+export function sameSenseTrack(
+  newer: readonly SameSensePoint[],
+  older: readonly SameSensePoint[],
+  toleranceDays = SAME_SENSE_DAY_TOLERANCE
+): SenseTrack {
+  const pairs = sameSensePairs(newer, older, toleranceDays)
+  const steps: SenseTrackStep[] = []
+  let sinceHit = 0
+  let seenHit = false
+  let closedSum = 0
+  let closedCount = 0
+  for (const pair of pairs) {
+    if (pair.same) {
+      if (seenHit) {
+        closedSum += sinceHit
+        closedCount += 1
+      }
+      seenHit = true
+      sinceHit = 0
+    } else {
+      sinceHit += 1
+    }
+    steps.push({
+      date: pair.toDate,
+      month: pair.month,
+      day: pair.day,
+      x: annualBarX(pair.month, pair.day),
+      same: pair.same,
+      gap: pair.same ? 0 : sinceHit,
+    })
+  }
+  const meanGap = closedCount > 0 ? closedSum / closedCount : null
+  const gap = steps.length === 0 ? null : steps[steps.length - 1].gap
+  const judged = gap == null ? { reading: null, delta: null } : senseGapReading(gap, meanGap)
+  return { steps, meanGap, gap, reading: judged.reading, delta: judged.delta }
+}
+
+/** Compare un écart à la moyenne. delta = moyenne − écart. */
+export function senseGapReading(
+  gap: number,
+  meanGap: number | null
+): { reading: SenseReading | null; delta: number | null } {
+  if (meanGap == null || !Number.isFinite(meanGap) || !Number.isFinite(gap)) {
+    return { reading: null, delta: null }
+  }
+  const delta = meanGap - gap
+  if (Math.abs(delta) < SENSE_GAP_EQUAL) return { reading: "egal", delta: 0 }
+  if (delta > 0) return { reading: "avance", delta }
+  return { reading: "retard", delta }
+}
+
+export function formatSenseGap(value: number): string {
+  const rounded = Math.round(value * 10) / 10
+  const normalized = Object.is(rounded, -0) || rounded === 0 ? 0 : rounded
+  return normalized.toLocaleString("fr-FR", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 0,
+  })
+}
+
+/** Lecture courte d’un écart : « avance 1,5 », « retard 2 », « égal » ou « écart 4 ». */
+export function formatSenseMoment(gap: number, meanGap: number | null): string {
+  const judged = senseGapReading(gap, meanGap)
+  if (judged.reading == null || judged.delta == null || meanGap == null) {
+    return `écart ${formatSenseGap(gap)}`
+  }
+  if (judged.reading === "egal") return "égal"
+  return `${judged.reading} ${formatSenseGap(Math.abs(judged.delta))}`
+}
+
+export function formatSenseTrack(track: SenseTrack): string {
+  if (track.gap == null) return "—"
+  return formatSenseMoment(track.gap, track.meanGap)
+}
+
+type SameSensePair = {
+  fromDate: string
+  toDate: string
+  olderFromDate: string
+  olderToDate: string
+  month: number
+  day: number
+  same: boolean
+}
+
+function sameSensePairs(
+  newer: readonly SameSensePoint[],
+  older: readonly SameSensePoint[],
+  toleranceDays: number
+): SameSensePair[] {
   const left = chronological(newer)
   const right = chronological(older)
-  const keys = new Set<string>()
-  if (left.length < 2 || right.length < 2) {
-    return { compared: 0, same: 0, rate: null, keys }
-  }
+  if (left.length < 2 || right.length < 2) return []
   const tolerance = Math.max(0, toleranceDays)
-  let compared = 0
-  let same = 0
+  const pairs: SameSensePair[] = []
   for (let index = 0; index < left.length - 1; index += 1) {
     const from = left[index]
     const to = left[index + 1]
     const fromIndex = nearestSameEvening(from, right, tolerance)
     const toIndex = nearestSameEvening(to, right, tolerance)
     if (fromIndex == null || toIndex == null || toIndex !== fromIndex + 1) continue
-    compared += 1
     const newerDelta = to.sum - from.sum
     const olderDelta = right[toIndex].sum - right[fromIndex].sum
-    if (newerDelta === 0 || olderDelta === 0 || Math.sign(newerDelta) !== Math.sign(olderDelta)) {
-      continue
-    }
-    same += 1
-    keys.add(sameSenseSegmentKey(from.date, to.date))
-    keys.add(sameSenseSegmentKey(right[fromIndex].date, right[toIndex].date))
+    pairs.push({
+      fromDate: from.date,
+      toDate: to.date,
+      olderFromDate: right[fromIndex].date,
+      olderToDate: right[toIndex].date,
+      month: to.month,
+      day: to.day,
+      same: newerDelta !== 0 && olderDelta !== 0 && Math.sign(newerDelta) === Math.sign(olderDelta),
+    })
   }
-  return {
-    compared,
-    same,
-    rate: compared === 0 ? null : same / compared,
-    keys,
-  }
+  return pairs
 }
 
 /** Segments dont la somme va dans le même sens. Voir `sameSenseRate`. */
