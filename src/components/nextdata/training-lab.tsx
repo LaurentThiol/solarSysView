@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { chronosBanner, type ChronosStatus } from "@/lib/nextdata/chronos"
-import { NEXTDATA_HELP, NEXTDATA_TRAINING_HELP } from "@/lib/nextdata/help"
+import { FOCUS_LENGTHS, NEXTDATA_HELP, NEXTDATA_TRAINING_HELP, isFocusLength, type FocusLength } from "@/lib/nextdata/help"
 import {
   pairPersist,
   persistKey,
@@ -166,7 +166,7 @@ function tone(value: number | null | undefined) {
 
 export function TrainingLab() {
   const { draws, source, loading: drawsLoading } = useDraws("current")
-  const [focus, setFocus] = useState<50 | 100>(50)
+  const [focus, setFocus] = useState<FocusLength>(50)
   const [years, setYears] = useState<string[]>(["n", "n-1", "n-2"])
   const [weekday, setWeekday] = useState<"tous" | "mardi" | "vendredi">("tous")
   const [families, setFamilies] = useState<string[]>(FAMILIES.map((item) => item.id))
@@ -317,7 +317,7 @@ export function TrainingLab() {
   }
 
   function applySweepRow(row: SweepRow) {
-    if (row.focus === 50 || row.focus === 100) setFocus(row.focus)
+    if (isFocusLength(row.focus)) setFocus(row.focus)
     if (row.years.length) setYears(row.years)
     if (row.covariates.length) setFamilies(row.covariates)
     setWithChronos(row.with_chronos)
@@ -434,7 +434,7 @@ export function TrainingLab() {
               Focus
               <HelpTip {...NEXTDATA_HELP.focus} />
             </span>
-            {([50, 100] as const).map((value) => (
+            {FOCUS_LENGTHS.map((value) => (
               <Button
                 key={value}
                 type="button"

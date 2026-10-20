@@ -89,10 +89,11 @@ def test_main_effects_stay_within_the_row_cap() -> None:
     rows = main_effects(focus=50, years=["n", "n-1", "n-2"], covariates=list(FAMILIES), with_chronos=False)
     assert rows[0].anchor is True
     assert rows[0].id == "anchor"
-    assert len(rows) == 1 + 1 + 2 + len(FAMILIES)
+    assert len(rows) == 1 + 2 + 2 + len(FAMILIES)
     assert len(rows) <= MAX_ROWS
     assert len({row.id for row in rows}) == len(rows)
     assert all(row.with_chronos is False for row in rows)
+    assert any(row.id == "focus-20" for row in rows)
     assert any(row.id == "focus-100" for row in rows)
     assert any(row.id == "years-n" for row in rows)
     assert any(row.id == "years-n+n-1" for row in rows)
@@ -104,7 +105,9 @@ def test_main_effects_stay_within_the_row_cap() -> None:
     alone = main_effects(focus=100, years=["n"], covariates=["forme"], with_chronos=True)
     assert all(row.with_chronos for row in alone)
     assert not any(row.role == "covariate" for row in alone)
-    assert {row.id for row in alone} == {"anchor", "focus-50", "years-n+n-1", "years-n+n-1+n-2"}
+    assert {row.id for row in alone} == {"anchor", "focus-20", "focus-50", "years-n+n-1", "years-n+n-1+n-2"}
+    short = main_effects(focus=20, years=["n"], covariates=["forme"], with_chronos=False)
+    assert {row.id for row in short} == {"anchor", "focus-50", "focus-100", "years-n+n-1", "years-n+n-1+n-2"}
     assert len(alone) <= MAX_ROWS
 
     skipped = main_effects(focus=50, years=["n", "n-2"], covariates=["forme", "delta"], with_chronos=False)
@@ -319,8 +322,12 @@ def test_sweep_route_keeps_the_training_focus(monkeypatch) -> None:
 
     monkeypatch.setattr("synchro.nextdata.sweep.run_sweep", fake)
     client = TestClient(create_app())
-    refused = client.post("/api/nextdata/sweep", json={"focus": 30, "draws": _draws(30)})
+    refused = client.post("/api/nextdata/sweep", json={"focus": 10, "draws": _draws(30)})
     assert refused.status_code == 400
+    assert refused.json()["detail"] == "Le focus est 20, 50 ou 100."
+    short = client.post("/api/nextdata/sweep", json={"focus": 20, "draws": _draws(30)})
+    assert short.status_code == 200, short.text
+    assert captured["focus"] == 20
     accepted = client.post(
         "/api/nextdata/sweep",
         json={"focus": 100, "with_chronos": True, "covariates": ["forme"], "draws": _draws(30)},
@@ -430,7 +437,7 @@ def test_rows_with_the_same_years_share_one_frame(monkeypatch) -> None:
         lags=(1,),
     )
     assert report["ok"] is True
-    assert len(report["rows"]) == 1 + 1 + 2 + 3
+    assert len(report["rows"]) == 1 + 2 + 2 + 3
     assert sorted(built) == sorted({("n",), ("n", "n-1"), ("n", "n-1", "n-2")})
     focus_row = next(row for row in report["rows"] if row["id"] == "focus-100")
     assert focus_row["focus"] == 100

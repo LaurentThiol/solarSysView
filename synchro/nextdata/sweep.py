@@ -1,7 +1,7 @@
 """Méga : les effets principaux du réglage affiché, notés sur les mêmes décalages.
 
 Le réglage des boutons est la ligne de départ. Autour, un seul facteur change :
-l’autre focus, une autre profondeur d’années, ou une covariable retirée. Le jour
+un autre focus, une autre profondeur d’années, ou une covariable retirée. Le jour
 et le nombre d’arbres restent ceux du pronostic. Les pas sont ceux du cache de
 nextDataTraining. Plusieurs morceaux tournent ensemble, tant que la charge de
 la machine reste sous le plafond.
@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from synchro.nextdata.covariates import normalize_families
-from synchro.nextdata.panel import YEAR_KEYS
+from synchro.nextdata.panel import FOCUS_LENGTHS, YEAR_KEYS
 from synchro.nextdata.uncertainty import paired_gap
 
 DECISION_READING = "corpus"
@@ -96,12 +96,10 @@ def _year_label(years: tuple[str, ...]) -> str:
     return ", ".join(year.replace("-", "−") for year in years)
 
 
-def _other_focus(focus: int) -> int | None:
-    if int(focus) == 50:
-        return 100
-    if int(focus) == 100:
-        return 50
-    return None
+def _other_focuses(focus: int) -> tuple[int, ...]:
+    """Les autres longueurs de focus. L’ordre est celui des boutons."""
+    current = int(focus)
+    return tuple(length for length in FOCUS_LENGTHS if length != current)
 
 
 def main_effects(
@@ -127,8 +125,7 @@ def main_effects(
             anchor=True,
         )
     ]
-    other = _other_focus(int(focus))
-    if other is not None:
+    for other in _other_focuses(int(focus)):
         rows.append(
             Variant(
                 id=f"focus-{other}",

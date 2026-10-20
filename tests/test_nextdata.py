@@ -212,6 +212,26 @@ def test_frame_uses_civil_years_and_recounts_the_focus() -> None:
         assert row["star_consecutive"] in (0.0, 1.0)
 
 
+def test_shift_minus_ten_keeps_nine_focus_draws_at_twenty() -> None:
+    """Le décalage −10 a neuf pas de focus devant lui à partir de 20, pas à 10."""
+    from synchro.nextdata.backtest import SHIFT_MAX
+    from synchro.nextdata.conformal import MIN_STEPS
+
+    draws = _draws(160, seed=3)
+
+    def predecessors(focus: int, lag: int) -> int:
+        frame = build_frame(draws, focus=focus)
+        cut = len(frame.rows) - lag
+        return sum(1 for index in range(frame.focus_start, len(frame.rows)) if index < cut)
+
+    twenty = build_frame(draws, focus=20)
+    assert twenty.focus == 20
+    assert twenty.focus_start == len(twenty.rows) - 20
+    assert predecessors(20, SHIFT_MAX) >= MIN_STEPS
+    assert all(predecessors(20, lag) >= MIN_STEPS for lag in range(1, SHIFT_MAX + 1))
+    assert predecessors(10, SHIFT_MAX) < MIN_STEPS
+
+
 def test_star_pool_follows_the_draw_date_when_it_is_missing() -> None:
     draws = [{key: value for key, value in draw.items() if key != "star_pool"} for draw in _draws(40, seed=21)]
     draws[-1] = {**draws[-1], "stars": [3, 7]}
@@ -910,6 +930,12 @@ def test_training_shift_is_one_through_ten(monkeypatch) -> None:
     assert accepted.status_code == 200, accepted.text
     assert captured["shift"] == 3
     assert accepted.json()["shifts"][0]["x"] == 3
+    refused_focus = client.post("/api/nextdata/training", json={"focus": 10, "draws": _draws(30)})
+    assert refused_focus.status_code == 400
+    assert refused_focus.json()["detail"] == "Le focus est 20, 50 ou 100."
+    taken = client.post("/api/nextdata/training", json={"focus": 20, "draws": _draws(30)})
+    assert taken.status_code == 200, taken.text
+    assert captured["shift"] is None
 
 
 def _band(mid: float) -> dict[str, float]:
@@ -1396,8 +1422,9 @@ def test_status_and_focus_guard(monkeypatch) -> None:
     body = status.json()
     assert body["ok"] is True
     assert "lightgbm" in body and "darts" in body and "chronos" in body
-    refused = client.post("/api/nextdata/forecast", json={"focus": 20, "draws": _draws(30)})
+    refused = client.post("/api/nextdata/forecast", json={"focus": 10, "draws": _draws(30)})
     assert refused.status_code == 400
+    assert refused.json()["detail"] == "Le focus est 20, 50 ou 100."
     accepted = client.post(
         "/api/nextdata/forecast",
         json={

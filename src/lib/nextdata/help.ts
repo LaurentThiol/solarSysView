@@ -5,6 +5,13 @@
 
 import type { HelpCopy } from "@/components/help"
 
+export const FOCUS_LENGTHS = [20, 50, 100] as const
+export type FocusLength = (typeof FOCUS_LENGTHS)[number]
+
+export function isFocusLength(value: number): value is FocusLength {
+  return (FOCUS_LENGTHS as readonly number[]).includes(value)
+}
+
 export const NEXTDATA_HELP = {
   banner: {
     title: "nextData",
@@ -12,16 +19,16 @@ export const NEXTDATA_HELP = {
     body: "Deux lectures du prochain tirage 5+2, construites sur les numéros réellement sortis. n1 est le plus petit des cinq, n5 le plus grand : la FDJ ne publie pas l’ordre de sortie.\n\nLes deux modèles partent à chaque pronostic. L’interrupteur choisit la grille mise en avant, celle qui part vers Jeux. L’anneau d’une boule suit la largeur de sa bande 10–90, calibrée sur le retour : plus il est épais, moins le rang est serré.\n\nCe n’est pas une probabilité de gain FDJ. Le retour arrière dit seulement à quel point la même lecture, au même réglage, aurait collé aux tirages déjà sortis.",
   },
   focus: {
-    title: "Focus 50 ou 100",
-    body: "Les 50 ou 100 derniers tirages du corpus coché. Changer de focus relance le recomptage et les deux entraînements.",
+    title: "Focus 20, 50 ou 100",
+    body: "Les 20, 50 ou 100 derniers tirages du corpus coché. Changer de focus relance le recomptage et les deux entraînements.",
     items: [
       {
         label: "Trois ans",
-        text: "Ces tirages pèsent trois fois plus que le reste des années. Ils ne sont pas les seuls à être appris.",
+        text: "Ces tirages pèsent trois fois plus que le reste des années. Ils ne sont pas les seuls à être appris. Raccourcir le focus rétrécit cette zone : le reste des années pèse davantage.",
       },
       {
         label: "Fenêtre seule",
-        text: "La perte ne voit qu’eux, et tous : leurs décalages lisent les tirages d’avant le focus, comme Darts. La fenêtre apprend donc sur 50 ou 100 tirages, avec les mêmes 16 décalages que le mode trois ans.",
+        text: "La perte ne voit qu’eux, et tous : leurs décalages lisent les tirages d’avant le focus, comme Darts. La fenêtre apprend donc sur 20, 50 ou 100 tirages, avec les mêmes 16 décalages que le mode trois ans. C’est cette lecture qui concentre l’apprentissage sur le focus.",
       },
       {
         label: "Lecture",
@@ -54,7 +61,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Fenêtre seule",
-        text: "LightGBM n’apprend que sur les 50 ou 100 derniers, à poids égal. Les tirages d’avant servent de contexte aux décalages.",
+        text: "LightGBM n’apprend que sur les 20, 50 ou 100 derniers, à poids égal. Les tirages d’avant servent de contexte aux décalages.",
       },
       {
         label: "Erreur de somme",
@@ -408,7 +415,7 @@ export const NEXTDATA_TRAINING_HELP = {
   mega: {
     title: "Méga",
     wide: true,
-    body: "Compare le réglage affiché à ses voisins, un facteur à la fois. L’autre focus, 50 ou 100. Les autres profondeurs d’années : n seule, puis n et n−1, puis n, n−1 et n−2. Chaque covariable retirée seule, dès que deux familles au moins sont cochées. Le jour reste celui du bouton. Le nombre d’arbres est celui du pronostic, le même pour toutes les lignes, pour que la ligne retenue se rejoue telle quelle sur nextData. Chronos n’entre que s’il est déjà inclus.\n\nLes lignes sont notées sur les dix mêmes décalages, ceux du réglage affiché. −1 prévoit le dernier tirage, −10 celui d’il y a dix tirages. Le nombre d’une colonne LGB ou CB est l’erreur absolue moyenne de la somme des cinq numéros. Le tri, le mot « retenu » et le bandeau ne lisent que LightGBM · trois ans, la lecture Corpus.\n\nUne variante est retenue seulement si, sur ces dix dates, son erreur de somme Corpus reste sous celle du réglage affiché sur tout l’intervalle à 95 %, après correction de Holm. Plusieurs lignes peuvent l’être : le bandeau nomme celle dont l’écart moyen est le plus négatif. Sinon le réglage affiché tient. Sur dix décalages, une MAE bouge d’environ ±6 points. Le verdict demande l’intervalle entier. La case la plus basse peut rester non tranchée.\n\nLes ajustements partagent le cache des pas. Plusieurs tournent en parallèle, tant que la charge de la machine reste sous 80 % ; sans /proc (macOS), la charge se lit sur la moyenne d’une minute. Un clic sur une ligne remet ses boutons. Entraîner relit alors le cache.",
+    body: "Compare le réglage affiché à ses voisins, un facteur à la fois. Les autres focus, parmi 20, 50 et 100. À 20, les dix décalages restent calibrés : le plus ancien a encore dix tirages du focus devant lui, et le calibrage en demande neuf. Les autres profondeurs d’années : n seule, puis n et n−1, puis n, n−1 et n−2. Chaque covariable retirée seule, dès que deux familles au moins sont cochées. Le jour reste celui du bouton. Le nombre d’arbres est celui du pronostic, le même pour toutes les lignes, pour que la ligne retenue se rejoue telle quelle sur nextData. Chronos n’entre que s’il est déjà inclus.\n\nLes lignes sont notées sur les dix mêmes décalages, ceux du réglage affiché. −1 prévoit le dernier tirage, −10 celui d’il y a dix tirages. Le nombre d’une colonne LGB ou CB est l’erreur absolue moyenne de la somme des cinq numéros. Le tri, le mot « retenu » et le bandeau ne lisent que LightGBM · trois ans, la lecture Corpus.\n\nUne variante est retenue seulement si, sur ces dix dates, son erreur de somme Corpus reste sous celle du réglage affiché sur tout l’intervalle à 95 %, après correction de Holm. Plusieurs lignes peuvent l’être : le bandeau nomme celle dont l’écart moyen est le plus négatif. Sinon le réglage affiché tient. Sur dix décalages, une MAE bouge d’environ ±6 points. Le verdict demande l’intervalle entier. La case la plus basse peut rester non tranchée.\n\nLes ajustements partagent le cache des pas. Plusieurs tournent en parallèle, tant que la charge de la machine reste sous 80 % ; sans /proc (macOS), la charge se lit sur la moyenne d’une minute. Un clic sur une ligne remet ses boutons. Entraîner relit alors le cache.",
     items: [
       {
         label: "Lecture Corpus",
@@ -438,7 +445,7 @@ export const NEXTDATA_SWEEP_HELP = {
   synthese: {
     title: "Synthèse Méga",
     wide: true,
-    body: "Le tableau note le réglage des boutons et ses voisins sur les mêmes dix décalages. Chaque ligne ne change qu’un facteur : l’autre focus, une autre profondeur d’années, ou une covariable retirée. Le jour reste celui du bouton, le nombre d’arbres celui du pronostic.\n\nLa première ligne est le réglage affiché, même quand sa MAE est plus haute. Les autres suivent l’erreur de somme de LightGBM · trois ans, de la plus basse à la plus haute. À erreur égale, l’ordre suit l’alphabet français des libellés. Une erreur manquante passe en bas.\n\nLe bandeau ne nomme un gagnant qu’une fois toutes les lignes complètes. « Comparaison en cours » : des décalages manquent encore. Un libellé « se trompe moins… après correction de Holm » : cette ligne est la retenue dont l’écart moyen est le plus négatif. « Le réglage affiché tient » : aucune variante ne reste sous lui sur tout l’intervalle, une fois Holm appliqué. Plusieurs lignes peuvent porter le mot « retenu » et le fond teinté. Le bandeau n’en nomme qu’une.\n\nLa phrase grise sous le bandeau répète la règle. Avec Chronos, elle ajoute que le mélange est moitié-moitié, et que la MAE du réglage affiché peut s’écarter de celle d’Entraîner. La ligne de charge dit ce que la machine faisait pendant la dernière tranche.",
+    body: "Le tableau note le réglage des boutons et ses voisins sur les mêmes dix décalages. Chaque ligne ne change qu’un facteur : un autre focus, 20, 50 ou 100, une autre profondeur d’années, ou une covariable retirée. Le jour reste celui du bouton, le nombre d’arbres celui du pronostic.\n\nLa première ligne est le réglage affiché, même quand sa MAE est plus haute. Les autres suivent l’erreur de somme de LightGBM · trois ans, de la plus basse à la plus haute. À erreur égale, l’ordre suit l’alphabet français des libellés. Une erreur manquante passe en bas.\n\nLe bandeau ne nomme un gagnant qu’une fois toutes les lignes complètes. « Comparaison en cours » : des décalages manquent encore. Un libellé « se trompe moins… après correction de Holm » : cette ligne est la retenue dont l’écart moyen est le plus négatif. « Le réglage affiché tient » : aucune variante ne reste sous lui sur tout l’intervalle, une fois Holm appliqué. Plusieurs lignes peuvent porter le mot « retenu » et le fond teinté. Le bandeau n’en nomme qu’une.\n\nLa phrase grise sous le bandeau répète la règle. Avec Chronos, elle ajoute que le mélange est moitié-moitié, et que la MAE du réglage affiché peut s’écarter de celle d’Entraîner. La ligne de charge dit ce que la machine faisait pendant la dernière tranche.",
     items: [
       {
         label: "Ce qui décide",
@@ -464,8 +471,8 @@ export const NEXTDATA_SWEEP_HELP = {
     body: "Le nom de la ligne, et le seul facteur qui la sépare du réglage affiché. La première ligne reprend les boutons tels quels : focus, années, covariables, et Chronos s’il est déjà inclus. Chaque autre ligne n’en change qu’un.\n\nLe mot « retenu » et le fond teinté arrivent ensemble, parcours fini : Holm garde cette ligne, et son erreur de somme Corpus est plus basse que celle du réglage affiché sur tout l’intervalle. Le bouton reprend le focus, les années, les covariables et Chronos de la ligne. Il s’ouvre quand le parcours est fini. Une ligne vide reste fermée. La petite ligne grise sous le nom est la raison d’une ligne vide.",
     items: [
       {
-        label: "Focus 50 ou Focus 100",
-        text: "L’autre fenêtre. Les années et les covariables restent celles des boutons. Les dix dates notées aussi.",
+        label: "Focus 20, 50 ou 100",
+        text: "Une autre longueur. Les années et les covariables restent celles des boutons. Les dix dates notées aussi. À 20, les dix décalages restent calibrés.",
       },
       {
         label: "Années",
@@ -484,15 +491,15 @@ export const NEXTDATA_SWEEP_HELP = {
   focus: {
     title: "Focus",
     wide: true,
-    body: "50 ou 100 : la longueur de focus demandée pour la ligne, après le filtre du jour. Ce nombre change ce que les modèles apprennent. Les dix dates notées restent celles du réglage affiché : −1 à −10 sont les dix derniers tirages de ce corpus, et ces dix tirages sont dans la fenêtre. Si le corpus est plus court que le focus affiché, l’apprentissage s’arrête au dernier tirage disponible : Focus 50 et Focus 100 apprennent alors la même queue.",
+    body: "20, 50 ou 100 : la longueur de focus demandée pour la ligne, après le filtre du jour. Ce nombre change ce que les modèles apprennent. Les dix dates notées restent celles du réglage affiché : −1 à −10 sont les dix derniers tirages de ce corpus, et ces dix tirages sont dans la fenêtre. Si le corpus est plus court que le focus affiché, l’apprentissage s’arrête au dernier tirage disponible : les focus plus longs apprennent alors la même queue.",
     items: [
       {
         label: "Trois ans, poids ×3",
-        text: "LightGBM apprend sur les années cochées. Hors focus, chaque tirage pèse 1. Dans le focus, il pèse 3. Passer de 50 à 100 allonge la zone qui pèse trois. C’est la lecture Corpus, celle du verdict.",
+        text: "LightGBM apprend sur les années cochées. Hors focus, chaque tirage pèse 1. Dans le focus, il pèse 3. Allonger le focus allonge la zone qui pèse trois. Le raccourcir laisse plus de poids au reste des années. C’est la lecture Corpus, celle du verdict.",
       },
       {
         label: "Fenêtre seule",
-        text: "La perte ne voit que ces 50 ou 100 tirages, à poids égal. Les tirages d’avant le focus restent lisibles par les décalages, comme Darts et comme sur nextData. Élargir le focus allonge donc aussi cette fenêtre.",
+        text: "La perte ne voit que ces 20, 50 ou 100 tirages, à poids égal. Les tirages d’avant le focus restent lisibles par les décalages, comme Darts et comme sur nextData. Raccourcir le focus concentre cette fenêtre. À 20, les dix décalages notés restent calibrés : chacun a au moins neuf tirages du focus devant lui.",
       },
       {
         label: "Même queue",
@@ -518,7 +525,7 @@ export const NEXTDATA_SWEEP_HELP = {
   covariables: {
     title: "Covariables de la ligne",
     wide: true,
-    body: "« Celles des boutons » : les familles cochées au-dessus. C’est le cas du réglage affiché, de l’autre focus et des autres années. « Sans » suivi d’un nom : cette seule famille est éteinte, les autres restent.",
+    body: "« Celles des boutons » : les familles cochées au-dessus. C’est le cas du réglage affiché, des autres focus et des autres années. « Sans » suivi d’un nom : cette seule famille est éteinte, les autres restent.",
     items: [
       {
         label: "Familles",
@@ -541,7 +548,7 @@ export const NEXTDATA_SWEEP_HELP = {
       },
       {
         label: "LGB · fenêtre",
-        text: "Le même LightGBM, appris seulement sur les 50 ou 100 tirages du focus, à poids égal. Sa MAE ne départage pas les lignes.",
+        text: "Le même LightGBM, appris seulement sur les 20, 50 ou 100 tirages du focus, à poids égal. Sa MAE ne départage pas les lignes.",
       },
       {
         label: "CB · 3 ans et CB · fenêtre",

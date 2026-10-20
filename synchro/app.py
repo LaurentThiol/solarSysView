@@ -2797,6 +2797,14 @@ def create_app() -> FastAPI:
             raise HTTPException(400, "Chronos s’active avec un booléen.")
         return raw
 
+    def _nextdata_focus(payload: dict[str, Any]) -> int:
+        from synchro.nextdata.panel import FOCUS_LENGTHS
+
+        focus = payload.get("focus", 50)
+        if focus not in FOCUS_LENGTHS:
+            raise HTTPException(400, "Le focus est 20, 50 ou 100.")
+        return int(focus)
+
     @app.get("/api/nextdata/status")
     def nextdata_status() -> dict[str, Any]:
         from synchro.nextdata import dependency_status
@@ -2811,9 +2819,7 @@ def create_app() -> FastAPI:
             raise HTTPException(400, "nextData n’a pas reçu une requête lisible.") from exc
         if not isinstance(payload, dict):
             raise HTTPException(400, "Le corps nextData doit être un objet.")
-        focus = payload.get("focus", 50)
-        if focus not in (50, 100):
-            raise HTTPException(400, "Le focus est 50 ou 100.")
+        focus = _nextdata_focus(payload)
         primary = payload.get("primary") or "corpus"
         if primary not in ("corpus", "fenetre"):
             raise HTTPException(400, "Le mode est corpus ou fenetre.")
@@ -2863,9 +2869,7 @@ def create_app() -> FastAPI:
             raise HTTPException(400, "nextDataTraining n’a pas reçu une requête lisible.") from exc
         if not isinstance(payload, dict):
             raise HTTPException(400, "Le corps nextDataTraining doit être un objet.")
-        focus = payload.get("focus", 50)
-        if focus not in (50, 100):
-            raise HTTPException(400, "Le focus est 50 ou 100.")
+        focus = _nextdata_focus(payload)
         years = payload.get("years")
         if years is not None and not isinstance(years, list):
             raise HTTPException(400, "Les années se cochent dans une liste.")
@@ -2921,9 +2925,7 @@ def create_app() -> FastAPI:
             raise HTTPException(400, "nextDataTraining n’a pas reçu une requête lisible.") from exc
         if not isinstance(payload, dict):
             raise HTTPException(400, "Le corps nextDataTraining doit être un objet.")
-        focus = payload.get("focus", 50)
-        if focus not in (50, 100):
-            raise HTTPException(400, "Le focus est 50 ou 100.")
+        focus = _nextdata_focus(payload)
         years = payload.get("years")
         if years is not None and not isinstance(years, list):
             raise HTTPException(400, "Les années se cochent dans une liste.")

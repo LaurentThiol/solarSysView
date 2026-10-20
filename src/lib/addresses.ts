@@ -306,7 +306,7 @@ const TABS: AddressEntry[] = [
   tabEntry(
     "/nextdata?tab=pronostic",
     "nextData · Pronostic",
-    "Deux grilles 5+2 : trois ans avec poids ×3 sur le focus, et fenêtre seule des 50 ou 100 derniers tirages.",
+    "Deux grilles 5+2 : trois ans avec poids ×3 sur le focus, et fenêtre seule des 20, 50 ou 100 derniers tirages.",
     "grilles",
     "tab=pronostic"
   ),
@@ -566,7 +566,7 @@ const APIS: AddressEntry[] = [
     "nextDataTraining",
     "Dix décalages −1 à −10 : écart signé entre la prévision et le tirage sorti.",
     "grilles",
-    "focus=50|100"
+    "focus=20|50|100"
   ),
   apiEntry(
     "/api/nextdata/forecast",
@@ -574,7 +574,7 @@ const APIS: AddressEntry[] = [
     "nextData · pronostic",
     "Deux entraînements (trois ans, fenêtre seule) et le faisceau 5+2 sur la base recomptée.",
     "grilles",
-    "focus=50|100, primary=corpus|fenetre"
+    "focus=20|50|100, primary=corpus|fenetre"
   ),
   apiEntry(
     "/api/pronostic/committee",

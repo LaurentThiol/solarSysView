@@ -27,6 +27,8 @@ from synchro.short_cycle import short_residual
 
 MIN_DRAWS = 24
 YEAR_KEYS = ("n", "n-1", "n-2")
+# 20 est le plus court qui laisse encore neuf tirages de focus devant le décalage −10.
+FOCUS_LENGTHS = (20, 50, 100)
 
 
 @dataclass

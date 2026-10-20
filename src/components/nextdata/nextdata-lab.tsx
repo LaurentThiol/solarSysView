@@ -26,7 +26,7 @@ import {
 } from "@/lib/nextdata/bands"
 import { chronosBanner, chronosShare, type ChronosNote, type ChronosStatus } from "@/lib/nextdata/chronos"
 import { formatDecimal } from "@/lib/nextdata/compare"
-import { NEXTDATA_HELP } from "@/lib/nextdata/help"
+import { FOCUS_LENGTHS, NEXTDATA_HELP, type FocusLength } from "@/lib/nextdata/help"
 import {
   edgeFor,
   formatPoints,
@@ -358,7 +358,7 @@ export function NextDataLab() {
     chronos_error?: string | null
     catboost?: boolean
   } | null>(null)
-  const [focus, setFocus] = useState<50 | 100>(50)
+  const [focus, setFocus] = useState<FocusLength>(50)
   const [years, setYears] = useState<string[]>(["n", "n-1", "n-2"])
   const [primary, setPrimary] = useState<"corpus" | "fenetre">("corpus")
   const [library, setLibrary] = useState<"lightgbm" | "catboost">("lightgbm")
@@ -582,7 +582,7 @@ export function NextDataLab() {
               Focus
               <HelpTip {...NEXTDATA_HELP.focus} />
             </span>
-            {([50, 100] as const).map((value) => (
+            {FOCUS_LENGTHS.map((value) => (
               <Button
                 key={value}
                 type="button"
