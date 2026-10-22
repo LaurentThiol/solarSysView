@@ -136,6 +136,13 @@ import {
   type TripleNumberLink,
 } from "@/lib/next/triple-chart"
 import {
+  formatRepeatCaption,
+  formatRepeatTouch,
+  repeatKeysFor,
+  repeatLinks,
+  type RepeatLink,
+} from "@/lib/repeat-link"
+import {
   SeriesDayDot,
   WeekdayPointLegend,
   WeekdaySeriesLines,
@@ -240,6 +247,8 @@ La ligne « 1er rang » (si l’archive a les gagnants) se lit sur l’axe de dr
 
 SMA et Bollinger sont optionnels, une courbe à la fois (la série visible). Maj+clic sur un n l’isole pour lire sa bande. Lissage descriptif, pas une prédiction.
 
+Lien (éteint par défaut) trace un pointillé horizontal quand un même numéro revient au tirage suivant. La hauteur est le numéro : 28 en n4 puis 28 en n2 reste un trait plat. Le survol isole le pas sous la souris.
+
 Les min / max / moy. sous le graphe décrivent chaque série sur la fenêtre affichée, pas un tirage isolé.`,
   },
   sumStars: {
@@ -251,7 +260,9 @@ Les min / max / moy. sous le graphe décrivent chaque série sur la fenêtre aff
     wide: true,
     body: `e1 et e2 sont les 2 étoiles du tirage, triées du plus petit au plus grand — pas l’ordre de sortie.
 
-e1 = plus petite étoile, e2 = plus grande. L’axe Y va de 1 à 12. SMA et Bollinger optionnels, comme pour n1–n5. Maj+clic isole une courbe. Les min / max / moy. portent sur la fenêtre affichée.`,
+e1 = plus petite étoile, e2 = plus grande. L’axe Y va de 1 à 12. SMA et Bollinger optionnels, comme pour n1–n5. Maj+clic isole une courbe. Les min / max / moy. portent sur la fenêtre affichée.
+
+Lien (éteint par défaut) fait de même pour une étoile reprise au tirage suivant : trait pointillé horizontal, survol pour isoler le pas.`,
   },
 }
 
@@ -311,7 +322,7 @@ const SERIES_SELECT_HELP: HelpCopy = {
   wide: true,
   body: `Sommes superposées (échelle relative 0–100 %), somme des 5 numéros, chacune des 5 boules, somme des 2 étoiles, ou chaque étoile. L’axe Y s’adapte (0–100 %, 1–50 ou 1–12).
 
-« Chaque numéro » trace n1 à n5 : les 5 boules triées du plus petit au plus grand, pas l’ordre de sortie. « Somme des numéros » et « Chaque numéro » superposent la ligne 1er rang (0 = gagnant, +1 = pas gagnant) quand l’archive la porte. Le choix est éteint par défaut. « Chaque étoile » fait de même pour e1 < e2. SMA et Bollinger s’appliquent à chaque courbe visible.`,
+« Chaque numéro » trace n1 à n5 : les 5 boules triées du plus petit au plus grand, pas l’ordre de sortie. « Somme des numéros » et « Chaque numéro » superposent la ligne 1er rang (0 = gagnant, +1 = pas gagnant) quand l’archive la porte. Le choix est éteint par défaut. « Chaque étoile » fait de même pour e1 < e2. SMA et Bollinger s’appliquent à chaque courbe visible. Lien, sur Chaque numéro et Chaque étoile, relie d’un tirage au suivant les boules identiques par un pointillé horizontal.`,
 }
 
 const SUMMARY_HELP: HelpCopy = {
@@ -327,6 +338,18 @@ const SMA_HELP: HelpCopy = {
 const BB_HELP: HelpCopy = {
   title: "Bollinger",
   body: "Bandes SMA ± 2σ de chaque série visible. Le milieu est la SMA. %B dans l’infobulle : 0 = bande basse, 1 = bande haute. Maj+clic sur un n pour isoler sa bande. Dispersion observée, pas un signal de jeu.",
+}
+
+const LINK_HELP: HelpCopy = {
+  title: "Lien",
+  wide: true,
+  body: `Trait pointillé entre une boule et sa reprise au tirage suivant de la fenêtre.
+
+La hauteur est le numéro (1–50) ou l’étoile (1–12) : le trait est horizontal. Le rang peut changer — 28 en n4 puis 28 en n2 reste un trait plat. Un numéro absent au tirage du milieu coupe le trait.
+
+Le survol d’un tirage garde les traits qui le touchent et atténue les autres. L’infobulle nomme la reprise, le rang de départ et le rang d’arrivée.
+
+Éteint par défaut. Mardi seul, le suivant est le mardi d’après dans la fenêtre. Ce n’est pas le trait vertical d’un couple ou d’un triplet épinglé depuis Next. Descriptif : chaque tirage reste indépendant.`,
 }
 
 function isRankMode(mode: DrawChartMode) {
@@ -661,6 +684,68 @@ function CoupleLinkMarks({ marks }: { marks: readonly CoupleNumberLink[] }) {
   )
 }
 
+function RepeatLinkMarks({
+  marks,
+  hoverDate,
+}: {
+  marks: readonly RepeatLink[]
+  hoverDate: string | null
+}) {
+  const xScale = useXAxisScale()
+  const yScale = useYAxisScale()
+  if (!xScale || !yScale || marks.length === 0) return null
+  return (
+    <g pointerEvents="none" data-repeat-links={marks.length}>
+      {marks.map((mark) => {
+        const x1 = xScale(mark.fromDate, { position: "middle" })
+        const x2 = xScale(mark.toDate, { position: "middle" })
+        const y = yScale(mark.value)
+        if (
+          x1 == null ||
+          x2 == null ||
+          y == null ||
+          !Number.isFinite(x1) ||
+          !Number.isFinite(x2) ||
+          !Number.isFinite(y)
+        ) {
+          return null
+        }
+        const hot =
+          hoverDate == null || hoverDate === mark.fromDate || hoverDate === mark.toDate
+        const span = Math.abs(x2 - x1)
+        const dash = span >= 9 ? "0.01 4.5" : `0.01 ${Math.max(2.2, span / 2).toFixed(2)}`
+        return (
+          <g
+            key={`${mark.fromDate}-${mark.toDate}-${mark.value}`}
+            opacity={hot ? 1 : 0.16}
+          >
+            <line
+              x1={x1}
+              x2={x2}
+              y1={y}
+              y2={y}
+              stroke="var(--background)"
+              strokeWidth={3.4}
+              strokeLinecap="round"
+              strokeDasharray={dash}
+            />
+            <line
+              x1={x1}
+              x2={x2}
+              y1={y}
+              y2={y}
+              stroke="var(--foreground)"
+              strokeWidth={hot && hoverDate ? 2 : 1.6}
+              strokeLinecap="round"
+              strokeDasharray={dash}
+            />
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
 function MagnetHalo({
   live,
   plotted,
@@ -842,6 +927,8 @@ function SeriesTooltip({
   combined,
   coupleLinks,
   tripleLinks,
+  repeatMarks,
+  showRepeat,
 }: {
   active?: boolean
   payload?: Array<{
@@ -857,6 +944,8 @@ function SeriesTooltip({
   combined: boolean
   coupleLinks?: readonly CoupleNumberLink[]
   tripleLinks?: readonly TripleNumberLink[]
+  repeatMarks?: readonly RepeatLink[]
+  showRepeat?: boolean
 }) {
   if (combined) {
     return (
@@ -890,6 +979,17 @@ function SeriesTooltip({
           Lien {tripleHere.balls.join("–")} · {tripleHere.keys.join("–")}
         </p>
       ) : null}
+      {showRepeat && repeatMarks
+        ? (["prev", "next"] as const).map((side) => {
+            const line = formatRepeatTouch(repeatMarks, point.date, side)
+            if (!line) return null
+            return (
+              <p key={side} className="text-muted-foreground">
+                {line}
+              </p>
+            )
+          })
+        : null}
       <div className="grid gap-1.5">
         {keys
           .filter((key) => !hidden[key])
@@ -992,6 +1092,8 @@ export function DrawChart({
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>(rank1HiddenDefault)
   const [showSma, setShowSma] = useState(true)
   const [showBb, setShowBb] = useState(false)
+  const [showRepeat, setShowRepeat] = useState(false)
+  const [linkHoverDate, setLinkHoverDate] = useState<string | null>(null)
   const [dayLine, setDayLine] = useState<{ mardi: boolean; vendredi: boolean }>(() =>
     weekdayLinesOn ? { mardi: true, vendredi: true } : weekdayLinesOff()
   )
@@ -1017,6 +1119,12 @@ export function DrawChart({
     () => (triple && mode === "eachNumber" ? tripleNumberLinks(series, triple) : []),
     [triple, mode, series]
   )
+  const repeatMode = mode === "eachNumber" || mode === "eachStar" ? mode : null
+  const repeatMarks = useMemo(
+    () => (showRepeat && repeatMode ? repeatLinks(series, repeatKeysFor(repeatMode)) : []),
+    [showRepeat, repeatMode, series]
+  )
+  const repeatNoun = repeatMode === "eachStar" ? "étoile" : "numéro"
   const mixedDays = useMemo(() => {
     let mardi = false
     let vendredi = false
@@ -1403,10 +1511,11 @@ export function DrawChart({
       scale: combined ? scale : null,
       showSma: showSma && smaPeriod > 0,
       showBb: showBb && smaPeriod > 0,
+      showRepeatLink: Boolean(repeatMode) && showRepeat,
       smaPeriod,
       visibleKeys: visibleKeyList ? visibleKeyList.split(",") : [],
     })
-  }, [setChartMeta, mode, combined, scale, showSma, showBb, smaPeriod, visibleKeyList])
+  }, [setChartMeta, mode, combined, scale, showSma, showBb, showRepeat, repeatMode, smaPeriod, visibleKeyList])
 
   useEffect(() => {
     if (!draw?.drawing) {
@@ -2293,14 +2402,22 @@ export function DrawChart({
                   onChartPointerDown(state, event)
                 }}
                 onMouseMove={(state, event) => {
-                  if (!draw?.drawing) return
-                  onChartMove(state, event)
+                  if (draw?.drawing) {
+                    setLinkHoverDate((current) => (current == null ? current : null))
+                    onChartMove(state, event)
+                    return
+                  }
+                  if (!showRepeat || !repeatMode) return
+                  const date =
+                    typeof state?.activeLabel === "string" ? state.activeLabel : null
+                  setLinkHoverDate((current) => (current === date ? current : date))
                 }}
                 onClick={(state, event) => {
                   if (!draw?.drawing) return
                   onChartClick(state, event)
                 }}
                 onMouseLeave={() => {
+                  setLinkHoverDate(null)
                   setHoveredHandle(null)
                   if (movingRef.current) return
                   lastPointerRef.current = null
@@ -2362,6 +2479,8 @@ export function DrawChart({
                         combined={combined}
                         coupleLinks={coupleMarks}
                         tripleLinks={tripleMarks}
+                        repeatMarks={repeatMarks}
+                        showRepeat={showRepeat && repeatMode != null}
                       />
                     ) : (
                       <ChartTooltipContent
@@ -2827,6 +2946,9 @@ export function DrawChart({
                     </Fragment>
                   )
                 })}
+                {repeatMode && showRepeat ? (
+                  <RepeatLinkMarks marks={repeatMarks} hoverDate={linkHoverDate} />
+                ) : null}
                 {coupleOrdered && mode === "eachNumber" ? (
                   <>
                     <ReferenceLine
@@ -2936,6 +3058,49 @@ export function DrawChart({
                   Lien {tripleOrdered ? tripleOrdered.balls.join("–") : ""}
                 </span>
               ) : null}
+              {rankMode ? (
+                <span className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    data-repeat-link-toggle
+                    aria-pressed={showRepeat}
+                    title={
+                      repeatMode === "eachStar"
+                        ? "Relier les étoiles identiques d’un tirage au suivant"
+                        : "Relier les numéros identiques d’un tirage au suivant"
+                    }
+                    onClick={() => {
+                      setShowRepeat((current) => !current)
+                      setLinkHoverDate(null)
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs transition-opacity hover:bg-muted",
+                      !showRepeat && "opacity-40"
+                    )}
+                  >
+                    <svg
+                      width="16"
+                      height="8"
+                      viewBox="0 0 16 8"
+                      aria-hidden
+                      className="shrink-0"
+                    >
+                      <line
+                        x1="1"
+                        y1="4"
+                        x2="15"
+                        y2="4"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeDasharray="0.01 3.2"
+                      />
+                    </svg>
+                    Lien{showRepeat ? ` · ${repeatMarks.length}` : ""}
+                  </button>
+                  <HelpTip {...LINK_HELP} />
+                </span>
+              ) : null}
               {smaPeriod > 0 ? (
                 <>
                   <span className="inline-flex items-center gap-1">
@@ -3039,6 +3204,14 @@ export function DrawChart({
                 >
                   Afficher le lien
                 </button>
+              </p>
+            ) : null}
+            {repeatMode && showRepeat ? (
+              <p
+                className="mt-2 text-center text-xs text-muted-foreground"
+                data-repeat-link-caption
+              >
+                {formatRepeatCaption(repeatMarks, repeatNoun)}
               </p>
             ) : null}
             {rankMode && (showSma || showBb) && visibleKeys.length > 2 ? (

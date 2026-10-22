@@ -65,7 +65,7 @@ const CHART_TABS = [
     label: "Courbes",
     help: {
       title: "Courbes",
-      body: "Sommes, n1 à n5 et étoiles sur la fenêtre. SMA et Bollinger décrivent le tracé, ils ne prédisent pas le tirage suivant.",
+      body: "Sommes, n1 à n5 et étoiles sur la fenêtre. SMA et Bollinger décrivent le tracé, ils ne prédisent pas le tirage suivant. Lien, dans Chaque numéro et Chaque étoile, relie par un pointillé une boule reprise au tirage suivant.",
     },
   },
   {

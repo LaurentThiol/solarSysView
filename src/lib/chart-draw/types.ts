@@ -109,6 +109,7 @@ export type EvolutionChartMeta = {
   scale: string | null
   showSma: boolean
   showBb: boolean
+  showRepeatLink: boolean
   smaPeriod: number
   visibleKeys: string[]
 }

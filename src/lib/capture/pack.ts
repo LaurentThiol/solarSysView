@@ -459,7 +459,9 @@ export function packEvolution(input: {
         : input.chartMeta
           ? `Série ${input.chartMeta.modeLabel}${
               input.chartMeta.showSma ? ` · SMA ${input.chartMeta.smaPeriod}` : ""
-            }${input.chartMeta.showBb ? " · Bollinger" : ""}`
+            }${input.chartMeta.showBb ? " · Bollinger" : ""}${
+              input.chartMeta.showRepeatLink ? " · Lien" : ""
+            }`
           : "Courbe d’évolution",
   ]
   if (drawings.length) {
