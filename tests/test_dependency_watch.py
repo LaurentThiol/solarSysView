@@ -70,7 +70,7 @@ def test_pip_upper_bound_and_equivalent_releases() -> None:
 def test_repo_manifests_list_eslint_and_optional_requirements() -> None:
     deps = {item.name: item.spec for item in dw.load_npm_deps(ROOT)}
     assert deps["eslint"] == "^9"
-    assert deps["next"] == "16.3.6"
+    assert deps["next"] == "16.4.1"
     reqs = {(item.manifest, item.name): item.spec for item in dw.load_requirements(ROOT)}
     assert reqs[("requirements.txt", "fastapi")] == ">=0.115.0"
     assert reqs[("requirements-morpho.txt", "transformers")] == ">=5.10.0"
