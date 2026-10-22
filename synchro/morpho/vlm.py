@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import inspect
 import io
 import json
 import os
@@ -101,6 +102,10 @@ CONTRASTIVE_V2_PROMPT = (
     'Schema: {"difference":"one sentence"}. '
     "What is the morphological difference between the left glyph and the right glyph?"
 )
+CLOSED_QUERY_SETTINGS = {"max_tokens": 24, "temperature": 0}
+PROSE_QUERY_SETTINGS = {"max_tokens": 64}
+PROSE_MAX_CHARS = 240
+_PROSE_WORD = re.compile(r"[^\W_]+", re.UNICODE)
 
 
 def extras_requirements_path() -> Path:
@@ -117,6 +122,41 @@ def parse_label(answer: str, pattern: str) -> str | None:
         if re.search(rf"\b{re.escape(token)}\b", text):
             return token
     return None
+
+
+def _prose_repeats(text: str) -> bool:
+    """Boucle de décodage : mot collé, mot répété, ou n-gramme qui revient tout de suite."""
+    if re.search(r"(.{4,}?)\1", text, flags=re.IGNORECASE | re.DOTALL):
+        return True
+    words = [word.lower() for word in _PROSE_WORD.findall(text)]
+    if any(words[index] == words[index - 1] for index in range(1, len(words))):
+        return True
+    for size in range(2, 5):
+        span = size * 2
+        if len(words) < span:
+            continue
+        for index in range(len(words) - span + 1):
+            if words[index : index + size] == words[index + size : index + span]:
+                return True
+    return False
+
+
+def usable_prose(text: str | None) -> str | None:
+    """Phrase libre affichable. Une boucle ou un pavé trop long ne s'affiche pas."""
+    raw = (text or "").strip()
+    if not raw or len(raw) > PROSE_MAX_CHARS or _prose_repeats(raw):
+        return None
+    return raw
+
+
+def _query_accepts_settings(query: Any) -> bool:
+    try:
+        signature = inspect.signature(query)
+    except (TypeError, ValueError):
+        return False
+    if "settings" in signature.parameters:
+        return True
+    return any(param.kind is inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())
 
 
 def project_points(
@@ -846,7 +886,12 @@ def _pil_image(png: bytes):
     return Image.open(io.BytesIO(png)).convert("RGB")
 
 
-def _ask(png: bytes, question: str, timeout: float | None = None) -> str:
+def _ask(
+    png: bytes,
+    question: str,
+    timeout: float | None = None,
+    settings: dict[str, Any] | None = None,
+) -> str:
     if _backend is None:
         raise RuntimeError("VLM non chargé")
     if _backend.get("name") == "ollama":
@@ -858,7 +903,11 @@ def _ask(png: bytes, question: str, timeout: float | None = None) -> str:
     model = _backend["model"]
     image = _pil_image(png)
     if hasattr(model, "query"):
-        result = model.query(image, question)
+        query = model.query
+        kwargs: dict[str, Any] = {}
+        if settings and _query_accepts_settings(query):
+            kwargs["settings"] = settings
+        result = query(image, question, **kwargs)
         if isinstance(result, dict):
             return str(result.get("answer") or "")
         return str(result)
@@ -952,7 +1001,7 @@ def analyze(
                     label = parse_label(str(parsed.get(key) or ""), pattern)
                     if label:
                         queries[key] = label
-                residual = str(parsed.get("caption") or raw).strip()
+                residual = usable_prose(str(parsed.get("caption") or raw))
                 predicted_numbers = cells_to_values(parsed.get("cells"), kind="number")
                 predicted_stars = cells_to_values(parsed.get("star_cells"), kind="star")
                 box_numbers, box_stars = boxes_to_predicted(parsed.get("boxes"))
@@ -960,15 +1009,18 @@ def analyze(
                 predicted_stars = sorted(set(predicted_stars + box_stars))
             else:
                 for key, pattern, question in _QUERY_SPECS:
-                    answer = _ask(blob, question)
+                    answer = _ask(blob, question, settings=CLOSED_QUERY_SETTINGS)
                     parsed_label = parse_label(answer, pattern)
                     if parsed_label:
                         queries[key] = parsed_label
-                residual = _ask(
-                    blob,
-                    "One sentence. Describe only the geometric arrangement of filled dots. "
-                    f"Do not invent objects. Do not contradict these facts: {fact_line}.",
-                ).strip()
+                residual = usable_prose(
+                    _ask(
+                        blob,
+                        "One sentence. Describe only the geometric arrangement of filled dots. "
+                        f"Do not invent objects. Do not contradict these facts: {fact_line}.",
+                        settings=PROSE_QUERY_SETTINGS,
+                    )
+                )
                 points = _point(blob, "filled circle")
                 predicted_numbers = project_points(points, kind="number")
                 predicted_stars = project_points(points, kind="star")
@@ -1016,12 +1068,22 @@ def sequence_query(draws: list[tuple[list[int], list[int]]]) -> dict[str, Any]:
     try:
         if _backend.get("name") == "ollama" and is_vision_chat_model(str(_backend.get("model_id") or "")):
             parsed = parse_json_object(_ask(png, SEQUENCE_V2_PROMPT, timeout=120)) or {}
-            drift = str(parsed.get("drift") or "").strip()
+            drift = usable_prose(str(parsed.get("drift") or ""))
             move = parse_label(str(parsed.get("cluster_move") or ""), "left|right|up|down|none")
         else:
-            drift = _ask(png, "One sentence: what spatial change occurs from left to right among the filled dots?")
+            drift = usable_prose(
+                _ask(
+                    png,
+                    "One sentence: what spatial change occurs from left to right among the filled dots?",
+                    settings=PROSE_QUERY_SETTINGS,
+                )
+            )
             move = parse_label(
-                _ask(png, "Reply with exactly one of: left, right, up, down, none. Does the cluster migrate?"),
+                _ask(
+                    png,
+                    "Reply with exactly one of: left, right, up, down, none. Does the cluster migrate?",
+                    settings=CLOSED_QUERY_SETTINGS,
+                ),
                 "left|right|up|down|none",
             )
         _record_morpho(
@@ -1048,11 +1110,14 @@ def contrastive_query(
     try:
         if _backend.get("name") == "ollama" and is_vision_chat_model(str(_backend.get("model_id") or "")):
             parsed = parse_json_object(_ask(png, CONTRASTIVE_V2_PROMPT, timeout=120)) or {}
-            difference = str(parsed.get("difference") or "").strip()
+            difference = usable_prose(str(parsed.get("difference") or ""))
         else:
-            difference = _ask(
-                png,
-                "One sentence: what is the morphological difference between the left glyph and the right glyph?",
+            difference = usable_prose(
+                _ask(
+                    png,
+                    "One sentence: what is the morphological difference between the left glyph and the right glyph?",
+                    settings=PROSE_QUERY_SETTINGS,
+                )
             )
         _record_morpho(
             ok=True,

@@ -30,6 +30,130 @@ def _ollama_tags_off(monkeypatch) -> None:
     unload()
 
 
+def test_usable_prose_rejects_moondream_loop() -> None:
+    salad = (
+        "Baron Baron Baron Ke Ke Ke extra extra extra "
+        "TemPar Ke Bernard Stan TemPar Ke Bernard Stan "
+        "Untersuchungen Unterschiede TembisTembisTembis"
+    )
+    assert vlm_mod.usable_prose(salad) is None
+    assert vlm_mod.usable_prose("TemPar Ke Bernard Stan TemPar Ke Bernard Stan") is None
+    assert vlm_mod.usable_prose("   ") is None
+    long_sentence = " ".join(f"w{index}" for index in range(80))
+    assert len(long_sentence) > 240
+    assert vlm_mod.usable_prose(long_sentence) is None
+
+
+def test_usable_prose_keeps_a_short_sentence() -> None:
+    sentence = "The filled dots form a compact cluster near the center."
+    assert vlm_mod.usable_prose(f"  {sentence}  ") == sentence
+
+
+def test_sequence_query_drops_loop(monkeypatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_ask(png: bytes, question: str, timeout: float | None = None, settings: dict | None = None) -> str:
+        assert png
+        calls.append({"question": question, "settings": settings})
+        if "spatial change" in question:
+            return "Baron Baron Baron extra extra extra TembisTembisTembis"
+        return "left"
+
+    monkeypatch.setattr(
+        vlm_mod,
+        "_backend",
+        {"name": "transformers", "model_id": "vikhyatk/moondream2", "model": object()},
+    )
+    monkeypatch.setattr(vlm_mod, "_ask", fake_ask)
+    monkeypatch.setattr(vlm_mod, "_record_morpho", lambda **_kwargs: None)
+    try:
+        result = vlm_mod.sequence_query([([1, 2, 3, 4, 5], [1, 2]), ([6, 7, 8, 9, 10], [3, 4])])
+    finally:
+        unload()
+    assert result["ok"] is True
+    assert result["loaded"] is True
+    assert result["drift"] is None
+    assert result["cluster_move"] == "left"
+    prose = next(call for call in calls if "spatial change" in str(call["question"]))
+    closed = next(call for call in calls if "cluster migrate" in str(call["question"]))
+    assert prose["settings"] == {"max_tokens": 64}
+    assert closed["settings"] == {"max_tokens": 24, "temperature": 0}
+
+
+def test_ask_forwards_settings_only_when_query_accepts_them(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    class WithSettings:
+        def query(self, image: object, question: str, settings: dict | None = None) -> dict[str, str]:
+            seen["settings"] = settings
+            return {"answer": "top"}
+
+    class WithoutSettings:
+        def query(self, image: object, question: str) -> dict[str, str]:
+            seen["bare"] = question
+            return {"answer": "center"}
+
+    monkeypatch.setattr(vlm_mod, "_pil_image", lambda png: png)
+    monkeypatch.setattr(
+        vlm_mod,
+        "_backend",
+        {"name": "transformers", "model": WithSettings(), "model_id": "vikhyatk/moondream2"},
+    )
+    assert vlm_mod._ask(b"png", "Where?", settings={"max_tokens": 24, "temperature": 0}) == "top"
+    assert seen["settings"] == {"max_tokens": 24, "temperature": 0}
+
+    monkeypatch.setattr(
+        vlm_mod,
+        "_backend",
+        {"name": "transformers", "model": WithoutSettings(), "model_id": "vikhyatk/moondream2"},
+    )
+    assert vlm_mod._ask(b"png", "Where?", settings={"max_tokens": 24, "temperature": 0}) == "center"
+    assert seen["bare"] == "Where?"
+    unload()
+
+
+def test_analyze_drops_looping_residual(monkeypatch) -> None:
+    salad = "Baron Baron Baron extra extra extra TembisTembisTembis"
+
+    def fake_ask(png: bytes, question: str, timeout: float | None = None, settings: dict | None = None) -> str:
+        assert png
+        if question.startswith("One sentence"):
+            assert settings == {"max_tokens": 64}
+            return salad
+        if "collinear" in question:
+            assert settings == {"max_tokens": 24, "temperature": 0}
+            return "no"
+        if "compact" in question:
+            return "mixed"
+        if "adjacent" in question or "lower smaller grid" in question:
+            return "apart"
+        if "concentrated" in question:
+            return "center"
+        return salad
+
+    monkeypatch.setattr(
+        vlm_mod,
+        "_backend",
+        {
+            "name": "transformers",
+            "model_id": "vikhyatk/moondream2",
+            "model": object(),
+            "revision": "2025-06-21",
+        },
+    )
+    monkeypatch.setattr(vlm_mod, "_ask", fake_ask)
+    monkeypatch.setattr(vlm_mod, "_point", lambda png, target: [])
+    monkeypatch.setattr(vlm_mod, "_record_morpho", lambda **_kwargs: None)
+    try:
+        state = analyze([1, 2, 3, 4, 5], [1, 2])
+    finally:
+        unload()
+    assert state["residual"] is None
+    assert "Baron" not in state["caption"]
+    assert state["queries"]["region"] == "center"
+    assert state["queries"]["collinear"] == "no"
+
+
 def test_parse_label() -> None:
     assert parse_label("The cluster is compact and tight", "compact|spread|mixed") == "compact"
     assert parse_label("yes they line up", "yes|no") == "yes"
