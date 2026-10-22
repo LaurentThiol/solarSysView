@@ -4,6 +4,6 @@
   "area": "Morpho",
   "title": "Phrase VLM en boucle masquée",
   "body": "Sur la carte VLM, une phrase libre qui se répète (noms, extra, morceaux collés) ne s’affiche plus. La caption du lexique, les libellés de forme et l’ancrage restent. Les questions fermées sont inchangées : un mot attendu (center, left, …) est toujours pris. Qwen2.5-VL continue de répondre en un JSON ; seule une phrase trop longue ou en boucle est retirée.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 323,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/323"
 }
