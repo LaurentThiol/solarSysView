@@ -17,10 +17,14 @@ from typing import Any, Iterable
 from synchro.nextdata.covariates import SHAPE_SERIES, TEMPORAL_TARGETS, active_block, grid_shape, normalize_families
 from synchro.nextdata.empirical import public_base, recount
 from synchro.nextdata.models import _clamp_span, _clip, chronos_error, darts_error, star_pool_of
+from synchro.nextdata.notices import quiet_optional_model_notices
 from synchro.nextdata.panel import Frame, build_frame, normalized_draws
 from synchro.nextdata.persist import base_rates, recent_draws, snap_grid
 from synchro.nextdata.project import rank_bands
 from synchro.nextdata.pulse_features import public_pulse
+
+# Avant le premier Darts ou Chronos : ce module est importé par l’API et par le pool.
+quiet_optional_model_notices()
 
 
 def _installed(module: str) -> bool:

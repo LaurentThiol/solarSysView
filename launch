@@ -1126,7 +1126,11 @@ cmd_install_nextdata() {
     warn "CatBoost ne se charge pas. LightGBM reste disponible."
   fi
   local darts_err
-  if ! darts_err="$(MPLBACKEND=Agg "$venv/bin/python" -c 'from darts.models import LightGBMModel' 2>&1)"; then
+  if ! darts_err="$(cd "$ROOT" && MPLBACKEND=Agg "$venv/bin/python" -c '
+from synchro.nextdata.notices import quiet_optional_model_notices
+quiet_optional_model_notices()
+from darts.models import LightGBMModel
+' 2>&1)"; then
     warn "Darts ne se charge pas : LightGBM garde sa médiane."
     printf '%s\n' "$darts_err" | tail -n 1 >&2
   fi
@@ -1135,6 +1139,8 @@ cmd_install_nextdata() {
   if chronos_out="$(cd "$ROOT" && MPLBACKEND=Agg "$venv/bin/python" -c '
 import sys
 import numpy as np
+from synchro.nextdata.notices import quiet_optional_model_notices
+quiet_optional_model_notices()
 from synchro.nextdata.models import CHRONOS_MODEL, chronos_quantiles
 days = np.arange(33, dtype=float)
 item = {

@@ -4,6 +4,9 @@
 # u8darts 0.41 n’a plus d’extra lightgbm : LightGBM est installé à part.
 # L’extra [all] tirerait Prophet et un second jeu de dépendances en conflit
 # avec le torch de Morpho, Chartisme et Cycles.
+# StatsForecast et XGBoost ne servent pas : nextData n’ajuste que LightGBMModel.
+# Leurs avis d’import, et l’avis d’accès public au Hub pour Chronos, sont tus
+# dans quiet_optional_model_notices.
 u8darts>=0.30
 # Dès que torch est là, darts.models charge ses modèles torch, qui importent
 # Lightning : sans lui, `from darts.models import LightGBMModel` échoue.

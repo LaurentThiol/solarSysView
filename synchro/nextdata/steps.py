@@ -31,7 +31,11 @@ from typing import Any, Iterable
 from synchro.config import ROOT
 from synchro.nextdata.forecast import _installed, catboost_import_error
 from synchro.nextdata.models import MODEL_PARTS, StepSettings, chronos_error, compute_part, darts_error
+from synchro.nextdata.notices import quiet_optional_model_notices
 from synchro.nextdata.panel import Frame
+
+# Le pool démarre par ce module. Le filtre est déjà posé via forecast ; on le redit ici.
+quiet_optional_model_notices()
 
 MIN_HISTORY = 16
 

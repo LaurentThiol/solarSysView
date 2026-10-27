@@ -639,6 +639,62 @@ def test_lightgbm_predict_does_not_reopen_the_openmp_pool(monkeypatch) -> None:
     assert calls["max_threads"] == 1
 
 
+def test_optional_model_notices_stay_out_of_the_log() -> None:
+    """StatsForecast, XGBoost et l’accès public au Hub ne remplissent plus le journal.
+
+    Une limite de débit du Hub et une erreur qui cite XGBoost restent écrites.
+    """
+    import io
+    import logging
+
+    # forecast est importé avec les tests : c’est lui qui pose le filtre pour l’API.
+    assert getattr(logging.Logger.handle, "_synchro_optional_notices", False)
+    buffer = io.StringIO()
+    handler = logging.StreamHandler(buffer)
+    handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
+    names = ("darts.models", "darts.utils.utils", "huggingface_hub.utils._http")
+    loggers = [logging.getLogger(name) for name in names]
+    previous = [(logger.level, logger.propagate) for logger in loggers]
+    for logger in loggers:
+        logger.addHandler(handler)
+        logger.setLevel(logging.WARNING)
+        logger.propagate = False
+    try:
+        logging.getLogger("darts.models").warning(
+            "The StatsForecast module could not be imported. "
+            "To enable support for the AutoARIMA, AutoETS and Croston models, "
+            "please consider installing it."
+        )
+        xgboost = (
+            "The `XGBoost` module could not be imported. To enable XGBoost support in Darts, "
+            "follow the detailed instructions in the installation guide: "
+            "https://github.com/unit8co/darts/blob/master/INSTALL.md"
+        )
+        logging.getLogger("darts.utils.utils").warning(xgboost)
+        logging.getLogger("darts.utils.utils").warning(xgboost)
+        logging.getLogger("huggingface_hub.utils._http").warning(
+            "Warning: You are sending unauthenticated requests to the HF Hub. "
+            "Please set a HF_TOKEN to enable higher rate limits and faster downloads."
+        )
+        logging.getLogger("huggingface_hub.utils._http").warning(
+            "Rate limited. Waiting 2s before retry [Retry 1/5]."
+        )
+        logging.getLogger("darts.utils.utils").error(
+            "ImportError: The `XGBoost` module could not be imported. To enable XGBoost support in Darts."
+        )
+    finally:
+        for logger, (level, propagate) in zip(loggers, previous):
+            logger.removeHandler(handler)
+            logger.setLevel(level)
+            logger.propagate = propagate
+    text = buffer.getvalue()
+    assert "StatsForecast" not in text
+    assert "unauthenticated" not in text
+    assert "Rate limited" in text
+    assert text.count("XGBoost") == 1
+    assert "ERROR" in text
+
+
 def test_darts_lightgbm_stays_single_threaded(monkeypatch) -> None:
     import sys
     import types
