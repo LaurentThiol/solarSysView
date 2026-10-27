@@ -1,10 +1,10 @@
 """Méga : les effets principaux du réglage affiché, notés sur les mêmes décalages.
 
 Le réglage des boutons est la ligne de départ. Autour, un seul facteur change :
-un autre focus, une autre profondeur d’années, ou une covariable retirée. Le jour
-et le nombre d’arbres restent ceux du pronostic. Les pas sont ceux du cache de
-nextDataTraining. Plusieurs morceaux tournent ensemble, tant que la charge de
-la machine reste sous le plafond.
+un autre focus, une autre profondeur d’années, une covariable retirée, ou, sans
+Chronos, un bloc d’une grande famille. Le jour et le nombre d’arbres restent
+ceux du pronostic. Les pas sont ceux du cache de nextDataTraining. Plusieurs
+morceaux tournent ensemble, tant que la charge de la machine reste sous le plafond.
 """
 
 from __future__ import annotations
@@ -21,13 +21,13 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from synchro.nextdata.covariates import normalize_families
+from synchro.nextdata.covariates import BLOCKS, active_block, normalize_families
 from synchro.nextdata.panel import FOCUS_LENGTHS, YEAR_KEYS
 from synchro.nextdata.uncertainty import paired_gap
 
 DECISION_READING = "corpus"
 WAVE_BUDGET = 25.0
-MAX_ROWS = 16
+MAX_ROWS = 28
 MEMORY_FLOOR = 0.20
 GROW_BELOW = 0.60
 LOAD_LIMIT = 0.8
@@ -52,6 +52,10 @@ NOTE = (
     "que si son erreur de somme, lecture Corpus, reste sous celle de ce réglage "
     "sur tout l’intervalle, après correction de Holm."
 )
+GROUP_NOTE = (
+    " Les focus, les années et les familles retirées forment un groupe. "
+    "Les blocs en forment un autre. Le bandeau nomme la retenue dont l’écart moyen est le plus négatif."
+)
 # Une ligne ne calcule que ses dix décalages : la fenêtre de Chronos (dix pas d’avant) n’est jamais pleine.
 CHRONOS_NOTE = (
     " Chronos s’y mélange moitié-moitié : ses poids se règlent sur les dix tirages "
@@ -72,6 +76,8 @@ class Variant:
     families: tuple[str, ...]
     with_chronos: bool
     dropped: str | None = None
+    block: str | None = None
+    excluded: tuple[str, ...] = ()
     anchor: bool = False
 
 
@@ -102,17 +108,37 @@ def _other_focuses(focus: int) -> tuple[int, ...]:
     return tuple(length for length in FOCUS_LENGTHS if length != current)
 
 
+def _carried_block(
+    kept: tuple[str, ...],
+    block_id: str | None,
+    columns: tuple[str, ...],
+) -> tuple[str | None, tuple[str, ...]]:
+    """Le jeton du réglage affiché, tant que sa famille reste dans la ligne."""
+    if not block_id:
+        return None, ()
+    active, kept_columns = active_block(block_id, kept)
+    if active is None:
+        return None, ()
+    return active, kept_columns or columns
+
+
 def main_effects(
     *,
     focus: int,
     years: Iterable[str] | None,
     covariates: Iterable[str] | None,
     with_chronos: bool,
+    block: str | None = None,
 ) -> list[Variant]:
-    """Le réglage affiché, puis un facteur à la fois. Au plus MAX_ROWS lignes."""
+    """Le réglage affiché, puis un facteur à la fois. Au plus MAX_ROWS lignes.
+
+    Sans Chronos, chaque bloc d’une famille cochée ajoute une ligne. Le jeton
+    déjà posé est celui du réglage affiché : sa ligne de bloc n’est pas répétée.
+    """
     anchor_years = canonical_years(years)
     families = tuple(normalize_families(covariates))
     chronos = bool(with_chronos)
+    anchor_block, anchor_excluded = active_block(block, families)
     rows = [
         Variant(
             id="anchor",
@@ -122,6 +148,8 @@ def main_effects(
             years=anchor_years,
             families=families,
             with_chronos=chronos,
+            block=anchor_block,
+            excluded=anchor_excluded,
             anchor=True,
         )
     ]
@@ -135,6 +163,8 @@ def main_effects(
                 years=anchor_years,
                 families=families,
                 with_chronos=chronos,
+                block=anchor_block,
+                excluded=anchor_excluded,
             )
         )
     for depth in YEAR_DEPTHS:
@@ -149,11 +179,14 @@ def main_effects(
                 years=depth,
                 families=families,
                 with_chronos=chronos,
+                block=anchor_block,
+                excluded=anchor_excluded,
             )
         )
     if len(families) >= 2:
         for name in families:
             kept = tuple(item for item in families if item != name)
+            carried, carried_columns = _carried_block(kept, anchor_block, anchor_excluded)
             rows.append(
                 Variant(
                     id=f"drop-{name}",
@@ -164,6 +197,25 @@ def main_effects(
                     families=kept,
                     with_chronos=chronos,
                     dropped=name,
+                    block=carried,
+                    excluded=carried_columns,
+                )
+            )
+    if not chronos:
+        for spec in BLOCKS:
+            if spec.family not in families or spec.id == anchor_block:
+                continue
+            rows.append(
+                Variant(
+                    id=f"block-{spec.id}",
+                    role="block",
+                    label=spec.label,
+                    focus=int(focus),
+                    years=anchor_years,
+                    families=families,
+                    with_chronos=False,
+                    block=spec.id,
+                    excluded=spec.columns,
                 )
             )
     return rows[:MAX_ROWS]
@@ -334,6 +386,23 @@ def decide_leader(candidates: list[dict[str, Any]], *, reading: str = DECISION_R
     return {"leader": leader, "held": leader is None, "holm": holm}
 
 
+def decide_groups(
+    structural: list[dict[str, Any]],
+    blocks: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Deux corrections de Holm. Le bandeau garde l’écart moyen le plus négatif."""
+    holm: dict[str, dict[str, Any]] = {}
+    retained: list[dict[str, Any]] = []
+    for group in (structural, blocks):
+        decision = decide_leader(group)
+        holm.update(decision["holm"])
+        if decision["leader"] is not None:
+            retained.append(decision["leader"])
+    retained.sort(key=lambda item: (float(item["value"]), str(item["id"])))
+    leader = retained[0] if retained else None
+    return {"leader": leader, "held": leader is None, "holm": holm}
+
+
 def shift_dates(frame: Any, lags: Iterable[int]) -> list[str]:
     """Dates notées, dans l’ordre des lags, du plus récent vers les plus anciens."""
     from synchro.nextdata.steps import MIN_HISTORY
@@ -356,6 +425,7 @@ def run_sweep(
     covariates: Iterable[str] | None = None,
     estimators: int = 32,
     with_chronos: bool = False,
+    block: str | None = None,
     persist: dict[str, int] | None = None,
     load_limit: float = LOAD_LIMIT,
     budget: float = WAVE_BUDGET,
@@ -374,7 +444,13 @@ def run_sweep(
 
     limit = _clamp_limit(load_limit)
     wanted = tuple(int(lag) for lag in (lags if lags is not None else range(1, 11)))
-    variants = main_effects(focus=int(focus), years=years, covariates=covariates, with_chronos=with_chronos)
+    variants = main_effects(
+        focus=int(focus),
+        years=years,
+        covariates=covariates,
+        with_chronos=with_chronos,
+        block=block,
+    )
     frame_for = _frames(draws, weekday)
     try:
         anchor_frame = frame_for(variants[0])
@@ -427,7 +503,7 @@ def run_sweep(
         },
         "progress": {"ready": ready, "total": total, "complete": complete},
         "wave": finished,
-        "note": NOTE + (CHRONOS_NOTE if with_chronos else ""),
+        "note": NOTE + ("" if with_chronos else GROUP_NOTE) + (CHRONOS_NOTE if with_chronos else ""),
     }
 
 
@@ -478,7 +554,12 @@ def _prepare(
         item["detail"] = "Ces années ne portent pas les mêmes tirages que le réglage affiché."
         item["frame"] = frame
         return item
-    settings = StepSettings(focus=frame.focus, families=variant.families, estimators=int(estimators))
+    settings = StepSettings(
+        focus=frame.focus,
+        families=variant.families,
+        estimators=int(estimators),
+        excluded=variant.excluded,
+    )
     parts = parts_needed(variant.with_chronos)
     digests = prefix_digests(frame.rows)
     keys: list[tuple[int, int, str, str]] = []
@@ -557,6 +638,7 @@ def _pending_jobs(built: list[dict[str, Any]], found: dict[str, Any]) -> list[_J
                     "families": list(settings.families),
                     "estimators": settings.estimators,
                     "quantiles": list(settings.quantiles),
+                    "excluded": list(settings.excluded),
                 },
             )
         )
@@ -722,6 +804,7 @@ def _compute(built: list[dict[str, Any]], job: _Job) -> dict[str, Any]:
         families=tuple(job.settings["families"]),
         estimators=int(job.settings["estimators"]),
         quantiles=tuple(job.settings["quantiles"]),
+        excluded=tuple(job.settings.get("excluded") or ()),
     )
     return compute_part(prefix, horizon, job.part, settings)
 
@@ -770,6 +853,7 @@ def _public_row(
         "years_present": list(item.get("years_present") or []),
         "covariates": list(variant.families),
         "dropped": variant.dropped,
+        "block": variant.block,
         "with_chronos": variant.with_chronos,
         "status": item["status"],
         "detail": item["detail"],
@@ -853,7 +937,8 @@ def _attach_verdicts(rows: list[dict[str, Any]]) -> dict[str, Any]:
     anchor = next((row for row in rows if row["anchor"]), None)
     if anchor is None:
         return {"leader": None, "held": True, "holm": {}}
-    candidates = []
+    structural: list[dict[str, Any]] = []
+    blocks: list[dict[str, Any]] = []
     for row in rows:
         if row["anchor"] or row["status"] not in {"ready", "partial"}:
             continue
@@ -863,16 +948,18 @@ def _attach_verdicts(rows: list[dict[str, Any]]) -> dict[str, Any]:
         row["versus_anchor"] = {DECISION_READING: gap}
         if gap.get("p") is None or gap.get("verdict") is None:
             continue
-        candidates.append(
-            {
-                "id": row["id"],
-                "label": row["label"],
-                "verdict": gap["verdict"],
-                "p": gap["p"],
-                "value": gap["value"],
-            }
-        )
-    decision = decide_leader(candidates)
+        candidate = {
+            "id": row["id"],
+            "label": row["label"],
+            "verdict": gap["verdict"],
+            "p": gap["p"],
+            "value": gap["value"],
+        }
+        if row.get("role") == "block":
+            blocks.append(candidate)
+        else:
+            structural.append(candidate)
+    decision = decide_groups(structural, blocks)
     for row in rows:
         info = decision["holm"].get(row["id"])
         if info is None:

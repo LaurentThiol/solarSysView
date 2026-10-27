@@ -1,5 +1,6 @@
 /** Méga : tableau des effets principaux, trié par MAE, verdict après Holm. */
 
+import { blockCaption } from "@/lib/nextdata/blocks"
 import { formatDecimal } from "@/lib/nextdata/compare"
 import { formatGap, versusText, type PairedGap, type Verdict } from "@/lib/nextdata/uncertainty"
 
@@ -38,6 +39,7 @@ export type SweepRow = {
   years_present?: string[]
   covariates: string[]
   dropped: string | null
+  block: string | null
   with_chronos: boolean
   status: string
   detail: string | null
@@ -88,8 +90,9 @@ export function yearLabel(years: string[]) {
   return years.map((year) => year.replaceAll("-", "−")).join(", ")
 }
 
-/** « celles des boutons », ou « sans Pulse » pour une covariable retirée. */
-export function covariateCaption(row: { anchor?: boolean; dropped?: string | null }) {
+/** « celles des boutons », « sans Pulse », ou « sans les retards » pour une ligne de bloc. */
+export function covariateCaption(row: { anchor?: boolean; dropped?: string | null; block?: string | null; role?: string }) {
+  if (row.role === "block" && row.block) return blockCaption(row.block)
   if (row.dropped) return `sans ${FAMILY_LABELS[row.dropped] ?? row.dropped}`
   return "celles des boutons"
 }

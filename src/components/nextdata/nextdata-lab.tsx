@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
+import { CovariateBlockToken, useCovariateBlock } from "@/components/nextdata/covariate-block"
 import { PersistArchive, PersistControl, PersistPairCard, RecentNote, SwapNote } from "@/components/nextdata/persist-panel"
 import { RankPath } from "@/components/nextdata/rank-path"
 import { StepMeter } from "@/components/nextdata/step-meter"
@@ -364,6 +365,7 @@ export function NextDataLab() {
   const [library, setLibrary] = useState<"lightgbm" | "catboost">("lightgbm")
   const [weekday, setWeekday] = useState<"tous" | "mardi" | "vendredi">("tous")
   const [families, setFamilies] = useState<string[]>(FAMILIES.map((item) => item.id))
+  const [covariateBlock, setCovariateBlock] = useCovariateBlock(families)
   const [withChronos, setWithChronos] = useState(false)
   const [delta, setDelta] = useState(false)
   const [persistSetting, setPersistSetting] = useState<PersistSetting | null>(null)
@@ -379,11 +381,12 @@ export function NextDataLab() {
         years: [...years].sort(),
         weekday,
         covariates: [...families].sort(),
+        block: covariateBlock,
         withChronos,
         persist: persistSetting,
         draws: draws.map((draw) => [draw.date, draw.numbers, draw.stars, draw.star_pool]),
       }),
-    [draws, families, focus, persistSetting, weekday, withChronos, years]
+    [covariateBlock, draws, families, focus, persistSetting, weekday, withChronos, years]
   )
 
   useEffect(() => {
@@ -461,6 +464,7 @@ export function NextDataLab() {
       primary,
       weekday,
       covariates: families,
+      block: covariateBlock,
       with_chronos: withChronos,
       persist: persistSetting,
       draws: draws.map((draw) => ({
@@ -699,6 +703,7 @@ export function NextDataLab() {
                 {family.label}
               </button>
             ))}
+            <CovariateBlockToken block={covariateBlock} disabled={running} onClear={() => setCovariateBlock(null)} />
             {families.includes("pulse") && report?.pulse ? (
               <p className="basis-full text-xs text-muted-foreground">{pulseCaption(report.pulse)}</p>
             ) : null}

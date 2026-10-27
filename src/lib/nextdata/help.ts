@@ -125,7 +125,7 @@ export const NEXTDATA_HELP = {
   covariates: {
     title: "Covariables",
     wide: true,
-    body: "Cases cochées par défaut. Une famille éteinte sort de LightGBM, de CatBoost et de Chronos. Les horloges et Pulse sont connus avant le tirage. Le reste n’est connu qu’une fois les boules sorties : les modèles ne le voient que jusqu’au dernier tirage.",
+    body: "Cases cochées par défaut. Une famille éteinte sort de LightGBM, de CatBoost et de Chronos. Les horloges et Pulse sont connus avant le tirage. Le reste n’est connu qu’une fois les boules sorties : les modèles ne le voient que jusqu’au dernier tirage. Un jeton, « Sans les retards », retire cette part et laisse la famille cochée. Un clic l’éteint. Éteindre la famille l’éteint aussi.",
     items: [
       {
         label: "Calendrier",
@@ -415,7 +415,7 @@ export const NEXTDATA_TRAINING_HELP = {
   mega: {
     title: "Méga",
     wide: true,
-    body: "Compare le réglage affiché à ses voisins, un facteur à la fois. Les autres focus, parmi 20, 50 et 100. À 20, les dix décalages restent calibrés : le plus ancien a encore dix tirages du focus devant lui, et le calibrage en demande neuf. Les autres profondeurs d’années : n seule, puis n et n−1, puis n, n−1 et n−2. Chaque covariable retirée seule, dès que deux familles au moins sont cochées. Le jour reste celui du bouton. Le nombre d’arbres est celui du pronostic, le même pour toutes les lignes, pour que la ligne retenue se rejoue telle quelle sur nextData. Chronos n’entre que s’il est déjà inclus.\n\nLes lignes sont notées sur les dix mêmes décalages, ceux du réglage affiché. −1 prévoit le dernier tirage, −10 celui d’il y a dix tirages. Le nombre d’une colonne LGB ou CB est l’erreur absolue moyenne de la somme des cinq numéros. Le tri, le mot « retenu » et le bandeau ne lisent que LightGBM · trois ans, la lecture Corpus.\n\nUne variante est retenue seulement si, sur ces dix dates, son erreur de somme Corpus reste sous celle du réglage affiché sur tout l’intervalle à 95 %, après correction de Holm. Plusieurs lignes peuvent l’être : le bandeau nomme celle dont l’écart moyen est le plus négatif. Sinon le réglage affiché tient. Sur dix décalages, une MAE bouge d’environ ±6 points. Le verdict demande l’intervalle entier. La case la plus basse peut rester non tranchée.\n\nLes ajustements partagent le cache des pas. Plusieurs tournent en parallèle, tant que la charge de la machine reste sous 80 % ; sans /proc (macOS), la charge se lit sur la moyenne d’une minute. Un clic sur une ligne remet ses boutons. Entraîner relit alors le cache.",
+    body: "Compare le réglage affiché à ses voisins, un facteur à la fois. Les autres focus, parmi 20, 50 et 100. À 20, les dix décalages restent calibrés : le plus ancien a encore dix tirages du focus devant lui, et le calibrage en demande neuf. Les autres profondeurs d’années : n seule, puis n et n−1, puis n, n−1 et n−2. Chaque covariable retirée seule, dès que deux familles au moins sont cochées. Sans Chronos, douze blocs en plus, pour les familles cochées : la date ou les cycles du calendrier, le profil ou les retards de la forme, l’ancienneté, les parts ou les affinités des couples et des triples, les numéros ou les étoiles de Pulse. Chronos inclus ne les ajoute pas. Niveaux et DeltaEvol ne font pas de ligne : ils changent les courbes, pas le calcul. Le jour reste celui du bouton. Le nombre d’arbres est celui du pronostic, le même pour toutes les lignes, pour que la ligne retenue se rejoue telle quelle sur nextData. Chronos n’entre que s’il est déjà inclus.\n\nLes lignes sont notées sur les dix mêmes décalages, ceux du réglage affiché. −1 prévoit le dernier tirage, −10 celui d’il y a dix tirages. Le nombre d’une colonne LGB ou CB est l’erreur absolue moyenne de la somme des cinq numéros. Le tri, le mot « retenu » et le bandeau ne lisent que LightGBM · trois ans, la lecture Corpus.\n\nUne variante est retenue seulement si, sur ces dix dates, son erreur de somme Corpus reste sous celle du réglage affiché sur tout l’intervalle à 95 %, après correction de Holm. Deux groupes : les focus, les années et les familles d’un côté, les blocs de l’autre. Plusieurs lignes peuvent l’être : le bandeau nomme celle dont l’écart moyen est le plus négatif. Sinon le réglage affiché tient. Sur dix décalages, une MAE bouge d’environ ±6 points. Le verdict demande l’intervalle entier. La case la plus basse peut rester non tranchée.\n\nLes ajustements partagent le cache des pas. Plusieurs tournent en parallèle, tant que la charge de la machine reste sous 80 % ; sans /proc (macOS), la charge se lit sur la moyenne d’une minute. Un clic sur une ligne remet ses boutons. Une ligne de bloc pose un jeton, lu aussi par nextData. Entraîner relit alors le cache.",
     items: [
       {
         label: "Lecture Corpus",
@@ -427,7 +427,7 @@ export const NEXTDATA_TRAINING_HELP = {
       },
       {
         label: "Holm",
-        text: "Chaque variante est un test. On les classe du p le plus petit au plus grand. Le premier est jugé à 5 % divisé par le nombre de lignes comparées. Le suivant, à 5 % divisé par le nombre encore en lice. Dès qu’une ligne ne passe pas, les suivantes non plus. Une case qui lisait « erreur plus basse » ou « erreur plus haute » devient alors « non tranché après Holm ».",
+        text: "Deux groupes. Les focus, les années et les familles retirées se corrigent entre eux. Les blocs se corrigent entre eux. Dans un groupe, on classe les p du plus petit au plus grand. Le premier est jugé à 5 % divisé par le nombre de lignes du groupe. Le suivant, à 5 % divisé par le nombre encore en lice. Dès qu’une ligne ne passe pas, les suivantes de son groupe non plus. Une case qui lisait « erreur plus basse » ou « erreur plus haute » devient alors « non tranché après Holm ». Le bandeau compare les retenues des deux groupes et nomme la plus négative.",
       },
       {
         label: "Chronos",
@@ -445,7 +445,7 @@ export const NEXTDATA_SWEEP_HELP = {
   synthese: {
     title: "Synthèse Méga",
     wide: true,
-    body: "Le tableau note le réglage des boutons et ses voisins sur les mêmes dix décalages. Chaque ligne ne change qu’un facteur : un autre focus, 20, 50 ou 100, une autre profondeur d’années, ou une covariable retirée. Le jour reste celui du bouton, le nombre d’arbres celui du pronostic.\n\nLa première ligne est le réglage affiché, même quand sa MAE est plus haute. Les autres suivent l’erreur de somme de LightGBM · trois ans, de la plus basse à la plus haute. À erreur égale, l’ordre suit l’alphabet français des libellés. Une erreur manquante passe en bas.\n\nLe bandeau ne nomme un gagnant qu’une fois toutes les lignes complètes. « Comparaison en cours » : des décalages manquent encore. Un libellé « se trompe moins… après correction de Holm » : cette ligne est la retenue dont l’écart moyen est le plus négatif. « Le réglage affiché tient » : aucune variante ne reste sous lui sur tout l’intervalle, une fois Holm appliqué. Plusieurs lignes peuvent porter le mot « retenu » et le fond teinté. Le bandeau n’en nomme qu’une.\n\nLa phrase grise sous le bandeau répète la règle. Avec Chronos, elle ajoute que le mélange est moitié-moitié, et que la MAE du réglage affiché peut s’écarter de celle d’Entraîner. La ligne de charge dit ce que la machine faisait pendant la dernière tranche.",
+    body: "Le tableau note le réglage des boutons et ses voisins sur les mêmes dix décalages. Chaque ligne ne change qu’un facteur : un autre focus, 20, 50 ou 100, une autre profondeur d’années, une covariable retirée, ou, sans Chronos, un bloc d’une grande famille. Le jour reste celui du bouton, le nombre d’arbres celui du pronostic.\n\nLa première ligne est le réglage affiché, même quand sa MAE est plus haute. Les autres suivent l’erreur de somme de LightGBM · trois ans, de la plus basse à la plus haute. À erreur égale, l’ordre suit l’alphabet français des libellés. Une erreur manquante passe en bas.\n\nLe bandeau ne nomme un gagnant qu’une fois toutes les lignes complètes. « Comparaison en cours » : des décalages manquent encore. Un libellé « se trompe moins… après correction de Holm » : cette ligne est la retenue dont l’écart moyen est le plus négatif, entre les deux groupes. « Le réglage affiché tient » : aucune variante ne reste sous lui sur tout l’intervalle, une fois Holm appliqué. Plusieurs lignes peuvent porter le mot « retenu » et le fond teinté. Le bandeau n’en nomme qu’une.\n\nLa phrase grise sous le bandeau répète la règle. Sans Chronos, elle sépare le groupe des blocs de celui des focus, des années et des familles. Avec Chronos, elle ajoute que le mélange est moitié-moitié, et que la MAE du réglage affiché peut s’écarter de celle d’Entraîner. La ligne de charge dit ce que la machine faisait pendant la dernière tranche.",
     items: [
       {
         label: "Ce qui décide",
@@ -468,7 +468,7 @@ export const NEXTDATA_SWEEP_HELP = {
   reglage: {
     title: "Réglage",
     wide: true,
-    body: "Le nom de la ligne, et le seul facteur qui la sépare du réglage affiché. La première ligne reprend les boutons tels quels : focus, années, covariables, et Chronos s’il est déjà inclus. Chaque autre ligne n’en change qu’un.\n\nLe mot « retenu » et le fond teinté arrivent ensemble, parcours fini : Holm garde cette ligne, et son erreur de somme Corpus est plus basse que celle du réglage affiché sur tout l’intervalle. Le bouton reprend le focus, les années, les covariables et Chronos de la ligne. Il s’ouvre quand le parcours est fini. Une ligne vide reste fermée. La petite ligne grise sous le nom est la raison d’une ligne vide.",
+    body: "Le nom de la ligne, et le seul facteur qui la sépare du réglage affiché. La première ligne reprend les boutons tels quels : focus, années, covariables, le jeton de bloc s’il est posé, et Chronos s’il est déjà inclus. Chaque autre ligne n’en change qu’un.\n\nLe mot « retenu » et le fond teinté arrivent ensemble, parcours fini : Holm garde cette ligne, et son erreur de somme Corpus est plus basse que celle du réglage affiché sur tout l’intervalle. Le bouton reprend le focus, les années, les covariables, le jeton et Chronos de la ligne. Il s’ouvre quand le parcours est fini. Une ligne vide reste fermée. La petite ligne grise sous le nom est la raison d’une ligne vide.",
     items: [
       {
         label: "Focus 20, 50 ou 100",
@@ -481,6 +481,10 @@ export const NEXTDATA_SWEEP_HELP = {
       {
         label: "Sans une famille",
         text: "Cette covariable sort de LightGBM, de CatBoost et de Chronos. Les autres restent. Ces lignes n’apparaissent que si au moins deux familles sont cochées.",
+      },
+      {
+        label: "Sans un bloc",
+        text: "Une part de la famille sort, le reste reste. Calendrier : la date, ou les cycles. Forme : le profil, ou les retards. Couples et triples : l’ancienneté, les parts, ou les affinités. Pulse : les numéros, ou les étoiles. Ces lignes n’apparaissent que sans Chronos. Le clic pose le jeton sur nextDataTraining et sur nextData.",
       },
       {
         label: "Ligne vide",
@@ -525,11 +529,15 @@ export const NEXTDATA_SWEEP_HELP = {
   covariables: {
     title: "Covariables de la ligne",
     wide: true,
-    body: "« Celles des boutons » : les familles cochées au-dessus. C’est le cas du réglage affiché, des autres focus et des autres années. « Sans » suivi d’un nom : cette seule famille est éteinte, les autres restent.",
+    body: "« Celles des boutons » : les familles cochées au-dessus. C’est le cas du réglage affiché, des autres focus et des autres années. « Sans » suivi d’un nom : cette seule famille est éteinte, les autres restent. « Sans les retards », ou un autre bloc : cette part sort, la famille reste cochée. Ces lignes n’apparaissent que sans Chronos.",
     items: [
       {
         label: "Familles",
         text: "Calendrier, Lune, Forme, Décennies, Delta, Répétitions, Couples, Triples, Pulse. Une famille éteinte sort de LightGBM, de CatBoost et de Chronos. Les horloges et Pulse sont connus pour le tirage prévu. Les autres familles ne sont vues que jusqu’au dernier tirage sorti.",
+      },
+      {
+        label: "Bloc",
+        text: "Sans Chronos, la colonne dit « sans les retards », ou le nom du bloc. La famille reste cochée. Le clic pose ce jeton. Entraîner et Pronostiquer l’envoient. L’éteindre, ou éteindre la famille, retire ces colonnes. Un pas sans jeton garde sa clé de cache.",
       },
       {
         label: "Ce qui ne varie pas",

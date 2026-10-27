@@ -140,6 +140,8 @@ def step_key(digest: str, horizon: list[dict[str, Any]], settings: StepSettings,
         "focus": int(settings.focus),
         "families": sorted(settings.families),
     }
+    if settings.excluded:
+        payload["excluded"] = sorted(settings.excluded)
     if part in MODEL_PARTS or part == "darts":
         payload["estimators"] = int(settings.estimators)
     if part in MODEL_PARTS:
@@ -184,6 +186,7 @@ def _part_job(
             families=tuple(settings["families"]),
             estimators=int(settings["estimators"]),
             quantiles=tuple(settings["quantiles"]),
+            excluded=tuple(settings.get("excluded") or ()),
         ),
     )
 
@@ -261,6 +264,7 @@ def _compute(
         "families": list(settings.families),
         "estimators": settings.estimators,
         "quantiles": list(settings.quantiles),
+        "excluded": list(settings.excluded),
     }
     for job in jobs:
         t, part, _key = job

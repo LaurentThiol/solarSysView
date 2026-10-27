@@ -1,0 +1,9 @@
+{
+  "slug": "mega-blocs-covariables-3e9d",
+  "happened_on": "2026-10-27",
+  "area": "nextDataTraining",
+  "title": "Méga : blocs de covariables",
+  "body": "Sans Chronos, Méga retire aussi une part des grandes familles : la date ou les cycles, le profil ou les retards, l’ancienneté, les parts ou les affinités des couples et des triples, les numéros ou les étoiles de Pulse. Les familles entières, les focus et les années restent. Chronos inclus n’ajoute pas ces lignes. Niveaux et DeltaEvol ne changent pas le calcul. Un clic pose un jeton, lu par Entraîner et par nextData. L’éteindre, ou éteindre la famille, retire ces colonnes. Les blocs se jugent entre eux ; les autres lignes entre elles. Le bandeau nomme toujours une seule retenue.",
+  "pr_number": null,
+  "pr_url": null
+}

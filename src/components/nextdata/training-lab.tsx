@@ -8,6 +8,7 @@ import { PersistArchive, PersistControl, PersistPairCard } from "@/components/ne
 import { RankPath } from "@/components/nextdata/rank-path"
 import { StepMeter } from "@/components/nextdata/step-meter"
 import { TrainingCompare } from "@/components/nextdata/training-compare"
+import { CovariateBlockToken, useCovariateBlock } from "@/components/nextdata/covariate-block"
 import { TrainingSweep } from "@/components/nextdata/training-sweep"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,6 +26,7 @@ import {
 } from "@/lib/nextdata/persist"
 import type { Arbitration } from "@/lib/nextdata/rank-path"
 import { computeCaption, progressPercent, type ComputeState, type StepProgress } from "@/lib/nextdata/bands"
+import { COVARIATE_BLOCKS } from "@/lib/nextdata/blocks"
 import { pulseCaption, type PulseReading } from "@/lib/nextdata/pulse"
 import { formatDecimal } from "@/lib/nextdata/compare"
 import { bandCoverage, deltaNumbers, TRAINING_SHIFT_TOTAL, visibleTrainingShift } from "@/lib/nextdata/training-progress"
@@ -170,6 +172,7 @@ export function TrainingLab() {
   const [years, setYears] = useState<string[]>(["n", "n-1", "n-2"])
   const [weekday, setWeekday] = useState<"tous" | "mardi" | "vendredi">("tous")
   const [families, setFamilies] = useState<string[]>(FAMILIES.map((item) => item.id))
+  const [covariateBlock, setCovariateBlock] = useCovariateBlock(families)
   const [withChronos, setWithChronos] = useState(false)
   const [delta, setDelta] = useState(false)
   const [persistSetting, setPersistSetting] = useState<PersistSetting | null>(null)
@@ -191,11 +194,12 @@ export function TrainingLab() {
         years: [...years].sort(),
         weekday,
         covariates: [...families].sort(),
+        block: covariateBlock,
         withChronos,
         persist: persistSetting,
         draws: draws.map((draw) => [draw.date, draw.numbers, draw.stars, draw.star_pool]),
       }),
-    [draws, families, focus, persistSetting, weekday, withChronos, years]
+    [covariateBlock, draws, families, focus, persistSetting, weekday, withChronos, years]
   )
 
   useEffect(() => {
@@ -268,6 +272,7 @@ export function TrainingLab() {
       years,
       weekday,
       covariates: families,
+      block: covariateBlock,
       with_chronos: withChronos,
       persist: persistSetting,
       draws: draws.map((draw) => ({
@@ -321,6 +326,8 @@ export function TrainingLab() {
     if (row.years.length) setYears(row.years)
     if (row.covariates.length) setFamilies(row.covariates)
     setWithChronos(row.with_chronos)
+    const family = row.block ? COVARIATE_BLOCKS[row.block]?.family : null
+    setCovariateBlock(family && row.covariates.includes(family) ? row.block : null)
   }
 
   async function compare() {
@@ -338,6 +345,7 @@ export function TrainingLab() {
       years,
       weekday,
       covariates: families,
+      block: covariateBlock,
       with_chronos: withChronos,
       persist: persistSetting,
       draws: draws.map((draw) => ({
@@ -531,6 +539,7 @@ export function TrainingLab() {
                 {family.label}
               </button>
             ))}
+            <CovariateBlockToken block={covariateBlock} disabled={busy} onClear={() => setCovariateBlock(null)} />
             {pulseNow ? <p className="basis-full text-xs text-muted-foreground">{pulseCaption(pulseNow)}</p> : null}
           </div>
           <div className="flex flex-wrap items-center gap-3">

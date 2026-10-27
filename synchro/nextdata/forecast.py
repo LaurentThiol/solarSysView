@@ -14,7 +14,7 @@ from __future__ import annotations
 import importlib.util
 from typing import Any, Iterable
 
-from synchro.nextdata.covariates import SHAPE_SERIES, TEMPORAL_TARGETS, grid_shape, normalize_families
+from synchro.nextdata.covariates import SHAPE_SERIES, TEMPORAL_TARGETS, active_block, grid_shape, normalize_families
 from synchro.nextdata.empirical import public_base, recount
 from synchro.nextdata.models import _clamp_span, _clip, chronos_error, darts_error, star_pool_of
 from synchro.nextdata.panel import Frame, build_frame, normalized_draws
@@ -246,6 +246,7 @@ def run_forecast(
     estimators: int = 32,
     chunk: int | None = None,
     persist: dict[str, int] | None = None,
+    block: str | None = None,
 ) -> dict[str, Any]:
     """Prochain tirage et retour, au même réglage, par tranches de pas.
 
@@ -260,6 +261,7 @@ def run_forecast(
     mode_primary = primary if primary in ("corpus", "fenetre") else "corpus"
     families = normalize_families(covariates)
     try:
+        chosen_block, excluded = active_block(block, families)
         frame = build_frame(draws, years=years, focus=int(focus), weekday=weekday)
     except ValueError as exc:
         return {"ok": False, "error": str(exc), **dependency_status()}
@@ -267,7 +269,12 @@ def run_forecast(
     from synchro.nextdata import backtest
     from synchro.nextdata.steps import StepSettings, compute_state, ensure_steps, parts_needed, worker_count
 
-    settings = StepSettings(focus=frame.focus, families=tuple(families), estimators=int(estimators))
+    settings = StepSettings(
+        focus=frame.focus,
+        families=tuple(families),
+        estimators=int(estimators),
+        excluded=excluded,
+    )
     parts = parts_needed(with_chronos)
     n = len(frame.rows)
     target_pool = star_pool_of(frame.horizon[0] if frame.horizon else None, frame.star_pool)
@@ -311,6 +318,7 @@ def run_forecast(
         "primary": mode_primary,
         "weekday": frame.weekday,
         "covariates": families,
+        "block": chosen_block,
         "pulse": public_pulse(frame.horizon[0]),
         "next_date": frame.next_date,
         "star_pool": target_pool,
@@ -349,6 +357,7 @@ def run_training(
     with_chronos: bool = False,
     chunk: int | None = None,
     persist: dict[str, int] | None = None,
+    block: str | None = None,
 ) -> dict[str, Any]:
     """Banc −1…−10 : les dix derniers pas du retour, au réglage du pronostic.
 
@@ -362,6 +371,7 @@ def run_training(
         return refused
     families = normalize_families(covariates)
     try:
+        chosen_block, excluded = active_block(block, families)
         frame = build_frame(draws, years=years, focus=int(focus), weekday=weekday)
     except ValueError as exc:
         return {"ok": False, "error": str(exc), **dependency_status()}
@@ -369,7 +379,12 @@ def run_training(
     from synchro.nextdata import backtest
     from synchro.nextdata.steps import MIN_HISTORY, StepSettings, compute_state, ensure_steps, parts_needed, worker_count
 
-    settings = StepSettings(focus=frame.focus, families=tuple(families), estimators=int(estimators))
+    settings = StepSettings(
+        focus=frame.focus,
+        families=tuple(families),
+        estimators=int(estimators),
+        excluded=excluded,
+    )
     parts = parts_needed(with_chronos)
     n = len(frame.rows)
     retour = list(reversed(backtest.retour_indices(frame)))
@@ -399,6 +414,7 @@ def run_training(
         "years_present": frame.years_present,
         "weekday": frame.weekday,
         "covariates": families,
+        "block": chosen_block,
         "pulse": report["shifts"][-1]["pulse"] if report["shifts"] else public_pulse(frame.horizon[0]),
         "star_pool": frame.star_pool,
         "anchor_year": frame.anchor_year,

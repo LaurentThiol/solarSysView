@@ -2797,6 +2797,15 @@ def create_app() -> FastAPI:
             raise HTTPException(400, "Chronos s’active avec un booléen.")
         return raw
 
+    def _nextdata_block(payload: dict[str, Any]) -> str | None:
+        from synchro.nextdata.covariates import known_block
+
+        try:
+            found = known_block(payload.get("block"))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return None if found is None else found.id
+
     def _nextdata_focus(payload: dict[str, Any]) -> int:
         from synchro.nextdata.panel import FOCUS_LENGTHS
 
@@ -2857,6 +2866,7 @@ def create_app() -> FastAPI:
                 with_chronos=with_chronos,
                 estimators=_nextdata_estimators(),
                 persist=persist,
+                block=_nextdata_block(payload),
             )
         )
         return report
@@ -2913,6 +2923,7 @@ def create_app() -> FastAPI:
                 shift=shift,
                 with_chronos=with_chronos,
                 persist=persist,
+                block=_nextdata_block(payload),
             )
         )
         return report
@@ -2959,6 +2970,7 @@ def create_app() -> FastAPI:
                 estimators=_nextdata_estimators(),
                 with_chronos=with_chronos,
                 persist=persist,
+                block=_nextdata_block(payload),
             )
         )
         return report

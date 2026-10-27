@@ -27,6 +27,7 @@ function row(partial: Partial<SweepRow> & Pick<SweepRow, "id" | "label">): Sweep
     years: ["n", "n-1", "n-2"],
     covariates: ["forme"],
     dropped: null,
+    block: null,
     with_chronos: false,
     status: "ready",
     detail: null,
@@ -59,6 +60,8 @@ test("the synthesis table sorts the anchor first, then by corpus MAE", () => {
   assert.equal(yearLabel(["n", "n-1", "n-2"]), "n, n−1, n−2")
   assert.equal(covariateCaption({ anchor: true, dropped: null }), "celles des boutons")
   assert.equal(covariateCaption({ dropped: "pulse" }), "sans Pulse")
+  assert.equal(covariateCaption({ role: "block", block: "forme-retards", dropped: null }), "sans les retards")
+  assert.equal(covariateCaption({ role: "focus", block: "forme-retards", dropped: null }), "celles des boutons")
   assert.equal(maeCell({ corpus: { mae_sum: 12.26, hits_numbers: 0, count: 10 } }, "corpus"), "12,3")
   assert.equal(maeCell({}, "fenetre"), "—")
 })
@@ -159,6 +162,10 @@ test("Synthèse Méga explains the logic of each value", () => {
   assert.match(NEXTDATA_TRAINING_HELP.mega.body, /Holm/)
   assert.match(NEXTDATA_TRAINING_HELP.mega.body, /80 %/)
   assert.match(NEXTDATA_TRAINING_HELP.mega.body, /lecture Corpus/)
+  assert.match(NEXTDATA_TRAINING_HELP.mega.body, /Sans Chronos/)
+  assert.match(NEXTDATA_TRAINING_HELP.mega.body, /Niveaux/)
+  assert.match(lab, /CovariateBlockToken/)
+  assert.match(lab, /block: covariateBlock/)
   assert.match(NEXTDATA_TRAINING_HELP.mega.items?.map((item) => item.label).join(" ") ?? "", /Holm/)
   assert.match(NEXTDATA_TRAINING_HELP.mega.items?.map((item) => item.label).join(" ") ?? "", /Écart apparié/)
   assert.equal(NEXTDATA_SWEEP_HELP.covariables.title, "Covariables de la ligne")

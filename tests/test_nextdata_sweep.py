@@ -9,11 +9,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from synchro.app import create_app
-from synchro.nextdata.covariates import FAMILIES
+from synchro.nextdata.covariates import BLOCKS, FAMILIES, future_columns, past_columns
+from synchro.nextdata.models import StepSettings
 from synchro.nextdata.panel import build_frame
+from synchro.nextdata.steps import step_key
 from synchro.nextdata.sweep import (
     MAX_ROWS,
     cpu_ratio,
+    decide_groups,
     decide_leader,
     holm_adjust,
     main_effects,
@@ -89,8 +92,15 @@ def test_main_effects_stay_within_the_row_cap() -> None:
     rows = main_effects(focus=50, years=["n", "n-1", "n-2"], covariates=list(FAMILIES), with_chronos=False)
     assert rows[0].anchor is True
     assert rows[0].id == "anchor"
-    assert len(rows) == 1 + 2 + 2 + len(FAMILIES)
+    assert len(rows) == 1 + 2 + 2 + len(FAMILIES) + 12
     assert len(rows) <= MAX_ROWS
+    blocks = [row for row in rows if row.role == "block"]
+    assert len(blocks) == 12
+    assert {row.block for row in blocks} == {spec.id for spec in BLOCKS}
+    retards = next(row for row in blocks if row.block == "forme-retards")
+    assert "delay_1" in retards.excluded
+    assert "spread" not in retards.excluded
+    assert retards.families == tuple(FAMILIES)
     assert len({row.id for row in rows}) == len(rows)
     assert all(row.with_chronos is False for row in rows)
     assert any(row.id == "focus-20" for row in rows)
@@ -102,16 +112,65 @@ def test_main_effects_stay_within_the_row_cap() -> None:
     assert "pulse" not in dropped.families
     assert dropped.label == "Sans Pulse"
 
+    chronos_rows = main_effects(focus=50, years=["n", "n-1", "n-2"], covariates=list(FAMILIES), with_chronos=True)
+    assert not any(row.role == "block" for row in chronos_rows)
+    assert len(chronos_rows) == 1 + 2 + 2 + len(FAMILIES)
+
     alone = main_effects(focus=100, years=["n"], covariates=["forme"], with_chronos=True)
     assert all(row.with_chronos for row in alone)
     assert not any(row.role == "covariate" for row in alone)
+    assert not any(row.role == "block" for row in alone)
     assert {row.id for row in alone} == {"anchor", "focus-20", "focus-50", "years-n+n-1", "years-n+n-1+n-2"}
     short = main_effects(focus=20, years=["n"], covariates=["forme"], with_chronos=False)
-    assert {row.id for row in short} == {"anchor", "focus-50", "focus-100", "years-n+n-1", "years-n+n-1+n-2"}
+    assert {row.id for row in short} == {
+        "anchor",
+        "focus-50",
+        "focus-100",
+        "years-n+n-1",
+        "years-n+n-1+n-2",
+        "block-forme-profil",
+        "block-forme-retards",
+    }
     assert len(alone) <= MAX_ROWS
 
     skipped = main_effects(focus=50, years=["n", "n-2"], covariates=["forme", "delta"], with_chronos=False)
     assert sum(1 for row in skipped if row.role == "years") == 3
+
+
+def test_blocks_partition_their_family_and_an_empty_exclusion_keeps_the_cache_key() -> None:
+    covered = {"calendrier", "forme", "couples", "triples", "pulse"}
+    assert {spec.family for spec in BLOCKS} == covered
+    assert len(BLOCKS) == 12
+    for family in covered:
+        columns = set(past_columns([family]) + future_columns([family]))
+        parts = [spec for spec in BLOCKS if spec.family == family]
+        union: set[str] = set()
+        for spec in parts:
+            assert not union & set(spec.columns)
+            union |= set(spec.columns)
+            kept = set(past_columns([family], spec.columns) + future_columns([family], spec.columns))
+            assert set(spec.columns).isdisjoint(kept)
+            assert columns - set(spec.columns) == kept
+        assert union == columns
+
+    digest = "abc"
+    horizon = [{"date": "2024-01-02"}]
+    plain = StepSettings(focus=20, families=("forme",), estimators=2)
+    empty = StepSettings(focus=20, families=("forme",), estimators=2, excluded=())
+    cut = StepSettings(focus=20, families=("forme",), estimators=2, excluded=("delay_1",))
+    assert step_key(digest, horizon, plain, "lightgbm") == step_key(digest, horizon, empty, "lightgbm")
+    assert step_key(digest, horizon, plain, "lightgbm") != step_key(digest, horizon, cut, "lightgbm")
+
+
+def test_holm_groups_do_not_penalize_each_other() -> None:
+    decision = decide_groups(
+        [{"id": "focus-20", "label": "Focus 20", "verdict": "lower", "p": 0.04, "value": -1.0}],
+        [{"id": "block-forme-retards", "label": "Sans les retards", "verdict": "lower", "p": 0.04, "value": -3.0}],
+    )
+    assert decision["leader"]["id"] == "block-forme-retards"
+    assert decision["holm"]["focus-20"]["retained"] is True
+    assert decision["holm"]["block-forme-retards"]["retained"] is True
+    assert decision["held"] is False
 
 
 def test_year_depths_share_the_anchor_dates() -> None:
@@ -437,7 +496,7 @@ def test_rows_with_the_same_years_share_one_frame(monkeypatch) -> None:
         lags=(1,),
     )
     assert report["ok"] is True
-    assert len(report["rows"]) == 1 + 2 + 2 + 3
+    assert len(report["rows"]) == 1 + 2 + 2 + 3 + 2
     assert sorted(built) == sorted({("n",), ("n", "n-1"), ("n", "n-1", "n-2")})
     focus_row = next(row for row in report["rows"] if row["id"] == "focus-100")
     assert focus_row["focus"] == 100

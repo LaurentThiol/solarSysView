@@ -9,6 +9,7 @@ avant t.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from datetime import date
 from itertools import combinations
 from typing import Iterable
@@ -124,6 +125,103 @@ FUTURE_CALENDAR = (
 )
 FUTURE_MOON = ("lunar_sin", "lunar_cos")
 
+
+def _kind_columns(prefix: str, kind: str) -> tuple[str, ...]:
+    return tuple(f"{prefix}_{kind}_{rank}" for rank in range(1, LINK_SLOTS + 1))
+
+
+@dataclass(frozen=True)
+class Block:
+    """Une part d’une famille. Méga la retire seule, sans éteindre le reste."""
+
+    id: str
+    family: str
+    label: str
+    columns: tuple[str, ...]
+
+
+# Douze parts. Lune, décennies, delta et répétitions restent des familles entières.
+BLOCKS: tuple[Block, ...] = (
+    Block("calendrier-date", "calendrier", "Sans la date", ("weekday_mardi", "month", "day_of_year")),
+    Block(
+        "calendrier-cycles",
+        "calendrier",
+        "Sans les cycles",
+        ("carrington_sin", "carrington_cos", "schwabe_sin", "schwabe_cos", "tropical_sin", "tropical_cos"),
+    ),
+    Block(
+        "forme-profil",
+        "forme",
+        "Sans le profil",
+        ("spread", "high_low", "consecutive", "star_consecutive", "centroid", "short_residual"),
+    ),
+    Block("forme-retards", "forme", "Sans les retards", (*NUMBER_DELAYS, *STAR_DELAYS)),
+    Block(
+        "couples-ago",
+        "couples",
+        "Sans ancienneté des couples",
+        (*_kind_columns("couple", "ago"), "couple_ago_min", "star_couple_ago"),
+    ),
+    Block("couples-count", "couples", "Sans parts des couples", _kind_columns("couple", "count")),
+    Block(
+        "couples-affinity",
+        "couples",
+        "Sans affinités des couples",
+        (*_kind_columns("couple", "affinity"), "couple_overlap"),
+    ),
+    Block(
+        "triples-ago",
+        "triples",
+        "Sans ancienneté des triples",
+        (*_kind_columns("triple", "ago"), "triple_ago_min"),
+    ),
+    Block("triples-count", "triples", "Sans parts des triples", _kind_columns("triple", "count")),
+    Block(
+        "triples-affinity",
+        "triples",
+        "Sans affinités des triples",
+        (*_kind_columns("triple", "affinity"), "triple_overlap"),
+    ),
+    Block(
+        "pulse-numeros",
+        "pulse",
+        "Sans Pulse numéros",
+        tuple(name for name in FUTURE_PULSE if not name.startswith("star_")),
+    ),
+    Block(
+        "pulse-etoiles",
+        "pulse",
+        "Sans Pulse étoiles",
+        tuple(name for name in FUTURE_PULSE if name.startswith("star_")),
+    ),
+)
+
+_BLOCK_BY_ID = {block.id: block for block in BLOCKS}
+
+
+def known_block(block_id: object) -> Block | None:
+    """Le jeton nommé, ou None s’il est absent. Un identifiant inconnu est refusé."""
+    if block_id is None or block_id == "":
+        return None
+    if not isinstance(block_id, str):
+        raise ValueError("Le bloc de covariables n’est pas reconnu.")
+    found = _BLOCK_BY_ID.get(block_id)
+    if found is None:
+        raise ValueError("Le bloc de covariables n’est pas reconnu.")
+    return found
+
+
+def active_block(block_id: object, families: Iterable[str]) -> tuple[str | None, tuple[str, ...]]:
+    """Identifiant et colonnes du jeton, si sa famille est cochée.
+
+    Famille éteinte : le jeton ne retire rien. Identifiant inconnu : ValueError.
+    """
+    found = known_block(block_id)
+    if found is None or found.family not in set(families):
+        return None, ()
+    return found.id, found.columns
+
+
 _PAST_BY_FAMILY: dict[str, tuple[str, ...]] = {
     "forme": PAST_FORME,
     "decennies": PAST_DECADES,
@@ -161,21 +259,23 @@ def normalize_families(selected: Iterable[str] | None) -> list[str]:
     return wanted or list(FAMILIES)
 
 
-def past_columns(families: Iterable[str]) -> list[str]:
+def past_columns(families: Iterable[str], excluded: Iterable[str] | None = None) -> list[str]:
+    skip = set(excluded or ())
     chosen = set(families)
     out: list[str] = []
     for family, cols in _PAST_BY_FAMILY.items():
         if family in chosen:
-            out.extend(cols)
+            out.extend(col for col in cols if col not in skip)
     return out
 
 
-def future_columns(families: Iterable[str]) -> list[str]:
+def future_columns(families: Iterable[str], excluded: Iterable[str] | None = None) -> list[str]:
+    skip = set(excluded or ())
     chosen = set(families)
     out: list[str] = []
     for family, cols in _FUTURE_BY_FAMILY.items():
         if family in chosen:
-            out.extend(cols)
+            out.extend(col for col in cols if col not in skip)
     return out
 
 

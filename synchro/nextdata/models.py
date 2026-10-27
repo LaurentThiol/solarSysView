@@ -55,6 +55,7 @@ class StepSettings:
     families: tuple[str, ...]
     estimators: int
     quantiles: tuple[float, ...] = QUANTILES
+    excluded: tuple[str, ...] = ()
 
 
 FUTURE_BACK = 4
@@ -494,14 +495,15 @@ def predict_moments(
     estimators: int = 48,
     quantiles: tuple[float, ...] = (0.1, 0.5, 0.9),
     library: str = "lightgbm",
+    excluded: Iterable[str] = (),
 ) -> tuple[dict[str, dict[str, float]], list[dict[str, Any]], str]:
     """Médianes et quantiles du pas qui suit `rows`. La chaîne raffine les rangs."""
     n = len(rows)
     focus_used = max(1, min(int(focus), n))
     focus_start = n - focus_used
     lags, past_lags = lag_choice(n)
-    past_names = past_columns(families)
-    future_names = future_columns(families)
+    past_names = past_columns(families, excluded)
+    future_names = future_columns(families, excluded)
     indices = loss_indices(n, lags, focus_start, mode)
     alphas = tuple(sorted(set(quantiles)))
     if 0.5 not in alphas:
@@ -691,6 +693,7 @@ def try_darts_medians(
     focus: int,
     families: Iterable[str],
     estimators: int = 32,
+    excluded: Iterable[str] = (),
 ) -> dict[str, float] | None:
     """Un pas Darts. None quand l’histoire n’a pas huit lignes de perte, ou quand Darts a échoué.
 
@@ -713,8 +716,8 @@ def try_darts_medians(
         return None
     start, weight_values = fitted
     lags, past_lags = lag_choice(n)
-    past_names = past_columns(families)
-    future_names = future_columns(families)
+    past_names = past_columns(families, excluded)
+    future_names = future_columns(families, excluded)
     target_names = ["sum", "star_sum", "n1", "parity", "spread", "consecutive", "star_consecutive"]
     pool = star_pool_of(horizon[0] if horizon else None)
     try:
@@ -882,6 +885,7 @@ def compute_part(
                     estimators=settings.estimators,
                     quantiles=settings.quantiles,
                     library=part,
+                    excluded=settings.excluded,
                 )
             except Exception as exc:
                 out[mode] = {"error": str(exc) or type(exc).__name__}
@@ -895,6 +899,7 @@ def compute_part(
                 focus=settings.focus,
                 families=settings.families,
                 estimators=settings.estimators,
+                excluded=settings.excluded,
             )
     if part == "darts" and darts_error() is not None:
         return {"error": darts_error()}
@@ -907,6 +912,7 @@ def chronos_inputs(
     horizon: list[dict[str, Any]],
     focus: int,
     families: Iterable[str],
+    excluded: Iterable[str] = (),
 ) -> list[dict[str, Any]]:
     """Entrées Chronos-2 des deux modes, dans l’ordre de MODES : trois cibles et les covariables cochées.
 
@@ -914,8 +920,8 @@ def chronos_inputs(
     Chronos-2 lit aussi leur historique. Les autres familles s’arrêtent au
     dernier tirage sorti. Pulse sur ce tirage n’utilise que les sorties d’avant.
     """
-    past = past_columns(families)
-    future = future_columns(families)
+    past = past_columns(families, excluded)
+    future = future_columns(families, excluded)
     windows = {"corpus": prefix, "fenetre": prefix[-focus:]}
     items: list[dict[str, Any]] = []
     for mode in MODES:
@@ -936,9 +942,14 @@ def _chronos_part(prefix: list[dict[str, Any]], horizon: list[dict[str, Any]], s
     lentement que dix appels, et refuse un lot dont les covariables diffèrent.
     """
     try:
-        bands = chronos_quantiles(chronos_inputs(prefix, horizon, settings.focus, settings.families))
+        bands = chronos_quantiles(
+            chronos_inputs(prefix, horizon, settings.focus, settings.families, settings.excluded)
+        )
     except RuntimeError as exc:
         return {"error": str(exc)}
     out: dict[str, Any] = {mode: dict(zip(CHRONOS_SERIES, mode_bands)) for mode, mode_bands in zip(MODES, bands)}
-    out["covariates"] = {"past": len(past_columns(settings.families)), "future": len(future_columns(settings.families))}
+    out["covariates"] = {
+        "past": len(past_columns(settings.families, settings.excluded)),
+        "future": len(future_columns(settings.families, settings.excluded)),
+    }
     return json.loads(json.dumps(out))
