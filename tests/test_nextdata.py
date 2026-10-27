@@ -691,8 +691,27 @@ def test_optional_model_notices_stay_out_of_the_log() -> None:
     assert "StatsForecast" not in text
     assert "unauthenticated" not in text
     assert "Rate limited" in text
-    assert text.count("XGBoost") == 1
+    # Les deux avis sont tus. L’erreur, qui cite la même phrase, reste.
+    assert text.count("The `XGBoost` module could not be imported") == 1
     assert "ERROR" in text
+
+
+def _fresh_process_is_quiet() -> bool:
+    """Point d’entrée d’un interpréteur neuf : le pool de Méga importe `steps` ainsi."""
+    import logging
+
+    from synchro.nextdata import steps
+
+    del steps
+    return bool(getattr(logging.Logger.handle, "_synchro_optional_notices", False))
+
+
+def test_a_fresh_process_quiets_the_notices_before_darts() -> None:
+    import multiprocessing
+
+    ctx = multiprocessing.get_context("spawn")
+    with ctx.Pool(1) as pool:
+        assert pool.apply(_fresh_process_is_quiet)
 
 
 def test_darts_lightgbm_stays_single_threaded(monkeypatch) -> None:
