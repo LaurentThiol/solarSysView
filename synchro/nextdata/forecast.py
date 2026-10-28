@@ -452,8 +452,6 @@ def _chart(
             "date": row["date"],
             "label": row["date"][5:],
             "kind": "history",
-            "d_sum": round(float(row["d_sum"]), 4),
-            "d_star_sum": round(float(row["d_star_sum"]), 4),
         }
         for name in level_names:
             point[name] = round(float(row[name]), 4)
@@ -481,11 +479,5 @@ def _chart(
         if grid.get("numbers"):
             for name, value in grid_shape(grid["numbers"], grid.get("stars") or []).items():
                 forecast[f"{name}_{mode}"] = value
-    if points:
-        last = points[-1]
-        forecast["d_sum"] = round(float(forecast.get("sum_corpus", last["sum"])) - float(last["sum"]), 4)
-        forecast["d_star_sum"] = round(
-            float(forecast.get("star_sum_corpus", last["star_sum"])) - float(last["star_sum"]), 4
-        )
     points.append(forecast)
     return points
