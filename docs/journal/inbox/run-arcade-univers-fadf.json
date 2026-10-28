@@ -1,0 +1,9 @@
+{
+  "slug": "run-arcade-univers-fadf",
+  "happened_on": "2026-10-28",
+  "area": "runArcade",
+  "title": "Univers graphique de chaque runner",
+  "body": "Assistants ouvre runArcade. Au lancement, chaque runner reçoit son cadre. À chaque tour, le cadre trace la série du rang qu’il suit, la tangente du dernier pas, le rayon vers un niveau du nombre d’or, le vecteur du pas et la flèche de projection. Le rail de droite porte les sept rangs annoncés. Un rang confirmé par la réponse du tour se colore. Le solde part de 50 €, le tour coûte 2,50 €, un rang juste en rapporte 2 €. Lecture enchaîne les tours.",
+  "pr_number": null,
+  "pr_url": null
+}

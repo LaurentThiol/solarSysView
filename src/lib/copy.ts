@@ -280,6 +280,11 @@ export const GLOSSARY: GlossaryEntry[] = [
     text: "Derniers tirages tenus hors de la recherche (100, ou 30 % si la série est courte). Ils notent le verdict et chaque feuille. Ils ne choisissent pas la profondeur.",
   },
   {
+    term: "runArcade",
+    group: "assistants",
+    text: "Chaque runner a son univers graphique. À chaque tour il y dessine ce qu’il pense : tangente, rayon du nombre d’or, vecteur du pas et projection des rangs. Le solde part de 50 €, le tour coûte 2,50 €, un rang juste rapporte 2 €.",
+  },
+  {
     term: "decisionTree",
     group: "assistants",
     text: "Assistant qui cherche un seuil sur le flux, juste avant le tirage t. Une ligne du tableau est l’état du flux (somme, rangs, retard d’une boule, figure). L’indépendance n’est que l’hypothèse nulle : on détruit l’ordre des tirages et on rejoue tout le calcul. Le dessin montre chaque coupure. La suite propose un spécialiste, des chances vers Jeux, ou une règle chartiste — rien n’est écrit tant que vous ne le demandez pas.",

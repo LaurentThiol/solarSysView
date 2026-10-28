@@ -187,7 +187,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     home: "/brain",
     help: {
       title: "Assistants",
-      body: "Brain lit les fiches épinglées. Le Dictionnaire tient les concepts confirmés à la main. Les Spécialistes publient une prévision de série nommée. decisionTree cherche un seuil de flux. IA lit une capture. Réf date des cycles physiques.",
+      body: "Brain lit les fiches épinglées. Le Dictionnaire tient les concepts confirmés à la main. Les Spécialistes publient une prévision de série nommée. decisionTree cherche un seuil de flux. runArcade dessine la pensée de chaque runner. IA lit une capture. Réf date des cycles physiques.",
     },
     items: [
       {
@@ -212,6 +212,14 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         help: {
           title: "decisionTree",
           body: "Le flux est le tableau montré avant la lecture : une ligne est l’état juste avant le tirage t. Un arbre cherche ensuite où ce tableau se coupe (somme, rangs, retards, figures). L’indépendance n’est que l’hypothèse nulle. On détruit l’ordre des tirages et on rejoue caractéristiques, étiquettes, recherche et score. Un seuil qui tient sur l’ordre réel et disparaît sur l’ordre détruit est un seuil de flux. S’il ne dépasse pas ce nul, aucun seuil n’est visible — ce n’est pas une conclusion d’indépendance. Le dessin montre chaque coupure. La suite mène vers un spécialiste, Jeux ou une règle chartiste, sans rien écrire en silence.",
+        },
+      },
+      {
+        href: "/brain/run-arcade",
+        label: "runArcade",
+        help: {
+          title: "runArcade",
+          body: "Chaque runner a son univers. À chaque tour il y trace sa tangente, son rayon, ses vecteurs et la projection des rangs n1–n5 et E1/E2. Le solde classe la course.",
         },
       },
       {
