@@ -1863,6 +1863,40 @@ def test_chronos_quantiles_keep_level_order(monkeypatch) -> None:
         monkeypatch.setattr(models_mod, "_CHRONOS", None)
 
 
+def test_importance_is_a_share_per_model_not_a_raw_gain_sum() -> None:
+    from synchro.nextdata.models import _importance
+
+    class Gains:
+        def __init__(self, values: list[float]) -> None:
+            self._values = values
+
+        def feature_importance(self, importance_type: str = "split") -> list[float]:
+            assert importance_type == "gain"
+            return self._values
+
+    class Catboost:
+        def get_feature_importance(self) -> list[float]:
+            return [10.0, 90.0]
+
+    # La cible large (gains par milliers) et la cible étroite (gains par dizaines) pèsent autant.
+    wide = (Gains([9000.0, 1000.0]), ["a", "b"])
+    narrow = (Gains([10.0, 90.0]), ["a", "b"])
+    out = _importance([wide, narrow])
+    assert {item["name"]: item["gain"] for item in out} == {"a": 50.0, "b": 50.0}
+    assert sum(item["gain"] for item in out) == 100.0
+
+    only_narrow = _importance([narrow])
+    assert [item["name"] for item in only_narrow] == ["b", "a"]
+    assert [item["gain"] for item in only_narrow] == [90.0, 10.0]
+
+    assert _importance([(Catboost(), ["x", "y"])]) == [
+        {"name": "y", "gain": 90.0, "family": "series"},
+        {"name": "x", "gain": 10.0, "family": "series"},
+    ]
+    assert _importance([(Gains([0.0, 0.0]), ["a", "b"])]) == []
+    assert _importance([]) == []
+
+
 def test_rows_and_horizon_carry_their_star_pool() -> None:
     frame = build_frame(_draws(30, seed=4), focus=24)
     assert frame.rows[-1]["star_pool"] == 12

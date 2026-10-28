@@ -367,7 +367,7 @@ export const NEXTDATA_HELP = {
   },
   poids: {
     title: "Poids des variables",
-    body: "Les quinze colonnes les plus utilisées pour la somme et pour n1, une liste pour LightGBM et une pour CatBoost. Le nom dit le décalage : lag:sum:2 est la somme d’il y a deux tirages. La famille regroupe calendrier, lune, forme, décennies, delta, répétitions, couples, triples, pulse ou la série elle-même. Un gain élevé dit que la colonne a servi à couper les arbres, pas qu’elle annonce le prochain tirage à elle seule.",
+    body: "Les quinze colonnes les plus utilisées pour la somme et pour n1, une liste pour LightGBM et une pour CatBoost. Le nom dit le décalage : lag:sum:2 est la somme d’il y a deux tirages. La famille regroupe calendrier, lune, forme, décennies, delta, répétitions, couples, triples, pulse ou la série elle-même. Le chiffre est la part du gain, en pour cent : chaque modèle (somme, n1) est ramené à 100 avant la moyenne, pour que la somme, dont l’échelle est plus large, ne couvre pas n1. Une part élevée dit que la colonne a servi à couper les arbres, pas qu’elle annonce le prochain tirage à elle seule.",
   },
 } satisfies Record<string, HelpCopy>
 

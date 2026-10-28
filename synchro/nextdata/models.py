@@ -615,7 +615,14 @@ def predict_moments(
 
 
 def _importance(models: list[tuple[Any, list[str]]], limit: int = 15) -> list[dict[str, Any]]:
-    gains: dict[str, float] = {}
+    """Part de gain de chaque colonne, en pour cent, moyenne des modèles lus.
+
+    Le gain brut d’un arbre suit l’échelle de sa cible (la somme varie de 15 à
+    240, n1 de 1 à 46) : additionner les gains bruts ferait de la somme seule
+    le classement. Chaque modèle est donc ramené à 100 avant la moyenne.
+    """
+    shares: dict[str, float] = {}
+    read = 0
     for model, names in models:
         if hasattr(model, "get_feature_importance"):
             values = model.get_feature_importance()
@@ -625,8 +632,14 @@ def _importance(models: list[tuple[Any, list[str]]], limit: int = 15) -> list[di
             values = getattr(model, "feature_importances_", None)
         if values is None:
             continue
-        for name, gain in zip(names, values):
-            gains[name] = gains.get(name, 0.0) + float(gain)
+        raw = [max(float(gain), 0.0) for gain in values]
+        total = sum(raw)
+        if not total > 0:
+            continue
+        read += 1
+        for name, gain in zip(names, raw):
+            shares[name] = shares.get(name, 0.0) + 100.0 * gain / total
+    gains = {name: share / read for name, share in shares.items()} if read else {}
     ordered = sorted(gains.items(), key=lambda item: (-item[1], item[0]))
     out = []
     for name, gain in ordered:
