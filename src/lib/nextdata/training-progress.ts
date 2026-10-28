@@ -38,7 +38,8 @@ export function visibleTrainingShift<T extends { x: number }>(shifts: T[], pinne
   return shifts[shifts.length - 1]
 }
 
-/** Tirages tombés dans la bande 10–90 brute, ou calibrée, sur les décalages qui en ont une. */
+/** Tirages tombés dans la bande 10–90 brute, ou calibrée, sur les décalages qui en ont une.
+ *  Une lecture sans couverture brute n’en emprunte pas à la calibrée : la colonne reste vide. */
 export function bandCoverage(
   shifts: ShiftSlice[],
   reading: string,
@@ -51,7 +52,7 @@ export function bandCoverage(
     const side = shift.readings[reading]
     if (!side) continue
     if (kind === "calibrated" && side.calibrated === false) continue
-    const covered = kind === "raw" ? (side.in_band_raw ?? side.in_band)?.[field] : side.in_band?.[field]
+    const covered = kind === "raw" ? side.in_band_raw?.[field] : side.in_band?.[field]
     if (covered == null) continue
     total += 1
     if (covered) inside += 1

@@ -40,3 +40,12 @@ test("raw and calibrated bands are counted apart", () => {
   assert.deepEqual(bandCoverage(shifts, "corpus", "n5", "raw"), { inside: 1, total: 3 })
   assert.deepEqual(bandCoverage(shifts, "corpus", "n5", "calibrated"), { inside: 2, total: 2 })
 })
+
+test("a reading without a raw coverage does not lend its calibrated one", () => {
+  const shifts = [
+    { readings: { corpus_persist: { calibrated: true, in_band: { n5: true } } } },
+    { readings: { corpus_persist: { calibrated: true, in_band: { n5: false } } } },
+  ]
+  assert.deepEqual(bandCoverage(shifts, "corpus_persist", "n5", "raw"), { inside: 0, total: 0 })
+  assert.deepEqual(bandCoverage(shifts, "corpus_persist", "n5", "calibrated"), { inside: 1, total: 2 })
+})

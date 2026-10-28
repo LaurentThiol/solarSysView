@@ -605,6 +605,10 @@ def shift_report(
             if persist:
                 snapped = persist_side(frame, t, reading, persist)
                 twin = _shift_side(snapped, actual, view)
+                # Mêmes bandes que la lecture : la jumelle porte aussi sa couverture brute et son calibrage.
+                twin["in_band_raw"] = side["in_band_raw"]
+                twin["calibrated"] = side["calibrated"]
+                twin["calibration_steps"] = side["calibration_steps"]
                 twin["swaps"] = snapped["swaps"]
                 twin["held"] = snapped["held"]
                 readings[f"{key}_persist"] = twin

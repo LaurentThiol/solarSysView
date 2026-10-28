@@ -298,6 +298,9 @@ def test_each_shift_reading_gets_its_persist_twin(monkeypatch) -> None:
         assert set(twin["errors"]) == set(raw["errors"])
         assert twin["errors"]["sum"] == round(sum(twin["numbers"]) - frame.rows[-lag]["sum"], 4)
         assert twin["in_band"] == raw["in_band"]
+        assert twin["in_band_raw"] == raw["in_band_raw"]
+        assert twin["calibrated"] == raw["calibrated"]
+        assert twin["calibration_steps"] == raw["calibration_steps"]
         _check_twin(raw, twin, before, shift["actual"], 2)
         swapped += len(twin["swaps"])
     assert swapped > 0
