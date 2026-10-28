@@ -1951,6 +1951,20 @@ def test_importance_is_a_share_per_model_not_a_raw_gain_sum() -> None:
     assert _importance([]) == []
 
 
+def test_gap_bounds_reach_the_largest_legal_gap() -> None:
+    from synchro.nextdata.models import _clamp_span
+
+    extremes = {
+        "g1": [1, 47, 48, 49, 50],
+        "g2": [1, 2, 48, 49, 50],
+        "g3": [1, 2, 3, 49, 50],
+        "g4": [1, 2, 3, 4, 50],
+    }
+    for name, draw in extremes.items():
+        rank = int(name[1])
+        assert _clamp_span(name) == (1.0, float(draw[rank] - draw[rank - 1])) == (1.0, 46.0)
+
+
 def test_rows_and_horizon_carry_their_star_pool() -> None:
     frame = build_frame(_draws(30, seed=4), focus=24)
     assert frame.rows[-1]["star_pool"] == 12
