@@ -1329,6 +1329,60 @@ def test_a_chronos_failure_is_reported_and_never_cached(monkeypatch) -> None:
     assert seen["calls"] == []
 
 
+def test_a_transient_model_failure_is_not_stored_on_disk(monkeypatch) -> None:
+    import json
+    import os
+    from pathlib import Path
+
+    from synchro.nextdata import steps
+    from synchro.nextdata.models import StepSettings
+
+    monkeypatch.setattr(steps, "_TRANSIENT", {})
+    frame = build_frame(_draws(40, seed=31), focus=24)
+    n = len(frame.rows)
+    memory_at, short_at, fine_at = n - 3, n - 2, n - 1
+
+    def flaky(rows, horizon, **kwargs):
+        if len(rows) == memory_at:
+            raise MemoryError("mémoire")
+        if len(rows) == short_at:
+            raise ValueError("Pas assez de tirages antérieurs pour ce mode.")
+        return _fake_moments(rows, horizon, **kwargs)
+
+    _offline(monkeypatch, moments=flaky)
+    settings = StepSettings(focus=24, families=("forme",), estimators=2)
+    order = [memory_at, short_at, fine_at]
+
+    def saved() -> list[dict]:
+        root = Path(os.environ["SYNCHRO_NEXTDATA_CACHE"])
+        return [json.loads(path.read_text(encoding="utf-8")) for path in root.rglob("*.json")]
+
+    ready, left = steps.ensure_steps(frame, order, settings, ("lightgbm",), limit=10)
+    assert left == 0
+    memory = ready[memory_at]["parts"]["lightgbm"]
+    assert memory["corpus"] == {"error": "mémoire", "transient": True}
+    assert ready[short_at]["parts"]["lightgbm"]["corpus"] == {"error": "Pas assez de tirages antérieurs pour ce mode."}
+    assert "moments" in ready[fine_at]["parts"]["lightgbm"]["corpus"]
+    # Un historique trop court se range ; la panne passagère, non.
+    assert len(saved()) == 2
+    assert not any(block.get("transient") for part in saved() for block in part.values())
+
+    # Le sondage suivant ne reboucle pas sur le pas en panne : il reste prêt, en mémoire.
+    again, left = steps.ensure_steps(frame, order, settings, ("lightgbm",), limit=0)
+    assert left == 0
+    assert again[memory_at]["parts"]["lightgbm"]["corpus"]["transient"] is True
+
+    # Au redémarrage de l’API, ce pas se recalcule et se range.
+    monkeypatch.setattr(steps, "_TRANSIENT", {})
+    _, left = steps.ensure_steps(frame, order, settings, ("lightgbm",), limit=0)
+    assert left == 1
+    _offline(monkeypatch)
+    recovered, left = steps.ensure_steps(frame, order, settings, ("lightgbm",), limit=10)
+    assert left == 0
+    assert "moments" in recovered[memory_at]["parts"]["lightgbm"]["corpus"]
+    assert len(saved()) == 3
+
+
 def test_a_darts_failure_is_reported_and_never_cached(monkeypatch) -> None:
     import json
     import os

@@ -899,8 +899,12 @@ def compute_part(
                     library=part,
                     excluded=settings.excluded,
                 )
-            except Exception as exc:
+            except ValueError as exc:
+                # Historique trop court, ou valeur que ces tirages rendent toujours : le même résultat à chaque calcul.
                 out[mode] = {"error": str(exc) or type(exc).__name__}
+            except Exception as exc:
+                # Mémoire, bibliothèque : le prochain calcul peut réussir, la fiche ne se range pas sur disque.
+                out[mode] = {"error": str(exc) or type(exc).__name__, "transient": True}
             else:
                 out[mode] = {"moments": moments, "importance": importance}
         elif part == "darts":

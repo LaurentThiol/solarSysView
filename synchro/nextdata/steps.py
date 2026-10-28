@@ -175,6 +175,24 @@ def save_part(key: str, data: Any) -> None:
         temp.unlink(missing_ok=True)
 
 
+_TRANSIENT: dict[str, Any] = {}
+_TRANSIENT_CAP = 4096
+_TRANSIENT_LOCK = threading.Lock()
+
+
+def is_transient(data: Any) -> bool:
+    """Un morceau dont un mode a échoué pour une raison qui peut passer (mémoire, bibliothèque)."""
+    return isinstance(data, dict) and any(isinstance(block, dict) and block.get("transient") for block in data.values())
+
+
+def remember_transient(key: str, data: Any) -> None:
+    """Garde l’échec en mémoire, jusqu’au redémarrage de l’API : le sondage de la page ne reboucle pas dessus."""
+    with _TRANSIENT_LOCK:
+        if len(_TRANSIENT) >= _TRANSIENT_CAP:
+            _TRANSIENT.clear()
+        _TRANSIENT[key] = data
+
+
 def _part_job(
     prefix: list[dict[str, Any]],
     horizon: list[dict[str, Any]],
@@ -279,8 +297,13 @@ def _compute(
 
     def keep(job: tuple[int, str, str], data: dict[str, Any]) -> None:
         t, part, key = job
-        # Un échec de Chronos ou de Darts tient à l’installation ou au réseau : rangé, il ne serait jamais retenté.
-        if not (part in ("chronos", "darts") and "error" in data):
+        # Un échec de Chronos ou de Darts tient à l’installation ou au réseau, un échec transitoire de LightGBM ou de
+        # CatBoost à la mémoire : rangé sur disque, il ne serait jamais retenté. Un historique trop court, lui, se range.
+        if part in ("chronos", "darts") and "error" in data:
+            pass
+        elif is_transient(data):
+            remember_transient(key, data)
+        else:
             save_part(key, data)
         done[t][part] = data
 
@@ -327,6 +350,8 @@ def ensure_steps(
         found = {}
         for part, key in keys.items():
             data = load_part(key)
+            if data is None:
+                data = _TRANSIENT.get(key)
             if data is not None:
                 found[part] = data
         if len(found) == len(keys):
