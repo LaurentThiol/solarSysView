@@ -825,7 +825,9 @@ def chronos_quantiles(items: list[dict[str, Any]]) -> list[list[dict[str, float]
     """Bandes 10–90 du tirage qui suit chaque entrée, une par variable de la cible, en un seul appel à Chronos-2.
 
     Une entrée suit le format de Chronos-2 : `target` (variables × tirages),
-    `past_covariates`, `future_covariates`. Un échec (paquet, poids, appel)
+    `past_covariates`, `future_covariates`. Les trois quantiles sont rendus
+    dans l’ordre : un modèle quantile peut les croiser, ce qui n’est pas une
+    panne. Un échec (paquet, poids, appel, valeur manquante)
     lève `RuntimeError` et reste noté : les appels suivants échouent aussitôt,
     sans retélécharger ni rappeler le modèle.
     """
@@ -851,11 +853,8 @@ def chronos_quantiles(items: list[dict[str, Any]]) -> list[list[dict[str, float]
             bands: list[list[dict[str, float]]] = []
             for table in tables:
                 rows_out: list[dict[str, float]] = []
-                for row in table:
-                    lo, mid, hi = (float(row[0]), float(row[1]), float(row[2]))
-                    if not lo <= mid <= hi:
-                        raise ValueError("quantile non croissant")
-                    rows_out.append({"lo": lo, "mid": mid, "hi": hi})
+                for row in np.sort(table, axis=1):
+                    rows_out.append({"lo": float(row[0]), "mid": float(row[1]), "hi": float(row[2])})
                 bands.append(rows_out)
         except Exception as exc:
             _CHRONOS_ERROR = _short_error(exc)

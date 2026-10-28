@@ -1840,6 +1840,11 @@ def test_chronos_quantiles_keep_level_order(monkeypatch) -> None:
             table = np.asarray([[[9.0, 1.0, 4.0]]], dtype=float)
             return [table], None
 
+    class Missing:
+        def predict_quantiles(self, items, prediction_length=1, quantile_levels=None):
+            table = np.asarray([[[1.0, float("nan"), 4.0]]], dtype=float)
+            return [table], None
+
     monkeypatch.setattr(models_mod, "_CHRONOS", Ordered())
     monkeypatch.setattr(models_mod, "_CHRONOS_ERROR", None)
     try:
@@ -1847,8 +1852,12 @@ def test_chronos_quantiles_keep_level_order(monkeypatch) -> None:
             [{"lo": 1.0, "mid": 4.0, "hi": 9.0}, {"lo": 2.0, "mid": 3.0, "hi": 8.0}]
         ]
         monkeypatch.setattr(models_mod, "_CHRONOS", Crossed())
-        with pytest.raises(RuntimeError, match="non croissant"):
+        assert chronos_quantiles([{"target": [[1.0]]}]) == [[{"lo": 1.0, "mid": 4.0, "hi": 9.0}]]
+        assert models_mod.chronos_error() is None
+        monkeypatch.setattr(models_mod, "_CHRONOS", Missing())
+        with pytest.raises(RuntimeError, match="non fini"):
             chronos_quantiles([{"target": [[1.0]]}])
+        assert models_mod.chronos_error() is not None
     finally:
         monkeypatch.setattr(models_mod, "_CHRONOS_ERROR", None)
         monkeypatch.setattr(models_mod, "_CHRONOS", None)
