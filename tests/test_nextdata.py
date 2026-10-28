@@ -121,6 +121,18 @@ def test_same_mean_delay_keeps_number_and_star_profiles() -> None:
     assert sum(spread_stars) == sum(paired_stars)
 
 
+def test_delay_profile_does_not_grow_with_history() -> None:
+    from synchro.nextdata.covariates import AGO_CAP
+
+    # La boule 50 ne sort qu’au tirage 60 : sans plafond, son retard vaudrait 60.
+    profile = delay_profile([[1, 2, 3, 4, 5]] * 60 + [[1, 2, 3, 4, 50]], 5)
+    assert profile[10] == [1.0, 1.0, 1.0, 1.0, 1.0]
+    assert profile[-1] == [1.0, 1.0, 1.0, 1.0, float(AGO_CAP)]
+    assert max(max(row) for row in profile) == AGO_CAP
+    stars = delay_profile([[1, 2]] * 30 + [[3, 4]], 2)
+    assert stars[-1] == [float(AGO_CAP), float(AGO_CAP)]
+
+
 def test_same_mean_couple_age_keeps_the_sorted_profile() -> None:
     """Dix anciennetés de moyenne 4 ne sont pas dix fois 4."""
     quiet = [22, 23, 24, 25, 26]

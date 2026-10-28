@@ -137,7 +137,7 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Forme",
-        text: "Écart max−min des numéros, hauts et bas, consécutifs des numéros et des étoiles, centre, résidu de cycle court. Les cinq retards des numéros sortis, du plus court au plus long, et les deux retards des étoiles, de même. Chacun est le nombre de tirages depuis la sortie précédente, compté avant de revoir la boule. L’étendue des étoiles est l’écart e2 − e1, déjà prévu avec les rangs.",
+        text: "Écart max−min des numéros, hauts et bas, consécutifs des numéros et des étoiles, centre, résidu de cycle court. Les cinq retards des numéros sortis, du plus court au plus long, et les deux retards des étoiles, de même. Chacun est le nombre de tirages depuis la sortie précédente, compté avant de revoir la boule et plafonné à 25 comme l’ancienneté des couples. L’étendue des étoiles est l’écart e2 − e1, déjà prévu avec les rangs.",
       },
       {
         label: "Décennies",

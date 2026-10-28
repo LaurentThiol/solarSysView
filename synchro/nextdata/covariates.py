@@ -453,15 +453,16 @@ def delay_profile(pools: list[list[int]], slots: int) -> list[list[float]]:
     """Retards des boules de ce tirage, du plus court au plus long.
 
     Comptés avant de les revoir : tirages depuis la sortie précédente, ou
-    depuis le début du corpus si la boule n’est pas encore sortie. Une grille
-    courte est complétée par des zéros. La moyenne de ces retards n’est pas
-    une colonne.
+    depuis le début du corpus si la boule n’est pas encore sortie. Plafonnés
+    à AGO_CAP comme l’ancienneté des liens : une boule jamais vue vaudrait t,
+    et la colonne suivrait la longueur de l’historique. Une grille courte est
+    complétée par des zéros. La moyenne de ces retards n’est pas une colonne.
     """
     last: dict[int, int] = {}
     out: list[list[float]] = []
     width = max(1, int(slots))
     for index, pool in enumerate(pools):
-        delays = [float(index - last[n]) if n in last else float(index) for n in pool]
+        delays = [float(min(index - last[n] if n in last else index, AGO_CAP)) for n in pool]
         for number in pool:
             last[number] = index
         out.append(_sorted_slots(delays, width))
