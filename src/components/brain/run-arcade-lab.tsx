@@ -152,9 +152,15 @@ export function RunArcadeLab() {
         <li>Rail : n1–n5 et e1–e2 annoncés</li>
       </ul>
 
+      {race?.seenDate ? (
+        <p className="text-sm text-muted-foreground">
+          Passé révélé jusqu’au {formatDrawDate(race.seenDate)}. Le tirage du tour reste caché pendant le dessin.
+        </p>
+      ) : null}
+
       {race?.revealed ? (
         <p className="text-sm">
-          Réponse du tour · {formatDrawDate(race.revealed.date)} · {race.revealed.n1} {race.revealed.n2}{" "}
+          Arbitre · {formatDrawDate(race.revealed.date)} · {race.revealed.n1} {race.revealed.n2}{" "}
           {race.revealed.n3} {race.revealed.n4} {race.revealed.n5}
           <span className="text-muted-foreground"> ★ {race.revealed.e1} {race.revealed.e2}</span>
         </p>
@@ -171,7 +177,7 @@ export function RunArcadeLab() {
           <RunnerUniverse
             runnerId={`${focus.mind.id}-focus`}
             thought={focus.thought}
-            revealed={race?.revealed ?? null}
+            matched={focus.matched}
             className="h-72"
           />
           <p className="mt-2 text-sm leading-5">{focus.thought.phrase}</p>
@@ -203,7 +209,7 @@ export function RunArcadeLab() {
               <RunnerUniverse
                 runnerId={runner.mind.id}
                 thought={runner.thought}
-                revealed={race.revealed}
+                matched={runner.matched}
                 className="mt-1"
               />
               <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">

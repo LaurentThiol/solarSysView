@@ -48,6 +48,8 @@ export type ThoughtDraw = {
   golden: { ratio: number; y: number; chosen: boolean }[]
   marks: { key: RankKey; value: number }[]
   phrase: string
+  /** Dernier tirage du passé révélé. Le tirage caché n’y figure pas. */
+  seenDate: string
   yMin: number
   yMax: number
   xMax: number
@@ -283,6 +285,7 @@ export function think(mind: RunnerMind, past: readonly RankPoint[]): Thought {
       golden: visible,
       marks: RANK_KEYS.map((key) => ({ key, value: guess[key] })),
       phrase,
+      seenDate: past[past.length - 1].date,
       yMin: yMin - pad,
       yMax: yMax + pad,
       xMax: last.x,
@@ -299,6 +302,8 @@ export type RunnerLive = {
   lastHits: number
   thought: ThoughtDraw | null
   guess: Guess | null
+  /** Rangs justes, posés par l’arbitre après le dessin. */
+  matched: RankKey[]
 }
 
 export type Race = {
@@ -307,6 +312,8 @@ export type Race = {
   start: number
   end: number
   revealed: RankPoint | null
+  /** Date du dernier tirage lisible au moment du dessin. */
+  seenDate: string | null
   done: boolean
 }
 
@@ -324,37 +331,58 @@ export function createRace(count: number, seriesLength: number, length: number):
       lastHits: 0,
       thought: null,
       guess: null,
+      matched: [],
     })),
     cursor: Math.min(start, end),
     start: Math.min(start, end),
     end,
     revealed: null,
+    seenDate: null,
     done: start >= end,
   }
+}
+
+/** Copie des tirages strictement avant `cursor`. `cursor` est le tirage caché. */
+export function revealedPast(series: readonly RankPoint[], cursor: number): RankPoint[] {
+  const end = Math.max(0, Math.min(cursor, series.length))
+  return series.slice(0, end).map((point) => ({
+    date: point.date,
+    n1: point.n1,
+    n2: point.n2,
+    n3: point.n3,
+    n4: point.n4,
+    n5: point.n5,
+    e1: point.e1,
+    e2: point.e2,
+  }))
 }
 
 export function playTurn(race: Race, series: readonly RankPoint[]): Race {
   if (race.done || race.cursor >= race.end || race.cursor >= series.length || race.cursor < 2) {
     return { ...race, done: true }
   }
-  const past = series.slice(0, race.cursor)
+  const past = revealedPast(series, race.cursor)
   const actual = series[race.cursor]
+  if (past.length < 2 || past[past.length - 1].date === actual.date) {
+    return { ...race, done: true }
+  }
   const runners = race.runners.map((runner) => {
     if (!runner.alive || runner.cents < TICKET_CENTS) {
-      return runner.alive ? { ...runner, alive: false } : runner
+      return runner.alive ? { ...runner, alive: false, matched: [] } : runner
     }
     const thought = think(runner.mind, past)
-    const lastHits = countHits(thought.guess, actual)
-    const cents = settlePurse(runner.cents, lastHits)
+    const matched = RANK_KEYS.filter((key) => thought.guess[key] === actual[key])
+    const cents = settlePurse(runner.cents, matched.length)
     return {
       ...runner,
       cents,
       alive: cents >= TICKET_CENTS,
       turns: runner.turns + 1,
-      hits: runner.hits + lastHits,
-      lastHits,
+      hits: runner.hits + matched.length,
+      lastHits: matched.length,
       thought: thought.draw,
       guess: thought.guess,
+      matched,
     }
   })
   const cursor = race.cursor + 1
@@ -362,7 +390,8 @@ export function playTurn(race: Race, series: readonly RankPoint[]): Race {
     ...race,
     runners,
     cursor,
-    revealed: actual,
+    revealed: { ...actual },
+    seenDate: past[past.length - 1].date,
     done: cursor >= race.end || runners.every((runner) => !runner.alive),
   }
 }

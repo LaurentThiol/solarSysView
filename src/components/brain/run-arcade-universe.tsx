@@ -1,4 +1,4 @@
-import type { RankKey, RankPoint, ThoughtDraw } from "@/lib/run-arcade/thought"
+import type { RankKey, ThoughtDraw } from "@/lib/run-arcade/thought"
 
 import { cn } from "@/lib/utils"
 
@@ -26,12 +26,12 @@ function line(x1: number, y1: number, x2: number, y2: number) {
 export function RunnerUniverse({
   runnerId,
   thought,
-  revealed,
+  matched,
   className,
 }: {
   runnerId: string
   thought: ThoughtDraw | null
-  revealed: RankPoint | null
+  matched?: readonly RankKey[]
   className?: string
 }) {
   if (!thought) {
@@ -150,7 +150,7 @@ export function RunnerUniverse({
       <circle cx={X(thought.projection.x2)} cy={Y(thought.projection.y2)} r="3.5" className="fill-chart-4" />
       <circle cx={cx} cy={cy} r="2.4" className="fill-foreground" />
       {thought.marks.map((mark, index) => {
-        const hit = revealed != null && revealed[mark.key as RankKey] === mark.value
+        const hit = matched?.includes(mark.key) ?? false
         const y = 22 + index * 24
         return (
           <g key={mark.key}>

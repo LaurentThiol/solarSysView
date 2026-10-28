@@ -12,6 +12,7 @@ import {
   goldenLevel,
   orderGuess,
   playTurn,
+  revealedPast,
   settlePurse,
   think,
   type RankPoint,
@@ -67,6 +68,57 @@ test("an ordered guess stays inside the legal bands", () => {
   for (let index = 1; index < numbers.length; index += 1) {
     assert.ok(numbers[index] > numbers[index - 1])
   }
+})
+
+test("the hidden draw and the draws after it stay out of the thought", () => {
+  const rows = series(12)
+  const hidden = {
+    date: "2099-01-01",
+    n1: 9,
+    n2: 19,
+    n3: 29,
+    n4: 39,
+    n5: 49,
+    e1: 8,
+    e2: 11,
+  }
+  const later = {
+    date: "2099-06-01",
+    n1: 8,
+    n2: 18,
+    n3: 28,
+    n4: 38,
+    n5: 48,
+    e1: 6,
+    e2: 10,
+  }
+  rows[8] = hidden
+  rows[9] = later
+  const race = createRace(12, rows.length, 4)
+  assert.equal(race.cursor, 8)
+  const past = revealedPast(rows, race.cursor)
+  assert.equal(past.length, 8)
+  assert.equal(past[past.length - 1].date, rows[7].date)
+  assert.notEqual(past[past.length - 1], rows[7])
+  const played = playTurn(race, rows)
+  assert.equal(played.seenDate, rows[7].date)
+  assert.equal(played.revealed?.date, hidden.date)
+  const swapped = rows.map((point) => ({ ...point }))
+  swapped[8] = { ...hidden, date: "2099-02-01", n1: 1, n5: 5 }
+  swapped[9] = { ...later, n3: 3 }
+  const other = playTurn(createRace(12, swapped.length, 4), swapped)
+  for (const runner of played.runners) {
+    const thought = runner.thought
+    assert.ok(thought)
+    const blob = JSON.stringify(thought)
+    assert.equal(blob.includes("2099"), false)
+    assert.equal(thought.seenDate, rows[7].date)
+    assert.equal(thought.trail[thought.trail.length - 1].y, rows[7][runner.mind.focus])
+    const twin = other.runners.find((item) => item.mind.id === runner.mind.id)
+    assert.deepEqual(runner.guess, twin?.guess)
+  }
+  assert.equal(other.revealed?.date, "2099-02-01")
+  assert.notEqual(played.revealed?.n1, other.revealed?.n1)
 })
 
 test("a thought uses only the revealed past", () => {
