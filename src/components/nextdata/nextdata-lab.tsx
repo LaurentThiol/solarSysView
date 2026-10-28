@@ -331,8 +331,8 @@ function SeriesChart({
           <XAxis dataKey="label" tick={{ fontSize: 10 }} minTickGap={18} />
           <YAxis tick={{ fontSize: 10 }} width={32} />
           <ChartTooltip content={<ChartTooltipContent />} />
-          <Line type="monotone" dataKey={hiKey} stroke="var(--color-corpus)" dot={false} strokeWidth={1} strokeOpacity={0.35} connectNulls />
-          <Line type="monotone" dataKey={loKey} stroke="var(--color-corpus)" dot={false} strokeWidth={1} strokeOpacity={0.35} connectNulls />
+          <Line type="monotone" dataKey={hiKey} stroke={`var(--color-${primary})`} dot={false} strokeWidth={1} strokeOpacity={0.35} connectNulls />
+          <Line type="monotone" dataKey={loKey} stroke={`var(--color-${primary})`} dot={false} strokeWidth={1} strokeOpacity={0.35} connectNulls />
           <Line type="monotone" dataKey={dataKey} name="Sorti" stroke="var(--color-actual)" dot={false} strokeWidth={1.6} connectNulls />
           <Line type="monotone" dataKey={`${dataKey}_corpus`} name="Trois ans" stroke="var(--color-corpus)" dot={false} strokeDasharray="5 3" strokeWidth={1.4} connectNulls />
           <Line type="monotone" dataKey={`${dataKey}_fenetre`} name="Fenêtre seule" stroke="var(--color-fenetre)" dot={false} strokeDasharray="2 3" strokeWidth={1.4} connectNulls />
