@@ -6,6 +6,7 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "rec
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { PersistArchive, PersistControl, PersistPairCard } from "@/components/nextdata/persist-panel"
 import { RankPath } from "@/components/nextdata/rank-path"
+import { StaleArchiveNote } from "@/components/nextdata/stale-archive-note"
 import { StepMeter } from "@/components/nextdata/step-meter"
 import { TrainingCompare } from "@/components/nextdata/training-compare"
 import { CovariateBlockToken, useCovariateBlock } from "@/components/nextdata/covariate-block"
@@ -592,6 +593,7 @@ export function TrainingLab() {
               possibles, mais elles n’incluent pas les tirages suivants.
             </p>
           ) : null}
+          <StaleArchiveNote lastDate={draws[0]?.date} source={source} loading={drawsLoading} />
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>

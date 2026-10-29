@@ -8,6 +8,7 @@ import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { CovariateBlockToken, useCovariateBlock } from "@/components/nextdata/covariate-block"
 import { PersistArchive, PersistControl, PersistPairCard, RecentNote, SwapNote } from "@/components/nextdata/persist-panel"
 import { RankPath } from "@/components/nextdata/rank-path"
+import { StaleArchiveNote } from "@/components/nextdata/stale-archive-note"
 import { StepMeter } from "@/components/nextdata/step-meter"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -751,6 +752,7 @@ export function NextDataLab() {
               mais il ne tient pas compte des tirages suivants.
             </p>
           ) : null}
+          <StaleArchiveNote lastDate={draws[0]?.date} source={source} loading={drawsLoading} />
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>
