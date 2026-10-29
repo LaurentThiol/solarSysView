@@ -1,0 +1,9 @@
+{
+  "slug": "revue-nextdata-reparations-bfdf",
+  "happened_on": "2026-10-28",
+  "area": "nextData",
+  "title": "Revue de nextData : poids, Chronos, retards, archive",
+  "body": "Poids des variables : chaque modèle (somme, n1) est ramené à 100 avant la moyenne, le chiffre est une part de gain en pour cent, et la somme ne couvre plus n1. Chronos n’est plus éteint jusqu’au redémarrage de l’API quand ses trois quantiles se croisent : ils sont remis dans l’ordre. Les retards des boules sont plafonnés à 25 tirages comme l’ancienneté des couples, et les écarts g1 à g4 montent jusqu’à 46 : les grilles et les bandes peuvent bouger d’un cran. Un bandeau, sur nextData et nextDataTraining, dit quand des tirages du mardi ou du vendredi manquent à l’archive ; la bande du graphique de nextData prend la couleur de la lecture choisie ; la jumelle Persist de nextDataTraining montre sa vraie couverture brute dans la colonne Brute. Un échec passager de LightGBM ou de CatBoost ne reste plus rangé sur disque. Le reste du calcul, des bandes calibrées et des verdicts ne change pas.",
+  "pr_number": null,
+  "pr_url": null
+}
