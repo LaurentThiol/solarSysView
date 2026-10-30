@@ -196,6 +196,22 @@ test("a ruined runner stops calling, its skills stay as they were", async () => 
   session.dispose()
 })
 
+test("a pause freezes the clock, resume picks up the time left", async () => {
+  const { clock, session } = harness(1)
+  session.launch({ count: 2, draws: 4, minutes: 1, series: series(40), champion: null })
+  await clock.advance(20_000)
+  session.pause()
+  assert.equal(session.getSnapshot().pausedLeftMs, 40_000)
+  await clock.advance(120_000)
+  assert.equal(session.getSnapshot().phase, "avant")
+  session.resume()
+  await clock.advance(39_000)
+  assert.equal(session.getSnapshot().phase, "avant")
+  await clock.advance(1_000)
+  assert.equal(session.getSnapshot().phase, "course")
+  session.dispose()
+})
+
 test("an absent local IA stops the calls, the race goes on", async () => {
   const { clock, ia, session } = harness(1)
   session.launch({ count: 2, draws: 4, minutes: 1, series: series(40), champion: null })
