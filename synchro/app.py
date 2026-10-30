@@ -328,6 +328,19 @@ class BrainSpecialistIn(BaseModel):
     origin: str | None = None
 
 
+class RunArcadeChampionIn(BaseModel):
+    generation: int = Field(ge=1)
+    runner: str = Field(min_length=1, max_length=40)
+    cents: int
+    examCents: int | None = None
+    calls: int = Field(default=0, ge=0)
+    raceFrom: str | None = None
+    raceTo: str | None = None
+    skills: list[dict[str, Any]] = Field(min_length=1, max_length=40)
+    journal: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
+    savedAt: str | None = None
+
+
 class DecisionTreeIn(BaseModel):
     question: str = "shape"
     label: str | None = None
@@ -1841,6 +1854,34 @@ def create_app() -> FastAPI:
             )
         except Exception:
             return
+
+    @app.get("/api/brain/run-arcade/champion")
+    def run_arcade_champion() -> dict[str, Any]:
+        from synchro.run_arcade import champion_from_row
+
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré")
+        try:
+            row = db.latest_run_arcade_champion()
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return {"ok": True, "champion": _json(champion_from_row(row)) if row else None}
+
+    @app.post("/api/brain/run-arcade/champion")
+    def create_run_arcade_champion(payload: RunArcadeChampionIn) -> dict[str, Any]:
+        from synchro.run_arcade import normalize_champion
+
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré")
+        try:
+            record = normalize_champion(payload.model_dump())
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        try:
+            row = db.insert_run_arcade_champion(record)
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return {"ok": True, "source": "neon", "id": row["id"], "versions": row["versions"]}
 
     @app.get("/api/brain/specialists/features")
     def brain_specialist_features() -> dict[str, Any]:

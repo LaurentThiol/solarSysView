@@ -315,6 +315,37 @@ CREATE TABLE IF NOT EXISTS dev_journal (
 CREATE INDEX IF NOT EXISTS dev_journal_happened ON dev_journal (happened_on DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS dev_journal_pr_number
     ON dev_journal (pr_number) WHERE pr_number IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS run_arcade_champions (
+    id              BIGSERIAL PRIMARY KEY,
+    generation      INTEGER NOT NULL,
+    runner          TEXT NOT NULL,
+    cents           INTEGER NOT NULL,
+    exam_cents      INTEGER,
+    calls           INTEGER NOT NULL DEFAULT 0,
+    race_from       DATE,
+    race_to         DATE,
+    payload         JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS run_arcade_champions_created ON run_arcade_champions (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS run_arcade_skill_versions (
+    id              BIGSERIAL PRIMARY KEY,
+    champion_id     BIGINT NOT NULL REFERENCES run_arcade_champions(id) ON DELETE CASCADE,
+    skill_id        TEXT NOT NULL,
+    skill_name      TEXT NOT NULL DEFAULT '',
+    version         INTEGER NOT NULL,
+    parent          INTEGER,
+    cutoff          DATE,
+    origin          TEXT NOT NULL DEFAULT 'ia',
+    params          JSONB NOT NULL DEFAULT '{}'::jsonb,
+    phrase          TEXT NOT NULL DEFAULT '',
+    exam_cents      INTEGER,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS run_arcade_skill_versions_skill
+    ON run_arcade_skill_versions (skill_id, version);
 """
 
 _pool: ConnectionPool | None = None
@@ -1666,6 +1697,58 @@ def delete_brain_specialist(slug: str) -> bool:
             deleted = cur.rowcount > 0
         conn.commit()
         return deleted
+
+
+def insert_run_arcade_champion(record: dict[str, Any]) -> dict[str, Any]:
+    """Champion d'un lancement runArcade, et chaque version de ses skills avec sa date de coupure."""
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO run_arcade_champions (
+                    generation, runner, cents, exam_cents, calls, race_from, race_to, payload
+                ) VALUES (
+                    %(generation)s, %(runner)s, %(cents)s, %(exam_cents)s, %(calls)s,
+                    %(race_from)s, %(race_to)s, %(payload)s
+                )
+                RETURNING id, created_at
+                """,
+                {
+                    "generation": record["generation"],
+                    "runner": record["runner"],
+                    "cents": record["cents"],
+                    "exam_cents": record["exam_cents"],
+                    "calls": record["calls"],
+                    "race_from": record["race_from"],
+                    "race_to": record["race_to"],
+                    "payload": Jsonb(record["payload"]),
+                },
+            )
+            row = dict(cur.fetchone())
+            for version in record["versions"]:
+                cur.execute(
+                    """
+                    INSERT INTO run_arcade_skill_versions (
+                        champion_id, skill_id, skill_name, version, parent, cutoff,
+                        origin, params, phrase, exam_cents
+                    ) VALUES (
+                        %(champion_id)s, %(skill_id)s, %(skill_name)s, %(version)s, %(parent)s,
+                        %(cutoff)s, %(origin)s, %(params)s, %(phrase)s, %(exam_cents)s
+                    )
+                    """,
+                    {**version, "champion_id": row["id"], "params": Jsonb(version["params"])},
+                )
+        conn.commit()
+    row["versions"] = len(record["versions"])
+    return row
+
+
+def latest_run_arcade_champion() -> dict[str, Any] | None:
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM run_arcade_champions ORDER BY created_at DESC, id DESC LIMIT 1")
+            row = cur.fetchone()
+            return dict(row) if row else None
 
 
 def _llm_usage_created_at(value: Any) -> datetime | None:
