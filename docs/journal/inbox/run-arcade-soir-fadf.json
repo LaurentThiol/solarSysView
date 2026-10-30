@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "runArcade : mardi et vendredi, même geste décalé",
   "body": "Le geste soir sépare les mardis et les vendredis. La flèche d’une courbe recopie l’autre soir, à quatre jours au plus, plus le dernier pas de ce soir : un vendredi suit le mardi d’il y a trois jours, un mardi suit le vendredi d’il y a quatre jours. S’il n’y a pas de vis-à-vis, la flèche reprend le dernier pas du même soir. La phrase du dessin nomme le soir et le décalage en jours, puis le rappel aux sommes et aux décennies. Une harmonique se compte en tirages du même soir : un cycle de deux tirages mélangés reste la semaine, et n’est retenu que si les deux soirs le portent.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 330,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/330"
 }
