@@ -220,6 +220,18 @@ test("a turn settles the draw at the cursor and leaves the rest unseen", () => {
   assert.equal(createMinds(80).length, 50)
 })
 
+test("the first sixteen runners start from sixteen different gestures", () => {
+  const params = createMinds(16).map((runner) => {
+    const { curve, gesture, ratio, span, window, days } = runner.skills[0].versions[0]
+    return JSON.stringify({ curve, gesture, ratio, span, window, days })
+  })
+  assert.equal(new Set(params).size, 16)
+  const plain = createMinds(16)
+    .map((runner) => runner.skills[0].versions[0].gesture)
+    .filter((gesture) => gesture === "persiste" || gesture === "glisse" || gesture === "miroir")
+  assert.equal(new Set(plain).size, plain.length)
+})
+
 test("a version written on or after the hidden draw does not play it", () => {
   const rows = series(30)
   const hiddenDate = rows[20].date

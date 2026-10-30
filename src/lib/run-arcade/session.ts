@@ -125,6 +125,8 @@ type RequestMeta = { cutoff: string; hiddenDate: string; turn: number | null }
 export const MIN_SLICE_MS = 700
 const ERROR_COOLDOWN_MS = 2_000
 const BRAVE_RETRIES = 2
+/** Essais de variation maison par enfant, au lancement d’une génération. */
+const VARIATION_TRIES = 6
 
 function emptySnapshot(): SessionSnapshot {
   return {
@@ -358,18 +360,25 @@ export class RunArcadeSession {
     }
   }
 
-  /** Variation maison d’un enfant : au plus une skill nouvelle, gardée si l’examen monte. */
+  /**
+   * Variation maison d’un enfant : au plus une skill nouvelle. Plusieurs essais, chacun passe l’examen ;
+   * le premier qui fait monter le solde d’examen est gardé.
+   */
   private tryVariation(mind: RunnerMind, free: readonly RankPoint[], generation: number, index: number): RunnerMind {
     const base = mind.skills.find((skill) => currentVersion(skill).curve === "*") ?? mind.skills[0]
-    if (!base || free.length === 0) return mind
-    const params = houseVariation(currentVersion(base), this.seed + index * 31)
-    const meta: VersionMeta = { cutoff: free[free.length - 1].date, origin: "variation", examCents: null }
-    const candidate = applyParams(mind, params, meta, "Variation maison", `${mind.id}-g${generation}-${params.curve}`)
+    const read = promptPast(free)
+    if (!base || read.length === 0) return mind
+    const meta: VersionMeta = { cutoff: read[read.length - 1].date, origin: "variation", examCents: null }
     const before = examine(mind, free)
-    const after = examine(candidate.mind, free)
-    if (!passesExam(after, before)) return mind
-    if (candidate.isNew) this.added.set(mind.id, 1)
-    return withExam(candidate.mind, params.curve, after.cents)
+    for (let attempt = 0; attempt < VARIATION_TRIES; attempt += 1) {
+      const params = houseVariation(currentVersion(base), this.seed + index * 31 + attempt * 11)
+      const candidate = applyParams(mind, params, meta, "Variation maison", `${mind.id}-g${generation}-${params.curve}`)
+      const after = examine(candidate.mind, free)
+      if (!passesExam(after, before)) continue
+      if (candidate.isNew) this.added.set(mind.id, 1)
+      return withExam(candidate.mind, params.curve, after.cents)
+    }
+    return mind
   }
 
   private startCourse() {

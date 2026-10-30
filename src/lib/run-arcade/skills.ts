@@ -177,19 +177,37 @@ export function parseSkillParams(raw: unknown): SkillParams | null {
   return { curve, gesture, ratio, span, window, days }
 }
 
-const BASE_WINDOWS = [5, 8, 10, 3, 16] as const
-const BASE_DAYS = [null, 30, 60, 90] as const
+/**
+ * Gestes de départ, tous différents. Persiste, glisse et miroir n’ont pas de réglage :
+ * ils ne paraissent qu’une fois, le nombre d’or et la moyenne varient ensuite.
+ */
+const BASE_PRESETS: Omit<SkillParams, "curve">[] = [
+  { gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null },
+  { gesture: "glisse", ratio: 0.618, span: "bande", window: 8, days: null },
+  { gesture: "miroir", ratio: 0.618, span: "bande", window: 8, days: null },
+  { gesture: "or", ratio: 0.618, span: "bande", window: 8, days: null },
+  { gesture: "moyenne", ratio: 0.618, span: "bande", window: 5, days: null },
+  { gesture: "or", ratio: 0.382, span: "lignes", window: 10, days: null },
+  { gesture: "moyenne", ratio: 0.618, span: "bande", window: 10, days: 60 },
+  { gesture: "or", ratio: 1.272, span: "pas", window: 5, days: null },
+  { gesture: "moyenne", ratio: 0.618, span: "bande", window: 3, days: null },
+  { gesture: "or", ratio: 0.618, span: "lignes", window: 16, days: null },
+  { gesture: "moyenne", ratio: 0.618, span: "bande", window: 10, days: 30 },
+  { gesture: "or", ratio: 0.382, span: "pas", window: 8, days: null },
+  { gesture: "moyenne", ratio: 0.618, span: "bande", window: 10, days: 90 },
+  { gesture: "or", ratio: 1.272, span: "bande", window: 8, days: null },
+  { gesture: "moyenne", ratio: 0.618, span: "bande", window: 16, days: null },
+  { gesture: "or", ratio: 0.618, span: "pas", window: 3, days: null },
+]
 
 /** Skill de départ d’un runner : un geste pour toutes les courbes. */
 export function baseSkill(runnerId: string, index: number): Skill {
-  const gesture = GESTURES[index % GESTURES.length]
+  const preset = BASE_PRESETS[index % BASE_PRESETS.length]
+  const lap = Math.floor(index / BASE_PRESETS.length)
   const params: SkillParams = {
     curve: "*",
-    gesture,
-    ratio: GOLDEN_RATIOS[index % GOLDEN_RATIOS.length],
-    span: SPANS[index % SPANS.length],
-    window: BASE_WINDOWS[index % BASE_WINDOWS.length],
-    days: gesture === "moyenne" ? BASE_DAYS[(index % (BASE_DAYS.length - 1)) + 1] : null,
+    ...preset,
+    window: Math.min(WINDOW_MAX, preset.window + lap * 2),
   }
   return newSkill(`${runnerId}-base`, "Geste de base", params, { cutoff: "", origin: "maison", examCents: null })
 }

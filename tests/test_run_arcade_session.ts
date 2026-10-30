@@ -290,3 +290,39 @@ test("the next generation starts from the champion without its late versions", (
   }
   session.dispose()
 })
+
+test("a house variation is written before the exam window and kept only if the exam rises", () => {
+  const { session } = harness(1)
+  const rows = series(80)
+  const quiet: SessionDeps = {
+    now: () => 0,
+    setTimer: () => 0,
+    clearTimer: () => {},
+    askIa: async () => unreadable,
+    askBrave: async () => ({ ok: false, error: "absente", absent: true }),
+    saveChampion: async () => ({ ok: true, source: "test" }),
+  }
+  const first = createSession(quiet)
+  first.launch({ count: 6, draws: 10, minutes: 0, series: rows, champion: null })
+  for (let turn = 0; turn < 12 && first.getSnapshot().phase !== "fin"; turn += 1) first.skip()
+  const champion = first.getSnapshot().champion
+  assert.ok(champion)
+  session.launch({ count: 8, draws: 10, minutes: 0, series: rows, champion })
+  const runners = session.getSnapshot().race?.runners ?? []
+  const baseline = runners[0].examCents ?? 0
+  const readEnd = rows[70 - EXAM_WINDOW - 1].date
+  let kept = 0
+  for (const runner of runners.slice(1)) {
+    for (const skill of runner.mind.skills) {
+      for (const version of skill.versions) {
+        if (version.origin !== "variation") continue
+        kept += 1
+        assert.equal(version.cutoff, readEnd)
+        assert.ok((runner.examCents ?? 0) > baseline)
+      }
+    }
+  }
+  assert.ok(kept > 0)
+  first.dispose()
+  session.dispose()
+})
