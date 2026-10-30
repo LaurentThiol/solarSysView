@@ -1,0 +1,727 @@
+import type { BraveNote } from "./brave-filter"
+import {
+  championRecord,
+  childrenOf,
+  JOURNAL_KEEP,
+  pickChampion,
+  setAsideCount,
+  type ChampionRecord,
+  type JournalEntry,
+  type JournalKind,
+} from "./champion"
+import { median, rotate, sliceMs } from "./clock"
+import { buildTrack, type RankPoint } from "./curves"
+import { examine, passesExam, promptPast } from "./examen"
+import { buildPrompt, parseAction } from "./prompt"
+import {
+  addVersion,
+  currentVersion,
+  describeSkill,
+  houseVariation,
+  newSkill,
+  type SkillParams,
+  type VersionMeta,
+} from "./skills"
+import {
+  createMinds,
+  createRace,
+  formatCents,
+  playTurn,
+  previewTurn,
+  revealedPast,
+  think,
+  type Race,
+  type RunnerLive,
+  type RunnerMind,
+  type ThoughtDraw,
+} from "./thought"
+
+export type SessionPhase = "idle" | "avant" | "course" | "fin"
+export type ServiceState = "inconnu" | "ok" | "absente"
+
+export type IaRequest = {
+  runnerId: string
+  seed: number
+  system: string
+  user: string
+  image: string | null
+}
+
+export type IaReply =
+  | { ok: true; text: string; latencyMs: number; model: string | null; vision: boolean }
+  | { ok: false; error: string; absent?: boolean; aborted?: boolean }
+
+export type BraveRequest = { query: string; from: string; cutoff: string }
+
+export type BraveReply =
+  | { ok: true; results: BraveNote[] }
+  | { ok: false; error: string; absent?: boolean; retryAfterMs?: number; aborted?: boolean }
+
+export type SaveReply = { ok: true; source: string } | { ok: false; error: string }
+
+export type SessionDeps = {
+  now: () => number
+  setTimer: (fn: () => void, ms: number) => unknown
+  clearTimer: (handle: unknown) => void
+  askIa: (request: IaRequest, signal: AbortSignal) => Promise<IaReply>
+  askBrave: (request: BraveRequest, signal: AbortSignal) => Promise<BraveReply>
+  saveChampion: (record: ChampionRecord) => Promise<SaveReply>
+  /** Image de la pensée envoyée au modèle de vision. Le dessin vient du passé que lit le prompt. */
+  capture?: (runnerId: string, draw: ThoughtDraw) => Promise<string | null>
+  /** Appels à l’IA en vol en même temps. Une machine locale en sert souvent un seul. */
+  parallel?: number
+}
+
+export type LaunchOptions = {
+  count: number
+  draws: number
+  minutes: number
+  series: readonly RankPoint[]
+  champion: ChampionRecord | null
+  seed?: number
+}
+
+export type SaveState = { state: "—" | "en cours" | "ok" | "erreur"; detail: string | null }
+
+export type SessionSnapshot = {
+  phase: SessionPhase
+  generation: number
+  race: Race | null
+  track: RankPoint[]
+  draws: number
+  minutes: number
+  sliceMs: number
+  /** Fin de l’avant-course, ou fin de la tranche du tour. */
+  phaseEndsAt: number | null
+  pausedLeftMs: number | null
+  ia: ServiceState
+  iaError: string | null
+  iaVision: boolean
+  brave: ServiceState
+  braveError: string | null
+  latencies: number[]
+  medianMs: number | null
+  inFlight: number
+  save: SaveState
+  champion: ChampionRecord | null
+  parent: ChampionRecord | null
+  /** Versions du champion écrites après le premier tirage caché, laissées de côté au lancement. */
+  setAside: number
+  journal: JournalEntry[]
+  error: string | null
+}
+
+type InboxItem = {
+  runnerId: string
+  params: SkillParams
+  name: string
+  phrase: string
+  cutoff: string
+}
+
+type RequestMeta = { cutoff: string; hiddenDate: string; turn: number | null }
+
+/** Rythme minimal d’un tour quand Y vaut 0 : la course se lit à l’écran. */
+export const MIN_SLICE_MS = 700
+const ERROR_COOLDOWN_MS = 2_000
+const BRAVE_RETRIES = 2
+
+function emptySnapshot(): SessionSnapshot {
+  return {
+    phase: "idle",
+    generation: 0,
+    race: null,
+    track: [],
+    draws: 0,
+    minutes: 0,
+    sliceMs: 0,
+    phaseEndsAt: null,
+    pausedLeftMs: null,
+    ia: "inconnu",
+    iaError: null,
+    iaVision: false,
+    brave: "inconnu",
+    braveError: null,
+    latencies: [],
+    medianMs: null,
+    inFlight: 0,
+    save: { state: "—", detail: null },
+    champion: null,
+    parent: null,
+    setAside: 0,
+    journal: [],
+    error: null,
+  }
+}
+
+function seedFrom(track: readonly RankPoint[]) {
+  const last = track[track.length - 1]?.date ?? ""
+  const digits = Number(last.replaceAll("-", ""))
+  return Number.isFinite(digits) && digits > 0 ? digits % 1_000_003 : 1
+}
+
+/** Applique des paramètres : nouvelle version d’une skill qui pilote déjà cette courbe, sinon skill nouvelle. */
+export function applyParams(
+  mind: RunnerMind,
+  params: SkillParams,
+  meta: VersionMeta,
+  name: string,
+  newId: string
+): { mind: RunnerMind; isNew: boolean } {
+  const index = mind.skills.findIndex((skill) => currentVersion(skill).curve === params.curve)
+  if (index >= 0) {
+    const skills = [...mind.skills]
+    skills[index] = addVersion(skills[index], params, meta)
+    return { mind: { ...mind, skills }, isNew: false }
+  }
+  return { mind: { ...mind, skills: [...mind.skills, newSkill(newId, name, params, meta)] }, isNew: true }
+}
+
+/** Inscrit le solde d’examen sur la version qui vient d’être écrite pour cette courbe. */
+function withExam(mind: RunnerMind, curve: SkillParams["curve"], cents: number): RunnerMind {
+  return {
+    ...mind,
+    skills: mind.skills.map((skill) => {
+      const last = currentVersion(skill)
+      if (last.curve !== curve) return skill
+      return { ...skill, versions: [...skill.versions.slice(0, -1), { ...last, examCents: cents }] }
+    }),
+  }
+}
+
+export class RunArcadeSession {
+  private readonly deps: SessionDeps
+  private snapshot: SessionSnapshot = emptySnapshot()
+  private readonly listeners = new Set<() => void>()
+  private launchId = 0
+  private timer: unknown = null
+  private wake: unknown = null
+  private round = 0
+  private queue: string[] = []
+  private readonly pending = new Map<string, AbortController>()
+  private readonly braving = new Map<string, AbortController>()
+  private readonly cooldown = new Map<string, number>()
+  private readonly notes = new Map<string, BraveNote[]>()
+  private readonly added = new Map<string, number>()
+  private readonly callCount = new Map<string, number>()
+  private inbox: InboxItem[] = []
+  private seed = 1
+
+  constructor(deps: SessionDeps) {
+    this.deps = deps
+  }
+
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  getSnapshot = () => this.snapshot
+
+  private set(patch: Partial<SessionSnapshot>) {
+    this.snapshot = { ...this.snapshot, ...patch }
+    for (const listener of this.listeners) listener()
+  }
+
+  private log(runner: string, kind: JournalKind, cutoff: string, detail: string, turn: number | null = this.turnNumber()) {
+    const entry: JournalEntry = {
+      at: new Date(this.deps.now()).toISOString(),
+      runner,
+      kind,
+      cutoff,
+      turn,
+      detail,
+    }
+    this.set({ journal: [...this.snapshot.journal, entry].slice(-JOURNAL_KEEP * 4) })
+  }
+
+  private turnNumber() {
+    const race = this.snapshot.race
+    if (!race || this.snapshot.phase !== "course") return null
+    return race.cursor - race.start + 1
+  }
+
+  private updateRunner(id: string, fn: (runner: RunnerLive) => RunnerLive) {
+    const race = this.snapshot.race
+    if (!race) return
+    this.set({ race: { ...race, runners: race.runners.map((runner) => (runner.mind.id === id ? fn(runner) : runner)) } })
+  }
+
+  private runner(id: string) {
+    return this.snapshot.race?.runners.find((runner) => runner.mind.id === id) ?? null
+  }
+
+  /** Passé lisible : l’archive gratuite avant la course, puis les réponses déjà données par l’arbitre. */
+  readablePast(): RankPoint[] {
+    const race = this.snapshot.race
+    if (!race) return []
+    return revealedPast(this.snapshot.track, race.cursor)
+  }
+
+  /** Premier tirage encore caché. */
+  hiddenDate(): string | null {
+    const race = this.snapshot.race
+    if (!race) return null
+    return this.snapshot.track[race.cursor]?.date ?? null
+  }
+
+  private clearTimers() {
+    if (this.timer != null) this.deps.clearTimer(this.timer)
+    if (this.wake != null) this.deps.clearTimer(this.wake)
+    this.timer = null
+    this.wake = null
+  }
+
+  private abortAll() {
+    for (const controller of this.pending.values()) controller.abort()
+    for (const controller of this.braving.values()) controller.abort()
+    this.pending.clear()
+    this.braving.clear()
+  }
+
+  private abortRunner(id: string) {
+    this.pending.get(id)?.abort()
+    this.braving.get(id)?.abort()
+    this.pending.delete(id)
+    this.braving.delete(id)
+  }
+
+  dispose() {
+    this.launchId += 1
+    this.clearTimers()
+    this.abortAll()
+  }
+
+  launch(options: LaunchOptions) {
+    this.dispose()
+    this.inbox = []
+    this.queue = []
+    this.round = 0
+    this.notes.clear()
+    this.added.clear()
+    this.callCount.clear()
+    this.cooldown.clear()
+    const track = buildTrack(options.series)
+    if (track.length < 4) {
+      this.set({ ...emptySnapshot(), error: "L’archive chargée est trop courte pour une course." })
+      return
+    }
+    const draws = Math.min(Math.max(1, Math.round(options.draws)), track.length - 2)
+    const minutes = Math.max(0, Number.isFinite(options.minutes) ? options.minutes : 0)
+    const start = Math.max(2, track.length - draws)
+    const hiddenDate = track[start].date
+    const parent = options.champion
+    const generation = parent ? parent.generation + 1 : 1
+    const free = revealedPast(track, start)
+    this.seed = options.seed ?? seedFrom(track)
+
+    let minds = parent ? childrenOf(parent, options.count, hiddenDate) : createMinds(options.count)
+    if (parent) {
+      minds = minds.map((mind, index) => (index === 0 ? mind : this.tryVariation(mind, free, generation, index)))
+    }
+    let race = createRace(minds, track.length, draws)
+    race = {
+      ...race,
+      runners: race.runners.map((runner) => ({
+        ...runner,
+        examCents: examine(runner.mind, free).cents,
+        added: this.added.get(runner.mind.id) ?? 0,
+      })),
+    }
+    race = previewTurn(race, track)
+
+    const now = this.deps.now()
+    this.set({
+      ...emptySnapshot(),
+      phase: minutes > 0 ? "avant" : "course",
+      generation,
+      race,
+      track,
+      draws,
+      minutes,
+      sliceMs: sliceMs(minutes, draws),
+      phaseEndsAt: minutes > 0 ? now + minutes * 60_000 : null,
+      parent,
+      setAside: parent ? setAsideCount(parent, hiddenDate) : 0,
+    })
+    if (minutes > 0) {
+      const id = this.launchId
+      this.timer = this.deps.setTimer(() => {
+        if (id === this.launchId) this.startCourse()
+      }, minutes * 60_000)
+      this.refill()
+      this.pump()
+    } else {
+      this.startCourse()
+    }
+  }
+
+  /** Variation maison d’un enfant : au plus une skill nouvelle, gardée si l’examen monte. */
+  private tryVariation(mind: RunnerMind, free: readonly RankPoint[], generation: number, index: number): RunnerMind {
+    const base = mind.skills.find((skill) => currentVersion(skill).curve === "*") ?? mind.skills[0]
+    if (!base || free.length === 0) return mind
+    const params = houseVariation(currentVersion(base), this.seed + index * 31)
+    const meta: VersionMeta = { cutoff: free[free.length - 1].date, origin: "variation", examCents: null }
+    const candidate = applyParams(mind, params, meta, "Variation maison", `${mind.id}-g${generation}-${params.curve}`)
+    const before = examine(mind, free)
+    const after = examine(candidate.mind, free)
+    if (!passesExam(after, before)) return mind
+    if (candidate.isNew) this.added.set(mind.id, 1)
+    return withExam(candidate.mind, params.curve, after.cents)
+  }
+
+  private startCourse() {
+    if (!this.snapshot.race) return
+    this.clearTimers()
+    this.round = 0
+    this.set({ phase: "course" })
+    this.refill()
+    this.scheduleSlice()
+  }
+
+  private scheduleSlice(ms = Math.max(this.snapshot.sliceMs, MIN_SLICE_MS)) {
+    const id = this.launchId
+    this.set({ phaseEndsAt: this.deps.now() + ms })
+    this.timer = this.deps.setTimer(() => {
+      if (id === this.launchId) this.endSlice()
+    }, ms)
+    this.pump()
+  }
+
+  private endSlice() {
+    const race = this.snapshot.race
+    if (!race || this.snapshot.phase !== "course") return
+    this.timer = null
+    this.applyInbox()
+    const played = playTurn(this.snapshot.race as Race, this.snapshot.track)
+    for (const runner of played.runners) {
+      if (!runner.alive) this.abortRunner(runner.mind.id)
+    }
+    this.set({ race: played, inFlight: this.pending.size })
+    if (played.done) {
+      this.finish()
+      return
+    }
+    this.round += 1
+    this.refill()
+    this.scheduleSlice()
+  }
+
+  private finish() {
+    this.clearTimers()
+    this.abortAll()
+    const race = this.snapshot.race
+    const track = this.snapshot.track
+    if (!race) return
+    const best = pickChampion(race.runners)
+    const record = best
+      ? championRecord({
+          runner: best,
+          generation: this.snapshot.generation,
+          raceFrom: track[race.start]?.date ?? null,
+          raceTo: track[race.end - 1]?.date ?? null,
+          journal: this.snapshot.journal,
+          savedAt: new Date(this.deps.now()).toISOString(),
+        })
+      : null
+    this.set({
+      phase: "fin",
+      phaseEndsAt: null,
+      inFlight: 0,
+      champion: record,
+      save: record ? { state: "en cours", detail: null } : { state: "—", detail: null },
+    })
+    if (!record) return
+    const id = this.launchId
+    this.deps
+      .saveChampion(record)
+      .then((reply) => {
+        if (id !== this.launchId) return
+        this.set({ save: reply.ok ? { state: "ok", detail: reply.source } : { state: "erreur", detail: reply.error } })
+      })
+      .catch((error: unknown) => {
+        if (id !== this.launchId) return
+        this.set({ save: { state: "erreur", detail: error instanceof Error ? error.message : "échec" } })
+      })
+  }
+
+  pause() {
+    const { phase, phaseEndsAt, pausedLeftMs } = this.snapshot
+    if ((phase !== "avant" && phase !== "course") || pausedLeftMs != null) return
+    const left = Math.max(0, (phaseEndsAt ?? this.deps.now()) - this.deps.now())
+    this.clearTimers()
+    this.set({ pausedLeftMs: left, phaseEndsAt: null })
+  }
+
+  resume() {
+    const { phase, pausedLeftMs } = this.snapshot
+    if (pausedLeftMs == null) return
+    this.set({ pausedLeftMs: null })
+    const id = this.launchId
+    if (phase === "avant") {
+      this.set({ phaseEndsAt: this.deps.now() + pausedLeftMs })
+      this.timer = this.deps.setTimer(() => {
+        if (id === this.launchId) this.startCourse()
+      }, pausedLeftMs)
+      this.pump()
+    } else if (phase === "course") {
+      this.scheduleSlice(pausedLeftMs)
+    }
+  }
+
+  /** Termine tout de suite l’avant-course, ou la tranche du tour en cours. */
+  skip() {
+    if (this.snapshot.pausedLeftMs != null) this.set({ pausedLeftMs: null })
+    if (this.snapshot.phase === "avant") {
+      this.clearTimers()
+      this.startCourse()
+    } else if (this.snapshot.phase === "course") {
+      this.clearTimers()
+      this.endSlice()
+    }
+  }
+
+  private aliveIds() {
+    return (this.snapshot.race?.runners ?? []).filter((runner) => runner.alive).map((runner) => runner.mind.id)
+  }
+
+  private refill() {
+    this.queue = rotate(this.aliveIds(), this.round)
+  }
+
+  private eligible(id: string) {
+    const runner = this.runner(id)
+    if (!runner || !runner.alive) return false
+    if (this.pending.has(id) || this.braving.has(id)) return false
+    return (this.cooldown.get(id) ?? 0) <= this.deps.now()
+  }
+
+  private nextRunner(): string | null {
+    for (let pass = 0; pass < 2; pass += 1) {
+      while (this.queue.length) {
+        const id = this.queue.shift() as string
+        if (this.eligible(id)) return id
+      }
+      if (this.snapshot.phase === "avant") this.round += 1
+      this.refill()
+      if (!this.queue.some((id) => this.eligible(id))) {
+        this.queue = []
+        return null
+      }
+    }
+    return null
+  }
+
+  private pump() {
+    const { phase, pausedLeftMs, ia, minutes } = this.snapshot
+    if ((phase !== "avant" && phase !== "course") || pausedLeftMs != null || ia === "absente" || minutes <= 0) return
+    const limit = Math.max(1, this.deps.parallel ?? 1)
+    while (this.pending.size < limit) {
+      const id = this.nextRunner()
+      if (!id || !this.dispatch(id)) break
+    }
+    this.set({ inFlight: this.pending.size })
+    this.scheduleWake()
+  }
+
+  private scheduleWake() {
+    if (this.wake != null || this.cooldown.size === 0) return
+    const now = this.deps.now()
+    const next = Math.min(...this.cooldown.values())
+    if (next <= now) {
+      this.cooldown.forEach((until, id) => {
+        if (until <= now) this.cooldown.delete(id)
+      })
+      return
+    }
+    const id = this.launchId
+    this.wake = this.deps.setTimer(() => {
+      this.wake = null
+      if (id === this.launchId) this.pump()
+    }, next - now)
+  }
+
+  /** Le prompt lit le passé lisible moins la fenêtre d’examen. Son dessin vient de ce même passé. */
+  private dispatch(id: string): boolean {
+    const runner = this.runner(id)
+    const hiddenDate = this.hiddenDate()
+    if (!runner || !hiddenDate) return false
+    const past = promptPast(this.readablePast())
+    if (past.length < 2) return false
+    const cutoff = past[past.length - 1].date
+    const drawing = think(runner.mind, past, { hiddenDate }).draw
+    const prompt = buildPrompt({
+      mind: runner.mind,
+      past,
+      hiddenDate,
+      examCents: runner.examCents,
+      notes: this.notes.get(id) ?? [],
+      drawing: drawing.phrase,
+    })
+    const count = (this.callCount.get(id) ?? 0) + 1
+    this.callCount.set(id, count)
+    const index = this.snapshot.race?.runners.findIndex((item) => item.mind.id === id) ?? 0
+    const seed = (this.seed * 1000 + index * 97 + count) % 2_147_483_647
+    const controller = new AbortController()
+    this.pending.set(id, controller)
+    this.updateRunner(id, (item) => ({ ...item, calls: item.calls + 1 }))
+    const meta: RequestMeta = { cutoff, hiddenDate, turn: this.turnNumber() }
+    const launch = this.launchId
+    const capture = this.snapshot.iaVision && this.deps.capture ? this.deps.capture : null
+    void (async () => {
+      let reply: IaReply
+      try {
+        const image = capture ? await capture(id, drawing).catch(() => null) : null
+        reply = await this.deps.askIa(
+          { runnerId: id, seed, system: prompt.system, user: prompt.user, image },
+          controller.signal
+        )
+      } catch (error) {
+        reply = {
+          ok: false,
+          error: error instanceof Error ? error.message : "échec",
+          aborted: controller.signal.aborted,
+        }
+      }
+      if (launch !== this.launchId) return
+      if (this.pending.get(id) === controller) this.pending.delete(id)
+      this.onIaReply(id, reply, meta)
+      this.pump()
+    })()
+    return true
+  }
+
+  private onIaReply(id: string, reply: IaReply, meta: RequestMeta) {
+    if (!reply.ok) {
+      if (reply.aborted) return
+      this.log(id, "erreur", meta.cutoff, reply.error, meta.turn)
+      this.cooldown.set(id, this.deps.now() + ERROR_COOLDOWN_MS)
+      this.set(reply.absent ? { ia: "absente", iaError: reply.error } : { iaError: reply.error })
+      return
+    }
+    const latencies = [...this.snapshot.latencies, reply.latencyMs].slice(-200)
+    this.set({ ia: "ok", iaError: null, iaVision: reply.vision, latencies, medianMs: median(latencies) })
+    const action = parseAction(reply.text)
+    if (!action) {
+      this.log(id, "refus", meta.cutoff, "réponse illisible", meta.turn)
+      return
+    }
+    if (action.kind === "brave") {
+      this.searchBrave(id, action.query, meta, 0)
+      return
+    }
+    this.log(id, "ia", meta.cutoff, `propose : ${describeSkill(action.params)}`, meta.turn)
+    this.inbox.push({ runnerId: id, params: action.params, name: action.name, phrase: action.phrase, cutoff: meta.cutoff })
+    if (this.snapshot.phase === "avant") this.applyInbox()
+  }
+
+  private searchBrave(id: string, query: string, meta: RequestMeta, attempt: number) {
+    if (this.snapshot.brave === "absente") {
+      this.log(id, "refus", meta.cutoff, "Brave absente", meta.turn)
+      return
+    }
+    const runner = this.runner(id)
+    const track = this.snapshot.track
+    if (!runner || !runner.alive || track.length === 0) return
+    const year = Number(track[track.length - 1].date.slice(0, 4))
+    const controller = new AbortController()
+    this.braving.set(id, controller)
+    if (attempt === 0) this.updateRunner(id, (item) => ({ ...item, calls: item.calls + 1 }))
+    const launch = this.launchId
+    this.deps
+      .askBrave({ query, from: `${year - 1}-01-01`, cutoff: meta.hiddenDate }, controller.signal)
+      .catch(
+        (error: unknown): BraveReply => ({
+          ok: false,
+          error: error instanceof Error ? error.message : "échec",
+          aborted: controller.signal.aborted,
+        })
+      )
+      .then((reply) => {
+        if (launch !== this.launchId) return
+        if (this.braving.get(id) === controller) this.braving.delete(id)
+        if (!reply.ok) {
+          if (reply.aborted) return
+          if (reply.retryAfterMs != null && attempt < BRAVE_RETRIES) {
+            this.braving.set(id, controller)
+            this.deps.setTimer(() => {
+              if (launch !== this.launchId) return
+              this.braving.delete(id)
+              this.searchBrave(id, query, meta, attempt + 1)
+            }, Math.max(500, reply.retryAfterMs))
+            return
+          }
+          this.log(id, "erreur", meta.cutoff, `Brave : ${reply.error}`, meta.turn)
+          this.set(reply.absent ? { brave: "absente", braveError: reply.error } : { braveError: reply.error })
+        } else {
+          this.notes.set(id, reply.results.slice(0, 5))
+          this.log(id, "brave", meta.cutoff, `« ${query} » : ${reply.results.length} résultat(s) lisible(s)`, meta.turn)
+          this.set({ brave: "ok", braveError: null })
+        }
+        this.pump()
+      })
+  }
+
+  /** Réponses arrivées depuis la dernière application : elles jouent au prochain tour, après l’examen. */
+  private applyInbox() {
+    if (this.inbox.length === 0 || !this.snapshot.race) return
+    const items = this.inbox
+    this.inbox = []
+    const readable = this.readablePast()
+    for (const item of items) {
+      const runner = this.runner(item.runnerId)
+      if (!runner || !runner.alive) {
+        this.log(item.runnerId, "refus", item.cutoff, "runner arrêté : ses skills restent à leur version")
+        continue
+      }
+      const isNewCurve = !runner.mind.skills.some((skill) => currentVersion(skill).curve === item.params.curve)
+      if (isNewCurve && (this.added.get(runner.mind.id) ?? 0) >= 1) {
+        this.log(runner.mind.id, "refus", item.cutoff, "une seule skill nouvelle par lancement")
+        continue
+      }
+      const before = examine(runner.mind, readable)
+      const candidate = applyParams(
+        runner.mind,
+        item.params,
+        { cutoff: item.cutoff, origin: "ia", examCents: null, phrase: item.phrase || undefined },
+        item.name,
+        `${runner.mind.id}-g${this.snapshot.generation}-${item.params.curve === "*" ? "tout" : item.params.curve}`
+      )
+      const after = examine(candidate.mind, readable)
+      if (!passesExam(after, before)) {
+        this.updateRunner(runner.mind.id, (live) => ({ ...live, examCents: before.cents }))
+        this.log(
+          runner.mind.id,
+          "refus",
+          item.cutoff,
+          `examen ${formatCents(after.cents)}, pas au-dessus de ${formatCents(before.cents)}`
+        )
+        continue
+      }
+      if (candidate.isNew) this.added.set(runner.mind.id, (this.added.get(runner.mind.id) ?? 0) + 1)
+      const mind = withExam(candidate.mind, item.params.curve, after.cents)
+      const skill = mind.skills.find((entry) => currentVersion(entry).curve === item.params.curve)
+      this.updateRunner(runner.mind.id, (live) => ({
+        ...live,
+        mind,
+        examCents: after.cents,
+        added: this.added.get(runner.mind.id) ?? 0,
+      }))
+      this.log(
+        runner.mind.id,
+        "skill",
+        item.cutoff,
+        `${skill?.name ?? "skill"} v${skill ? currentVersion(skill).version : 1} gardée, examen ${formatCents(after.cents)}`
+      )
+    }
+    if (this.snapshot.phase === "avant" && this.snapshot.race) {
+      this.set({ race: previewTurn(this.snapshot.race, this.snapshot.track) })
+    }
+  }
+}
+
+export function createSession(deps: SessionDeps) {
+  return new RunArcadeSession(deps)
+}
