@@ -15,6 +15,7 @@ import {
   type RankPoint,
 } from "./curves"
 import { formatRatio, goldenAim, goldenLevel, GOLDEN_RATIOS } from "./golden"
+import { soirReading } from "./soir"
 import { activeVersion, baseSkill, gesturePhrase, type Skill, type SkillParams } from "./skills"
 
 export { aimRatio, formatRatio, goldenAim, goldenLevel, GOLDEN_RATIOS, type GoldenRatio } from "./golden"
@@ -188,8 +189,10 @@ export function tipFor(
   params: SkillParams,
   past: readonly RankPoint[],
   rows: readonly CurveValues[],
-  key: CurveKey
+  key: CurveKey,
+  hiddenDate?: string | null
 ) {
+  if (params.gesture === "soir") return soirReading(past, rows, key, hiddenDate).tip
   const last = rows[rows.length - 1][key]
   const prev = rows.length > 1 ? rows[rows.length - 2][key] : last
   const delta = last - prev
@@ -220,7 +223,7 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
   const hiddenDate = options.hiddenDate ?? null
   const rows = past.map(curveValues)
   const tips = {} as CurveValues
-  for (const key of CURVE_KEYS) tips[key] = tipFor(paramsFor(mind, key, hiddenDate), past, rows, key)
+  for (const key of CURVE_KEYS) tips[key] = tipFor(paramsFor(mind, key, hiddenDate), past, rows, key, hiddenDate)
   const lastRow = rows[rows.length - 1]
   const reconciled = reconcile(
     tips,
@@ -272,7 +275,13 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
     return level.y >= low && level.y <= high
   })
   const slopeWord = delta > 0.05 ? "montante" : delta < -0.05 ? "descendante" : "plate"
-  const phrase = `${curveLabel(focus)} ${gesturePhrase(params.gesture)} : tangente ${slopeWord}, rayon ${formatNum(radius)} vers ${formatRatio(params.ratio)}, vecteur ${formatNum(tip)}, projection ${projected}${recalled ? ", ramenée par les totales" : ""}.`
+  const reading = params.gesture === "soir" ? soirReading(past, rows, focus, hiddenDate) : null
+  const clause = reading
+    ? reading.days == null
+      ? `reprend le pas du ${reading.evening}`
+      : `${reading.evening} suit le ${reading.other} à ${reading.days} ${reading.days > 1 ? "jours" : "jour"}`
+    : gesturePhrase(params.gesture)
+  const phrase = `${curveLabel(focus)} ${clause} : tangente ${slopeWord}, rayon ${formatNum(radius)} vers ${formatRatio(params.ratio)}, vecteur ${formatNum(tip)}, projection ${projected}${recalled ? ", ramenée par les totales" : ""}.`
   const ys = [
     ...trail.map((point) => point.y),
     tangent.y1,

@@ -1,7 +1,7 @@
 import { CURVE_KEYS, curveLabel, isCurveKey, type CurveKey } from "./curves"
 import { formatRatio, GOLDEN_RATIOS, nearestGolden, type GoldenRatio } from "./golden"
 
-export const GESTURES = ["persiste", "glisse", "miroir", "or", "moyenne"] as const
+export const GESTURES = ["persiste", "glisse", "miroir", "or", "moyenne", "soir"] as const
 export type Gesture = (typeof GESTURES)[number]
 
 export const SPANS = ["bande", "lignes", "pas"] as const
@@ -54,6 +54,7 @@ const GESTURE_PHRASE: Record<Gesture, string> = {
   miroir: "inverse le pas",
   or: "vise le nombre d’or",
   moyenne: "rejoint sa moyenne",
+  soir: "suit l’autre soir",
 }
 
 export function gesturePhrase(gesture: Gesture) {
@@ -71,6 +72,7 @@ const SPAN_PHRASE: Record<SpanKind, string> = {
 }
 
 export function describeSkill(params: SkillParams) {
+  if (params.gesture === "soir") return `${targetLabel(params.curve)} suit l’autre soir, à 4 jours au plus.`
   const scale =
     params.gesture === "moyenne" && params.days
       ? `sur ${params.days} jours`
@@ -178,7 +180,7 @@ export function parseSkillParams(raw: unknown): SkillParams | null {
 }
 
 /**
- * Gestes de départ, tous différents. Persiste, glisse et miroir n’ont pas de réglage :
+ * Gestes de départ, tous différents. Persiste, glisse, miroir et soir n’ont pas de réglage :
  * ils ne paraissent qu’une fois, le nombre d’or et la moyenne varient ensuite.
  */
 const BASE_PRESETS: Omit<SkillParams, "curve">[] = [
@@ -197,7 +199,7 @@ const BASE_PRESETS: Omit<SkillParams, "curve">[] = [
   { gesture: "moyenne", ratio: 0.618, span: "bande", window: 10, days: 90 },
   { gesture: "or", ratio: 1.272, span: "bande", window: 8, days: null },
   { gesture: "moyenne", ratio: 0.618, span: "bande", window: 16, days: null },
-  { gesture: "or", ratio: 0.618, span: "pas", window: 3, days: null },
+  { gesture: "soir", ratio: 0.618, span: "pas", window: 3, days: null },
 ]
 
 /** Skill de départ d’un runner : un geste pour toutes les courbes. */
