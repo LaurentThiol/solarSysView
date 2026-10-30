@@ -1,0 +1,9 @@
+{
+  "slug": "run-arcade-aide-9617",
+  "happened_on": "2026-10-31",
+  "area": "runArcade",
+  "title": "runArcade : l’aide nomme chaque commande",
+  "body": "L’aide de runArcade pose un point d’exclamation sur les runners, les tirages, les minutes, Lancer, la pause, le tour, l’export et l’import. Le texte dit le solde de 50,00 €, le tour à 2,50 € et le numéro trouvé à 2,00 €, et qu’une skill n’est gardée que si l’examen monte. Il nomme aussi les signes du dessin, les gestes, le soir du mardi et du vendredi à quatre jours au plus, les quatorze courbes et le champion écrit dans Neon. Le menu, le sous-titre et le glossaire disent la même règle d’examen.",
+  "pr_number": null,
+  "pr_url": null
+}

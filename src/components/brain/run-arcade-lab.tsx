@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 
 import { captureDraw } from "@/components/brain/run-arcade-capture"
 import { RunnerUniverse } from "@/components/brain/run-arcade-universe"
+import { HelpTip, HelpWrap, LabelHelp, TitleHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
@@ -11,6 +12,7 @@ import { lastRevealedDraw, proposeNextDraw, type ChampionRecord } from "@/lib/ru
 import { askBrave, askIa, exportChampion, listChampions, loadChampion, readChampionFile, saveChampion } from "@/lib/run-arcade/client"
 import { formatDuration, raceDurationMs, servedPerSlice } from "@/lib/run-arcade/clock"
 import { CURVE_KEYS, curveLabel, curveValues, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
+import { RUN_ARCADE_HELP } from "@/lib/run-arcade/help"
 import { createSession, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
 import { currentVersion, targetLabel } from "@/lib/run-arcade/skills"
 import {
@@ -227,8 +229,7 @@ export function RunArcadeLab() {
           launch()
         }}
       >
-        <label className="flex w-24 flex-col gap-1 text-xs text-muted-foreground">
-          Runners
+        <LabelHelp label="Runners" help={RUN_ARCADE_HELP.runners} className="w-24 sm:w-24">
           <Input
             type="number"
             min={1}
@@ -240,9 +241,8 @@ export function RunArcadeLab() {
               if (Number.isFinite(value)) setCount(Math.min(RUNNER_MAX, Math.max(1, Math.round(value))))
             }}
           />
-        </label>
-        <label className="flex w-24 flex-col gap-1 text-xs text-muted-foreground">
-          Tirages
+        </LabelHelp>
+        <LabelHelp label="Tirages" help={RUN_ARCADE_HELP.tirages} className="w-24 sm:w-24">
           <Input
             type="number"
             min={4}
@@ -254,9 +254,8 @@ export function RunArcadeLab() {
               if (Number.isFinite(value)) setRaceDraws(Math.min(maxDraws, Math.max(4, Math.round(value))))
             }}
           />
-        </label>
-        <label className="flex w-24 flex-col gap-1 text-xs text-muted-foreground">
-          Minutes
+        </LabelHelp>
+        <LabelHelp label="Minutes" help={RUN_ARCADE_HELP.minutes} className="w-24 sm:w-24">
           <Input
             type="number"
             min={0}
@@ -269,34 +268,44 @@ export function RunArcadeLab() {
               if (Number.isFinite(value)) setMinutes(Math.min(MINUTES_MAX, Math.max(0, Math.round(value * 2) / 2)))
             }}
           />
-        </label>
-        <Button type="submit" disabled={series.length < 4}>
-          Lancer
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={!running}
-          onClick={() => (snapshot.pausedLeftMs != null ? session.resume() : session.pause())}
-        >
-          {snapshot.pausedLeftMs != null ? "Reprendre" : "Pause"}
-        </Button>
-        <Button type="button" variant="outline" disabled={!running} onClick={() => session.skip()}>
-          {snapshot.phase === "avant" ? "Passer à la course" : "Jouer le tour"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={!parent}
-          onClick={() => {
-            if (parent) exportChampion(parent)
-          }}
-        >
-          Exporter le champion
-        </Button>
-        <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}>
-          Importer le champion
-        </Button>
+        </LabelHelp>
+        <HelpWrap help={RUN_ARCADE_HELP.lancer}>
+          <Button type="submit" disabled={series.length < 4}>
+            Lancer
+          </Button>
+        </HelpWrap>
+        <HelpWrap help={RUN_ARCADE_HELP.pause}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!running}
+            onClick={() => (snapshot.pausedLeftMs != null ? session.resume() : session.pause())}
+          >
+            {snapshot.pausedLeftMs != null ? "Reprendre" : "Pause"}
+          </Button>
+        </HelpWrap>
+        <HelpWrap help={RUN_ARCADE_HELP.tour}>
+          <Button type="button" variant="outline" disabled={!running} onClick={() => session.skip()}>
+            {snapshot.phase === "avant" ? "Passer à la course" : "Jouer le tour"}
+          </Button>
+        </HelpWrap>
+        <HelpWrap help={RUN_ARCADE_HELP.exporter}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!parent}
+            onClick={() => {
+              if (parent) exportChampion(parent)
+            }}
+          >
+            Exporter le champion
+          </Button>
+        </HelpWrap>
+        <HelpWrap help={RUN_ARCADE_HELP.importer}>
+          <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}>
+            Importer le champion
+          </Button>
+        </HelpWrap>
         <input
           ref={fileRef}
           type="file"
@@ -315,12 +324,14 @@ export function RunArcadeLab() {
         <p className="text-foreground">
           {loading && series.length < 4 ? "Archive en cours de lecture." : phaseText(snapshot, remaining)}
           {leader && snapshot.phase === "course" ? ` · meilleur ${leader.mind.name} ${formatCents(leader.cents)}` : ""}
+          <HelpTip {...RUN_ARCADE_HELP.statut} />
         </p>
         {race && newestYear ? (
           <p>
             Archive gratuite : années {newestYear - 1} et {newestYear}, du {formatDrawDate(track[0].date)} au{" "}
             {formatDrawDate(track[race.start - 1].date)}. Course : {race.end - race.start} tirages, du{" "}
             {formatDrawDate(track[race.start].date)} au {formatDrawDate(track[race.end - 1].date)}.
+            <HelpTip {...RUN_ARCADE_HELP.archive} />
           </p>
         ) : null}
         {race ? (
@@ -336,6 +347,7 @@ export function RunArcadeLab() {
             ) : (
               "Lecture : les tours s’enchaînent, sans appel."
             )}
+            <HelpTip {...RUN_ARCADE_HELP.horloge} />
           </p>
         ) : null}
         {race ? (
@@ -349,6 +361,7 @@ export function RunArcadeLab() {
                 : snapshot.save.state === "en cours"
                   ? "écriture du champion"
                   : "écrit le champion en fin de course"}
+            <HelpTip {...RUN_ARCADE_HELP.services} />
           </p>
         ) : null}
         {race && snapshot.parent ? (
@@ -358,13 +371,16 @@ export function RunArcadeLab() {
             {snapshot.setAside > 0
               ? ` ${snapshot.setAside} version(s) écrite(s) le jour du premier tirage caché ou après restent de côté.`
               : ""}
+            <HelpTip {...RUN_ARCADE_HELP.generation} />
           </p>
         ) : null}
       </div>
 
       {history.length > 0 ? (
         <div className="flex flex-col gap-1">
-          <h2 className="text-xs font-medium text-muted-foreground">Champions déjà écrits</h2>
+          <h2 className="text-xs font-medium text-muted-foreground">
+            <TitleHelp help={RUN_ARCADE_HELP.champions}>Champions déjà écrits</TitleHelp>
+          </h2>
           <ul className="flex flex-col gap-1" data-testid="run-arcade-history">
             {history.map((item) => {
               const active =
@@ -403,15 +419,19 @@ export function RunArcadeLab() {
         <section className="rounded-xl border bg-card p-3" data-testid="run-arcade-next">
           <header className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-sm font-medium">
-              Tirage suivant · {parent.runner}
-              <span className="font-normal text-muted-foreground"> · génération {parent.generation}</span>
+              <TitleHelp help={RUN_ARCADE_HELP.suivant}>
+                Tirage suivant · {parent.runner}
+                <span className="font-normal text-muted-foreground"> · génération {parent.generation}</span>
+              </TitleHelp>
             </h2>
             <p className="text-sm text-muted-foreground">
               course {formatCents(parent.cents)}
               {parent.examCents != null ? ` · examen ${formatCents(parent.examCents)}` : ""}
             </p>
           </header>
-          <div className="mb-2 flex flex-wrap gap-1" role="group" aria-label="Courbe du tirage suivant">
+          <div className="mb-2 flex flex-wrap items-center gap-1">
+            <HelpTip {...RUN_ARCADE_HELP.courbes} />
+            <div className="contents" role="group" aria-label="Courbe du tirage suivant">
             {CURVE_KEYS.map((key) => (
               <button
                 key={key}
@@ -425,6 +445,7 @@ export function RunArcadeLab() {
                 {curveLabel(key)}
               </button>
             ))}
+            </div>
           </div>
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(16rem,0.8fr)]">
             <div>
@@ -444,7 +465,9 @@ export function RunArcadeLab() {
             </div>
             {persisted ? (
               <div className="rounded-lg border border-dashed p-3 text-sm" data-testid="run-arcade-persist">
-                <h3 className="font-medium">Persiste</h3>
+                <h3 className="font-medium">
+                  <TitleHelp help={RUN_ARCADE_HELP.persiste}>Persiste</TitleHelp>
+                </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Le nul gris recopie le dernier tirage révélé, {formatDrawDate(persisted.date)}.
                 </p>
@@ -471,7 +494,11 @@ export function RunArcadeLab() {
         </section>
       ) : null}
 
-      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <li className="inline-flex items-center gap-1 empty:hidden">
+          <HelpTip {...RUN_ARCADE_HELP.dessin} />
+          <HelpTip {...RUN_ARCADE_HELP.gestes} />
+        </li>
         <li className="text-chart-2">Tangente, en pointillés</li>
         <li className="text-chart-1">Rayon vers le nombre d’or</li>
         <li className="text-chart-3">Pas d’avant</li>
@@ -479,13 +506,17 @@ export function RunArcadeLab() {
         <li>Trait fin : rappel à la somme</li>
         <li className="text-chart-4">Projection : la case jouée</li>
         <li>Rail : sommes et décennies à gauche, rangs à droite</li>
-        <li className="text-[var(--ok)]">Numéro ou étoile trouvé : +2 €</li>
+        <li className="inline-flex items-center gap-1 text-[var(--ok)]">
+          Numéro ou étoile trouvé : +2 €
+          <HelpTip {...RUN_ARCADE_HELP.solde} />
+        </li>
         <li className="text-chart-2">Somme ou décennie juste</li>
       </ul>
 
       {race?.seenDate ? (
         <p className="text-sm text-muted-foreground">
           Passé révélé jusqu’au {formatDrawDate(race.seenDate)}. Le tirage du tour reste caché pendant le dessin.
+          <HelpTip {...RUN_ARCADE_HELP.passe} />
         </p>
       ) : null}
 
@@ -497,6 +528,7 @@ export function RunArcadeLab() {
             {" "}
             ★ {race.revealed.e1} {race.revealed.e2}
           </span>
+          <HelpTip {...RUN_ARCADE_HELP.arbitre} />
         </p>
       ) : null}
 
@@ -504,7 +536,9 @@ export function RunArcadeLab() {
         <section className="rounded-xl border border-primary/50 bg-card p-3" data-testid="run-arcade-focus">
           <header className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-sm font-medium">
-              {focus.mind.name} · {skillSummary(focus)}
+              <TitleHelp help={RUN_ARCADE_HELP.fiche}>
+                {focus.mind.name} · {skillSummary(focus)}
+              </TitleHelp>
             </h2>
             <p className="text-sm">
               {formatCents(focus.cents)}
@@ -514,7 +548,9 @@ export function RunArcadeLab() {
               </span>
             </p>
           </header>
-          <div className="mb-2 flex flex-wrap gap-1" role="group" aria-label="Courbe dessinée">
+          <div className="mb-2 flex flex-wrap items-center gap-1">
+            <HelpTip {...RUN_ARCADE_HELP.courbes} />
+            <div className="contents" role="group" aria-label="Courbe dessinée">
             {CURVE_KEYS.map((key) => {
               const active = (focusCurve ?? focus.mind.focus) === key
               return (
@@ -531,6 +567,7 @@ export function RunArcadeLab() {
                 </button>
               )
             })}
+            </div>
           </div>
           <RunnerUniverse
             runnerId={`${focus.mind.id}-focus`}
@@ -542,7 +579,9 @@ export function RunArcadeLab() {
           {focusView.draw ? <p className="mt-2 text-sm leading-5">{focusView.draw.phrase}</p> : null}
           <div className="mt-3 grid gap-3 lg:grid-cols-2">
             <div>
-              <h3 className="mb-1 text-xs font-medium text-muted-foreground">Skills et versions</h3>
+              <h3 className="mb-1 text-xs font-medium text-muted-foreground">
+                <TitleHelp help={RUN_ARCADE_HELP.skills}>Skills et versions</TitleHelp>
+              </h3>
               <ul className="flex flex-col gap-1 text-xs">
                 {focus.mind.skills.map((skill) => (
                   <li key={skill.id}>
@@ -563,7 +602,9 @@ export function RunArcadeLab() {
               </ul>
             </div>
             <div>
-              <h3 className="mb-1 text-xs font-medium text-muted-foreground">Journal des requêtes</h3>
+              <h3 className="mb-1 text-xs font-medium text-muted-foreground">
+                <TitleHelp help={RUN_ARCADE_HELP.journal}>Journal des requêtes</TitleHelp>
+              </h3>
               {focusJournal.length ? (
                 <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
                   {focusJournal.map((entry, index) => (
