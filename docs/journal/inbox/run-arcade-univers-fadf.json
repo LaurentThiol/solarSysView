@@ -1,9 +1,9 @@
 {
   "slug": "run-arcade-univers-fadf",
-  "happened_on": "2026-10-28",
+  "happened_on": "2026-10-30",
   "area": "runArcade",
-  "title": "Univers graphique de chaque runner",
-  "body": "Assistants ouvre runArcade. Au lancement, chaque runner reçoit son cadre. À chaque tour, le cadre trace la série du rang qu’il suit, la tangente du dernier pas, le rayon vers un niveau du nombre d’or, le vecteur du pas et la flèche de projection. Le dessin ne lit que le passé déjà révélé : le tirage du tour, et ceux d’après, restent cachés jusqu’à l’arbitre. Le rail de droite porte les sept rangs annoncés. Un rang confirmé par l’arbitre se colore ensuite. Le solde part de 50 €, le tour coûte 2,50 €, un rang juste en rapporte 2 €. Lecture enchaîne les tours.",
+  "title": "runArcade : avant-course, horloge par tour et champion dans Neon",
+  "body": "Assistants ouvre runArcade. Lancer donne aux runners une avant-course de Y minutes sur les années n−1 et n, puis une course sur les 25 derniers tirages, avec une tranche d’horloge par tour pour l’IA locale et Brave ; une réponse arrivée après la tranche joue au tour suivant. Chaque runner pense d’abord la somme des numéros et la somme des étoiles, puis la décennie et les rangs : la flèche est sa pensée, le trait fin le rappel aux totales, le point la case jouée, et le rail porte les quatorze cases sur deux colonnes. Chaque numéro ou étoile trouvé rapporte 2 € quel que soit son rang, le tour coûte 2,50 €, et le solde de course classe les runners. Une skill nouvelle n’est gardée que si le solde d’examen monte, et chaque version garde la date du dernier tirage lu. Le champion part dans Neon et ouvre la génération suivante, pendant que le tirage du tour reste caché jusqu’à l’arbitre.",
   "pr_number": 327,
   "pr_url": "https://github.com/LaurentThiol/Synchro/pull/327"
 }
