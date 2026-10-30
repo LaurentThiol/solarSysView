@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "Appel local : jetons et JSON lisible",
   "body": "Les appels de runArcade au modèle local réussissaient dans Usage 24 h, avec la colonne Jetons in / out à 0 / 0. Ces compteurs sont maintenant ceux qu’Ollama renvoie, additionnés sur la ligne Brain / Local. Sans compteur, une estimation à partir du texte porte la marque estimé. Le prompt joint un exemple JSON valide, et Ollama reçoit un schéma des courbes, des gestes et des ratios. Une liste recopiée du genre « sumNumbers|n1 » devient la première valeur autorisée. Les appels déjà écrits restent à 0 jusqu’à leur sortie de la fenêtre de 24 h.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 331,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/331"
 }
