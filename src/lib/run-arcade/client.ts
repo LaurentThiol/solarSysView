@@ -113,6 +113,15 @@ export async function loadChampion(): Promise<ChampionRecord | null> {
   return local.savedAt > remote.savedAt ? local : remote
 }
 
+/** Relit un fichier exporté. Un JSON qui n’est pas un champion est refusé. */
+export function readChampionFile(text: string): ChampionRecord | null {
+  try {
+    return parseChampion(JSON.parse(text))
+  } catch {
+    return null
+  }
+}
+
 export function exportChampion(record: ChampionRecord) {
   const blob = new Blob([JSON.stringify(record, null, 2)], { type: "application/json" })
   const url = URL.createObjectURL(blob)

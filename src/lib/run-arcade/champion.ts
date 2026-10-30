@@ -1,4 +1,4 @@
-import { CURVE_KEYS } from "./curves"
+import { buildTrack, CURVE_KEYS, type RankPoint } from "./curves"
 import {
   auditCutoffs,
   baseSkill,
@@ -8,7 +8,7 @@ import {
   type SkillOrigin,
   type SkillVersion,
 } from "./skills"
-import type { RunnerLive, RunnerMind } from "./thought"
+import { think, type RunnerLive, type RunnerMind, type Thought } from "./thought"
 
 export type JournalKind = "ia" | "brave" | "skill" | "refus" | "erreur"
 
@@ -151,4 +151,27 @@ export function childrenOf(champion: ChampionRecord, count: number, hiddenDate: 
 /** Versions du champion écrites le jour du premier tirage caché ou après. */
 export function setAsideCount(champion: ChampionRecord, hiddenDate: string) {
   return auditCutoffs(champion.skills, hiddenDate).length
+}
+
+function dayAfter(iso: string) {
+  const date = new Date(`${iso.slice(0, 10)}T12:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + 1)
+  return date.toISOString().slice(0, 10)
+}
+
+/**
+ * Le champion propose le tirage qui vient après le dernier de l’archive.
+ * Tout le passé est révélé. La date cachée est le lendemain, pour que les versions
+ * écrites jusqu’au dernier tirage jouent encore.
+ */
+export function proposeNextDraw(champion: ChampionRecord, series: readonly RankPoint[]): Thought | null {
+  const track = buildTrack(series)
+  if (track.length < 2 || champion.skills.length === 0) return null
+  const mind: RunnerMind = {
+    id: "champion",
+    name: champion.runner,
+    focus: "sumNumbers",
+    skills: champion.skills,
+  }
+  return think(mind, track, { hiddenDate: dayAfter(track[track.length - 1].date) })
 }

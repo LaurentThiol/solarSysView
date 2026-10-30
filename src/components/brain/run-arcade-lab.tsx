@@ -1,14 +1,14 @@
 "use client"
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 
 import { captureDraw } from "@/components/brain/run-arcade-capture"
 import { RunnerUniverse } from "@/components/brain/run-arcade-universe"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
-import type { ChampionRecord } from "@/lib/run-arcade/champion"
-import { askBrave, askIa, exportChampion, loadChampion, saveChampion } from "@/lib/run-arcade/client"
+import { proposeNextDraw, type ChampionRecord } from "@/lib/run-arcade/champion"
+import { askBrave, askIa, exportChampion, loadChampion, readChampionFile, saveChampion } from "@/lib/run-arcade/client"
 import { formatDuration, raceDurationMs, servedPerSlice } from "@/lib/run-arcade/clock"
 import { CURVE_KEYS, curveLabel, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
 import { createSession, MIN_SLICE_MS, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
@@ -129,6 +129,9 @@ export function RunArcadeLab() {
   const [selected, setSelected] = useState<string | null>(null)
   const [focusCurve, setFocusCurve] = useState<CurveKey | null>(null)
   const [stored, setStored] = useState<ChampionRecord | null>(null)
+  const [imported, setImported] = useState<ChampionRecord | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => () => session.dispose(), [session])
 
@@ -144,7 +147,7 @@ export function RunArcadeLab() {
 
   const race = snapshot.race
   const track = snapshot.track
-  const parent = snapshot.champion ?? stored
+  const parent = imported ?? snapshot.champion ?? stored
   const running = snapshot.phase === "avant" || snapshot.phase === "course"
   const remaining =
     snapshot.pausedLeftMs ?? (snapshot.phaseEndsAt != null && now > 0 ? Math.max(0, snapshot.phaseEndsAt - now) : null)
@@ -177,7 +180,25 @@ export function RunArcadeLab() {
     if (series.length < 4) return
     setSelected(null)
     setFocusCurve(null)
+    setImported(null)
     session.launch({ count, draws: raceDraws, minutes, series, champion: parent })
+  }
+
+  const proposal = useMemo(() => (parent && series.length >= 2 ? proposeNextDraw(parent, series) : null), [parent, series])
+
+  function importFile(file: File) {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const record = readChampionFile(String(reader.result ?? ""))
+      if (!record) {
+        setImportError("Ce fichier n’est pas un champion runArcade.")
+        return
+      }
+      setImportError(null)
+      setImported(record)
+      void saveChampion(record)
+    }
+    reader.readAsText(file)
   }
 
   const focusJournal = focus
@@ -260,6 +281,21 @@ export function RunArcadeLab() {
         >
           Exporter le champion
         </Button>
+        <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}>
+          Importer le champion
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          aria-label="Fichier du champion"
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            event.target.value = ""
+            if (file) importFile(file)
+          }}
+        />
       </form>
 
       <div className="flex flex-col gap-1 text-sm text-muted-foreground" data-testid="run-arcade-status">
@@ -307,6 +343,39 @@ export function RunArcadeLab() {
           </p>
         ) : null}
       </div>
+
+      {importError ? <p className="text-sm text-destructive">{importError}</p> : null}
+
+      {proposal && parent ? (
+        <section className="rounded-xl border bg-card p-3" data-testid="run-arcade-next">
+          <header className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-medium">
+              Tirage suivant · {parent.runner}
+              <span className="font-normal text-muted-foreground"> · génération {parent.generation}</span>
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              course {formatCents(parent.cents)}
+              {parent.examCents != null ? ` · examen ${formatCents(parent.examCents)}` : ""}
+            </p>
+          </header>
+          <p className="text-lg tracking-wide">
+            {proposal.guess.n1} {proposal.guess.n2} {proposal.guess.n3} {proposal.guess.n4} {proposal.guess.n5}
+            <span className="text-muted-foreground">
+              {" "}
+              ★ {proposal.guess.e1} {proposal.guess.e2}
+            </span>
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Somme des numéros {proposal.cases.sumNumbers} · somme des étoiles {proposal.cases.sumStars} · décennies{" "}
+            {proposal.cases.d0} {proposal.cases.d1} {proposal.cases.d2} {proposal.cases.d3} {proposal.cases.d4}
+          </p>
+          <p className="mt-1 text-sm leading-5">{proposal.draw.phrase}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Lu sur toute l’archive révélée, jusqu’au {formatDrawDate(proposal.draw.seenDate)}. Le tirage suivant n’est
+            pas dans la base. Lancer reprend ce champion pour la génération suivante.
+          </p>
+        </section>
+      ) : null}
 
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <li className="text-chart-2">Tangente, en pointillés</li>

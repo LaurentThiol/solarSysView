@@ -6,6 +6,7 @@ import {
   childrenOf,
   parseChampion,
   pickChampion,
+  proposeNextDraw,
   setAsideCount,
 } from "../src/lib/run-arcade/champion.ts"
 import { decadeProfile, fitProfileToSum, placeStars, reconcile, sumRange } from "../src/lib/run-arcade/coherence.ts"
@@ -295,6 +296,30 @@ test("a generation is a launch: children inherit the versions written before the
     assert.equal(child.skills[0].versions[1].window, 5)
   }
   assert.equal(parseChampion({ generation: 0, cents: 1, skills: [] }), null)
+})
+
+test("the champion proposes the draw after the last one in the archive", () => {
+  const rows = series(12)
+  const record = championRecord({
+    runner: { ...newRunner(mind), cents: 5400, examCents: 5100 },
+    generation: 2,
+    raceFrom: rows[8].date,
+    raceTo: rows[11].date,
+    journal: [],
+    savedAt: "2026-10-30T12:00:00.000Z",
+  })
+  const proposal = proposeNextDraw(record, rows)
+  assert.ok(proposal)
+  assert.equal(proposal.draw.seenDate, rows[11].date)
+  assert.deepEqual(proposal.guess, think(mind, rows, { hiddenDate: "2099-01-01" }).guess)
+  assert.equal(JSON.stringify(proposal).includes("2099"), false)
+  const late = addVersion(record.skills[0], { ...glide, gesture: "persiste" }, {
+    cutoff: "2099-01-01",
+    origin: "ia",
+    examCents: null,
+  })
+  const held = proposeNextDraw({ ...record, skills: [late] }, rows)
+  assert.deepEqual(held?.guess, proposal.guess)
 })
 
 test("an IA answer is one JSON action with known fields", () => {
