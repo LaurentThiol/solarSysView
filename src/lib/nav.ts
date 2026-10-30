@@ -219,7 +219,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "runArcade",
         help: {
           title: "runArcade",
-          body: "Chaque runner a son univers. À chaque tour il y trace sa tangente, son rayon, ses vecteurs et la projection des rangs n1–n5 et E1/E2. Le solde classe la course.",
+          body: "Chaque runner a son univers. Il lit gratuitement les années n−1 et n, s’entraîne Y minutes avec l’IA locale et Brave, puis court les 25 derniers tirages, une tranche d’horloge par tour. Il pense d’abord les sommes, puis la décennie et les rangs : le vecteur est sa pensée, la projection la case jouée. Le solde classe la course. Le champion part dans Neon et ouvre la génération suivante.",
         },
       },
       {

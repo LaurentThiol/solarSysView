@@ -1,14 +1,21 @@
-import type { RankKey, ThoughtDraw } from "@/lib/run-arcade/thought"
+import { curveLabel, RAIL_LEFT, RAIL_RIGHT, type CurveKey } from "@/lib/run-arcade/curves"
+import type { RailMark, ThoughtDraw } from "@/lib/run-arcade/thought"
 
 import { cn } from "@/lib/utils"
 
-const PLOT = { l: 28, r: 268, t: 16, b: 168 }
-const VIEW_W = 360
+const PLOT = { l: 28, r: 258, t: 16, b: 168 }
+const VIEW_W = 380
 const VIEW_H = 200
+const RAIL_TOP = 22
+const RAIL_STEP = 24
+const COLUMNS = [
+  { keys: RAIL_LEFT, label: 268, value: 296 },
+  { keys: RAIL_RIGHT, label: 324, value: 350 },
+] as const
 
 function scales(thought: ThoughtDraw) {
   const x0 = -0.35
-  const x1 = thought.xMax + 1.45
+  const x1 = thought.xMax + 0.6
   const y0 = thought.yMin
   const y1 = thought.yMax
   const xSpan = x1 - x0 || 1
@@ -19,19 +26,28 @@ function scales(thought: ThoughtDraw) {
   return { X, Y, radiusPx }
 }
 
-function line(x1: number, y1: number, x2: number, y2: number) {
-  return `M ${x1} ${y1} L ${x2} ${y2}`
+function formatValue(value: number) {
+  const rounded = Math.round(value * 10) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(".", ",")
+}
+
+function railTone(key: CurveKey, matched: readonly CurveKey[], exact: readonly CurveKey[]) {
+  if (matched.includes(key)) return "fill-[var(--ok)] font-medium"
+  if (exact.includes(key)) return "fill-chart-2 font-medium"
+  return "fill-foreground"
 }
 
 export function RunnerUniverse({
   runnerId,
   thought,
-  matched,
+  matched = [],
+  exact = [],
   className,
 }: {
   runnerId: string
   thought: ThoughtDraw | null
-  matched?: readonly RankKey[]
+  matched?: readonly CurveKey[]
+  exact?: readonly CurveKey[]
   className?: string
 }) {
   if (!thought) {
@@ -42,7 +58,7 @@ export function RunnerUniverse({
           className
         )}
       >
-        En attente du premier tour.
+        En attente du lancement.
       </div>
     )
   }
@@ -52,6 +68,9 @@ export function RunnerUniverse({
   const markerId = `run-arcade-${runnerId}-head`
   const cx = X(thought.radius.cx)
   const cy = Y(thought.radius.cy)
+  const marks = new Map<CurveKey, RailMark>(thought.marks.map((mark) => [mark.key, mark]))
+  const caseX = X(thought.projection.x)
+  const caseY = Y(thought.projection.y)
 
   return (
     <svg
@@ -59,18 +78,11 @@ export function RunnerUniverse({
       role="img"
       aria-label={thought.phrase}
       data-testid="runner-universe"
+      data-runner-universe={runnerId}
       className={cn("h-40 w-full", className)}
     >
       <defs>
-        <marker
-          id={markerId}
-          viewBox="0 0 8 8"
-          refX="7"
-          refY="4"
-          markerWidth="7"
-          markerHeight="7"
-          orient="auto"
-        >
+        <marker id={markerId} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
           <path d="M0 0 L8 4 L0 8 Z" className="fill-chart-4" />
         </marker>
         <marker
@@ -104,13 +116,7 @@ export function RunnerUniverse({
           ) : null}
         </g>
       ))}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={Math.max(4, radiusPx)}
-        className="fill-chart-1/10 stroke-chart-1"
-        strokeWidth="1.25"
-      />
+      <circle cx={cx} cy={cy} r={Math.max(4, radiusPx)} className="fill-chart-1/10 stroke-chart-1" strokeWidth="1.25" />
       <line
         x1={X(thought.spoke.x1)}
         y1={Y(thought.spoke.y1)}
@@ -119,12 +125,14 @@ export function RunnerUniverse({
         className="stroke-chart-1"
         strokeWidth="1"
       />
-      <path
-        d={line(X(thought.tangent.x1), Y(thought.tangent.y1), X(thought.tangent.x2), Y(thought.tangent.y2))}
+      <line
+        x1={X(thought.tangent.x1)}
+        y1={Y(thought.tangent.y1)}
+        x2={X(thought.tangent.x2)}
+        y2={Y(thought.tangent.y2)}
         className="stroke-chart-2"
         strokeWidth="1.2"
         strokeDasharray="4 3"
-        fill="none"
       />
       <polyline points={trail} className="stroke-foreground" strokeWidth="1.6" fill="none" />
       {thought.velocity ? (
@@ -139,34 +147,57 @@ export function RunnerUniverse({
         />
       ) : null}
       <line
-        x1={X(thought.projection.x1)}
-        y1={Y(thought.projection.y1)}
-        x2={X(thought.projection.x2)}
-        y2={Y(thought.projection.y2)}
+        x1={X(thought.vector.x1)}
+        y1={Y(thought.vector.y1)}
+        x2={X(thought.vector.x2)}
+        y2={Y(thought.vector.y2)}
         className="stroke-chart-4"
         strokeWidth="1.6"
         markerEnd={`url(#${markerId})`}
+        data-testid="runner-vector"
       />
-      <circle cx={X(thought.projection.x2)} cy={Y(thought.projection.y2)} r="3.5" className="fill-chart-4" />
+      {thought.recall ? (
+        <line
+          x1={X(thought.recall.x1)}
+          y1={Y(thought.recall.y1)}
+          x2={X(thought.recall.x2)}
+          y2={Y(thought.recall.y2)}
+          className="stroke-muted-foreground"
+          strokeWidth="0.9"
+          strokeDasharray="2 2"
+          data-testid="runner-recall"
+        />
+      ) : null}
+      <line x1={caseX} y1={caseY} x2={PLOT.r} y2={caseY} className="stroke-chart-4/50" strokeWidth="0.8" strokeDasharray="1 3" />
+      <circle cx={caseX} cy={caseY} r="3.6" className="fill-canvas stroke-chart-4" strokeWidth="1.6" />
+      <circle cx={caseX} cy={caseY} r="1.6" className="fill-chart-4" />
+      <text x={PLOT.r - 2} y={caseY - 3} textAnchor="end" className="fill-chart-4 text-[9px]">
+        {formatValue(thought.projection.y)}
+      </text>
       <circle cx={cx} cy={cy} r="2.4" className="fill-foreground" />
-      {thought.marks.map((mark, index) => {
-        const hit = matched?.includes(mark.key) ?? false
-        const y = 22 + index * 24
-        return (
-          <g key={mark.key}>
-            <text x="292" y={y} className="fill-muted-foreground text-[10px]">
-              {mark.key}
-            </text>
-            <text
-              x="318"
-              y={y}
-              className={hit ? "fill-[var(--ok)] text-[11px] font-medium" : "fill-foreground text-[11px]"}
-            >
-              {mark.value}
-            </text>
-          </g>
-        )
-      })}
+      {COLUMNS.map((column) =>
+        column.keys.map((key, index) => {
+          const mark = marks.get(key)
+          if (!mark) return null
+          const y = RAIL_TOP + index * RAIL_STEP
+          const focus = key === thought.focus
+          return (
+            <g key={key} data-rail={key}>
+              <title>{`${curveLabel(key)} : pensée ${formatValue(mark.thought)} · case ${mark.value}`}</title>
+              <text
+                x={column.label}
+                y={y}
+                className={cn("text-[10px]", focus ? "fill-chart-4 font-medium" : "fill-muted-foreground")}
+              >
+                {curveLabel(key)}
+              </text>
+              <text x={column.value} y={y} className={cn("text-[11px]", railTone(key, matched, exact))}>
+                {mark.value}
+              </text>
+            </g>
+          )
+        })
+      )}
     </svg>
   )
 }

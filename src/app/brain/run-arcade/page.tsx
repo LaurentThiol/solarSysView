@@ -7,7 +7,7 @@ import { PageShell } from "@/components/page-shell"
 export const metadata: Metadata = {
   title: "runArcade — Synchro",
   description:
-    "Chaque runner dessine, dans son univers, la tangente, le rayon, les vecteurs et la projection des rangs.",
+    "Chaque runner s’entraîne sur les années n−1 et n, puis court les derniers tirages et dessine sa pensée : tangente, rayon, vecteur, projection.",
 }
 
 export default function RunArcadePage() {
@@ -15,7 +15,7 @@ export default function RunArcadePage() {
     <PageShell
       wide
       title="runArcade"
-      subtitle="Chaque runner a son univers. À chaque tour il y dessine ce qu’il pense : tangente, rayon, vecteurs, projection des rangs."
+      subtitle="Chaque runner a son univers. Après l’avant-course, chaque tour lui laisse une tranche d’horloge pour penser : sommes, décennie, rangs. Il dessine sa tangente, son rayon, son vecteur et la case jouée."
     >
       <Suspense fallback={null}>
         <RunArcadeLab />

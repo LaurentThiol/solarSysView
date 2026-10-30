@@ -282,7 +282,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "runArcade",
     group: "assistants",
-    text: "Chaque runner a son univers graphique. À chaque tour il y dessine ce qu’il pense : tangente, rayon du nombre d’or, vecteur du pas et projection des rangs. Le solde part de 50 €, le tour coûte 2,50 €, un rang juste rapporte 2 €.",
+    text: "Chaque runner a son univers graphique. À chaque tour il y dessine ce qu’il pense : tangente, rayon du nombre d’or, vecteur vers sa pensée et projection de la case jouée, ramenée sur les sommes et la décennie. Le solde part de 50 €, le tour coûte 2,50 €, chaque numéro ou étoile trouvé rapporte 2 €, quel que soit son rang.",
   },
   {
     term: "decisionTree",

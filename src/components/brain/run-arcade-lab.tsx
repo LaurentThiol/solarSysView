@@ -1,26 +1,35 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
 
+import { captureDraw } from "@/components/brain/run-arcade-capture"
 import { RunnerUniverse } from "@/components/brain/run-arcade-universe"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { formatDrawDate, toDrawSeries, type Draw } from "@/lib/draws"
+import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
+import type { ChampionRecord } from "@/lib/run-arcade/champion"
+import { askBrave, askIa, exportChampion, loadChampion, saveChampion } from "@/lib/run-arcade/client"
+import { formatDuration, raceDurationMs, servedPerSlice } from "@/lib/run-arcade/clock"
+import { CURVE_KEYS, curveLabel, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
+import { createSession, MIN_SLICE_MS, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
+import { currentVersion, targetLabel } from "@/lib/run-arcade/skills"
 import {
+  exactKeys,
+  formatCents,
+  leaderOf,
+  matchedKeys,
+  RACE_DRAWS_DEFAULT,
+  revealedPast,
   RUNNER_DEFAULT,
   RUNNER_MAX,
-  createRace,
-  formatCents,
-  formatRatio,
-  leaderOf,
-  playTurn,
-  type Race,
-  type RankPoint,
+  think,
+  type RunnerLive,
 } from "@/lib/run-arcade/thought"
 import { useDraws } from "@/lib/use-draws"
 import { cn } from "@/lib/utils"
 
-const LENGTH_DEFAULT = 24
+const MINUTES_DEFAULT = 10
+const MINUTES_MAX = 120
 
 function toRankPoints(draws: Draw[]): RankPoint[] {
   return toDrawSeries(draws).map((point) => ({
@@ -35,48 +44,145 @@ function toRankPoints(draws: Draw[]): RankPoint[] {
   }))
 }
 
+const clock = (() => {
+  let value = 0
+  let timer: number | null = null
+  const listeners = new Set<() => void>()
+  return {
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      if (timer == null) {
+        value = Date.now()
+        timer = window.setInterval(() => {
+          value = Date.now()
+          for (const item of listeners) item()
+        }, 500)
+      }
+      return () => {
+        listeners.delete(listener)
+        if (listeners.size === 0 && timer != null) {
+          window.clearInterval(timer)
+          timer = null
+        }
+      }
+    },
+    get: () => value,
+    server: () => 0,
+  }
+})()
+
+function serviceText(state: ServiceState, error: string | null, ok: string) {
+  if (state === "ok") return ok
+  if (state === "absente") return `absente${error ? ` (${error})` : ""}`
+  return error ? `en attente (${error})` : "en attente"
+}
+
+function phaseText(snapshot: SessionSnapshot, remaining: number | null) {
+  const race = snapshot.race
+  if (snapshot.error) return snapshot.error
+  if (!race) return "Choisissez le nombre de runners, les tirages de course et les minutes d’avant-course, puis lancez."
+  const total = race.end - race.start
+  const pause = snapshot.pausedLeftMs != null ? " · en pause" : ""
+  const left = remaining != null ? formatDuration(remaining) : "—"
+  if (snapshot.phase === "avant") return `Génération ${snapshot.generation} · avant-course, ${left} restantes${pause}`
+  if (snapshot.phase === "course") {
+    return `Génération ${snapshot.generation} · tour ${race.cursor - race.start + 1} / ${total}, tranche ${left}${pause}`
+  }
+  if (snapshot.phase === "fin") {
+    const champion = snapshot.champion
+    return champion
+      ? `Génération ${snapshot.generation} finie · champion ${champion.runner} ${formatCents(champion.cents)}`
+      : `Génération ${snapshot.generation} finie`
+  }
+  return ""
+}
+
+function skillSummary(runner: RunnerLive) {
+  return runner.mind.skills
+    .map((skill) => {
+      const version = currentVersion(skill)
+      return `${version.curve === "*" ? "tout" : curveLabel(version.curve)} v${version.version}`
+    })
+    .join(" · ")
+}
+
 export function RunArcadeLab() {
   const { draws, loading } = useDraws("all")
   const series = useMemo(() => toRankPoints(draws), [draws])
-  const [track, setTrack] = useState<RankPoint[]>([])
+  const [session] = useState(() =>
+    createSession({
+      now: () => Date.now(),
+      setTimer: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimer: (handle) => window.clearTimeout(handle as number),
+      askIa,
+      askBrave,
+      saveChampion,
+      capture: captureDraw,
+      parallel: 1,
+    })
+  )
+  const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
+  const now = useSyncExternalStore(clock.subscribe, clock.get, clock.server)
   const [count, setCount] = useState(RUNNER_DEFAULT)
-  const [length, setLength] = useState(LENGTH_DEFAULT)
-  const [race, setRace] = useState<Race | null>(null)
-  const [playing, setPlaying] = useState(false)
+  const [raceDraws, setRaceDraws] = useState(RACE_DRAWS_DEFAULT)
+  const [minutes, setMinutes] = useState(MINUTES_DEFAULT)
   const [selected, setSelected] = useState<string | null>(null)
-  const booted = useRef(false)
+  const [focusCurve, setFocusCurve] = useState<CurveKey | null>(null)
+  const [stored, setStored] = useState<ChampionRecord | null>(null)
 
-  function launch(nextCount = count, nextLength = length) {
+  useEffect(() => () => session.dispose(), [session])
+
+  useEffect(() => {
+    let alive = true
+    void loadChampion().then((record) => {
+      if (alive) setStored(record)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const race = snapshot.race
+  const track = snapshot.track
+  const parent = snapshot.champion ?? stored
+  const running = snapshot.phase === "avant" || snapshot.phase === "course"
+  const remaining =
+    snapshot.pausedLeftMs ?? (snapshot.phaseEndsAt != null && now > 0 ? Math.max(0, snapshot.phaseEndsAt - now) : null)
+  const leader = race ? leaderOf(race.runners) : null
+  const focus = race?.runners.find((runner) => runner.mind.id === selected) ?? null
+  const slice = Math.max(snapshot.sliceMs, MIN_SLICE_MS)
+  const served = servedPerSlice(snapshot.sliceMs, snapshot.medianMs, 1)
+  const maxDraws = Math.max(4, Math.min(120, series.length - 2))
+  const newestYear = track.length ? Number(track[track.length - 1].date.slice(0, 4)) : null
+
+  const focusView = useMemo(() => {
+    if (!focus || !race || track.length === 0) return null
+    const curve = focusCurve ?? focus.mind.focus
+    if (curve === focus.mind.focus || !focus.thought) {
+      return { draw: focus.thought, matched: focus.matched, exact: focus.exact }
+    }
+    const shown = race.revealed ? race.cursor - 1 : race.cursor
+    const past = revealedPast(track, shown)
+    if (past.length < 2) return { draw: focus.thought, matched: focus.matched, exact: focus.exact }
+    const thought = think(focus.mind, past, { hiddenDate: track[shown]?.date, focus: curve })
+    const revealed = race.revealed
+    return {
+      draw: thought.draw,
+      matched: revealed ? matchedKeys(thought.cases, revealed) : [],
+      exact: revealed ? exactKeys(thought.cases, revealed) : [],
+    }
+  }, [focus, focusCurve, race, track])
+
+  function launch() {
     if (series.length < 4) return
-    setTrack(series)
-    setRace(playTurn(createRace(nextCount, series.length, nextLength), series))
-    setPlaying(false)
     setSelected(null)
+    setFocusCurve(null)
+    session.launch({ count, draws: raceDraws, minutes, series, champion: parent })
   }
 
-  useEffect(() => {
-    if (booted.current || series.length < 4) return
-    booted.current = true
-    setTrack(series)
-    setRace(playTurn(createRace(RUNNER_DEFAULT, series.length, LENGTH_DEFAULT), series))
-  }, [series])
-
-  useEffect(() => {
-    if (!playing || track.length < 4 || race?.done) return
-    const id = window.setInterval(() => {
-      setRace((current) => {
-        if (!current || current.done) return current
-        return playTurn(current, track)
-      })
-    }, 700)
-    return () => window.clearInterval(id)
-  }, [playing, track, race?.done])
-
-  const leader = race ? leaderOf(race.runners) : null
-  const played = race ? race.cursor - race.start : 0
-  const total = race ? race.end - race.start : 0
-  const focus = race?.runners.find((runner) => runner.mind.id === selected) ?? null
-  const maxLength = Math.max(4, series.length - 2)
+  const focusJournal = focus
+    ? snapshot.journal.filter((entry) => entry.runner === focus.mind.id).slice(-8).reverse()
+    : []
 
   return (
     <div className="flex flex-col gap-4">
@@ -102,54 +208,116 @@ export function RunArcadeLab() {
           />
         </label>
         <label className="flex w-24 flex-col gap-1 text-xs text-muted-foreground">
-          Tours
+          Tirages
           <Input
             type="number"
             min={4}
-            max={maxLength}
-            value={length}
-            aria-label="Nombre de tours"
+            max={maxDraws}
+            value={raceDraws}
+            aria-label="Tirages de course"
             onChange={(event) => {
               const value = Number(event.target.value)
-              if (Number.isFinite(value)) setLength(Math.min(maxLength, Math.max(4, Math.round(value))))
+              if (Number.isFinite(value)) setRaceDraws(Math.min(maxDraws, Math.max(4, Math.round(value))))
             }}
           />
         </label>
-        <Button type="submit">Lancer</Button>
+        <label className="flex w-24 flex-col gap-1 text-xs text-muted-foreground">
+          Minutes
+          <Input
+            type="number"
+            min={0}
+            max={MINUTES_MAX}
+            step={0.5}
+            value={minutes}
+            aria-label="Minutes d’avant-course"
+            onChange={(event) => {
+              const value = Number(event.target.value)
+              if (Number.isFinite(value)) setMinutes(Math.min(MINUTES_MAX, Math.max(0, Math.round(value * 2) / 2)))
+            }}
+          />
+        </label>
+        <Button type="submit" disabled={series.length < 4}>
+          Lancer
+        </Button>
         <Button
           type="button"
           variant="outline"
-          disabled={!race || race.done}
+          disabled={!running}
+          onClick={() => (snapshot.pausedLeftMs != null ? session.resume() : session.pause())}
+        >
+          {snapshot.pausedLeftMs != null ? "Reprendre" : "Pause"}
+        </Button>
+        <Button type="button" variant="outline" disabled={!running} onClick={() => session.skip()}>
+          {snapshot.phase === "avant" ? "Passer à la course" : "Jouer le tour"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!parent}
           onClick={() => {
-            setPlaying(false)
-            setRace((current) => (current ? playTurn(current, track) : current))
+            if (parent) exportChampion(parent)
           }}
         >
-          Tour
+          Exporter le champion
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={!race || race.done}
-          onClick={() => setPlaying((value) => !value)}
-        >
-          {playing && !race?.done ? "Pause" : "Lecture"}
-        </Button>
-        <p className="pb-1 text-sm text-muted-foreground">
-          {loading && series.length < 4
-            ? "Archive en cours de lecture."
-            : race
-              ? `Tour ${played} / ${total}${leader ? ` · meilleur ${leader.mind.name} ${formatCents(leader.cents)}` : ""}`
-              : "Choisissez le nombre de runners, puis lancez."}
-        </p>
       </form>
+
+      <div className="flex flex-col gap-1 text-sm text-muted-foreground" data-testid="run-arcade-status">
+        <p className="text-foreground">
+          {loading && series.length < 4 ? "Archive en cours de lecture." : phaseText(snapshot, remaining)}
+          {leader && snapshot.phase === "course" ? ` · meilleur ${leader.mind.name} ${formatCents(leader.cents)}` : ""}
+        </p>
+        {race && newestYear ? (
+          <p>
+            Archive gratuite : années {newestYear - 1} et {newestYear}, du {formatDrawDate(track[0].date)} au{" "}
+            {formatDrawDate(track[race.start - 1].date)}. Course : {race.end - race.start} tirages, du{" "}
+            {formatDrawDate(track[race.start].date)} au {formatDrawDate(track[race.end - 1].date)}.
+          </p>
+        ) : null}
+        {race ? (
+          <p>
+            Horloge : {snapshot.minutes > 0 ? `${formatDuration(snapshot.minutes * 60_000)} d’avant-course, ` : ""}
+            tranche de {formatDuration(slice)} par tour, course de{" "}
+            {formatDuration(raceDurationMs(race.end - race.start, slice))}.
+            {snapshot.medianMs != null
+              ? ` Appel médian ${formatDuration(snapshot.medianMs)} : ${served ?? 0} runner(s) servi(s) par tranche. Une réponse arrivée après la tranche joue au tour suivant.`
+              : ""}
+          </p>
+        ) : null}
+        {race ? (
+          <p>
+            IA locale : {serviceText(snapshot.ia, snapshot.iaError, snapshot.iaVision ? "prête, vision comprise" : "prête")} ·
+            Brave : {serviceText(snapshot.brave, snapshot.braveError, "prête")} · Neon :{" "}
+            {snapshot.save.state === "ok"
+              ? `champion écrit (${snapshot.save.detail})`
+              : snapshot.save.state === "erreur"
+                ? `écriture refusée : ${snapshot.save.detail}`
+                : snapshot.save.state === "en cours"
+                  ? "écriture du champion"
+                  : "écrit le champion en fin de course"}
+          </p>
+        ) : null}
+        {race && snapshot.parent ? (
+          <p>
+            Génération {snapshot.generation} : enfants de {snapshot.parent.runner} (génération{" "}
+            {snapshot.parent.generation}).
+            {snapshot.setAside > 0
+              ? ` ${snapshot.setAside} version(s) écrite(s) le jour du premier tirage caché ou après restent de côté.`
+              : ""}
+          </p>
+        ) : null}
+      </div>
 
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <li className="text-chart-2">Tangente, en pointillés</li>
         <li className="text-chart-1">Rayon vers le nombre d’or</li>
-        <li className="text-chart-3">Vecteur du pas</li>
-        <li className="text-chart-4">Projection du rang</li>
-        <li>Rail : n1–n5 et e1–e2 annoncés</li>
+        <li className="text-chart-3">Pas d’avant</li>
+        <li className="text-chart-4">Vecteur : la pensée</li>
+        <li>Trait fin : rappel aux sommes et à la décennie</li>
+        <li className="text-chart-4">Projection : la case jouée</li>
+        <li>Rail : sommes et décennies à gauche, rangs à droite</li>
+        <li className="text-[var(--ok)]">Numéro ou étoile trouvé : +2 €</li>
+        <li className="text-chart-2">Somme ou décennie juste</li>
       </ul>
 
       {race?.seenDate ? (
@@ -159,28 +327,94 @@ export function RunArcadeLab() {
       ) : null}
 
       {race?.revealed ? (
-        <p className="text-sm">
-          Arbitre · {formatDrawDate(race.revealed.date)} · {race.revealed.n1} {race.revealed.n2}{" "}
-          {race.revealed.n3} {race.revealed.n4} {race.revealed.n5}
-          <span className="text-muted-foreground"> ★ {race.revealed.e1} {race.revealed.e2}</span>
+        <p className="text-sm" data-testid="run-arcade-referee">
+          Arbitre · {formatDrawDate(race.revealed.date)} · {race.revealed.n1} {race.revealed.n2} {race.revealed.n3}{" "}
+          {race.revealed.n4} {race.revealed.n5}
+          <span className="text-muted-foreground">
+            {" "}
+            ★ {race.revealed.e1} {race.revealed.e2}
+          </span>
         </p>
       ) : null}
 
-      {focus?.thought ? (
-        <section className="rounded-xl border border-primary/50 bg-card p-3">
+      {focus && focusView ? (
+        <section className="rounded-xl border border-primary/50 bg-card p-3" data-testid="run-arcade-focus">
           <header className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-sm font-medium">
-              {focus.mind.name} · {focus.mind.focus} · {formatRatio(focus.mind.ratio)} · {focus.mind.span}
+              {focus.mind.name} · {skillSummary(focus)}
             </h2>
-            <p className="text-sm">{formatCents(focus.cents)}</p>
+            <p className="text-sm">
+              {formatCents(focus.cents)}
+              <span className="text-muted-foreground">
+                {" "}
+                · examen {focus.examCents == null ? "—" : formatCents(focus.examCents)} · {focus.calls} appel(s)
+              </span>
+            </p>
           </header>
+          <div className="mb-2 flex flex-wrap gap-1" role="group" aria-label="Courbe dessinée">
+            {CURVE_KEYS.map((key) => {
+              const active = (focusCurve ?? focus.mind.focus) === key
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setFocusCurve(key)}
+                  className={cn(
+                    "rounded-md border px-1.5 py-0.5 text-[11px]",
+                    active ? "border-chart-4 text-chart-4" : "border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {curveLabel(key)}
+                </button>
+              )
+            })}
+          </div>
           <RunnerUniverse
             runnerId={`${focus.mind.id}-focus`}
-            thought={focus.thought}
-            matched={focus.matched}
+            thought={focusView.draw}
+            matched={focusView.matched}
+            exact={focusView.exact}
             className="h-72"
           />
-          <p className="mt-2 text-sm leading-5">{focus.thought.phrase}</p>
+          {focusView.draw ? <p className="mt-2 text-sm leading-5">{focusView.draw.phrase}</p> : null}
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <div>
+              <h3 className="mb-1 text-xs font-medium text-muted-foreground">Skills et versions</h3>
+              <ul className="flex flex-col gap-1 text-xs">
+                {focus.mind.skills.map((skill) => (
+                  <li key={skill.id}>
+                    <span className="font-medium">{skill.name}</span>
+                    <span className="text-muted-foreground"> · {targetLabel(currentVersion(skill).curve)}</span>
+                    <ul className="ml-3">
+                      {skill.versions.map((version) => (
+                        <li key={version.version} className="text-muted-foreground">
+                          v{version.version} · {version.origin} · coupure{" "}
+                          {version.cutoff ? formatShortDate(version.cutoff) : "aucune"}
+                          {version.examCents != null ? ` · examen ${formatCents(version.examCents)}` : ""} ·{" "}
+                          {version.phrase}
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3 className="mb-1 text-xs font-medium text-muted-foreground">Journal des requêtes</h3>
+              {focusJournal.length ? (
+                <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
+                  {focusJournal.map((entry, index) => (
+                    <li key={`${entry.at}-${index}`}>
+                      {entry.turn != null ? `tour ${entry.turn}` : "avant-course"} · {entry.kind} · coupure{" "}
+                      {entry.cutoff ? formatShortDate(entry.cutoff) : "aucune"} · {entry.detail}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">Aucune requête pour ce runner.</p>
+              )}
+            </div>
+          </div>
         </section>
       ) : null}
 
@@ -191,7 +425,10 @@ export function RunArcadeLab() {
             <button
               key={runner.mind.id}
               type="button"
-              onClick={() => setSelected(runner.mind.id)}
+              onClick={() => {
+                setSelected(runner.mind.id)
+                setFocusCurve(null)
+              }}
               className={cn(
                 "rounded-xl border bg-card p-2 text-left transition-colors hover:border-foreground/30",
                 active ? "border-primary" : "border-border",
@@ -203,13 +440,15 @@ export function RunArcadeLab() {
                 <span className="text-muted-foreground">{formatCents(runner.cents)}</span>
               </span>
               <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                {runner.mind.focus} · {formatRatio(runner.mind.ratio)} · {runner.mind.motion}
+                {curveLabel(runner.mind.focus)} · {skillSummary(runner)} · examen{" "}
+                {runner.examCents == null ? "—" : formatCents(runner.examCents)} · {runner.calls} appel(s)
                 {runner.alive ? "" : " · arrêté"}
               </span>
               <RunnerUniverse
                 runnerId={runner.mind.id}
                 thought={runner.thought}
                 matched={runner.matched}
+                exact={runner.exact}
                 className="mt-1"
               />
               <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
