@@ -95,6 +95,22 @@ export async function saveChampion(record: ChampionRecord): Promise<SaveReply> {
   }
 }
 
+/** Champions déjà écrits, du plus récent au plus ancien. Liste vide si Neon ne répond pas. */
+export async function listChampions(): Promise<ChampionRecord[]> {
+  try {
+    const response = await fetch("/api/brain/run-arcade/champions", { cache: "no-store" })
+    if (!response.ok) return []
+    const body = (await response.json()) as { items?: unknown }
+    if (!Array.isArray(body.items)) return []
+    return body.items.flatMap((item) => {
+      const record = parseChampion(item)
+      return record ? [record] : []
+    })
+  } catch {
+    return []
+  }
+}
+
 /** Dernier champion : celui de Neon, ou la copie du navigateur si elle est plus récente. */
 export async function loadChampion(): Promise<ChampionRecord | null> {
   const local = readLocal()

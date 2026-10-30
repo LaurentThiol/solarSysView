@@ -1,4 +1,4 @@
-import { buildTrack, CURVE_KEYS, type RankPoint } from "./curves"
+import { buildTrack, CURVE_KEYS, type CurveKey, type RankPoint } from "./curves"
 import {
   auditCutoffs,
   baseSkill,
@@ -164,14 +164,24 @@ function dayAfter(iso: string) {
  * Tout le passé est révélé. La date cachée est le lendemain, pour que les versions
  * écrites jusqu’au dernier tirage jouent encore.
  */
-export function proposeNextDraw(champion: ChampionRecord, series: readonly RankPoint[]): Thought | null {
+export function proposeNextDraw(
+  champion: ChampionRecord,
+  series: readonly RankPoint[],
+  focus: CurveKey = "sumNumbers"
+): Thought | null {
   const track = buildTrack(series)
   if (track.length < 2 || champion.skills.length === 0) return null
   const mind: RunnerMind = {
     id: "champion",
     name: champion.runner,
-    focus: "sumNumbers",
+    focus,
     skills: champion.skills,
   }
-  return think(mind, track, { hiddenDate: dayAfter(track[track.length - 1].date) })
+  return think(mind, track, { hiddenDate: dayAfter(track[track.length - 1].date), focus })
+}
+
+/** Dernier tirage révélé de l’archive n−1 et n. Le nul gris le recopie. */
+export function lastRevealedDraw(series: readonly RankPoint[]): RankPoint | null {
+  const track = buildTrack(series)
+  return track.length > 0 ? track[track.length - 1] : null
 }

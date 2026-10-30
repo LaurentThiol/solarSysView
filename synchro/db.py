@@ -1744,11 +1744,23 @@ def insert_run_arcade_champion(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def latest_run_arcade_champion() -> dict[str, Any] | None:
+    rows = list_run_arcade_champions(1)
+    return rows[0] if rows else None
+
+
+def list_run_arcade_champions(limit: int = 20) -> list[dict[str, Any]]:
+    capped = max(1, min(50, int(limit)))
     with connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM run_arcade_champions ORDER BY created_at DESC, id DESC LIMIT 1")
-            row = cur.fetchone()
-            return dict(row) if row else None
+            cur.execute(
+                """
+                SELECT * FROM run_arcade_champions
+                ORDER BY created_at DESC, id DESC
+                LIMIT %s
+                """,
+                (capped,),
+            )
+            return [dict(row) for row in cur.fetchall()]
 
 
 def _llm_usage_created_at(value: Any) -> datetime | None:

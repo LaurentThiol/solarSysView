@@ -7,11 +7,11 @@ import { RunnerUniverse } from "@/components/brain/run-arcade-universe"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
-import { proposeNextDraw, type ChampionRecord } from "@/lib/run-arcade/champion"
-import { askBrave, askIa, exportChampion, loadChampion, readChampionFile, saveChampion } from "@/lib/run-arcade/client"
+import { lastRevealedDraw, proposeNextDraw, type ChampionRecord } from "@/lib/run-arcade/champion"
+import { askBrave, askIa, exportChampion, listChampions, loadChampion, readChampionFile, saveChampion } from "@/lib/run-arcade/client"
 import { formatDuration, raceDurationMs, servedPerSlice } from "@/lib/run-arcade/clock"
-import { CURVE_KEYS, curveLabel, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
-import { createSession, MIN_SLICE_MS, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
+import { CURVE_KEYS, curveLabel, curveValues, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
+import { createSession, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
 import { currentVersion, targetLabel } from "@/lib/run-arcade/skills"
 import {
   exactKeys,
@@ -86,7 +86,8 @@ function phaseText(snapshot: SessionSnapshot, remaining: number | null) {
   const left = remaining != null ? formatDuration(remaining) : "—"
   if (snapshot.phase === "avant") return `Génération ${snapshot.generation} · avant-course, ${left} restantes${pause}`
   if (snapshot.phase === "course") {
-    return `Génération ${snapshot.generation} · tour ${race.cursor - race.start + 1} / ${total}, tranche ${left}${pause}`
+    const tour = `Génération ${snapshot.generation} · tour ${race.cursor - race.start + 1} / ${total}`
+    return snapshot.minutes > 0 ? `${tour}, tranche ${left}${pause}` : `${tour}${pause}`
   }
   if (snapshot.phase === "fin") {
     const champion = snapshot.champion
@@ -128,8 +129,10 @@ export function RunArcadeLab() {
   const [minutes, setMinutes] = useState(MINUTES_DEFAULT)
   const [selected, setSelected] = useState<string | null>(null)
   const [focusCurve, setFocusCurve] = useState<CurveKey | null>(null)
+  const [nextCurve, setNextCurve] = useState<CurveKey>("sumNumbers")
   const [stored, setStored] = useState<ChampionRecord | null>(null)
   const [imported, setImported] = useState<ChampionRecord | null>(null)
+  const [history, setHistory] = useState<ChampionRecord[]>([])
   const [importError, setImportError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -139,6 +142,9 @@ export function RunArcadeLab() {
     let alive = true
     void loadChampion().then((record) => {
       if (alive) setStored(record)
+    })
+    void listChampions().then((items) => {
+      if (alive) setHistory(items)
     })
     return () => {
       alive = false
@@ -153,8 +159,8 @@ export function RunArcadeLab() {
     snapshot.pausedLeftMs ?? (snapshot.phaseEndsAt != null && now > 0 ? Math.max(0, snapshot.phaseEndsAt - now) : null)
   const leader = race ? leaderOf(race.runners) : null
   const focus = race?.runners.find((runner) => runner.mind.id === selected) ?? null
-  const slice = Math.max(snapshot.sliceMs, MIN_SLICE_MS)
-  const served = servedPerSlice(snapshot.sliceMs, snapshot.medianMs, 1)
+  const slice = snapshot.minutes > 0 ? snapshot.sliceMs : 0
+  const served = servedPerSlice(slice, snapshot.medianMs, 1)
   const maxDraws = Math.max(4, Math.min(120, series.length - 2))
   const newestYear = track.length ? Number(track[track.length - 1].date.slice(0, 4)) : null
 
@@ -184,7 +190,14 @@ export function RunArcadeLab() {
     session.launch({ count, draws: raceDraws, minutes, series, champion: parent })
   }
 
-  const proposal = useMemo(() => (parent && series.length >= 2 ? proposeNextDraw(parent, series) : null), [parent, series])
+  const proposal = useMemo(
+    () => (parent && series.length >= 2 ? proposeNextDraw(parent, series, nextCurve) : null),
+    [parent, series, nextCurve]
+  )
+  const persisted = useMemo(() => {
+    const last = lastRevealedDraw(series)
+    return last ? { date: last.date, values: curveValues(last), point: last } : null
+  }, [series])
 
   function importFile(file: File) {
     const reader = new FileReader()
@@ -312,12 +325,17 @@ export function RunArcadeLab() {
         ) : null}
         {race ? (
           <p>
-            Horloge : {snapshot.minutes > 0 ? `${formatDuration(snapshot.minutes * 60_000)} d’avant-course, ` : ""}
-            tranche de {formatDuration(slice)} par tour, course de{" "}
-            {formatDuration(raceDurationMs(race.end - race.start, slice))}.
-            {snapshot.medianMs != null
-              ? ` Appel médian ${formatDuration(snapshot.medianMs)} : ${served ?? 0} runner(s) servi(s) par tranche. Une réponse arrivée après la tranche joue au tour suivant.`
-              : ""}
+            {snapshot.minutes > 0 ? (
+              <>
+                Horloge : {formatDuration(snapshot.minutes * 60_000)} d’avant-course, tranche de {formatDuration(slice)}{" "}
+                par tour, course de {formatDuration(raceDurationMs(race.end - race.start, slice))}.
+                {snapshot.medianMs != null
+                  ? ` Appel médian ${formatDuration(snapshot.medianMs)} : ${served ?? 0} runner(s) servi(s) par tranche. Une réponse arrivée après la tranche joue au tour suivant.`
+                  : ""}
+              </>
+            ) : (
+              "Lecture : les tours s’enchaînent, sans appel."
+            )}
           </p>
         ) : null}
         {race ? (
@@ -344,6 +362,41 @@ export function RunArcadeLab() {
         ) : null}
       </div>
 
+      {history.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <h2 className="text-xs font-medium text-muted-foreground">Champions déjà écrits</h2>
+          <ul className="flex flex-col gap-1" data-testid="run-arcade-history">
+            {history.map((item) => {
+              const active =
+                parent?.generation === item.generation &&
+                parent.runner === item.runner &&
+                parent.savedAt === item.savedAt
+              return (
+                <li key={`${item.generation}-${item.runner}-${item.savedAt}`}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportError(null)
+                      setImported(item)
+                    }}
+                    className={cn(
+                      "w-full rounded-md border px-2 py-1 text-left text-xs",
+                      active ? "border-primary" : "border-border text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Génération {item.generation} · {item.runner} · course {formatCents(item.cents)}
+                    {item.examCents != null ? ` · examen ${formatCents(item.examCents)}` : ""}
+                    {item.raceFrom && item.raceTo
+                      ? ` · ${formatShortDate(item.raceFrom)} – ${formatShortDate(item.raceTo)}`
+                      : ""}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      ) : null}
+
       {importError ? <p className="text-sm text-destructive">{importError}</p> : null}
 
       {proposal && parent ? (
@@ -358,19 +411,60 @@ export function RunArcadeLab() {
               {parent.examCents != null ? ` · examen ${formatCents(parent.examCents)}` : ""}
             </p>
           </header>
-          <p className="text-lg tracking-wide">
-            {proposal.guess.n1} {proposal.guess.n2} {proposal.guess.n3} {proposal.guess.n4} {proposal.guess.n5}
-            <span className="text-muted-foreground">
-              {" "}
-              ★ {proposal.guess.e1} {proposal.guess.e2}
-            </span>
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Somme des numéros {proposal.cases.sumNumbers} · somme des étoiles {proposal.cases.sumStars} · décennies{" "}
-            {proposal.cases.d0} {proposal.cases.d1} {proposal.cases.d2} {proposal.cases.d3} {proposal.cases.d4}
-          </p>
-          <p className="mt-1 text-sm leading-5">{proposal.draw.phrase}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <div className="mb-2 flex flex-wrap gap-1" role="group" aria-label="Courbe du tirage suivant">
+            {CURVE_KEYS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setNextCurve(key)}
+                className={cn(
+                  "rounded-md border px-1.5 py-0.5 text-[11px]",
+                  nextCurve === key ? "border-chart-4 text-chart-4" : "border-border text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {curveLabel(key)}
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(16rem,0.8fr)]">
+            <div>
+              <RunnerUniverse runnerId="champion-next" thought={proposal.draw} className="h-64" />
+              <p className="mt-2 text-lg tracking-wide">
+                {proposal.guess.n1} {proposal.guess.n2} {proposal.guess.n3} {proposal.guess.n4} {proposal.guess.n5}
+                <span className="text-muted-foreground">
+                  {" "}
+                  ★ {proposal.guess.e1} {proposal.guess.e2}
+                </span>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Somme des numéros {proposal.cases.sumNumbers} · somme des étoiles {proposal.cases.sumStars} · décennies{" "}
+                {proposal.cases.d0} {proposal.cases.d1} {proposal.cases.d2} {proposal.cases.d3} {proposal.cases.d4}
+              </p>
+              <p className="mt-1 text-sm leading-5">{proposal.draw.phrase}</p>
+            </div>
+            {persisted ? (
+              <div className="rounded-lg border border-dashed p-3 text-sm" data-testid="run-arcade-persist">
+                <h3 className="font-medium">Persiste</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Le nul gris recopie le dernier tirage révélé, {formatDrawDate(persisted.date)}.
+                </p>
+                <p className="mt-2 tracking-wide">
+                  {persisted.point.n1} {persisted.point.n2} {persisted.point.n3} {persisted.point.n4}{" "}
+                  {persisted.point.n5}
+                  <span className="text-muted-foreground">
+                    {" "}
+                    ★ {persisted.point.e1} {persisted.point.e2}
+                  </span>
+                </p>
+                <p className="text-muted-foreground">
+                  Somme des numéros {persisted.values.sumNumbers} · somme des étoiles {persisted.values.sumStars} ·
+                  décennies {persisted.values.d0} {persisted.values.d1} {persisted.values.d2} {persisted.values.d3}{" "}
+                  {persisted.values.d4}
+                </p>
+              </div>
+            ) : null}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
             Lu sur toute l’archive révélée, jusqu’au {formatDrawDate(proposal.draw.seenDate)}. Le tirage suivant n’est
             pas dans la base. Lancer reprend ce champion pour la génération suivante.
           </p>

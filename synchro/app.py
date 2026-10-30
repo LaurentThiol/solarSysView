@@ -1855,6 +1855,18 @@ def create_app() -> FastAPI:
         except Exception:
             return
 
+    @app.get("/api/brain/run-arcade/champions")
+    def run_arcade_champions(limit: int = Query(20, ge=1, le=50)) -> dict[str, Any]:
+        from synchro.run_arcade import champion_from_row
+
+        if not db.database_configured():
+            raise HTTPException(503, "Neon non configuré")
+        try:
+            rows = db.list_run_arcade_champions(limit)
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return {"ok": True, "items": [_json(champion_from_row(row)) for row in rows]}
+
     @app.get("/api/brain/run-arcade/champion")
     def run_arcade_champion() -> dict[str, Any]:
         from synchro.run_arcade import champion_from_row

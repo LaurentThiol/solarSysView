@@ -108,6 +108,18 @@ function skillReply(curve: string): IaReply {
   }
 }
 
+test("Y = 0 starts the race at reading pace without a call slice", async () => {
+  const { ia, session } = harness(1)
+  session.launch({ count: 2, draws: 4, minutes: 0, series: series(40), champion: null })
+  await flush()
+  const snap = session.getSnapshot()
+  assert.equal(snap.phase, "course")
+  assert.equal(snap.minutes, 0)
+  assert.equal(snap.sliceMs, 0)
+  assert.equal(ia.length, 0)
+  session.dispose()
+})
+
 test("the clock shares Y minutes between the race draws and rotates the order", () => {
   assert.equal(sliceMs(10, 25), 24_000)
   assert.equal(sliceMs(0, 25), 0)

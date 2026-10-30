@@ -100,6 +100,24 @@ def test_champion_round_trip(monkeypatch) -> None:
     assert champion_from_row({"id": 3, "payload": {"runner": "R1"}}) == {"runner": "R1", "id": 3}
 
 
+def test_champions_list_is_newest_first(monkeypatch) -> None:
+    older = {"id": 1, "payload": {**_champion(), "generation": 1, "runner": "R1"}}
+    newer = {"id": 2, "payload": _champion()}
+    monkeypatch.setattr("synchro.db.database_configured", lambda: True)
+    monkeypatch.setattr("synchro.db.list_run_arcade_champions", lambda limit: [newer, older][:limit])
+    client = TestClient(create_app())
+    body = client.get("/api/brain/run-arcade/champions").json()
+    assert body["ok"] is True
+    assert [item["runner"] for item in body["items"]] == ["R3", "R1"]
+    assert body["items"][0]["id"] == 2
+    assert client.get("/api/brain/run-arcade/champions?limit=1").json()["items"][0]["generation"] == 2
+
+
+def test_champions_list_needs_neon(monkeypatch) -> None:
+    monkeypatch.setattr("synchro.db.database_configured", lambda: False)
+    assert TestClient(create_app()).get("/api/brain/run-arcade/champions").status_code == 503
+
+
 def test_champion_rejects_an_empty_skill_list(monkeypatch) -> None:
     monkeypatch.setattr("synchro.db.database_configured", lambda: True)
     client = TestClient(create_app())

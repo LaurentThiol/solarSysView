@@ -320,6 +320,9 @@ test("the champion proposes the draw after the last one in the archive", () => {
   })
   const held = proposeNextDraw({ ...record, skills: [late] }, rows)
   assert.deepEqual(held?.guess, proposal.guess)
+  const otherCurve = proposeNextDraw(record, rows, "n3")
+  assert.equal(otherCurve?.draw.focus, "n3")
+  assert.deepEqual(otherCurve?.guess, proposal.guess)
 })
 
 test("an IA answer is one JSON action with known fields", () => {
