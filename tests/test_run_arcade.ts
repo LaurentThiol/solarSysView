@@ -9,7 +9,7 @@ import {
   proposeNextDraw,
   setAsideCount,
 } from "../src/lib/run-arcade/champion.ts"
-import { decadeProfile, fitProfileToSum, placeStars, reconcile, sumRange } from "../src/lib/run-arcade/coherence.ts"
+import { placeStars, reconcile } from "../src/lib/run-arcade/coherence.ts"
 import { buildTrack, curveValues, CURVE_KEYS, type CurveValues } from "../src/lib/run-arcade/curves.ts"
 import { EXAM_WINDOW, examine, examStart, passesExam, promptPast } from "../src/lib/run-arcade/examen.ts"
 import { BRAVE_EXAMPLE, buildPrompt, parseAction, SKILL_EXAMPLE } from "../src/lib/run-arcade/prompt.ts"
@@ -105,21 +105,13 @@ test("the track keeps calendar years n−1 and n", () => {
   )
 })
 
-test("the sum wins over the decade, the decade over the ranks", () => {
-  assert.deepEqual(decadeProfile([2.6, 1.2, 0.7, 0.4, 0.1], [1, 1, 1, 1, 1]).reduce((a, b) => a + b, 0), 5)
-  const crowded = [5, 0, 0, 0, 0]
-  assert.deepEqual(sumRange(crowded), { min: 15, max: 40 })
-  const fitted = fitProfileToSum(crowded, 150)
-  const range = sumRange(fitted)
-  assert.ok(range.min <= 150 && range.max >= 150)
-  assert.equal(fitted.reduce((a, b) => a + b, 0), 5)
-
+test("the sum wins, and the ranks stay near the thoughts instead of the decade edges", () => {
   for (let seed = 0; seed < 200; seed += 1) {
     const tips = {} as CurveValues
     for (const key of CURVE_KEYS) tips[key] = ((seed * 37 + key.length * 11) % 97) - 20
     tips.sumNumbers = 15 + ((seed * 53) % 226)
     tips.sumStars = 3 + ((seed * 7) % 21)
-    const out = reconcile(tips, [1, 1, 1, 1, 1])
+    const out = reconcile(tips)
     const numbers = out.numbers
     assert.equal(numbers.length, 5)
     assert.deepEqual(numbers, [...numbers].sort((a, b) => a - b))
@@ -136,6 +128,22 @@ test("the sum wins over the decade, the decade over the ranks", () => {
   }
   assert.deepEqual(placeStars([4, 9], 13), [4, 9])
   assert.deepEqual(placeStars([4, 9], 3), [1, 2])
+})
+
+test("n1 to n5 are not pinned to 10, 20, 30, 40 or 50", () => {
+  const flat = {} as CurveValues
+  for (const key of CURVE_KEYS) flat[key] = 1
+  flat.sumNumbers = 140
+  flat.sumStars = 15
+  flat.n1 = 12.4
+  flat.n2 = 21.8
+  flat.n3 = 31.2
+  flat.n4 = 35.6
+  flat.n5 = 44.1
+  assert.deepEqual(reconcile(flat).numbers, [11, 21, 30, 35, 43])
+
+  const shared = { ...flat, n1: 35.6, n2: 35.6, n3: 35.6, n4: 35.6, n5: 35.6 }
+  assert.deepEqual(reconcile(shared).numbers, [26, 27, 28, 29, 30])
 })
 
 test("a number or a star pays 2 € wherever its rank", () => {
@@ -182,6 +190,16 @@ test("the hidden draw and the draws after it stay out of the thought", () => {
     assert.deepEqual(runner.guess, twin?.guess)
   }
   assert.equal(other.revealed?.date, "2099-02-01")
+})
+
+test("lignes reads each rank on its own window, not the whole grid", () => {
+  const past = series(8)
+  const params: SkillParams = { curve: "*", gesture: "or", ratio: 0.382, span: "lignes", window: 8, days: null }
+  const thought = think(mindWith(params, "n1"), past)
+  assert.ok(thought.tips.n1 < 10)
+  assert.ok(thought.tips.n5 > 30)
+  assert.ok(thought.guess.n1 < 15)
+  assert.ok(thought.guess.n5 > 30)
 })
 
 test("the vector is the thought, the projection is the case after the totals", () => {

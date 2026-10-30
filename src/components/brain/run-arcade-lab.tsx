@@ -476,7 +476,7 @@ export function RunArcadeLab() {
         <li className="text-chart-1">Rayon vers le nombre d’or</li>
         <li className="text-chart-3">Pas d’avant</li>
         <li className="text-chart-4">Vecteur : la pensée</li>
-        <li>Trait fin : rappel aux sommes et à la décennie</li>
+        <li>Trait fin : rappel à la somme</li>
         <li className="text-chart-4">Projection : la case jouée</li>
         <li>Rail : sommes et décennies à gauche, rangs à droite</li>
         <li className="text-[var(--ok)]">Numéro ou étoile trouvé : +2 €</li>

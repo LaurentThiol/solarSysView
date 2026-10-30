@@ -1,120 +1,60 @@
-import { clampInt, NUMBER_SUM_MAX, NUMBER_SUM_MIN, STAR_POOL, STAR_SUM_MAX, STAR_SUM_MIN } from "@/lib/pronostic/bounds"
-
+import { decadeCounts } from "@/lib/grid-shape"
 import {
-  DECADE_BANDS,
-  DECADE_KEYS,
-  NUMBER_KEYS,
-  type CurveValues,
-} from "./curves"
+  clampInt,
+  NUMBER_POOL,
+  NUMBER_SUM_MAX,
+  NUMBER_SUM_MIN,
+  STAR_POOL,
+  STAR_SUM_MAX,
+  STAR_SUM_MIN,
+} from "@/lib/pronostic/bounds"
 
-type Band = { lo: number; hi: number }
-
-const DRAWN = 5
+import { NUMBER_KEYS, type CurveValues } from "./curves"
 
 function total(values: readonly number[]) {
   return values.reduce((sum, value) => sum + value, 0)
 }
 
-/** Cinq comptes entiers de 0 à 5 dont la somme vaut 5, au plus près des pointes. */
-export function decadeProfile(tips: readonly number[], fallback: readonly number[]): number[] {
-  const clamped = tips.map((value) => (Number.isFinite(value) ? Math.min(DRAWN, Math.max(0, value)) : 0))
-  const base = total(clamped) > 0 ? clamped : fallback.map((value) => Math.max(0, value))
-  const mass = total(base)
-  if (mass <= 0) return [1, 1, 1, 1, 1]
-  const scaled = base.map((value) => (value / mass) * DRAWN)
-  const counts = scaled.map((value) => Math.floor(value))
-  let left = DRAWN - total(counts)
-  const order = scaled
-    .map((value, index) => ({ index, frac: value - Math.floor(value) }))
-    .sort((a, b) => b.frac - a.frac || a.index - b.index)
-  for (const { index } of order) {
-    if (left <= 0) break
-    counts[index] += 1
-    left -= 1
-  }
-  return counts
+const NUMBER_DRAW = 5
+
+function openHi(index: number) {
+  return NUMBER_POOL - (NUMBER_DRAW - 1 - index)
 }
 
-/** Somme la plus basse et la plus haute que ce profil permet. */
-export function sumRange(counts: readonly number[]) {
-  let min = 0
-  let max = 0
-  counts.forEach((count, index) => {
-    const band = DECADE_BANDS[index]
-    min += count * band.lo + (count * (count - 1)) / 2
-    max += count * band.hi - (count * (count - 1)) / 2
-  })
-  return { min, max }
+function stepBounds(placed: readonly number[], index: number) {
+  const lo = index === 0 ? 1 : placed[index - 1] + 1
+  const hi = index === placed.length - 1 ? NUMBER_POOL : placed[index + 1] - 1
+  return { lo, hi }
 }
 
 /**
- * La somme gagne sur la décennie. Hors de portée, un compte glisse vers la bande voisine,
- * du côté qui rapproche, jusqu’à ce que la somme soit atteignable.
+ * Cinq numéros distincts, triés, dont la somme vaut la cible.
+ * Chaque pas réduit le carré de l’écart à la pointe : l’écart de somme se partage,
+ * un rang ne va pas jusqu’au bord 10, 20, 30, 40 ou 50 pour absorber tout le reste.
  */
-export function fitProfileToSum(counts: readonly number[], target: number) {
-  const out = [...counts]
-  for (let guard = 0; guard < 64; guard += 1) {
-    const { min, max } = sumRange(out)
-    if (target > max) {
-      const from = out.findIndex((count, index) => count > 0 && index < out.length - 1)
-      if (from < 0) break
-      out[from] -= 1
-      out[from + 1] += 1
-      continue
-    }
-    if (target < min) {
-      let from = -1
-      for (let index = out.length - 1; index > 0; index -= 1) {
-        if (out[index] > 0) {
-          from = index
-          break
-        }
-      }
-      if (from < 0) break
-      out[from] -= 1
-      out[from - 1] += 1
-      continue
-    }
-    break
-  }
-  return out
-}
-
-function bandsOf(counts: readonly number[]): Band[] {
-  const bands: Band[] = []
-  counts.forEach((count, index) => {
-    for (let j = 0; j < count; j += 1) bands.push(DECADE_BANDS[index])
-  })
-  return bands
-}
-
-/** Cinq numéros triés, dans les bandes du profil, dont la somme vaut la cible. */
-export function placeNumbers(counts: readonly number[], tips: readonly number[], target: number) {
-  const bands = bandsOf(counts)
-  const sortedTips = [...tips].map((value) => (Number.isFinite(value) ? value : 25)).sort((a, b) => a - b)
+export function placeNumbers(tips: readonly number[], target: number) {
+  const sortedTips = Array.from({ length: NUMBER_DRAW }, (_, index) => {
+    const value = tips[index]
+    return Number.isFinite(value) ? value : 25
+  }).sort((a, b) => a - b)
   const placed: number[] = []
-  let cursor = 0
-  counts.forEach((count, index) => {
-    const band = DECADE_BANDS[index]
-    for (let j = 0; j < count; j += 1) {
-      const lo = Math.max(band.lo + j, j > 0 ? placed[cursor - 1] + 1 : band.lo)
-      const hi = band.hi - (count - 1 - j)
-      placed.push(clampInt(sortedTips[cursor], lo, Math.max(lo, hi)))
-      cursor += 1
-    }
-  })
+  for (let index = 0; index < NUMBER_DRAW; index += 1) {
+    const lo = placed.length === 0 ? 1 : placed[placed.length - 1] + 1
+    const hi = Math.max(lo, openHi(index))
+    placed.push(clampInt(sortedTips[index], lo, hi))
+  }
+  const goal = clampInt(target, NUMBER_SUM_MIN, NUMBER_SUM_MAX)
   let sum = total(placed)
-  for (let guard = 0; guard < 2000 && sum !== target; guard += 1) {
-    const dir = target > sum ? 1 : -1
+  for (let guard = 0; guard < 2000 && sum !== goal; guard += 1) {
+    const dir = goal > sum ? 1 : -1
     let best = -1
     let bestCost = Number.POSITIVE_INFINITY
     for (let index = 0; index < placed.length; index += 1) {
+      const { lo, hi } = stepBounds(placed, index)
       const next = placed[index] + dir
-      const band = bands[index]
-      if (next < band.lo || next > band.hi) continue
-      if (index > 0 && next <= placed[index - 1]) continue
-      if (index < placed.length - 1 && next >= placed[index + 1]) continue
-      const cost = Math.abs(next - sortedTips[index]) - Math.abs(placed[index] - sortedTips[index])
+      if (next < lo || next > hi) continue
+      const gap = placed[index] - sortedTips[index]
+      const cost = dir * (2 * gap + dir)
       if (cost < bestCost - 1e-9) {
         best = index
         bestCost = cost
@@ -153,25 +93,19 @@ export type Reconciled = {
 }
 
 /**
- * Rappel aux totales. Ordre : la somme des numéros, puis la décennie, puis n1–n5.
+ * Rappel à la somme. n1–n5 restent près de leur pensée : la décennie du rail
+ * est celle de ces numéros, elle ne les cale pas sur 10, 20, 30, 40 ou 50.
  * Les étoiles suivent la somme des étoiles.
  */
-export function reconcile(tips: CurveValues, fallbackDecades: readonly number[]): Reconciled {
+export function reconcile(tips: CurveValues): Reconciled {
   const sumNumbers = clampInt(tips.sumNumbers, NUMBER_SUM_MIN, NUMBER_SUM_MAX)
   const sumStars = clampInt(tips.sumStars, STAR_SUM_MIN, STAR_SUM_MAX)
-  const profile = fitProfileToSum(
-    decadeProfile(
-      DECADE_KEYS.map((key) => tips[key]),
-      fallbackDecades
-    ),
-    sumNumbers
-  )
   const numbers = placeNumbers(
-    profile,
     NUMBER_KEYS.map((key) => tips[key]),
     sumNumbers
   )
   const stars = placeStars([tips.e1, tips.e2], sumStars)
+  const decades = decadeCounts(numbers)
   return {
     numbers,
     stars,
@@ -185,11 +119,11 @@ export function reconcile(tips: CurveValues, fallbackDecades: readonly number[])
       n5: numbers[4],
       e1: stars[0],
       e2: stars[1],
-      d0: profile[0],
-      d1: profile[1],
-      d2: profile[2],
-      d3: profile[3],
-      d4: profile[4],
+      d0: decades[0],
+      d1: decades[1],
+      d2: decades[2],
+      d3: decades[3],
+      d4: decades[4],
     },
   }
 }

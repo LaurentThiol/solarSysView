@@ -15,7 +15,7 @@ export default function RunArcadePage() {
     <PageShell
       wide
       title="runArcade"
-      subtitle="Chaque runner a son univers. Après l’avant-course, chaque tour lui laisse une tranche d’horloge pour penser : sommes, décennie, rangs. Il dessine sa tangente, son rayon, son vecteur et la case jouée. Le geste soir aligne le mardi et le vendredi, à trois ou quatre jours."
+      subtitle="Chaque runner a son univers. Après l’avant-course, chaque tour lui laisse une tranche d’horloge pour penser : somme, puis rangs. Il dessine sa tangente, son rayon, son vecteur et la case jouée, près de sa pensée. n1 à n5 ne se calent pas sur 10, 20, 30, 40 ou 50. Le geste soir aligne le mardi et le vendredi, à trois ou quatre jours."
     >
       <Suspense fallback={null}>
         <RunArcadeLab />

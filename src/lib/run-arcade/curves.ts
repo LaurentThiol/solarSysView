@@ -33,14 +33,6 @@ export type CurveMeta = {
   hi: number
 }
 
-export const DECADE_BANDS = [
-  { lo: 1, hi: 10 },
-  { lo: 11, hi: 20 },
-  { lo: 21, hi: 30 },
-  { lo: 31, hi: 40 },
-  { lo: 41, hi: 50 },
-] as const
-
 /** Colonnes du rail : totales et décennies à gauche, rangs à droite. */
 export const RAIL_LEFT: readonly CurveKey[] = [...SUM_KEYS, ...DECADE_KEYS]
 export const RAIL_RIGHT: readonly CurveKey[] = [...RANK_KEYS]

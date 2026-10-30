@@ -63,7 +63,7 @@ export function buildPrompt(input: PromptInput) {
   const system = [
     `Tu es ${input.mind.name}, un runner de runArcade.`,
     "Tu cours sur des courbes EuroMillions déjà révélées : Σn (somme des 5 numéros, 15 à 240), Σ★ (somme des 2 étoiles, 3 à 23), n1 à n5, e1 et e2, d0 à d4 (numéros par décennie 1–10 … 41–50, leur somme vaut 5).",
-    "À chaque tirage, tu dessines un vecteur par courbe. Les sommes passent d’abord, puis la décennie, puis les rangs : la case jouée est ramenée sur les totales.",
+    "À chaque tirage, tu dessines un vecteur par courbe. La somme passe d’abord, puis les rangs : la case jouée reste près de la pensée et la somme l’ajuste. Elle ne se cale pas sur 10, 20, 30, 40 ou 50. La décennie affichée est celle des numéros joués.",
     "Tu paies 2,50 € par tour. Chaque numéro trouvé parmi les cinq boules rapporte 2 €, chaque étoile trouvée parmi les deux étoiles rapporte 2 €, quel que soit le rang.",
     "Réponds par un seul objet JSON, sans texte autour. Deux actions, chacune déjà valide :",
     `Skill : ${JSON.stringify(SKILL_EXAMPLE)}`,

@@ -1,0 +1,9 @@
+{
+  "slug": "run-arcade-rangs-dizaines-bdc4",
+  "happened_on": "2026-10-30",
+  "area": "runArcade",
+  "title": "n1 à n5 ne se calent plus sur 10, 20, 30, 40, 50",
+  "body": "Sur le rail d’un runner, n1 à n5 restent près de la pensée de leur rang. L’écart entre cette pensée et la somme des numéros se répartit sur les cinq cases : une pensée à 12, 22 ou 32 reste dans ces eaux-là. Le geste entre les lignes vise la fenêtre du rang dessiné, donc n1 et n5 ne visent plus le même niveau. La décennie affichée compte les numéros joués. Les étoiles suivent toujours la somme des étoiles. Le tour coûte toujours 2,50 € et un numéro trouvé rapporte toujours 2 €.",
+  "pr_number": null,
+  "pr_url": null
+}

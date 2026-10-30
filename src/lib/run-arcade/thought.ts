@@ -169,11 +169,6 @@ export function spanFor(params: SkillParams, rows: readonly CurveValues[], key: 
       const hi = Math.max(...window.map((row) => row.e2))
       return { lo, hi: Math.max(hi, lo + 1) }
     }
-    if ((NUMBER_KEYS as readonly string[]).includes(key)) {
-      const lo = Math.min(...window.map((row) => row.n1))
-      const hi = Math.max(...window.map((row) => row.n5))
-      return { lo, hi: Math.max(hi, lo + 1) }
-    }
     const lo = Math.min(...window.map((row) => row[key]))
     const hi = Math.max(...window.map((row) => row[key]))
     return { lo, hi: Math.max(hi, lo + 1) }
@@ -224,11 +219,7 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
   const rows = past.map(curveValues)
   const tips = {} as CurveValues
   for (const key of CURVE_KEYS) tips[key] = tipFor(paramsFor(mind, key, hiddenDate), past, rows, key, hiddenDate)
-  const lastRow = rows[rows.length - 1]
-  const reconciled = reconcile(
-    tips,
-    DECADE_KEYS.map((key) => lastRow[key])
-  )
+  const reconciled = reconcile(tips)
   const guess = guessOf(reconciled.numbers, reconciled.stars)
 
   const focus = options.focus ?? mind.focus
