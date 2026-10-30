@@ -1,20 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { liveEnv } from "@/lib/env-file"
-import { ollamaNumCtx } from "@/lib/ia/local-options"
 import { isNativeOllamaKind, localChatCompletionsUrl, localNativeChatUrl } from "@/lib/ia/local-url"
 import { llmFetch } from "@/lib/ia/loopback-fetch"
 import { pickLocalTextModel, pickLocalVisionModel } from "@/lib/ia/models"
 import { probeLocalLlm } from "@/lib/ia/providers"
 import { recordLlmUsage } from "@/lib/ia/record-usage"
-import { ollamaDeltaText, openaiDeltaText } from "@/lib/ia/sse"
+import { localThinkText, localThinkTokens, requestLocalThink } from "@/lib/run-arcade/local-call"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-/** Une action JSON tient en quelques centaines de jetons. */
-const PREDICT = 320
-const TEMPERATURE = 0.2
 const TIMEOUT_MS = 120_000
 const IMAGE_MAX = 3_000_000
 
@@ -59,42 +55,43 @@ export async function POST(request: NextRequest) {
   const started = Date.now()
   try {
     const url = native ? localNativeChatUrl(probe.host) : localChatCompletionsUrl(probe.host)
-    const payload = native
-      ? {
-          model,
-          stream: false,
-          format: "json",
-          keep_alive: "30m",
-          messages,
-          options: { num_ctx: ollamaNumCtx(), num_predict: PREDICT, temperature: TEMPERATURE, seed },
-        }
-      : {
-          model,
-          stream: false,
-          temperature: TEMPERATURE,
-          seed,
-          max_tokens: PREDICT,
-          response_format: { type: "json_object" },
-          messages,
-        }
-    const response = await llmFetch(
-      url,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      },
-      TIMEOUT_MS
-    )
-    const raw = await response.text()
-    if (!response.ok) throw new Error(`LLM local HTTP ${response.status}${raw ? ` · ${raw.slice(0, 160)}` : ""}`)
-    const parsed = JSON.parse(raw) as unknown
-    const text = (native ? ollamaDeltaText(parsed) : openaiDeltaText(parsed)).trim()
+    const parsed = await requestLocalThink({ native, model, messages, seed }, async (payload) => {
+      const response = await llmFetch(
+        url,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        },
+        TIMEOUT_MS
+      )
+      return { ok: response.ok, status: response.status, text: await response.text() }
+    })
+    const text = localThinkText(native, parsed)
     if (!text) throw new Error("réponse vide")
     const latencyMs = Date.now() - started
-    void recordLlmUsage({ surface: "brain", provider: "local", model, ok: true, latencyMs })
-    return NextResponse.json({ ok: true, text, latencyMs, model, vision: Boolean(visionModel) })
+    const tokens = localThinkTokens(parsed, text, `${system}\n${user}`, started, started + latencyMs)
+    void recordLlmUsage({
+      surface: "brain",
+      provider: "local",
+      model,
+      ok: true,
+      promptTokens: tokens.promptTokens,
+      completionTokens: tokens.completionTokens,
+      estimated: tokens.estimated,
+      latencyMs,
+    })
+    return NextResponse.json({
+      ok: true,
+      text,
+      latencyMs,
+      model,
+      vision: Boolean(visionModel),
+      promptTokens: tokens.promptTokens,
+      completionTokens: tokens.completionTokens,
+      estimated: tokens.estimated,
+    })
   } catch (error) {
     const latencyMs = Date.now() - started
     const message = error instanceof Error ? error.message : "échec"

@@ -12,7 +12,7 @@ import {
 import { decadeProfile, fitProfileToSum, placeStars, reconcile, sumRange } from "../src/lib/run-arcade/coherence.ts"
 import { buildTrack, curveValues, CURVE_KEYS, type CurveValues } from "../src/lib/run-arcade/curves.ts"
 import { EXAM_WINDOW, examine, examStart, passesExam, promptPast } from "../src/lib/run-arcade/examen.ts"
-import { buildPrompt, parseAction } from "../src/lib/run-arcade/prompt.ts"
+import { BRAVE_EXAMPLE, buildPrompt, parseAction, SKILL_EXAMPLE } from "../src/lib/run-arcade/prompt.ts"
 import {
   activeVersion,
   addVersion,
@@ -337,6 +337,30 @@ test("an IA answer is one JSON action with known fields", () => {
   assert.deepEqual(brave, { kind: "brave", query: "nombre d’or et séries temporelles" })
   assert.equal(parseAction('{"action":"skill","curve":"n9","gesture":"glisse"}'), null)
   assert.equal(parseAction("pas de json"), null)
+  const copied = parseAction(
+    '{"action":"skill","name":"x","phrase":"y","curve":"sumNumbers|n1|*","gesture":"persiste|glisse","ratio":"0.382|0.618","span":"bande|lignes","window":"3|5|10 ou 2 à 60","days":"null ou 30|60"}'
+  )
+  assert.ok(copied && copied.kind === "skill")
+  if (copied && copied.kind === "skill") {
+    assert.equal(copied.params.curve, "sumNumbers")
+    assert.equal(copied.params.gesture, "persiste")
+    assert.equal(copied.params.ratio, 0.382)
+    assert.equal(copied.params.span, "bande")
+    assert.equal(copied.params.window, 3)
+    assert.equal(copied.params.days, 30)
+  }
+  assert.equal(parseAction(JSON.stringify(SKILL_EXAMPLE))?.kind, "skill")
+  assert.equal(parseAction(JSON.stringify(BRAVE_EXAMPLE))?.kind, "brave")
+  const sample = buildPrompt({
+    mind,
+    past: series(4),
+    hiddenDate: "2099-01-01",
+    examCents: null,
+    notes: [],
+    drawing: null,
+  })
+  assert.ok(sample.system.includes(JSON.stringify(SKILL_EXAMPLE)))
+  assert.equal(sample.system.includes("|"), false)
   assert.equal(parseSkillParams({ curve: "d2", gesture: "or", ratio: 1.6, window: 400 }), null)
   assert.deepEqual(parseSkillParams({ curve: "d2", gesture: "or", ratio: 1.6 }), {
     curve: "d2",

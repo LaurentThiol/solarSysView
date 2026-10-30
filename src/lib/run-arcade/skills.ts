@@ -1,4 +1,4 @@
-import { CURVE_KEYS, curveLabel, isCurveKey, type CurveKey } from "./curves"
+import { CURVE_KEYS, curveLabel, type CurveKey } from "./curves"
 import { formatRatio, GOLDEN_RATIOS, nearestGolden, type GoldenRatio } from "./golden"
 
 export const GESTURES = ["persiste", "glisse", "miroir", "or", "moyenne", "soir"] as const
@@ -164,18 +164,52 @@ function intIn(value: unknown, min: number, max: number) {
   return rounded >= min && rounded <= max ? rounded : null
 }
 
-/** Paramètres proposés par l’IA. Un champ inconnu ou hors bornes refuse la proposition. */
+/** Première valeur autorisée. Une liste copiée du modèle (« a|b ») garde le premier jeton connu. */
+function firstAllowed<T extends string>(value: unknown, allowed: readonly T[]): T | null {
+  if (typeof value !== "string") return null
+  const text = value.trim()
+  if ((allowed as readonly string[]).includes(text)) return text as T
+  for (const piece of text.split(/[^a-zA-Z0-9*.]+/)) {
+    if ((allowed as readonly string[]).includes(piece)) return piece as T
+  }
+  return null
+}
+
+function firstNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value !== "string") return null
+  const match = value.match(/-?\d+(?:[.,]\d+)?/)
+  if (!match) return null
+  const parsed = Number(match[0].replace(",", "."))
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function boundedInt(value: unknown, min: number, max: number) {
+  const direct = typeof value === "string" && /[^\d-]/.test(value) ? null : intIn(value, min, max)
+  if (direct != null) return direct
+  if (typeof value !== "string") return null
+  const match = value.match(/\d+/)
+  return match ? intIn(Number(match[0]), min, max) : null
+}
+
+/** 0 et « null » : pas de fenêtre longue. undefined : valeur illisible. */
+function optionalDays(value: unknown): number | null | undefined {
+  if (value == null || value === 0 || value === "0" || value === "null") return null
+  const days = boundedInt(value, DAYS_MIN, DAYS_MAX)
+  return days == null ? undefined : days
+}
+
+/** Paramètres proposés par l’IA. Une liste copiée garde la première valeur autorisée. Hors bornes : refus. */
 export function parseSkillParams(raw: unknown): SkillParams | null {
   if (!raw || typeof raw !== "object") return null
   const record = raw as Record<string, unknown>
-  const curve = record.curve === "*" || isCurveKey(record.curve) ? (record.curve as SkillTarget) : null
-  const gesture = (GESTURES as readonly string[]).includes(String(record.gesture)) ? (record.gesture as Gesture) : null
-  const ratio = record.ratio == null ? 0.618 : nearestGolden(Number(record.ratio))
-  const span = record.span == null ? "bande" : (SPANS as readonly string[]).includes(String(record.span)) ? (record.span as SpanKind) : null
-  const window = record.window == null ? 8 : intIn(record.window, WINDOW_MIN, WINDOW_MAX)
-  const days = record.days == null || record.days === 0 ? null : intIn(record.days, DAYS_MIN, DAYS_MAX)
-  if (!curve || !gesture || ratio == null || !span || window == null) return null
-  if (record.days != null && record.days !== 0 && days == null) return null
+  const curve = firstAllowed<SkillTarget>(record.curve, ["*", ...CURVE_KEYS])
+  const gesture = firstAllowed(record.gesture, GESTURES)
+  const ratio = record.ratio == null ? 0.618 : nearestGolden(firstNumber(record.ratio) ?? Number.NaN)
+  const span = record.span == null ? "bande" : firstAllowed(record.span, SPANS)
+  const window = record.window == null ? 8 : boundedInt(record.window, WINDOW_MIN, WINDOW_MAX)
+  const days = optionalDays(record.days)
+  if (!curve || !gesture || ratio == null || !span || window == null || days === undefined) return null
   return { curve, gesture, ratio, span, window, days }
 }
 

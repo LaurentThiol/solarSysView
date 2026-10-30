@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+import subprocess
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -116,6 +119,32 @@ def test_champions_list_is_newest_first(monkeypatch) -> None:
 def test_champions_list_needs_neon(monkeypatch) -> None:
     monkeypatch.setattr("synchro.db.database_configured", lambda: False)
     assert TestClient(create_app()).get("/api/brain/run-arcade/champions").status_code == 503
+
+
+def _node(script: str) -> None:
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [
+            "node",
+            "--experimental-strip-types",
+            "--import",
+            str(root / "tests" / "node-register.mjs"),
+            "--test",
+            str(root / "tests" / script),
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_run_arcade_node() -> None:
+    _node("test_run_arcade.ts")
+
+
+def test_run_arcade_think_node() -> None:
+    _node("test_run_arcade_think.ts")
 
 
 def test_champion_rejects_an_empty_skill_list(monkeypatch) -> None:

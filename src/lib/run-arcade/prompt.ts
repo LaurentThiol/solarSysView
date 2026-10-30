@@ -3,14 +3,43 @@ import { CURVE_KEYS, curveValues, type RankPoint } from "./curves"
 import { GOLDEN_RATIOS } from "./golden"
 import {
   activeVersion,
+  DAYS_MAX,
+  DAYS_MIN,
   GESTURES,
-  LONG_DAYS,
   parseSkillParams,
-  SHORT_WINDOWS,
   SPANS,
+  WINDOW_MAX,
+  WINDOW_MIN,
   type SkillParams,
 } from "./skills"
 import { formatCents, type RunnerMind } from "./thought"
+
+/** Exemple JSON déjà valide, que le modèle peut recopier tel quel. */
+export const SKILL_EXAMPLE = {
+  action: "skill",
+  name: "Somme lente",
+  phrase: "Σn rejoint sa moyenne",
+  query: "",
+  curve: "sumNumbers",
+  gesture: "moyenne",
+  ratio: 0.618,
+  span: "bande",
+  window: 8,
+  days: 60,
+} as const
+
+export const BRAVE_EXAMPLE = {
+  action: "brave",
+  name: "",
+  phrase: "",
+  query: "somme des numéros EuroMillions",
+  curve: "sumNumbers",
+  gesture: "moyenne",
+  ratio: 0.618,
+  span: "bande",
+  window: 8,
+  days: 0,
+} as const
 
 export type IaAction =
   | { kind: "skill"; params: SkillParams; name: string; phrase: string }
@@ -36,9 +65,10 @@ export function buildPrompt(input: PromptInput) {
     "Tu cours sur des courbes EuroMillions déjà révélées : Σn (somme des 5 numéros, 15 à 240), Σ★ (somme des 2 étoiles, 3 à 23), n1 à n5, e1 et e2, d0 à d4 (numéros par décennie 1–10 … 41–50, leur somme vaut 5).",
     "À chaque tirage, tu dessines un vecteur par courbe. Les sommes passent d’abord, puis la décennie, puis les rangs : la case jouée est ramenée sur les totales.",
     "Tu paies 2,50 € par tour. Chaque numéro trouvé parmi les cinq boules rapporte 2 €, chaque étoile trouvée parmi les deux étoiles rapporte 2 €, quel que soit le rang.",
-    "Réponds par un seul objet JSON, sans texte autour. Deux actions :",
-    `{"action":"skill","name":"…","phrase":"…","curve":"${CURVE_KEYS.join("|")}|*","gesture":"${GESTURES.join("|")}","ratio":${GOLDEN_RATIOS.join("|")},"span":"${SPANS.join("|")}","window":${SHORT_WINDOWS.join("|")} ou 2 à 60,"days":null ou ${LONG_DAYS.join("|")} ou 7 à 365}`,
-    '{"action":"brave","query":"…"}',
+    "Réponds par un seul objet JSON, sans texte autour. Deux actions, chacune déjà valide :",
+    `Skill : ${JSON.stringify(SKILL_EXAMPLE)}`,
+    `Recherche : ${JSON.stringify(BRAVE_EXAMPLE)}`,
+    `curve : ${CURVE_KEYS.join(", ")} ou *. gesture : ${GESTURES.join(", ")}. ratio : ${GOLDEN_RATIOS.join(", ")}. span : ${SPANS.join(", ")}. window : entier de ${WINDOW_MIN} à ${WINDOW_MAX}. days : 0 s’il n’y a pas de fenêtre longue, sinon un entier de ${DAYS_MIN} à ${DAYS_MAX}.`,
     "Une skill sur une courbe déjà pilotée en devient une nouvelle version. Une seule skill nouvelle par lancement.",
     "L’examen rejoue les derniers tirages, que tu ne lis pas. La skill n’est gardée que si le solde d’examen monte.",
   ].join("\n")

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { consumeSse, encodeSse, geminiDeltaText, openaiDeltaText } from "../src/lib/ia/sse.ts"
+import { consumeSse, encodeSse, geminiDeltaText, openaiCompletionText, openaiDeltaText } from "../src/lib/ia/sse.ts"
 import type { IaChatMessage } from "../src/lib/ia/models.ts"
 import { groupIaTurns, historyForLane } from "../src/lib/ia/turns.ts"
 
@@ -28,6 +28,12 @@ test("Gemini and OpenAI delta extractors", () => {
   assert.equal(openaiDeltaText({ choices: [{ delta: { content: "x" } }] }), "x")
   assert.equal(openaiDeltaText({ choices: [{ delta: { content: null } }] }), "")
   assert.throws(() => openaiDeltaText({ error: { message: "quota" } }), /quota/)
+  assert.equal(openaiCompletionText({ choices: [{ message: { content: '{"action":"brave"}' } }] }), '{"action":"brave"}')
+  assert.equal(
+    openaiCompletionText({ choices: [{ message: { content: [{ type: "text", text: "a" }, { type: "text", text: "b" }] } }] }),
+    "ab"
+  )
+  assert.equal(openaiDeltaText({ choices: [{ message: { content: "complet" } }] }), "")
 })
 
 test("compare turns group a pair, solo pairId stays a single bubble", () => {

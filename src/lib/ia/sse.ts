@@ -64,6 +64,29 @@ export function geminiDeltaText(payload: unknown) {
   return parts.map((part) => part.text || "").join("")
 }
 
+function textOf(content: unknown): string {
+  if (typeof content === "string") return content
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") return part
+        if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") {
+          return (part as { text: string }).text
+        }
+        return ""
+      })
+      .join("")
+  }
+  if (content && typeof content === "object") {
+    try {
+      return JSON.stringify(content)
+    } catch {
+      return ""
+    }
+  }
+  return ""
+}
+
 export function openaiDeltaText(payload: unknown) {
   if (!payload || typeof payload !== "object") return ""
   const record = payload as {
@@ -72,6 +95,23 @@ export function openaiDeltaText(payload: unknown) {
   }
   if (record.error?.message) throw new Error(record.error.message)
   return record.choices?.[0]?.delta?.content || ""
+}
+
+/** Réponse non streamée : le texte est dans message.content, pas dans delta. */
+export function openaiCompletionText(payload: unknown) {
+  if (!payload || typeof payload !== "object") return ""
+  const record = payload as {
+    error?: { message?: string }
+    choices?: Array<{
+      message?: { content?: unknown }
+      delta?: { content?: string | null }
+    }>
+  }
+  if (record.error?.message) throw new Error(record.error.message)
+  const choice = record.choices?.[0]
+  const message = textOf(choice?.message?.content)
+  if (message.trim()) return message
+  return typeof choice?.delta?.content === "string" ? choice.delta.content : ""
 }
 
 export async function readNdjson(
