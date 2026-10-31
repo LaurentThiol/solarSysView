@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "runArcade : le bouton du moment",
   "body": "Pendant l’avant-course ou la course, Pause est le bouton or. Relancer, et Jouer le tour ou Passer à la course, restent disponibles avec un fond visible. En pause, Reprendre prend l’aplat or et le temps restant reste figé. Au repos et à la fin d’une génération, Lancer redevient le bouton or. La phrase d’état devient une bande : pastille de phase, génération, temps restant, et en course le numéro de tour, une barre et le meilleur solde. L’archive, l’horloge et les services restent en texte secondaire sous cette bande.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 335,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/335"
 }
