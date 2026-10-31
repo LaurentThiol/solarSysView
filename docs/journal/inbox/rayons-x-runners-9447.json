@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "Rayons X : préparation et reçu",
   "body": "Avant Lancer, le bouton Rayons X arme une lecture de la course et reste figé tant que les runners courent. À la fin, on peut le rouvrir pour relire. Le panneau Avant nomme les skills et le solde d’examen de chaque runner, la variation retenue, et range les essais refusés dans un dépliable. En ce moment suit l’appel à l’IA locale, la recherche Brave et la proposition qui attend la fin de tranche ; la carte du runner porte le même mot. Chaque tour laisse le reçu : la grille jouée, les trouvés, les 2,50 € du ticket, les 2 € par trouvé et le solde. Sous l’univers, une chaîne relie le dernier point, le geste, la pensée et la case jouée, sans changer le dessin envoyé au modèle.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 334,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/334"
 }
