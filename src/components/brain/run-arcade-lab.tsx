@@ -16,6 +16,16 @@ import { RUN_ARCADE_HELP } from "@/lib/run-arcade/help"
 import { createSession, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
 import { currentVersion, targetLabel } from "@/lib/run-arcade/skills"
 import {
+  activityLines,
+  attemptLine,
+  chainHiddenDate,
+  lastTurnReceipts,
+  prepHeadline,
+  thoughtChain,
+  xrayFeed,
+  xrayMark,
+} from "@/lib/run-arcade/xray"
+import {
   exactKeys,
   formatCents,
   leaderOf,
@@ -26,6 +36,7 @@ import {
   RUNNER_MAX,
   think,
   type RunnerLive,
+  type ThoughtDraw,
 } from "@/lib/run-arcade/thought"
 import { useDraws } from "@/lib/use-draws"
 import { cn } from "@/lib/utils"
@@ -82,7 +93,9 @@ function serviceText(state: ServiceState, error: string | null, ok: string) {
 function phaseText(snapshot: SessionSnapshot, remaining: number | null) {
   const race = snapshot.race
   if (snapshot.error) return snapshot.error
-  if (!race) return "Choisissez le nombre de runners, les tirages de course et les minutes d’avant-course, puis lancez."
+  if (!race) {
+    return "Choisissez le nombre de runners, les tirages de course et les minutes d’avant-course. Rayons X, avant de lancer, montre la préparation et chaque tour."
+  }
   const total = race.end - race.start
   const pause = snapshot.pausedLeftMs != null ? " · en pause" : ""
   const left = remaining != null ? formatDuration(remaining) : "—"
@@ -109,6 +122,110 @@ function skillSummary(runner: RunnerLive) {
     .join(" · ")
 }
 
+function ThoughtChain({
+  runner,
+  draw,
+  hiddenDate,
+}: {
+  runner: RunnerLive
+  draw: ThoughtDraw | null
+  hiddenDate: string | null
+}) {
+  const chain = thoughtChain(runner.mind, draw, hiddenDate)
+  if (!chain) return null
+  return (
+    <span className="mt-1 block text-[11px] leading-4" data-testid="runner-xray-chain">
+      <span className="text-foreground">{chain.last}</span>
+      <span className="text-muted-foreground"> → </span>
+      <span className="text-chart-3">{chain.gesture}</span>
+      <span className="text-muted-foreground"> → </span>
+      <span className="text-chart-4">pensée {chain.thought}</span>
+      <span className="text-muted-foreground"> → </span>
+      <span className="text-chart-4">case {chain.played}</span>
+    </span>
+  )
+}
+
+function refusedLabel(count: number) {
+  return count === 1 ? "1 essai refusé" : `${count} essais refusés`
+}
+
+function XrayPanel({ snapshot }: { snapshot: SessionSnapshot }) {
+  const race = snapshot.race
+  if (!race) return null
+  const names = Object.fromEntries(race.runners.map((runner) => [runner.mind.id, runner.mind.name]))
+  const live = activityLines(snapshot.activity, names)
+  const last = lastTurnReceipts(snapshot.xrayReceipts)
+  const feed = xrayFeed({
+    prep: snapshot.xrayPrep,
+    receipts: snapshot.xrayReceipts,
+    journal: snapshot.journal,
+    names,
+  })
+  return (
+    <section className="rounded-xl border bg-card p-3" data-testid="run-arcade-xray">
+      <h2 className="text-sm font-medium">Rayons X</h2>
+      <div className="mt-3">
+        <h3 className="text-xs font-medium text-muted-foreground">Avant</h3>
+        <ul className="mt-1 flex flex-col gap-1 text-xs">
+          {snapshot.xrayPrep.map((prep) => {
+            const refused = prep.attempts.filter((attempt) => !attempt.kept)
+            return (
+              <li key={prep.runnerId}>
+                <p>{prepHeadline(prep, names[prep.runnerId] ?? prep.runnerId)}</p>
+                {refused.length > 0 ? (
+                  <details className="mt-0.5 text-muted-foreground">
+                    <summary className="cursor-pointer">{refusedLabel(refused.length)}</summary>
+                    <ul className="mt-1 ml-3 flex flex-col gap-0.5">
+                      {refused.map((attempt, index) => (
+                        <li key={`${prep.runnerId}-${index}`}>{attemptLine(attempt)}</li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+      <div className="mt-3">
+        <h3 className="text-xs font-medium text-muted-foreground">En ce moment</h3>
+        {live.length > 0 ? (
+          <ul className="mt-1 flex flex-col gap-0.5 text-xs">
+            {live.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-xs text-muted-foreground">Personne en cours.</p>
+        )}
+      </div>
+      {last.length > 0 ? (
+        <div className="mt-3">
+          <h3 className="text-xs font-medium text-muted-foreground">Tour {last[0]?.turn}</h3>
+          <ul className="mt-1 flex flex-col gap-0.5 text-xs">
+            {last.map((receipt) => (
+              <li key={`${receipt.turn}-${receipt.runnerId}`}>{receipt.detail}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className="mt-3">
+        <h3 className="text-xs font-medium text-muted-foreground">Fil</h3>
+        {feed.length > 0 ? (
+          <ul className="mt-1 flex flex-col gap-0.5 text-xs text-muted-foreground">
+            {feed.map((line, index) => (
+              <li key={`${line.at}-${index}`}>{line.text}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-xs text-muted-foreground">Rien encore.</p>
+        )}
+      </div>
+    </section>
+  )
+}
+
 export function RunArcadeLab() {
   const { draws, loading } = useDraws("all")
   const series = useMemo(() => toRankPoints(draws), [draws])
@@ -129,6 +246,7 @@ export function RunArcadeLab() {
   const [count, setCount] = useState(RUNNER_DEFAULT)
   const [raceDraws, setRaceDraws] = useState(RACE_DRAWS_DEFAULT)
   const [minutes, setMinutes] = useState(MINUTES_DEFAULT)
+  const [xray, setXray] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [focusCurve, setFocusCurve] = useState<CurveKey | null>(null)
   const [nextCurve, setNextCurve] = useState<CurveKey>("sumNumbers")
@@ -161,6 +279,7 @@ export function RunArcadeLab() {
     snapshot.pausedLeftMs ?? (snapshot.phaseEndsAt != null && now > 0 ? Math.max(0, snapshot.phaseEndsAt - now) : null)
   const leader = race ? leaderOf(race.runners) : null
   const focus = race?.runners.find((runner) => runner.mind.id === selected) ?? null
+  const hiddenDate = race ? chainHiddenDate(race, track) : null
   const slice = snapshot.minutes > 0 ? snapshot.sliceMs : 0
   const served = servedPerSlice(slice, snapshot.medianMs, 1)
   const maxDraws = Math.max(4, Math.min(120, series.length - 2))
@@ -269,6 +388,18 @@ export function RunArcadeLab() {
             }}
           />
         </LabelHelp>
+        <HelpWrap help={RUN_ARCADE_HELP.rayons}>
+          <Button
+            type="button"
+            variant="outline"
+            aria-pressed={xray}
+            disabled={running}
+            className={cn(xray && "border-chart-4 text-chart-4")}
+            onClick={() => setXray((value) => !value)}
+          >
+            Rayons X
+          </Button>
+        </HelpWrap>
         <HelpWrap help={RUN_ARCADE_HELP.lancer}>
           <Button type="submit" disabled={series.length < 4}>
             Lancer
@@ -520,6 +651,8 @@ export function RunArcadeLab() {
         </p>
       ) : null}
 
+      {xray && race ? <XrayPanel key={snapshot.generation} snapshot={snapshot} /> : null}
+
       {race?.revealed ? (
         <p className="text-sm" data-testid="run-arcade-referee">
           Arbitre · {formatDrawDate(race.revealed.date)} · {race.revealed.n1} {race.revealed.n2} {race.revealed.n3}{" "}
@@ -576,6 +709,7 @@ export function RunArcadeLab() {
             exact={focusView.exact}
             className="h-72"
           />
+          {xray ? <ThoughtChain runner={focus} draw={focusView.draw} hiddenDate={hiddenDate} /> : null}
           {focusView.draw ? <p className="mt-2 text-sm leading-5">{focusView.draw.phrase}</p> : null}
           <div className="mt-3 grid gap-3 lg:grid-cols-2">
             <div>
@@ -625,6 +759,7 @@ export function RunArcadeLab() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {race?.runners.map((runner) => {
           const active = runner.mind.id === selected
+          const mark = xray ? xrayMark(runner.mind.id, snapshot.activity) : null
           return (
             <button
               key={runner.mind.id}
@@ -636,12 +771,16 @@ export function RunArcadeLab() {
               className={cn(
                 "rounded-xl border bg-card p-2 text-left transition-colors hover:border-foreground/30",
                 active ? "border-primary" : "border-border",
+                mark && "ring-1 ring-chart-4",
                 !runner.alive && "opacity-60"
               )}
             >
               <span className="flex items-baseline justify-between gap-2 text-xs">
                 <span className="font-medium text-foreground">{runner.mind.name}</span>
-                <span className="text-muted-foreground">{formatCents(runner.cents)}</span>
+                <span className="text-muted-foreground">
+                  {mark ? <span className="text-chart-4">{mark} · </span> : null}
+                  {formatCents(runner.cents)}
+                </span>
               </span>
               <span className="mt-0.5 block text-[11px] text-muted-foreground">
                 {curveLabel(runner.mind.focus)} · {skillSummary(runner)} · examen{" "}
@@ -655,6 +794,7 @@ export function RunArcadeLab() {
                 exact={runner.exact}
                 className="mt-1"
               />
+              {xray ? <ThoughtChain runner={runner} draw={runner.thought} hiddenDate={hiddenDate} /> : null}
               <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
                 {runner.thought?.phrase ?? "—"}
               </span>

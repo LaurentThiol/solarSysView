@@ -35,6 +35,16 @@ import {
   type RunnerMind,
   type ThoughtDraw,
 } from "./thought"
+import {
+  emptyActivity,
+  prepDetail,
+  receiptsOf,
+  XRAY_KEEP,
+  type XrayActivity,
+  type XrayAttempt,
+  type XrayPrep,
+  type XrayReceipt,
+} from "./xray"
 
 export type SessionPhase = "idle" | "avant" | "course" | "fin"
 export type ServiceState = "inconnu" | "ok" | "absente"
@@ -108,6 +118,12 @@ export type SessionSnapshot = {
   /** Versions du champion écrites après le premier tirage caché, laissées de côté au lancement. */
   setAside: number
   journal: JournalEntry[]
+  /** Préparation de chaque runner, hors du journal du champion. */
+  xrayPrep: XrayPrep[]
+  /** Reçus des tours joués, hors du journal du champion. */
+  xrayReceipts: XrayReceipt[]
+  /** Appels, recherches et propositions encore ouverts. */
+  activity: XrayActivity
   error: string | null
 }
 
@@ -152,6 +168,9 @@ function emptySnapshot(): SessionSnapshot {
     parent: null,
     setAside: 0,
     journal: [],
+    xrayPrep: [],
+    xrayReceipts: [],
+    activity: emptyActivity(),
     error: null,
   }
 }
@@ -206,6 +225,7 @@ export class RunArcadeSession {
   private readonly notes = new Map<string, BraveNote[]>()
   private readonly added = new Map<string, number>()
   private readonly callCount = new Map<string, number>()
+  private readonly attempts = new Map<string, XrayAttempt[]>()
   private inbox: InboxItem[] = []
   private seed = 1
 
@@ -223,8 +243,16 @@ export class RunArcadeSession {
   getSnapshot = () => this.snapshot
 
   private set(patch: Partial<SessionSnapshot>) {
-    this.snapshot = { ...this.snapshot, ...patch }
+    this.snapshot = { ...this.snapshot, ...patch, activity: this.activity() }
     for (const listener of this.listeners) listener()
+  }
+
+  private activity(): XrayActivity {
+    return {
+      calling: [...this.pending.keys()],
+      searching: [...this.braving.keys()],
+      pending: this.inbox.map((item) => ({ runnerId: item.runnerId, detail: describeSkill(item.params) })),
+    }
   }
 
   private log(runner: string, kind: JournalKind, cutoff: string, detail: string, turn: number | null = this.turnNumber()) {
@@ -305,6 +333,7 @@ export class RunArcadeSession {
     this.added.clear()
     this.callCount.clear()
     this.cooldown.clear()
+    this.attempts.clear()
     const track = buildTrack(options.series)
     if (track.length < 4) {
       this.set({ ...emptySnapshot(), error: "L’archive chargée est trop courte pour une course." })
@@ -335,6 +364,7 @@ export class RunArcadeSession {
     race = previewTurn(race, track)
 
     const now = this.deps.now()
+    const at = new Date(now).toISOString()
     this.set({
       ...emptySnapshot(),
       phase: minutes > 0 ? "avant" : "course",
@@ -347,6 +377,12 @@ export class RunArcadeSession {
       phaseEndsAt: minutes > 0 ? now + minutes * 60_000 : null,
       parent,
       setAside: parent ? setAsideCount(parent, hiddenDate) : 0,
+      xrayPrep: race.runners.map((runner) => ({
+        runnerId: runner.mind.id,
+        at,
+        detail: prepDetail(runner),
+        attempts: [...(this.attempts.get(runner.mind.id) ?? [])],
+      })),
     })
     if (minutes > 0) {
       const id = this.launchId
@@ -370,14 +406,19 @@ export class RunArcadeSession {
     if (!base || read.length === 0) return mind
     const meta: VersionMeta = { cutoff: read[read.length - 1].date, origin: "variation", examCents: null }
     const before = examine(mind, free)
+    const tries: XrayAttempt[] = []
     for (let attempt = 0; attempt < VARIATION_TRIES; attempt += 1) {
       const params = houseVariation(currentVersion(base), this.seed + index * 31 + attempt * 11)
       const candidate = applyParams(mind, params, meta, "Variation maison", `${mind.id}-g${generation}-${params.curve}`)
       const after = examine(candidate.mind, free)
-      if (!passesExam(after, before)) continue
+      const kept = passesExam(after, before)
+      tries.push({ detail: describeSkill(params), beforeCents: before.cents, afterCents: after.cents, kept })
+      if (!kept) continue
+      this.attempts.set(mind.id, tries)
       if (candidate.isNew) this.added.set(mind.id, 1)
       return withExam(candidate.mind, params.curve, after.cents)
     }
+    this.attempts.set(mind.id, tries)
     return mind
   }
 
@@ -404,11 +445,18 @@ export class RunArcadeSession {
     if (!race || this.snapshot.phase !== "course") return
     this.timer = null
     this.applyInbox()
-    const played = playTurn(this.snapshot.race as Race, this.snapshot.track)
+    const before = this.snapshot.race
+    if (!before) return
+    const played = playTurn(before, this.snapshot.track)
+    const at = new Date(this.deps.now()).toISOString()
     for (const runner of played.runners) {
       if (!runner.alive) this.abortRunner(runner.mind.id)
     }
-    this.set({ race: played, inFlight: this.pending.size })
+    this.set({
+      race: played,
+      inFlight: this.pending.size,
+      xrayReceipts: [...this.snapshot.xrayReceipts, ...receiptsOf(before, played, at)].slice(-XRAY_KEEP),
+    })
     if (played.done) {
       this.finish()
       return
@@ -604,7 +652,10 @@ export class RunArcadeSession {
 
   private onIaReply(id: string, reply: IaReply, meta: RequestMeta) {
     if (!reply.ok) {
-      if (reply.aborted) return
+      if (reply.aborted) {
+        this.set({ inFlight: this.pending.size })
+        return
+      }
       this.log(id, "erreur", meta.cutoff, reply.error, meta.turn)
       this.cooldown.set(id, this.deps.now() + ERROR_COOLDOWN_MS)
       this.set(reply.absent ? { ia: "absente", iaError: reply.error } : { iaError: reply.error })
@@ -624,20 +675,26 @@ export class RunArcadeSession {
     this.log(id, "ia", meta.cutoff, `propose : ${describeSkill(action.params)}`, meta.turn)
     this.inbox.push({ runnerId: id, params: action.params, name: action.name, phrase: action.phrase, cutoff: meta.cutoff })
     if (this.snapshot.phase === "avant") this.applyInbox()
+    else this.set({ inFlight: this.pending.size })
   }
 
   private searchBrave(id: string, query: string, meta: RequestMeta, attempt: number) {
     if (this.snapshot.brave === "absente") {
       this.log(id, "refus", meta.cutoff, "Brave absente", meta.turn)
+      this.set({ inFlight: this.pending.size })
       return
     }
     const runner = this.runner(id)
     const track = this.snapshot.track
-    if (!runner || !runner.alive || track.length === 0) return
+    if (!runner || !runner.alive || track.length === 0) {
+      this.set({ inFlight: this.pending.size })
+      return
+    }
     const year = Number(track[track.length - 1].date.slice(0, 4))
     const controller = new AbortController()
     this.braving.set(id, controller)
     if (attempt === 0) this.updateRunner(id, (item) => ({ ...item, calls: item.calls + 1 }))
+    else this.set({ inFlight: this.pending.size })
     const launch = this.launchId
     this.deps
       .askBrave({ query, from: `${year - 1}-01-01`, cutoff: meta.hiddenDate }, controller.signal)
@@ -652,9 +709,13 @@ export class RunArcadeSession {
         if (launch !== this.launchId) return
         if (this.braving.get(id) === controller) this.braving.delete(id)
         if (!reply.ok) {
-          if (reply.aborted) return
+          if (reply.aborted) {
+            this.set({ inFlight: this.pending.size })
+            return
+          }
           if (reply.retryAfterMs != null && attempt < BRAVE_RETRIES) {
             this.braving.set(id, controller)
+            this.set({ inFlight: this.pending.size })
             this.deps.setTimer(() => {
               if (launch !== this.launchId) return
               this.braving.delete(id)

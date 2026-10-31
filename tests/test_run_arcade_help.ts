@@ -18,6 +18,7 @@ const KEYS = [
   "runners",
   "tirages",
   "minutes",
+  "rayons",
   "lancer",
   "pause",
   "tour",

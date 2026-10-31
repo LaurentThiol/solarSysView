@@ -14,6 +14,7 @@ import {
   type SessionDeps,
 } from "../src/lib/run-arcade/session.ts"
 import { addVersion, newSkill } from "../src/lib/run-arcade/skills.ts"
+import { chainHiddenDate, thoughtChain, xrayFeed } from "../src/lib/run-arcade/xray.ts"
 
 function dateAt(index: number) {
   return new Date(Date.UTC(2025, 0, 3 + index * 3, 12)).toISOString().slice(0, 10)
@@ -365,5 +366,147 @@ test("a house variation is written before the exam window and kept only if the e
   }
   assert.ok(kept > 0)
   first.dispose()
+  session.dispose()
+})
+
+test("xray records each house variation before the first turn", () => {
+  const { session } = harness(1)
+  const rows = series(80)
+  const parent: ChampionRecord = {
+    generation: 1,
+    runner: "R1",
+    cents: 5000,
+    examCents: null,
+    calls: 0,
+    raceFrom: null,
+    raceTo: null,
+    skills: [
+      newSkill(
+        "champ-base",
+        "Geste de base",
+        { curve: "*", gesture: "or", ratio: 0.618, span: "bande", window: 8, days: null },
+        { cutoff: "", origin: "maison", examCents: null }
+      ),
+    ],
+    journal: [],
+    savedAt: "2026-10-30T09:00:00.000Z",
+  }
+  session.launch({ count: 8, draws: 10, minutes: 0, series: rows, champion: parent })
+  const snapshot = session.getSnapshot()
+  assert.equal(snapshot.journal.length, 0)
+  assert.equal(snapshot.xrayPrep.length, 8)
+  assert.equal(snapshot.xrayPrep[0]?.attempts.length, 0)
+  assert.match(snapshot.xrayPrep[0]?.detail ?? "", /examen/)
+  let kept = 0
+  for (const prep of snapshot.xrayPrep.slice(1)) {
+    assert.ok(prep.attempts.length >= 1 && prep.attempts.length <= 6)
+    const before = prep.attempts[0]?.beforeCents ?? 0
+    for (const attempt of prep.attempts) {
+      assert.ok(attempt.detail.length > 0)
+      assert.equal(attempt.beforeCents, before)
+      assert.equal(attempt.kept, attempt.afterCents > before)
+    }
+    const winner = prep.attempts.filter((attempt) => attempt.kept)
+    assert.ok(winner.length <= 1)
+    if (winner[0]) {
+      kept += 1
+      const runner = snapshot.race?.runners.find((item) => item.mind.id === prep.runnerId)
+      assert.equal(runner?.examCents, winner[0].afterCents)
+      assert.ok(winner[0].afterCents > before)
+    }
+  }
+  assert.ok(kept > 0)
+  session.dispose()
+})
+
+test("xray leaves a receipt for each played turn and names a runner who cannot pay", () => {
+  const { session } = harness(1)
+  session.launch({ count: 2, draws: 4, minutes: 0, series: series(40), champion: null })
+  const opened = session.getSnapshot()
+  const first = opened.race?.runners[0]
+  assert.ok(opened.race && first?.thought)
+  assert.equal(thoughtChain(first.mind, first.thought, chainHiddenDate(opened.race, opened.track))?.gesture, "persiste")
+  session.skip()
+  const snap = session.getSnapshot()
+  assert.equal(snap.xrayReceipts.length, 2)
+  for (const receipt of snap.xrayReceipts) {
+    assert.equal(receipt.turn, 1)
+    assert.match(receipt.detail, /joue \d+/)
+    assert.match(receipt.detail, /★/)
+    assert.match(receipt.detail, /trouvé/)
+    assert.match(receipt.detail, /− 2,50 €/)
+    assert.match(receipt.detail, /= /)
+  }
+  assert.equal(snap.journal.length, 0)
+  const names = Object.fromEntries((snap.race?.runners ?? []).map((runner) => [runner.mind.id, runner.mind.name]))
+  const feed = xrayFeed({ prep: snap.xrayPrep, receipts: snap.xrayReceipts, journal: snap.journal, names })
+  assert.ok(feed.some((line) => line.text.includes("examen")))
+  assert.ok(feed.some((line) => line.text.includes("tour 1")))
+  const race = snap.race
+  assert.ok(race)
+  const internal = session as unknown as { set(patch: object): void }
+  internal.set({
+    race: {
+      ...race,
+      runners: race.runners.map((runner) => (runner.mind.id === "r1" ? { ...runner, cents: 100, alive: true } : runner)),
+    },
+  })
+  session.skip()
+  const stopped = session.getSnapshot().xrayReceipts.find((item) => item.turn === 2 && item.runnerId === "r1")
+  assert.ok(stopped)
+  assert.match(stopped.detail, /s’arrête/)
+  assert.match(stopped.detail, /2,50 €/)
+  assert.equal(stopped.detail.includes("joue"), false)
+  session.dispose()
+})
+
+test("a pending call appears in the xray activity, then leaves", async () => {
+  const { ia, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  await flush()
+  assert.deepEqual(session.getSnapshot().activity.calling, ["r1"])
+  session.pause()
+  ia[0].resolve(unreadable)
+  await flush()
+  assert.deepEqual(session.getSnapshot().activity.calling, [])
+  session.dispose()
+})
+
+test("a Brave search appears in the xray activity, then leaves", async () => {
+  const { ia, brave, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  await flush()
+  session.pause()
+  ia[0].resolve({
+    ok: true,
+    text: '{"action":"brave","query":"nombre d’or"}',
+    latencyMs: 10,
+    model: "t",
+    vision: false,
+  })
+  await flush()
+  assert.deepEqual(session.getSnapshot().activity.searching, ["r1"])
+  assert.deepEqual(session.getSnapshot().activity.calling, [])
+  brave[0]?.resolve({ ok: true, results: [] })
+  await flush()
+  assert.deepEqual(session.getSnapshot().activity.searching, [])
+  session.dispose()
+})
+
+test("a proposal waits in the xray activity until the slice ends", async () => {
+  const { clock, ia, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  await flush()
+  session.skip()
+  const slice = session.getSnapshot().sliceMs
+  await clock.advance(slice)
+  ia[0].resolve(skillReply("sumNumbers"))
+  await flush()
+  const pending = session.getSnapshot().activity.pending
+  assert.equal(pending.length, 1)
+  assert.equal(pending[0]?.runnerId, "r1")
+  assert.match(pending[0]?.detail ?? "", /moyenne/)
+  await clock.advance(slice)
+  assert.equal(session.getSnapshot().activity.pending.length, 0)
   session.dispose()
 })

@@ -219,7 +219,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "runArcade",
         help: {
           title: "runArcade",
-          body: "Chaque runner a son univers. Il lit gratuitement les années n−1 et n, s’entraîne Y minutes avec l’IA locale et Brave, puis court les tirages choisis, 25 au départ, une tranche d’horloge par tour. Il pense la somme, puis les rangs : le vecteur est sa pensée, le point la case jouée. n1 à n5 ne se calent pas sur 10, 20, 30, 40 ou 50. La décennie du rail est celle des numéros joués. Le geste soir aligne mardi et vendredi, à quatre jours au plus. Une skill n’est gardée que si l’examen monte. Le solde classe la course. Le champion part dans Neon et ouvre la génération suivante.",
+          body: "Chaque runner a son univers. Il lit gratuitement les années n−1 et n, s’entraîne Y minutes avec l’IA locale et Brave, puis court les tirages choisis, 25 au départ, une tranche d’horloge par tour. Il pense la somme, puis les rangs : le vecteur est sa pensée, le point la case jouée. n1 à n5 ne se calent pas sur 10, 20, 30, 40 ou 50. La décennie du rail est celle des numéros joués. Le geste soir aligne mardi et vendredi, à quatre jours au plus. Une skill n’est gardée que si l’examen monte. Le solde classe la course. Le champion part dans Neon et ouvre la génération suivante. Rayons X, choisi avant le lancement, montre la préparation de chaque runner et le reçu de chaque tour.",
         },
       },
       {

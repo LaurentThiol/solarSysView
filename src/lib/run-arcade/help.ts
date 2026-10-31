@@ -43,6 +43,24 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
     ],
   },
+  rayons: {
+    title: "Rayons X",
+    body: "Choisi avant Lancer, il reste figé pendant l’avant-course et la course. À l’arrêt ou à la fin, on peut le rouvrir pour relire, ou le couper avant le lancement suivant.",
+    items: [
+      {
+        label: "Avant",
+        text: "Skills reçues, solde d’examen, variation retenue. Les essais refusés sont dans un dépliable.",
+      },
+      {
+        label: "En ce moment",
+        text: "Qui appelle l’IA locale, qui cherche sur Brave, quelle proposition attend la fin de tranche. La carte du runner porte le même mot.",
+      },
+      {
+        label: "Tour",
+        text: "Grille jouée, trouvés, 2,50 € du ticket, 2,00 € par trouvé, solde. Sous le dessin, la chaîne relie le dernier point, le geste, la pensée et la case jouée.",
+      },
+    ],
+  },
   lancer: {
     title: "Lancer",
     body: "Ouvre une génération. Le champion de la liste, le fichier importé, ou le dernier déjà écrit, devient le parent. Tant que ce bouton n’est pas pressé, les runners ne courent pas.",
