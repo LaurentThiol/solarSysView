@@ -143,6 +143,10 @@ def test_run_arcade_node() -> None:
     _node("test_run_arcade.ts")
 
 
+def test_run_arcade_chrome_node() -> None:
+    _node("test_run_arcade_chrome.ts")
+
+
 def test_run_arcade_think_node() -> None:
     _node("test_run_arcade_think.ts")
 

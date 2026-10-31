@@ -63,7 +63,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   lancer: {
     title: "Lancer",
-    body: "Ouvre une génération. Le champion de la liste, le fichier importé, ou le dernier déjà écrit, devient le parent. Tant que ce bouton n’est pas pressé, les runners ne courent pas.",
+    body: "Ouvre une génération. Le champion de la liste, le fichier importé, ou le dernier déjà écrit, devient le parent. Tant que ce bouton n’est pas pressé, les runners ne courent pas. Pendant l’avant-course ou la course, il s’écrit Relancer et n’est plus le geste mis en avant : Pause, ou Reprendre, l’est.",
   },
   pause: {
     title: "Pause",
@@ -83,7 +83,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   statut: {
     title: "Où en est la course",
-    body: "La première ligne nomme la génération, la phase, et le temps qui reste. En course, elle ajoute le numéro du tour et le meilleur solde. Avant le lancement, elle rappelle de choisir les runners, les tirages et les minutes.",
+    body: "La bande porte la phase, la génération et le temps qui reste. En course, elle ajoute le tour, une barre, et le meilleur solde. En avant-course, la barre suit le temps écoulé. Avant le lancement, une phrase rappelle de choisir les runners, les tirages et les minutes.",
     items: [
       {
         label: "Carte",

@@ -5,10 +5,12 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { captureDraw } from "@/components/brain/run-arcade-capture"
 import { RunnerUniverse } from "@/components/brain/run-arcade-universe"
 import { HelpTip, HelpWrap, LabelHelp, TitleHelp } from "@/components/help"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
 import { lastRevealedDraw, proposeNextDraw, type ChampionRecord } from "@/lib/run-arcade/champion"
+import { raceChrome } from "@/lib/run-arcade/chrome"
 import { askBrave, askIa, exportChampion, listChampions, loadChampion, readChampionFile, saveChampion } from "@/lib/run-arcade/client"
 import { formatDuration, raceDurationMs, servedPerSlice } from "@/lib/run-arcade/clock"
 import { CURVE_KEYS, curveLabel, curveValues, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
@@ -88,29 +90,6 @@ function serviceText(state: ServiceState, error: string | null, ok: string) {
   if (state === "ok") return ok
   if (state === "absente") return `absente${error ? ` (${error})` : ""}`
   return error ? `en attente (${error})` : "en attente"
-}
-
-function phaseText(snapshot: SessionSnapshot, remaining: number | null) {
-  const race = snapshot.race
-  if (snapshot.error) return snapshot.error
-  if (!race) {
-    return "Choisissez le nombre de runners, les tirages de course et les minutes d’avant-course. Rayons X, avant de lancer, montre la préparation et chaque tour."
-  }
-  const total = race.end - race.start
-  const pause = snapshot.pausedLeftMs != null ? " · en pause" : ""
-  const left = remaining != null ? formatDuration(remaining) : "—"
-  if (snapshot.phase === "avant") return `Génération ${snapshot.generation} · avant-course, ${left} restantes${pause}`
-  if (snapshot.phase === "course") {
-    const tour = `Génération ${snapshot.generation} · tour ${race.cursor - race.start + 1} / ${total}`
-    return snapshot.minutes > 0 ? `${tour}, tranche ${left}${pause}` : `${tour}${pause}`
-  }
-  if (snapshot.phase === "fin") {
-    const champion = snapshot.champion
-    return champion
-      ? `Génération ${snapshot.generation} finie · champion ${champion.runner} ${formatCents(champion.cents)}`
-      : `Génération ${snapshot.generation} finie`
-  }
-  return ""
 }
 
 function skillSummary(runner: RunnerLive) {
@@ -278,6 +257,17 @@ export function RunArcadeLab() {
   const remaining =
     snapshot.pausedLeftMs ?? (snapshot.phaseEndsAt != null && now > 0 ? Math.max(0, snapshot.phaseEndsAt - now) : null)
   const leader = race ? leaderOf(race.runners) : null
+  const reading = loading && series.length < 4
+  const chrome = raceChrome({
+    phase: snapshot.phase,
+    paused: snapshot.pausedLeftMs != null,
+    error: snapshot.error,
+    canLaunch: series.length >= 4,
+    generation: snapshot.generation,
+    race: race ? { cursor: race.cursor, start: race.start, end: race.end } : null,
+    minutes: snapshot.minutes,
+    remainingMs: remaining,
+  })
   const focus = race?.runners.find((runner) => runner.mind.id === selected) ?? null
   const hiddenDate = race ? chainHiddenDate(race, track) : null
   const slice = snapshot.minutes > 0 ? snapshot.sliceMs : 0
@@ -401,23 +391,23 @@ export function RunArcadeLab() {
           </Button>
         </HelpWrap>
         <HelpWrap help={RUN_ARCADE_HELP.lancer}>
-          <Button type="submit" disabled={series.length < 4}>
-            Lancer
+          <Button type="submit" variant={chrome.launch.variant} disabled={chrome.launch.disabled}>
+            {chrome.launch.label}
           </Button>
         </HelpWrap>
         <HelpWrap help={RUN_ARCADE_HELP.pause}>
           <Button
             type="button"
-            variant="outline"
-            disabled={!running}
+            variant={chrome.pause.variant}
+            disabled={chrome.pause.disabled}
             onClick={() => (snapshot.pausedLeftMs != null ? session.resume() : session.pause())}
           >
-            {snapshot.pausedLeftMs != null ? "Reprendre" : "Pause"}
+            {chrome.pause.label}
           </Button>
         </HelpWrap>
         <HelpWrap help={RUN_ARCADE_HELP.tour}>
-          <Button type="button" variant="outline" disabled={!running} onClick={() => session.skip()}>
-            {snapshot.phase === "avant" ? "Passer à la course" : "Jouer le tour"}
+          <Button type="button" variant={chrome.step.variant} disabled={chrome.step.disabled} onClick={() => session.skip()}>
+            {chrome.step.label}
           </Button>
         </HelpWrap>
         <HelpWrap help={RUN_ARCADE_HELP.exporter}>
@@ -452,11 +442,47 @@ export function RunArcadeLab() {
       </form>
 
       <div className="flex flex-col gap-1 text-sm text-muted-foreground" data-testid="run-arcade-status">
-        <p className="text-foreground">
-          {loading && series.length < 4 ? "Archive en cours de lecture." : phaseText(snapshot, remaining)}
-          {leader && snapshot.phase === "course" ? ` · meilleur ${leader.mind.name} ${formatCents(leader.cents)}` : ""}
-          <HelpTip {...RUN_ARCADE_HELP.statut} />
-        </p>
+        {chrome.band && !reading ? (
+          <div className="flex flex-col gap-2 text-foreground" data-testid="run-arcade-live">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <Badge variant="secondary">{chrome.band.badge}</Badge>
+              <span>Génération {chrome.band.generation}</span>
+              {chrome.band.tour ? <span>{chrome.band.tour}</span> : null}
+              {chrome.band.remaining ? <span className="font-medium tabular-nums">{chrome.band.remaining}</span> : null}
+              {leader && snapshot.phase === "course" ? (
+                <span>
+                  meilleur {leader.mind.name} {formatCents(leader.cents)}
+                </span>
+              ) : null}
+              {snapshot.phase === "fin" && snapshot.champion ? (
+                <span>
+                  champion {snapshot.champion.runner} {formatCents(snapshot.champion.cents)}
+                </span>
+              ) : null}
+              <HelpTip {...RUN_ARCADE_HELP.statut} />
+            </div>
+            {chrome.band.fraction != null && chrome.band.barNow != null && chrome.band.barMax != null ? (
+              <div
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={chrome.band.barMax}
+                aria-valuenow={chrome.band.barNow}
+                aria-label={chrome.band.barLabel ?? "Avancement"}
+                className="h-2 overflow-hidden rounded-full bg-muted"
+              >
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${chrome.band.fraction * 100}%` }}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-foreground">
+            {reading ? "Archive en cours de lecture." : chrome.lead}
+            <HelpTip {...RUN_ARCADE_HELP.statut} />
+          </p>
+        )}
         {race && newestYear ? (
           <p>
             Archive gratuite : années {newestYear - 1} et {newestYear}, du {formatDrawDate(track[0].date)} au{" "}
