@@ -110,7 +110,12 @@ export function buildPrompt(input: PromptInput) {
     `Solde d’examen actuel : ${input.examCents == null ? "inconnu" : formatCents(input.examCents)}.`,
     `Derniers tirages lus (${rows.length}), du plus ancien au plus récent :`,
     ...rows,
-    ...(input.drawing ? [`Ton dessin : ${input.drawing}`] : []),
+    ...(input.drawing
+      ? [
+          `Ton dessin : ${input.drawing}`,
+          "L’image montre le bout de la courbe, vingt tirages au plus, là où sont les calques.",
+        ]
+      : []),
     ...(notes.length ? ["Notes Brave :", ...notes] : []),
     "Propose une action.",
   ].join("\n")

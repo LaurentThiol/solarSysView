@@ -1,0 +1,9 @@
+{
+  "slug": "fenetre-courbe-b787",
+  "happened_on": "2026-11-02",
+  "area": "runArcade",
+  "title": "Curseur le long de la courbe",
+  "body": "Quand la série révélée est longue, le dessin ne tasse plus tout le trait dans le cadre. Il montre vingt tirages, calé sur le bout, là où sont les masques et les calques. Un curseur sous le dessin fait glisser cette fenêtre vers les tirages plus anciens, le trait se laisse aussi glisser, et Au bout ramène les calques. Une série courte reste entière, sans curseur. Le dessin envoyé à l’IA locale montre ce même bout. Le solde, l’examen et les grilles ne changent pas.",
+  "pr_number": null,
+  "pr_url": null
+}

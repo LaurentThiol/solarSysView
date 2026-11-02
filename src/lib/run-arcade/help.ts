@@ -172,11 +172,15 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   dessin: {
     title: "Signes du dessin",
     wide: true,
-    body: "Chaque runner dessine la série révélée de sa courbe. Une skill qui la vise pose un masque : la fenêtre du geste. Tangente, cercle d’or, pas d’avant et vecteur sont quatre calques, toujours visibles. La phrase sous le dessin dit le geste, la lecture, puis « Observation du …, vue N fois ».",
+    body: "Chaque runner dessine la série révélée de sa courbe. Une skill qui la vise pose un masque : la fenêtre du geste. Tangente, cercle d’or, pas d’avant et vecteur sont quatre calques, toujours visibles. Quand la série est longue, le cadre montre vingt tirages : un curseur le glisse le long du trait, calé au départ sur le bout. La phrase sous le dessin dit le geste, la lecture, puis « Observation du …, vue N fois ».",
     items: [
       {
         label: "Trait",
         text: "La série révélée de la courbe affichée, du plus ancien au plus récent.",
+      },
+      {
+        label: "Curseur",
+        text: "Vingt tirages tiennent dans le cadre quand la série est plus longue. Le curseur va du plus ancien au bout. Le trait se laisse aussi glisser. Les calques restent au bout : ils sortent du cadre si l’on recule, et Au bout les ramène. Une série courte s’affiche entière, sans curseur.",
       },
       {
         label: "Masque",

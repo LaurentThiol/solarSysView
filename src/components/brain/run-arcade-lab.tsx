@@ -685,6 +685,7 @@ export function RunArcadeLab() {
           <HelpTip {...RUN_ARCADE_HELP.gestes} />
         </li>
         <li>Trait : courbe fondamentale</li>
+        <li>Curseur : vingt tirages, du plus ancien au bout</li>
         <li>Bande : masque</li>
         <li className="text-chart-2">Calque tangente</li>
         <li className="text-chart-1">Calque cercle d’or</li>
@@ -825,14 +826,13 @@ export function RunArcadeLab() {
         {race?.runners.map((runner) => {
           const active = runner.mind.id === selected
           const mark = xray ? xrayMark(runner.mind.id, snapshot.activity) : null
+          const select = () => {
+            setSelected(runner.mind.id)
+            setFocusCurve(null)
+          }
           return (
-            <button
+            <div
               key={runner.mind.id}
-              type="button"
-              onClick={() => {
-                setSelected(runner.mind.id)
-                setFocusCurve(null)
-              }}
               className={cn(
                 "rounded-xl border bg-card p-2 text-left transition-colors hover:border-foreground/30",
                 active ? "border-primary" : "border-border",
@@ -840,38 +840,43 @@ export function RunArcadeLab() {
                 !runner.alive && "opacity-60"
               )}
             >
-              <span className="flex items-baseline justify-between gap-2 text-xs">
-                <span className="font-medium text-foreground">{runner.mind.name}</span>
-                <span className="text-muted-foreground">
-                  {mark ? <span className="text-chart-4">{mark} · </span> : null}
-                  {formatCents(runner.cents)}
+              <button type="button" onClick={select} className="block w-full cursor-pointer text-left">
+                <span className="flex items-baseline justify-between gap-2 text-xs">
+                  <span className="font-medium text-foreground">{runner.mind.name}</span>
+                  <span className="text-muted-foreground">
+                    {mark ? <span className="text-chart-4">{mark} · </span> : null}
+                    {formatCents(runner.cents)}
+                  </span>
                 </span>
-              </span>
-              <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                {curveLabel(runner.mind.focus)} · {skillSummary(runner)} · examen{" "}
-                {runner.examCents == null ? "—" : formatCents(runner.examCents)} · {runner.calls} appel(s)
-                {runner.alive ? "" : " · arrêté"}
-              </span>
+                <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                  {curveLabel(runner.mind.focus)} · {skillSummary(runner)} · examen{" "}
+                  {runner.examCents == null ? "—" : formatCents(runner.examCents)} · {runner.calls} appel(s)
+                  {runner.alive ? "" : " · arrêté"}
+                </span>
+              </button>
               <RunnerUniverse
                 runnerId={runner.mind.id}
                 thought={runner.thought}
                 matched={runner.matched}
                 exact={runner.exact}
+                onPress={select}
                 className="mt-1"
               />
-              {xray ? <ThoughtChain runner={runner} draw={runner.thought} hiddenDate={hiddenDate} /> : null}
-              <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
-                {runner.thought?.phrase ?? "—"}
-              </span>
-              {runner.thought ? (
-                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">{runner.thought.observation}</span>
-              ) : null}
-              {observationReportFor(snapshot.observations, runner.thought?.observation) ? (
-                <span className="mt-1 block text-[11px] leading-4 text-foreground" data-testid="runner-observation">
-                  {observationReportFor(snapshot.observations, runner.thought?.observation)}
+              <button type="button" onClick={select} className="block w-full cursor-pointer text-left">
+                {xray ? <ThoughtChain runner={runner} draw={runner.thought} hiddenDate={hiddenDate} /> : null}
+                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                  {runner.thought?.phrase ?? "—"}
                 </span>
-              ) : null}
-            </button>
+                {runner.thought ? (
+                  <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">{runner.thought.observation}</span>
+                ) : null}
+                {observationReportFor(snapshot.observations, runner.thought?.observation) ? (
+                  <span className="mt-1 block text-[11px] leading-4 text-foreground" data-testid="runner-observation">
+                    {observationReportFor(snapshot.observations, runner.thought?.observation)}
+                  </span>
+                ) : null}
+              </button>
+            </div>
           )
         })}
       </div>
