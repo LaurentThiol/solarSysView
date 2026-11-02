@@ -1,3 +1,11 @@
+# Consignes
+
+Écris en français clair : phrases courtes, mots courants, une idée à la fois.
+
+Ajoute un schéma quand il rend une idée plus lisible (flux, écran, dépendances). Mermaid suffit pour un enchaînement ou un arbre.
+
+Quand tu ne sais pas, dis-le, ou pose la question.
+
 # Journal de suivi
 
 À la fin d’une tâche qui ouvre une pull request, dépose un brouillon dans le journal des modifications (Système / Journal), sauf si la PR ne change rien de visible.
