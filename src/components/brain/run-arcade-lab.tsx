@@ -32,11 +32,13 @@ import {
   formatCents,
   leaderOf,
   matchedKeys,
+  observationReportFor,
   RACE_DRAWS_DEFAULT,
   revealedPast,
   RUNNER_DEFAULT,
   RUNNER_MAX,
   think,
+  type Observation,
   type RunnerLive,
   type ThoughtDraw,
 } from "@/lib/run-arcade/thought"
@@ -202,6 +204,28 @@ function XrayPanel({ snapshot }: { snapshot: SessionSnapshot }) {
         )}
       </div>
     </section>
+  )
+}
+
+function ObservationLedger({ observations }: { observations: readonly Observation[] }) {
+  const rows = [...observations].sort(
+    (a, b) => b.count - a.count || a.createdOn.localeCompare(b.createdOn) || a.phrase.localeCompare(b.phrase)
+  )
+  return (
+    <div className="mt-3">
+      <h3 className="mb-1 text-xs font-medium text-muted-foreground">Observations</h3>
+      {rows.length ? (
+        <ul className="flex flex-col gap-1 text-xs text-muted-foreground" data-testid="run-arcade-observations">
+          {rows.map((item) => (
+            <li key={item.phrase}>
+              {item.phrase} · {observationReportFor([item], item.phrase)}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">Aucune observation reconnue.</p>
+      )}
+    </div>
   )
 }
 
@@ -509,7 +533,7 @@ export function RunArcadeLab() {
         ) : null}
         {race ? (
           <p>
-            IA locale : {serviceText(snapshot.ia, snapshot.iaError, snapshot.iaVision ? "prête, vision comprise" : "prête")} ·
+            IA locale : {serviceText(snapshot.ia, snapshot.iaError, snapshot.iaVision ? "prête, le dessin part avec l’appel" : "prête")} ·
             Brave : {serviceText(snapshot.brave, snapshot.braveError, "prête")} · Neon :{" "}
             {snapshot.save.state === "ok"
               ? `champion écrit (${snapshot.save.detail})`
@@ -619,6 +643,10 @@ export function RunArcadeLab() {
                 {proposal.cases.d0} {proposal.cases.d1} {proposal.cases.d2} {proposal.cases.d3} {proposal.cases.d4}
               </p>
               <p className="mt-1 text-sm leading-5">{proposal.draw.phrase}</p>
+              <p className="text-sm leading-5 text-muted-foreground">{proposal.draw.observation}</p>
+              {observationReportFor(snapshot.observations, proposal.draw.observation) ? (
+                <p className="text-sm leading-5">{observationReportFor(snapshot.observations, proposal.draw.observation)}</p>
+              ) : null}
             </div>
             {persisted ? (
               <div className="rounded-lg border border-dashed p-3 text-sm" data-testid="run-arcade-persist">
@@ -656,12 +684,14 @@ export function RunArcadeLab() {
           <HelpTip {...RUN_ARCADE_HELP.dessin} />
           <HelpTip {...RUN_ARCADE_HELP.gestes} />
         </li>
-        <li className="text-chart-2">Tangente, en pointillés</li>
-        <li className="text-chart-1">Rayon vers le nombre d’or</li>
-        <li className="text-chart-3">Pas d’avant</li>
-        <li className="text-chart-4">Vecteur : la pensée</li>
+        <li>Trait : courbe fondamentale</li>
+        <li>Bande : masque</li>
+        <li className="text-chart-2">Calque tangente</li>
+        <li className="text-chart-1">Calque cercle d’or</li>
+        <li className="text-chart-3">Calque pas d’avant</li>
+        <li className="text-chart-4">Calque vecteur</li>
         <li>Trait fin : rappel à la somme</li>
-        <li className="text-chart-4">Projection : la case jouée</li>
+        <li className="text-chart-4">Point : la case jouée</li>
         <li>Rail : sommes et décennies à gauche, rangs à droite</li>
         <li className="inline-flex items-center gap-1 text-[var(--ok)]">
           Numéro ou étoile trouvé : +2 €
@@ -736,7 +766,16 @@ export function RunArcadeLab() {
             className="h-72"
           />
           {xray ? <ThoughtChain runner={focus} draw={focusView.draw} hiddenDate={hiddenDate} /> : null}
-          {focusView.draw ? <p className="mt-2 text-sm leading-5">{focusView.draw.phrase}</p> : null}
+          {focusView.draw ? (
+            <div className="mt-2 text-sm leading-5">
+              <p>{focusView.draw.phrase}</p>
+              <p className="text-muted-foreground">{focusView.draw.observation}</p>
+              {observationReportFor(snapshot.observations, focusView.draw.observation) ? (
+                <p>{observationReportFor(snapshot.observations, focusView.draw.observation)}</p>
+              ) : null}
+            </div>
+          ) : null}
+          <ObservationLedger observations={snapshot.observations} />
           <div className="mt-3 grid gap-3 lg:grid-cols-2">
             <div>
               <h3 className="mb-1 text-xs font-medium text-muted-foreground">
@@ -824,6 +863,14 @@ export function RunArcadeLab() {
               <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
                 {runner.thought?.phrase ?? "—"}
               </span>
+              {runner.thought ? (
+                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">{runner.thought.observation}</span>
+              ) : null}
+              {observationReportFor(snapshot.observations, runner.thought?.observation) ? (
+                <span className="mt-1 block text-[11px] leading-4 text-foreground" data-testid="runner-observation">
+                  {observationReportFor(snapshot.observations, runner.thought?.observation)}
+                </span>
+              ) : null}
             </button>
           )
         })}

@@ -12,7 +12,7 @@ import {
   WINDOW_MIN,
   type SkillParams,
 } from "./skills"
-import { formatCents, type RunnerMind } from "./thought"
+import { formatCents, lectureWord, LECTURE_KEYS, type Lecture, type LectureWord, type RunnerMind } from "./thought"
 
 /** Exemple JSON déjà valide, que le modèle peut recopier tel quel. */
 export const SKILL_EXAMPLE = {
@@ -26,6 +26,13 @@ export const SKILL_EXAMPLE = {
   span: "bande",
   window: 8,
   days: 60,
+  lecture: {
+    tangente: "correspond",
+    masque: "correspond",
+    cercle: "correspond",
+    pas: "correspond",
+    vecteur: "correspond",
+  },
 } as const
 
 export const BRAVE_EXAMPLE = {
@@ -39,6 +46,13 @@ export const BRAVE_EXAMPLE = {
   span: "bande",
   window: 8,
   days: 0,
+  lecture: {
+    tangente: "correspond",
+    masque: "correspond",
+    cercle: "correspond",
+    pas: "correspond",
+    vecteur: "correspond",
+  },
 } as const
 
 export type IaAction =
@@ -71,6 +85,7 @@ export function buildPrompt(input: PromptInput) {
     `curve : ${CURVE_KEYS.join(", ")} ou *. gesture : ${GESTURES.join(", ")}. ratio : ${GOLDEN_RATIOS.join(", ")}. span : ${SPANS.join(", ")}. window : entier de ${WINDOW_MIN} à ${WINDOW_MAX}. days : 0 s’il n’y a pas de fenêtre longue, sinon un entier de ${DAYS_MIN} à ${DAYS_MAX}.`,
     "Une skill sur une courbe déjà pilotée en devient une nouvelle version. Une seule skill nouvelle par lancement.",
     "L’examen rejoue les derniers tirages, que tu ne lis pas. La skill n’est gardée que si le solde d’examen monte.",
+    "Le dessin porte une lecture déjà mesurée. Recopie-la dans lecture, cinq champs : tangente, masque, cercle, pas, vecteur. Chaque champ vaut correspond ou ecarte. ecarte veut dire s’écarte. Tu ne changes pas ces mots.",
   ].join("\n")
 
   const skills = input.mind.skills
@@ -103,6 +118,50 @@ export function buildPrompt(input: PromptInput) {
   return { system, user }
 }
 
+function asLectureWord(value: string): LectureWord | null {
+  if (value === "correspond") return "correspond"
+  if (value === "ecarte" || value === "s’écarte" || value === "s'écarte") return "ecarte"
+  return null
+}
+
+/** Lecture lue dans le dessin (« À recopier ») ou dans la phrase d’observation. */
+export function lectureFromText(text: string): Lecture | null {
+  const copy = text.match(/À recopier : ([^\n]+)/)
+  const source = copy?.[1] ?? text
+  const lecture = {} as Lecture
+  for (const key of LECTURE_KEYS) {
+    const match = source.match(new RegExp(`${key} (correspond|ecarte|s’écarte|s'écarte)`))
+    const word = match ? asLectureWord(match[1]) : null
+    if (!word) return null
+    lecture[key] = word
+  }
+  return lecture
+}
+
+function parseLecture(raw: unknown): Lecture | null {
+  if (!raw || typeof raw !== "object") return null
+  const record = raw as Record<string, unknown>
+  const lecture = {} as Lecture
+  for (const key of LECTURE_KEYS) {
+    if (record[key] !== "correspond" && record[key] !== "ecarte") return null
+    lecture[key] = record[key]
+  }
+  return lecture
+}
+
+/** Mots qui contredisent la mesure. Vide si la lecture manque ou si elle recopie. */
+export function lectureRefusal(text: string, expected: Lecture): string | null {
+  const raw = extractJson(text)
+  if (!raw || typeof raw !== "object") return null
+  const lecture = parseLecture((raw as Record<string, unknown>).lecture)
+  if (!lecture) return null
+  const clashes = LECTURE_KEYS.filter((key) => lecture[key] !== expected[key])
+  if (clashes.length === 0) return null
+  const model = clashes.map((key) => `${key} ${lectureWord(lecture[key])}`).join(" », « ")
+  const measure = clashes.map((key) => `${key} ${lectureWord(expected[key])}`).join(" », « ")
+  return `le modèle écrit « ${model} », la mesure dit « ${measure} »`
+}
+
 function extractJson(text: string) {
   const start = text.indexOf("{")
   const end = text.lastIndexOf("}")
@@ -114,10 +173,14 @@ function extractJson(text: string) {
   }
 }
 
-export function parseAction(text: string): IaAction | null {
+export function parseAction(text: string, expected?: Lecture | null): IaAction | null {
   const raw = extractJson(text)
   if (!raw || typeof raw !== "object") return null
   const record = raw as Record<string, unknown>
+  if (expected) {
+    const lecture = parseLecture(record.lecture)
+    if (!lecture || LECTURE_KEYS.some((key) => lecture[key] !== expected[key])) return null
+  }
   if (record.action === "brave") {
     const query = String(record.query ?? "").replace(/\s+/g, " ").trim()
     return query ? { kind: "brave", query: query.slice(0, 200) } : null

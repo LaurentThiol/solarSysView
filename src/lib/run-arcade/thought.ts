@@ -16,7 +16,15 @@ import {
 } from "./curves"
 import { formatRatio, goldenAim, goldenLevel, GOLDEN_RATIOS } from "./golden"
 import { soirReading } from "./soir"
-import { activeVersion, baseSkill, gesturePhrase, type Skill, type SkillParams } from "./skills"
+import {
+  activeVersion,
+  baseSkill,
+  gesturePhrase,
+  type Gesture,
+  type Skill,
+  type SkillParams,
+  type SkillTarget,
+} from "./skills"
 
 export { aimRatio, formatRatio, goldenAim, goldenLevel, GOLDEN_RATIOS, type GoldenRatio } from "./golden"
 export {
@@ -56,9 +64,46 @@ export type RailMark = {
   thought: number
 }
 
+export type LectureWord = "correspond" | "ecarte"
+
+/** Cinq lectures, dans l’ordre tangente, masque, cercle, pas, vecteur. */
+export type Lecture = {
+  tangente: LectureWord
+  masque: LectureWord
+  cercle: LectureWord
+  pas: LectureWord
+  vecteur: LectureWord
+}
+
+export const LECTURE_KEYS = ["tangente", "masque", "cercle", "pas", "vecteur"] as const
+
+/** Fenêtre d’une skill sur la courbe affichée. */
+export type CurveMask = {
+  id: string
+  name: string
+  gesture: Gesture
+  curve: SkillTarget
+  /** Cette skill pose la pensée. */
+  drives: boolean
+  x1: number
+  x2: number
+}
+
+/** Phrase reconnue, datée du premier soir où elle a été vue, comptée ensuite. */
+export type Observation = {
+  phrase: string
+  createdOn: string
+  count: number
+}
+
 export type ThoughtDraw = {
   focus: CurveKey
+  /** Série révélée entière. Le dernier point est la dernière valeur lue. */
   trail: Point[]
+  masks: CurveMask[]
+  lecture: Lecture
+  /** Courbe, geste, fenêtre et cinq lectures. Clé du registre. */
+  observation: string
   tangent: Segment
   radius: { cx: number; cy: number; r: number }
   /** Trait du centre vers le niveau d’or visé. */
@@ -202,6 +247,174 @@ export function tipFor(
   return goldenAim(span.lo, span.hi, params.ratio)
 }
 
+/** Fenêtre déjà lue par le geste : les `window` derniers tirages, ou les jours demandés. */
+function windowBounds(params: SkillParams, past: readonly RankPoint[], rows: readonly CurveValues[]) {
+  const last = rows.length - 1
+  if (last < 0) return { x1: 0, x2: 0 }
+  if (params.days && past.length > 0) {
+    const from = addDays(past[last].date, -params.days)
+    for (let index = 0; index <= last; index += 1) {
+      if (past[index].date > from) return { x1: index, x2: last }
+    }
+  }
+  const count = Math.min(rows.length, Math.max(2, params.window))
+  return { x1: last - count + 1, x2: last }
+}
+
+/** Skills qui visent la courbe affichée. La dédiée pose la pensée, sinon la dernière `*`. */
+function masksOn(
+  mind: RunnerMind,
+  key: CurveKey,
+  hiddenDate: string | null,
+  past: readonly RankPoint[],
+  rows: readonly CurveValues[]
+): CurveMask[] {
+  const applicable: { skill: Skill; version: SkillParams }[] = []
+  let dedicated = -1
+  let wildcard = -1
+  for (const skill of mind.skills) {
+    const version = activeVersion(skill, hiddenDate)
+    if (!version || (version.curve !== key && version.curve !== "*")) continue
+    const index = applicable.length
+    applicable.push({ skill, version })
+    if (version.curve === key) dedicated = index
+    else wildcard = index
+  }
+  const driver = dedicated >= 0 ? dedicated : wildcard
+  return applicable.map((item, index) => {
+    const bounds = windowBounds(item.version, past, rows)
+    return {
+      id: item.skill.id,
+      name: item.skill.name,
+      gesture: item.version.gesture,
+      curve: item.version.curve,
+      drives: index === driver,
+      x1: bounds.x1,
+      x2: bounds.x2,
+    }
+  })
+}
+
+const FLAT_STEP = 0.05
+
+function meanAbs(values: readonly number[], target: number) {
+  if (values.length === 0) return 0
+  return values.reduce((total, value) => total + Math.abs(value - target), 0) / values.length
+}
+
+function halfGap(values: readonly number[]) {
+  if (values.length < 2) return 0
+  const mid = Math.floor(values.length / 2)
+  const mean = (slice: readonly number[]) => slice.reduce((total, value) => total + value, 0) / slice.length
+  return Math.abs(mean(values.slice(0, mid)) - mean(values.slice(mid)))
+}
+
+/** Écart moyen à la droite du dernier pas. Les deux derniers points sont sur la droite. */
+function tangentDistance(points: readonly Point[], last: Point, delta: number) {
+  if (points.length <= 2) return 0
+  const sample = points.slice(0, -2)
+  const total = sample.reduce((sum, point) => {
+    const predicted = last.y + delta * (point.x - last.x)
+    return sum + Math.abs(point.y - predicted)
+  }, 0)
+  return total / sample.length
+}
+
+function word(ok: boolean): LectureWord {
+  return ok ? "correspond" : "ecarte"
+}
+
+export function lectureWord(value: LectureWord) {
+  return value === "correspond" ? "correspond" : "s’écarte"
+}
+
+function lectureClause(lecture: Lecture) {
+  return LECTURE_KEYS.map((key) => `${key} ${lectureWord(lecture[key])}`).join(", ")
+}
+
+function windowLabel(params: SkillParams) {
+  return params.days ? `${params.days} jours` : `${Math.max(2, params.window)} tirages`
+}
+
+/** Texte envoyé avec le dessin : la phrase, puis les cinq valeurs à recopier. */
+export function drawingText(draw: Pick<ThoughtDraw, "observation" | "lecture">) {
+  const copy = LECTURE_KEYS.map((key) => `${key} ${draw.lecture[key]}`).join(", ")
+  return `${draw.observation}\nÀ recopier : ${copy}`
+}
+
+const OBSERVATION_DATE = new Intl.DateTimeFormat("fr-FR", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+})
+
+/** Date sans jour de semaine : « 12 mars 2026 », « 1er mars 2026 ». */
+export function formatObservationDate(isoDate: string) {
+  return OBSERVATION_DATE.formatToParts(new Date(`${isoDate.slice(0, 10)}T12:00:00Z`))
+    .map((part) => (part.type === "day" && part.value === "1" ? "1er" : part.value))
+    .join("")
+}
+
+export function observationReport(item: Observation) {
+  return `Observation du ${formatObservationDate(item.createdOn)}, vue ${item.count} fois.`
+}
+
+export function observationReportFor(observations: readonly Observation[], phrase: string | null | undefined) {
+  if (!phrase) return null
+  const found = observations.find((item) => item.phrase === phrase)
+  return found ? observationReport(found) : null
+}
+
+export function noteObservation(
+  observations: readonly Observation[],
+  seen: ReadonlySet<string>,
+  input: { runnerId: string; hiddenDate: string; phrase: string; createdOn: string }
+) {
+  const token = `${input.runnerId}|${input.hiddenDate}|${input.phrase}`
+  if (seen.has(token)) return { observations: [...observations], seen: new Set(seen), counted: false }
+  const nextSeen = new Set(seen)
+  nextSeen.add(token)
+  const index = observations.findIndex((item) => item.phrase === input.phrase)
+  if (index < 0) {
+    return {
+      observations: [...observations, { phrase: input.phrase, createdOn: input.createdOn, count: 1 }],
+      seen: nextSeen,
+      counted: true,
+    }
+  }
+  return {
+    observations: observations.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, count: item.count + 1 } : item
+    ),
+    seen: nextSeen,
+    counted: true,
+  }
+}
+
+/** Une reconnaissance par runner, par tirage caché, par phrase. Le même jeton ne recompte pas. */
+export function noteRace(
+  observations: readonly Observation[],
+  seen: ReadonlySet<string>,
+  race: Race,
+  hiddenDate: string
+) {
+  let next = observations
+  let tokens = seen
+  for (const runner of race.runners) {
+    if (!runner.alive || !runner.thought) continue
+    const noted = noteObservation(next, tokens, {
+      runnerId: runner.mind.id,
+      hiddenDate,
+      phrase: runner.thought.observation,
+      createdOn: runner.thought.seenDate,
+    })
+    next = noted.observations
+    tokens = noted.seen
+  }
+  return { observations: next, seen: tokens }
+}
+
 function guessOf(numbers: readonly number[], stars: readonly number[]): Guess {
   return {
     n1: numbers[0],
@@ -224,12 +437,16 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
 
   const focus = options.focus ?? mind.focus
   const params = paramsFor(mind, focus, hiddenDate)
-  const trailLength = Math.min(16, Math.max(6, params.window))
-  const trailRows = rows.slice(-trailLength)
-  const trail = trailRows.map((row, index) => ({ x: index, y: row[focus] }))
+  const trail = rows.map((row, index) => ({ x: index, y: row[focus] }))
+  const masks = masksOn(mind, focus, hiddenDate, past, rows)
+  const driver = masks.find((mask) => mask.drives)
+  const bounds = driver ? { x1: driver.x1, x2: driver.x2 } : windowBounds(params, past, rows)
+  const maskPoints = trail.filter((point) => point.x >= bounds.x1 && point.x <= bounds.x2)
   const last = trail[trail.length - 1]
   const prev = trail.length > 1 ? trail[trail.length - 2] : last
+  const prev2 = trail.length > 2 ? trail[trail.length - 3] : null
   const delta = last.y - prev.y
+  const deltaPrev = prev2 ? prev.y - prev2.y : null
   const span = spanFor(params, rows, focus)
   const spanWidth = Math.max(1, span.hi - span.lo)
   const aimY = goldenAim(span.lo, span.hi, params.ratio)
@@ -265,14 +482,45 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
     const high = Math.max(span.hi, last.y, projected, tip) + spanWidth * 0.75
     return level.y >= low && level.y <= high
   })
-  const slopeWord = delta > 0.05 ? "montante" : delta < -0.05 ? "descendante" : "plate"
+  const slopeWord = delta > FLAT_STEP ? "montante" : delta < -FLAT_STEP ? "descendante" : "plate"
   const reading = params.gesture === "soir" ? soirReading(past, rows, focus, hiddenDate) : null
+  const tol = Math.max(0.5, spanWidth / 4)
+  const maskValues = maskPoints.map((point) => point.y)
+  const tangentGap = tangentDistance(maskPoints, last, delta)
+  const tangente = word(tangentGap <= tol)
+  const masque = word(
+    params.gesture === "glisse"
+      ? tangentGap <= tol
+      : params.gesture === "soir"
+        ? reading?.days != null
+        : params.gesture === "miroir"
+          ? deltaPrev != null && Math.abs(delta + deltaPrev) <= tol
+          : params.gesture === "moyenne"
+            ? halfGap(maskValues) <= tol
+            : params.gesture === "or"
+              ? meanAbs(maskValues, aimY) <= tol
+              : meanAbs(maskValues, last.y) <= tol
+  )
+  const pas = word(
+    deltaPrev != null &&
+      ((Math.abs(delta) <= FLAT_STEP && Math.abs(deltaPrev) <= FLAT_STEP) ||
+        (delta * deltaPrev > 0 && Math.abs(delta - deltaPrev) <= tol))
+  )
+  const lecture: Lecture = {
+    tangente,
+    masque,
+    cercle: word(meanAbs(maskValues, aimY) <= tol),
+    pas,
+    vecteur: word(Math.abs(projected - tip) < 0.5),
+  }
   const clause = reading
     ? reading.days == null
       ? `reprend le pas du ${reading.evening}`
       : `${reading.evening} suit le ${reading.other} à ${reading.days} ${reading.days > 1 ? "jours" : "jour"}`
     : gesturePhrase(params.gesture)
-  const phrase = `${curveLabel(focus)} ${clause} : tangente ${slopeWord}, rayon ${formatNum(radius)} vers ${formatRatio(params.ratio)}, vecteur ${formatNum(tip)}, projection ${projected}${recalled ? ", ramenée par les totales" : ""}.`
+  const words = lectureClause(lecture)
+  const observation = `${curveLabel(focus)} · ${params.gesture} · ${windowLabel(params)} · ${words}`
+  const phrase = `${curveLabel(focus)} ${clause} : tangente ${slopeWord}, rayon ${formatNum(radius)} vers ${formatRatio(params.ratio)}, vecteur ${formatNum(tip)}, projection ${projected}${recalled ? ", ramenée par les totales" : ""}. Lecture : ${words}.`
   const ys = [
     ...trail.map((point) => point.y),
     tangent.y1,
@@ -298,6 +546,9 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
     draw: {
       focus,
       trail,
+      masks,
+      lecture,
+      observation,
       tangent,
       radius: { cx: last.x, cy: last.y, r: radius },
       spoke: { x1: last.x, y1: last.y, x2: last.x, y2: aimY },

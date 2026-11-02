@@ -52,6 +52,8 @@ test("Ollama gets a schema and retries format json once on HTTP 400", async () =
   assert.ok(schema.properties.curve.enum.includes("sumNumbers"))
   assert.ok(schema.properties.curve.enum.includes("*"))
   assert.ok(schema.properties.ratio.enum.includes(0.618))
+  assert.deepEqual(schema.properties.lecture.properties.tangente.enum, ["correspond", "ecarte"])
+  assert.ok(schema.required.includes("lecture"))
 
   const formats: unknown[] = []
   const parsed = await requestLocalThink(

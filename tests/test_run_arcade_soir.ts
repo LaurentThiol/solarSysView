@@ -48,6 +48,7 @@ test("friday copies the tuesday three days earlier, plus that tuesday’s step",
   assert.equal(thought.draw.vector.y2, 48)
   const phrase = thought.draw.phrase
   assert.match(phrase, /vendredi suit le mardi à 3 jours/)
+  assert.equal(thought.draw.lecture.masque, "correspond")
   assert.ok(phrase.indexOf("vendredi suit le mardi") < phrase.indexOf("projection"))
   if (thought.draw.recall) {
     assert.match(phrase, /ramenée par les totales/)
@@ -91,6 +92,7 @@ test("without a counterpart within four days the tip repeats the same evening’
   assert.equal(reading.tip, 42)
   const thought = think(mind(), past, { hiddenDate: "2026-06-05" })
   assert.match(thought.draw.phrase, /reprend le pas du vendredi/)
+  assert.equal(thought.draw.lecture.masque, "ecarte")
 })
 
 test("the tip follows the phase, not a closer evening at the wrong lag", () => {

@@ -12,7 +12,7 @@ import {
 import { placeStars, reconcile } from "../src/lib/run-arcade/coherence.ts"
 import { buildTrack, curveValues, CURVE_KEYS, type CurveValues } from "../src/lib/run-arcade/curves.ts"
 import { EXAM_WINDOW, examine, examStart, passesExam, promptPast } from "../src/lib/run-arcade/examen.ts"
-import { BRAVE_EXAMPLE, buildPrompt, parseAction, SKILL_EXAMPLE } from "../src/lib/run-arcade/prompt.ts"
+import { BRAVE_EXAMPLE, buildPrompt, lectureFromText, lectureRefusal, parseAction, SKILL_EXAMPLE } from "../src/lib/run-arcade/prompt.ts"
 import {
   activeVersion,
   addVersion,
@@ -29,10 +29,16 @@ import {
   countHits,
   createMinds,
   createRace,
+  drawingText,
+  formatObservationDate,
   goldenAim,
   goldenLevel,
   newRunner,
+  noteObservation,
+  noteRace,
+  observationReport,
   playTurn,
+  previewTurn,
   revealedPast,
   settlePurse,
   think,
@@ -388,4 +394,204 @@ test("an IA answer is one JSON action with known fields", () => {
     window: 8,
     days: null,
   })
+})
+
+function withN1(values: number[]) {
+  return values.map((n1, index) => ({ ...point(index), n1 }))
+}
+
+test("the drawn trail is the whole revealed series, and the mask is the skill window", () => {
+  const past = series(12)
+  const draw = think(mindWith({ ...glide, curve: "n5", window: 3 }, "n5"), past).draw
+  assert.equal(draw.trail.length, past.length)
+  assert.equal(draw.trail[0].x, 0)
+  assert.equal(draw.trail[draw.trail.length - 1].x, past.length - 1)
+  assert.equal(draw.trail[draw.trail.length - 1].y, curveValues(past[11]).n5)
+  assert.equal(draw.masks.length, 1)
+  assert.equal(draw.masks[0].x2 - draw.masks[0].x1 + 1, 3)
+  assert.equal(draw.masks[0].drives, true)
+  assert.match(draw.observation, /n5 · glisse · 3 tirages · tangente (correspond|s’écarte), masque (correspond|s’écarte), cercle (correspond|s’écarte), pas (correspond|s’écarte), vecteur (correspond|s’écarte)/)
+  assert.match(draw.phrase, /Lecture : tangente/)
+  assert.equal(draw.lecture.vecteur, draw.recall ? "ecarte" : "correspond")
+})
+
+test("a day window, another curve and a late version stay out of the mask", () => {
+  const past = series(12)
+  const hiddenDate = "2099-01-01"
+  const days = think(
+    mindWith({ ...glide, curve: "n1", gesture: "persiste", window: 8, days: 10 }, "n1"),
+    past,
+    { hiddenDate }
+  ).draw
+  const from = new Date(`${past[11].date}T12:00:00Z`)
+  from.setUTCDate(from.getUTCDate() - 10)
+  const limit = from.toISOString().slice(0, 10)
+  const expected = past.filter((row) => row.date > limit).length
+  assert.equal(days.masks[0].x2 - days.masks[0].x1 + 1, expected)
+  assert.match(days.observation, /10 jours/)
+
+  const elsewhere = think(mindWith({ ...glide, curve: "n2" }, "n1"), past, { hiddenDate }).draw
+  assert.equal(elsewhere.masks.length, 0)
+
+  const early = newSkill("early", "Tôt", { ...glide, curve: "n1" }, { cutoff: past[2].date, origin: "maison", examCents: null })
+  const late = addVersion(early, { ...glide, curve: "n1", gesture: "miroir" }, { cutoff: hiddenDate, origin: "ia", examCents: null })
+  const kept = think({ ...mind, focus: "n1", skills: [late] }, past, { hiddenDate }).draw
+  assert.equal(kept.masks.length, 1)
+  assert.equal(kept.masks[0].gesture, "glisse")
+  const onlyLate = newSkill("late", "Tard", { ...glide, curve: "n1", gesture: "miroir" }, { cutoff: hiddenDate, origin: "ia", examCents: null })
+  assert.equal(think({ ...mind, focus: "n1", skills: [onlyLate] }, past, { hiddenDate }).draw.masks.length, 0)
+})
+
+test("the dedicated skill drives the mask, the wildcard stays lighter", () => {
+  const past = series(12)
+  const wild = newSkill("wild", "Geste de base", glide, { cutoff: "", origin: "maison", examCents: null })
+  const slow = newSkill(
+    "slow",
+    "n1 lente",
+    { curve: "n1", gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: 6 },
+    { cutoff: "", origin: "maison", examCents: null }
+  )
+  const other = newSkill(
+    "other",
+    "n5 seule",
+    { ...glide, curve: "n5" },
+    { cutoff: "", origin: "maison", examCents: null }
+  )
+  const masks = think({ ...mind, focus: "n1", skills: [wild, slow, other] }, past).draw.masks
+  assert.equal(masks.length, 2)
+  assert.equal(masks.find((mask) => mask.id === "slow")?.drives, true)
+  assert.equal(masks.find((mask) => mask.id === "wild")?.drives, false)
+  assert.equal(masks.find((mask) => mask.id === "slow")!.x2 - masks.find((mask) => mask.id === "slow")!.x1 + 1, 2)
+  assert.equal(masks.find((mask) => mask.id === "wild")!.x2 - masks.find((mask) => mask.id === "wild")!.x1 + 1, 8)
+})
+
+test("the five words follow the mask, and a contradicted JSON is refused", () => {
+  const flat = think(
+    mindWith({ curve: "n1", gesture: "persiste", ratio: 0.618, span: "pas", window: 6, days: null }, "n1"),
+    withN1([8, 8, 8, 8, 8, 8])
+  ).draw
+  assert.equal(flat.lecture.tangente, "correspond")
+  assert.equal(flat.lecture.masque, "correspond")
+  assert.equal(flat.lecture.cercle, "ecarte")
+  assert.equal(flat.lecture.pas, "correspond")
+
+  const glideDraw = think(
+    mindWith({ curve: "n1", gesture: "glisse", ratio: 0.618, span: "pas", window: 6, days: null }, "n1"),
+    withN1([1, 1, 1, 1, 2, 8])
+  ).draw
+  assert.equal(glideDraw.lecture.tangente, "ecarte")
+  assert.equal(glideDraw.lecture.masque, glideDraw.lecture.tangente)
+
+  const mean = think(
+    mindWith({ curve: "n1", gesture: "moyenne", ratio: 0.618, span: "pas", window: 4, days: null }, "n1"),
+    withN1([1, 8, 2, 7])
+  ).draw
+  assert.equal(mean.lecture.masque, "correspond")
+  assert.equal(mean.lecture.tangente, "ecarte")
+
+  const mirror = think(
+    mindWith({ curve: "n1", gesture: "miroir", ratio: 0.618, span: "pas", window: 3, days: null }, "n1"),
+    withN1([4, 8, 4])
+  ).draw
+  assert.equal(mirror.lecture.masque, "correspond")
+  assert.equal(
+    think(
+      mindWith({ curve: "n1", gesture: "miroir", ratio: 0.618, span: "pas", window: 3, days: null }, "n1"),
+      withN1([4, 8])
+    ).draw.lecture.masque,
+    "ecarte"
+  )
+  assert.equal(
+    think(
+      mindWith({ curve: "n1", gesture: "miroir", ratio: 0.618, span: "pas", window: 3, days: null }, "n1"),
+      withN1([4, 8])
+    ).draw.lecture.pas,
+    "ecarte"
+  )
+  assert.equal(
+    think(
+      mindWith({ curve: "n1", gesture: "glisse", ratio: 0.618, span: "pas", window: 3, days: null }, "n1"),
+      withN1([2, 4, 6])
+    ).draw.lecture.pas,
+    "correspond"
+  )
+  assert.equal(
+    think(
+      mindWith({ curve: "n1", gesture: "glisse", ratio: 0.618, span: "pas", window: 3, days: null }, "n1"),
+      withN1([2, 6, 3])
+    ).draw.lecture.pas,
+    "ecarte"
+  )
+
+  const copied = lectureFromText(drawingText(flat))
+  assert.deepEqual(copied, flat.lecture)
+  const bad = { ...flat.lecture, tangente: "ecarte" as const }
+  const body = JSON.stringify({ ...SKILL_EXAMPLE, lecture: bad })
+  assert.equal(parseAction(body, flat.lecture), null)
+  assert.equal(
+    lectureRefusal(body, flat.lecture),
+    "le modèle écrit « tangente s’écarte », la mesure dit « tangente correspond »"
+  )
+  assert.equal(parseAction(JSON.stringify({ ...SKILL_EXAMPLE, lecture: flat.lecture }), flat.lecture)?.kind, "skill")
+  assert.equal(JSON.stringify(flat).includes("2099"), false)
+})
+
+test("an observation is dated on first sight and counted on the next draw, not twice on the same one", () => {
+  assert.equal(formatObservationDate("2026-03-12"), "12 mars 2026")
+  assert.equal(formatObservationDate("2026-03-01"), "1er mars 2026")
+  const phrase = "n1 · glisse · 8 tirages · tangente correspond, masque correspond, cercle s’écarte, pas correspond, vecteur correspond"
+  const flipped = phrase.replace("cercle s’écarte", "cercle correspond")
+  let noted = noteObservation([], new Set(), {
+    runnerId: "r1",
+    hiddenDate: "2026-03-13",
+    phrase,
+    createdOn: "2026-03-10",
+  })
+  assert.equal(noted.observations.length, 1)
+  assert.equal(noted.observations[0].count, 1)
+  assert.equal(observationReport(noted.observations[0]), "Observation du 10 mars 2026, vue 1 fois.")
+  noted = noteObservation(noted.observations, noted.seen, {
+    runnerId: "r3",
+    hiddenDate: "2026-03-13",
+    phrase,
+    createdOn: "2026-03-12",
+  })
+  assert.equal(noted.observations[0].count, 2)
+  assert.equal(noted.observations[0].createdOn, "2026-03-10")
+  noted = noteObservation(noted.observations, noted.seen, {
+    runnerId: "r1",
+    hiddenDate: "2026-03-13",
+    phrase,
+    createdOn: "2026-03-10",
+  })
+  assert.equal(noted.observations[0].count, 2)
+  noted = noteObservation(noted.observations, noted.seen, {
+    runnerId: "r1",
+    hiddenDate: "2026-03-17",
+    phrase,
+    createdOn: "2026-03-13",
+  })
+  assert.equal(noted.observations[0].count, 3)
+  assert.equal(noted.observations[0].createdOn, "2026-03-10")
+  assert.equal(observationReport(noted.observations[0]), "Observation du 10 mars 2026, vue 3 fois.")
+  noted = noteObservation(noted.observations, noted.seen, {
+    runnerId: "r1",
+    hiddenDate: "2026-03-17",
+    phrase: flipped,
+    createdOn: "2026-03-13",
+  })
+  assert.equal(noted.observations.length, 2)
+  assert.equal(noted.observations[1].count, 1)
+  assert.equal(noted.observations[1].createdOn, "2026-03-13")
+
+  const rows = series(12)
+  let race = previewTurn(createRace(1, rows.length, 4), rows)
+  const hidden = rows[race.cursor].date
+  let raceNotes = noteRace([], new Set(), race, hidden)
+  const counts = raceNotes.observations.reduce((total, item) => total + item.count, 0)
+  raceNotes = noteRace(raceNotes.observations, raceNotes.seen, race, hidden)
+  assert.equal(raceNotes.observations.reduce((total, item) => total + item.count, 0), counts)
+  const played = playTurn(race, rows)
+  raceNotes = noteRace(raceNotes.observations, raceNotes.seen, played, played.revealed?.date ?? hidden)
+  assert.equal(raceNotes.observations.reduce((total, item) => total + item.count, 0), counts)
 })

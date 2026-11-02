@@ -112,7 +112,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
     items: [
       {
         label: "IA locale",
-        text: "Ollama, graine fixe, réponse courte. Le prompt lit les douze derniers tirages lisibles, sans la fenêtre d’examen, et rappelle le solde d’examen. Une réponse illisible est refusée. Quand la ligne dit « vision comprise », les appels suivants joignent le dessin.",
+        text: "Ollama, graine fixe, réponse courte. Le prompt lit les douze derniers tirages lisibles, sans la fenêtre d’examen, et rappelle le solde d’examen. Une réponse illisible est refusée. Le premier appel part sans image. Quand la ligne dit « le dessin part avec l’appel », les appels suivants joignent le dessin. Le journal nomme l’appel, la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite les deux versions.",
       },
       {
         label: "Brave",
@@ -172,26 +172,30 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   dessin: {
     title: "Signes du dessin",
     wide: true,
-    body: "Chaque runner dessine une courbe. La phrase sous le dessin dit le geste, la pente de la tangente, le rayon, le vecteur et la case jouée.",
+    body: "Chaque runner dessine la série révélée de sa courbe. Une skill qui la vise pose un masque : la fenêtre du geste. Tangente, cercle d’or, pas d’avant et vecteur sont quatre calques, toujours visibles. La phrase sous le dessin dit le geste, la lecture, puis « Observation du …, vue N fois ».",
     items: [
       {
         label: "Trait",
-        text: "Les derniers points de la courbe dessinée.",
+        text: "La série révélée de la courbe affichée, du plus ancien au plus récent.",
       },
       {
-        label: "Tangente",
+        label: "Masque",
+        text: "Bande sur la fenêtre de la skill. La bande marquée pose la pensée. Une skill d’une autre courbe n’y paraît pas. Le survol nomme la skill et son geste.",
+      },
+      {
+        label: "Calque tangente",
         text: "Pointillés : la pente entre les deux derniers points, prolongée des deux côtés.",
       },
       {
-        label: "Rayon",
-        text: "Cercle et trait vers le niveau du nombre d’or choisi : 0,382, 0,618, 1,272, 1,618 ou 2,618.",
+        label: "Calque cercle d’or",
+        text: "Cercle, trait vers le niveau choisi, et niveaux d’or déjà calculés : 0,382, 0,618, 1,272, 1,618 ou 2,618.",
       },
       {
-        label: "Pas d’avant",
+        label: "Calque pas d’avant",
         text: "Flèche du point d’avant vers le dernier point révélé.",
       },
       {
-        label: "Vecteur",
+        label: "Calque vecteur",
         text: "Flèche du dernier point vers la pensée, avant le rappel aux sommes.",
       },
       {
@@ -263,7 +267,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   fiche: {
     title: "Fiche du runner",
-    body: "La fiche montre le solde de course, le solde d’examen et le nombre d’appels. Les pastilles redessinent la courbe choisie. Les numéros annoncés pour le tour restent ceux de toutes les courbes.",
+    body: "La fiche montre le solde de course, le solde d’examen et le nombre d’appels. Les pastilles redessinent la courbe choisie, sans créer d’observation. Les numéros annoncés pour le tour restent ceux de toutes les courbes. La liste donne chaque observation, la plus vue d’abord : la phrase, la date de création, le compte.",
   },
   skills: {
     title: "Skills et versions",
@@ -285,6 +289,6 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   journal: {
     title: "Journal des requêtes",
-    body: "Les huit dernières lignes de ce runner. La ligne dit « avant-course » ou le numéro du tour, puis le genre : ia, brave, skill, refus ou erreur. La coupure est le dernier tirage lu par la requête.",
+    body: "Les huit dernières lignes de ce runner. La ligne dit « avant-course » ou le numéro du tour, puis le genre : ia, brave, skill, refus ou erreur. La coupure est le dernier tirage lu par la requête. Un appel nomme s’il est parti sans image ou avec le dessin, puis la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite ce que le modèle a écrit et ce que la mesure dit.",
   },
 }

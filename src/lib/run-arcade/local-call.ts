@@ -28,8 +28,20 @@ export function actionSchema() {
       span: { type: "string", enum: [...SPANS] },
       window: { type: "integer", minimum: WINDOW_MIN, maximum: WINDOW_MAX },
       days: { type: "integer", minimum: 0, maximum: DAYS_MAX },
+      lecture: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          tangente: { type: "string", enum: ["correspond", "ecarte"] },
+          masque: { type: "string", enum: ["correspond", "ecarte"] },
+          cercle: { type: "string", enum: ["correspond", "ecarte"] },
+          pas: { type: "string", enum: ["correspond", "ecarte"] },
+          vecteur: { type: "string", enum: ["correspond", "ecarte"] },
+        },
+        required: ["tangente", "masque", "cercle", "pas", "vecteur"],
+      },
     },
-    required: ["action", "name", "phrase", "query", "curve", "gesture", "ratio", "span", "window", "days"],
+    required: ["action", "name", "phrase", "query", "curve", "gesture", "ratio", "span", "window", "days", "lecture"],
   }
 }
 

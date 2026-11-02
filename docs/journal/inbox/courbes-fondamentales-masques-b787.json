@@ -1,0 +1,9 @@
+{
+  "slug": "courbes-fondamentales-masques-b787",
+  "happened_on": "2026-11-02",
+  "area": "runArcade",
+  "title": "Courbe fondamentale, masques et observations",
+  "body": "Chaque runner dessine la série révélée de la courbe affichée : n1 pour n1, la somme pour Σn, et de même pour les autres cases. Les skills qui visent cette courbe posent un masque sur leur fenêtre. Tangente, cercle d’or, pas d’avant et vecteur restent en calques, toujours visibles. Le logiciel mesure cinq lectures, correspond ou s’écarte, les date à la première reconnaissance et compte les suivantes. La phrase sous la carte, le dessin envoyé et le journal disent la même lecture. L’IA recopie ces cinq mots : une contradiction est refusée. Le solde, l’examen et les grilles ne changent pas.",
+  "pr_number": null,
+  "pr_url": null
+}

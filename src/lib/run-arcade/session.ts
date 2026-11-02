@@ -12,7 +12,7 @@ import {
 import { median, rotate, sliceMs } from "./clock"
 import { buildTrack, type RankPoint } from "./curves"
 import { examine, passesExam, promptPast } from "./examen"
-import { buildPrompt, parseAction } from "./prompt"
+import { buildPrompt, lectureRefusal, parseAction } from "./prompt"
 import {
   addVersion,
   currentVersion,
@@ -25,11 +25,16 @@ import {
 import {
   createMinds,
   createRace,
+  drawingText,
   formatCents,
+  noteRace,
+  observationReport,
   playTurn,
   previewTurn,
   revealedPast,
   think,
+  type Lecture,
+  type Observation,
   type Race,
   type RunnerLive,
   type RunnerMind,
@@ -124,6 +129,8 @@ export type SessionSnapshot = {
   xrayReceipts: XrayReceipt[]
   /** Appels, recherches et propositions encore ouverts. */
   activity: XrayActivity
+  /** Observations reconnues pendant la course, la plus ancienne d’abord. */
+  observations: Observation[]
   error: string | null
 }
 
@@ -135,7 +142,14 @@ type InboxItem = {
   cutoff: string
 }
 
-type RequestMeta = { cutoff: string; hiddenDate: string; turn: number | null }
+type RequestMeta = {
+  cutoff: string
+  hiddenDate: string
+  turn: number | null
+  observation: string
+  lecture: Lecture
+  withImage: boolean
+}
 
 /** Rythme minimal d’un tour quand Y vaut 0 : la course se lit à l’écran. */
 export const MIN_SLICE_MS = 700
@@ -171,6 +185,7 @@ function emptySnapshot(): SessionSnapshot {
     xrayPrep: [],
     xrayReceipts: [],
     activity: emptyActivity(),
+    observations: [],
     error: null,
   }
 }
@@ -227,6 +242,7 @@ export class RunArcadeSession {
   private readonly callCount = new Map<string, number>()
   private readonly attempts = new Map<string, XrayAttempt[]>()
   private inbox: InboxItem[] = []
+  private seenObservations = new Set<string>()
   private seed = 1
 
   constructor(deps: SessionDeps) {
@@ -297,6 +313,20 @@ export class RunArcadeSession {
     return this.snapshot.track[race.cursor]?.date ?? null
   }
 
+  /** Compte le dessin engagé pour ce tirage caché. Un jeton déjà vu ne recompte pas. */
+  private observe(race: Race, hiddenDate: string) {
+    const noted = noteRace(this.snapshot.observations, this.seenObservations, race, hiddenDate)
+    this.seenObservations = noted.seen
+    return noted.observations
+  }
+
+  private callDetail(meta: RequestMeta, tail: string) {
+    const mode = meta.withImage ? "appel avec le dessin" : "appel en texte, sans image"
+    const known = this.snapshot.observations.find((item) => item.phrase === meta.observation)
+    const report = known ? ` · ${observationReport(known)}` : ""
+    return `${mode} · ${meta.observation}${report} · ${tail}`
+  }
+
   private clearTimers() {
     if (this.timer != null) this.deps.clearTimer(this.timer)
     if (this.wake != null) this.deps.clearTimer(this.wake)
@@ -334,6 +364,7 @@ export class RunArcadeSession {
     this.callCount.clear()
     this.cooldown.clear()
     this.attempts.clear()
+    this.seenObservations = new Set()
     const track = buildTrack(options.series)
     if (track.length < 4) {
       this.set({ ...emptySnapshot(), error: "L’archive chargée est trop courte pour une course." })
@@ -362,6 +393,9 @@ export class RunArcadeSession {
       })),
     }
     race = previewTurn(race, track)
+    const hidden = track[race.cursor]?.date
+    const noted = hidden ? noteRace([], this.seenObservations, race, hidden) : { observations: [], seen: this.seenObservations }
+    this.seenObservations = noted.seen
 
     const now = this.deps.now()
     const at = new Date(now).toISOString()
@@ -377,6 +411,7 @@ export class RunArcadeSession {
       phaseEndsAt: minutes > 0 ? now + minutes * 60_000 : null,
       parent,
       setAside: parent ? setAsideCount(parent, hiddenDate) : 0,
+      observations: noted.observations,
       xrayPrep: race.runners.map((runner) => ({
         runnerId: runner.mind.id,
         at,
@@ -452,8 +487,13 @@ export class RunArcadeSession {
     for (const runner of played.runners) {
       if (!runner.alive) this.abortRunner(runner.mind.id)
     }
+    const observations =
+      played.cursor !== before.cursor && played.revealed
+        ? this.observe(played, played.revealed.date)
+        : this.snapshot.observations
     this.set({
       race: played,
+      observations,
       inFlight: this.pending.size,
       xrayReceipts: [...this.snapshot.xrayReceipts, ...receiptsOf(before, played, at)].slice(-XRAY_KEEP),
     })
@@ -615,7 +655,7 @@ export class RunArcadeSession {
       hiddenDate,
       examCents: runner.examCents,
       notes: this.notes.get(id) ?? [],
-      drawing: drawing.phrase,
+      drawing: drawingText(drawing),
     })
     const count = (this.callCount.get(id) ?? 0) + 1
     this.callCount.set(id, count)
@@ -624,13 +664,21 @@ export class RunArcadeSession {
     const controller = new AbortController()
     this.pending.set(id, controller)
     this.updateRunner(id, (item) => ({ ...item, calls: item.calls + 1 }))
-    const meta: RequestMeta = { cutoff, hiddenDate, turn: this.turnNumber() }
+    const meta: RequestMeta = {
+      cutoff,
+      hiddenDate,
+      turn: this.turnNumber(),
+      observation: drawing.observation,
+      lecture: drawing.lecture,
+      withImage: false,
+    }
     const launch = this.launchId
     const capture = this.snapshot.iaVision && this.deps.capture ? this.deps.capture : null
     void (async () => {
       let reply: IaReply
+      let image: string | null = null
       try {
-        const image = capture ? await capture(id, drawing).catch(() => null) : null
+        image = capture ? await capture(id, drawing).catch(() => null) : null
         reply = await this.deps.askIa(
           { runnerId: id, seed, system: prompt.system, user: prompt.user, image },
           controller.signal
@@ -644,7 +692,7 @@ export class RunArcadeSession {
       }
       if (launch !== this.launchId) return
       if (this.pending.get(id) === controller) this.pending.delete(id)
-      this.onIaReply(id, reply, meta)
+      this.onIaReply(id, reply, { ...meta, withImage: Boolean(image) })
       this.pump()
     })()
     return true
@@ -663,7 +711,13 @@ export class RunArcadeSession {
     }
     const latencies = [...this.snapshot.latencies, reply.latencyMs].slice(-200)
     this.set({ ia: "ok", iaError: null, iaVision: reply.vision, latencies, medianMs: median(latencies) })
-    const action = parseAction(reply.text)
+    const refusal = lectureRefusal(reply.text, meta.lecture)
+    if (refusal) {
+      const mode = meta.withImage ? "appel avec le dessin" : "appel en texte, sans image"
+      this.log(id, "refus", meta.cutoff, `${mode} · lecture refusée · ${refusal}`, meta.turn)
+      return
+    }
+    const action = parseAction(reply.text, meta.lecture)
     if (!action) {
       this.log(id, "refus", meta.cutoff, "réponse illisible", meta.turn)
       return
@@ -672,7 +726,7 @@ export class RunArcadeSession {
       this.searchBrave(id, action.query, meta, 0)
       return
     }
-    this.log(id, "ia", meta.cutoff, `propose : ${describeSkill(action.params)}`, meta.turn)
+    this.log(id, "ia", meta.cutoff, this.callDetail(meta, `propose : ${describeSkill(action.params)}`), meta.turn)
     this.inbox.push({ runnerId: id, params: action.params, name: action.name, phrase: action.phrase, cutoff: meta.cutoff })
     if (this.snapshot.phase === "avant") this.applyInbox()
     else this.set({ inFlight: this.pending.size })
@@ -787,7 +841,10 @@ export class RunArcadeSession {
       )
     }
     if (this.snapshot.phase === "avant" && this.snapshot.race) {
-      this.set({ race: previewTurn(this.snapshot.race, this.snapshot.track) })
+      const previewed = previewTurn(this.snapshot.race, this.snapshot.track)
+      const hidden = this.snapshot.track[previewed.cursor]?.date
+      const observations = hidden ? this.observe(previewed, hidden) : this.snapshot.observations
+      this.set({ race: previewed, observations })
     }
   }
 }

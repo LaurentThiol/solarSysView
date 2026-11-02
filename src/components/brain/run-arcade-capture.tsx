@@ -17,11 +17,11 @@ function nextFrame() {
 export async function captureDraw(runnerId: string, draw: ThoughtDraw): Promise<string | null> {
   const host = document.createElement("div")
   host.setAttribute("aria-hidden", "true")
-  host.style.cssText = "position:fixed;left:0;top:0;width:380px;height:200px;z-index:-1;pointer-events:none"
+  host.style.cssText = "position:fixed;left:0;top:0;width:380px;height:224px;z-index:-1;pointer-events:none"
   document.body.appendChild(host)
   const root = createRoot(host)
   try {
-    root.render(<RunnerUniverse runnerId={`${runnerId}-vision`} thought={draw} className="h-[200px] w-[380px]" />)
+    root.render(<RunnerUniverse runnerId={`${runnerId}-vision`} thought={draw} className="h-[224px] w-[380px]" />)
     await nextFrame()
     const png = await captureNodePng(host)
     return png ? await fitImageDataUrl(png) : null

@@ -5,6 +5,7 @@ import type { ChampionRecord } from "../src/lib/run-arcade/champion.ts"
 import { formatDuration, median, raceDurationMs, rotate, servedPerSlice, sliceMs } from "../src/lib/run-arcade/clock.ts"
 import type { RankPoint } from "../src/lib/run-arcade/curves.ts"
 import { EXAM_WINDOW } from "../src/lib/run-arcade/examen.ts"
+import { lectureFromText } from "../src/lib/run-arcade/prompt.ts"
 import {
   createSession,
   type BraveReply,
@@ -69,7 +70,7 @@ class FakeClock {
 
 type Waiting<Q, R> = { request: Q; resolve: (reply: R) => void }
 
-function harness(parallel = 1) {
+function harness(parallel = 1, capture?: SessionDeps["capture"]) {
   const clock = new FakeClock()
   const ia: Waiting<IaRequest, IaReply>[] = []
   const brave: Waiting<BraveRequest, BraveReply>[] = []
@@ -92,6 +93,7 @@ function harness(parallel = 1) {
       saved.push(record)
       return { ok: true, source: "test" }
     },
+    capture,
     parallel,
   }
   return { clock, ia, brave, saved, session: createSession(deps) }
@@ -99,12 +101,30 @@ function harness(parallel = 1) {
 
 const unreadable: IaReply = { ok: true, text: "je réfléchis", latencyMs: 4000, model: "test", vision: false }
 
-function skillReply(curve: string): IaReply {
+function skillReply(curve: string, request: IaRequest): IaReply {
   return {
     ok: true,
-    text: JSON.stringify({ action: "skill", name: "Essai", curve, gesture: "moyenne", window: 5, days: 30 }),
+    text: JSON.stringify({
+      action: "skill",
+      name: "Essai",
+      curve,
+      gesture: "moyenne",
+      window: 5,
+      days: 30,
+      lecture: lectureFromText(request.user),
+    }),
     latencyMs: 6000,
     model: "test",
+    vision: false,
+  }
+}
+
+function braveReply(request: IaRequest, query: string): IaReply {
+  return {
+    ok: true,
+    text: JSON.stringify({ action: "brave", query, lecture: lectureFromText(request.user) }),
+    latencyMs: 3000,
+    model: "t",
     vision: false,
   }
 }
@@ -167,10 +187,14 @@ test("a late reply plays at the next turn, after the exam", async () => {
   assert.equal(slice, 15_000)
   await clock.advance(slice)
   assert.equal(session.getSnapshot().race?.cursor, 37)
-  ia[0].resolve(skillReply("sumNumbers"))
+  ia[0].resolve(skillReply("sumNumbers", ia[0].request))
   await flush()
   const journal = () => session.getSnapshot().journal
   assert.ok(journal().some((entry) => entry.kind === "ia"))
+  const proposed = journal().find((entry) => entry.kind === "ia")
+  assert.match(proposed?.detail ?? "", /appel en texte, sans image/)
+  assert.match(proposed?.detail ?? "", /tangente (correspond|s’écarte)/)
+  assert.match(proposed?.detail ?? "", /propose :/)
   assert.equal(
     journal().some((entry) => entry.kind === "skill" || entry.detail.startsWith("examen")),
     false
@@ -200,7 +224,7 @@ test("a ruined runner stops calling, its skills stay as they were", async () => 
   })
   const seen = ia.length
   for (let round = 0; round < 4; round += 1) {
-    for (const call of ia.slice(-2)) call.resolve(round === 0 ? skillReply("n3") : unreadable)
+    for (const call of ia.slice(-2)) call.resolve(round === 0 ? skillReply("n3", call.request) : unreadable)
     await flush()
   }
   assert.ok(ia.length > seen)
@@ -264,7 +288,7 @@ test("Brave follows the referee cutoff and waits on a 429", async () => {
   const rows = series(40)
   session.launch({ count: 1, draws: 4, minutes: 1, series: rows, champion: null })
   await flush()
-  ia[0].resolve({ ok: true, text: '{"action":"brave","query":"nombre d’or"}', latencyMs: 3000, model: "t", vision: false })
+  ia[0].resolve(braveReply(ia[0].request, "nombre d’or"))
   await flush()
   assert.equal(brave.length, 1)
   assert.deepEqual(brave[0].request, { query: "nombre d’or", from: "2024-01-01", cutoff: rows[36].date })
@@ -477,13 +501,7 @@ test("a Brave search appears in the xray activity, then leaves", async () => {
   session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
   await flush()
   session.pause()
-  ia[0].resolve({
-    ok: true,
-    text: '{"action":"brave","query":"nombre d’or"}',
-    latencyMs: 10,
-    model: "t",
-    vision: false,
-  })
+  ia[0].resolve(braveReply(ia[0].request, "nombre d’or"))
   await flush()
   assert.deepEqual(session.getSnapshot().activity.searching, ["r1"])
   assert.deepEqual(session.getSnapshot().activity.calling, [])
@@ -500,7 +518,7 @@ test("a proposal waits in the xray activity until the slice ends", async () => {
   session.skip()
   const slice = session.getSnapshot().sliceMs
   await clock.advance(slice)
-  ia[0].resolve(skillReply("sumNumbers"))
+  ia[0].resolve(skillReply("sumNumbers", ia[0].request))
   await flush()
   const pending = session.getSnapshot().activity.pending
   assert.equal(pending.length, 1)
@@ -508,5 +526,76 @@ test("a proposal waits in the xray activity until the slice ends", async () => {
   assert.match(pending[0]?.detail ?? "", /moyenne/)
   await clock.advance(slice)
   assert.equal(session.getSnapshot().activity.pending.length, 0)
+  session.dispose()
+})
+
+test("a lecture that contradicts the measure is refused with both wordings", async () => {
+  const { ia, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  await flush()
+  const lecture = lectureFromText(ia[0].request.user)
+  assert.ok(lecture)
+  const flipped = { ...lecture, tangente: lecture.tangente === "correspond" ? "ecarte" : "correspond" }
+  ia[0].resolve({
+    ok: true,
+    text: JSON.stringify({
+      action: "skill",
+      name: "Essai",
+      curve: "n1",
+      gesture: "glisse",
+      window: 8,
+      days: 0,
+      lecture: flipped,
+    }),
+    latencyMs: 10,
+    model: "t",
+    vision: true,
+  })
+  await flush()
+  const entry = session.getSnapshot().journal.find((item) => item.detail.includes("lecture refusée"))
+  assert.ok(entry)
+  assert.match(entry.detail, /appel en texte, sans image/)
+  assert.match(entry.detail, /le modèle écrit « tangente /)
+  assert.match(entry.detail, /la mesure dit « tangente /)
+  assert.equal(session.getSnapshot().iaVision, true)
+  session.dispose()
+})
+
+test("the next call after a vision model says the drawing went with it", async () => {
+  let images = 0
+  const { ia, session } = harness(1, async () => {
+    images += 1
+    return "data:image/png;base64,qq"
+  })
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  await flush()
+  assert.equal(ia.length, 1)
+  assert.equal(images, 0)
+  ia[0].resolve({ ...skillReply("n1", ia[0].request), vision: true })
+  await flush()
+  assert.equal(ia.length, 2)
+  assert.equal(images, 1)
+  ia[1].resolve({ ...skillReply("n1", ia[1].request), vision: true })
+  await flush()
+  const lines = session.getSnapshot().journal.filter((entry) => entry.kind === "ia").map((entry) => entry.detail)
+  assert.match(lines[0] ?? "", /appel en texte, sans image/)
+  assert.match(lines[1] ?? "", /appel avec le dessin/)
+  assert.match(lines[1] ?? "", /propose :/)
+  session.dispose()
+})
+
+test("playing the previewed draw does not count the observation again", async () => {
+  const { clock, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 0, series: series(40), champion: null })
+  const before = session.getSnapshot().observations.map((item) => ({ ...item }))
+  assert.ok(before.length > 0)
+  assert.ok(before.every((item) => item.count === 1))
+  await clock.advance(700)
+  const after = session.getSnapshot().observations
+  for (const item of before) {
+    const kept = after.find((entry) => entry.phrase === item.phrase)
+    assert.equal(kept?.count, 1)
+    assert.equal(kept?.createdOn, item.createdOn)
+  }
   session.dispose()
 })
