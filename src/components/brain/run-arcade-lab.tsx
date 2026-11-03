@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 
 import { captureDraw } from "@/components/brain/run-arcade-capture"
+import { RunArcadeLayers } from "@/components/brain/run-arcade-layers"
 import { RunnerUniverse } from "@/components/brain/run-arcade-universe"
 import { HelpTip, HelpWrap, LabelHelp, TitleHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +18,7 @@ import { askBrave, askIa, exportChampion, listChampions, loadChampion, readChamp
 import { formatDuration, raceDurationMs, servedPerSlice } from "@/lib/run-arcade/clock"
 import { CURVE_KEYS, curveLabel, curveValues, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
 import { RUN_ARCADE_HELP } from "@/lib/run-arcade/help"
+import { layerPoints } from "@/lib/run-arcade/layers"
 import { createSession, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
 import { currentVersion, targetLabel } from "@/lib/run-arcade/skills"
 import {
@@ -306,6 +308,17 @@ export function RunArcadeLab() {
   const bounds = useMemo(() => departBounds(series, raceDraws), [series, raceDraws])
   const shownDate = bounds.first ? (snapDepart(bounds.free, departDate || bounds.first) ?? bounds.first) : ""
   const freeArchive = race ? track.slice(0, race.start) : []
+
+  const layers = useMemo(
+    () =>
+      layerPoints({
+        series,
+        track,
+        running,
+        cursor: race?.cursor ?? null,
+      }),
+    [series, track, running, race]
+  )
 
   const focusView = useMemo(() => {
     if (!focus || !race || track.length === 0) return null
@@ -743,6 +756,8 @@ export function RunArcadeLab() {
         </li>
         <li className="text-chart-2">Somme ou décennie juste</li>
       </ul>
+
+      <RunArcadeLayers points={layers} help={RUN_ARCADE_HELP.couches} />
 
       {race?.seenDate ? (
         <p className="text-sm text-muted-foreground">

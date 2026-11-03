@@ -35,6 +35,7 @@ const KEYS = [
   "courbes",
   "persiste",
   "dessin",
+  "couches",
   "gestes",
   "solde",
   "arbitre",

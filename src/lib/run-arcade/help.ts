@@ -313,4 +313,23 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
     title: "Journal des requêtes",
     body: "Les huit dernières lignes de ce runner. La ligne dit « avant-course » ou le numéro du tour, puis le genre : ia, brave, skill, refus ou erreur. La coupure est le dernier tirage lu par la requête. Un appel nomme s’il est parti sans image ou avec le dessin, puis la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite ce que le modèle a écrit et ce que la mesure dit.",
   },
+  couches: {
+    title: "Couches",
+    wide: true,
+    body: "Deux fenêtres lisent les mêmes tirages. L’une pose n1 à n5 sur l’échelle 1–50, l’autre e1 et e2 sur l’échelle 1–12. Le trait vertical est le profil d’un tirage. La phrase donne les écarts entre couches, la cohérence face à la loi de l’urne, et, pour les numéros, la place dans l’étendue.",
+    items: [
+      {
+        label: "n1 à n5",
+        text: "Cinq couches, du plus petit au plus grand. Un clic sur une colonne choisit ce tirage. Sans clic, c’est le plus récent du cadre. Masquer un trait ne change pas les mesures.",
+      },
+      {
+        label: "e1 et e2",
+        text: "Les deux étoiles, ordonnées. L’écart est e2 moins e1. La cohérence compare leur pas à la loi de l’urne. Ce n’est pas un signal.",
+      },
+      {
+        label: "Curseur",
+        text: "Un seul curseur glisse les deux fenêtres. Vingt tirages tiennent dans le cadre. Au bout ramène les deux au dernier tirage lisible. Pendant la course, le tirage encore caché reste dehors.",
+      },
+    ],
+  },
 }
