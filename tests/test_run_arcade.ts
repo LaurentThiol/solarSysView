@@ -37,6 +37,7 @@ import {
 } from "../src/lib/run-arcade/skills.ts"
 import {
   GOLDEN_RATIOS,
+  RUNNER_MAX,
   START_CENTS,
   TICKET_CENTS,
   countHits,
@@ -292,7 +293,7 @@ test("a turn settles the draw at the cursor and leaves the rest unseen", () => {
   const alone = think(race.runners[0].mind, rows.slice(0, 8), { hiddenDate: rows[8].date })
   assert.deepEqual(played.runners[0].guess, alone.guess)
   assert.equal(played.runners[0].lastHits, countHits(alone.guess, rows[8]))
-  assert.equal(createMinds(80).length, 50)
+  assert.equal(createMinds(80).length, RUNNER_MAX)
 })
 
 test("the first sixteen runners start from sixteen different gestures", () => {
@@ -853,7 +854,6 @@ test("a geometric figure slides a short caliber and keeps the old gestures", () 
   for (const phase of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
     const first = 100 + 50 * Math.sin(phase)
     assert.ok(Math.abs(readFigure(sinusoid(phase), "sin", 8).tip - first) < 1e-9)
-    assert.ok(Math.abs(readFigure(sinusoid(phase), "cos", 8).tip - first) < 1e-9)
   }
   const rising = [10, 50, 90, 130, 170, 130, 90, 50]
   const falling = [170, 130, 90, 50, 10, 50, 90, 130]
@@ -999,8 +999,8 @@ test("a house variation or an IA proposal never gives a figure a window shorter 
     const item = houseVariation(fromMoyenne, step)
     if (item.gesture === "figure") assert.ok(item.window >= figureLength(item.forme!, item.n ?? null), `${step}`)
   }
-  const cos = parseSkillParams({ curve: "*", gesture: "figure", forme: "cos", n: 12, window: 3 })
-  assert.equal(cos?.window, 12)
+  const wave = parseSkillParams({ curve: "*", gesture: "figure", forme: "sin", n: 12, window: 3 })
+  assert.equal(wave?.window, 12)
   assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "polygone", n: 8, window: 20 })?.window, 20)
   assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "triangle", window: 2 })?.window, 3)
   assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "sin", n: 12 })?.window, 12)
@@ -1059,23 +1059,39 @@ test("every figure tip stays within one amplitude of its window, and the thought
   }
 })
 
-test("the sin and cos figures read the phase of the last cran", () => {
+test("the sin figure reads the phase of the last cran", () => {
   const sinusoid = (phase: number, period: number) =>
     Array.from({ length: period + 4 }, (_, index) => 100 + 50 * Math.sin((2 * Math.PI * index) / period + phase))
   for (const period of WAVE_PERIODS) {
     const tips = [0, 1, 2, 3, 4, 5].map((step) => {
       const values = sinusoid((step * Math.PI) / 3, period)
       const cran = values.slice(-period)
-      return { sin: readFigure(values, "sin", period).tip, cos: readFigure(values, "cos", period).tip, cran }
+      return { tip: readFigure(values, "sin", period).tip, cran }
     })
-    for (const { sin, cos, cran } of tips) {
-      assert.ok(Math.abs(sin - cos) < 1e-9)
-      assert.ok(sin >= Math.min(...cran) - 50 && sin <= Math.max(...cran) + 50)
+    for (const { tip, cran } of tips) {
+      assert.ok(tip >= Math.min(...cran) - 50 && tip <= Math.max(...cran) + 50)
     }
-    assert.ok(new Set(tips.map((item) => item.sin.toFixed(3))).size > 1)
+    assert.ok(new Set(tips.map((item) => item.tip.toFixed(3))).size > 1)
   }
   assert.ok(Number.isFinite(readFigure([0, 1, 0, 1, 0, 1, 0, 1], "sin", 8).tip))
-  assert.ok(Number.isFinite(readFigure([5, 5, 5, 5, 5, 5, 5, 5], "cos", 8).tip))
+  assert.ok(Number.isFinite(readFigure([5, 5, 5, 5, 5, 5, 5, 5], "sin", 8).tip))
+})
+
+test("there are nine figure shapes, and no cosine: an old cos is read as sin, a new one is refused", () => {
+  assert.equal(FORMES.length, 9)
+  assert.equal((FORMES as readonly string[]).includes("cos"), false)
+  assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "cos", n: 8 }), null)
+  assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "sin|cos", n: 8 })?.forme, "sin")
+  const forms = new Set<string>()
+  for (let step = 0; step < 6000; step += 1) {
+    const item = houseVariation(fromMoyenne, step)
+    if (item.gesture === "figure") forms.add(String(item.forme))
+  }
+  assert.equal(forms.size, 9)
+  assert.equal(forms.has("cos"), false)
+  const prompt = buildPrompt({ mind, past: series(4), hiddenDate: "2099-01-01", examCents: null, notes: [], drawing: null })
+  assert.match(prompt.system, /forme : triangle, cercle, polygone, pythagore, sin, tan, arcsin, arccos, arctan\./)
+  assert.doesNotMatch(prompt.system, /\bcos\b/)
 })
 
 test("the five golden levels of the drawing keep their height whatever the chosen ratio", () => {
@@ -1150,36 +1166,38 @@ test("parseSkillParams reads text and numbers the same way, refuses a minus sign
   }
 })
 
-test("beyond 18 runners the gesture comes back with another setting that counts, never a clone", () => {
+test("the runners are capped at 18, one different gesture each, by createMinds and by the children", () => {
+  assert.equal(RUNNER_MAX, 18)
+  assert.equal(createMinds(RUNNER_MAX + 1).length, RUNNER_MAX)
+  assert.equal(createMinds(50).length, RUNNER_MAX)
+  assert.equal(createMinds(RUNNER_MAX).length, RUNNER_MAX)
+  assert.equal(createMinds(0).length, 1)
+
   const rows = urn(70, 9)
   const ends = [30, 41, 52, 63]
-  const grids = createMinds(50).map((runner) =>
+  const minds = createMinds(RUNNER_MAX)
+  const starts = minds.map((runner) => runner.skills[0].versions[0])
+  const params = starts.map(({ gesture, ratio, span, window, days, r, forme, n }) =>
+    JSON.stringify({ gesture, ratio, span, window, days, r, forme, n })
+  )
+  assert.equal(new Set(params).size, RUNNER_MAX)
+  const grids = minds.map((runner) =>
     ends.map((end) => JSON.stringify(think(runner, rows.slice(0, end), { hiddenDate: rows[end].date }).guess)).join("|")
   )
-  const minds = createMinds(50)
-  const gestureOf = (index: number) => minds[index].skills[0].versions[0].gesture
-  const noSetting = ["persiste", "glisse", "miroir", "soir"]
-  const withSetting = minds.map((_, index) => index).filter((index) => !noSetting.includes(gestureOf(index)))
-  assert.equal(withSetting.length, 50 - 11)
-  assert.equal(new Set(withSetting.map((index) => grids[index])).size, withSetting.length)
-  assert.equal(new Set(grids.slice(0, 18)).size, 18)
-  assert.equal(new Set(grids).size, withSetting.length + noSetting.length)
-  for (const index of [18, 20, 36]) assert.equal(gestureOf(index), gestureOf(index % 18))
+  assert.equal(new Set(grids).size, RUNNER_MAX)
 
-  const first = createMinds(18).map((runner) => runner.skills[0].versions[0])
-  const again = createMinds(50).slice(0, 18).map((runner) => runner.skills[0].versions[0])
-  assert.deepEqual(again, first)
-  const ratios = createMinds(50)
-    .map((runner) => runner.skills[0].versions[0])
-    .filter((version) => version.gesture === "or" && version.span === "bande")
-    .map((version) => version.ratio)
-  assert.equal(new Set(ratios).size, ratios.length)
-  const suites = createMinds(50)
-    .map((runner) => runner.skills[0].versions[0])
-    .filter((version) => version.gesture === "suite")
-  assert.equal(new Set(suites.map((version) => `${version.r}|${version.span}`)).size, suites.length)
-  assert.ok(suites.every((version) => version.span !== "pas"))
-  assert.ok(createMinds(50).every((runner) => runner.skills[0].versions[0].window >= 2))
+  const record = championRecord({
+    runner: { ...newRunner(minds[0]), cents: 5400, examCents: 5100 },
+    generation: 2,
+    raceFrom: rows[40].date,
+    raceTo: rows[60].date,
+    journal: [],
+    savedAt: "2026-10-30T12:00:00.000Z",
+  })
+  assert.equal(childrenOf(record, 50, rows[50].date).length, RUNNER_MAX)
+  assert.equal(childrenOf(record, RUNNER_MAX + 1, rows[50].date).length, RUNNER_MAX)
+  assert.equal(childrenOf(record, 5, rows[50].date).length, 5)
+  assert.equal(childrenOf(record, 0, rows[50].date).length, 1)
 })
 
 test("a champion written before the new rules is read as it played", () => {
@@ -1200,10 +1218,14 @@ test("a champion written before the new rules is read as it played", () => {
   assert.equal(suite?.span, "pas")
   assert.equal(suite?.r, 2.8)
   assert.equal(parseSkillParams({ curve: "n3", gesture: "suite", suite: "logistique", r: 2.8, span: "pas" }), null)
-  const figure = stored({ curve: "e1", gesture: "figure", forme: "cos", n: 12, ratio: 0.618, span: "bande", window: 3, days: 20 })
+  const figure = stored({ curve: "e1", gesture: "figure", forme: "sin", n: 12, ratio: 0.618, span: "bande", window: 3, days: 20 })
   assert.equal(figure?.window, 3)
   assert.equal(figure?.days, 20)
-  assert.equal(parseSkillParams({ curve: "e1", gesture: "figure", forme: "cos", n: 12, window: 3, days: 20 })?.window, 12)
+  assert.equal(parseSkillParams({ curve: "e1", gesture: "figure", forme: "sin", n: 12, window: 3, days: 20 })?.window, 12)
+  const cosine = stored({ curve: "e1", gesture: "figure", forme: "cos", n: 12, ratio: 0.618, span: "bande", window: 12, days: null })
+  assert.equal(cosine?.forme, "sin")
+  assert.equal(cosine?.n, 12)
+  assert.equal(cosine?.window, 12)
   const plain = stored({ curve: "*", gesture: "persiste", ratio: 1.272, span: "lignes", window: 8, days: null })
   assert.equal(plain?.ratio, 1.272)
   assert.equal(parseSkillParams({ curve: "*", gesture: "persiste", ratio: 1.272, span: "lignes" })?.ratio, 0.618)

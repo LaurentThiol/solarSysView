@@ -9,7 +9,6 @@ export const FORMES = [
   "polygone",
   "pythagore",
   "sin",
-  "cos",
   "tan",
   "arcsin",
   "arccos",
@@ -31,7 +30,7 @@ export function usesFigureN(forme: Forme) {
 export function defaultFigureN(forme: Forme): number | null {
   if (forme === "polygone") return 4
   if (forme === "arctan") return 30
-  if (forme === "sin" || forme === "cos" || forme === "tan" || forme === "arcsin" || forme === "arccos") return 8
+  if (forme === "sin" || forme === "tan" || forme === "arcsin" || forme === "arccos") return 8
   return null
 }
 
@@ -153,7 +152,7 @@ function pythagorasY(points: readonly UnitPoint[]) {
  * Onde du cran : on lit sa phase φ, par moindres carrés avec sin et cos de période `period`
  * (φ = atan2 de la corrélation avec cos sur la corrélation avec sin, ordonnées centrées).
  * La pointe est le point suivant de l’onde 0,5 + 0,5·sin(2π·i/période + φ), dans le carré du cran.
- * Une onde dont la phase est libre est la même, qu’on l’appelle sinus ou cosinus.
+ * Il n’y a pas de forme cosinus : à phase libre, ce serait la même onde.
  * Sans composante à cette période, il n’y a rien à lire : pas de point, le cran glisse.
  */
 function waveY(points: readonly UnitPoint[], period: number) {
@@ -220,7 +219,7 @@ function figureStep(points: readonly UnitPoint[], forme: Forme, n: number | null
   else if (forme === "cercle") y = circleY(points)
   else if (forme === "polygone") y = polygonY(points, n ?? 4)
   else if (forme === "pythagore") y = pythagorasY(points)
-  else if (forme === "sin" || forme === "cos") y = waveY(points, period)
+  else if (forme === "sin") y = waveY(points, period)
   else if (forme === "arcsin" || forme === "arccos") y = inverseY(points, forme, period)
   else if (forme === "tan") y = tangentY(points)
   else y = arctanY(points, n ?? 30)

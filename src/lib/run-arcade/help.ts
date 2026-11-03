@@ -13,7 +13,7 @@ export type RunArcadeHelpCopy = {
 export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   runners: {
     title: "Runners",
-    body: "De 1 à 50 coureurs, 8 au départ. Chacun commence avec un geste de base, le même pour toutes les courbes. Les 18 premiers ont chacun un geste différent. R8 part avec la skill Suite numérique, un pas logistique à R = 2. Le premier s’appelle R1. Au-delà de 18, le geste revient avec un réglage qui change à chaque tour de 18 : ratio d’or, étendue, jours, fenêtre, R ou forme. Persiste, glisse, miroir et soir n’ont aucun réglage : leur copie joue la même grille.",
+    body: "De 1 à 18 coureurs, 8 au départ. Chacun commence avec un geste de base différent, le même pour toutes les courbes. R8 part avec la skill Suite numérique, un pas logistique à R = 2. Le premier s’appelle R1.",
     items: [
       {
         label: "Sans champion",
@@ -303,7 +303,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Trace une figure",
-        text: "Un calibre court avance d’un tirage dans la fenêtre. Triangle, cercle et hypoténuse lisent 3 tirages. Le polygone lit 4, 5, 6 ou 8 côtés. Sinus, cosinus, tangente, arcsinus et arccosinus lisent une période de 4, 6, 8 ou 12 tirages. L’arc tangente tourne le dernier pas de 15, 30 ou 45 degrés. La fenêtre compte au moins autant de tirages que le calibre : une fenêtre plus courte est relevée, sinon la figure ne se lit pas et la pensée reste sur place. Chaque cran est jugé dans son carré. Sinus et cosinus lisent la phase du dernier cran : la pensée est le point suivant de l’onde qui colle le mieux à ce cran. Les deux donnent la même pensée. La pensée part du dernier cran. Elle peut dépasser la fenêtre d’une amplitude au plus, et ne sort jamais de la bande de la courbe. Le cercle d’or reste le calque des niveaux. Le cercle dessiné est toujours le cercle d’or, même pour une figure.",
+        text: "Un calibre court avance d’un tirage dans la fenêtre. Triangle, cercle et hypoténuse lisent 3 tirages. Le polygone lit 4, 5, 6 ou 8 côtés. Sinus, tangente, arcsinus et arccosinus lisent une période de 4, 6, 8 ou 12 tirages. L’arc tangente tourne le dernier pas de 15, 30 ou 45 degrés. La fenêtre compte au moins autant de tirages que le calibre : une fenêtre plus courte est relevée, sinon la figure ne se lit pas et la pensée reste sur place. Chaque cran est jugé dans son carré. Le sinus lit la phase du dernier cran : la pensée est le point suivant de l’onde qui colle le mieux à ce cran. La pensée part du dernier cran. Elle peut dépasser la fenêtre d’une amplitude au plus, et ne sort jamais de la bande de la courbe. Le cercle d’or reste le calque des niveaux. Le cercle dessiné est toujours le cercle d’or, même pour une figure.",
       },
     ],
   },

@@ -46,7 +46,7 @@ export {
 export const START_CENTS = 5000
 export const TICKET_CENTS = 250
 export const HIT_CENTS = 200
-export const RUNNER_MAX = 50
+export const RUNNER_MAX = 18
 export const RUNNER_DEFAULT = 8
 export const RACE_DRAWS_DEFAULT = 25
 

@@ -122,7 +122,6 @@ export function figureClause(params: SkillParams) {
   if (forme === "polygone") return `trace un polygone à ${n} côtés, calibre ${length}`
   if (forme === "pythagore") return `suit l’hypoténuse, calibre ${length}`
   if (forme === "sin") return `suit un sinus de période ${n}, calibre ${length}`
-  if (forme === "cos") return `suit un cosinus de période ${n}, calibre ${length}`
   if (forme === "tan") return `prolonge la tangente, calibre ${length}`
   if (forme === "arcsin") return `suit l’arcsinus de période ${n}, calibre ${length}`
   if (forme === "arccos") return `suit l’arccosinus de période ${n}, calibre ${length}`
@@ -136,7 +135,7 @@ export function figureMark(params: SkillParams) {
   const n = params.n ?? defaultFigureN(forme)
   const length = figureLength(forme, n)
   if (forme === "polygone") return `figure · polygone · ${n} côtés · calibre ${length}`
-  if (forme === "sin" || forme === "cos" || forme === "arcsin" || forme === "arccos") {
+  if (forme === "sin" || forme === "arcsin" || forme === "arccos") {
     return `figure · ${forme} · période ${n} · calibre ${length}`
   }
   if (forme === "arctan") return `figure · arctan · tour ${n} · calibre ${length}`
@@ -320,6 +319,11 @@ function readRatio(value: unknown) {
   return isAbsent(value) ? DEFAULT_RATIO : nearestGolden(firstNumber(value) ?? Number.NaN)
 }
 
+/** Forme retirée d’une version déjà écrite : « cos » se relit « sin ». À phase libre, le cosinus était le sinus. */
+function storedForme(value: unknown) {
+  return typeof value === "string" && value.trim() === "cos" ? "sin" : value
+}
+
 /** Jours qui contiennent toujours au moins `count` tirages, au rythme mardi puis vendredi (3 puis 4 jours). */
 function daysHolding(count: number) {
   const back = Math.max(0, count - 1)
@@ -341,7 +345,9 @@ function readParams(raw: unknown, proposal: boolean): SkillParams | null {
   const days = optionalDays(record.days)
   if (!curve || !gesture || ratio == null || !span || window == null || days === undefined) return null
   if (gesture === "figure") {
-    const forme = isAbsent(record.forme) ? "triangle" : firstAllowed(record.forme, FORMES)
+    const forme = isAbsent(record.forme)
+      ? "triangle"
+      : firstAllowed(proposal ? record.forme : storedForme(record.forme), FORMES)
     if (!forme) return null
     const n = readFigureN(record.n)
     if (n === undefined) return null
@@ -379,20 +385,19 @@ export function parseSkillParams(raw: unknown): SkillParams | null {
 
 /**
  * Réglages d’une version déjà écrite, venue de Neon ou d’un fichier. Elle se relit telle qu’elle a joué :
- * ratio gardé pour tous les gestes, suite sur « du dernier pas » permise, fenêtre de figure inchangée.
- * Un champion écrit avant ces règles reste lisible.
+ * ratio gardé pour tous les gestes, suite sur « du dernier pas » permise, fenêtre de figure inchangée,
+ * forme « cos » relue « sin ». Un champion écrit avant ces règles reste lisible.
  */
 export function parseStoredSkillParams(raw: unknown): SkillParams | null {
   return readParams(raw, false)
 }
 
-type BasePreset = Omit<SkillParams, "curve">
-
 /**
  * Gestes de départ, tous différents. Persiste, glisse, miroir, soir, la suite
  * et la figure ne paraissent qu’une fois. Le nombre d’or et la moyenne varient ensuite.
+ * Un runner par geste : le plafond de runners (`RUNNER_MAX`) vaut leur nombre.
  */
-const BASE_PRESETS: BasePreset[] = [
+const BASE_PRESETS: Omit<SkillParams, "curve">[] = [
   { gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null },
   { gesture: "glisse", ratio: 0.618, span: "bande", window: 8, days: null },
   { gesture: "miroir", ratio: 0.618, span: "bande", window: 8, days: null },
@@ -413,99 +418,9 @@ const BASE_PRESETS: BasePreset[] = [
   { gesture: "figure", forme: "triangle", n: null, ratio: 0.618, span: "bande", window: 8, days: null },
 ]
 
-/**
- * Ce qui change la grille jouée par un geste de départ. Les autres réglages ne changent que le dessin.
- * Persiste, glisse, miroir et soir n’en ont aucun.
- */
-function gridKeys(params: BasePreset): string[] {
-  const frame = params.span === "lignes" ? params.window : ""
-  if (params.gesture === "or") return [`or|${params.ratio}|${params.span}|${frame}`]
-  if (params.gesture === "suite") return [`suite|${params.r}|${params.span}|${frame}`]
-  if (params.gesture === "moyenne") return drawCounts(params).map((count) => `moyenne|${count}`)
-  if (params.gesture === "figure") {
-    return drawCounts(params).map((count) => `figure|${params.forme}|${params.n}|${count}`)
-  }
-  return [params.gesture]
-}
-
-/**
- * Tirages que lit la fenêtre. Des jours en donnent deux possibles : à un tirage tous les 3,5 jours
- * (mardi puis vendredi), le compte dépend du jour du dernier tirage, à un tirage près.
- */
-function drawCounts(params: BasePreset) {
-  if (!params.days) return [params.window]
-  return [...new Set([Math.floor(params.days / 3.5), Math.ceil(params.days / 3.5)])]
-}
-
-/** Réglages que le geste d’un preset peut prendre au tour suivant, du plus proche au plus lointain. */
-function lapChoices(preset: BasePreset): BasePreset[] {
-  const choices: BasePreset[] = []
-  if (preset.gesture === "or") {
-    const ratio = GOLDEN_RATIOS.indexOf(preset.ratio)
-    const span = SPANS.indexOf(preset.span)
-    for (let shift = 0; shift < SPANS.length; shift += 1) {
-      for (let step = shift === 0 ? 1 : 0; step < GOLDEN_RATIOS.length; step += 1) {
-        choices.push({
-          ...preset,
-          ratio: GOLDEN_RATIOS[(ratio + step) % GOLDEN_RATIOS.length],
-          span: SPANS[(span + shift) % SPANS.length],
-        })
-      }
-    }
-  } else if (preset.gesture === "suite") {
-    const r = LOGISTIC_R.indexOf(preset.r ?? DEFAULT_LOGISTIC_R)
-    const span = SUITE_SPANS.indexOf(preset.span as (typeof SUITE_SPANS)[number])
-    for (let shift = 0; shift < SUITE_SPANS.length; shift += 1) {
-      for (let step = shift === 0 ? 1 : 0; step < LOGISTIC_R.length; step += 1) {
-        choices.push({
-          ...preset,
-          r: LOGISTIC_R[(r + step) % LOGISTIC_R.length],
-          span: SUITE_SPANS[(span + shift) % SUITE_SPANS.length],
-        })
-      }
-    }
-  } else if (preset.gesture === "moyenne" && preset.days) {
-    for (let days = preset.days + 15; days <= DAYS_MAX; days += 15) choices.push({ ...preset, days })
-  } else if (preset.gesture === "moyenne") {
-    for (let window = preset.window + 2; window <= WINDOW_MAX; window += 2) choices.push({ ...preset, window })
-  } else if (preset.gesture === "figure") {
-    const from = FORMES.indexOf(preset.forme ?? "triangle")
-    for (let step = 1; step < FORMES.length; step += 1) {
-      const forme = FORMES[(from + step) % FORMES.length]
-      const n = usesFigureN(forme) ? defaultFigureN(forme) : null
-      choices.push({ ...preset, forme, n, window: Math.max(preset.window, figureLength(forme, n)) })
-    }
-  }
-  return choices
-}
-
-/**
- * Gestes de départ des `count` premiers runners. Au-delà de 18, le geste revient avec un réglage qui compte
- * pour lui : le premier encore libre. Deux runners ne jouent donc jamais la même grille, sauf pour persiste,
- * glisse, miroir et soir, qui n’ont aucun réglage : la fenêtre ne change que leur dessin.
- */
-function basePresets(count: number): BasePreset[] {
-  const taken = new Set<string>()
-  const out: BasePreset[] = []
-  for (let index = 0; index < count; index += 1) {
-    const preset = BASE_PRESETS[index % BASE_PRESETS.length]
-    const lap = Math.floor(index / BASE_PRESETS.length)
-    const chosen =
-      lap === 0
-        ? preset
-        : (lapChoices(preset).find((choice) => gridKeys(choice).every((key) => !taken.has(key))) ?? {
-            ...preset,
-            window: Math.min(WINDOW_MAX, preset.window + lap * 2),
-          })
-    for (const key of gridKeys(chosen)) taken.add(key)
-    out.push(chosen)
-  }
-  return out
-}
-
 /** Skill de départ d’un runner : un geste pour toutes les courbes. */
 export function baseSkill(runnerId: string, index: number): Skill {
-  const params: SkillParams = { curve: "*", ...basePresets(index + 1)[index] }
+  const params: SkillParams = { curve: "*", ...BASE_PRESETS[index % BASE_PRESETS.length] }
   const name = params.gesture === "suite" ? "Suite numérique" : params.gesture === "figure" ? "Figure" : "Geste de base"
   return newSkill(`${runnerId}-base`, name, params, { cutoff: "", origin: "maison", examCents: null })
 }

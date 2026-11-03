@@ -19,7 +19,7 @@ import {
 } from "../src/lib/run-arcade/session.ts"
 import { addVersion, describeSkill, newSkill } from "../src/lib/run-arcade/skills.ts"
 import { fonctionnelBoard } from "../src/lib/run-arcade/fonctionnel.ts"
-import { revealedPast } from "../src/lib/run-arcade/thought.ts"
+import { revealedPast, RUNNER_MAX } from "../src/lib/run-arcade/thought.ts"
 import { activityLines, braveHeadline, braveResultDetail, chainHiddenDate, thoughtChain, xrayFeed } from "../src/lib/run-arcade/xray.ts"
 
 function dateAt(index: number) {
@@ -1154,5 +1154,42 @@ test("a house variation at launch does not block one new IA skill, and a second 
     .journal.find((entry) => entry.runner === "r2" && entry.kind === "refus" && entry.detail.includes("une seule skill nouvelle"))
   assert.ok(refusal)
   assert.equal(session.getSnapshot().race?.runners.find((item) => item.mind.id === "r2")?.added, 2)
+  session.dispose()
+})
+
+test("a launch never runs more than 18 runners, new or children of a champion", () => {
+  const { session } = harness(1)
+  const rows = series(40)
+  session.launch({ count: 50, draws: 4, minutes: 0, series: rows, champion: null })
+  assert.equal(session.getSnapshot().race?.runners.length, RUNNER_MAX)
+  assert.equal(RUNNER_MAX, 18)
+  session.launch({ count: 7, draws: 4, minutes: 0, series: rows, champion: null })
+  assert.equal(session.getSnapshot().race?.runners.length, 7)
+  const parent: ChampionRecord = {
+    generation: 1,
+    runner: "R1",
+    cents: 5000,
+    examCents: null,
+    calls: 0,
+    raceFrom: null,
+    raceTo: null,
+    skills: [
+      newSkill(
+        "champ-base",
+        "Geste de base",
+        { curve: "*", gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null },
+        { cutoff: "", origin: "maison", examCents: null }
+      ),
+    ],
+    journal: [],
+    savedAt: "2026-10-30T09:00:00.000Z",
+  }
+  session.launch({ count: 40, draws: 4, minutes: 0, series: rows, champion: parent })
+  const runners = session.getSnapshot().race?.runners ?? []
+  assert.equal(runners.length, RUNNER_MAX)
+  assert.deepEqual(
+    runners.map((runner) => runner.mind.id),
+    Array.from({ length: RUNNER_MAX }, (_, index) => `r${index + 1}`)
+  )
   session.dispose()
 })

@@ -8,7 +8,7 @@ import {
   type SkillOrigin,
   type SkillVersion,
 } from "./skills"
-import { countHits, think, type RunnerLive, type RunnerMind, type Thought } from "./thought"
+import { countHits, RUNNER_MAX, think, type RunnerLive, type RunnerMind, type Thought } from "./thought"
 
 export type JournalKind = "ia" | "brave" | "skill" | "refus" | "erreur"
 
@@ -160,7 +160,7 @@ export function parseChampion(raw: unknown): ChampionRecord | null {
  */
 export function childrenOf(champion: ChampionRecord, count: number, hiddenDate: string): RunnerMind[] {
   const inherited = rollBack(champion.skills, hiddenDate)
-  return Array.from({ length: Math.max(1, Math.round(count)) }, (_, index) => {
+  return Array.from({ length: Math.min(RUNNER_MAX, Math.max(1, Math.round(count))) }, (_, index) => {
     const id = `r${index + 1}`
     const skills = inherited.length
       ? inherited.map((skill) => ({ ...skill, versions: skill.versions.map((version) => ({ ...version })) }))
