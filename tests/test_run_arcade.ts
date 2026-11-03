@@ -19,6 +19,7 @@ import {
   FORMES,
   POLYGON_SIDES,
   readFigure,
+  TIP_MARGIN,
   usesFigureN,
   WAVE_PERIODS,
 } from "../src/lib/run-arcade/figure.ts"
@@ -839,14 +840,17 @@ test("a geometric figure slides a short caliber and keeps the old gestures", () 
   assert.ok(Math.abs(triangle.tip - down * 10) < 1e-9)
   assert.equal(triangle.correspond, false)
 
-  assert.equal(readFigure([0, 5, 10], "cercle", null).tip, 15)
-  assert.equal(readFigure([0, 10, 0], "cercle", null).tip, -10)
+  assert.equal(readFigure([0, 5, 10], "cercle", null, Infinity).tip, 15)
+  assert.equal(readFigure([0, 10, 0], "cercle", null, Infinity).tip, -10)
+  assert.equal(readFigure([0, 5, 10], "cercle", null).tip, 12.5)
+  assert.equal(readFigure([0, 10, 0], "cercle", null).tip, -2.5)
 
   const yPentagon = 1 - Math.tan((72 * Math.PI) / 180) * 0.25
   assert.ok(Math.abs(readFigure([0, 0, 0, 10, 10], "polygone", 5).tip - yPentagon * 10) < 1e-9)
 
   assert.equal(readFigure([0, 10, 0], "pythagore", null).tip, 10)
-  assert.equal(readFigure([0, 5, 10], "pythagore", null).tip, 15)
+  assert.equal(readFigure([0, 5, 10], "pythagore", null, Infinity).tip, 15)
+  assert.equal(readFigure([0, 5, 10], "pythagore", null).tip, 12.5)
   assert.equal(readFigure([7, 7, 7], "pythagore", null).tip, 7)
 
   const sinusoid = (phase: number) =>
@@ -870,7 +874,8 @@ test("a geometric figure slides a short caliber and keeps the old gestures", () 
 
   const chord = readFigure([0, 2, 4, 6, 8, 10], "tan", 4)
   assert.equal(chord.correspond, true)
-  assert.ok(Math.abs(chord.tip - 40 / 3) < 1e-9)
+  assert.ok(Math.abs(readFigure([0, 2, 4, 6, 8, 10], "tan", 4, Infinity).tip - 40 / 3) < 1e-9)
+  assert.equal(chord.tip, 12.5)
   assert.equal(readFigure([0, 2, 4, 6, 8], "tan", 4).correspond, false)
 
   const alpha = Math.atan2(-1, 0.5)
@@ -879,7 +884,9 @@ test("a geometric figure slides a short caliber and keeps the old gestures", () 
   assert.ok(Math.abs(scaled.tip - Math.tan(beta) * 0.5 * 30) < 1e-9)
   assert.ok(Math.abs(scaled.tip - (10 + Math.tan(beta) * 0.5 * 10)) > 1)
 
-  assert.equal(readFigure([0, 0, 100], "arctan", 45).tip, 200)
+  const steep = (80 * Math.PI) / 180
+  assert.ok(Math.abs(readFigure([0, 0, 100], "arctan", 45, Infinity).tip - 100 * (1 + Math.tan(steep) * 0.5)) < 1e-9)
+  assert.equal(readFigure([0, 0, 100], "arctan", 45).tip, 125)
   assert.ok(Math.abs(readFigure([10, 0, 0], "arctan", 30).tip - 5 / Math.sqrt(3)) < 1e-9)
   assert.equal(readFigure([1, 2], "triangle", null).tip, 2)
 
@@ -1024,15 +1031,16 @@ test("a house variation or an IA proposal never gives a figure a window shorter 
   assert.equal(parseSkillParams({ curve: "*", gesture: "moyenne", days: 7 })?.days, 7)
 })
 
-test("every figure tip stays within one amplitude of its window, and the thought stays in its band", () => {
+test("every figure tip stays within a quarter of the height of its window, and the thought stays in its band", () => {
   const random = lcg(11)
   for (const { forme, n } of FIGURE_CASES) {
     for (let round = 0; round < 120; round += 1) {
       const values = Array.from({ length: 16 }, () => 10 + Math.floor(random() * 30))
       const lo = Math.min(...values)
       const hi = Math.max(...values)
+      const reach = TIP_MARGIN * (hi - lo)
       const tip = readFigure(values, forme, n).tip
-      assert.ok(tip >= lo - (hi - lo) - 1e-9 && tip <= hi + (hi - lo) + 1e-9, `${forme} ${n} : ${tip}`)
+      assert.ok(tip >= lo - reach - 1e-9 && tip <= hi + reach + 1e-9, `${forme} ${n} : ${tip}`)
     }
   }
   const meta = curveMeta("sumNumbers")
@@ -1056,6 +1064,88 @@ test("every figure tip stays within one amplitude of its window, and the thought
       assert.ok(draw.yMax - draw.yMin < 4 * (meta.hi - meta.lo), `${forme} ${n} fin ${end} : ${draw.yMax - draw.yMin}`)
       assert.equal(draw.vector.y2, thought.tips.sumNumbers)
     }
+  }
+})
+
+test("the tip clip only pulls a figure back towards its window, on the side the figure points to", () => {
+  const random = lcg(23)
+  let clipped = 0
+  let total = 0
+  for (const { forme, n } of FIGURE_CASES) {
+    for (let round = 0; round < 150; round += 1) {
+      const size = figureLength(forme, n) + Math.floor(random() * 12)
+      const values = Array.from({ length: size }, () => 15 + Math.floor(random() * 226))
+      const lo = Math.min(...values)
+      const hi = Math.max(...values)
+      const last = values[values.length - 1]
+      const reach = TIP_MARGIN * (hi - lo)
+      const free = readFigure(values, forme, n, Infinity)
+      const read = readFigure(values, forme, n)
+      assert.equal(read.tip, Math.min(hi + reach, Math.max(lo - reach, free.tip)), `${forme} ${n}`)
+      assert.equal(Math.sign(read.tip - last), Math.sign(free.tip - last), `${forme} ${n}`)
+      assert.deepEqual({ ...read, tip: 0 }, { ...free, tip: 0 }, `${forme} ${n}`)
+      total += 1
+      if (read.tip !== free.tip) clipped += 1
+    }
+  }
+  assert.ok(clipped > 0 && clipped < total, `${clipped} pointes écrêtées sur ${total}`)
+})
+
+test("the drawn thought of a figure points the way the figure points", () => {
+  const rows = urn(60, 7)
+  const sums = rows.map((row) => curveValues(row).sumNumbers)
+  for (const { forme, n } of FIGURE_CASES) {
+    const window = Math.max(10, figureLength(forme, n))
+    const params: SkillParams = {
+      curve: "sumNumbers",
+      gesture: "figure",
+      forme,
+      n,
+      ratio: 0.618,
+      span: "bande",
+      window,
+      days: null,
+    }
+    for (let end = 20; end < rows.length; end += 4) {
+      const draw = think(mindWith(params, "sumNumbers"), rows.slice(0, end), { hiddenDate: rows[end].date }).draw
+      const values = sums.slice(0, end).slice(-window)
+      const last = values[values.length - 1]
+      const free = readFigure(values, forme, n, Infinity).tip
+      assert.equal(draw.vector.y1, last)
+      assert.equal(Math.sign(draw.vector.y2 - draw.vector.y1), Math.sign(free - last), `${forme} ${n} fin ${end}`)
+    }
+  }
+})
+
+test("an arctan figure plays Σn on an edge of the band in fewer than 5 % of the turns", () => {
+  const meta = curveMeta("sumNumbers")
+  const archives = [1, 2, 3, 4, 5, 6].map((seed) => urn(210, seed))
+  for (const [n, window] of [
+    [15, 3],
+    [30, 5],
+    [45, 10],
+    [30, 16],
+  ] as const) {
+    const params: SkillParams = {
+      curve: "sumNumbers",
+      gesture: "figure",
+      forme: "arctan",
+      n,
+      ratio: 0.618,
+      span: "bande",
+      window,
+      days: null,
+    }
+    let edge = 0
+    let turns = 0
+    for (const rows of archives) {
+      for (let end = 12; end < rows.length; end += 1) {
+        const played = think(mindWith(params, "sumNumbers"), rows.slice(0, end), { hiddenDate: rows[end].date })
+        turns += 1
+        if (played.cases.sumNumbers <= meta.lo || played.cases.sumNumbers >= meta.hi) edge += 1
+      }
+    }
+    assert.ok(edge / turns < 0.05, `arc tangente ${n}°, ${window} tirages : ${edge} grilles de bord sur ${turns}`)
   }
 })
 

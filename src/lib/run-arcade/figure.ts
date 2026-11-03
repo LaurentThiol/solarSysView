@@ -1,6 +1,6 @@
 /**
  * Formes d’une skill. Chaque cran est jugé dans son carré.
- * La pointe du dernier cran est remise à l’échelle de la fenêtre. Elle la dépasse d’une amplitude au plus.
+ * La pointe du dernier cran est remise à l’échelle de la fenêtre. Elle la dépasse d’un quart de sa hauteur au plus.
  */
 
 export const FORMES = [
@@ -22,6 +22,14 @@ export const WAVE_PERIODS = [4, 6, 8, 12] as const
 export const ARCTAN_TURNS = [15, 30, 45] as const
 
 const EPS = 1e-9
+
+/**
+ * Part de la hauteur de la fenêtre dont la pointe peut la dépasser, vers le haut comme vers le bas.
+ * Un quart est la plus grande valeur ronde qui garde Σn sous 5 % de grilles de bord (somme jouée à 15 ou à 240)
+ * avec l’arc tangente de 15, 30 et 45 degrés, sur 3 à 16 tirages. À 0,3, l’arc tangente passe 5 %.
+ * Au-delà, la pointe gagne la bande et le rappel aux totales colle la somme à son bord.
+ */
+export const TIP_MARGIN = 0.25
 
 export function usesFigureN(forme: Forme) {
   return forme !== "triangle" && forme !== "cercle" && forme !== "pythagore"
@@ -247,8 +255,16 @@ function place(built: Built, cran: readonly number[], maskLo: number, maskHi: nu
   return lo + built.y * (hi - lo)
 }
 
-/** Fait glisser le calibre dans la fenêtre. La pensée est le dernier cran. */
-export function readFigure(values: readonly number[], forme: Forme, n: number | null): FigureRead {
+/**
+ * Fait glisser le calibre dans la fenêtre. La pensée est le dernier cran.
+ * `margin` : de combien la pointe peut sortir de la fenêtre, en part de sa hauteur. `Infinity` rend la pointe brute.
+ */
+export function readFigure(
+  values: readonly number[],
+  forme: Forme,
+  n: number | null,
+  margin: number = TIP_MARGIN
+): FigureRead {
   const resolved = usesFigureN(forme) ? (n ?? defaultFigureN(forme)) : null
   const length = figureLength(forme, resolved)
   const last = values.length ? values[values.length - 1] : 0
@@ -270,8 +286,8 @@ export function readFigure(values: readonly number[], forme: Forme, n: number | 
     } else {
       tip = place(built, cran, maskLo, maskHi, "tip")
       if (maskHi - maskLo > EPS) {
-        const span = maskHi - maskLo
-        tip = Math.min(maskHi + span, Math.max(maskLo - span, tip))
+        const reach = margin * (maskHi - maskLo)
+        tip = Math.min(maskHi + reach, Math.max(maskLo - reach, tip))
       }
     }
   }

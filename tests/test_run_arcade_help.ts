@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+import { TIP_MARGIN } from "../src/lib/run-arcade/figure.ts"
 import { RUN_ARCADE_HELP } from "../src/lib/run-arcade/help.ts"
 
 const lab = readFileSync(new URL("../src/components/brain/run-arcade-lab.tsx", import.meta.url), "utf8")
@@ -156,7 +157,9 @@ test("runArcade help follows the suite, the waves, the figure window, the evenin
   assert.match(figure, /Le sinus lit la phase du dernier cran/)
   assert.match(figure, /Sinus, tangente, arcsinus et arccosinus lisent une période/)
   assert.doesNotMatch(figure, /\bcosinus\b/)
-  assert.match(figure, /dépasser la fenêtre d’une amplitude au plus/)
+  assert.equal(TIP_MARGIN, 0.25)
+  assert.match(figure, /dépasser la fenêtre d’un quart de sa hauteur au plus/)
+  assert.doesNotMatch(figure, /d’une amplitude/)
   assert.doesNotMatch(figure, /se place entre le plus bas et le plus haut de la fenêtre/)
   const runners = RUN_ARCADE_HELP.runners.body
   assert.match(runners, /De 1 à 18 coureurs, 8 au départ/)
