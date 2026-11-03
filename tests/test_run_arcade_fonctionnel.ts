@@ -4,7 +4,7 @@ import test from "node:test"
 
 import { fonctionnelBoard, type FonctionnelInput } from "../src/lib/run-arcade/fonctionnel.ts"
 import { RUN_ARCADE_HELP } from "../src/lib/run-arcade/help.ts"
-import { emptyActivity, type XrayStep } from "../src/lib/run-arcade/xray.ts"
+import { activityLines, emptyActivity, type XrayStep } from "../src/lib/run-arcade/xray.ts"
 
 function step(partial: Partial<XrayStep> & Pick<XrayStep, "op" | "state" | "result">): XrayStep {
   return {
@@ -153,10 +153,34 @@ test("pause and a missing model are said on the course line", () => {
   assert.equal(absent.course, "IA absente : modèle absent")
 })
 
+test("two identical waiting lines keep distinct keys", () => {
+  const detail = "Σn rejoint sa moyenne sur 5 tirages."
+  const lines = activityLines(
+    {
+      calling: [],
+      searching: [],
+      pending: [
+        { runnerId: "r4", detail },
+        { runnerId: "r4", detail },
+      ],
+    },
+    { r4: "R4" }
+  )
+  assert.deepEqual(
+    lines.map((line) => line.text),
+    [
+      "R4 en attente : Σn rejoint sa moyenne sur 5 tirages.",
+      "R4 en attente : Σn rejoint sa moyenne sur 5 tirages.",
+    ]
+  )
+  assert.equal(new Set(lines.map((line) => line.key)).size, 2)
+})
+
 test("the functional window is wired into Rayons X and its help", () => {
   const lab = readFileSync(new URL("../src/components/brain/run-arcade-lab.tsx", import.meta.url), "utf8")
   assert.match(lab, /data-testid="run-arcade-fonctionnel"/)
   assert.match(lab, /FonctionnelTable/)
+  assert.match(lab, /<li key=\{line\.key\}>\{line\.text\}<\/li>/)
   const help = RUN_ARCADE_HELP.rayons.items?.find((item) => item.label === "Fonctionnel")
   assert.ok(help)
   assert.match(help.text, /Passage à Jeu/)

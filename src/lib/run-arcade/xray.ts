@@ -202,12 +202,25 @@ export function xrayFeed(
   return lines.slice(-limit)
 }
 
-export function activityLines(activity: XrayActivity, names: Readonly<Record<string, string>>) {
+/** Ligne de « En ce moment ». La clé reste unique quand la phrase se répète. */
+export type ActivityLine = {
+  key: string
+  text: string
+}
+
+/** Appel, recherche, puis proposition en attente. */
+export function activityLines(activity: XrayActivity, names: Readonly<Record<string, string>>): ActivityLine[] {
   const nameOf = (id: string) => names[id] ?? id
+  const rank = new Map<string, number>()
+  const line = (id: string, text: string): ActivityLine => {
+    const count = (rank.get(id) ?? 0) + 1
+    rank.set(id, count)
+    return { key: `${id}:${count}`, text }
+  }
   return [
-    ...activity.calling.map((id) => `${nameOf(id)} appelle`),
-    ...activity.searching.map((id) => `${nameOf(id)} cherche`),
-    ...activity.pending.map((item) => `${nameOf(item.runnerId)} en attente : ${item.detail}`),
+    ...activity.calling.map((id) => line(id, `${nameOf(id)} appelle`)),
+    ...activity.searching.map((id) => line(id, `${nameOf(id)} cherche`)),
+    ...activity.pending.map((item) => line(item.runnerId, `${nameOf(item.runnerId)} en attente : ${item.detail}`)),
   ]
 }
 

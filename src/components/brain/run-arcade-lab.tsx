@@ -275,7 +275,7 @@ function XrayPanel({ snapshot }: { snapshot: SessionSnapshot }) {
         {live.length > 0 ? (
           <ul className="mt-1 flex flex-col gap-0.5 text-xs">
             {live.map((line) => (
-              <li key={line}>{line}</li>
+              <li key={line.key}>{line.text}</li>
             ))}
           </ul>
         ) : (
