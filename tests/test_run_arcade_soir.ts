@@ -158,8 +158,9 @@ test("soir is a gesture the runners and the local model can name", () => {
     "toutes les courbes suit l’autre soir, à 4 jours au plus."
   )
   assert.equal(parseSkillParams({ curve: "n5", gesture: "soir" })?.gesture, "soir")
-  const gestures = createMinds(16).map((runner) => runner.skills[0].versions[0].gesture)
+  const gestures = createMinds(17).map((runner) => runner.skills[0].versions[0].gesture)
   assert.equal(gestures.filter((gesture) => gesture === "soir").length, 1)
+  assert.equal(gestures[16], "soir")
   const past = [draw("2026-05-26", 40), draw("2026-06-02", 44)]
   const prompt = buildPrompt({
     mind: mind(),

@@ -1,0 +1,9 @@
+{
+  "slug": "suite-numerique-c003",
+  "happened_on": "2026-11-03",
+  "area": "runArcade",
+  "title": "Suite numérique : un pas logistique",
+  "body": "R8 part avec la skill Suite numérique, R = 2, sur toutes les courbes. La pensée est un pas de X(n+1) = R×Xn×(1−Xn), après avoir ramené la dernière valeur entre 0 et 1 sur la bande du geste. R se choisit parmi 1, 1,5, 2, 2,8 et 3,2. Au-dessus, la proposition est refusée. Le vecteur pointe ce pas. Les calques ne changent pas, et l’examen garde la skill seulement si le solde monte. R1 à R7 gardent leur geste de départ.",
+  "pr_number": null,
+  "pr_url": null
+}

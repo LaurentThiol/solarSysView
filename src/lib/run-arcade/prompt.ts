@@ -6,8 +6,10 @@ import {
   DAYS_MAX,
   DAYS_MIN,
   GESTURES,
+  LOGISTIC_R,
   parseSkillParams,
   SPANS,
+  SUITES,
   WINDOW_MAX,
   WINDOW_MIN,
   type SkillParams,
@@ -27,6 +29,8 @@ export const SKILL_EXAMPLE = {
   span: "bande",
   window: 8,
   days: 60,
+  suite: "logistique",
+  r: 2,
   lecture: {
     tangente: "correspond",
     masque: "correspond",
@@ -47,6 +51,8 @@ export const BRAVE_EXAMPLE = {
   span: "bande",
   window: 8,
   days: 0,
+  suite: "logistique",
+  r: 2,
   lecture: {
     tangente: "correspond",
     masque: "correspond",
@@ -87,7 +93,7 @@ export function buildPrompt(input: PromptInput) {
     "Réponds par un seul objet JSON, sans texte autour. Deux actions, chacune déjà valide :",
     `Skill : ${JSON.stringify(SKILL_EXAMPLE)}`,
     `Recherche : ${JSON.stringify(BRAVE_EXAMPLE)}`,
-    `curve : ${CURVE_KEYS.join(", ")} ou *. gesture : ${GESTURES.join(", ")}. ratio : ${GOLDEN_RATIOS.join(", ")}. span : ${SPANS.join(", ")}. window : entier de ${WINDOW_MIN} à ${WINDOW_MAX}. days : 0 s’il n’y a pas de fenêtre longue, sinon un entier de ${DAYS_MIN} à ${DAYS_MAX}.`,
+    `curve : ${CURVE_KEYS.join(", ")} ou *. gesture : ${GESTURES.join(", ")}. ratio : ${GOLDEN_RATIOS.join(", ")}. span : ${SPANS.join(", ")}. window : entier de ${WINDOW_MIN} à ${WINDOW_MAX}. days : 0 s’il n’y a pas de fenêtre longue, sinon un entier de ${DAYS_MIN} à ${DAYS_MAX}. suite : ${SUITES.join(", ")}. r : ${LOGISTIC_R.join(", ")}. suite et r ne comptent que pour le geste suite.`,
     "Une skill sur une courbe déjà pilotée en devient une nouvelle version. Une seule skill nouvelle par lancement.",
     "L’examen rejoue les derniers tirages, que tu ne lis pas. La skill n’est gardée que si le solde d’examen monte.",
     "Le dessin porte une lecture déjà mesurée. Recopie-la dans lecture, cinq champs : tangente, masque, cercle, pas, vecteur. Chaque champ vaut correspond ou ecarte. ecarte veut dire s’écarte. Tu ne changes pas ces mots.",
@@ -98,7 +104,9 @@ export function buildPrompt(input: PromptInput) {
       const version = activeVersion(skill, input.hiddenDate)
       if (!version) return null
       const scale = version.days ? `, ${version.days} jours` : ""
-      return `- ${skill.name} v${version.version} : ${version.phrase} (courbe ${version.curve}, geste ${version.gesture}, ratio ${version.ratio}, span ${version.span}, fenêtre ${version.window} tirages${scale})`
+      const suite =
+        version.gesture === "suite" ? `, suite ${version.suite ?? "logistique"}, R ${version.r ?? 2}` : ""
+      return `- ${skill.name} v${version.version} : ${version.phrase} (courbe ${version.curve}, geste ${version.gesture}${suite}, ratio ${version.ratio}, span ${version.span}, fenêtre ${version.window} tirages${scale})`
     })
     .filter(Boolean)
 

@@ -69,6 +69,16 @@ def test_normalize_flattens_versions_with_their_cutoff() -> None:
     assert record["versions"][1]["cutoff"] == "2026-07-28"
     assert record["versions"][1]["parent"] == 1
     assert record["versions"][1]["params"]["days"] == 60
+    assert "suite" not in record["versions"][1]["params"]
+    suite = {
+        **_champion()["skills"][0]["versions"][0],
+        "gesture": "suite",
+        "suite": "logistique",
+        "r": 2,
+    }
+    stored = normalize_champion({**_champion(), "skills": [{**_champion()["skills"][0], "versions": [suite]}]})
+    assert stored["versions"][0]["params"]["suite"] == "logistique"
+    assert stored["versions"][0]["params"]["r"] == 2
     with pytest.raises(ValueError):
         normalize_champion({**_champion(), "skills": [{"id": "", "versions": []}]})
 

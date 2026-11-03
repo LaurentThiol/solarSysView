@@ -17,6 +17,16 @@ def _day(value: Any) -> str | None:
     return head if ISO_DAY.match(head) else None
 
 
+def _params(row: dict[str, Any]) -> dict[str, Any]:
+    """Champs du geste. La suite logistique ajoute sa formule et R, seulement pour ce geste."""
+    params = {key: row.get(key) for key in PARAM_KEYS}
+    if row.get("gesture") != "suite":
+        return params
+    params["suite"] = row.get("suite") or "logistique"
+    params["r"] = 2 if row.get("r") is None else row.get("r")
+    return params
+
+
 def _int_or_none(value: Any) -> int | None:
     if value is None or value == "":
         return None
@@ -51,7 +61,7 @@ def normalize_champion(payload: dict[str, Any]) -> dict[str, Any]:
                     "parent": _int_or_none(row.get("parent")),
                     "cutoff": _day(row.get("cutoff")),
                     "origin": row.get("origin") if row.get("origin") in ORIGINS else "ia",
-                    "params": {key: row.get(key) for key in PARAM_KEYS},
+                    "params": _params(row),
                     "phrase": str(row.get("phrase") or "")[:280],
                     "exam_cents": _int_or_none(row.get("examCents")),
                 }

@@ -98,7 +98,15 @@ test("runArcade help names the purse, the exam, the evenings and the curves", ()
   assert.match(RUN_ARCADE_HELP.gestes.items?.[5].text ?? "", /mardi/)
   assert.match(RUN_ARCADE_HELP.gestes.items?.[5].text ?? "", /vendredi/)
 
-  const phrases = ["reste sur place", "poursuit le pas", "inverse le pas", "vise le nombre d’or", "rejoint sa moyenne", "suit l’autre soir"]
+  const phrases = [
+    "reste sur place",
+    "poursuit le pas",
+    "inverse le pas",
+    "vise le nombre d’or",
+    "rejoint sa moyenne",
+    "suit l’autre soir",
+    "suit la suite logistique",
+  ]
   assert.deepEqual(
     RUN_ARCADE_HELP.gestes.items?.map((item) => item.label.toLowerCase()),
     phrases
@@ -113,4 +121,11 @@ test("runArcade help names the purse, the exam, the evenings and the curves", ()
   assert.match(copy, /50,00 €/)
   assert.match(page, /Une skill n’est gardée que si l’examen monte/)
   assert.match(page, /à quatre jours au plus/)
+  assert.match(RUN_ARCADE_HELP.gestes.items?.[6].text ?? "", /R\/4/)
+  assert.match(RUN_ARCADE_HELP.gestes.items?.[6].text ?? "", /3,2/)
+  assert.match(RUN_ARCADE_HELP.gestes.items?.[6].text ?? "", /3,8 et 4 sont refusés/)
+  assert.match(RUN_ARCADE_HELP.runners.body, /Suite numérique/)
+  assert.match(nav, /X\(n\+1\)/)
+  assert.match(copy, /X\(n\+1\)/)
+  assert.match(page, /X\(n\+1\)/)
 })

@@ -17,6 +17,8 @@ import {
   activeVersion,
   addVersion,
   auditCutoffs,
+  describeSkill,
+  houseVariation,
   newSkill,
   parseSkillParams,
   rollBack,
@@ -42,6 +44,7 @@ import {
   revealedPast,
   settlePurse,
   think,
+  tipFor,
   type RankPoint,
   type RunnerMind,
 } from "../src/lib/run-arcade/thought.ts"
@@ -594,4 +597,108 @@ test("an observation is dated on first sight and counted on the next draw, not t
   const played = playTurn(race, rows)
   raceNotes = noteRace(raceNotes.observations, raceNotes.seen, played, played.revealed?.date ?? hidden)
   assert.equal(raceNotes.observations.reduce((total, item) => total + item.count, 0), counts)
+})
+
+const suite: SkillParams = {
+  curve: "sumNumbers",
+  gesture: "suite",
+  suite: "logistique",
+  r: 2,
+  ratio: 0.618,
+  span: "bande",
+  window: 8,
+  days: null,
+}
+
+test("the logistic step stays in the band, and a strong R is refused", () => {
+  const lo = 15
+  const hi = 240
+  const width = hi - lo
+  const middle = lo + width / 2
+  const at = (r: SkillParams["r"], values: number[]) =>
+    tipFor(
+      { ...suite, r },
+      [],
+      values.map((sumNumbers) => ({ ...curveValues(point(0)), sumNumbers })),
+      "sumNumbers"
+    )
+  assert.ok(Math.abs(at(2, [middle, middle]) - middle) < 1e-9)
+  assert.ok(Math.abs(at(2.8, [middle]) - (lo + 0.7 * width)) < 1e-9)
+  assert.ok(at(1, [middle, hi, lo]) <= lo + 0.25 * width + 1e-9)
+  assert.ok(Math.abs(at(1, [300]) - lo) < 1e-9)
+  assert.ok(Math.abs(at(1, [0]) - lo) < 1e-9)
+
+  assert.equal(parseSkillParams({ curve: "sumNumbers", gesture: "suite", r: 3.5 }), null)
+  assert.equal(parseSkillParams({ curve: "sumNumbers", gesture: "suite", r: 3.8 }), null)
+  assert.equal(parseSkillParams({ curve: "sumNumbers", gesture: "suite", r: 4 }), null)
+  assert.equal(parseSkillParams({ curve: "sumNumbers", gesture: "suite" })?.r, 2)
+  assert.equal(parseSkillParams({ curve: "sumNumbers", gesture: "suite", r: "1,5" })?.r, 1.5)
+  assert.equal(parseSkillParams({ curve: "sumNumbers", gesture: "suite", r: 3.2 })?.suite, "logistique")
+  const old = parseSkillParams({ curve: "d2", gesture: "or", ratio: 1.6 })
+  assert.equal(old?.gesture, "or")
+  assert.equal(old?.r, undefined)
+  assert.equal(parseSkillParams({ curve: "d2", gesture: "persiste", r: 4 })?.gesture, "persiste")
+
+  const starter = createMinds(8)[7].skills[0]
+  assert.equal(starter.name, "Suite numérique")
+  assert.equal(starter.versions[0].gesture, "suite")
+  assert.equal(starter.versions[0].r, 2)
+  assert.equal(starter.versions[0].curve, "*")
+  assert.equal(createMinds(8)[6].skills[0].name, "Geste de base")
+  assert.notEqual(createMinds(8)[6].skills[0].versions[0].gesture, "suite")
+  assert.equal(
+    describeSkill(starter.versions[0]),
+    "toutes les courbes suit la suite logistique, R 2, de la bande, sur 8 tirages."
+  )
+  const varied = houseVariation(
+    { curve: "*", gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null },
+    6
+  )
+  assert.equal(varied.gesture, "suite")
+  assert.equal(varied.suite, "logistique")
+  assert.equal(varied.r, 1.5)
+  assert.notEqual(
+    houseVariation({ curve: "*", gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null }, 5).gesture,
+    "suite"
+  )
+
+  const calm = think(mindWith({ ...suite, curve: "n1", window: 4 }, "n1"), withN1([23, 23, 23, 23]))
+  assert.equal(calm.draw.lecture.masque, "correspond")
+  assert.match(calm.draw.observation, /n1 · suite · R 2 · 4 tirages/)
+  assert.match(calm.draw.phrase, /suit la suite logistique, R 2/)
+  assert.ok(calm.draw.tangent)
+  assert.ok(calm.draw.vector)
+
+  const wild = think(mindWith({ ...suite, curve: "n1", r: 1, window: 4 }, "n1"), withN1([1, 46, 1, 46]))
+  assert.equal(wild.draw.lecture.masque, "ecarte")
+
+  const legacy = parseChampion({
+    generation: 1,
+    runner: "R1",
+    cents: 5000,
+    skills: [
+      {
+        id: "r1-base",
+        name: "Geste de base",
+        versions: [
+          {
+            curve: "*",
+            gesture: "persiste",
+            ratio: 0.618,
+            span: "bande",
+            window: 8,
+            days: null,
+            version: 1,
+            parent: null,
+            cutoff: "",
+            origin: "maison",
+            phrase: "reste",
+            examCents: null,
+          },
+        ],
+      },
+    ],
+  })
+  assert.equal(legacy?.skills[0].versions[0].gesture, "persiste")
+  assert.equal(legacy?.skills[0].versions[0].r, undefined)
 })

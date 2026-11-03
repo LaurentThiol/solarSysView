@@ -1,8 +1,17 @@
 import { CURVE_KEYS, curveLabel, type CurveKey } from "./curves"
 import { formatRatio, GOLDEN_RATIOS, nearestGolden, type GoldenRatio } from "./golden"
 
-export const GESTURES = ["persiste", "glisse", "miroir", "or", "moyenne", "soir"] as const
+export const GESTURES = ["persiste", "glisse", "miroir", "or", "moyenne", "soir", "suite"] as const
 export type Gesture = (typeof GESTURES)[number]
+
+/** Première suite : un pas de X(n+1) = R·Xn·(1−Xn). */
+export const SUITES = ["logistique"] as const
+export type SuiteId = (typeof SUITES)[number]
+
+/** R du pas logistique. Au-dessus de 3,2, le pas traverse la bande. */
+export const LOGISTIC_R = [1, 1.5, 2, 2.8, 3.2] as const
+export type LogisticR = (typeof LOGISTIC_R)[number]
+export const DEFAULT_LOGISTIC_R: LogisticR = 2
 
 export const SPANS = ["bande", "lignes", "pas"] as const
 export type SpanKind = (typeof SPANS)[number]
@@ -28,6 +37,10 @@ export type SkillParams = {
   window: number
   /** Fenêtre longue, en jours. Facultative. */
   days: number | null
+  /** Formule, seulement pour le geste suite. */
+  suite?: SuiteId | null
+  /** Paramètre R, seulement pour le geste suite. */
+  r?: LogisticR | null
 }
 
 export type SkillOrigin = "maison" | "ia" | "variation"
@@ -55,6 +68,7 @@ const GESTURE_PHRASE: Record<Gesture, string> = {
   or: "vise le nombre d’or",
   moyenne: "rejoint sa moyenne",
   soir: "suit l’autre soir",
+  suite: "suit la suite logistique",
 }
 
 export function gesturePhrase(gesture: Gesture) {
@@ -73,6 +87,10 @@ const SPAN_PHRASE: Record<SpanKind, string> = {
 
 export function describeSkill(params: SkillParams) {
   if (params.gesture === "soir") return `${targetLabel(params.curve)} suit l’autre soir, à 4 jours au plus.`
+  if (params.gesture === "suite") {
+    const r = params.r ?? DEFAULT_LOGISTIC_R
+    return `${targetLabel(params.curve)} suit la suite logistique, R ${formatRatio(r)}, ${SPAN_PHRASE[params.span]}, sur ${params.window} tirages.`
+  }
   const scale =
     params.gesture === "moyenne" && params.days
       ? `sur ${params.days} jours`
@@ -192,6 +210,16 @@ function boundedInt(value: unknown, min: number, max: number) {
   return match ? intIn(Number(match[0]), min, max) : null
 }
 
+/** R le plus proche, à 0,05 près. Plus loin : refus. */
+export function nearestLogistic(value: number): LogisticR | null {
+  if (!Number.isFinite(value)) return null
+  let best: LogisticR = LOGISTIC_R[0]
+  for (const r of LOGISTIC_R) {
+    if (Math.abs(r - value) < Math.abs(best - value)) best = r
+  }
+  return Math.abs(best - value) <= 0.05 ? best : null
+}
+
 /** 0 et « null » : pas de fenêtre longue. undefined : valeur illisible. */
 function optionalDays(value: unknown): number | null | undefined {
   if (value == null || value === 0 || value === "0" || value === "null") return null
@@ -210,12 +238,19 @@ export function parseSkillParams(raw: unknown): SkillParams | null {
   const window = record.window == null ? 8 : boundedInt(record.window, WINDOW_MIN, WINDOW_MAX)
   const days = optionalDays(record.days)
   if (!curve || !gesture || ratio == null || !span || window == null || days === undefined) return null
-  return { curve, gesture, ratio, span, window, days }
+  if (gesture !== "suite") return { curve, gesture, ratio, span, window, days }
+  const suite = record.suite == null || record.suite === "" ? "logistique" : firstAllowed(record.suite, SUITES)
+  const r =
+    record.r == null || record.r === ""
+      ? DEFAULT_LOGISTIC_R
+      : nearestLogistic(firstNumber(record.r) ?? Number.NaN)
+  if (!suite || r == null) return null
+  return { curve, gesture, ratio, span, window, days, suite, r }
 }
 
 /**
- * Gestes de départ, tous différents. Persiste, glisse, miroir et soir n’ont pas de réglage :
- * ils ne paraissent qu’une fois, le nombre d’or et la moyenne varient ensuite.
+ * Gestes de départ, tous différents. Persiste, glisse, miroir, soir et la suite
+ * ne paraissent qu’une fois. Le nombre d’or et la moyenne varient ensuite.
  */
 const BASE_PRESETS: Omit<SkillParams, "curve">[] = [
   { gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null },
@@ -225,6 +260,7 @@ const BASE_PRESETS: Omit<SkillParams, "curve">[] = [
   { gesture: "moyenne", ratio: 0.618, span: "bande", window: 5, days: null },
   { gesture: "or", ratio: 0.382, span: "lignes", window: 10, days: null },
   { gesture: "moyenne", ratio: 0.618, span: "bande", window: 10, days: 60 },
+  { gesture: "suite", suite: "logistique", r: DEFAULT_LOGISTIC_R, ratio: 0.618, span: "bande", window: 8, days: null },
   { gesture: "or", ratio: 1.272, span: "pas", window: 5, days: null },
   { gesture: "moyenne", ratio: 0.618, span: "bande", window: 3, days: null },
   { gesture: "or", ratio: 0.618, span: "lignes", window: 16, days: null },
@@ -245,16 +281,37 @@ export function baseSkill(runnerId: string, index: number): Skill {
     ...preset,
     window: Math.min(WINDOW_MAX, preset.window + lap * 2),
   }
-  return newSkill(`${runnerId}-base`, "Geste de base", params, { cutoff: "", origin: "maison", examCents: null })
+  const name = params.gesture === "suite" ? "Suite numérique" : "Geste de base"
+  return newSkill(`${runnerId}-base`, name, params, { cutoff: "", origin: "maison", examCents: null })
+}
+
+const CLASSIC_GESTURES = ["persiste", "glisse", "miroir", "or", "moyenne", "soir"] as const
+
+/** Même cycle qu’avant la suite. La suite occupe le créneau suivant, un pas sur sept. */
+function variedGesture(base: Gesture, step: number): Gesture {
+  if (step % (CLASSIC_GESTURES.length + 1) === CLASSIC_GESTURES.length) return "suite"
+  const origin = CLASSIC_GESTURES.indexOf(base as (typeof CLASSIC_GESTURES)[number])
+  const from = origin < 0 ? 0 : origin
+  return CLASSIC_GESTURES[(from + 1 + (step % (CLASSIC_GESTURES.length - 1))) % CLASSIC_GESTURES.length]
 }
 
 /** Variation maison : une skill dédiée à une courbe, tirée de la skill de base. Sans IA, elle reste une proposition. */
 export function houseVariation(base: SkillParams, seed: number): SkillParams {
   const step = Math.abs(Math.round(seed))
   const curve = CURVE_KEYS[step % CURVE_KEYS.length]
-  const gesture = GESTURES[(GESTURES.indexOf(base.gesture) + 1 + (step % (GESTURES.length - 1))) % GESTURES.length]
+  const gesture = variedGesture(base.gesture, step)
   const ratio = GOLDEN_RATIOS[(GOLDEN_RATIOS.indexOf(base.ratio) + 1 + step) % GOLDEN_RATIOS.length]
   const window = SHORT_WINDOWS[step % SHORT_WINDOWS.length]
   const days = gesture === "moyenne" ? LONG_DAYS[step % LONG_DAYS.length] : null
-  return { curve, gesture, ratio, span: base.span, window, days }
+  if (gesture !== "suite") return { curve, gesture, ratio, span: base.span, window, days }
+  return {
+    curve,
+    gesture,
+    ratio,
+    span: base.span,
+    window,
+    days,
+    suite: "logistique",
+    r: LOGISTIC_R[step % LOGISTIC_R.length],
+  }
 }

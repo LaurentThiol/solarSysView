@@ -15,7 +15,7 @@ export default function RunArcadePage() {
     <PageShell
       wide
       title="runArcade"
-      subtitle="Chaque runner a son univers. Après l’avant-course, chaque tour lui laisse une tranche d’horloge pour penser : somme, puis rangs. Le trait est la courbe fondamentale, la bande le masque de la skill, et tangente, cercle d’or, pas d’avant et vecteur restent en calques. Quand la série est longue, un curseur glisse vingt tirages le long du trait, calé au départ sur le bout. Le point est la case jouée, près de la pensée. n1 à n5 ne se calent pas sur 10, 20, 30, 40 ou 50. Le geste soir aligne le mardi et le vendredi, à quatre jours au plus. Une skill n’est gardée que si l’examen monte. Le logiciel date chaque observation et compte ses reconnaissances."
+      subtitle="Chaque runner a son univers. Après l’avant-course, chaque tour lui laisse une tranche d’horloge pour penser : somme, puis rangs. Le trait est la courbe fondamentale, la bande le masque de la skill, et tangente, cercle d’or, pas d’avant et vecteur restent en calques. Quand la série est longue, un curseur glisse vingt tirages le long du trait, calé au départ sur le bout. Le point est la case jouée, près de la pensée. n1 à n5 ne se calent pas sur 10, 20, 30, 40 ou 50. Le geste soir aligne le mardi et le vendredi, à quatre jours au plus. Le geste suite pose un pas X(n+1) = R×Xn×(1−Xn). R vaut 1, 1,5, 2, 2,8 ou 3,2. Une skill n’est gardée que si l’examen monte. Le logiciel date chaque observation et compte ses reconnaissances."
     >
       <Suspense fallback={null}>
         <RunArcadeLab />

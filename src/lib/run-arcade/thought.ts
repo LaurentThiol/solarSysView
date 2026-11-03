@@ -20,6 +20,7 @@ import { soirReading } from "./soir"
 import {
   activeVersion,
   baseSkill,
+  DEFAULT_LOGISTIC_R,
   gesturePhrase,
   type Gesture,
   type Skill,
@@ -225,6 +226,36 @@ export function spanFor(params: SkillParams, rows: readonly CurveValues[], key: 
   return { lo, hi: Math.max(last, prev, lo + 1) }
 }
 
+function clampUnit(value: number) {
+  return Math.min(1, Math.max(0, value))
+}
+
+/** Dernière valeur ramenée entre 0 et 1 sur la bande. Hors bande : collée au bord. */
+function unitOf(value: number, lo: number, hi: number) {
+  const width = hi - lo
+  if (width <= 0) return 0
+  return clampUnit((value - lo) / width)
+}
+
+/** Un pas : X(n+1) = R·Xn·(1−Xn). L’image reste au plus R/4. */
+function logisticImage(unit: number, r: number) {
+  const x = clampUnit(unit)
+  return r * x * (1 - x)
+}
+
+/** Écart moyen entre chaque pas de la fenêtre et un pas logistique du même R. */
+function logisticDistance(values: readonly number[], lo: number, hi: number, r: number) {
+  if (values.length < 2) return 0
+  const width = hi - lo
+  if (width <= 0) return 0
+  let total = 0
+  for (let index = 0; index < values.length - 1; index += 1) {
+    const predicted = lo + logisticImage(unitOf(values[index], lo, hi), r) * width
+    total += Math.abs(values[index + 1] - predicted)
+  }
+  return total / (values.length - 1)
+}
+
 /** Pointe du vecteur d’une courbe : la pensée, avant le rappel aux totales. */
 export function tipFor(
   params: SkillParams,
@@ -245,6 +276,10 @@ export function tipFor(
     return values.reduce((total, value) => total + value, 0) / values.length
   }
   const span = spanFor(params, rows, key)
+  if (params.gesture === "suite") {
+    const image = logisticImage(unitOf(last, span.lo, span.hi), params.r ?? DEFAULT_LOGISTIC_R)
+    return span.lo + image * (span.hi - span.lo)
+  }
   return goldenAim(span.lo, span.hi, params.ratio)
 }
 
@@ -498,8 +533,10 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
           ? deltaPrev != null && Math.abs(delta + deltaPrev) <= tol
           : params.gesture === "moyenne"
             ? halfGap(maskValues) <= tol
-            : params.gesture === "or"
-              ? meanAbs(maskValues, aimY) <= tol
+          : params.gesture === "or"
+            ? meanAbs(maskValues, aimY) <= tol
+            : params.gesture === "suite"
+              ? logisticDistance(maskValues, span.lo, span.hi, params.r ?? DEFAULT_LOGISTIC_R) <= tol
               : meanAbs(maskValues, last.y) <= tol
   )
   const pas = word(
@@ -518,9 +555,15 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
     ? reading.days == null
       ? `reprend le pas du ${reading.evening}`
       : `${reading.evening} suit le ${reading.other} à ${reading.days} ${reading.days > 1 ? "jours" : "jour"}`
-    : gesturePhrase(params.gesture)
+    : params.gesture === "suite"
+      ? `${gesturePhrase(params.gesture)}, R ${formatRatio(params.r ?? DEFAULT_LOGISTIC_R)}`
+      : gesturePhrase(params.gesture)
   const words = lectureClause(lecture)
-  const observation = `${curveLabel(focus)} · ${params.gesture} · ${windowLabel(params)} · ${words}`
+  const windowText =
+    params.gesture === "suite"
+      ? `R ${formatRatio(params.r ?? DEFAULT_LOGISTIC_R)} · ${windowLabel(params)}`
+      : windowLabel(params)
+  const observation = `${curveLabel(focus)} · ${params.gesture} · ${windowText} · ${words}`
   const phrase = `${curveLabel(focus)} ${clause} : tangente ${slopeWord}, rayon ${formatNum(radius)} vers ${formatRatio(params.ratio)}, vecteur ${formatNum(tip)}, projection ${projected}${recalled ? ", ramenée par les totales" : ""}. Lecture : ${words}.`
   const ys = [
     ...trail.map((point) => point.y),

@@ -13,7 +13,7 @@ export type RunArcadeHelpCopy = {
 export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   runners: {
     title: "Runners",
-    body: "De 1 à 50 coureurs, 8 au départ. Chacun commence avec un geste de base différent, le même pour toutes les courbes. Le premier s’appelle R1.",
+    body: "De 1 à 50 coureurs, 8 au départ. Chacun commence avec un geste de base différent, le même pour toutes les courbes. R8 part avec la skill Suite numérique, un pas logistique à R = 2. Le premier s’appelle R1.",
     items: [
       {
         label: "Sans champion",
@@ -262,6 +262,10 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       {
         label: "Suit l’autre soir",
         text: "Mardi et vendredi sont le même jeu. La flèche recopie l’autre soir, à quatre jours au plus, plus le dernier pas de ce soir. Un vendredi suit le mardi d’il y a trois jours, un mardi suit le vendredi d’il y a quatre jours. Sans vis-à-vis, la flèche reprend le dernier pas du même soir. La phrase nomme le soir et le décalage. Une harmonique se compte en tirages du même soir : deux tirages mélangés font la semaine, retenue seulement si les deux soirs la portent.",
+      },
+      {
+        label: "Suit la suite logistique",
+        text: "La dernière valeur est ramenée entre 0 et 1 sur la bande du geste : bornes de la courbe, entre les lignes, ou dernier pas. La pensée est un seul pas, X(n+1) = R×Xn×(1−Xn), ramené sur cette bande. R vaut 1, 1,5, 2, 2,8 ou 3,2. Le sommet du pas est R/4 de la bande. 3,5, 3,8 et 4 sont refusés.",
       },
     ],
   },

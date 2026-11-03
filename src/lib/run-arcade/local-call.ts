@@ -4,7 +4,7 @@ import { estimateTokens, usageFromPayload } from "@/lib/ia/usage"
 
 import { CURVE_KEYS } from "./curves"
 import { GOLDEN_RATIOS } from "./golden"
-import { DAYS_MAX, GESTURES, SPANS, WINDOW_MAX, WINDOW_MIN } from "./skills"
+import { DAYS_MAX, GESTURES, LOGISTIC_R, SPANS, SUITES, WINDOW_MAX, WINDOW_MIN } from "./skills"
 
 /** Une action JSON tient en quelques centaines de jetons. */
 const PREDICT = 320
@@ -12,7 +12,7 @@ const TEMPERATURE = 0.2
 
 export type LocalPost = (body: unknown) => Promise<{ ok: boolean; status: number; text: string }>
 
-/** Grammaire Ollama : courbe, geste, span et ratio restent dans la liste. */
+/** Grammaire Ollama : courbe, geste, span, ratio, suite et R restent dans la liste. */
 export function actionSchema() {
   return {
     type: "object",
@@ -28,6 +28,8 @@ export function actionSchema() {
       span: { type: "string", enum: [...SPANS] },
       window: { type: "integer", minimum: WINDOW_MIN, maximum: WINDOW_MAX },
       days: { type: "integer", minimum: 0, maximum: DAYS_MAX },
+      suite: { type: "string", enum: [...SUITES] },
+      r: { type: "number", enum: [...LOGISTIC_R] },
       lecture: {
         type: "object",
         additionalProperties: false,
@@ -41,7 +43,7 @@ export function actionSchema() {
         required: ["tangente", "masque", "cercle", "pas", "vecteur"],
       },
     },
-    required: ["action", "name", "phrase", "query", "curve", "gesture", "ratio", "span", "window", "days", "lecture"],
+    required: ["action", "name", "phrase", "query", "curve", "gesture", "ratio", "span", "window", "days", "suite", "r", "lecture"],
   }
 }
 

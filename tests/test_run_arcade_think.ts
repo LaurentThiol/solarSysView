@@ -49,6 +49,11 @@ test("an object content and a missing usage become text and an estimate", () => 
 test("Ollama gets a schema and retries format json once on HTTP 400", async () => {
   const schema = actionSchema()
   assert.ok(schema.properties.gesture.enum.includes("glisse"))
+  assert.ok(schema.properties.gesture.enum.includes("suite"))
+  assert.deepEqual(schema.properties.r.enum, [1, 1.5, 2, 2.8, 3.2])
+  assert.deepEqual(schema.properties.suite.enum, ["logistique"])
+  assert.ok(schema.required.includes("r"))
+  assert.ok(schema.required.includes("suite"))
   assert.ok(schema.properties.curve.enum.includes("sumNumbers"))
   assert.ok(schema.properties.curve.enum.includes("*"))
   assert.ok(schema.properties.ratio.enum.includes(0.618))
