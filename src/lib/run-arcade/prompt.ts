@@ -81,12 +81,27 @@ export type PromptInput = {
   /** Premier tirage encore caché : une version écrite après ne compte pas. */
   hiddenDate: string
   examCents: number | null
+  /** Fenêtre de cet examen : nombre de tours, et tour de course où il a été rejoué (vide : au lancement). */
+  exam?: { turns: number; at: number | null }
   notes: readonly BraveNote[]
   drawing: string | null
   /** Premier tirage lu. Absent : la ligne de départ n’est pas écrite. */
   since?: string
   /** Tirages de la zone lue écartés avant `since`. */
   dropped?: number
+}
+
+/**
+ * Solde d’examen, et le moment où il a été mesuré. La fenêtre avance pendant la course : tant que
+ * le runner n’a pas été réexaminé, le solde date du lancement, et le prompt le dit.
+ */
+function examSentence(input: Pick<PromptInput, "examCents" | "exam">) {
+  if (input.examCents == null) return "Solde d’examen : inconnu."
+  const money = formatCents(input.examCents)
+  if (!input.exam) return `Solde d’examen : ${money}.`
+  const when = input.exam.at == null ? "au lancement" : `au tour ${input.exam.at}`
+  const turns = input.exam.turns > 0 ? ` (${input.exam.turns === 1 ? "1 tour" : `${input.exam.turns} tours`})` : ""
+  return `Solde d’examen ${when} : ${money}${turns}.`
 }
 
 /** JSON d’exemple. S’il y a un dessin, la lecture est celle qu’il demande de recopier. */
@@ -107,7 +122,7 @@ export function buildPrompt(input: PromptInput) {
     "Pour une recherche, laisse query vide. La relation entre les valeurs déjà lues est mesurée ici.",
     `curve : ${CURVE_KEYS.join(", ")} ou *. gesture : ${GESTURES.join(", ")}. ratio : ${GOLDEN_RATIOS.join(", ")}. span : ${SPANS.join(", ")}. window : entier de ${WINDOW_MIN} à ${WINDOW_MAX}. days : 0 s’il n’y a pas de fenêtre longue, sinon un entier de ${DAYS_MIN} à ${DAYS_MAX}. suite : ${SUITES.join(", ")}. r : ${LOGISTIC_R.join(", ")}. suite et r ne comptent que pour le geste suite. forme : ${FORMES.join(", ")}. n : 0 si la forme n’en a pas, sinon 4, 5, 6 ou 8 côtés, 4, 6, 8 ou 12 pour la période, 15, 30 ou 45 pour le tour. forme et n ne comptent que pour le geste figure.`,
     "Une skill sur une courbe déjà pilotée en devient une nouvelle version. Une seule skill nouvelle par lancement.",
-    "L’examen rejoue les derniers tirages, que tu ne lis pas. La skill n’est gardée que si le solde d’examen monte.",
+    "L’examen rejoue les derniers tirages lisibles, que tu ne lis pas. Pendant la course, cette fenêtre avance d’un tirage par tour : ta skill est jugée sur la fenêtre du moment. Elle n’est gardée que si le solde d’examen monte.",
     "Le dessin porte une lecture déjà mesurée. Recopie-la dans lecture, cinq champs : tangente, masque, cercle, pas, vecteur. Chaque champ vaut correspond ou ecarte. ecarte veut dire s’écarte. Tu ne changes pas ces mots.",
   ].join("\n")
 
@@ -136,7 +151,7 @@ export function buildPrompt(input: PromptInput) {
   const user = [
     "Tes skills :",
     ...(skills.length ? skills : ["- aucune"]),
-    `Solde d’examen actuel : ${input.examCents == null ? "inconnu" : formatCents(input.examCents)}.`,
+    examSentence(input),
     ...(input.since ? [departSentence(input.since, input.past.length, input.dropped ?? 0)] : []),
     `Derniers tirages lus (${rows.length}), du plus ancien au plus récent :`,
     ...rows,

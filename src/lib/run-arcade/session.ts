@@ -5,6 +5,7 @@ import {
   JOURNAL_KEEP,
   pickChampion,
   setAsideCount,
+  sharedWithParent,
   type ChampionRecord,
   type JournalEntry,
   type JournalKind,
@@ -12,7 +13,7 @@ import {
 import { median, rotate, sliceMs } from "./clock"
 import { buildTrack, type RankPoint } from "./curves"
 import { assignDeparts, droppedBefore, sincePast, type DepartChoice } from "./depart"
-import { examine, passesExam, promptPast } from "./examen"
+import { examine, passesExam, promptPast, type ExamResult } from "./examen"
 import { ruleFor } from "./fonctionnel"
 import { buildPrompt, lectureRefusal, parseAction } from "./prompt"
 import { strongestRelation } from "./relation"
@@ -131,8 +132,10 @@ export type SessionSnapshot = {
   save: SaveState
   champion: ChampionRecord | null
   parent: ChampionRecord | null
-  /** Versions du champion écrites après le premier tirage caché, laissées de côté au lancement. */
+  /** Versions du champion écrites, ou gardées par un examen, le jour du premier tirage caché ou après : laissées de côté. */
   setAside: number
+  /** Tirages de cette course déjà dans la plage de course du parent. Vide : pas de parent, ou plage inconnue. */
+  sharedWithParent: number | null
   journal: JournalEntry[]
   /** Préparation de chaque runner, hors du journal du champion. */
   xrayPrep: XrayPrep[]
@@ -172,6 +175,8 @@ const ERROR_COOLDOWN_MS = 2_000
 const BRAVE_RETRIES = 2
 /** Essais de variation maison par enfant, au lancement d’une génération. */
 const VARIATION_TRIES = 6
+/** Pas de graine d’une génération à la suivante : sans lui, une archive qui ne bouge pas rejoue les mêmes tirages au sort. */
+const GENERATION_SEED_STEP = 7919
 
 function emptySnapshot(): SessionSnapshot {
   return {
@@ -196,6 +201,7 @@ function emptySnapshot(): SessionSnapshot {
     champion: null,
     parent: null,
     setAside: 0,
+    sharedWithParent: null,
     journal: [],
     xrayPrep: [],
     xrayReceipts: [],
@@ -230,16 +236,22 @@ export function applyParams(
   return { mind: { ...mind, skills: [...mind.skills, newSkill(newId, name, params, meta)] }, isNew: true }
 }
 
-/** Inscrit le solde d’examen sur la version qui vient d’être écrite pour cette courbe. */
-function withExam(mind: RunnerMind, curve: SkillParams["curve"], cents: number): RunnerMind {
+/** Inscrit le solde d’examen, et le dernier tirage qu’il a rejoué, sur la version qui vient d’être écrite pour cette courbe. */
+function withExam(mind: RunnerMind, curve: SkillParams["curve"], cents: number, examTo: string | null): RunnerMind {
   return {
     ...mind,
     skills: mind.skills.map((skill) => {
       const last = currentVersion(skill)
       if (last.curve !== curve) return skill
-      return { ...skill, versions: [...skill.versions.slice(0, -1), { ...last, examCents: cents }] }
+      const kept = { ...last, examCents: cents, ...(examTo ? { examTo } : {}) }
+      return { ...skill, versions: [...skill.versions.slice(0, -1), kept] }
     }),
   }
+}
+
+/** Solde et fenêtre d’un examen, tels que le runner les porte. `at` : le tour de course, vide au lancement. */
+function examFields(exam: ExamResult, at: number | null) {
+  return { examCents: exam.cents, examFrom: exam.from, examTo: exam.to, examTurns: exam.turns, examAt: at }
 }
 
 export class RunArcadeSession {
@@ -418,7 +430,7 @@ export class RunArcadeSession {
     const choice = options.depart ?? { mode: "fixe" as const, date: free[0]?.date ?? "" }
 
     let minds = parent ? childrenOf(parent, options.count, hiddenDate) : createMinds(options.count)
-    const sinces = assignDeparts(free, minds.length, choice, this.seed)
+    const sinces = assignDeparts(free, minds.length, choice, this.seed + generation * GENERATION_SEED_STEP)
     if (parent) {
       minds = minds.map((mind, index) =>
         index === 0 ? mind : this.tryVariation(mind, free, generation, index, sinces[index] ?? "")
@@ -432,7 +444,7 @@ export class RunArcadeSession {
         return {
           ...runner,
           since,
-          examCents: examine(runner.mind, free, undefined, since).cents,
+          ...examFields(examine(runner.mind, free, undefined, since), null),
           added: this.added.get(runner.mind.id) ?? 0,
         }
       }),
@@ -456,6 +468,7 @@ export class RunArcadeSession {
       phaseEndsAt: minutes > 0 ? now + minutes * 60_000 : null,
       parent,
       setAside: parent ? setAsideCount(parent, hiddenDate) : 0,
+      sharedWithParent: sharedWithParent(track, race.start, race.end, parent),
       observations: noted.observations,
       xrayPrep: race.runners.map((runner) => ({
         runnerId: runner.mind.id,
@@ -478,7 +491,8 @@ export class RunArcadeSession {
 
   /**
    * Variation maison d’un enfant : au plus une skill nouvelle. Plusieurs essais, chacun passe l’examen ;
-   * le premier qui fait monter le solde d’examen est gardé.
+   * le premier qui fait monter le solde d’examen est gardé, avec le dernier tirage que cet examen a rejoué.
+   * Un examen vide (archive gratuite trop courte) ne garde rien.
    */
   private tryVariation(
     mind: RunnerMind,
@@ -492,7 +506,12 @@ export class RunArcadeSession {
     if (!base || read.length < 2) return mind
     const meta: VersionMeta = { cutoff: read[read.length - 1].date, origin: "variation", examCents: null }
     const before = examine(mind, free, undefined, since)
+    const beforeCents = before.cents
     const tries: XrayAttempt[] = []
+    if (beforeCents == null) {
+      this.attempts.set(mind.id, tries)
+      return mind
+    }
     for (let attempt = 0; attempt < VARIATION_TRIES; attempt += 1) {
       const params = houseVariation(
         currentVersion(base),
@@ -500,12 +519,14 @@ export class RunArcadeSession {
       )
       const candidate = applyParams(mind, params, meta, "Variation maison", `${mind.id}-g${generation}-${params.curve}`)
       const after = examine(candidate.mind, free, undefined, since)
+      const afterCents = after.cents
+      if (afterCents == null) continue
       const kept = passesExam(after, before)
-      tries.push({ detail: describeSkill(params), beforeCents: before.cents, afterCents: after.cents, kept })
+      tries.push({ detail: describeSkill(params), beforeCents, afterCents, kept })
       if (!kept) continue
       this.attempts.set(mind.id, tries)
       if (candidate.isNew) this.added.set(mind.id, 1)
-      return withExam(candidate.mind, params.curve, after.cents)
+      return withExam(candidate.mind, params.curve, afterCents, after.to)
     }
     this.attempts.set(mind.id, tries)
     return mind
@@ -572,12 +593,14 @@ export class RunArcadeSession {
     const track = this.snapshot.track
     if (!race) return
     const best = pickChampion(race.runners)
+    // Tous les runners ruinés arrêtent la course avant `end` : le curseur dit jusqu’où elle a joué.
+    const lastPlayed = Math.max(race.start, Math.min(race.end, race.cursor) - 1)
     const record = best
       ? championRecord({
           runner: best,
           generation: this.snapshot.generation,
           raceFrom: track[race.start]?.date ?? null,
-          raceTo: track[race.end - 1]?.date ?? null,
+          raceTo: track[lastPlayed]?.date ?? null,
           journal: this.snapshot.journal,
           savedAt: new Date(this.deps.now()).toISOString(),
         })
@@ -729,6 +752,7 @@ export class RunArcadeSession {
       past,
       hiddenDate,
       examCents: runner.examCents,
+      exam: { turns: runner.examTurns, at: runner.examAt },
       notes: this.notes.get(id) ?? [],
       drawing: drawingText(drawing),
       since: runner.since,
@@ -737,7 +761,8 @@ export class RunArcadeSession {
     const count = (this.callCount.get(id) ?? 0) + 1
     this.callCount.set(id, count)
     const index = this.snapshot.race?.runners.findIndex((item) => item.mind.id === id) ?? 0
-    const seed = (this.seed * 1000 + index * 97 + count) % 2_147_483_647
+    const generationStep = this.snapshot.generation * GENERATION_SEED_STEP
+    const seed = (this.seed * 1000 + generationStep + index * 97 + count) % 2_147_483_647
     const controller = new AbortController()
     this.pending.set(id, controller)
     this.updateRunner(id, (item) => ({ ...item, calls: item.calls + 1 }))
@@ -960,9 +985,17 @@ export class RunArcadeSession {
         `${runner.mind.id}-g${this.snapshot.generation}-${item.params.curve === "*" ? "tout" : item.params.curve}`
       )
       const after = examine(candidate.mind, readable, undefined, runner.since)
+      const at = this.turnNumber()
+      if (before.cents == null || after.cents == null) {
+        const detail = "examen vide : aucun tirage à rejouer, la proposition ne peut pas passer"
+        this.updateRunner(runner.mind.id, (live) => ({ ...live, ...examFields(before, at) }))
+        this.note(runner.mind.id, "examen", "refusé", detail)
+        this.log(runner.mind.id, "refus", item.cutoff, detail)
+        continue
+      }
       if (!passesExam(after, before)) {
         const detail = `examen ${formatCents(after.cents)}, pas au-dessus de ${formatCents(before.cents)}`
-        this.updateRunner(runner.mind.id, (live) => ({ ...live, examCents: before.cents }))
+        this.updateRunner(runner.mind.id, (live) => ({ ...live, ...examFields(before, at) }))
         this.note(runner.mind.id, "examen", "refusé", detail)
         this.log(runner.mind.id, "refus", item.cutoff, detail)
         continue
@@ -971,13 +1004,13 @@ export class RunArcadeSession {
         this.iaAdded.set(runner.mind.id, (this.iaAdded.get(runner.mind.id) ?? 0) + 1)
         this.added.set(runner.mind.id, (this.added.get(runner.mind.id) ?? 0) + 1)
       }
-      const mind = withExam(candidate.mind, item.params.curve, after.cents)
+      const mind = withExam(candidate.mind, item.params.curve, after.cents, after.to)
       const skill = mind.skills.find((entry) => currentVersion(entry).curve === item.params.curve)
       const detail = `${skill?.name ?? "skill"} v${skill ? currentVersion(skill).version : 1} gardée, examen ${formatCents(after.cents)}`
       this.updateRunner(runner.mind.id, (live) => ({
         ...live,
         mind,
-        examCents: after.cents,
+        ...examFields(after, at),
         added: this.added.get(runner.mind.id) ?? 0,
       }))
       this.note(runner.mind.id, "examen", "fait", detail)

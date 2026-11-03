@@ -113,6 +113,35 @@ def test_champion_round_trip(monkeypatch) -> None:
     assert champion_from_row({"id": 3, "payload": {"runner": "R1"}}) == {"runner": "R1", "id": 3}
 
 
+def test_champion_keeps_the_exam_window_and_the_exam_end_of_each_version(monkeypatch) -> None:
+    stored: dict = {}
+
+    def insert(record: dict) -> dict:
+        stored["row"] = {"id": 9, "payload": record["payload"]}
+        return {"id": 9, "created_at": None, "versions": len(record["versions"])}
+
+    champion = _champion()
+    champion["examFrom"] = "2026-05-08"
+    champion["examTo"] = "2026-07-31"
+    champion["examTurns"] = 25
+    champion["skills"][0]["versions"][1]["examTo"] = "2026-07-31"
+    monkeypatch.setattr("synchro.db.database_configured", lambda: True)
+    monkeypatch.setattr("synchro.db.insert_run_arcade_champion", insert)
+    monkeypatch.setattr("synchro.db.latest_run_arcade_champion", lambda: stored.get("row"))
+    client = TestClient(create_app())
+    assert client.post("/api/brain/run-arcade/champion", json=champion).status_code == 200
+    read = client.get("/api/brain/run-arcade/champion").json()["champion"]
+    assert (read["examFrom"], read["examTo"], read["examTurns"]) == ("2026-05-08", "2026-07-31", 25)
+    assert read["skills"][0]["versions"][1]["examTo"] == "2026-07-31"
+    assert "examTo" not in read["skills"][0]["versions"][0]
+
+    stored.clear()
+    assert client.post("/api/brain/run-arcade/champion", json=_champion()).status_code == 200
+    legacy = client.get("/api/brain/run-arcade/champion").json()["champion"]
+    assert (legacy["examFrom"], legacy["examTo"], legacy["examTurns"]) == (None, None, None)
+    assert client.post("/api/brain/run-arcade/champion", json={**_champion(), "examTurns": -1}).status_code == 422
+
+
 def test_champions_list_is_newest_first(monkeypatch) -> None:
     older = {"id": 1, "payload": {**_champion(), "generation": 1, "runner": "R1"}}
     newer = {"id": 2, "payload": _champion()}
@@ -191,6 +220,10 @@ def test_run_arcade_soir_node() -> None:
 
 def test_run_arcade_layers_node() -> None:
     _node("test_run_arcade_layers.ts")
+
+
+def test_run_arcade_examen_node() -> None:
+    _node("test_run_arcade_examen.ts")
 
 
 def test_every_run_arcade_ts_test_has_a_wrapper() -> None:

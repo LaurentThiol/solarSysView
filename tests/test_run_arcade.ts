@@ -320,6 +320,7 @@ test("the exam replays draws the prompt does not read, and keeps a skill only if
   const result = examine(mind, rows)
   assert.ok(result.turns <= EXAM_WINDOW && result.turns > 0)
   assert.equal(result.from, rows[60 - EXAM_WINDOW].date)
+  assert.ok(result.cents != null)
   assert.equal(passesExam({ ...result }, result), false)
   assert.equal(passesExam({ ...result, cents: result.cents + 1 }, result), true)
   const prompt = buildPrompt({ mind, past: read, hiddenDate: "2099-01-01", examCents: result.cents, notes: [], drawing: null })

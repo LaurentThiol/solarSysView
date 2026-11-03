@@ -696,8 +696,14 @@ export type RunnerLive = {
   matched: CurveKey[]
   /** Sommes et décennies justes, posées par l’arbitre après le dessin. */
   exact: CurveKey[]
-  /** Solde d’examen des skills en place, sur l’archive lisible. */
+  /** Solde d’examen des skills en place, sur l’archive lisible. Vide : aucun tirage à rejouer. */
   examCents: number | null
+  /** Fenêtre de l’examen qui a donné ce solde : premier et dernier tirage rejoués, et nombre de tours. */
+  examFrom: string | null
+  examTo: string | null
+  examTurns: number
+  /** Tour de course où cet examen a été rejoué. Vide : au lancement, avant le premier tour. */
+  examAt: number | null
   /** Premier tirage que ce runner a le droit de lire. Vide : toute l’archive. */
   since: string
   /** Appels à l’IA locale et à Brave depuis le lancement. */
@@ -731,6 +737,10 @@ export function newRunner(mind: RunnerMind): RunnerLive {
     matched: [],
     exact: [],
     examCents: null,
+    examFrom: null,
+    examTo: null,
+    examTurns: 0,
+    examAt: null,
     since: "",
     calls: 0,
     added: 0,

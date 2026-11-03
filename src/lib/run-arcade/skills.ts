@@ -65,6 +65,12 @@ export type SkillVersion = SkillParams & {
   parent: number | null
   /** Date du dernier tirage révélé lu pour écrire cette version. Vide : écrite sans lire de tirage. */
   cutoff: string
+  /**
+   * Dernier tirage rejoué par l’examen qui a gardé la version. Absent : version venue avant ce champ.
+   * Il ne sert pas à jouer (la version doit rester visible à son propre examen, voir `cutoff`),
+   * seulement à la mettre de côté : la sélection a vu ce tirage.
+   */
+  examTo?: string
   origin: SkillOrigin
   phrase: string
   examCents: number | null
@@ -153,7 +159,10 @@ export function currentVersion(skill: Skill): SkillVersion {
   return skill.versions[skill.versions.length - 1]
 }
 
-/** Dernière version écrite avant le tirage caché. Une version plus récente reste de côté. */
+/**
+ * Dernière version écrite avant le tirage caché. Une version plus récente reste de côté.
+ * Seul `cutoff` compte ici : avec `examTo`, une version ne jouerait plus les tirages de son propre examen.
+ */
 export function activeVersion(skill: Skill, hiddenDate?: string | null): SkillVersion | null {
   if (!hiddenDate) return currentVersion(skill) ?? null
   for (let index = skill.versions.length - 1; index >= 0; index -= 1) {
@@ -163,21 +172,32 @@ export function activeVersion(skill: Skill, hiddenDate?: string | null): SkillVe
   return null
 }
 
-/** Versions écrites le jour du tirage caché ou après : elles ne jouent pas ce tirage. */
+/**
+ * Dernier tirage que la sélection de la version a vu : celui du prompt qui l’a écrite,
+ * ou celui de l’examen qui l’a gardée, le plus tardif des deux.
+ */
+export function seenUntil(version: Pick<SkillVersion, "cutoff" | "examTo">) {
+  const exam = version.examTo ?? ""
+  return exam > version.cutoff ? exam : version.cutoff
+}
+
+/** Versions dont la sélection a vu le tirage caché ou un tirage d’après : elles restent de côté. */
 export function auditCutoffs(skills: readonly Skill[], hiddenDate: string) {
-  const late: { skillId: string; version: number; cutoff: string }[] = []
+  const late: { skillId: string; version: number; cutoff: string; examTo: string | null }[] = []
   for (const skill of skills) {
     for (const version of skill.versions) {
-      if (version.cutoff >= hiddenDate) late.push({ skillId: skill.id, version: version.version, cutoff: version.cutoff })
+      if (seenUntil(version) >= hiddenDate) {
+        late.push({ skillId: skill.id, version: version.version, cutoff: version.cutoff, examTo: version.examTo ?? null })
+      }
     }
   }
   return late
 }
 
-/** Garde, pour chaque skill, les versions écrites avant `hiddenDate`. Une skill sans version restante tombe. */
+/** Garde, pour chaque skill, les versions que la sélection a vues avant `hiddenDate`. Une skill sans version restante tombe. */
 export function rollBack(skills: readonly Skill[], hiddenDate: string): Skill[] {
   return skills
-    .map((skill) => ({ ...skill, versions: skill.versions.filter((version) => version.cutoff < hiddenDate) }))
+    .map((skill) => ({ ...skill, versions: skill.versions.filter((version) => seenUntil(version) < hiddenDate) }))
     .filter((skill) => skill.versions.length > 0)
 }
 
@@ -185,6 +205,8 @@ export type VersionMeta = {
   cutoff: string
   origin: SkillOrigin
   examCents: number | null
+  /** Dernier tirage rejoué par l’examen qui garde la version. */
+  examTo?: string | null
   phrase?: string
 }
 
@@ -198,6 +220,7 @@ export function newSkill(id: string, name: string, params: SkillParams, meta: Ve
         version: 1,
         parent: null,
         cutoff: meta.cutoff,
+        ...(meta.examTo ? { examTo: meta.examTo } : {}),
         origin: meta.origin,
         phrase: meta.phrase || describeSkill(params),
         examCents: meta.examCents,
@@ -217,6 +240,7 @@ export function addVersion(skill: Skill, params: SkillParams, meta: VersionMeta)
         version: last.version + 1,
         parent: last.version,
         cutoff: meta.cutoff,
+        ...(meta.examTo ? { examTo: meta.examTo } : {}),
         origin: meta.origin,
         phrase: meta.phrase || describeSkill(params),
         examCents: meta.examCents,

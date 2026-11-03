@@ -27,6 +27,13 @@ export type ChampionRecord = {
   runner: string
   cents: number
   examCents: number | null
+  /**
+   * Fenêtre de l’examen qui a donné `examCents` : premier et dernier tirage rejoués, nombre de tours.
+   * Facultatifs : un champion écrit avant ces champs ne les porte pas.
+   */
+  examFrom?: string | null
+  examTo?: string | null
+  examTurns?: number | null
   calls: number
   raceFrom: string | null
   raceTo: string | null
@@ -63,6 +70,9 @@ export function championRecord(input: {
     runner: runner.mind.name,
     cents: runner.cents,
     examCents: runner.examCents,
+    examFrom: runner.examFrom,
+    examTo: runner.examTo,
+    examTurns: runner.examTurns,
     calls: runner.calls,
     raceFrom: input.raceFrom,
     raceTo: input.raceTo,
@@ -74,6 +84,11 @@ export function championRecord(input: {
 
 const ORIGINS: SkillOrigin[] = ["maison", "ia", "variation"]
 
+/** Un jour AAAA-MM-JJ, ou rien. Une date illisible écarterait la version à tort. */
+function isoDay(value: unknown): string | null {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null
+}
+
 function parseVersion(raw: unknown): SkillVersion | null {
   const params = parseSkillParams(raw)
   if (!params || !raw || typeof raw !== "object") return null
@@ -84,11 +99,13 @@ function parseVersion(raw: unknown): SkillVersion | null {
   if (parent != null && !Number.isInteger(parent)) return null
   const origin = ORIGINS.includes(record.origin as SkillOrigin) ? (record.origin as SkillOrigin) : "ia"
   const examCents = record.examCents == null ? null : Number(record.examCents)
+  const examTo = isoDay(record.examTo)
   return {
     ...params,
     version,
     parent,
     cutoff: typeof record.cutoff === "string" ? record.cutoff.slice(0, 10) : "",
+    ...(examTo ? { examTo } : {}),
     origin,
     phrase: typeof record.phrase === "string" ? record.phrase.slice(0, 280) : "",
     examCents: examCents != null && Number.isFinite(examCents) ? examCents : null,
@@ -119,11 +136,15 @@ export function parseChampion(raw: unknown): ChampionRecord | null {
   const skills = record.skills.map(parseSkill)
   if (skills.length === 0 || skills.some((skill) => skill == null)) return null
   const examCents = record.examCents == null ? null : Number(record.examCents)
+  const examTurns = Number(record.examTurns)
   return {
     generation,
     runner: typeof record.runner === "string" ? record.runner : "?",
     cents,
     examCents: examCents != null && Number.isFinite(examCents) ? examCents : null,
+    examFrom: isoDay(record.examFrom),
+    examTo: isoDay(record.examTo),
+    examTurns: record.examTurns != null && Number.isInteger(examTurns) && examTurns >= 0 ? examTurns : null,
     calls: Number.isFinite(Number(record.calls)) ? Number(record.calls) : 0,
     raceFrom: typeof record.raceFrom === "string" ? record.raceFrom : null,
     raceTo: typeof record.raceTo === "string" ? record.raceTo : null,
@@ -135,7 +156,7 @@ export function parseChampion(raw: unknown): ChampionRecord | null {
 
 /**
  * Une génération est un lancement. Les enfants reçoivent les skills du champion,
- * dans la dernière version écrite avant le premier tirage caché.
+ * dans la dernière version dont la sélection (prompt et examen) a fini avant le premier tirage caché.
  */
 export function childrenOf(champion: ChampionRecord, count: number, hiddenDate: string): RunnerMind[] {
   const inherited = rollBack(champion.skills, hiddenDate)
@@ -148,9 +169,32 @@ export function childrenOf(champion: ChampionRecord, count: number, hiddenDate: 
   })
 }
 
-/** Versions du champion écrites le jour du premier tirage caché ou après. */
+/** Versions du champion écrites, ou gardées par un examen, le jour du premier tirage caché ou après. */
 export function setAsideCount(champion: ChampionRecord, hiddenDate: string) {
   return auditCutoffs(champion.skills, hiddenDate).length
+}
+
+/** Tirages de la liste dont la date tombe dans la plage `from`–`to`, bornes comprises. Plage ouverte : 0. */
+export function drawsInRange(points: readonly { date: string }[], from: string | null, to: string | null) {
+  if (!from || !to) return 0
+  const first = from.slice(0, 10)
+  const last = to.slice(0, 10)
+  return points.filter((point) => point.date >= first && point.date <= last).length
+}
+
+/**
+ * Tirages de la course (de `start` inclus à `end` exclu dans la piste) déjà dans la plage de course du parent.
+ * Le parent a été choisi sur ces tirages : plus il y en a, plus le solde de l’enfant est facile.
+ * Vide : pas de parent, ou un parent dont la plage n’est pas écrite.
+ */
+export function sharedWithParent(
+  track: readonly { date: string }[],
+  start: number,
+  end: number,
+  parent: Pick<ChampionRecord, "raceFrom" | "raceTo"> | null
+) {
+  if (!parent || !parent.raceFrom || !parent.raceTo) return null
+  return drawsInRange(track.slice(start, end), parent.raceFrom, parent.raceTo)
 }
 
 function dayAfter(iso: string) {

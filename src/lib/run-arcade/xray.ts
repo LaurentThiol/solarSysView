@@ -1,5 +1,6 @@
 import type { JournalEntry } from "./champion"
 import { droppedLabel } from "./depart"
+import { runnerExamLine } from "./examen"
 import { currentVersion, targetLabel } from "./skills"
 import {
   formatCents,
@@ -121,9 +122,8 @@ export function prepDetail(runner: RunnerLive, dropped = 0) {
       return `${skill.name} (${targetLabel(version.curve)}) v${version.version}`
     })
     .join(", ")
-  const exam = runner.examCents == null ? "—" : formatCents(runner.examCents)
   const depart = runner.since ? ` · ${departCard(runner.since, dropped)}` : ""
-  return `${skills || "aucune skill"}${depart} · examen ${exam}`
+  return `${skills || "aucune skill"}${depart} · ${runnerExamLine(runner)}`
 }
 
 /** Ligne courte pour la carte : date déjà écrite, et le nombre de tirages écartés. */

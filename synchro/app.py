@@ -333,6 +333,11 @@ class RunArcadeChampionIn(BaseModel):
     runner: str = Field(min_length=1, max_length=40)
     cents: int
     examCents: int | None = None
+    # Fenêtre de l'examen qui a donné examCents. Facultatifs : un ancien champion ne les envoie pas.
+    # Sans ces champs, le modèle les jetterait avant l'écriture du payload dans Neon.
+    examFrom: str | None = None
+    examTo: str | None = None
+    examTurns: int | None = Field(default=None, ge=0)
     calls: int = Field(default=0, ge=0)
     raceFrom: str | None = None
     raceTo: str | None = None

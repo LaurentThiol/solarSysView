@@ -5,6 +5,17 @@ export type DepartMode = "fixe" | "aleatoire"
 
 export type DepartChoice = { mode: "fixe"; date: string } | { mode: "aleatoire" }
 
+export const RACE_DRAWS_MIN = 4
+export const RACE_DRAWS_MAX = 120
+
+/**
+ * Plus grand nombre de tirages de course : la piste (années n−1 et n), moins deux tirages gratuits.
+ * L’archive entière ne compte pas : ses années plus anciennes ne sont ni lues ni courues.
+ */
+export function maxRaceDraws(series: readonly RankPoint[]) {
+  return Math.max(RACE_DRAWS_MIN, Math.min(RACE_DRAWS_MAX, buildTrack(series).length - 2))
+}
+
 /** Premier index de course : les tirages d’avant sont gratuits. */
 export function raceStartIndex(trackLength: number, draws: number) {
   const span = Math.max(1, Math.round(draws))

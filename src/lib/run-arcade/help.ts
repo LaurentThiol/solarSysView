@@ -21,13 +21,13 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Génération suivante",
-        text: "Les enfants reçoivent les skills du champion, dans la dernière version écrite avant le premier tirage caché. R1 les garde telles quelles. Les autres essaient une variation maison : elle n’est gardée que si le solde d’examen monte.",
+        text: "Les enfants reçoivent les skills du champion, dans la dernière version écrite avant le premier tirage caché, et dont l’examen n’a pas lu ce tirage. R1 les garde telles quelles. Les autres essaient une variation maison : elle n’est gardée que si le solde d’examen monte.",
       },
     ],
   },
   tirages: {
     title: "Tirages de course",
-    body: "Nombre de tirages payants, 25 au départ, de 4 à 120. La piste est les années civiles n−1 et n du dernier tirage chargé. La course en prend la fin et laisse au moins deux tirages devant : un nombre plus grand est ramené à cette piste.",
+    body: "Nombre de tirages payants, 25 au départ, de 4 à 120. La piste est les années civiles n−1 et n du dernier tirage chargé. La course en prend la fin et laisse au moins deux tirages devant : un nombre plus grand est ramené à cette piste. Une piste courte laisse peu de tirages gratuits : l’examen rejoue alors moins de 25 tours, ou aucun, et s’écrit « — ».",
   },
   depart: {
     title: "Date de départ",
@@ -43,7 +43,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Examen",
-        text: "Les 25 derniers tirages gratuits restent les mêmes pour tous, juste avant la course. Le tirage suivant du champion lit toute l’archive révélée.",
+        text: "Au lancement, l’examen rejoue les 25 derniers tirages gratuits, juste avant la course : les mêmes pour tous. Pendant la course, il est rejoué quand une proposition arrive, sur les 25 derniers tirages lisibles de ce moment : la fenêtre avance d’un tirage par tour. Tant qu’un runner n’a pas été réexaminé, l’écran dit « au lancement ». Le tirage suivant du champion lit toute l’archive révélée.",
       },
     ],
   },
@@ -109,7 +109,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   statut: {
     title: "Où en est la course",
-    body: "La bande porte la phase, la génération et le temps qui reste. En course, elle ajoute le tour, une barre, et le meilleur solde. En avant-course, la barre suit le temps écoulé. Avant le lancement, une phrase rappelle de choisir les runners, les tirages et les minutes.",
+    body: "La bande porte la phase, la génération et le temps qui reste. En course, elle ajoute le tour, une barre, et le meilleur solde avec son repère du hasard. En avant-course, la barre suit le temps écoulé. Avant le lancement, une phrase rappelle de choisir les runners, les tirages et les minutes.",
     items: [
       {
         label: "Carte",
@@ -138,7 +138,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
     items: [
       {
         label: "IA locale",
-        text: "Ollama, graine fixe, réponse courte. Le prompt lit les douze derniers tirages lisibles depuis la date de départ, sans la fenêtre d’examen, et rappelle le solde d’examen. Une réponse illisible est refusée. Le premier appel part sans image. Quand la ligne dit « le dessin part avec l’appel », les appels suivants joignent le dessin. Le journal nomme l’appel, la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite les deux versions.",
+        text: "Ollama, graine fixe, réponse courte. Le prompt lit les douze derniers tirages lisibles depuis la date de départ, sans la fenêtre d’examen, et rappelle le solde d’examen, en disant s’il date du lancement ou d’un tour. Une réponse illisible est refusée. Le premier appel part sans image. Quand la ligne dit « le dessin part avec l’appel », les appels suivants joignent le dessin. Le journal nomme l’appel, la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite les deux versions.",
       },
       {
         label: "Brave",
@@ -152,11 +152,11 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   generation: {
     title: "Génération",
-    body: "Un lancement est une génération. La ligne nomme le parent et son numéro. Une version écrite le jour du premier tirage caché, ou après, reste de côté : elle ne joue pas ce tirage. Le compte de ces versions s’affiche ici.",
+    body: "Un lancement est une génération. La ligne nomme le parent et son numéro. Une version écrite le jour du premier tirage caché, ou après, reste de côté : elle ne joue pas ce tirage. Il en va de même d’une version que l’examen a gardée en rejouant ce tirage, ou un tirage d’après. Le compte de ces versions s’affiche ici, avec le nombre de tirages de la course déjà dans la plage où le parent a été choisi.",
   },
   champions: {
     title: "Champions déjà écrits",
-    body: "Les champions écrits dans Neon, les plus récents d’abord, vingt au plus. Un clic choisit le parent du prochain Lancer. La ligne donne la génération, le runner, le solde de course, le solde d’examen et les dates de la course.",
+    body: "Les champions écrits dans Neon, les plus récents d’abord, vingt au plus. Un clic choisit le parent du prochain Lancer. La ligne donne la génération, le runner, le solde de course et son repère du hasard, le solde d’examen avec ses tours et ses dates, et les dates de la course.",
   },
   suivant: {
     title: "Tirage suivant",
@@ -317,7 +317,11 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Examen",
-        text: "Solde séparé, sur les 25 derniers tirages lisibles, avec les mêmes 50,00 €, 2,50 € et 2,00 €. Le prompt de l’IA ne lit pas ces tirages. Une skill n’est gardée que si ce solde monte. À égalité, elle est refusée.",
+        text: "Solde séparé, sur les 25 derniers tirages lisibles, avec les mêmes 50,00 €, 2,50 € et 2,00 €. Le prompt de l’IA ne lit pas ces tirages. Une skill n’est gardée que si ce solde monte. À égalité, elle est refusée. L’écran écrit les tours et les dates rejoués, puis « au lancement » ou « au tour N ». Sans tirage à rejouer, il s’affiche « — » et rien n’est gardé.",
+      },
+      {
+        label: "Hasard",
+        text: "Une grille quelconque trouve en moyenne 5/6 de numéro ou d’étoile par tour. Après N tours, son solde vaut 50,00 € − N × (2,50 € − 2,00 € × 5/6), à ± 2,00 € × √(0,6658 × N) près : 29,17 € ± 8 sur 25 tours. Un solde dans cette marge ne montre aucun talent : le meilleur de plusieurs runners la dépasse souvent par chance.",
       },
     ],
   },
@@ -331,7 +335,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   fiche: {
     title: "Fiche du runner",
-    body: "La fiche montre le solde de course, le solde d’examen et le nombre d’appels. Les pastilles redessinent la courbe choisie, sans créer d’observation. Les numéros annoncés pour le tour restent ceux de toutes les courbes. La liste donne chaque observation, la plus vue d’abord : la phrase, la date de création, le compte.",
+    body: "La fiche montre le solde de course, le solde d’examen avec sa fenêtre (tours, dates, au lancement ou au tour N) et le nombre d’appels. Les pastilles redessinent la courbe choisie, sans créer d’observation. Les numéros annoncés pour le tour restent ceux de toutes les courbes. La liste donne chaque observation, la plus vue d’abord : la phrase, la date de création, le compte.",
   },
   skills: {
     title: "Skills et versions",
@@ -347,7 +351,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Examen de la version",
-        text: "Solde d’examen au moment où cette version a été gardée.",
+        text: "Solde d’examen au moment où cette version a été gardée, et « jusqu’au » : le dernier tirage que cet examen a rejoué. Si ce tirage est le tirage caché de la génération suivante, ou un tirage d’après, la version reste de côté : l’examen l’avait vu. La coupure ne change pas : la version doit rester visible à son propre examen.",
       },
     ],
   },
