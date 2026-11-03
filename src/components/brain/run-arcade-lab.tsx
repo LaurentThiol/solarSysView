@@ -8,9 +8,11 @@ import { HelpTip, HelpWrap, LabelHelp, TitleHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
 import { lastRevealedDraw, proposeNextDraw, type ChampionRecord } from "@/lib/run-arcade/champion"
 import { raceChrome } from "@/lib/run-arcade/chrome"
+import { departBounds, droppedBefore, sincePast, snapDepart, type DepartMode } from "@/lib/run-arcade/depart"
 import { askBrave, askIa, exportChampion, listChampions, loadChampion, readChampionFile, saveChampion } from "@/lib/run-arcade/client"
 import { formatDuration, raceDurationMs, servedPerSlice } from "@/lib/run-arcade/clock"
 import { CURVE_KEYS, curveLabel, curveValues, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
@@ -21,6 +23,7 @@ import {
   activityLines,
   attemptLine,
   chainHiddenDate,
+  departCard,
   lastTurnReceipts,
   prepHeadline,
   thoughtChain,
@@ -249,6 +252,8 @@ export function RunArcadeLab() {
   const [count, setCount] = useState(RUNNER_DEFAULT)
   const [raceDraws, setRaceDraws] = useState(RACE_DRAWS_DEFAULT)
   const [minutes, setMinutes] = useState(MINUTES_DEFAULT)
+  const [departMode, setDepartMode] = useState<DepartMode>("fixe")
+  const [departDate, setDepartDate] = useState("")
   const [xray, setXray] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [focusCurve, setFocusCurve] = useState<CurveKey | null>(null)
@@ -298,6 +303,9 @@ export function RunArcadeLab() {
   const served = servedPerSlice(slice, snapshot.medianMs, 1)
   const maxDraws = Math.max(4, Math.min(120, series.length - 2))
   const newestYear = track.length ? Number(track[track.length - 1].date.slice(0, 4)) : null
+  const bounds = useMemo(() => departBounds(series, raceDraws), [series, raceDraws])
+  const shownDate = bounds.first ? (snapDepart(bounds.free, departDate || bounds.first) ?? bounds.first) : ""
+  const freeArchive = race ? track.slice(0, race.start) : []
 
   const focusView = useMemo(() => {
     if (!focus || !race || track.length === 0) return null
@@ -306,7 +314,7 @@ export function RunArcadeLab() {
       return { draw: focus.thought, matched: focus.matched, exact: focus.exact }
     }
     const shown = race.revealed ? race.cursor - 1 : race.cursor
-    const past = revealedPast(track, shown)
+    const past = sincePast(revealedPast(track, shown), focus.since)
     if (past.length < 2) return { draw: focus.thought, matched: focus.matched, exact: focus.exact }
     const thought = think(focus.mind, past, { hiddenDate: track[shown]?.date, focus: curve })
     const revealed = race.revealed
@@ -322,7 +330,11 @@ export function RunArcadeLab() {
     setSelected(null)
     setFocusCurve(null)
     setImported(null)
-    session.launch({ count, draws: raceDraws, minutes, series, champion: parent })
+    const depart =
+      departMode === "aleatoire"
+        ? { mode: "aleatoire" as const }
+        : { mode: "fixe" as const, date: shownDate }
+    session.launch({ count, draws: raceDraws, minutes, series, champion: parent, depart })
   }
 
   const proposal = useMemo(
@@ -402,6 +414,37 @@ export function RunArcadeLab() {
             }}
           />
         </LabelHelp>
+        <LabelHelp label="Départ" help={RUN_ARCADE_HELP.depart} className="w-36">
+          <Select
+            value={departMode}
+            onValueChange={(value) => {
+              if (value === "fixe" || value === "aleatoire") setDepartMode(value)
+            }}
+          >
+            <SelectTrigger className="w-full" aria-label="Mode de départ">
+              <span className="flex flex-1 text-left">{departMode === "fixe" ? "Date fixe" : "Aléatoire"}</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="fixe">Date fixe</SelectItem>
+              <SelectItem value="aleatoire">Aléatoire</SelectItem>
+            </SelectContent>
+          </Select>
+        </LabelHelp>
+        {departMode === "fixe" ? (
+          <LabelHelp label="Date" help={RUN_ARCADE_HELP.depart} className="w-40">
+            <Input
+              type="date"
+              min={bounds.first || undefined}
+              max={bounds.last || undefined}
+              value={shownDate}
+              aria-label="Date de départ"
+              onChange={(event) => {
+                const snapped = snapDepart(bounds.free, event.target.value)
+                if (snapped) setDepartDate(snapped)
+              }}
+            />
+          </LabelHelp>
+        ) : null}
         <HelpWrap help={RUN_ARCADE_HELP.rayons}>
           <Button
             type="button"
@@ -735,6 +778,7 @@ export function RunArcadeLab() {
               <span className="text-muted-foreground">
                 {" "}
                 · examen {focus.examCents == null ? "—" : formatCents(focus.examCents)} · {focus.calls} appel(s)
+                {focus.since ? ` · ${departCard(formatDrawDate(focus.since), droppedBefore(freeArchive, focus.since))}` : ""}
               </span>
             </p>
           </header>
@@ -851,6 +895,9 @@ export function RunArcadeLab() {
                 <span className="mt-0.5 block text-[11px] text-muted-foreground">
                   {curveLabel(runner.mind.focus)} · {skillSummary(runner)} · examen{" "}
                   {runner.examCents == null ? "—" : formatCents(runner.examCents)} · {runner.calls} appel(s)
+                  {runner.since
+                    ? ` · ${departCard(formatDrawDate(runner.since), droppedBefore(freeArchive, runner.since))}`
+                    : ""}
                   {runner.alive ? "" : " · arrêté"}
                 </span>
               </button>

@@ -11,6 +11,7 @@ import {
 } from "./champion"
 import { median, rotate, sliceMs } from "./clock"
 import { buildTrack, type RankPoint } from "./curves"
+import { assignDeparts, droppedBefore, sincePast, type DepartChoice } from "./depart"
 import { examine, passesExam, promptPast } from "./examen"
 import { buildPrompt, lectureRefusal, parseAction } from "./prompt"
 import {
@@ -94,6 +95,8 @@ export type LaunchOptions = {
   series: readonly RankPoint[]
   champion: ChampionRecord | null
   seed?: number
+  /** Premier tirage lu. Absent : le premier tirage de la piste, pour tous. */
+  depart?: DepartChoice
 }
 
 export type SaveState = { state: "—" | "en cours" | "ok" | "erreur"; detail: string | null }
@@ -378,19 +381,27 @@ export class RunArcadeSession {
     const generation = parent ? parent.generation + 1 : 1
     const free = revealedPast(track, start)
     this.seed = options.seed ?? seedFrom(track)
+    const choice = options.depart ?? { mode: "fixe" as const, date: free[0]?.date ?? "" }
 
     let minds = parent ? childrenOf(parent, options.count, hiddenDate) : createMinds(options.count)
+    const sinces = assignDeparts(free, minds.length, choice, this.seed)
     if (parent) {
-      minds = minds.map((mind, index) => (index === 0 ? mind : this.tryVariation(mind, free, generation, index)))
+      minds = minds.map((mind, index) =>
+        index === 0 ? mind : this.tryVariation(mind, free, generation, index, sinces[index] ?? "")
+      )
     }
     let race = createRace(minds, track.length, draws)
     race = {
       ...race,
-      runners: race.runners.map((runner) => ({
-        ...runner,
-        examCents: examine(runner.mind, free).cents,
-        added: this.added.get(runner.mind.id) ?? 0,
-      })),
+      runners: race.runners.map((runner, index) => {
+        const since = sinces[index] ?? ""
+        return {
+          ...runner,
+          since,
+          examCents: examine(runner.mind, free, undefined, since).cents,
+          added: this.added.get(runner.mind.id) ?? 0,
+        }
+      }),
     }
     race = previewTurn(race, track)
     const hidden = track[race.cursor]?.date
@@ -415,7 +426,7 @@ export class RunArcadeSession {
       xrayPrep: race.runners.map((runner) => ({
         runnerId: runner.mind.id,
         at,
-        detail: prepDetail(runner),
+        detail: prepDetail(runner, droppedBefore(free, runner.since)),
         attempts: [...(this.attempts.get(runner.mind.id) ?? [])],
       })),
     })
@@ -435,17 +446,23 @@ export class RunArcadeSession {
    * Variation maison d’un enfant : au plus une skill nouvelle. Plusieurs essais, chacun passe l’examen ;
    * le premier qui fait monter le solde d’examen est gardé.
    */
-  private tryVariation(mind: RunnerMind, free: readonly RankPoint[], generation: number, index: number): RunnerMind {
+  private tryVariation(
+    mind: RunnerMind,
+    free: readonly RankPoint[],
+    generation: number,
+    index: number,
+    since: string
+  ): RunnerMind {
     const base = mind.skills.find((skill) => currentVersion(skill).curve === "*") ?? mind.skills[0]
-    const read = promptPast(free)
-    if (!base || read.length === 0) return mind
+    const read = sincePast(promptPast(free), since)
+    if (!base || read.length < 2) return mind
     const meta: VersionMeta = { cutoff: read[read.length - 1].date, origin: "variation", examCents: null }
-    const before = examine(mind, free)
+    const before = examine(mind, free, undefined, since)
     const tries: XrayAttempt[] = []
     for (let attempt = 0; attempt < VARIATION_TRIES; attempt += 1) {
       const params = houseVariation(currentVersion(base), this.seed + index * 31 + attempt * 11)
       const candidate = applyParams(mind, params, meta, "Variation maison", `${mind.id}-g${generation}-${params.curve}`)
-      const after = examine(candidate.mind, free)
+      const after = examine(candidate.mind, free, undefined, since)
       const kept = passesExam(after, before)
       tries.push({ detail: describeSkill(params), beforeCents: before.cents, afterCents: after.cents, kept })
       if (!kept) continue
@@ -645,7 +662,8 @@ export class RunArcadeSession {
     const runner = this.runner(id)
     const hiddenDate = this.hiddenDate()
     if (!runner || !hiddenDate) return false
-    const past = promptPast(this.readablePast())
+    const learned = promptPast(this.readablePast())
+    const past = sincePast(learned, runner.since)
     if (past.length < 2) return false
     const cutoff = past[past.length - 1].date
     const drawing = think(runner.mind, past, { hiddenDate }).draw
@@ -656,6 +674,8 @@ export class RunArcadeSession {
       examCents: runner.examCents,
       notes: this.notes.get(id) ?? [],
       drawing: drawingText(drawing),
+      since: runner.since,
+      dropped: runner.since ? learned.filter((point) => point.date < runner.since).length : 0,
     })
     const count = (this.callCount.get(id) ?? 0) + 1
     this.callCount.set(id, count)
@@ -805,7 +825,7 @@ export class RunArcadeSession {
         this.log(runner.mind.id, "refus", item.cutoff, "une seule skill nouvelle par lancement")
         continue
       }
-      const before = examine(runner.mind, readable)
+      const before = examine(runner.mind, readable, undefined, runner.since)
       const candidate = applyParams(
         runner.mind,
         item.params,
@@ -813,7 +833,7 @@ export class RunArcadeSession {
         item.name,
         `${runner.mind.id}-g${this.snapshot.generation}-${item.params.curve === "*" ? "tout" : item.params.curve}`
       )
-      const after = examine(candidate.mind, readable)
+      const after = examine(candidate.mind, readable, undefined, runner.since)
       if (!passesExam(after, before)) {
         this.updateRunner(runner.mind.id, (live) => ({ ...live, examCents: before.cents }))
         this.log(

@@ -29,6 +29,24 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
     title: "Tirages de course",
     body: "Nombre de tirages payants, 25 au départ, de 4 à 120. La piste est les années civiles n−1 et n du dernier tirage chargé. La course en prend la fin et laisse au moins deux tirages devant : un nombre plus grand est ramené à cette piste.",
   },
+  depart: {
+    title: "Date de départ",
+    body: "Premier tirage que le runner a le droit de lire, pour toute la génération : l’appel, l’examen et chaque tour. Date fixe : la même date pour tous. Aléatoire : une date par runner, tirée parmi les départs valides. Le départ affiché est le premier tirage de l’année n−1. Lancer sans y toucher rejoue la course d’aujourd’hui.",
+    items: [
+      {
+        label: "Cale",
+        text: "Un jour sans tirage se cale sur le tirage suivant. Une date dans l’examen, ou après, revient au dernier départ qui laisse encore deux tirages lus.",
+      },
+      {
+        label: "Douze lignes",
+        text: "L’appel montre les douze tirages les plus récents de ce qui est autorisé. Une date plus ancienne ne change pas ces lignes. Elle écarte le passé des gestes longs, moyenne et nombre d’or.",
+      },
+      {
+        label: "Examen",
+        text: "Les 25 derniers tirages gratuits restent les mêmes pour tous, juste avant la course. Le tirage suivant du champion lit toute l’archive révélée.",
+      },
+    ],
+  },
   minutes: {
     title: "Minutes d’avant-course",
     body: "Y minutes, de 0 à 120, par demi-minute, 10 au départ. Ce temps est l’avant-course : les runners lisent les années n−1 et n, appellent l’IA locale et Brave. Une skill qui passe l’examen s’applique tout de suite, et le dessin se met à jour.",
@@ -112,7 +130,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
     items: [
       {
         label: "IA locale",
-        text: "Ollama, graine fixe, réponse courte. Le prompt lit les douze derniers tirages lisibles, sans la fenêtre d’examen, et rappelle le solde d’examen. Une réponse illisible est refusée. Le premier appel part sans image. Quand la ligne dit « le dessin part avec l’appel », les appels suivants joignent le dessin. Le journal nomme l’appel, la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite les deux versions.",
+        text: "Ollama, graine fixe, réponse courte. Le prompt lit les douze derniers tirages lisibles depuis la date de départ, sans la fenêtre d’examen, et rappelle le solde d’examen. Une réponse illisible est refusée. Le premier appel part sans image. Quand la ligne dit « le dessin part avec l’appel », les appels suivants joignent le dessin. Le journal nomme l’appel, la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite les deux versions.",
       },
       {
         label: "Brave",

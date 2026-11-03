@@ -12,6 +12,7 @@ import {
   WINDOW_MIN,
   type SkillParams,
 } from "./skills"
+import { departSentence } from "./depart"
 import { formatCents, lectureWord, LECTURE_KEYS, type Lecture, type LectureWord, type RunnerMind } from "./thought"
 
 /** Exemple JSON déjà valide, que le modèle peut recopier tel quel. */
@@ -71,6 +72,10 @@ export type PromptInput = {
   examCents: number | null
   notes: readonly BraveNote[]
   drawing: string | null
+  /** Premier tirage lu. Absent : la ligne de départ n’est pas écrite. */
+  since?: string
+  /** Tirages de la zone lue écartés avant `since`. */
+  dropped?: number
 }
 
 export function buildPrompt(input: PromptInput) {
@@ -108,6 +113,7 @@ export function buildPrompt(input: PromptInput) {
     "Tes skills :",
     ...(skills.length ? skills : ["- aucune"]),
     `Solde d’examen actuel : ${input.examCents == null ? "inconnu" : formatCents(input.examCents)}.`,
+    ...(input.since ? [departSentence(input.since, input.past.length, input.dropped ?? 0)] : []),
     `Derniers tirages lus (${rows.length}), du plus ancien au plus récent :`,
     ...rows,
     ...(input.drawing

@@ -155,6 +155,10 @@ def test_run_arcade_window_node() -> None:
     _node("test_run_arcade_window.ts")
 
 
+def test_run_arcade_depart_node() -> None:
+    _node("test_run_arcade_depart.ts")
+
+
 def test_champion_rejects_an_empty_skill_list(monkeypatch) -> None:
     monkeypatch.setattr("synchro.db.database_configured", lambda: True)
     client = TestClient(create_app())

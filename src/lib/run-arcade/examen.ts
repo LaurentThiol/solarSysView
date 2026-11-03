@@ -1,4 +1,5 @@
 import type { RankPoint } from "./curves"
+import { sincePast } from "./depart"
 import { countHits, settlePurse, START_CENTS, think, TICKET_CENTS, type RunnerMind } from "./thought"
 
 /** Tirages rejoués par l’examen : les derniers tirages lisibles, que le prompt de l’IA ne lit pas. */
@@ -21,8 +22,11 @@ export function promptPast(past: readonly RankPoint[], size = EXAM_WINDOW) {
   return past.slice(0, examStart(past.length, size)).map((point) => ({ ...point }))
 }
 
-/** Rejoue les skills sur la fenêtre d’examen, tour par tour, avec un solde séparé de celui de la course. */
-export function examine(mind: RunnerMind, past: readonly RankPoint[], size = EXAM_WINDOW): ExamResult {
+/**
+ * Rejoue les skills sur la fenêtre d’examen, tour par tour, avec un solde séparé de celui de la course.
+ * `since` coupe à gauche. La fenêtre d’examen reste celle de l’archive complète.
+ */
+export function examine(mind: RunnerMind, past: readonly RankPoint[], size = EXAM_WINDOW, since = ""): ExamResult {
   const start = examStart(past.length, size)
   let cents = START_CENTS
   let hits = 0
@@ -30,7 +34,9 @@ export function examine(mind: RunnerMind, past: readonly RankPoint[], size = EXA
   for (let index = start; index < past.length; index += 1) {
     if (cents < TICKET_CENTS) break
     const hidden = past[index]
-    const thought = think(mind, past.slice(0, index), { hiddenDate: hidden.date })
+    const seen = sincePast(past.slice(0, index), since)
+    if (seen.length < 2) continue
+    const thought = think(mind, seen, { hiddenDate: hidden.date })
     const found = countHits(thought.guess, hidden)
     cents = settlePurse(cents, found)
     hits += found

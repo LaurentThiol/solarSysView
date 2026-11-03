@@ -1,4 +1,5 @@
 import { reconcile } from "./coherence"
+import { sincePast } from "./depart"
 import {
   CURVE_KEYS,
   DECADE_KEYS,
@@ -633,6 +634,8 @@ export type RunnerLive = {
   exact: CurveKey[]
   /** Solde d’examen des skills en place, sur l’archive lisible. */
   examCents: number | null
+  /** Premier tirage que ce runner a le droit de lire. Vide : toute l’archive. */
+  since: string
   /** Appels à l’IA locale et à Brave depuis le lancement. */
   calls: number
   /** Skills nouvelles ajoutées pendant ce lancement. */
@@ -664,6 +667,7 @@ export function newRunner(mind: RunnerMind): RunnerLive {
     matched: [],
     exact: [],
     examCents: null,
+    since: "",
     calls: 0,
     added: 0,
   }
@@ -710,7 +714,9 @@ export function previewTurn(race: Race, series: readonly RankPoint[]): Race {
     ...race,
     runners: race.runners.map((runner) => {
       if (!runner.alive) return runner
-      const thought = think(runner.mind, past, { hiddenDate })
+      const history = sincePast(past, runner.since)
+      if (history.length < 2) return runner
+      const thought = think(runner.mind, history, { hiddenDate })
       return { ...runner, thought: thought.draw, guess: thought.guess, cases: thought.cases, matched: [], exact: [] }
     }),
   }
@@ -729,7 +735,9 @@ export function playTurn(race: Race, series: readonly RankPoint[]): Race {
     if (!runner.alive || runner.cents < TICKET_CENTS) {
       return runner.alive ? { ...runner, alive: false, matched: [], exact: [] } : runner
     }
-    const thought = think(runner.mind, past, { hiddenDate: actual.date })
+    const history = sincePast(past, runner.since)
+    if (history.length < 2) return runner
+    const thought = think(runner.mind, history, { hiddenDate: actual.date })
     const hits = countHits(thought.guess, actual)
     const cents = settlePurse(runner.cents, hits)
     return {

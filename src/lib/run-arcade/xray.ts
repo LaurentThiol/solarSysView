@@ -1,4 +1,5 @@
 import type { JournalEntry } from "./champion"
+import { droppedLabel } from "./depart"
 import { currentVersion, targetLabel } from "./skills"
 import {
   formatCents,
@@ -74,8 +75,8 @@ function formatValue(value: number) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(".", ",")
 }
 
-/** Skills reçues et solde d’examen, au moment du lancement. */
-export function prepDetail(runner: RunnerLive) {
+/** Skills reçues, date de départ et solde d’examen, au moment du lancement. */
+export function prepDetail(runner: RunnerLive, dropped = 0) {
   const skills = runner.mind.skills
     .map((skill) => {
       const version = currentVersion(skill)
@@ -83,7 +84,13 @@ export function prepDetail(runner: RunnerLive) {
     })
     .join(", ")
   const exam = runner.examCents == null ? "—" : formatCents(runner.examCents)
-  return `${skills || "aucune skill"} · examen ${exam}`
+  const depart = runner.since ? ` · ${departCard(runner.since, dropped)}` : ""
+  return `${skills || "aucune skill"}${depart} · examen ${exam}`
+}
+
+/** Ligne courte pour la carte : date déjà écrite, et le nombre de tirages écartés. */
+export function departCard(since: string, dropped: number) {
+  return `départ ${since} · ${droppedLabel(dropped)}`
 }
 
 export function prepHeadline(prep: XrayPrep, name: string) {
