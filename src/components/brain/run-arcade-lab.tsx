@@ -12,9 +12,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
-import { lastRevealedDraw, proposeNextDraw, replayLastGrid, type ChampionRecord, type ReplayLastGrid } from "@/lib/run-arcade/champion"
+import {
+  drawsInRange,
+  lastRevealedDraw,
+  proposeNextDraw,
+  replayLastGrid,
+  type ChampionRecord,
+  type ReplayLastGrid,
+} from "@/lib/run-arcade/champion"
 import { raceChrome } from "@/lib/run-arcade/chrome"
-import { departBounds, droppedBefore, sincePast, snapDepart, type DepartMode } from "@/lib/run-arcade/depart"
+import { departBounds, droppedBefore, maxRaceDraws, sincePast, snapDepart, type DepartMode } from "@/lib/run-arcade/depart"
+import { balanceWithChance, championExamLine, runnerExamLine, sharedSentence } from "@/lib/run-arcade/examen"
 import { askBrave, askIa, exportChampion, listChampions, loadChampion, readChampionFile, saveChampion } from "@/lib/run-arcade/client"
 import { formatDuration, raceDurationMs, servedPerSlice } from "@/lib/run-arcade/clock"
 import { CURVE_KEYS, curveLabel, curveValues, NUMBER_KEYS, STAR_KEYS, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
@@ -503,7 +511,18 @@ export function RunArcadeLab() {
   const hiddenDate = race ? chainHiddenDate(race, track) : null
   const slice = snapshot.minutes > 0 ? snapshot.sliceMs : 0
   const served = servedPerSlice(slice, snapshot.medianMs, 1)
-  const maxDraws = Math.max(4, Math.min(120, series.length - 2))
+  const maxDraws = useMemo(() => maxRaceDraws(series), [series])
+  const parentTurns = useMemo(
+    () => (parent ? drawsInRange(series, parent.raceFrom, parent.raceTo) : 0),
+    [parent, series]
+  )
+  const historyTurns = useMemo(
+    () => history.map((item) => drawsInRange(series, item.raceFrom, item.raceTo)),
+    [history, series]
+  )
+  const championTurns = snapshot.champion
+    ? (race?.runners.find((runner) => runner.mind.name === snapshot.champion?.runner)?.turns ?? 0)
+    : 0
   const newestYear = track.length ? Number(track[track.length - 1].date.slice(0, 4)) : null
   const bounds = useMemo(() => departBounds(series, raceDraws), [series, raceDraws])
   const shownDate = bounds.first ? (snapDepart(bounds.free, departDate || bounds.first) ?? bounds.first) : ""
@@ -743,12 +762,12 @@ export function RunArcadeLab() {
               {chrome.band.remaining ? <span className="font-medium tabular-nums">{chrome.band.remaining}</span> : null}
               {leader && snapshot.phase === "course" ? (
                 <span>
-                  meilleur {leader.mind.name} {formatCents(leader.cents)}
+                  meilleur {leader.mind.name} {balanceWithChance(leader.cents, leader.turns)}
                 </span>
               ) : null}
               {snapshot.phase === "fin" && snapshot.champion ? (
                 <span>
-                  champion {snapshot.champion.runner} {formatCents(snapshot.champion.cents)}
+                  champion {snapshot.champion.runner} {balanceWithChance(snapshot.champion.cents, championTurns)}
                 </span>
               ) : null}
               <HelpTip {...RUN_ARCADE_HELP.statut} />
@@ -818,7 +837,10 @@ export function RunArcadeLab() {
             Génération {snapshot.generation} : enfants de {snapshot.parent.runner} (génération{" "}
             {snapshot.parent.generation}).
             {snapshot.setAside > 0
-              ? ` ${snapshot.setAside} version(s) écrite(s) le jour du premier tirage caché ou après restent de côté.`
+              ? ` ${snapshot.setAside} version(s) écrite(s), ou gardée(s) par un examen, le jour du premier tirage caché ou après restent de côté.`
+              : ""}
+            {snapshot.sharedWithParent != null
+              ? ` ${sharedSentence(snapshot.sharedWithParent, race.end - race.start, snapshot.parent)}`
               : ""}
             <HelpTip {...RUN_ARCADE_HELP.generation} />
           </p>
@@ -831,7 +853,7 @@ export function RunArcadeLab() {
             <TitleHelp help={RUN_ARCADE_HELP.champions}>Champions déjà écrits</TitleHelp>
           </h2>
           <ul className="flex flex-col gap-1" data-testid="run-arcade-history">
-            {history.map((item) => {
+            {history.map((item, position) => {
               const active =
                 parent?.generation === item.generation &&
                 parent.runner === item.runner &&
@@ -849,8 +871,8 @@ export function RunArcadeLab() {
                       active ? "border-primary" : "border-border text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    Génération {item.generation} · {item.runner} · course {formatCents(item.cents)}
-                    {item.examCents != null ? ` · examen ${formatCents(item.examCents)}` : ""}
+                    Génération {item.generation} · {item.runner} · course {balanceWithChance(item.cents, historyTurns[position])}
+                    {` · ${championExamLine(item)}`}
                     {item.raceFrom && item.raceTo
                       ? ` · ${formatShortDate(item.raceFrom)} – ${formatShortDate(item.raceTo)}`
                       : ""}
@@ -874,8 +896,7 @@ export function RunArcadeLab() {
               </TitleHelp>
             </h2>
             <p className="text-sm text-muted-foreground">
-              course {formatCents(parent.cents)}
-              {parent.examCents != null ? ` · examen ${formatCents(parent.examCents)}` : ""}
+              course {balanceWithChance(parent.cents, parentTurns)} · {championExamLine(parent)}
             </p>
           </header>
           {replay ? (
@@ -1004,10 +1025,10 @@ export function RunArcadeLab() {
               </TitleHelp>
             </h2>
             <p className="text-sm">
-              {formatCents(focus.cents)}
+              {balanceWithChance(focus.cents, focus.turns)}
               <span className="text-muted-foreground">
                 {" "}
-                · examen {focus.examCents == null ? "—" : formatCents(focus.examCents)} · {focus.calls} appel(s)
+                · {runnerExamLine(focus)} · {focus.calls} appel(s)
                 {focus.since ? ` · ${departCard(formatDrawDate(focus.since), droppedBefore(freeArchive, focus.since))}` : ""}
               </span>
             </p>
@@ -1066,7 +1087,8 @@ export function RunArcadeLab() {
                         <li key={version.version} className="text-muted-foreground">
                           v{version.version} · {version.origin} · coupure{" "}
                           {version.cutoff ? formatShortDate(version.cutoff) : "aucune"}
-                          {version.examCents != null ? ` · examen ${formatCents(version.examCents)}` : ""} ·{" "}
+                          {version.examCents != null ? ` · examen ${formatCents(version.examCents)}` : ""}
+                          {version.examCents != null && version.examTo ? ` jusqu’au ${formatShortDate(version.examTo)}` : ""} ·{" "}
                           {version.phrase}
                         </li>
                       ))}
@@ -1123,8 +1145,8 @@ export function RunArcadeLab() {
                   </span>
                 </span>
                 <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                  {curveLabel(runner.mind.focus)} · {skillSummary(runner)} · examen{" "}
-                  {runner.examCents == null ? "—" : formatCents(runner.examCents)} · {runner.calls} appel(s)
+                  {curveLabel(runner.mind.focus)} · {skillSummary(runner)} · {runnerExamLine(runner)} ·{" "}
+                  {runner.calls} appel(s)
                   {runner.since
                     ? ` · ${departCard(formatDrawDate(runner.since), droppedBefore(freeArchive, runner.since))}`
                     : ""}
