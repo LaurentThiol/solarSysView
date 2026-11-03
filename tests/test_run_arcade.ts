@@ -7,6 +7,7 @@ import {
   parseChampion,
   pickChampion,
   proposeNextDraw,
+  replayLastGrid,
   setAsideCount,
 } from "../src/lib/run-arcade/champion.ts"
 import { placeStars, reconcile } from "../src/lib/run-arcade/coherence.ts"
@@ -350,6 +351,42 @@ test("the champion proposes the draw after the last one in the archive", () => {
   const otherCurve = proposeNextDraw(record, rows, "n3")
   assert.equal(otherCurve?.draw.focus, "n3")
   assert.deepEqual(otherCurve?.guess, proposal.guess)
+})
+
+test("replaying the last race draw returns the grid think played and the countHits total", () => {
+  const rows = series(12)
+  const record = championRecord({
+    runner: { ...newRunner(mind), cents: 5400, examCents: 5100 },
+    generation: 2,
+    raceFrom: rows[8].date,
+    raceTo: rows[11].date,
+    journal: [],
+    savedAt: "2026-10-30T12:00:00.000Z",
+  })
+  const mindOf = {
+    id: "champion",
+    name: record.runner,
+    focus: "sumNumbers" as const,
+    skills: record.skills,
+  }
+  const replay = replayLastGrid(record, rows)
+  assert.ok(replay)
+  const played = think(mindOf, rows.slice(0, 11), { hiddenDate: rows[11].date, focus: "sumNumbers" })
+  assert.equal(replay.draw.date, rows[11].date)
+  assert.deepEqual(replay.thought.guess, played.guess)
+  assert.equal(replay.hits, countHits(played.guess, rows[11]))
+
+  const earlier = replayLastGrid({ ...record, raceTo: rows[9].date }, rows)
+  assert.ok(earlier)
+  const mid = think(mindOf, rows.slice(0, 9), { hiddenDate: rows[9].date, focus: "sumNumbers" })
+  assert.equal(earlier.draw.date, rows[9].date)
+  assert.deepEqual(earlier.thought.guess, mid.guess)
+  assert.equal(earlier.hits, countHits(mid.guess, rows[9]))
+
+  const open = replayLastGrid({ ...record, raceTo: null }, rows)
+  assert.equal(open?.draw.date, rows[11].date)
+  assert.deepEqual(open?.thought.guess, played.guess)
+  assert.equal(open?.hits, countHits(played.guess, rows[11]))
 })
 
 test("an IA answer is one JSON action with known fields", () => {

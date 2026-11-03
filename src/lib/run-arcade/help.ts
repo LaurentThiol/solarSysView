@@ -164,6 +164,32 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
     ],
   },
+  resultat: {
+    title: "Résultat",
+    body: "À l’arrêt et à la fin de la course, trois grilles en boules se posent au-dessus du dessin du tirage suivant. Pendant l’avant-course et la course, elles restent cachées.",
+    items: [
+      {
+        label: "Dernier tirage",
+        text: "La grille du dernier tirage de course, ou le dernier de l’archive. Persiste recopie cette grille une seule fois, en boules, avec la date.",
+      },
+      {
+        label: "Grille du champion",
+        text: "Relue avec les skills enregistrées, sur le passé d’avant ce tirage. La ligne compte les trouvés.",
+      },
+      {
+        label: "Anneau",
+        text: "Un anneau marque une boule commune. Les numéros et les étoiles se comptent à part.",
+      },
+      {
+        label: "Pronostic",
+        text: "La grille du tirage suivant. Ce tirage n’est pas dans la base. Un anneau marque une boule reprise du dernier tirage.",
+      },
+      {
+        label: "Ticket",
+        text: "À la fin, si la grille encore en mémoire du champion est la même, la ligne ajoute 2,50 €, puis 2,00 € par trouvé. Après rechargement, seuls les trouvés et le solde de course restent.",
+      },
+    ],
+  },
   courbes: {
     title: "Courbes",
     wide: true,

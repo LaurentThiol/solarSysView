@@ -32,6 +32,7 @@ const KEYS = [
   "generation",
   "champions",
   "suivant",
+  "resultat",
   "courbes",
   "persiste",
   "dessin",

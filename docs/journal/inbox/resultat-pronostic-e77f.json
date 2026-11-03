@@ -1,0 +1,9 @@
+{
+  "slug": "resultat-pronostic-e77f",
+  "happened_on": "2026-11-03",
+  "area": "runArcade",
+  "title": "Fin de course : trois grilles en boules",
+  "body": "À l’arrêt et à la fin, au-dessus du dessin du tirage suivant, trois grilles se posent côte à côte. La première est le dernier tirage : Persiste le recopie une seule fois, en boules, avec la date. La deuxième est la grille que le champion a jouée sur ce tirage : un anneau marque chaque boule commune, et la ligne compte les trouvés. La troisième est le pronostic du tirage suivant, qui n’est pas dans la base : un anneau marque une boule reprise du dernier tirage. À la fin, si cette grille est encore celle du champion, la ligne ajoute le ticket de 2,50 €, puis 2,00 € par trouvé. Après un rechargement, seuls les trouvés et le solde de course restent, et le calcul des grilles ne change pas.",
+  "pr_number": null,
+  "pr_url": null
+}

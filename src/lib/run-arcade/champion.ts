@@ -8,7 +8,7 @@ import {
   type SkillOrigin,
   type SkillVersion,
 } from "./skills"
-import { think, type RunnerLive, type RunnerMind, type Thought } from "./thought"
+import { countHits, think, type RunnerLive, type RunnerMind, type Thought } from "./thought"
 
 export type JournalKind = "ia" | "brave" | "skill" | "refus" | "erreur"
 
@@ -178,6 +178,40 @@ export function proposeNextDraw(
     skills: champion.skills,
   }
   return think(mind, track, { hiddenDate: dayAfter(track[track.length - 1].date), focus })
+}
+
+export type ReplayLastGrid = {
+  draw: RankPoint
+  thought: Thought
+  hits: number
+}
+
+/**
+ * Relit la grille jouée sur le dernier tirage de course.
+ * Le passé s’arrête avant cette date : une version écrite ce jour-là ne joue pas.
+ * Sans cette date dans l’archive, le dernier point sert de tirage.
+ */
+export function replayLastGrid(
+  champion: ChampionRecord,
+  series: readonly RankPoint[],
+  focus: CurveKey = "sumNumbers"
+): ReplayLastGrid | null {
+  const track = buildTrack(series)
+  if (track.length < 3 || champion.skills.length === 0) return null
+  const target = champion.raceTo?.slice(0, 10) ?? ""
+  const dated = target ? track.findIndex((point) => point.date.slice(0, 10) === target) : -1
+  const at = dated >= 0 ? dated : track.length - 1
+  if (at < 2) return null
+  const past = track.slice(0, at)
+  const draw = track[at]
+  const mind: RunnerMind = {
+    id: "champion",
+    name: champion.runner,
+    focus,
+    skills: champion.skills,
+  }
+  const thought = think(mind, past, { hiddenDate: draw.date, focus })
+  return { draw, thought, hits: countHits(thought.guess, draw) }
 }
 
 /** Dernier tirage révélé de l’archive n−1 et n. Le nul gris le recopie. */

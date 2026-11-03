@@ -5,18 +5,19 @@ import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } 
 import { captureDraw } from "@/components/brain/run-arcade-capture"
 import { RunArcadeLayers } from "@/components/brain/run-arcade-layers"
 import { RunnerUniverse } from "@/components/brain/run-arcade-universe"
+import { DrawBalls } from "@/components/draw-balls"
 import { HelpTip, HelpWrap, LabelHelp, TitleHelp } from "@/components/help"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
-import { lastRevealedDraw, proposeNextDraw, type ChampionRecord } from "@/lib/run-arcade/champion"
+import { lastRevealedDraw, proposeNextDraw, replayLastGrid, type ChampionRecord, type ReplayLastGrid } from "@/lib/run-arcade/champion"
 import { raceChrome } from "@/lib/run-arcade/chrome"
 import { departBounds, droppedBefore, sincePast, snapDepart, type DepartMode } from "@/lib/run-arcade/depart"
 import { askBrave, askIa, exportChampion, listChampions, loadChampion, readChampionFile, saveChampion } from "@/lib/run-arcade/client"
 import { formatDuration, raceDurationMs, servedPerSlice } from "@/lib/run-arcade/clock"
-import { CURVE_KEYS, curveLabel, curveValues, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
+import { CURVE_KEYS, curveLabel, curveValues, NUMBER_KEYS, STAR_KEYS, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
 import { fonctionnelBoard, type FonctionnelCell } from "@/lib/run-arcade/fonctionnel"
 import { RUN_ARCADE_HELP } from "@/lib/run-arcade/help"
 import { layerPoints } from "@/lib/run-arcade/layers"
@@ -36,6 +37,7 @@ import {
 import {
   exactKeys,
   formatCents,
+  HIT_CENTS,
   leaderOf,
   matchedKeys,
   observationReportFor,
@@ -43,9 +45,12 @@ import {
   revealedPast,
   RUNNER_DEFAULT,
   RUNNER_MAX,
+  TICKET_CENTS,
   think,
+  type Guess,
   type Observation,
   type RunnerLive,
+  type Thought,
   type ThoughtDraw,
 } from "@/lib/run-arcade/thought"
 import { useDraws } from "@/lib/use-draws"
@@ -107,6 +112,89 @@ function skillSummary(runner: RunnerLive) {
       return `${version.curve === "*" ? "tout" : curveLabel(version.curve)} v${version.version}`
     })
     .join(" · ")
+}
+
+function ballValues(source: Guess | RankPoint, keys: readonly ("n1" | "n2" | "n3" | "n4" | "n5" | "e1" | "e2")[]) {
+  return keys.map((key) => source[key])
+}
+
+function sharedBalls(played: number[], actual: number[]) {
+  const bag = new Set(actual)
+  return [...new Set(played.filter((value) => bag.has(value)))]
+}
+
+function sameGuess(left: Guess, right: Guess) {
+  return NUMBER_KEYS.every((key) => left[key] === right[key]) && STAR_KEYS.every((key) => left[key] === right[key])
+}
+
+function foundLabel(hits: number) {
+  return hits === 1 ? "1 trouvé" : `${hits} trouvés`
+}
+
+function ResultGrids({
+  replay,
+  proposal,
+  ticketHits,
+}: {
+  replay: ReplayLastGrid
+  proposal: Thought
+  ticketHits: number | null
+}) {
+  const drawNumbers = ballValues(replay.draw, NUMBER_KEYS)
+  const drawStars = ballValues(replay.draw, STAR_KEYS)
+  const playedNumbers = ballValues(replay.thought.guess, NUMBER_KEYS)
+  const playedStars = ballValues(replay.thought.guess, STAR_KEYS)
+  const nextNumbers = ballValues(proposal.guess, NUMBER_KEYS)
+  const nextStars = ballValues(proposal.guess, STAR_KEYS)
+  const ticket =
+    ticketHits == null
+      ? ""
+      : ` · ticket ${formatCents(TICKET_CENTS)}, puis ${formatCents(HIT_CENTS)} × ${ticketHits}`
+  return (
+    <div className="mb-3" data-testid="run-arcade-result">
+      <h3 className="mb-2 text-xs font-medium text-muted-foreground">
+        <TitleHelp help={RUN_ARCADE_HELP.resultat}>Résultat</TitleHelp>
+      </h3>
+      <div className="grid gap-3 md:grid-cols-3">
+        <div>
+          <p className="text-sm font-medium">Dernier tirage</p>
+          <div className="mt-2">
+            <DrawBalls numbers={drawNumbers} stars={drawStars} />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {formatDrawDate(replay.draw.date)}. Persiste recopie ce tirage.
+          </p>
+        </div>
+        <div>
+          <p className="text-sm font-medium">Grille du champion</p>
+          <div className="mt-2">
+            <DrawBalls
+              numbers={playedNumbers}
+              stars={playedStars}
+              highlightNumbers={sharedBalls(playedNumbers, drawNumbers)}
+              highlightStars={sharedBalls(playedStars, drawStars)}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground" data-testid="run-arcade-result-hits">
+            {foundLabel(replay.hits)}
+            {ticket}
+          </p>
+        </div>
+        <div>
+          <p className="text-sm font-medium">Pronostic</p>
+          <div className="mt-2">
+            <DrawBalls
+              numbers={nextNumbers}
+              stars={nextStars}
+              highlightNumbers={sharedBalls(nextNumbers, drawNumbers)}
+              highlightStars={sharedBalls(nextStars, drawStars)}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Ce tirage n’est pas dans la base.</p>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function ThoughtChain({
@@ -450,6 +538,18 @@ export function RunArcadeLab() {
     () => (parent && series.length >= 2 ? proposeNextDraw(parent, series, nextCurve) : null),
     [parent, series, nextCurve]
   )
+  const showResult = snapshot.phase === "idle" || snapshot.phase === "fin"
+  const replay = useMemo(
+    () => (showResult && parent ? replayLastGrid(parent, series) : null),
+    [showResult, parent, series]
+  )
+  const paidTicket =
+    snapshot.phase === "fin" && replay && race && parent
+      ? (race.runners.find(
+          (runner) =>
+            runner.guess != null && runner.mind.name === parent.runner && sameGuess(runner.guess, replay.thought.guess)
+        ) ?? null)
+      : null
   const persisted = useMemo(() => {
     const last = lastRevealedDraw(series)
     return last ? { date: last.date, values: curveValues(last), point: last } : null
@@ -762,6 +862,9 @@ export function RunArcadeLab() {
               {parent.examCents != null ? ` · examen ${formatCents(parent.examCents)}` : ""}
             </p>
           </header>
+          {replay ? (
+            <ResultGrids replay={replay} proposal={proposal} ticketHits={paidTicket ? paidTicket.lastHits : null} />
+          ) : null}
           <div className="mb-2 flex flex-wrap items-center gap-1">
             <HelpTip {...RUN_ARCADE_HELP.courbes} />
             <div className="contents" role="group" aria-label="Courbe du tirage suivant">
@@ -780,7 +883,7 @@ export function RunArcadeLab() {
             ))}
             </div>
           </div>
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(16rem,0.8fr)]">
+          <div className={cn("grid gap-3", !replay && "lg:grid-cols-[minmax(0,1.4fr)_minmax(16rem,0.8fr)]")}>
             <div>
               <RunnerUniverse runnerId="champion-next" thought={proposal.draw} className="h-64" />
               <p className="mt-2 text-lg tracking-wide">
@@ -800,7 +903,7 @@ export function RunArcadeLab() {
                 <p className="text-sm leading-5">{observationReportFor(snapshot.observations, proposal.draw.observation)}</p>
               ) : null}
             </div>
-            {persisted ? (
+            {persisted && !replay ? (
               <div className="rounded-lg border border-dashed p-3 text-sm" data-testid="run-arcade-persist">
                 <h3 className="font-medium">
                   <TitleHelp help={RUN_ARCADE_HELP.persiste}>Persiste</TitleHelp>
