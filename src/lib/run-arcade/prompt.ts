@@ -1,5 +1,6 @@
 import type { BraveNote } from "./brave-filter"
 import { CURVE_KEYS, curveValues, type RankPoint } from "./curves"
+import { FORMES, figureLength } from "./figure"
 import { GOLDEN_RATIOS } from "./golden"
 import {
   activeVersion,
@@ -31,6 +32,8 @@ export const SKILL_EXAMPLE = {
   days: 60,
   suite: "logistique",
   r: 2,
+  forme: "triangle",
+  n: 0,
   lecture: {
     tangente: "correspond",
     masque: "correspond",
@@ -53,6 +56,8 @@ export const BRAVE_EXAMPLE = {
   days: 0,
   suite: "logistique",
   r: 2,
+  forme: "triangle",
+  n: 0,
   lecture: {
     tangente: "correspond",
     masque: "correspond",
@@ -94,7 +99,7 @@ export function buildPrompt(input: PromptInput) {
     `Skill : ${JSON.stringify(SKILL_EXAMPLE)}`,
     `Recherche : ${JSON.stringify(BRAVE_EXAMPLE)}`,
     "Pour une recherche, laisse query vide. La relation entre les valeurs déjà lues est mesurée ici.",
-    `curve : ${CURVE_KEYS.join(", ")} ou *. gesture : ${GESTURES.join(", ")}. ratio : ${GOLDEN_RATIOS.join(", ")}. span : ${SPANS.join(", ")}. window : entier de ${WINDOW_MIN} à ${WINDOW_MAX}. days : 0 s’il n’y a pas de fenêtre longue, sinon un entier de ${DAYS_MIN} à ${DAYS_MAX}. suite : ${SUITES.join(", ")}. r : ${LOGISTIC_R.join(", ")}. suite et r ne comptent que pour le geste suite.`,
+    `curve : ${CURVE_KEYS.join(", ")} ou *. gesture : ${GESTURES.join(", ")}. ratio : ${GOLDEN_RATIOS.join(", ")}. span : ${SPANS.join(", ")}. window : entier de ${WINDOW_MIN} à ${WINDOW_MAX}. days : 0 s’il n’y a pas de fenêtre longue, sinon un entier de ${DAYS_MIN} à ${DAYS_MAX}. suite : ${SUITES.join(", ")}. r : ${LOGISTIC_R.join(", ")}. suite et r ne comptent que pour le geste suite. forme : ${FORMES.join(", ")}. n : 0 si la forme n’en a pas, sinon 4, 5, 6 ou 8 côtés, 4, 6, 8 ou 12 pour la période, 15, 30 ou 45 pour le tour. forme et n ne comptent que pour le geste figure.`,
     "Une skill sur une courbe déjà pilotée en devient une nouvelle version. Une seule skill nouvelle par lancement.",
     "L’examen rejoue les derniers tirages, que tu ne lis pas. La skill n’est gardée que si le solde d’examen monte.",
     "Le dessin porte une lecture déjà mesurée. Recopie-la dans lecture, cinq champs : tangente, masque, cercle, pas, vecteur. Chaque champ vaut correspond ou ecarte. ecarte veut dire s’écarte. Tu ne changes pas ces mots.",
@@ -107,7 +112,11 @@ export function buildPrompt(input: PromptInput) {
       const scale = version.days ? `, ${version.days} jours` : ""
       const suite =
         version.gesture === "suite" ? `, suite ${version.suite ?? "logistique"}, R ${version.r ?? 2}` : ""
-      return `- ${skill.name} v${version.version} : ${version.phrase} (courbe ${version.curve}, geste ${version.gesture}${suite}, ratio ${version.ratio}, span ${version.span}, fenêtre ${version.window} tirages${scale})`
+      const figure =
+        version.gesture === "figure"
+          ? `, forme ${version.forme ?? "triangle"}, n ${version.n ?? 0}, calibre ${figureLength(version.forme ?? "triangle", version.n ?? null)}`
+          : ""
+      return `- ${skill.name} v${version.version} : ${version.phrase} (courbe ${version.curve}, geste ${version.gesture}${suite}${figure}, ratio ${version.ratio}, span ${version.span}, fenêtre ${version.window} tirages${scale})`
     })
     .filter(Boolean)
 

@@ -240,7 +240,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Calque cercle d’or",
-        text: "Cercle, trait vers le niveau choisi, et niveaux d’or déjà calculés : 0,382, 0,618, 1,272, 1,618 ou 2,618.",
+        text: "Cercle, trait vers le niveau choisi, et niveaux d’or déjà calculés : 0,382, 0,618, 1,272, 1,618 ou 2,618. Le cercle d’une figure passe par trois points du calibre.",
       },
       {
         label: "Calque pas d’avant",
@@ -296,6 +296,10 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       {
         label: "Suit la suite logistique",
         text: "La dernière valeur est ramenée entre 0 et 1 sur la bande du geste : bornes de la courbe, entre les lignes, ou dernier pas. La pensée est un seul pas, X(n+1) = R×Xn×(1−Xn), ramené sur cette bande. R vaut 1, 1,5, 2, 2,8 ou 3,2. Le sommet du pas est R/4 de la bande. 3,5, 3,8 et 4 sont refusés.",
+      },
+      {
+        label: "Trace une figure",
+        text: "Un calibre court avance d’un tirage dans la fenêtre. Triangle, cercle et hypoténuse lisent 3 tirages. Le polygone lit 4, 5, 6 ou 8 côtés. Sinus, cosinus, tangente, arcsinus et arccosinus lisent une période de 4, 6, 8 ou 12 tirages. L’arc tangente tourne le dernier pas de 15, 30 ou 45 degrés. Chaque cran est jugé dans son carré. La pensée part du dernier cran et se place entre le plus bas et le plus haut de la fenêtre. Le cercle d’or reste le calque des niveaux. Le cercle de la figure passe par trois points du calibre.",
       },
     ],
   },

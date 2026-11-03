@@ -13,6 +13,7 @@ import {
 import { placeStars, reconcile } from "../src/lib/run-arcade/coherence.ts"
 import { buildTrack, curveValues, CURVE_KEYS, type CurveValues } from "../src/lib/run-arcade/curves.ts"
 import { EXAM_WINDOW, examine, examStart, passesExam, promptPast } from "../src/lib/run-arcade/examen.ts"
+import { readFigure } from "../src/lib/run-arcade/figure.ts"
 import { BRAVE_EXAMPLE, buildPrompt, lectureFromText, lectureRefusal, parseAction, SKILL_EXAMPLE } from "../src/lib/run-arcade/prompt.ts"
 import {
   activeVersion,
@@ -739,4 +740,92 @@ test("the logistic step stays in the band, and a strong R is refused", () => {
   })
   assert.equal(legacy?.skills[0].versions[0].gesture, "persiste")
   assert.equal(legacy?.skills[0].versions[0].r, undefined)
+})
+
+test("a geometric figure slides a short caliber and keeps the old gestures", () => {
+  const triangle = readFigure([0, 10, 10], "triangle", null)
+  const down = 1 - Math.tan(Math.PI / 3) * 0.5
+  assert.ok(Math.abs(triangle.tip - down * 10) < 1e-9)
+  assert.equal(triangle.correspond, false)
+
+  assert.equal(readFigure([0, 5, 10], "cercle", null).tip, 15)
+  assert.equal(readFigure([0, 10, 0], "cercle", null).tip, -10)
+
+  const yPentagon = 1 - Math.tan((72 * Math.PI) / 180) * 0.25
+  assert.ok(Math.abs(readFigure([0, 0, 0, 10, 10], "polygone", 5).tip - yPentagon * 10) < 1e-9)
+
+  assert.equal(readFigure([0, 10, 0], "pythagore", null).tip, 10)
+  assert.equal(readFigure([0, 5, 10], "pythagore", null).tip, 15)
+  assert.equal(readFigure([7, 7, 7], "pythagore", null).tip, 7)
+
+  const wave = [0, 1, 2, 3, 4, 5, 6, 7]
+  assert.equal(readFigure(wave, "sin", 8).tip, 3.5)
+  assert.equal(readFigure(wave, "cos", 8).tip, 7)
+
+  const level = [0, 10, 5, 5, 5, 5, 5, 5]
+  const up = 0.5 + Math.SQRT2 / 4
+  const downWave = 0.5 - Math.SQRT2 / 4
+  assert.ok(Math.abs(readFigure(level, "arcsin", 8).tip - up * 10) < 1e-9)
+  assert.ok(Math.abs(readFigure(level, "arccos", 8).tip - downWave * 10) < 1e-9)
+  assert.ok(readFigure(level, "arcsin", 8).tip > 5)
+  assert.ok(readFigure(level, "arccos", 8).tip < 5)
+
+  const chord = readFigure([0, 2, 4, 6, 8, 10], "tan", 4)
+  assert.equal(chord.correspond, true)
+  assert.ok(Math.abs(chord.tip - 40 / 3) < 1e-9)
+  assert.equal(readFigure([0, 2, 4, 6, 8], "tan", 4).correspond, false)
+
+  const alpha = Math.atan2(-1, 0.5)
+  const beta = alpha + Math.PI / 3
+  const scaled = readFigure([0, 30, 10, 20, 10], "triangle", null)
+  assert.ok(Math.abs(scaled.tip - Math.tan(beta) * 0.5 * 30) < 1e-9)
+  assert.ok(Math.abs(scaled.tip - (10 + Math.tan(beta) * 0.5 * 10)) > 1)
+
+  assert.equal(readFigure([0, 0, 100], "arctan", 45).tip, 200)
+  assert.ok(Math.abs(readFigure([10, 0, 0], "arctan", 30).tip - 5 / Math.sqrt(3)) < 1e-9)
+  assert.equal(readFigure([1, 2], "triangle", null).tip, 2)
+
+  assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "polygone", n: 7 }), null)
+  assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "sin", n: 5 }), null)
+  assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "arctan", n: 20 }), null)
+  assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "nope" }), null)
+  const plain = parseSkillParams({ curve: "n1", gesture: "figure" })
+  assert.equal(plain?.forme, "triangle")
+  assert.equal(plain?.n, null)
+  assert.equal(parseSkillParams({ curve: "n1", gesture: "figure", forme: "sin" })?.n, 8)
+  assert.equal(parseSkillParams({ curve: "n1", gesture: "figure", forme: "polygone" })?.n, 4)
+  assert.equal(parseSkillParams({ curve: "n1", gesture: "figure", forme: "arctan" })?.n, 30)
+  assert.equal(parseSkillParams({ curve: "n1", gesture: "figure", forme: "triangle", n: 7 })?.n, null)
+  assert.equal(parseSkillParams({ curve: "d2", gesture: "or", ratio: 1.6, forme: "sin", n: 8 })?.forme, undefined)
+  assert.equal(
+    describeSkill({ curve: "sumNumbers", gesture: "figure", forme: "triangle", ratio: 0.618, span: "bande", window: 8, days: null }),
+    "Σn trace un triangle, calibre 3, sur 8 tirages."
+  )
+
+  const runner = createMinds(18)[17].skills[0]
+  assert.equal(runner.name, "Figure")
+  assert.equal(runner.versions[0].gesture, "figure")
+  assert.equal(runner.versions[0].forme, "triangle")
+  assert.equal(createMinds(8)[7].skills[0].versions[0].gesture, "suite")
+  assert.equal(createMinds(17)[16].skills[0].versions[0].gesture, "soir")
+
+  const varied = houseVariation(
+    { curve: "*", gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null },
+    7
+  )
+  assert.equal(varied.gesture, "figure")
+  assert.equal(varied.forme, "arcsin")
+  assert.equal(varied.n, 12)
+
+  const drawn = think(
+    mindWith(
+      { curve: "n1", gesture: "figure", forme: "triangle", ratio: 0.618, span: "bande", window: 8, days: null },
+      "n1"
+    ),
+    withN1([0, 0, 0, 0, 0, 0, 10, 10])
+  ).draw
+  assert.match(drawn.observation, /n1 · figure · triangle · calibre 3 · 8 tirages/)
+  assert.match(drawn.phrase, /trace un triangle, calibre 3/)
+  assert.equal(drawn.phrase.includes("rayon"), false)
+  assert.ok(Math.abs(drawn.thoughtValue - down * 10) < 1e-6)
 })

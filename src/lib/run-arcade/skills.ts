@@ -1,7 +1,18 @@
 import { CURVE_KEYS, curveLabel, type CurveKey } from "./curves"
+import {
+  ARCTAN_TURNS,
+  defaultFigureN,
+  figureLength,
+  figureNAllowed,
+  FORMES,
+  POLYGON_SIDES,
+  WAVE_PERIODS,
+  type Forme,
+  usesFigureN,
+} from "./figure"
 import { formatRatio, GOLDEN_RATIOS, nearestGolden, type GoldenRatio } from "./golden"
 
-export const GESTURES = ["persiste", "glisse", "miroir", "or", "moyenne", "soir", "suite"] as const
+export const GESTURES = ["persiste", "glisse", "miroir", "or", "moyenne", "soir", "suite", "figure"] as const
 export type Gesture = (typeof GESTURES)[number]
 
 /** Première suite : un pas de X(n+1) = R·Xn·(1−Xn). */
@@ -41,6 +52,10 @@ export type SkillParams = {
   suite?: SuiteId | null
   /** Paramètre R, seulement pour le geste suite. */
   r?: LogisticR | null
+  /** Forme, seulement pour le geste figure. */
+  forme?: Forme | null
+  /** Côtés, période ou tour, seulement pour le geste figure. */
+  n?: number | null
 }
 
 export type SkillOrigin = "maison" | "ia" | "variation"
@@ -69,6 +84,7 @@ const GESTURE_PHRASE: Record<Gesture, string> = {
   moyenne: "rejoint sa moyenne",
   soir: "suit l’autre soir",
   suite: "suit la suite logistique",
+  figure: "trace une figure",
 }
 
 export function gesturePhrase(gesture: Gesture) {
@@ -85,8 +101,42 @@ const SPAN_PHRASE: Record<SpanKind, string> = {
   pas: "du dernier pas",
 }
 
+export function figureClause(params: SkillParams) {
+  const forme = params.forme ?? "triangle"
+  const n = params.n ?? defaultFigureN(forme)
+  const length = figureLength(forme, n)
+  if (forme === "cercle") return `trace un cercle, calibre ${length}`
+  if (forme === "polygone") return `trace un polygone à ${n} côtés, calibre ${length}`
+  if (forme === "pythagore") return `suit l’hypoténuse, calibre ${length}`
+  if (forme === "sin") return `suit un sinus de période ${n}, calibre ${length}`
+  if (forme === "cos") return `suit un cosinus de période ${n}, calibre ${length}`
+  if (forme === "tan") return `prolonge la tangente, calibre ${length}`
+  if (forme === "arcsin") return `suit l’arcsinus de période ${n}, calibre ${length}`
+  if (forme === "arccos") return `suit l’arccosinus de période ${n}, calibre ${length}`
+  if (forme === "arctan") return `tourne l’arc tangente de ${n} degrés, calibre ${length}`
+  return `trace un triangle, calibre ${length}`
+}
+
+/** Forme, réglage et calibre, pour ne pas confondre deux figures dans l’observation. */
+export function figureMark(params: SkillParams) {
+  const forme = params.forme ?? "triangle"
+  const n = params.n ?? defaultFigureN(forme)
+  const length = figureLength(forme, n)
+  if (forme === "polygone") return `figure · polygone · ${n} côtés · calibre ${length}`
+  if (forme === "sin" || forme === "cos" || forme === "arcsin" || forme === "arccos") {
+    return `figure · ${forme} · période ${n} · calibre ${length}`
+  }
+  if (forme === "arctan") return `figure · arctan · tour ${n} · calibre ${length}`
+  if (forme === "tan") return `figure · tan · calibre ${length}`
+  return `figure · ${forme} · calibre ${length}`
+}
+
 export function describeSkill(params: SkillParams) {
   if (params.gesture === "soir") return `${targetLabel(params.curve)} suit l’autre soir, à 4 jours au plus.`
+  if (params.gesture === "figure") {
+    const scale = params.days ? `sur ${params.days} jours` : `sur ${params.window} tirages`
+    return `${targetLabel(params.curve)} ${figureClause(params)}, ${scale}.`
+  }
   if (params.gesture === "suite") {
     const r = params.r ?? DEFAULT_LOGISTIC_R
     return `${targetLabel(params.curve)} suit la suite logistique, R ${formatRatio(r)}, ${SPAN_PHRASE[params.span]}, sur ${params.window} tirages.`
@@ -220,6 +270,14 @@ export function nearestLogistic(value: number): LogisticR | null {
   return Math.abs(best - value) <= 0.05 ? best : null
 }
 
+/** 0 et « null » : réglage absent. undefined : valeur illisible. */
+function readFigureN(value: unknown): number | null | undefined {
+  if (value == null || value === "" || value === 0 || value === "0" || value === "null") return null
+  const parsed = firstNumber(value)
+  if (parsed == null) return undefined
+  return Math.round(parsed)
+}
+
 /** 0 et « null » : pas de fenêtre longue. undefined : valeur illisible. */
 function optionalDays(value: unknown): number | null | undefined {
   if (value == null || value === 0 || value === "0" || value === "null") return null
@@ -238,6 +296,15 @@ export function parseSkillParams(raw: unknown): SkillParams | null {
   const window = record.window == null ? 8 : boundedInt(record.window, WINDOW_MIN, WINDOW_MAX)
   const days = optionalDays(record.days)
   if (!curve || !gesture || ratio == null || !span || window == null || days === undefined) return null
+  if (gesture === "figure") {
+    const forme = record.forme == null || record.forme === "" ? "triangle" : firstAllowed(record.forme, FORMES)
+    if (!forme) return null
+    const n = readFigureN(record.n)
+    if (n === undefined) return null
+    if (n != null && !figureNAllowed(forme, n)) return null
+    const resolved = usesFigureN(forme) ? (n ?? defaultFigureN(forme)) : null
+    return { curve, gesture, ratio, span, window, days, forme, n: resolved }
+  }
   if (gesture !== "suite") return { curve, gesture, ratio, span, window, days }
   const suite = record.suite == null || record.suite === "" ? "logistique" : firstAllowed(record.suite, SUITES)
   const r =
@@ -249,8 +316,8 @@ export function parseSkillParams(raw: unknown): SkillParams | null {
 }
 
 /**
- * Gestes de départ, tous différents. Persiste, glisse, miroir, soir et la suite
- * ne paraissent qu’une fois. Le nombre d’or et la moyenne varient ensuite.
+ * Gestes de départ, tous différents. Persiste, glisse, miroir, soir, la suite
+ * et la figure ne paraissent qu’une fois. Le nombre d’or et la moyenne varient ensuite.
  */
 const BASE_PRESETS: Omit<SkillParams, "curve">[] = [
   { gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null },
@@ -270,6 +337,7 @@ const BASE_PRESETS: Omit<SkillParams, "curve">[] = [
   { gesture: "or", ratio: 1.272, span: "bande", window: 8, days: null },
   { gesture: "moyenne", ratio: 0.618, span: "bande", window: 16, days: null },
   { gesture: "soir", ratio: 0.618, span: "pas", window: 3, days: null },
+  { gesture: "figure", forme: "triangle", n: null, ratio: 0.618, span: "bande", window: 8, days: null },
 ]
 
 /** Skill de départ d’un runner : un geste pour toutes les courbes. */
@@ -281,15 +349,16 @@ export function baseSkill(runnerId: string, index: number): Skill {
     ...preset,
     window: Math.min(WINDOW_MAX, preset.window + lap * 2),
   }
-  const name = params.gesture === "suite" ? "Suite numérique" : "Geste de base"
+  const name = params.gesture === "suite" ? "Suite numérique" : params.gesture === "figure" ? "Figure" : "Geste de base"
   return newSkill(`${runnerId}-base`, name, params, { cutoff: "", origin: "maison", examCents: null })
 }
 
 const CLASSIC_GESTURES = ["persiste", "glisse", "miroir", "or", "moyenne", "soir"] as const
 
-/** Même cycle qu’avant la suite. La suite occupe le créneau suivant, un pas sur sept. */
+/** Même cycle qu’avant la suite. La suite garde son pas sur sept. La figure prend le pas suivant. */
 function variedGesture(base: Gesture, step: number): Gesture {
   if (step % (CLASSIC_GESTURES.length + 1) === CLASSIC_GESTURES.length) return "suite"
+  if (step % (CLASSIC_GESTURES.length + 2) === CLASSIC_GESTURES.length + 1) return "figure"
   const origin = CLASSIC_GESTURES.indexOf(base as (typeof CLASSIC_GESTURES)[number])
   const from = origin < 0 ? 0 : origin
   return CLASSIC_GESTURES[(from + 1 + (step % (CLASSIC_GESTURES.length - 1))) % CLASSIC_GESTURES.length]
@@ -303,6 +372,18 @@ export function houseVariation(base: SkillParams, seed: number): SkillParams {
   const ratio = GOLDEN_RATIOS[(GOLDEN_RATIOS.indexOf(base.ratio) + 1 + step) % GOLDEN_RATIOS.length]
   const window = SHORT_WINDOWS[step % SHORT_WINDOWS.length]
   const days = gesture === "moyenne" ? LONG_DAYS[step % LONG_DAYS.length] : null
+  if (gesture === "figure") {
+    const forme = FORMES[step % FORMES.length]
+    const n =
+      forme === "polygone"
+        ? POLYGON_SIDES[step % POLYGON_SIDES.length]
+        : forme === "arctan"
+          ? ARCTAN_TURNS[step % ARCTAN_TURNS.length]
+          : forme === "sin" || forme === "cos" || forme === "tan" || forme === "arcsin" || forme === "arccos"
+            ? WAVE_PERIODS[step % WAVE_PERIODS.length]
+            : null
+    return { curve, gesture, ratio, span: base.span, window, days, forme, n }
+  }
   if (gesture !== "suite") return { curve, gesture, ratio, span: base.span, window, days }
   return {
     curve,

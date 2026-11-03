@@ -107,6 +107,7 @@ test("runArcade help names the purse, the exam, the evenings and the curves", ()
     "rejoint sa moyenne",
     "suit l’autre soir",
     "suit la suite logistique",
+    "trace une figure",
   ]
   assert.deepEqual(
     RUN_ARCADE_HELP.gestes.items?.map((item) => item.label.toLowerCase()),
@@ -129,4 +130,10 @@ test("runArcade help names the purse, the exam, the evenings and the curves", ()
   assert.match(nav, /X\(n\+1\)/)
   assert.match(copy, /X\(n\+1\)/)
   assert.match(page, /X\(n\+1\)/)
+  assert.match(RUN_ARCADE_HELP.gestes.items?.[7].text ?? "", /trois points/)
+  assert.match(RUN_ARCADE_HELP.gestes.items?.[7].text ?? "", /15, 30 ou 45/)
+  assert.match(RUN_ARCADE_HELP.dessin.items?.[4].text ?? "", /trois points/)
+  assert.match(nav, /trois points/)
+  assert.match(copy, /trois points/)
+  assert.match(page, /trois points/)
 })

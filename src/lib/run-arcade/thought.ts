@@ -15,12 +15,15 @@ import {
   type RankKey,
   type RankPoint,
 } from "./curves"
+import { readFigure } from "./figure"
 import { formatRatio, goldenAim, goldenLevel, GOLDEN_RATIOS } from "./golden"
 import { soirReading } from "./soir"
 import {
   activeVersion,
   baseSkill,
   DEFAULT_LOGISTIC_R,
+  figureClause,
+  figureMark,
   gesturePhrase,
   type Gesture,
   type Skill,
@@ -275,6 +278,10 @@ export function tipFor(
     const values = windowValues(params, past, rows, key)
     return values.reduce((total, value) => total + value, 0) / values.length
   }
+  if (params.gesture === "figure") {
+    const values = windowValues(params, past, rows, key)
+    return readFigure(values, params.forme ?? "triangle", params.n ?? null).tip
+  }
   const span = spanFor(params, rows, key)
   if (params.gesture === "suite") {
     const image = logisticImage(unitOf(last, span.lo, span.hi), params.r ?? DEFAULT_LOGISTIC_R)
@@ -520,12 +527,18 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
   })
   const slopeWord = delta > FLAT_STEP ? "montante" : delta < -FLAT_STEP ? "descendante" : "plate"
   const reading = params.gesture === "soir" ? soirReading(past, rows, focus, hiddenDate) : null
+  const figureRead =
+    params.gesture === "figure"
+      ? readFigure(windowValues(params, past, rows, focus), params.forme ?? "triangle", params.n ?? null)
+      : null
   const tol = Math.max(0.5, spanWidth / 4)
   const maskValues = maskPoints.map((point) => point.y)
   const tangentGap = tangentDistance(maskPoints, last, delta)
   const tangente = word(tangentGap <= tol)
   const masque = word(
-    params.gesture === "glisse"
+    params.gesture === "figure"
+      ? Boolean(figureRead?.correspond)
+      : params.gesture === "glisse"
       ? tangentGap <= tol
       : params.gesture === "soir"
         ? reading?.days != null
@@ -555,16 +568,24 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
     ? reading.days == null
       ? `reprend le pas du ${reading.evening}`
       : `${reading.evening} suit le ${reading.other} à ${reading.days} ${reading.days > 1 ? "jours" : "jour"}`
-    : params.gesture === "suite"
-      ? `${gesturePhrase(params.gesture)}, R ${formatRatio(params.r ?? DEFAULT_LOGISTIC_R)}`
-      : gesturePhrase(params.gesture)
+    : params.gesture === "figure"
+      ? figureClause(params)
+      : params.gesture === "suite"
+        ? `${gesturePhrase(params.gesture)}, R ${formatRatio(params.r ?? DEFAULT_LOGISTIC_R)}`
+        : gesturePhrase(params.gesture)
   const words = lectureClause(lecture)
   const windowText =
     params.gesture === "suite"
       ? `R ${formatRatio(params.r ?? DEFAULT_LOGISTIC_R)} · ${windowLabel(params)}`
       : windowLabel(params)
-  const observation = `${curveLabel(focus)} · ${params.gesture} · ${windowText} · ${words}`
-  const phrase = `${curveLabel(focus)} ${clause} : tangente ${slopeWord}, rayon ${formatNum(radius)} vers ${formatRatio(params.ratio)}, vecteur ${formatNum(tip)}, projection ${projected}${recalled ? ", ramenée par les totales" : ""}. Lecture : ${words}.`
+  const observation =
+    params.gesture === "figure"
+      ? `${curveLabel(focus)} · ${figureMark(params)} · ${windowLabel(params)} · ${words}`
+      : `${curveLabel(focus)} · ${params.gesture} · ${windowText} · ${words}`
+  const phrase =
+    params.gesture === "figure"
+      ? `${curveLabel(focus)} ${clause} : vecteur ${formatNum(tip)}, projection ${projected}${recalled ? ", ramenée par les totales" : ""}. Lecture : ${words}.`
+      : `${curveLabel(focus)} ${clause} : tangente ${slopeWord}, rayon ${formatNum(radius)} vers ${formatRatio(params.ratio)}, vecteur ${formatNum(tip)}, projection ${projected}${recalled ? ", ramenée par les totales" : ""}. Lecture : ${words}.`
   const ys = [
     ...trail.map((point) => point.y),
     tangent.y1,

@@ -3,6 +3,7 @@ import { ollamaDeltaText, openaiCompletionText } from "@/lib/ia/sse"
 import { estimateTokens, usageFromPayload } from "@/lib/ia/usage"
 
 import { CURVE_KEYS } from "./curves"
+import { FORMES } from "./figure"
 import { GOLDEN_RATIOS } from "./golden"
 import { DAYS_MAX, GESTURES, LOGISTIC_R, SPANS, SUITES, WINDOW_MAX, WINDOW_MIN } from "./skills"
 
@@ -12,7 +13,7 @@ const TEMPERATURE = 0.2
 
 export type LocalPost = (body: unknown) => Promise<{ ok: boolean; status: number; text: string }>
 
-/** Grammaire Ollama : courbe, geste, span, ratio, suite et R restent dans la liste. */
+/** Grammaire Ollama : courbe, geste, span, ratio, suite, R, forme et n restent dans la liste. */
 export function actionSchema() {
   return {
     type: "object",
@@ -30,6 +31,8 @@ export function actionSchema() {
       days: { type: "integer", minimum: 0, maximum: DAYS_MAX },
       suite: { type: "string", enum: [...SUITES] },
       r: { type: "number", enum: [...LOGISTIC_R] },
+      forme: { type: "string", enum: [...FORMES] },
+      n: { type: "number", enum: [0, 4, 5, 6, 8, 12, 15, 30, 45] },
       lecture: {
         type: "object",
         additionalProperties: false,
@@ -43,7 +46,7 @@ export function actionSchema() {
         required: ["tangente", "masque", "cercle", "pas", "vecteur"],
       },
     },
-    required: ["action", "name", "phrase", "query", "curve", "gesture", "ratio", "span", "window", "days", "suite", "r", "lecture"],
+    required: ["action", "name", "phrase", "query", "curve", "gesture", "ratio", "span", "window", "days", "suite", "r", "forme", "n", "lecture"],
   }
 }
 
