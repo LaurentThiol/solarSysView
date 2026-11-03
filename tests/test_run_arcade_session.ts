@@ -798,3 +798,116 @@ test("a played turn records a jeu step and zero minutes skips the calls", () => 
   assert.match(board.course ?? "", /Zéro minute/)
   session.dispose()
 })
+
+test("each generation varies the house seed on a fixed archive", () => {
+  const { session } = harness(1)
+  const rows = series(80)
+  const base = newSkill(
+    "champ-base",
+    "Geste de base",
+    { curve: "*", gesture: "or", ratio: 0.618, span: "bande", window: 8, days: null },
+    { cutoff: "", origin: "maison", examCents: null }
+  )
+  const parent: ChampionRecord = {
+    generation: 1,
+    runner: "R1",
+    cents: 5000,
+    examCents: null,
+    calls: 0,
+    raceFrom: null,
+    raceTo: null,
+    skills: [base],
+    journal: [],
+    savedAt: "2026-10-30T09:00:00.000Z",
+  }
+  session.launch({ count: 4, draws: 10, minutes: 0, series: rows, champion: parent })
+  const gen2 = session.getSnapshot().xrayPrep.slice(1).map((prep) => prep.attempts.map((a) => a.detail))
+  session.launch({ count: 4, draws: 10, minutes: 0, series: rows, champion: { ...parent, generation: 2 } })
+  const gen3 = session.getSnapshot().xrayPrep.slice(1).map((prep) => prep.attempts.map((a) => a.detail))
+  assert.notDeepEqual(gen2, gen3)
+  session.dispose()
+})
+
+test("a house variation at launch does not block one new IA skill, and a second new IA skill is refused", async () => {
+  const { ia, session } = harness(1)
+  const rows = series(80)
+  const parent: ChampionRecord = {
+    generation: 1,
+    runner: "R1",
+    cents: 5000,
+    examCents: null,
+    calls: 0,
+    raceFrom: null,
+    raceTo: null,
+    skills: [
+      newSkill(
+        "champ-base",
+        "Geste de base",
+        { curve: "*", gesture: "or", ratio: 0.618, span: "bande", window: 8, days: null },
+        { cutoff: "", origin: "maison", examCents: null }
+      ),
+    ],
+    journal: [],
+    savedAt: "2026-10-30T09:00:00.000Z",
+  }
+  session.launch({ count: 2, draws: 10, minutes: 1, series: rows, champion: parent })
+  await flush()
+  const r2Before = session.getSnapshot().race?.runners.find((item) => item.mind.id === "r2")
+  assert.equal(r2Before?.added, 1)
+  assert.equal(r2Before?.mind.skills.length, 2)
+
+  // Premier appel : R1. On répond illisible pour passer à R2.
+  ia[0].resolve(unreadable)
+  await flush()
+  assert.equal(ia[1]?.request.runnerId, "r2")
+  const lecture1 = lectureFromText(ia[1].request.user)
+  ia[1].resolve({
+    ok: true,
+    text: JSON.stringify({
+      action: "skill",
+      name: "Somme étoiles",
+      curve: "sumStars",
+      gesture: "glisse",
+      window: 5,
+      days: 0,
+      lecture: lecture1,
+    }),
+    latencyMs: 10,
+    model: "t",
+    vision: false,
+  })
+  await flush()
+  const r2AfterFirst = session.getSnapshot().race?.runners.find((item) => item.mind.id === "r2")
+  assert.equal(r2AfterFirst?.added, 2)
+  assert.equal(r2AfterFirst?.mind.skills.length, 3)
+
+  // Tour suivant dans la file d’avant-course : R2 repasse et tente une deuxième courbe nouvelle.
+  while (ia[ia.length - 1]?.request.runnerId !== "r2") {
+    ia[ia.length - 1].resolve(unreadable)
+    await flush()
+  }
+  const secondCall = ia[ia.length - 1]
+  const lecture2 = lectureFromText(secondCall.request.user)
+  secondCall.resolve({
+    ok: true,
+    text: JSON.stringify({
+      action: "skill",
+      name: "Rang 3",
+      curve: "n3",
+      gesture: "miroir",
+      window: 5,
+      days: 0,
+      lecture: lecture2,
+    }),
+    latencyMs: 10,
+    model: "t",
+    vision: false,
+  })
+  await flush()
+  const refusal = session
+    .getSnapshot()
+    .journal.find((entry) => entry.runner === "r2" && entry.kind === "refus" && entry.detail.includes("une seule skill nouvelle"))
+  assert.ok(refusal)
+  assert.equal(session.getSnapshot().race?.runners.find((item) => item.mind.id === "r2")?.added, 2)
+  session.dispose()
+})

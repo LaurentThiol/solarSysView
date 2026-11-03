@@ -258,6 +258,7 @@ export class RunArcadeSession {
   private readonly cooldown = new Map<string, number>()
   private readonly notes = new Map<string, BraveNote[]>()
   private readonly added = new Map<string, number>()
+  private readonly iaAdded = new Map<string, number>()
   private readonly callCount = new Map<string, number>()
   private readonly attempts = new Map<string, XrayAttempt[]>()
   private inbox: InboxItem[] = []
@@ -396,6 +397,7 @@ export class RunArcadeSession {
     this.round = 0
     this.notes.clear()
     this.added.clear()
+    this.iaAdded.clear()
     this.callCount.clear()
     this.cooldown.clear()
     this.attempts.clear()
@@ -492,7 +494,10 @@ export class RunArcadeSession {
     const before = examine(mind, free, undefined, since)
     const tries: XrayAttempt[] = []
     for (let attempt = 0; attempt < VARIATION_TRIES; attempt += 1) {
-      const params = houseVariation(currentVersion(base), this.seed + index * 31 + attempt * 11)
+      const params = houseVariation(
+        currentVersion(base),
+        this.seed + generation * 997 + index * 31 + attempt * 11
+      )
       const candidate = applyParams(mind, params, meta, "Variation maison", `${mind.id}-g${generation}-${params.curve}`)
       const after = examine(candidate.mind, free, undefined, since)
       const kept = passesExam(after, before)
@@ -940,7 +945,7 @@ export class RunArcadeSession {
         continue
       }
       const isNewCurve = !runner.mind.skills.some((skill) => currentVersion(skill).curve === item.params.curve)
-      if (isNewCurve && (this.added.get(runner.mind.id) ?? 0) >= 1) {
+      if (isNewCurve && (this.iaAdded.get(runner.mind.id) ?? 0) >= 1) {
         const detail = "une seule skill nouvelle par lancement"
         this.note(runner.mind.id, "examen", "refusé", detail)
         this.log(runner.mind.id, "refus", item.cutoff, detail)
@@ -962,7 +967,10 @@ export class RunArcadeSession {
         this.log(runner.mind.id, "refus", item.cutoff, detail)
         continue
       }
-      if (candidate.isNew) this.added.set(runner.mind.id, (this.added.get(runner.mind.id) ?? 0) + 1)
+      if (candidate.isNew) {
+        this.iaAdded.set(runner.mind.id, (this.iaAdded.get(runner.mind.id) ?? 0) + 1)
+        this.added.set(runner.mind.id, (this.added.get(runner.mind.id) ?? 0) + 1)
+      }
       const mind = withExam(candidate.mind, item.params.curve, after.cents)
       const skill = mind.skills.find((entry) => currentVersion(entry).curve === item.params.curve)
       const detail = `${skill?.name ?? "skill"} v${skill ? currentVersion(skill).version : 1} gardée, examen ${formatCents(after.cents)}`

@@ -169,8 +169,11 @@ export function itemText(item: BraveItem) {
 }
 
 export function keepResult(item: BraveItem, cutoff: string, hidden: readonly HiddenDraw[]) {
-  const age = String(item.page_age || "").slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(age) || age >= cutoff) return false
+  const rawAge = typeof item.page_age === "string" ? item.page_age.trim() : ""
+  if (rawAge.length > 0) {
+    const age = rawAge.slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(age) || age >= cutoff) return false
+  }
   const text = itemText(item)
   if (citesLateDate(text, cutoff)) return false
   for (const draw of hidden) {

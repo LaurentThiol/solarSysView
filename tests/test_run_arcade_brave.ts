@@ -34,8 +34,13 @@ test("dates are read in French and English, with or without the day", () => {
   assert.equal(citesLateDate("le 3 août 2026", cutoff), false)
 })
 
-test("a page without a date, or dated from the cutoff on, is removed", () => {
-  assert.equal(keepResult({ ...item("φ et suites"), page_age: undefined }, cutoff, hidden), false)
+test("a page without page_age is kept when clean, and a late or invalid page_age is removed", () => {
+  assert.equal(keepResult({ ...item("φ et suites"), page_age: undefined }, cutoff, hidden), true)
+  assert.equal(keepResult({ ...item("φ et suites"), page_age: "   " }, cutoff, hidden), true)
+  assert.equal(keepResult({ ...item("tirage du 4 août 2026"), page_age: undefined }, cutoff, hidden), false)
+  assert.equal(keepResult({ ...item("Combinaison : 44 07 23 12 38"), page_age: undefined }, cutoff, hidden), false)
+  assert.equal(keepResult({ ...item("étoiles : 9 et 3"), page_age: undefined }, cutoff, hidden), false)
+  assert.equal(keepResult(item("φ et suites", "invalid-date"), cutoff, hidden), false)
   assert.equal(keepResult(item("φ et suites", "2026-08-04T06:00:00"), cutoff, hidden), false)
   assert.equal(keepResult(item("φ et suites", "2026-08-03T23:00:00"), cutoff, hidden), true)
 })

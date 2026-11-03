@@ -14,11 +14,13 @@ export function goldenLevel(lo: number, hi: number, ratio: number) {
   return hi + (ratio - 1) * span
 }
 
-/** Part du span visée par le runner. 1,618 vise 0,618, 2,618 vise encore 0,618. */
+/** Part du span visée par le runner : cinq niveaux distincts dans la bande. */
 export function aimRatio(ratio: number) {
   if (ratio <= 1) return ratio
-  const frac = ratio - Math.floor(ratio)
-  return frac === 0 ? 0.618 : frac
+  if (Math.abs(ratio - 1.272) <= 0.05) return 0.272
+  if (Math.abs(ratio - 1.618) <= 0.05) return 0.764
+  if (Math.abs(ratio - 2.618) <= 0.05) return 0.854
+  return Math.min(1, Math.max(0, 1 - 0.382 / ratio))
 }
 
 export function goldenAim(lo: number, hi: number, ratio: number) {

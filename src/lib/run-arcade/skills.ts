@@ -370,6 +370,7 @@ export function houseVariation(base: SkillParams, seed: number): SkillParams {
   const curve = CURVE_KEYS[step % CURVE_KEYS.length]
   const gesture = variedGesture(base.gesture, step)
   const ratio = GOLDEN_RATIOS[(GOLDEN_RATIOS.indexOf(base.ratio) + 1 + step) % GOLDEN_RATIOS.length]
+  const span = SPANS[(SPANS.indexOf(base.span) + 1 + step) % SPANS.length]
   const window = SHORT_WINDOWS[step % SHORT_WINDOWS.length]
   const days = gesture === "moyenne" ? LONG_DAYS[step % LONG_DAYS.length] : null
   if (gesture === "figure") {
@@ -382,14 +383,14 @@ export function houseVariation(base: SkillParams, seed: number): SkillParams {
           : forme === "sin" || forme === "cos" || forme === "tan" || forme === "arcsin" || forme === "arccos"
             ? WAVE_PERIODS[step % WAVE_PERIODS.length]
             : null
-    return { curve, gesture, ratio, span: base.span, window, days, forme, n }
+    return { curve, gesture, ratio, span, window, days, forme, n }
   }
-  if (gesture !== "suite") return { curve, gesture, ratio, span: base.span, window, days }
+  if (gesture !== "suite") return { curve, gesture, ratio, span, window, days }
   return {
     curve,
     gesture,
     ratio,
-    span: base.span,
+    span,
     window,
     days,
     suite: "logistique",

@@ -213,7 +213,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "d0 à d4",
-        text: "Nombre de numéros joués dans 1–10, 11–20, 21–30, 31–40 et 41–50. Leur somme vaut 5. La décennie du rail est celle de ces numéros : elle ne les place pas.",
+        text: "Nombre de numéros joués dans 1–10, 11–20, 21–30, 31–40 et 41–50. Leur somme vaut 5. Une skill sur une décennie pousse doucement les rangs vers la répartition visée, sans les caler sur 10, 20, 30, 40 ou 50.",
       },
     ],
   },
@@ -287,7 +287,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Vise le nombre d’or",
-        text: "La pensée vise une part de la bande. 1,618 et 2,618 visent encore 0,618. Bande : les bornes de la courbe. Entre les lignes : du plus bas au plus haut de la fenêtre. Du dernier pas : entre l’avant-dernier point et le dernier.",
+        text: "La pensée vise une part de la bande : 0,272, 0,382, 0,618, 0,764 ou 0,854 selon le ratio choisi (1,272, 0,382, 0,618, 1,618 ou 2,618). Bande : les bornes de la courbe. Entre les lignes : du plus bas au plus haut de la fenêtre. Du dernier pas : entre l’avant-dernier point et le dernier.",
       },
       {
         label: "Rejoint sa moyenne",

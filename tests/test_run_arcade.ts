@@ -86,13 +86,18 @@ function mindWith(params: SkillParams, focus: RunnerMind["focus"] = "n5"): Runne
 
 const mind = mindWith(glide)
 
-test("golden ratios land on five distinct levels", () => {
+test("golden ratios land on five distinct levels and five distinct aims", () => {
   const levels = GOLDEN_RATIOS.map((ratio) => goldenLevel(1, 46, ratio))
   assert.equal(new Set(levels.map((level) => level.toFixed(4))).size, 5)
+  const aims = GOLDEN_RATIOS.map((ratio) => goldenAim(1, 46, ratio))
+  assert.equal(new Set(aims.map((aim) => aim.toFixed(4))).size, 5)
   assert.ok(Math.abs(goldenLevel(0, 10, 0.618) - 6.18) < 1e-9)
   assert.ok(Math.abs(goldenLevel(0, 10, 1.618) - 16.18) < 1e-9)
-  assert.ok(Math.abs(goldenAim(0, 10, 1.618) - 6.18) < 1e-9)
-  assert.ok(Math.abs(goldenAim(0, 10, 2.618) - 6.18) < 1e-9)
+  assert.ok(Math.abs(goldenAim(0, 10, 0.382) - 3.82) < 1e-9)
+  assert.ok(Math.abs(goldenAim(0, 10, 0.618) - 6.18) < 1e-9)
+  assert.ok(Math.abs(goldenAim(0, 10, 1.272) - 2.72) < 1e-9)
+  assert.ok(Math.abs(goldenAim(0, 10, 1.618) - 7.64) < 1e-9)
+  assert.ok(Math.abs(goldenAim(0, 10, 2.618) - 8.54) < 1e-9)
 })
 
 test("curves add the two sums and five decade counts", () => {
@@ -155,6 +160,37 @@ test("n1 to n5 are not pinned to 10, 20, 30, 40 or 50", () => {
 
   const shared = { ...flat, n1: 35.6, n2: 35.6, n3: 35.6, n4: 35.6, n5: 35.6 }
   assert.deepEqual(reconcile(shared).numbers, [26, 27, 28, 29, 30])
+
+  const lowDecades = { ...flat, d0: 4, d1: 1, d2: 1, d3: 1, d4: 0 }
+  const highDecades = { ...flat, d0: 0, d1: 1, d2: 1, d3: 1, d4: 4 }
+  assert.notDeepEqual(reconcile(lowDecades).numbers, reconcile(flat).numbers)
+  assert.notDeepEqual(reconcile(highDecades).numbers, reconcile(flat).numbers)
+  assert.notDeepEqual(reconcile(lowDecades).numbers, reconcile(highDecades).numbers)
+  assert.equal(
+    reconcile(lowDecades).numbers.reduce((a, b) => a + b, 0),
+    140
+  )
+  assert.equal(
+    reconcile(highDecades).numbers.reduce((a, b) => a + b, 0),
+    140
+  )
+  assert.ok(reconcile(lowDecades).numbers[0] < reconcile(flat).numbers[0])
+  assert.ok(reconcile(highDecades).numbers[4] > reconcile(flat).numbers[4])
+
+  const past = series(8)
+  const withDecadeSkill = {
+    ...mind,
+    skills: [
+      ...mind.skills,
+      newSkill(
+        "r1-d0",
+        "Décennie basse",
+        { curve: "d0", gesture: "or", ratio: 2.618, span: "bande", window: 8, days: null },
+        { cutoff: "", origin: "ia", examCents: null }
+      ),
+    ],
+  }
+  assert.notDeepEqual(think(withDecadeSkill, past).guess, think(mind, past).guess)
 })
 
 test("a number or a star pays 2 € wherever its rank", () => {
@@ -734,6 +770,14 @@ test("the logistic step stays in the band, and a strong R is refused", () => {
   assert.equal(varied.gesture, "suite")
   assert.equal(varied.suite, "logistique")
   assert.equal(varied.r, 1.5)
+  assert.equal(varied.span, "lignes")
+  const spans = new Set(
+    [0, 1, 2].map(
+      (step) =>
+        houseVariation({ curve: "*", gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null }, step).span
+    )
+  )
+  assert.deepEqual([...spans].sort(), ["bande", "lignes", "pas"])
   assert.notEqual(
     houseVariation({ curve: "*", gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null }, 5).gesture,
     "suite"
