@@ -7,7 +7,7 @@ import { RUN_ARCADE_HELP } from "../src/lib/run-arcade/help.ts"
 import { formatSlice, MINUTES_DEFAULT, MINUTES_MAX, MINUTES_MIN, MINUTES_STEP } from "../src/lib/run-arcade/clock.ts"
 import { RACE_DRAWS_MAX, RACE_DRAWS_MIN } from "../src/lib/run-arcade/depart.ts"
 import { chanceBalance, EXAM_WINDOW } from "../src/lib/run-arcade/examen.ts"
-import { RUNNER_MIN } from "../src/lib/run-arcade/fields.ts"
+import { RUNNER_MIN, settleFields } from "../src/lib/run-arcade/fields.ts"
 import { FONCTIONNEL_CHAIN } from "../src/lib/run-arcade/fonctionnel.ts"
 import { PROMPT_ROWS } from "../src/lib/run-arcade/prompt.ts"
 import { MIN_SLICE_MS } from "../src/lib/run-arcade/session.ts"
@@ -242,7 +242,8 @@ test("runArcade help follows the suite, the waves, the figure window, the evenin
   assert.match(runners, /Chacun commence avec un geste de base différent/)
   assert.doesNotMatch(runners, /Au-delà de 18/)
   assert.match(lab, /max=\{RUNNER_MAX\}/)
-  assert.match(lab, /Math\.min\(RUNNER_MAX, /)
+  const typed = { count: String(RUNNER_MAX + 1) }
+  assert.equal(settleFields([], { count: RUNNER_DEFAULT, draws: 25, minutes: 10, date: "" }, typed).count, RUNNER_MAX)
 })
 
 test("runArcade help says the exam window slides, what an empty exam shows, and what chance pays", () => {
