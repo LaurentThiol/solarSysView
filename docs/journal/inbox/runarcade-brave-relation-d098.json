@@ -1,0 +1,9 @@
+{
+  "slug": "runarcade-brave-relation-d098",
+  "happened_on": "2026-11-03",
+  "area": "runArcade",
+  "title": "runArcade : Brave ne lit plus l’examen, et la relation passe un vrai seuil",
+  "body": "Brave cherche maintenant avant le premier tirage de l’examen, celui que le prompt ne lit pas, et non plus avant le premier tirage de la course. La route refuse la recherche, avec un délai conseillé, quand l’API des tirages ne répond pas ou ne connaît pas le dernier tirage de la piste : elle ne filtre plus avec l’extrait de janvier à août. Elle lit aussi les dates écrites en barres, en abrégé, en anglais, sur deux chiffres ou sans année. La relation envoyée à Brave doit dépasser le hasard, une fois comptées toutes celles qu’on a essayées : n1 et n2, ou un numéro et sa dizaine, ne comptent plus, et un retard se mesure sur les valeurs. Sur des tirages au hasard, presque aucune relation ne passe, donc Brave n’est presque jamais appelé, comme le dit l’aide. Une même recherche n’est lue qu’une fois par génération (40 au plus), une réponse vide n’efface plus les notes, et la nouvelle tentative après « trop de requêtes » attend la reprise en pause et ne part plus après la fin de la course.",
+  "pr_number": null,
+  "pr_url": null
+}
