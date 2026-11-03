@@ -97,7 +97,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   tour: {
     title: "Passer à la course, ou jouer le tour",
-    body: "Pendant l’avant-course, le bouton coupe le temps restant et ouvre la course. Pendant la course, il joue tout de suite le tour en cours : l’arbitre révèle le tirage, le solde bouge, la tranche suivante commence.",
+    body: "Pendant l’avant-course, le bouton coupe le temps restant et ouvre la course. Pendant la course, il joue tout de suite le tour en cours : l’arbitre révèle le tirage, le solde bouge, la tranche suivante commence. En pause, il avance d’un cran sans rendre le temps : le tour se joue, la course reste en pause, et aucun appel ne part jusqu’à Reprendre.",
   },
   exporter: {
     title: "Exporter le champion",
@@ -105,7 +105,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   importer: {
     title: "Importer le champion",
-    body: "Lit un fichier JSON de champion. Un autre JSON est refusé, avec la phrase « Ce fichier n’est pas un champion runArcade. » Le champion lu devient le parent du prochain Lancer, et il est écrit.",
+    body: "Lit un fichier JSON de champion. Un autre JSON est refusé, avec la phrase « Ce fichier n’est pas un champion runArcade. » Le champion lu devient le parent du prochain Lancer. Il est écrit dans Neon, sauf s’il y est déjà (même génération, même runner, même date d’écriture) : l’écran dit alors « déjà dans Neon : rien n’est réécrit ». Si Neon refuse, l’écran le dit, et le champion attend « Réessayer l’écriture ».",
   },
   statut: {
     title: "Où en est la course",
@@ -134,11 +134,11 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   services: {
     title: "IA locale, Brave et Neon",
     wide: true,
-    body: "La ligne dit si chaque service est en attente, prêt, ou absent. L’IA locale répond par un seul objet JSON : une skill, ou une recherche Brave.",
+    body: "La ligne dit si chaque service est en attente, prêt, ou absent. L’IA locale répond par un seul objet JSON : une skill, ou une recherche Brave. Une IA absente est sondée de nouveau toutes les 15 s : le prochain appel est la sonde, et les appels reprennent dès qu’elle répond.",
     items: [
       {
         label: "IA locale",
-        text: "Ollama, graine fixe, réponse courte. Le prompt lit les douze derniers tirages lisibles depuis la date de départ, sans la fenêtre d’examen, et rappelle le solde d’examen, en disant s’il date du lancement ou d’un tour. Une réponse illisible est refusée. Le premier appel part sans image. Quand la ligne dit « le dessin part avec l’appel », les appels suivants joignent le dessin. Le journal nomme l’appel, la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite les deux versions.",
+        text: "Ollama, graine fixe, réponse courte. Le prompt lit les douze derniers tirages lisibles depuis la date de départ, sans la fenêtre d’examen, et rappelle le solde d’examen, en disant s’il date du lancement ou d’un tour. Une réponse illisible est refusée. Le premier appel part sans image. Quand la ligne dit « le dessin part avec l’appel », les appels suivants joignent le dessin. Le journal nomme l’appel, la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite les deux versions. Si le dessin ne se rend pas en 4 s, le journal écrit « dessin non joint » avec la raison, et l’appel part sans image. Après trois échecs de suite, le dessin n’est plus joint jusqu’au prochain Lancer.",
       },
       {
         label: "Brave",
@@ -146,7 +146,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Neon",
-        text: "Le champion est écrit à la fin de la course. La ligne dit si l’écriture est en cours, faite, ou refusée. Si elle est refusée, une copie reste dans ce navigateur.",
+        text: "Le champion est écrit à la fin de la course. La ligne dit si l’écriture est en cours, faite, ou refusée. Si elle est refusée, il reste dans une file de ce navigateur, et le bouton « Réessayer l’écriture » le renvoie, le plus ancien d’abord. Si le navigateur refuse aussi la copie, la ligne le dit : le champion n’est gardé nulle part, et Exporter le champion le sauve. Un champion déjà dans Neon n’y est jamais écrit deux fois.",
       },
     ],
   },

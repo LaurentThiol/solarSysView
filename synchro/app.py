@@ -1898,7 +1898,10 @@ def create_app() -> FastAPI:
             row = db.insert_run_arcade_champion(record)
         except Exception as exc:
             raise HTTPException(503, str(exc)) from exc
-        return {"ok": True, "source": "neon", "id": row["id"], "versions": row["versions"]}
+        written: dict[str, Any] = {"ok": True, "source": "neon", "id": row["id"], "versions": row["versions"]}
+        if row.get("duplicate"):
+            written["duplicate"] = True
+        return written
 
     @app.get("/api/brain/specialists/features")
     def brain_specialist_features() -> dict[str, Any]:

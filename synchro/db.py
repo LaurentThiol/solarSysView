@@ -1699,10 +1699,45 @@ def delete_brain_specialist(slug: str) -> bool:
         return deleted
 
 
+def _existing_run_arcade_champion(cur: Any, record: dict[str, Any]) -> dict[str, Any] | None:
+    """La ligne déjà écrite pour ce champion : même génération, même runner, même `savedAt`.
+
+    Sans `savedAt`, rien ne distingue deux champions : aucun doublon n'est reconnu.
+    """
+    saved_at = str(record["payload"].get("savedAt") or "").strip()
+    if not saved_at:
+        return None
+    # Un verrou par champion : deux envois en même temps passent l'un après l'autre.
+    cur.execute(
+        "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+        (f"run_arcade_champion:{record['generation']}:{record['runner']}:{saved_at}",),
+    )
+    cur.execute(
+        """
+        SELECT c.id, c.created_at,
+               (SELECT COUNT(*) FROM run_arcade_skill_versions v WHERE v.champion_id = c.id) AS versions
+        FROM run_arcade_champions c
+        WHERE c.generation = %s AND c.runner = %s AND c.payload->>'savedAt' = %s
+        ORDER BY c.id
+        LIMIT 1
+        """,
+        (record["generation"], record["runner"], saved_at),
+    )
+    found = cur.fetchone()
+    return dict(found) if found else None
+
+
 def insert_run_arcade_champion(record: dict[str, Any]) -> dict[str, Any]:
-    """Champion d'un lancement runArcade, et chaque version de ses skills avec sa date de coupure."""
+    """Champion d'un lancement runArcade, et chaque version de ses skills avec sa date de coupure.
+
+    Un champion déjà écrit n'est pas réécrit : la ligne existante revient avec `duplicate`. Un envoi
+    renouvelé après une réponse perdue, ou un fichier importé deux fois, ne crée pas de seconde ligne.
+    """
     with connection() as conn:
         with conn.cursor() as cur:
+            existing = _existing_run_arcade_champion(cur, record)
+            if existing:
+                return {**existing, "versions": int(existing["versions"]), "duplicate": True}
             cur.execute(
                 """
                 INSERT INTO run_arcade_champions (

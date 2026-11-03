@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(TIMEOUT_MS),
+          signal: AbortSignal.any([request.signal, AbortSignal.timeout(TIMEOUT_MS)]),
         },
         TIMEOUT_MS
       )
@@ -93,6 +93,8 @@ export async function POST(request: NextRequest) {
       estimated: tokens.estimated,
     })
   } catch (error) {
+    // Le navigateur a coupé l’appel (relance, fin de course) : ce n’est pas un échec du modèle.
+    if (request.signal.aborted) return NextResponse.json({ ok: false, error: "appel annulé" }, { status: 499 })
     const latencyMs = Date.now() - started
     const message = error instanceof Error ? error.message : "échec"
     void recordLlmUsage({ surface: "brain", provider: "local", model, ok: false, error: message, latencyMs })

@@ -194,6 +194,12 @@ type RequestMeta = {
 /** Rythme minimal d’un tour quand Y vaut 0 : la course se lit à l’écran. */
 export const MIN_SLICE_MS = 700
 const ERROR_COOLDOWN_MS = 2_000
+/** Une IA locale absente est sondée de nouveau au bout de ce temps : un modèle qui charge finit par répondre. */
+const IA_PROBE_MS = 15_000
+/** Temps laissé à la capture du dessin. Passé ce délai, l’appel part sans image. */
+const CAPTURE_TIMEOUT_MS = 4_000
+/** Échecs de capture de suite après lesquels le dessin n’est plus joint, jusqu’au prochain lancement. */
+const CAPTURE_FAILURES_MAX = 3
 const BRAVE_RETRIES = 2
 /** Recherches que Brave reçoit par génération : une par tour d’une course de 25 tirages, plus quelques-unes avant. Au-delà, c’est du quota perdu. */
 export const BRAVE_SEARCH_CAP = 40
@@ -303,9 +309,15 @@ export class RunArcadeSession {
   private readonly iaAdded = new Map<string, number>()
   private readonly callCount = new Map<string, number>()
   private readonly attempts = new Map<string, XrayAttempt[]>()
+  /** Journal par runner, `JOURNAL_KEEP` lignes chacun : un runner bavard ne chasse pas les lignes des autres. */
+  private readonly journals = new Map<string, JournalEntry[]>()
   private inbox: InboxItem[] = []
   private seenObservations: ReadonlySet<string> = new Set<string>()
   private seed = 1
+  /** Heure à partir de laquelle une IA absente est sondée de nouveau. */
+  private iaRetryAt = 0
+  private captureFailures = 0
+  private captureOff = false
 
   constructor(deps: SessionDeps) {
     this.deps = deps
@@ -342,7 +354,13 @@ export class RunArcadeSession {
       turn,
       detail,
     }
-    this.set({ journal: [...this.snapshot.journal, entry].slice(-JOURNAL_KEEP * 4) })
+    this.journals.set(runner, [...(this.journals.get(runner) ?? []), entry].slice(-JOURNAL_KEEP))
+    this.set({ journal: this.mergedJournal() })
+  }
+
+  /** Les journaux de tous les runners, du plus ancien au plus récent. À date égale, chaque runner garde son ordre. */
+  private mergedJournal(): JournalEntry[] {
+    return [...this.journals.values()].flat().sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
   }
 
   /** Pas du schéma fonctionnel. `turn` absent : le tour de l’horloge. `null` : l’avant-course. */
@@ -449,6 +467,10 @@ export class RunArcadeSession {
     this.callCount.clear()
     this.cooldown.clear()
     this.attempts.clear()
+    this.journals.clear()
+    this.iaRetryAt = 0
+    this.captureFailures = 0
+    this.captureOff = false
     this.seenObservations = new Set()
     const track = buildTrack(options.series)
     if (track.length < 4) {
@@ -568,13 +590,18 @@ export class RunArcadeSession {
     return mind
   }
 
-  private startCourse() {
+  private startCourse(keepPaused = false) {
     if (!this.snapshot.race) return
     this.clearTimers()
     this.round = 0
-    this.set({ phase: "course" })
+    this.set({ phase: "course", ...(keepPaused ? this.heldSlice() : {}) })
     this.refill()
-    this.scheduleSlice()
+    if (!keepPaused) this.scheduleSlice()
+  }
+
+  /** En pause, la tranche qui vient reste entière : Reprendre la rend, et rien ne part d’ici là. */
+  private heldSlice(): Pick<SessionSnapshot, "pausedLeftMs" | "phaseEndsAt"> {
+    return { pausedLeftMs: Math.max(this.snapshot.sliceMs, MIN_SLICE_MS), phaseEndsAt: null }
   }
 
   private scheduleSlice(ms = Math.max(this.snapshot.sliceMs, MIN_SLICE_MS)) {
@@ -587,7 +614,7 @@ export class RunArcadeSession {
     this.pump()
   }
 
-  private endSlice() {
+  private endSlice(keepPaused = false) {
     const race = this.snapshot.race
     if (!race || this.snapshot.phase !== "course") return
     this.timer = null
@@ -620,7 +647,8 @@ export class RunArcadeSession {
     }
     this.round += 1
     this.refill()
-    this.scheduleSlice()
+    if (keepPaused) this.set(this.heldSlice())
+    else this.scheduleSlice()
   }
 
   private finish() {
@@ -646,6 +674,7 @@ export class RunArcadeSession {
     this.set({
       phase: "fin",
       phaseEndsAt: null,
+      pausedLeftMs: null,
       inFlight: 0,
       champion: record,
       save: record ? { state: "en cours", detail: null } : { state: "—", detail: null },
@@ -662,6 +691,15 @@ export class RunArcadeSession {
         if (id !== this.launchId) return
         this.set({ save: { state: "erreur", detail: error instanceof Error ? error.message : "échec" } })
       })
+  }
+
+  /** Un nouvel essai a écrit ce champion : si c’est celui de cette course, la ligne « Neon » passe à « écrit ». */
+  confirmSaved(record: Pick<ChampionRecord, "generation" | "runner" | "savedAt">, source: string) {
+    const champion = this.snapshot.champion
+    if (!champion || this.snapshot.save.state !== "erreur") return
+    const same =
+      champion.generation === record.generation && champion.runner === record.runner && champion.savedAt === record.savedAt
+    if (same) this.set({ save: { state: "ok", detail: source } })
   }
 
   pause() {
@@ -689,15 +727,15 @@ export class RunArcadeSession {
     }
   }
 
-  /** Termine tout de suite l’avant-course, ou la tranche du tour en cours. */
+  /** Termine tout de suite l’avant-course, ou la tranche du tour en cours. En pause, la course reste en pause. */
   skip() {
-    if (this.snapshot.pausedLeftMs != null) this.set({ pausedLeftMs: null })
+    const paused = this.snapshot.pausedLeftMs != null
     if (this.snapshot.phase === "avant") {
       this.clearTimers()
-      this.startCourse()
+      this.startCourse(paused)
     } else if (this.snapshot.phase === "course") {
       this.clearTimers()
-      this.endSlice()
+      this.endSlice(paused)
     }
   }
 
@@ -733,8 +771,16 @@ export class RunArcadeSession {
   }
 
   private pump() {
-    const { phase, pausedLeftMs, ia, minutes } = this.snapshot
-    if ((phase !== "avant" && phase !== "course") || pausedLeftMs != null || ia === "absente" || minutes <= 0) return
+    const { phase, pausedLeftMs, minutes } = this.snapshot
+    if ((phase !== "avant" && phase !== "course") || pausedLeftMs != null || minutes <= 0) return
+    if (this.snapshot.ia === "absente") {
+      if (this.deps.now() < this.iaRetryAt) {
+        this.scheduleWake()
+        return
+      }
+      // Le prochain appel est la sonde : s’il échoue encore, l’IA repasse « absente » pour IA_PROBE_MS.
+      this.set({ ia: "inconnu" })
+    }
     const limit = Math.max(1, this.deps.parallel ?? 1)
     while (this.pending.size < limit) {
       const id = this.nextRunner()
@@ -744,21 +790,21 @@ export class RunArcadeSession {
     this.scheduleWake()
   }
 
+  /** Réveille la file au prochain cooldown, ou à la prochaine sonde d’une IA absente, quel que soit le nombre d’appels en vol. */
   private scheduleWake() {
-    if (this.wake != null || this.cooldown.size === 0) return
+    if (this.wake != null) return
     const now = this.deps.now()
-    const next = Math.min(...this.cooldown.values())
-    if (next <= now) {
-      this.cooldown.forEach((until, id) => {
-        if (until <= now) this.cooldown.delete(id)
-      })
-      return
+    for (const [runnerId, until] of this.cooldown) {
+      if (until <= now) this.cooldown.delete(runnerId)
     }
+    const due = [...this.cooldown.values()]
+    if (this.snapshot.ia === "absente") due.push(this.iaRetryAt)
+    if (due.length === 0) return
     const id = this.launchId
     this.wake = this.deps.setTimer(() => {
       this.wake = null
       if (id === this.launchId) this.pump()
-    }, next - now)
+    }, Math.max(0, Math.min(...due) - now))
   }
 
   /** Le prompt lit le passé lisible moins la fenêtre d’examen. Son dessin vient de ce même passé. */
@@ -823,11 +869,17 @@ export class RunArcadeSession {
       let reply: IaReply
       let image: string | null = null
       try {
-        image = capture ? await capture(id, drawing).catch(() => null) : null
-        reply = await this.deps.askIa(
-          { runnerId: id, seed, system: prompt.system, user: prompt.user, image },
-          controller.signal
-        )
+        if (capture) {
+          const shot = await this.shoot(capture, id, drawing)
+          image = shot.image
+          if (launch === this.launchId) this.drawingResult(id, shot.reason, meta)
+        }
+        reply = controller.signal.aborted
+          ? { ok: false, error: "appel annulé", aborted: true }
+          : await this.deps.askIa(
+              { runnerId: id, seed, system: prompt.system, user: prompt.user, image },
+              controller.signal
+            )
       } catch (error) {
         reply = {
           ok: false,
@@ -843,6 +895,49 @@ export class RunArcadeSession {
     return true
   }
 
+  /** Capture du dessin, au plus `CAPTURE_TIMEOUT_MS`. Ne jette jamais : l’image manque, et la raison est rendue. */
+  private async shoot(
+    capture: NonNullable<SessionDeps["capture"]>,
+    id: string,
+    draw: ThoughtDraw
+  ): Promise<{ image: string | null; reason: string | null }> {
+    let handle: unknown
+    const late = new Promise<never>((_, reject) => {
+      handle = this.deps.setTimer(
+        () => reject(new Error(`délai de ${CAPTURE_TIMEOUT_MS / 1000} s dépassé`)),
+        CAPTURE_TIMEOUT_MS
+      )
+    })
+    try {
+      const image = await Promise.race([capture(id, draw), late])
+      return image ? { image, reason: null } : { image: null, reason: "aucune image rendue" }
+    } catch (error) {
+      return { image: null, reason: error instanceof Error ? error.message : "échec" }
+    } finally {
+      this.deps.clearTimer(handle)
+    }
+  }
+
+  /** Dit pourquoi le dessin n’est pas joint. Après `CAPTURE_FAILURES_MAX` échecs de suite, il n’est plus tenté. */
+  private drawingResult(id: string, reason: string | null, meta: RequestMeta) {
+    if (!reason) {
+      this.captureFailures = 0
+      return
+    }
+    this.captureFailures += 1
+    this.log(id, "erreur", meta.cutoff, `dessin non joint : ${reason}`, meta.turn)
+    if (this.captureFailures < CAPTURE_FAILURES_MAX || this.captureOff) return
+    this.captureOff = true
+    this.set({ iaVision: false })
+    this.log(
+      id,
+      "erreur",
+      meta.cutoff,
+      `dessin coupé : ${CAPTURE_FAILURES_MAX} échecs de suite, les appels partent sans image`,
+      meta.turn
+    )
+  }
+
   private onIaReply(id: string, reply: IaReply, meta: RequestMeta) {
     if (!reply.ok) {
       if (reply.aborted) {
@@ -853,11 +948,18 @@ export class RunArcadeSession {
       this.note(id, "appel", "erreur", reply.error, meta.turn)
       this.log(id, "erreur", meta.cutoff, reply.error, meta.turn)
       this.cooldown.set(id, this.deps.now() + ERROR_COOLDOWN_MS)
+      if (reply.absent) this.iaRetryAt = this.deps.now() + IA_PROBE_MS
       this.set(reply.absent ? { ia: "absente", iaError: reply.error } : { iaError: reply.error })
       return
     }
     const latencies = [...this.snapshot.latencies, reply.latencyMs].slice(-200)
-    this.set({ ia: "ok", iaError: null, iaVision: reply.vision, latencies, medianMs: median(latencies) })
+    this.set({
+      ia: "ok",
+      iaError: null,
+      iaVision: reply.vision && !this.captureOff,
+      latencies,
+      medianMs: median(latencies),
+    })
     const refusal = lectureRefusal(reply.text, meta.lecture)
     if (refusal) {
       const mode = meta.withImage ? "appel avec le dessin" : "appel en texte, sans image"

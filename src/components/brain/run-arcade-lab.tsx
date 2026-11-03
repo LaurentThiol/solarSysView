@@ -6,6 +6,7 @@ import { captureDraw } from "@/components/brain/run-arcade-capture"
 import { RunArcadeLayers } from "@/components/brain/run-arcade-layers"
 import { LiveBand } from "@/components/brain/run-arcade-live"
 import { RunnerUniverse } from "@/components/brain/run-arcade-universe"
+import { UnsentChampions } from "@/components/brain/run-arcade-unsent"
 import { DrawBalls } from "@/components/draw-balls"
 import { HelpTip, HelpWrap, LabelHelp, TitleHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
@@ -83,6 +84,7 @@ import {
   type Thought,
   type ThoughtDraw,
 } from "@/lib/run-arcade/thought"
+import { importChampion, type ImportOutcome } from "@/lib/run-arcade/client"
 import { useDraws } from "@/lib/use-draws"
 import { cn } from "@/lib/utils"
 
@@ -467,6 +469,7 @@ export function RunArcadeLab() {
   const [imported, setImported] = useState<ChampionRecord | null>(null)
   const [history, setHistory] = useState<ChampionRecord[]>([])
   const [importError, setImportError] = useState<string | null>(null)
+  const [importOutcome, setImportOutcome] = useState<{ record: ChampionRecord; outcome: ImportOutcome } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => () => session.dispose(), [session])
@@ -626,7 +629,10 @@ export function RunArcadeLab() {
       }
       setImportError(null)
       setImported(record)
-      void saveChampion(record)
+      void importChampion(record).then((outcome) => {
+        setImportOutcome({ record, outcome })
+        if (outcome.state === "écrit") void listChampions().then(setHistory)
+      })
     }
     reader.readAsText(file)
   }
@@ -843,6 +849,13 @@ export function RunArcadeLab() {
         ) : null}
       </div>
 
+      <UnsentChampions
+        onWritten={(written) => {
+          for (const record of written) session.confirmSaved(record, "Neon")
+          void listChampions().then(setHistory)
+        }}
+      />
+
       {history.length > 0 ? (
         <div className="flex flex-col gap-1">
           <h2 className="text-xs font-medium text-muted-foreground">
@@ -881,6 +894,14 @@ export function RunArcadeLab() {
       ) : null}
 
       {importError ? <p className="text-sm text-destructive">{importError}</p> : null}
+      {importOutcome && importOutcome.record === imported ? (
+        <p
+          className={cn("text-sm", importOutcome.outcome.state === "non écrit" ? "text-destructive" : "text-muted-foreground")}
+          data-testid="run-arcade-import-outcome"
+        >
+          Champion importé : {importOutcome.outcome.text}
+        </p>
+      ) : null}
 
       {proposal && parent ? (
         <section className="rounded-xl border bg-card p-3" data-testid="run-arcade-next">

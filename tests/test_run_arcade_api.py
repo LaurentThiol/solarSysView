@@ -83,6 +83,128 @@ def test_normalize_flattens_versions_with_their_cutoff() -> None:
         normalize_champion({**_champion(), "skills": [{"id": "", "versions": []}]})
 
 
+def _figure(**fields) -> dict:
+    return {
+        **_champion()["skills"][0]["versions"][0],
+        "curve": "n2",
+        "gesture": "figure",
+        "version": 3,
+        "parent": 2,
+        "cutoff": "2026-07-28",
+        "origin": "variation",
+        **fields,
+    }
+
+
+def test_normalize_keeps_the_form_and_n_of_a_figure() -> None:
+    skill = _champion()["skills"][0]
+    versions = [
+        *skill["versions"],
+        _figure(forme="polygone", n=6),
+        _figure(forme="cercle", n=None, version=4),
+        _figure(forme=None, n="8", version=5),
+    ]
+    record = normalize_champion({**_champion(), "skills": [{**skill, "versions": versions}]})
+    params = [row["params"] for row in record["versions"]]
+    assert params[2]["forme"] == "polygone" and params[2]["n"] == 6
+    assert params[3]["forme"] == "cercle" and params[3]["n"] is None
+    assert params[4]["forme"] == "triangle" and params[4]["n"] == 8
+    for plain in params[:2]:
+        assert "forme" not in plain and "n" not in plain
+    assert params[2]["curve"] == "n2" and params[2]["gesture"] == "figure"
+    assert "suite" not in params[2] and "r" not in params[2]
+    # Le geste ne change rien aux autres champs : la ligne garde sa coupure, son origine et son examen.
+    assert record["versions"][2]["cutoff"] == "2026-07-28"
+    assert record["versions"][2]["origin"] == "variation"
+
+
+class _FakeCursor:
+    """Garde les ordres SQL. `known` : la ligne que la recherche d'un doublon rend, sinon aucune."""
+
+    def __init__(self, log: list[tuple[str, object]], known: dict | None) -> None:
+        self.log = log
+        self.known = known
+        self._sql = ""
+
+    def __enter__(self) -> "_FakeCursor":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def execute(self, sql: str, params: object = None) -> None:
+        self.log.append((" ".join(sql.split()), params))
+        self._sql = sql
+
+    def fetchone(self) -> dict | None:
+        if "FROM run_arcade_champions c" in self._sql:
+            return self.known
+        return {"id": 41, "created_at": None}
+
+
+def _insert_with(monkeypatch, record: dict, known: dict | None) -> tuple[dict, list[tuple[str, object]]]:
+    from contextlib import contextmanager
+
+    from synchro import db
+
+    log: list[tuple[str, object]] = []
+
+    class Conn:
+        def cursor(self) -> _FakeCursor:
+            return _FakeCursor(log, known)
+
+        def commit(self) -> None:
+            log.append(("COMMIT", None))
+
+    @contextmanager
+    def fake_connection(*, timeout: float | None = None):
+        yield Conn()
+
+    monkeypatch.setattr("synchro.db.connection", fake_connection)
+    return db.insert_run_arcade_champion(record), log
+
+
+def test_a_champion_already_written_is_not_written_again(monkeypatch) -> None:
+    record = normalize_champion(_champion())
+    known = {"id": 12, "created_at": None, "versions": 2}
+    row, log = _insert_with(monkeypatch, record, known)
+    assert row == {"id": 12, "created_at": None, "versions": 2, "duplicate": True}
+    statements = [sql for sql, _ in log]
+    assert any("pg_advisory_xact_lock" in sql for sql in statements)
+    assert not any(sql.startswith("INSERT") for sql in statements)
+    lookup = next(params for sql, params in log if "FROM run_arcade_champions c" in sql)
+    assert lookup == (2, "R3", "2026-10-30T09:00:00.000Z")
+
+
+def test_a_new_champion_is_written_with_each_version(monkeypatch) -> None:
+    record = normalize_champion(_champion())
+    row, log = _insert_with(monkeypatch, record, None)
+    assert row["id"] == 41 and row["versions"] == 2 and "duplicate" not in row
+    inserts = [sql for sql, _ in log if sql.startswith("INSERT")]
+    assert len(inserts) == 3
+    assert "run_arcade_champions" in inserts[0] and all("run_arcade_skill_versions" in sql for sql in inserts[1:])
+
+
+def test_a_champion_without_a_saved_date_is_never_taken_for_a_duplicate(monkeypatch) -> None:
+    record = normalize_champion({**_champion(), "savedAt": None})
+    known = {"id": 12, "created_at": None, "versions": 2}
+    row, log = _insert_with(monkeypatch, record, known)
+    assert "duplicate" not in row
+    assert not any("FROM run_arcade_champions c" in sql for sql, _ in log)
+    assert sum(1 for sql, _ in log if sql.startswith("INSERT")) == 3
+
+
+def test_the_route_says_when_the_champion_was_already_written(monkeypatch) -> None:
+    monkeypatch.setattr("synchro.db.database_configured", lambda: True)
+    monkeypatch.setattr(
+        "synchro.db.insert_run_arcade_champion",
+        lambda record: {"id": 12, "created_at": None, "versions": 2, "duplicate": True},
+    )
+    response = TestClient(create_app()).post("/api/brain/run-arcade/champion", json=_champion())
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "source": "neon", "id": 12, "versions": 2, "duplicate": True}
+
+
 def test_champion_needs_neon(monkeypatch) -> None:
     monkeypatch.setattr("synchro.db.database_configured", lambda: False)
     client = TestClient(create_app())
@@ -228,6 +350,18 @@ def test_run_arcade_layers_node() -> None:
 
 def test_run_arcade_examen_node() -> None:
     _node("test_run_arcade_examen.ts")
+
+
+def test_run_arcade_client_node() -> None:
+    _node("test_run_arcade_client.ts")
+
+
+def test_run_arcade_robustesse_node() -> None:
+    _node("test_run_arcade_robustesse.ts")
+
+
+def test_run_arcade_routes_node() -> None:
+    _node("test_run_arcade_routes.ts")
 
 
 def test_every_run_arcade_ts_test_has_a_wrapper() -> None:

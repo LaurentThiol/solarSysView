@@ -18,8 +18,11 @@ def _day(value: Any) -> str | None:
 
 
 def _params(row: dict[str, Any]) -> dict[str, Any]:
-    """Champs du geste. La suite logistique ajoute sa formule et R, seulement pour ce geste."""
+    """Champs du geste. La suite ajoute sa formule et R, la figure sa forme et son n : chacune pour son geste seulement."""
     params = {key: row.get(key) for key in PARAM_KEYS}
+    if row.get("gesture") == "figure":
+        params["forme"] = row.get("forme") or "triangle"
+        params["n"] = _int_or_none(row.get("n"))
     if row.get("gesture") != "suite":
         return params
     params["suite"] = row.get("suite") or "logistique"

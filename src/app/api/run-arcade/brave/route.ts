@@ -29,8 +29,9 @@ type BraveBody = { query?: unknown; from?: unknown; cutoff?: unknown; through?: 
 /**
  * Tirages encore cachés, lus côté serveur : l’archive embarquée et l’API Python.
  * Fermé par défaut : sans réponse de l’API, ou si elle ne remonte pas jusqu’à la coupure, la route ne les connaît pas (null).
+ * `cancelled` : le signal de la requête. Le navigateur qui annule coupe aussi cette lecture.
  */
-async function hiddenDraws(cutoff: string): Promise<HiddenDraw[] | null> {
+async function hiddenDraws(cutoff: string, cancelled: AbortSignal): Promise<HiddenDraw[] | null> {
   const byDate = new Map<string, HiddenDraw>()
   for (const draw of DRAWS) {
     if (draw.date >= cutoff) byDate.set(draw.date, { date: draw.date, numbers: draw.numbers, stars: draw.stars })
@@ -40,7 +41,7 @@ async function hiddenDraws(cutoff: string): Promise<HiddenDraw[] | null> {
   try {
     const response = await fetch(`${base}/api/draws?limit=${HIDDEN_PAGE}&offset=0`, {
       cache: "no-store",
-      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+      signal: AbortSignal.any([cancelled, AbortSignal.timeout(HEALTH_TIMEOUT_MS)]),
     })
     if (!response.ok) return null
     const body = (await response.json()) as {
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
   const guard = guardQuery(String(body?.query ?? ""), cutoff)
   if (!guard.ok) return NextResponse.json({ ok: false, error: guard.error }, { status: 400 })
 
-  const hidden = await hiddenDraws(cutoff)
+  const hidden = await hiddenDraws(cutoff, request.signal)
   if (!hidden) return unreadable("Brave refusé : l’API des tirages ne répond pas, les tirages cachés sont inconnus.")
   if (!knowsThrough(hidden, through)) {
     return unreadable(`Brave refusé : l’API des tirages ne connaît pas le tirage du ${through}, dernier de la piste.`)
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
     response = await fetch(`${BRAVE_URL}?${params}`, {
       headers: { Accept: "application/json", "X-Subscription-Token": key },
       cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(10_000)]),
     })
   } catch (error) {
     return NextResponse.json(
