@@ -18,7 +18,7 @@ import {
 import { departSentence } from "./depart"
 import { formatCents, lectureWord, LECTURE_KEYS, type Lecture, type LectureWord, type RunnerMind } from "./thought"
 
-/** Exemple JSON déjà valide, que le modèle peut recopier tel quel. */
+/** Forme JSON d’une skill, déjà valide. Dans le prompt, la lecture vient du dessin. */
 export const SKILL_EXAMPLE = {
   action: "skill",
   name: "Somme lente",
@@ -89,6 +89,12 @@ export type PromptInput = {
   dropped?: number
 }
 
+/** JSON d’exemple. S’il y a un dessin, la lecture est celle qu’il demande de recopier. */
+function promptJson(example: typeof SKILL_EXAMPLE | typeof BRAVE_EXAMPLE, drawing: string | null) {
+  const lecture = drawing ? lectureFromText(drawing) : null
+  return JSON.stringify(lecture ? { ...example, lecture } : example)
+}
+
 export function buildPrompt(input: PromptInput) {
   const system = [
     `Tu es ${input.mind.name}, un runner de runArcade.`,
@@ -96,8 +102,8 @@ export function buildPrompt(input: PromptInput) {
     "À chaque tirage, tu dessines un vecteur par courbe. La somme passe d’abord, puis les rangs : la case jouée reste près de la pensée et la somme l’ajuste. Elle ne se cale pas sur 10, 20, 30, 40 ou 50. La décennie affichée est celle des numéros joués.",
     "Tu paies 2,50 € par tour. Chaque numéro trouvé parmi les cinq boules rapporte 2 €, chaque étoile trouvée parmi les deux étoiles rapporte 2 €, quel que soit le rang.",
     "Réponds par un seul objet JSON, sans texte autour. Deux actions, chacune déjà valide :",
-    `Skill : ${JSON.stringify(SKILL_EXAMPLE)}`,
-    `Recherche : ${JSON.stringify(BRAVE_EXAMPLE)}`,
+    `Skill : ${promptJson(SKILL_EXAMPLE, input.drawing)}`,
+    `Recherche : ${promptJson(BRAVE_EXAMPLE, input.drawing)}`,
     "Pour une recherche, laisse query vide. La relation entre les valeurs déjà lues est mesurée ici.",
     `curve : ${CURVE_KEYS.join(", ")} ou *. gesture : ${GESTURES.join(", ")}. ratio : ${GOLDEN_RATIOS.join(", ")}. span : ${SPANS.join(", ")}. window : entier de ${WINDOW_MIN} à ${WINDOW_MAX}. days : 0 s’il n’y a pas de fenêtre longue, sinon un entier de ${DAYS_MIN} à ${DAYS_MAX}. suite : ${SUITES.join(", ")}. r : ${LOGISTIC_R.join(", ")}. suite et r ne comptent que pour le geste suite. forme : ${FORMES.join(", ")}. n : 0 si la forme n’en a pas, sinon 4, 5, 6 ou 8 côtés, 4, 6, 8 ou 12 pour la période, 15, 30 ou 45 pour le tour. forme et n ne comptent que pour le geste figure.`,
     "Une skill sur une courbe déjà pilotée en devient une nouvelle version. Une seule skill nouvelle par lancement.",

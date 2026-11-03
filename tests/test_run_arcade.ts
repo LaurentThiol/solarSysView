@@ -578,6 +578,44 @@ test("the five words follow the mask, and a contradicted JSON is refused", () =>
   assert.equal(JSON.stringify(flat).includes("2099"), false)
 })
 
+test("a measured écart is kept, and correspond copied in its place is still refused", () => {
+  const draw = think(
+    mindWith({ curve: "n1", gesture: "glisse", ratio: 0.618, span: "pas", window: 6, days: null }, "n1"),
+    withN1([1, 1, 1, 1, 2, 8])
+  ).draw
+  assert.equal(draw.lecture.tangente, "ecarte")
+
+  const prompt = buildPrompt({
+    mind,
+    past: series(4),
+    hiddenDate: "2099-01-01",
+    examCents: null,
+    notes: [],
+    drawing: drawingText(draw),
+  })
+  assert.match(prompt.system, /Recopie-la dans lecture/)
+  const skillLine = prompt.system.split("\n").find((line) => line.startsWith("Skill : "))
+  const braveLine = prompt.system.split("\n").find((line) => line.startsWith("Recherche : "))
+  assert.ok(skillLine)
+  assert.ok(braveLine)
+  const skill = JSON.parse(skillLine.slice("Skill : ".length)) as { lecture: typeof draw.lecture }
+  const brave = JSON.parse(braveLine.slice("Recherche : ".length)) as { lecture: typeof draw.lecture }
+  assert.deepEqual(skill.lecture, draw.lecture)
+  assert.deepEqual(brave.lecture, draw.lecture)
+  assert.equal(skill.lecture.tangente, "ecarte")
+
+  const faithful = JSON.stringify({ ...SKILL_EXAMPLE, lecture: draw.lecture })
+  assert.equal(lectureRefusal(faithful, draw.lecture), null)
+  assert.equal(parseAction(faithful, draw.lecture)?.kind, "skill")
+
+  const copied = JSON.stringify({ ...SKILL_EXAMPLE, lecture: { ...draw.lecture, tangente: "correspond" } })
+  assert.equal(parseAction(copied, draw.lecture), null)
+  assert.equal(
+    lectureRefusal(copied, draw.lecture),
+    "le modèle écrit « tangente correspond », la mesure dit « tangente s’écarte »"
+  )
+})
+
 test("an observation is dated on first sight and counted on the next draw, not twice on the same one", () => {
   assert.equal(formatObservationDate("2026-03-12"), "12 mars 2026")
   assert.equal(formatObservationDate("2026-03-01"), "1er mars 2026")
