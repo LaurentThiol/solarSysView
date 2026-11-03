@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 
 import { captureDraw } from "@/components/brain/run-arcade-capture"
 import { RunArcadeLayers } from "@/components/brain/run-arcade-layers"
@@ -17,6 +17,7 @@ import { departBounds, droppedBefore, sincePast, snapDepart, type DepartMode } f
 import { askBrave, askIa, exportChampion, listChampions, loadChampion, readChampionFile, saveChampion } from "@/lib/run-arcade/client"
 import { formatDuration, raceDurationMs, servedPerSlice } from "@/lib/run-arcade/clock"
 import { CURVE_KEYS, curveLabel, curveValues, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
+import { fonctionnelBoard, type FonctionnelCell } from "@/lib/run-arcade/fonctionnel"
 import { RUN_ARCADE_HELP } from "@/lib/run-arcade/help"
 import { layerPoints } from "@/lib/run-arcade/layers"
 import { createSession, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
@@ -136,6 +137,100 @@ function refusedLabel(count: number) {
   return count === 1 ? "1 essai refusé" : `${count} essais refusés`
 }
 
+function cellStateLabel(cell: FonctionnelCell) {
+  if (cell.panne && cell.count > 1) return `${cell.state} · ${cell.count}`
+  return cell.state
+}
+
+function cellTone(cell: FonctionnelCell) {
+  if (cell.state === "erreur") return "border-destructive/40 bg-destructive/10 text-destructive"
+  if (cell.state === "refusé") return "border-chart-5/40 bg-chart-5/15"
+  if (cell.state === "en cours") return "border-chart-4/50 text-chart-4"
+  if (cell.state === "interrompu") return "border-border bg-muted"
+  if (cell.state === "sauté" || cell.state === "—") return "border-transparent text-muted-foreground"
+  return "border-border"
+}
+
+function FonctionnelTable({ snapshot }: { snapshot: SessionSnapshot }) {
+  const race = snapshot.race
+  if (!race) return null
+  const names = Object.fromEntries(race.runners.map((runner) => [runner.mind.id, runner.mind.name]))
+  const board = fonctionnelBoard({
+    phase: snapshot.phase,
+    minutes: snapshot.minutes,
+    paused: snapshot.pausedLeftMs != null,
+    ia: snapshot.ia,
+    iaError: snapshot.iaError,
+    turn: race.cursor - race.start + 1,
+    runnerIds: race.runners.map((runner) => runner.mind.id),
+    names,
+    steps: snapshot.xraySteps,
+    activity: snapshot.activity,
+  })
+  return (
+    <div className="mt-3" data-testid="run-arcade-fonctionnel">
+      <h3 className="text-xs font-medium text-muted-foreground">Fonctionnel</h3>
+      <p className="mt-1 text-xs" data-testid="run-arcade-fonctionnel-panne">
+        {board.headline}
+      </p>
+      {board.course ? <p className="mt-1 text-xs text-muted-foreground">{board.course}</p> : null}
+      <p className="mt-2 text-xs text-muted-foreground">{board.momentLabel}</p>
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full min-w-[48rem] border-collapse text-left text-xs">
+          <thead>
+            <tr>
+              <th className="w-16" />
+              {board.model.map((item) => (
+                <th key={item.op} scope="col" className="px-1 align-top font-medium">
+                  {item.label}
+                  <span className="mt-1 block font-normal text-muted-foreground">{item.rule}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {board.rows.map((row) => (
+              <Fragment key={row.runnerId}>
+                <tr data-testid={`run-arcade-fonctionnel-${row.runnerId}`}>
+                  <th scope="row" className="py-1 pr-2 align-top font-medium">
+                    {row.name}
+                  </th>
+                  {row.cells.map((cell) => {
+                    const showResult = Boolean(cell.result) && (cell.panne || cell.op === "jeu")
+                    return (
+                      <td
+                        key={cell.op}
+                        className={cn("border px-1 py-1 align-top", cellTone(cell))}
+                        data-state={cell.state}
+                        title={cell.result ?? cell.rule}
+                      >
+                        <p>{cellStateLabel(cell)}</p>
+                        {showResult ? <p className="mt-0.5 font-normal">{cell.result}</p> : null}
+                      </td>
+                    )
+                  })}
+                </tr>
+                {row.detail ? (
+                  <tr>
+                    <td colSpan={7} className="pb-2 text-muted-foreground">
+                      {row.detail}
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {board.quietLabel ? (
+        <p className="mt-1 text-xs text-muted-foreground" data-testid="run-arcade-fonctionnel-quiet">
+          {board.quietLabel}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function XrayPanel({ snapshot }: { snapshot: SessionSnapshot }) {
   const race = snapshot.race
   if (!race) return null
@@ -151,6 +246,7 @@ function XrayPanel({ snapshot }: { snapshot: SessionSnapshot }) {
   return (
     <section className="rounded-xl border bg-card p-3" data-testid="run-arcade-xray">
       <h2 className="text-sm font-medium">Rayons X</h2>
+      <FonctionnelTable snapshot={snapshot} />
       <div className="mt-3">
         <h3 className="text-xs font-medium text-muted-foreground">Avant</h3>
         <ul className="mt-1 flex flex-col gap-1 text-xs">

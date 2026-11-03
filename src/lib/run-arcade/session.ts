@@ -13,6 +13,7 @@ import { median, rotate, sliceMs } from "./clock"
 import { buildTrack, type RankPoint } from "./curves"
 import { assignDeparts, droppedBefore, sincePast, type DepartChoice } from "./depart"
 import { examine, passesExam, promptPast } from "./examen"
+import { ruleFor } from "./fonctionnel"
 import { buildPrompt, lectureRefusal, parseAction } from "./prompt"
 import {
   addVersion,
@@ -46,10 +47,14 @@ import {
   prepDetail,
   receiptsOf,
   XRAY_KEEP,
+  XRAY_STEP_KEEP,
   type XrayActivity,
   type XrayAttempt,
+  type XrayOp,
   type XrayPrep,
   type XrayReceipt,
+  type XrayStep,
+  type XrayStepState,
 } from "./xray"
 
 export type SessionPhase = "idle" | "avant" | "course" | "fin"
@@ -130,6 +135,8 @@ export type SessionSnapshot = {
   xrayPrep: XrayPrep[]
   /** Reçus des tours joués, hors du journal du champion. */
   xrayReceipts: XrayReceipt[]
+  /** Pas du schéma fonctionnel, hors du journal du champion. */
+  xraySteps: XrayStep[]
   /** Appels, recherches et propositions encore ouverts. */
   activity: XrayActivity
   /** Observations reconnues pendant la course, la plus ancienne d’abord. */
@@ -187,6 +194,7 @@ function emptySnapshot(): SessionSnapshot {
     journal: [],
     xrayPrep: [],
     xrayReceipts: [],
+    xraySteps: [],
     activity: emptyActivity(),
     observations: [],
     error: null,
@@ -284,6 +292,20 @@ export class RunArcadeSession {
       detail,
     }
     this.set({ journal: [...this.snapshot.journal, entry].slice(-JOURNAL_KEEP * 4) })
+  }
+
+  /** Pas du schéma fonctionnel. `turn` absent : le tour de l’horloge. `null` : l’avant-course. */
+  private note(runnerId: string, op: XrayOp, state: XrayStepState, result: string, turn?: number | null) {
+    const entry: XrayStep = {
+      at: new Date(this.deps.now()).toISOString(),
+      turn: turn === undefined ? this.turnNumber() : turn,
+      runnerId,
+      op,
+      state,
+      rule: ruleFor(op),
+      result,
+    }
+    this.set({ xraySteps: [...this.snapshot.xraySteps, entry].slice(-XRAY_STEP_KEEP) })
   }
 
   private turnNumber() {
@@ -501,6 +523,11 @@ export class RunArcadeSession {
     if (!before) return
     const played = playTurn(before, this.snapshot.track)
     const at = new Date(this.deps.now()).toISOString()
+    const turn = before.cursor - before.start + 1
+    for (const receipt of receiptsOf(before, played, at)) {
+      const stopped = receipt.detail.includes("ne paie plus le ticket")
+      this.note(receipt.runnerId, "jeu", stopped ? "refusé" : "fait", receipt.detail, turn)
+    }
     for (const runner of played.runners) {
       if (!runner.alive) this.abortRunner(runner.mind.id)
     }
@@ -661,10 +688,25 @@ export class RunArcadeSession {
   private dispatch(id: string): boolean {
     const runner = this.runner(id)
     const hiddenDate = this.hiddenDate()
-    if (!runner || !hiddenDate) return false
+    if (!runner) {
+      this.note(id, "appel", "sauté", "Ce runner n’est plus là.")
+      return false
+    }
+    if (!hiddenDate) {
+      this.note(id, "passage", "fait", "Son tour.")
+      this.note(id, "appel", "sauté", "Pas de tirage caché.")
+      return false
+    }
     const learned = promptPast(this.readablePast())
     const past = sincePast(learned, runner.since)
-    if (past.length < 2) return false
+    if (past.length < 2) {
+      this.note(id, "passage", "fait", "Son tour.")
+      const reason = runner.since
+        ? "Moins de deux tirages lisibles depuis le départ."
+        : "Passé trop court : moins de deux tirages lisibles."
+      this.note(id, "appel", "sauté", reason)
+      return false
+    }
     const cutoff = past[past.length - 1].date
     const drawing = think(runner.mind, past, { hiddenDate }).draw
     const prompt = buildPrompt({
@@ -692,6 +734,8 @@ export class RunArcadeSession {
       lecture: drawing.lecture,
       withImage: false,
     }
+    this.note(id, "passage", "fait", "Son tour.")
+    this.note(id, "appel", "en cours", "L’appel est parti.")
     const launch = this.launchId
     const capture = this.snapshot.iaVision && this.deps.capture ? this.deps.capture : null
     void (async () => {
@@ -721,9 +765,11 @@ export class RunArcadeSession {
   private onIaReply(id: string, reply: IaReply, meta: RequestMeta) {
     if (!reply.ok) {
       if (reply.aborted) {
+        this.note(id, "appel", "interrompu", "Appel interrompu.", meta.turn)
         this.set({ inFlight: this.pending.size })
         return
       }
+      this.note(id, "appel", "erreur", reply.error, meta.turn)
       this.log(id, "erreur", meta.cutoff, reply.error, meta.turn)
       this.cooldown.set(id, this.deps.now() + ERROR_COOLDOWN_MS)
       this.set(reply.absent ? { ia: "absente", iaError: reply.error } : { iaError: reply.error })
@@ -734,26 +780,35 @@ export class RunArcadeSession {
     const refusal = lectureRefusal(reply.text, meta.lecture)
     if (refusal) {
       const mode = meta.withImage ? "appel avec le dessin" : "appel en texte, sans image"
+      this.note(id, "appel", "refusé", `lecture refusée · ${refusal}`, meta.turn)
       this.log(id, "refus", meta.cutoff, `${mode} · lecture refusée · ${refusal}`, meta.turn)
       return
     }
     const action = parseAction(reply.text, meta.lecture)
     if (!action) {
+      this.note(id, "appel", "refusé", "réponse illisible", meta.turn)
       this.log(id, "refus", meta.cutoff, "réponse illisible", meta.turn)
       return
     }
     if (action.kind === "brave") {
+      this.note(id, "appel", "fait", `demande une recherche : ${action.query}`, meta.turn)
       this.searchBrave(id, action.query, meta, 0)
       return
     }
-    this.log(id, "ia", meta.cutoff, this.callDetail(meta, `propose : ${describeSkill(action.params)}`), meta.turn)
+    const proposal = `propose : ${describeSkill(action.params)}`
+    this.note(id, "appel", "fait", proposal, meta.turn)
+    this.log(id, "ia", meta.cutoff, this.callDetail(meta, proposal), meta.turn)
     this.inbox.push({ runnerId: id, params: action.params, name: action.name, phrase: action.phrase, cutoff: meta.cutoff })
     if (this.snapshot.phase === "avant") this.applyInbox()
-    else this.set({ inFlight: this.pending.size })
+    else {
+      this.note(id, "attente", "en cours", describeSkill(action.params), meta.turn)
+      this.set({ inFlight: this.pending.size })
+    }
   }
 
   private searchBrave(id: string, query: string, meta: RequestMeta, attempt: number) {
     if (this.snapshot.brave === "absente") {
+      this.note(id, "recherche", "refusé", "Brave absente", meta.turn)
       this.log(id, "refus", meta.cutoff, "Brave absente", meta.turn)
       this.set({ inFlight: this.pending.size })
       return
@@ -761,9 +816,11 @@ export class RunArcadeSession {
     const runner = this.runner(id)
     const track = this.snapshot.track
     if (!runner || !runner.alive || track.length === 0) {
+      this.note(id, "recherche", "sauté", runner && runner.alive ? "Piste vide." : "Runner arrêté.", meta.turn)
       this.set({ inFlight: this.pending.size })
       return
     }
+    this.note(id, "recherche", "en cours", attempt === 0 ? `« ${query} »` : `nouvel essai : « ${query} »`, meta.turn)
     const year = Number(track[track.length - 1].date.slice(0, 4))
     const controller = new AbortController()
     this.braving.set(id, controller)
@@ -784,6 +841,7 @@ export class RunArcadeSession {
         if (this.braving.get(id) === controller) this.braving.delete(id)
         if (!reply.ok) {
           if (reply.aborted) {
+            this.note(id, "recherche", "interrompu", "Recherche interrompue.", meta.turn)
             this.set({ inFlight: this.pending.size })
             return
           }
@@ -797,11 +855,15 @@ export class RunArcadeSession {
             }, Math.max(500, reply.retryAfterMs))
             return
           }
-          this.log(id, "erreur", meta.cutoff, `Brave : ${reply.error}`, meta.turn)
+          const detail = `Brave : ${reply.error}`
+          this.note(id, "recherche", "erreur", detail, meta.turn)
+          this.log(id, "erreur", meta.cutoff, detail, meta.turn)
           this.set(reply.absent ? { brave: "absente", braveError: reply.error } : { braveError: reply.error })
         } else {
           this.notes.set(id, reply.results.slice(0, 5))
-          this.log(id, "brave", meta.cutoff, `« ${query} » : ${reply.results.length} résultat(s) lisible(s)`, meta.turn)
+          const detail = `« ${query} » : ${reply.results.length} résultat(s) lisible(s)`
+          this.note(id, "recherche", "fait", detail, meta.turn)
+          this.log(id, "brave", meta.cutoff, detail, meta.turn)
           this.set({ brave: "ok", braveError: null })
         }
         this.pump()
@@ -816,13 +878,18 @@ export class RunArcadeSession {
     const readable = this.readablePast()
     for (const item of items) {
       const runner = this.runner(item.runnerId)
+      this.note(item.runnerId, "attente", "fait", "La proposition passe à l’examen.")
       if (!runner || !runner.alive) {
-        this.log(item.runnerId, "refus", item.cutoff, "runner arrêté : ses skills restent à leur version")
+        const detail = "runner arrêté : ses skills restent à leur version"
+        this.note(item.runnerId, "examen", "refusé", detail)
+        this.log(item.runnerId, "refus", item.cutoff, detail)
         continue
       }
       const isNewCurve = !runner.mind.skills.some((skill) => currentVersion(skill).curve === item.params.curve)
       if (isNewCurve && (this.added.get(runner.mind.id) ?? 0) >= 1) {
-        this.log(runner.mind.id, "refus", item.cutoff, "une seule skill nouvelle par lancement")
+        const detail = "une seule skill nouvelle par lancement"
+        this.note(runner.mind.id, "examen", "refusé", detail)
+        this.log(runner.mind.id, "refus", item.cutoff, detail)
         continue
       }
       const before = examine(runner.mind, readable, undefined, runner.since)
@@ -835,30 +902,24 @@ export class RunArcadeSession {
       )
       const after = examine(candidate.mind, readable, undefined, runner.since)
       if (!passesExam(after, before)) {
+        const detail = `examen ${formatCents(after.cents)}, pas au-dessus de ${formatCents(before.cents)}`
         this.updateRunner(runner.mind.id, (live) => ({ ...live, examCents: before.cents }))
-        this.log(
-          runner.mind.id,
-          "refus",
-          item.cutoff,
-          `examen ${formatCents(after.cents)}, pas au-dessus de ${formatCents(before.cents)}`
-        )
+        this.note(runner.mind.id, "examen", "refusé", detail)
+        this.log(runner.mind.id, "refus", item.cutoff, detail)
         continue
       }
       if (candidate.isNew) this.added.set(runner.mind.id, (this.added.get(runner.mind.id) ?? 0) + 1)
       const mind = withExam(candidate.mind, item.params.curve, after.cents)
       const skill = mind.skills.find((entry) => currentVersion(entry).curve === item.params.curve)
+      const detail = `${skill?.name ?? "skill"} v${skill ? currentVersion(skill).version : 1} gardée, examen ${formatCents(after.cents)}`
       this.updateRunner(runner.mind.id, (live) => ({
         ...live,
         mind,
         examCents: after.cents,
         added: this.added.get(runner.mind.id) ?? 0,
       }))
-      this.log(
-        runner.mind.id,
-        "skill",
-        item.cutoff,
-        `${skill?.name ?? "skill"} v${skill ? currentVersion(skill).version : 1} gardée, examen ${formatCents(after.cents)}`
-      )
+      this.note(runner.mind.id, "examen", "fait", detail)
+      this.log(runner.mind.id, "skill", item.cutoff, detail)
     }
     if (this.snapshot.phase === "avant" && this.snapshot.race) {
       const previewed = previewTurn(this.snapshot.race, this.snapshot.track)

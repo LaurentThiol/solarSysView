@@ -1,0 +1,9 @@
+{
+  "slug": "run-arcade-fonctionnel-ed92",
+  "happened_on": "2026-11-03",
+  "area": "runArcade",
+  "title": "Rayons X : schéma fonctionnel",
+  "body": "Le panneau Rayons X gagne une fenêtre Fonctionnel, devant Avant, En ce moment, Tour et Fil. Six opérations s’y lisent dans l’ordre : Passage, Appel, Recherche, Attente, Examen, Jeu. Chaque case dit où en est le runner, et la phrase du haut nomme la première panne de ce moment. S’il n’y en a pas, elle garde la dernière de la course. À zéro minute, les appels sont marqués sautés et le Jeu porte la grille. La variation maison reste dans Avant.",
+  "pr_number": null,
+  "pr_url": null
+}

@@ -15,6 +15,7 @@ import {
   type SessionDeps,
 } from "../src/lib/run-arcade/session.ts"
 import { addVersion, newSkill } from "../src/lib/run-arcade/skills.ts"
+import { fonctionnelBoard } from "../src/lib/run-arcade/fonctionnel.ts"
 import { chainHiddenDate, thoughtChain, xrayFeed } from "../src/lib/run-arcade/xray.ts"
 
 function dateAt(index: number) {
@@ -481,6 +482,9 @@ test("xray leaves a receipt for each played turn and names a runner who cannot p
   assert.match(stopped.detail, /s’arrête/)
   assert.match(stopped.detail, /2,50 €/)
   assert.equal(stopped.detail.includes("joue"), false)
+  const stoppedStep = session.getSnapshot().xraySteps.find((item) => item.turn === 2 && item.runnerId === "r1" && item.op === "jeu")
+  assert.equal(stoppedStep?.state, "refusé")
+  assert.match(stoppedStep?.result ?? "", /ne paie plus le ticket/)
   session.dispose()
 })
 
@@ -597,5 +601,132 @@ test("playing the previewed draw does not count the observation again", async ()
     assert.equal(kept?.count, 1)
     assert.equal(kept?.createdOn, item.createdOn)
   }
+  session.dispose()
+})
+
+test("an IA error leaves an appel step", async () => {
+  const { ia, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  await flush()
+  const opening = session.getSnapshot().xraySteps.filter((item) => item.runnerId === "r1")
+  assert.equal(opening.some((item) => item.op === "passage" && item.state === "fait"), true)
+  assert.equal(opening.some((item) => item.op === "appel" && item.state === "en cours"), true)
+  ia[0].resolve({ ok: false, error: "modèle absent", absent: true })
+  await flush()
+  const failed = session.getSnapshot().xraySteps.filter((item) => item.op === "appel")
+  assert.equal(failed[failed.length - 1]?.state, "erreur")
+  assert.equal(failed[failed.length - 1]?.result, "modèle absent")
+  assert.equal(failed[failed.length - 1]?.turn, null)
+  session.dispose()
+})
+
+test("an aborted call leaves an interrupted step", async () => {
+  const { ia, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  await flush()
+  assert.equal(ia.length, 1)
+  session.skip()
+  const race = session.getSnapshot().race
+  assert.ok(race)
+  const internal = session as unknown as { set(patch: object): void }
+  internal.set({
+    race: {
+      ...race,
+      runners: race.runners.map((runner) => ({ ...runner, cents: 0, alive: true })),
+    },
+  })
+  session.skip()
+  await flush()
+  const step = session.getSnapshot().xraySteps.find((item) => item.op === "appel" && item.state === "interrompu")
+  assert.ok(step)
+  assert.equal(step.runnerId, "r1")
+  assert.equal(step.result, "Appel interrompu.")
+  session.dispose()
+})
+
+test("an exam that does not rise leaves a refused step", async () => {
+  const { ia, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  await flush()
+  const lecture = lectureFromText(ia[0].request.user)
+  ia[0].resolve({
+    ok: true,
+    text: JSON.stringify({
+      action: "skill",
+      name: "Essai",
+      curve: "*",
+      gesture: "persiste",
+      ratio: 0.618,
+      span: "bande",
+      window: 8,
+      days: null,
+      lecture,
+    }),
+    latencyMs: 10,
+    model: "t",
+    vision: false,
+  })
+  await flush()
+  const exam = session.getSnapshot().xraySteps.find((item) => item.op === "examen")
+  assert.ok(exam)
+  assert.equal(exam.state, "refusé")
+  assert.match(exam.result, /pas au-dessus/)
+  const wait = session.getSnapshot().xraySteps.find((item) => item.op === "attente")
+  assert.equal(wait?.state, "fait")
+  session.dispose()
+})
+
+test("a short past since the departure skips the call", async () => {
+  const { ia, session } = harness(1)
+  session.launch({ count: 2, draws: 4, minutes: 1, series: series(40), champion: null })
+  await flush()
+  const race = session.getSnapshot().race
+  assert.ok(race)
+  const internal = session as unknown as { set(patch: object): void }
+  internal.set({
+    race: {
+      ...race,
+      runners: race.runners.map((runner) => (runner.mind.id === "r2" ? { ...runner, since: "2099-01-01" } : runner)),
+    },
+  })
+  ia[0].resolve(unreadable)
+  await flush()
+  const skipped = session.getSnapshot().xraySteps.find((item) => item.runnerId === "r2" && item.op === "appel")
+  assert.equal(skipped?.state, "sauté")
+  assert.match(skipped?.result ?? "", /depuis le départ/)
+  session.dispose()
+})
+
+test("a played turn records a jeu step and zero minutes skips the calls", () => {
+  const { session } = harness(1)
+  session.launch({ count: 2, draws: 4, minutes: 0, series: series(40), champion: null })
+  assert.equal(session.getSnapshot().xraySteps.length, 0)
+  session.skip()
+  const snap = session.getSnapshot()
+  assert.equal(snap.xraySteps.length, 2)
+  for (const step of snap.xraySteps) {
+    assert.equal(step.op, "jeu")
+    assert.equal(step.state, "fait")
+    assert.equal(step.turn, 1)
+    assert.match(step.result, /joue \d+/)
+  }
+  const names = Object.fromEntries((snap.race?.runners ?? []).map((runner) => [runner.mind.id, runner.mind.name]))
+  const board = fonctionnelBoard({
+    phase: snap.phase,
+    minutes: snap.minutes,
+    paused: snap.pausedLeftMs != null,
+    ia: snap.ia,
+    iaError: snap.iaError,
+    turn: snap.race ? snap.race.cursor - snap.race.start + 1 : null,
+    runnerIds: snap.race?.runners.map((runner) => runner.mind.id) ?? [],
+    names,
+    steps: snap.xraySteps,
+    activity: snap.activity,
+  })
+  const row = board.rows.find((item) => item.runnerId === "r1")
+  assert.equal(row?.cells.find((cell) => cell.op === "appel")?.state, "sauté")
+  assert.equal(row?.cells.find((cell) => cell.op === "appel")?.panne, false)
+  assert.match(row?.cells.find((cell) => cell.op === "jeu")?.result ?? "", /joue/)
+  assert.match(board.course ?? "", /Zéro minute/)
   session.dispose()
 })

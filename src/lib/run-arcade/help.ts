@@ -77,6 +77,10 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
         label: "Tour",
         text: "Grille jouée, trouvés, 2,50 € du ticket, 2,00 € par trouvé, solde. Sous le dessin, la chaîne relie le dernier point, le geste, la pensée et la case jouée.",
       },
+      {
+        label: "Fonctionnel",
+        text: "Six opérations, de Passage à Jeu, avec la règle sous chaque case. La phrase du haut nomme la première panne de ce moment. S’il n’y en a pas, elle garde la dernière de la course. À zéro minute, Appel, Recherche, Attente et Examen sont sautés. La variation maison reste dans Avant.",
+      },
     ],
   },
   lancer: {

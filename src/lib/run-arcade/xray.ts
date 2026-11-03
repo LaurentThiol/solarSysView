@@ -50,6 +50,24 @@ export type XrayActivity = {
   pending: XrayPending[]
 }
 
+/** Opération du schéma fonctionnel, dans l’ordre du tour. */
+export type XrayOp = "passage" | "appel" | "recherche" | "attente" | "examen" | "jeu"
+
+/** Issue d’une opération. « sauté » est une vraie panne seulement si un pas l’a enregistré. */
+export type XrayStepState = "en cours" | "fait" | "sauté" | "refusé" | "erreur" | "interrompu"
+
+/** Pas d’une opération, hors du journal du champion. */
+export type XrayStep = {
+  at: string
+  /** Null pendant l’avant-course. */
+  turn: number | null
+  runnerId: string
+  op: XrayOp
+  state: XrayStepState
+  rule: string
+  result: string
+}
+
 export type XrayLine = {
   at: string
   text: string
@@ -64,6 +82,8 @@ export type ThoughtChain = {
 
 /** Reçus conservés. Un tour de cinquante runners tient encore dans la fenêtre. */
 export const XRAY_KEEP = 400
+/** Pas du schéma fonctionnel. Deux tours chargés de cinquante runners tiennent encore. */
+export const XRAY_STEP_KEEP = 800
 const FEED_KEEP = 12
 
 export function emptyActivity(): XrayActivity {
