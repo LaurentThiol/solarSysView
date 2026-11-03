@@ -71,7 +71,11 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "En ce moment",
-        text: "Qui appelle l’IA locale, qui cherche sur Brave, quelle proposition attend la fin de tranche. La carte du runner porte le même mot.",
+        text: "Qui appelle l’IA locale, qui cherche sur Brave, quelle proposition attend la fin de tranche. La carte du runner porte le même mot. La recherche en cours cite la requête.",
+      },
+      {
+        label: "Recherches Brave",
+        text: "Chaque requête du runner, dès l’envoi. La ligne dit le runner, l’avant-course ou le tour, puis en cours, le nombre de résultats lisibles, ou l’erreur. La requête est écrite en dessous, sans les sites écartés.",
       },
       {
         label: "Tour",

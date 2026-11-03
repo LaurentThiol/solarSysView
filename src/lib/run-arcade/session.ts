@@ -44,6 +44,7 @@ import {
   type ThoughtDraw,
 } from "./thought"
 import {
+  braveResultDetail,
   emptyActivity,
   prepDetail,
   receiptsOf,
@@ -51,6 +52,7 @@ import {
   XRAY_STEP_KEEP,
   type XrayActivity,
   type XrayAttempt,
+  type XrayBrave,
   type XrayOp,
   type XrayPrep,
   type XrayReceipt,
@@ -136,6 +138,8 @@ export type SessionSnapshot = {
   xrayPrep: XrayPrep[]
   /** Reçus des tours joués, hors du journal du champion. */
   xrayReceipts: XrayReceipt[]
+  /** Requêtes Brave du lancement, de l’envoi jusqu’à l’issue. */
+  xrayBrave: XrayBrave[]
   /** Pas du schéma fonctionnel, hors du journal du champion. */
   xraySteps: XrayStep[]
   /** Appels, recherches et propositions encore ouverts. */
@@ -195,6 +199,7 @@ function emptySnapshot(): SessionSnapshot {
     journal: [],
     xrayPrep: [],
     xrayReceipts: [],
+    xrayBrave: [],
     xraySteps: [],
     activity: emptyActivity(),
     observations: [],
@@ -248,6 +253,8 @@ export class RunArcadeSession {
   private queue: string[] = []
   private readonly pending = new Map<string, AbortController>()
   private readonly braving = new Map<string, AbortController>()
+  /** Requête Brave en cours, par runner. */
+  private readonly searching = new Map<string, string>()
   private readonly cooldown = new Map<string, number>()
   private readonly notes = new Map<string, BraveNote[]>()
   private readonly added = new Map<string, number>()
@@ -278,7 +285,7 @@ export class RunArcadeSession {
   private activity(): XrayActivity {
     return {
       calling: [...this.pending.keys()],
-      searching: [...this.braving.keys()],
+      searching: [...this.searching.entries()].map(([runnerId, query]) => ({ runnerId, query })),
       pending: this.inbox.map((item) => ({ runnerId: item.runnerId, detail: describeSkill(item.params) })),
     }
   }
@@ -365,6 +372,7 @@ export class RunArcadeSession {
     for (const controller of this.braving.values()) controller.abort()
     this.pending.clear()
     this.braving.clear()
+    this.searching.clear()
   }
 
   private abortRunner(id: string) {
@@ -372,6 +380,7 @@ export class RunArcadeSession {
     this.braving.get(id)?.abort()
     this.pending.delete(id)
     this.braving.delete(id)
+    this.searching.delete(id)
   }
 
   dispose() {
@@ -815,8 +824,41 @@ export class RunArcadeSession {
     }
   }
 
+  /** Pose la requête dans Rayons X dès l’envoi. Un nouvel essai après 429 ne crée pas une seconde ligne. */
+  private openBrave(id: string, query: string, turn: number | null) {
+    this.searching.set(id, query)
+    if (this.snapshot.xrayBrave.some((line) => line.runnerId === id && line.state === "cours" && line.query === query)) {
+      this.set({ inFlight: this.pending.size })
+      return
+    }
+    const line: XrayBrave = {
+      at: new Date(this.deps.now()).toISOString(),
+      runnerId: id,
+      turn,
+      query,
+      state: "cours",
+      detail: "en cours",
+    }
+    this.set({ xrayBrave: [...this.snapshot.xrayBrave, line].slice(-XRAY_KEEP) })
+  }
+
+  /** Ferme la requête encore ouverte de ce runner. */
+  private closeBrave(id: string, state: "fait" | "erreur", detail: string) {
+    this.searching.delete(id)
+    const lines = [...this.snapshot.xrayBrave]
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      if (lines[index].runnerId === id && lines[index].state === "cours") {
+        lines[index] = { ...lines[index], state, detail }
+        break
+      }
+    }
+    this.set({ xrayBrave: lines })
+  }
+
   private searchBrave(id: string, query: string, meta: RequestMeta, attempt: number) {
     if (this.snapshot.brave === "absente") {
+      this.openBrave(id, query, meta.turn)
+      this.closeBrave(id, "erreur", "Brave absente")
       this.note(id, "recherche", "refusé", "Brave absente", meta.turn)
       this.log(id, "refus", meta.cutoff, "Brave absente", meta.turn)
       this.set({ inFlight: this.pending.size })
@@ -833,8 +875,8 @@ export class RunArcadeSession {
     const year = Number(track[track.length - 1].date.slice(0, 4))
     const controller = new AbortController()
     this.braving.set(id, controller)
+    this.openBrave(id, query, meta.turn)
     if (attempt === 0) this.updateRunner(id, (item) => ({ ...item, calls: item.calls + 1 }))
-    else this.set({ inFlight: this.pending.size })
     const launch = this.launchId
     this.deps
       .askBrave({ query, from: `${year - 1}-01-01`, cutoff: meta.hiddenDate }, controller.signal)
@@ -850,6 +892,7 @@ export class RunArcadeSession {
         if (this.braving.get(id) === controller) this.braving.delete(id)
         if (!reply.ok) {
           if (reply.aborted) {
+            this.closeBrave(id, "erreur", "recherche interrompue")
             this.note(id, "recherche", "interrompu", "Recherche interrompue.", meta.turn)
             this.set({ inFlight: this.pending.size })
             return
@@ -865,10 +908,12 @@ export class RunArcadeSession {
             return
           }
           const detail = `Brave : ${reply.error}`
+          this.closeBrave(id, "erreur", reply.error)
           this.note(id, "recherche", "erreur", detail, meta.turn)
           this.log(id, "erreur", meta.cutoff, detail, meta.turn)
           this.set(reply.absent ? { brave: "absente", braveError: reply.error } : { braveError: reply.error })
         } else {
+          this.closeBrave(id, "fait", braveResultDetail(reply.results.length))
           this.notes.set(id, reply.results.slice(0, 5))
           const detail = `« ${query} » : ${reply.results.length} résultat(s) lisible(s)`
           this.note(id, "recherche", "fait", detail, meta.turn)

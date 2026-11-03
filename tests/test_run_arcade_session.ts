@@ -19,7 +19,7 @@ import {
 import { addVersion, newSkill } from "../src/lib/run-arcade/skills.ts"
 import { fonctionnelBoard } from "../src/lib/run-arcade/fonctionnel.ts"
 import { revealedPast } from "../src/lib/run-arcade/thought.ts"
-import { chainHiddenDate, thoughtChain, xrayFeed } from "../src/lib/run-arcade/xray.ts"
+import { activityLines, braveHeadline, braveResultDetail, chainHiddenDate, thoughtChain, xrayFeed } from "../src/lib/run-arcade/xray.ts"
 
 function dateAt(index: number) {
   return new Date(Date.UTC(2025, 0, 3 + index * 3, 12)).toISOString().slice(0, 10)
@@ -306,10 +306,19 @@ test("Brave follows the referee cutoff and waits on a 429", async () => {
   assert.equal(ia.length, 1)
   await clock.advance(1000)
   assert.equal(brave.length, 2)
+  const waiting = session.getSnapshot().xrayBrave
+  assert.equal(waiting.length, 1)
+  assert.equal(waiting[0].state, "cours")
+  assert.equal(waiting[0].query, relation.phrase)
   brave[1].resolve({ ok: true, results: [{ title: "Suites et φ", url: "https://exemple.fr", snippet: "…" }] })
   await flush()
   assert.equal(ia.length, 2)
   assert.ok(ia[1].request.user.includes("Suites et φ"))
+  const done = session.getSnapshot().xrayBrave
+  assert.equal(done.length, 1)
+  assert.equal(done[0].state, "fait")
+  assert.equal(done[0].detail, "1 résultat lisible")
+  assert.equal(braveHeadline(done[0], "R1"), "R1 · avant-course · 1 résultat lisible")
   const noted = session.getSnapshot().journal.find((entry) => entry.kind === "brave")
   assert.ok(noted?.detail.includes(relation.phrase))
   session.dispose()
@@ -531,11 +540,46 @@ test("a Brave search appears in the xray activity, then leaves", async () => {
   session.pause()
   ia[0].resolve(braveReply(ia[0].request, "nombre d’or"))
   await flush()
-  assert.deepEqual(session.getSnapshot().activity.searching, ["r1"])
-  assert.deepEqual(session.getSnapshot().activity.calling, [])
+  const live = session.getSnapshot()
+  const track = buildTrack(series(40))
+  const learned = promptPast(revealedPast(track, track.length - 4))
+  const relation = strongestRelation(sincePast(learned, learned[0]?.date ?? ""))
+  assert.ok(relation)
+  assert.deepEqual(live.activity.searching, [{ runnerId: "r1", query: relation.phrase }])
+  assert.deepEqual(live.activity.calling, [])
+  assert.equal(live.xrayBrave.length, 1)
+  assert.equal(live.xrayBrave[0].state, "cours")
+  assert.equal(live.xrayBrave[0].query, relation.phrase)
+  assert.deepEqual(
+    activityLines(live.activity, { r1: "R1" }).map((line) => line.text),
+    [`R1 cherche : « ${relation.phrase} »`]
+  )
   brave[0]?.resolve({ ok: true, results: [] })
   await flush()
-  assert.deepEqual(session.getSnapshot().activity.searching, [])
+  const after = session.getSnapshot()
+  assert.deepEqual(after.activity.searching, [])
+  assert.equal(after.xrayBrave[0].state, "fait")
+  assert.equal(after.xrayBrave[0].detail, braveResultDetail(0))
+  session.dispose()
+})
+
+test("a failed Brave search keeps the query and the error", async () => {
+  const { ia, brave, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  await flush()
+  session.pause()
+  ia[0].resolve(braveReply(ia[0].request, "somme et plus petit rang"))
+  await flush()
+  const track = buildTrack(series(40))
+  const learned = promptPast(revealedPast(track, track.length - 4))
+  const relation = strongestRelation(sincePast(learned, learned[0]?.date ?? ""))
+  assert.ok(relation)
+  brave[0]?.resolve({ ok: false, error: "Brave : trop de requêtes" })
+  await flush()
+  const line = session.getSnapshot().xrayBrave[0]
+  assert.equal(line.query, relation.phrase)
+  assert.equal(line.state, "erreur")
+  assert.equal(braveHeadline(line, "R1"), "R1 · avant-course · Brave : trop de requêtes")
   session.dispose()
 })
 

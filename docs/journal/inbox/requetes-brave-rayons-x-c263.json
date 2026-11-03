@@ -1,0 +1,9 @@
+{
+  "slug": "requetes-brave-rayons-x-c263",
+  "happened_on": "2026-11-03",
+  "area": "runArcade",
+  "title": "Rayons X : requêtes Brave en clair",
+  "body": "En mode Rayons X, une section Recherches Brave liste chaque requête dès que le runner l’envoie. La ligne dit qui cherche, si c’est l’avant-course ou un tour, puis en cours, le nombre de résultats lisibles, ou l’erreur. La requête elle-même est écrite en dessous. La carte du runner garde le mot court « cherche ». Le fil des dernières lignes ne change pas.",
+  "pr_number": null,
+  "pr_url": null
+}

@@ -43,10 +43,28 @@ export type XrayPending = {
   detail: string
 }
 
+/** Recherche Brave encore ouverte : le runner et la requête qu’il a demandée. */
+export type XraySearch = {
+  runnerId: string
+  query: string
+}
+
+/** Requête Brave suivie dans Rayons X, de l’envoi jusqu’à l’issue. */
+export type XrayBrave = {
+  at: string
+  runnerId: string
+  /** Tour de course. Vide pendant l’avant-course. */
+  turn: number | null
+  query: string
+  state: "cours" | "fait" | "erreur"
+  /** Issue lisible : nombre de résultats, ou texte d’erreur. */
+  detail: string
+}
+
 /** Appels, recherches et propositions encore ouverts. */
 export type XrayActivity = {
   calling: string[]
-  searching: string[]
+  searching: XraySearch[]
   pending: XrayPending[]
 }
 
@@ -202,6 +220,18 @@ export function xrayFeed(
   return lines.slice(-limit)
 }
 
+/** Nombre de pages gardées après le filtre, en clair. */
+export function braveResultDetail(count: number) {
+  return count === 1 ? "1 résultat lisible" : `${count} résultats lisibles`
+}
+
+/** Runner, moment, et issue. La requête elle-même se lit à part. */
+export function braveHeadline(line: XrayBrave, name: string) {
+  const moment = line.turn != null ? `tour ${line.turn}` : "avant-course"
+  const issue = line.state === "cours" ? "en cours" : line.detail
+  return `${name} · ${moment} · ${issue}`
+}
+
 /** Ligne de « En ce moment ». La clé reste unique quand la phrase se répète. */
 export type ActivityLine = {
   key: string
@@ -219,7 +249,7 @@ export function activityLines(activity: XrayActivity, names: Readonly<Record<str
   }
   return [
     ...activity.calling.map((id) => line(id, `${nameOf(id)} appelle`)),
-    ...activity.searching.map((id) => line(id, `${nameOf(id)} cherche`)),
+    ...activity.searching.map((item) => line(item.runnerId, `${nameOf(item.runnerId)} cherche : « ${item.query} »`)),
     ...activity.pending.map((item) => line(item.runnerId, `${nameOf(item.runnerId)} en attente : ${item.detail}`)),
   ]
 }
@@ -227,7 +257,7 @@ export function activityLines(activity: XrayActivity, names: Readonly<Record<str
 /** Mot posé sur la carte : l’appel passe avant la recherche, puis la proposition en attente. */
 export function xrayMark(runnerId: string, activity: XrayActivity) {
   if (activity.calling.includes(runnerId)) return "appelle"
-  if (activity.searching.includes(runnerId)) return "cherche"
+  if (activity.searching.some((item) => item.runnerId === runnerId)) return "cherche"
   if (activity.pending.some((item) => item.runnerId === runnerId)) return "en attente"
   return null
 }

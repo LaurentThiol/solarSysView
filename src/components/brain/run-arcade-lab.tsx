@@ -26,6 +26,7 @@ import { currentVersion, targetLabel } from "@/lib/run-arcade/skills"
 import {
   activityLines,
   attemptLine,
+  braveHeadline,
   chainHiddenDate,
   departCard,
   lastTurnReceipts,
@@ -368,6 +369,21 @@ function XrayPanel({ snapshot }: { snapshot: SessionSnapshot }) {
           </ul>
         ) : (
           <p className="mt-1 text-xs text-muted-foreground">Personne en cours.</p>
+        )}
+      </div>
+      <div className="mt-3">
+        <h3 className="text-xs font-medium text-muted-foreground">Recherches Brave</h3>
+        {snapshot.xrayBrave.length > 0 ? (
+          <ul className="mt-1 flex flex-col gap-2 text-xs" data-testid="run-arcade-xray-brave">
+            {snapshot.xrayBrave.map((line, index) => (
+              <li key={`${line.at}-${line.runnerId}-${index}`}>
+                <p className="text-muted-foreground">{braveHeadline(line, names[line.runnerId] ?? line.runnerId)}</p>
+                <p className="text-foreground">{line.query}</p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-xs text-muted-foreground">Aucune recherche.</p>
         )}
       </div>
       {last.length > 0 ? (
