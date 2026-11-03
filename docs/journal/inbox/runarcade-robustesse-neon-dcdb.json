@@ -1,0 +1,9 @@
+{
+  "slug": "runarcade-robustesse-neon-dcdb",
+  "happened_on": "2026-11-03",
+  "area": "runArcade",
+  "title": "runArcade : l’écriture du champion dit la vérité, et la session tient mieux",
+  "body": "Quand Neon refuse le champion, l’écran dit la vérité sur la copie : elle est gardée dans le navigateur, ou elle ne l’est pas. Les champions que Neon n’a pas confirmés attendent dans une file, et le bouton « Réessayer l’écriture » les renvoie, le plus ancien d’abord. L’import dit s’il a écrit le champion, s’il y était déjà (il n’est alors pas réécrit), ou si Neon a refusé. Relancer ou finir une course coupe aussi l’appel au modèle local. Un dessin qui ne se rend pas en 4 s part sans image, avec la raison dans le journal. Le journal de chaque runner garde ses 200 lignes, et Neon garde la forme et le n des figures. Une IA absente est sondée toutes les 15 s, et « Jouer le tour » en pause joue un tour sans relancer la course. Les calculs, l’examen et les gestes ne changent pas.",
+  "pr_number": null,
+  "pr_url": null
+}
