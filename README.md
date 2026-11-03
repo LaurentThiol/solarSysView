@@ -410,6 +410,8 @@ npm run dev
 
 Build : `npm run build && npm start`. Le déploiement **Netlify** utilise cette app (`@netlify/plugin-nextjs`).
 
+Types de runArcade, comme la CI les vérifie : `npx tsc --noEmit -p tsconfig.run-arcade.json`.
+
 ## Synchro Python → Neon
 
 Import de l’historique complet FDJ (2004 → aujourd’hui) dans PostgreSQL Neon, plus une API FastAPI locale (vérification de grilles, stats sur la formule actuelle).

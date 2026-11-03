@@ -1,0 +1,17 @@
+{
+  // Types de runArcade seulement. La CI le lance (job « types-run-arcade »).
+  // tsc lit aussi les fichiers que runArcade importe : une erreur dans l’un d’eux fait échouer cette vérification.
+  // Les tests importent leurs sources en « .ts » pour Node, d’où allowImportingTsExtensions.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "incremental": false
+  },
+  "include": [
+    "src/lib/run-arcade/**/*.ts",
+    "src/components/brain/run-arcade*.tsx",
+    "src/app/api/run-arcade/**/*.ts",
+    "src/app/brain/run-arcade/**/*.tsx",
+    "tests/test_run_arcade*.ts"
+  ]
+}

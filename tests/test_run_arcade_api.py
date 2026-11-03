@@ -189,6 +189,24 @@ def test_run_arcade_soir_node() -> None:
     _node("test_run_arcade_soir.ts")
 
 
+def test_run_arcade_layers_node() -> None:
+    _node("test_run_arcade_layers.ts")
+
+
+def test_every_run_arcade_ts_test_has_a_wrapper() -> None:
+    tests = Path(__file__).resolve().parent
+    wrappers = "".join(
+        (tests / name).read_text(encoding="utf-8")
+        for name in ("test_run_arcade_api.py", "test_run_arcade_help.py")
+    )
+    orphans = [
+        path.name
+        for path in sorted(tests.glob("test_run_arcade*.ts"))
+        if f'"{path.name}"' not in wrappers
+    ]
+    assert orphans == [], f"Aucun wrapper pytest pour : {orphans}"
+
+
 def test_champion_rejects_an_empty_skill_list(monkeypatch) -> None:
     monkeypatch.setattr("synchro.db.database_configured", lambda: True)
     client = TestClient(create_app())
