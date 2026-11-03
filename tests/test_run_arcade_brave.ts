@@ -77,5 +77,7 @@ test("the query stays before the cutoff and skips results sites", () => {
   assert.equal(guardQuery("   ", cutoff).ok, false)
   const query = withExclusions("nombre d’or")
   assert.match(query, /-site:fdj\.fr/)
+  assert.match(query, /-résultat/)
+  assert.match(query, /-loto/)
   assert.match(query, /^nombre d’or /)
 })

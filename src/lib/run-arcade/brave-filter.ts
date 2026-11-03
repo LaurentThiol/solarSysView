@@ -202,7 +202,7 @@ export function freshness(from: string, cutoff: string) {
 }
 
 export function withExclusions(query: string) {
-  return `${query.trim()} ${EXCLUDED_SITES.map((site) => `-site:${site}`).join(" ")}`
+  return `${query.trim()} -résultat -loto ${EXCLUDED_SITES.map((site) => `-site:${site}`).join(" ")}`
 }
 
 /** Une requête qui cite une date à partir de la coupure, ou une année d’après, est refusée. */

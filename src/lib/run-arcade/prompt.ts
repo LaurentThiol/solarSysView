@@ -44,7 +44,7 @@ export const BRAVE_EXAMPLE = {
   action: "brave",
   name: "",
   phrase: "",
-  query: "somme des numéros EuroMillions",
+  query: "",
   curve: "sumNumbers",
   gesture: "moyenne",
   ratio: 0.618,
@@ -64,7 +64,7 @@ export const BRAVE_EXAMPLE = {
 
 export type IaAction =
   | { kind: "skill"; params: SkillParams; name: string; phrase: string }
-  | { kind: "brave"; query: string }
+  | { kind: "brave" }
 
 /** Tirages relus dans le prompt, du plus ancien au plus récent. */
 export const PROMPT_ROWS = 12
@@ -93,6 +93,7 @@ export function buildPrompt(input: PromptInput) {
     "Réponds par un seul objet JSON, sans texte autour. Deux actions, chacune déjà valide :",
     `Skill : ${JSON.stringify(SKILL_EXAMPLE)}`,
     `Recherche : ${JSON.stringify(BRAVE_EXAMPLE)}`,
+    "Pour une recherche, laisse query vide. La relation entre les valeurs déjà lues est mesurée ici.",
     `curve : ${CURVE_KEYS.join(", ")} ou *. gesture : ${GESTURES.join(", ")}. ratio : ${GOLDEN_RATIOS.join(", ")}. span : ${SPANS.join(", ")}. window : entier de ${WINDOW_MIN} à ${WINDOW_MAX}. days : 0 s’il n’y a pas de fenêtre longue, sinon un entier de ${DAYS_MIN} à ${DAYS_MAX}. suite : ${SUITES.join(", ")}. r : ${LOGISTIC_R.join(", ")}. suite et r ne comptent que pour le geste suite.`,
     "Une skill sur une courbe déjà pilotée en devient une nouvelle version. Une seule skill nouvelle par lancement.",
     "L’examen rejoue les derniers tirages, que tu ne lis pas. La skill n’est gardée que si le solde d’examen monte.",
@@ -200,10 +201,7 @@ export function parseAction(text: string, expected?: Lecture | null): IaAction |
     const lecture = parseLecture(record.lecture)
     if (!lecture || LECTURE_KEYS.some((key) => lecture[key] !== expected[key])) return null
   }
-  if (record.action === "brave") {
-    const query = String(record.query ?? "").replace(/\s+/g, " ").trim()
-    return query ? { kind: "brave", query: query.slice(0, 200) } : null
-  }
+  if (record.action === "brave") return { kind: "brave" }
   if (record.action === "skill") {
     const source = record.skill && typeof record.skill === "object" ? record.skill : record
     const params = parseSkillParams(source)

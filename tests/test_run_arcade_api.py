@@ -169,12 +169,24 @@ def test_run_arcade_depart_node() -> None:
     _node("test_run_arcade_depart.ts")
 
 
+def test_run_arcade_relation_node() -> None:
+    _node("test_run_arcade_relation.ts")
+
+
 def test_run_arcade_session_node() -> None:
     _node("test_run_arcade_session.ts")
 
 
 def test_run_arcade_fonctionnel_node() -> None:
     _node("test_run_arcade_fonctionnel.ts")
+
+
+def test_run_arcade_brave_node() -> None:
+    _node("test_run_arcade_brave.ts")
+
+
+def test_run_arcade_soir_node() -> None:
+    _node("test_run_arcade_soir.ts")
 
 
 def test_champion_rejects_an_empty_skill_list(monkeypatch) -> None:

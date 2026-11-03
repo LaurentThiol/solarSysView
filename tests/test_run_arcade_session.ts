@@ -3,8 +3,10 @@ import test from "node:test"
 
 import type { ChampionRecord } from "../src/lib/run-arcade/champion.ts"
 import { formatDuration, median, raceDurationMs, rotate, servedPerSlice, sliceMs } from "../src/lib/run-arcade/clock.ts"
-import type { RankPoint } from "../src/lib/run-arcade/curves.ts"
-import { EXAM_WINDOW } from "../src/lib/run-arcade/examen.ts"
+import { buildTrack, type RankPoint } from "../src/lib/run-arcade/curves.ts"
+import { sincePast } from "../src/lib/run-arcade/depart.ts"
+import { EXAM_WINDOW, promptPast } from "../src/lib/run-arcade/examen.ts"
+import { strongestRelation } from "../src/lib/run-arcade/relation.ts"
 import { lectureFromText } from "../src/lib/run-arcade/prompt.ts"
 import {
   createSession,
@@ -16,6 +18,7 @@ import {
 } from "../src/lib/run-arcade/session.ts"
 import { addVersion, newSkill } from "../src/lib/run-arcade/skills.ts"
 import { fonctionnelBoard } from "../src/lib/run-arcade/fonctionnel.ts"
+import { revealedPast } from "../src/lib/run-arcade/thought.ts"
 import { chainHiddenDate, thoughtChain, xrayFeed } from "../src/lib/run-arcade/xray.ts"
 
 function dateAt(index: number) {
@@ -292,7 +295,12 @@ test("Brave follows the referee cutoff and waits on a 429", async () => {
   ia[0].resolve(braveReply(ia[0].request, "nombre d’or"))
   await flush()
   assert.equal(brave.length, 1)
-  assert.deepEqual(brave[0].request, { query: "nombre d’or", from: "2024-01-01", cutoff: rows[36].date })
+  const track = buildTrack(rows)
+  const learned = promptPast(revealedPast(track, track.length - 4))
+  const relation = strongestRelation(sincePast(learned, learned[0]?.date ?? ""))
+  assert.ok(relation)
+  assert.deepEqual(brave[0].request, { query: relation.phrase, from: "2024-01-01", cutoff: rows[36].date })
+  assert.equal(brave[0].request.query.includes("nombre d’or"), false)
   brave[0].resolve({ ok: false, error: "HTTP 429", retryAfterMs: 1000 })
   await flush()
   assert.equal(ia.length, 1)
@@ -302,6 +310,22 @@ test("Brave follows the referee cutoff and waits on a 429", async () => {
   await flush()
   assert.equal(ia.length, 2)
   assert.ok(ia[1].request.user.includes("Suites et φ"))
+  const noted = session.getSnapshot().journal.find((entry) => entry.kind === "brave")
+  assert.ok(noted?.detail.includes(relation.phrase))
+  session.dispose()
+})
+
+test("Brave stays quiet when the read series has no relation", async () => {
+  const { ia, brave, session } = harness(1)
+  const rows = series(30).map((point) => ({ ...point, n1: 4, n2: 10, n3: 20, n4: 30, n5: 40, e1: 1, e2: 2 }))
+  session.launch({ count: 1, draws: 4, minutes: 1, series: rows, champion: null })
+  await flush()
+  session.pause()
+  ia[0].resolve(braveReply(ia[0].request, "nombre d’or"))
+  await flush()
+  assert.equal(brave.length, 0)
+  const refusal = session.getSnapshot().journal.find((entry) => entry.kind === "refus")
+  assert.match(refusal?.detail ?? "", /aucune relation assez nette/)
   session.dispose()
 })
 

@@ -15,6 +15,7 @@ import { assignDeparts, droppedBefore, sincePast, type DepartChoice } from "./de
 import { examine, passesExam, promptPast } from "./examen"
 import { ruleFor } from "./fonctionnel"
 import { buildPrompt, lectureRefusal, parseAction } from "./prompt"
+import { strongestRelation } from "./relation"
 import {
   addVersion,
   currentVersion,
@@ -791,8 +792,16 @@ export class RunArcadeSession {
       return
     }
     if (action.kind === "brave") {
-      this.note(id, "appel", "fait", `demande une recherche : ${action.query}`, meta.turn)
-      this.searchBrave(id, action.query, meta, 0)
+      const past = sincePast(promptPast(this.readablePast()), this.runner(id)?.since ?? "")
+      const relation = strongestRelation(past)
+      if (!relation) {
+        this.note(id, "appel", "refusé", "aucune relation assez nette", meta.turn)
+        this.log(id, "refus", meta.cutoff, "aucune relation assez nette", meta.turn)
+        this.set({ inFlight: this.pending.size })
+        return
+      }
+      this.note(id, "appel", "fait", `demande une recherche : ${relation.phrase}`, meta.turn)
+      this.searchBrave(id, relation.phrase, meta, 0)
       return
     }
     const proposal = `propose : ${describeSkill(action.params)}`

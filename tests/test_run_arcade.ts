@@ -361,7 +361,8 @@ test("an IA answer is one JSON action with known fields", () => {
   assert.equal(skill.params.ratio, 0.618)
   assert.equal(skill.params.days, 60)
   const brave = parseAction('{"action":"brave","query":"nombre d’or et séries temporelles"}')
-  assert.deepEqual(brave, { kind: "brave", query: "nombre d’or et séries temporelles" })
+  assert.deepEqual(brave, { kind: "brave" })
+  assert.equal(parseAction('{"action":"brave"}')?.kind, "brave")
   assert.equal(parseAction('{"action":"skill","curve":"n9","gesture":"glisse"}'), null)
   assert.equal(parseAction("pas de json"), null)
   const copied = parseAction(

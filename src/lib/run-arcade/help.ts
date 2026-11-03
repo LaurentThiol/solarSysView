@@ -138,7 +138,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Brave",
-        text: "La recherche demandée par le runner s’arrête avant le tirage caché. Les pages de résultats de tirage sont écartées, ainsi qu’un texte qui citerait un tirage encore caché. Les notes qui restent entrent dans le prompt suivant.",
+        text: "La recherche nomme la relation retenue entre les valeurs déjà lues : deux courbes, mardi et vendredi, ou d’une année sur l’autre. S’il n’y en a pas d’assez nette, Brave n’est pas appelé. Elle s’arrête avant le tirage caché. Les pages de résultats de tirage sont écartées, ainsi qu’un texte qui citerait un tirage encore caché. Les notes qui restent entrent dans le prompt suivant.",
       },
       {
         label: "Neon",
@@ -319,7 +319,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   journal: {
     title: "Journal des requêtes",
-    body: "Les huit dernières lignes de ce runner. La ligne dit « avant-course » ou le numéro du tour, puis le genre : ia, brave, skill, refus ou erreur. La coupure est le dernier tirage lu par la requête. Un appel nomme s’il est parti sans image ou avec le dessin, puis la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite ce que le modèle a écrit et ce que la mesure dit.",
+    body: "Les huit dernières lignes de ce runner. La ligne dit « avant-course » ou le numéro du tour, puis le genre : ia, brave, skill, refus ou erreur. La coupure est le dernier tirage lu par la requête. Une recherche Brave cite la relation retenue, pas une phrase libre. Un appel nomme s’il est parti sans image ou avec le dessin, puis la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite ce que le modèle a écrit et ce que la mesure dit.",
   },
   couches: {
     title: "Couches",

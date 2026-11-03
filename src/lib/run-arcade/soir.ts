@@ -123,10 +123,11 @@ function nearestOrder(ratio: number) {
   return Math.abs(best - ratio) <= 0.2 ? best : null
 }
 
-/** Décalage en jours, de 1 à 4, qui aligne le mieux les deux soirs. */
-export function phaseDays(play: readonly SoirPoint[], other: readonly SoirPoint[]): number | null {
+/** Décalage en jours, de 1 à 4, qui aligne le mieux les deux soirs, et son r. */
+export function phaseLink(play: readonly SoirPoint[], other: readonly SoirPoint[]): { days: number; r: number } | null {
   let bestLag: number | null = null
   let best = 0
+  let bestR = 0
   for (let lag = 1; lag <= EVENING_GAP_DAYS; lag += 1) {
     const left: number[] = []
     const right: number[] = []
@@ -140,8 +141,15 @@ export function phaseDays(play: readonly SoirPoint[], other: readonly SoirPoint[
     if (score == null || Math.abs(score) <= best) continue
     best = Math.abs(score)
     bestLag = lag
+    bestR = score
   }
-  return bestLag
+  if (bestLag == null) return null
+  return { days: bestLag, r: bestR }
+}
+
+/** Décalage en jours, de 1 à 4, qui aligne le mieux les deux soirs. */
+export function phaseDays(play: readonly SoirPoint[], other: readonly SoirPoint[]): number | null {
+  return phaseLink(play, other)?.days ?? null
 }
 
 export function sharedHarmonic(mardi: readonly number[], vendredi: readonly number[]) {
