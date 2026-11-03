@@ -31,45 +31,45 @@ export type BraveNote = { title: string; url: string; snippet: string }
 const NUMBER_SPAN = 80
 const STAR_SPAN = 60
 
-const MONTHS: Record<string, number> = {
-  janvier: 1,
-  fevrier: 2,
-  février: 2,
-  mars: 3,
-  avril: 4,
-  mai: 5,
-  juin: 6,
-  juillet: 7,
-  aout: 8,
-  août: 8,
-  septembre: 9,
-  octobre: 10,
-  novembre: 11,
-  decembre: 12,
-  décembre: 12,
-  january: 1,
-  february: 2,
-  march: 3,
-  april: 4,
-  may: 5,
-  june: 6,
-  july: 7,
-  august: 8,
-  september: 9,
-  october: 10,
-  november: 11,
-  december: 12,
-}
+/** Les noms de chaque mois, sans accent : en toutes lettres, puis abrégés, en français et en anglais. */
+const MONTH_NAMES: readonly (readonly string[])[] = [
+  ["janvier", "january", "janv", "jan"],
+  ["fevrier", "february", "fevr", "fev", "feb"],
+  ["mars", "march", "mar"],
+  ["avril", "april", "avr", "apr"],
+  ["mai", "may"],
+  ["juin", "june", "jun"],
+  ["juillet", "july", "juil", "jul"],
+  ["aout", "august", "aug"],
+  ["septembre", "september", "sept", "sep"],
+  ["octobre", "october", "oct"],
+  ["novembre", "november", "nov"],
+  ["decembre", "december", "dec"],
+]
 
-const MONTH_PATTERN = Object.keys(MONTHS).join("|")
+const MONTHS = new Map(MONTH_NAMES.flatMap((names, index) => names.map((name) => [name, index + 1] as const)))
+
+/** Un nom de mois, avec ou sans point, qui ne continue pas en mot (« oct » n’est pas « octets »). */
+const MONTH_WORD = `(${[...MONTHS.keys()].sort((left, right) => right.length - left.length).join("|")})\\.?(?![a-z])`
+const DAY_SUFFIX = "(?:er|st|nd|rd|th)?"
+/** L’année qui suit un mois : quatre chiffres, ou deux (20 + AA). */
+const YEAR_AFTER = "(?:[\\s,]*(20\\d{2}|\\d{2})(?!\\d))?"
+/** « 14 août », « 1er sept. 2026 », « 7th of August 2026 », « 14 August, 2026 » : jour, mois, année facultative. */
+const DAY_FIRST = new RegExp(`(?<!\\d)(\\d{1,2})${DAY_SUFFIX}\\.?(?:\\s+(?:of|de))?\\s+${MONTH_WORD}${YEAR_AFTER}`, "g")
+/** « août 2026 », « sept. 2026 » : un mois sans jour. */
+const MONTH_YEAR = new RegExp(`(?<![a-z])${MONTH_WORD}[\\s,]*(20\\d{2})(?!\\d)`, "g")
+/** « Aug 14, 2026 », « August 14th » : mois, jour, année facultative. */
+const MONTH_FIRST = new RegExp(`(?<![a-z])${MONTH_WORD}\\s*(\\d{1,2})${DAY_SUFFIX}(?!\\d)${YEAR_AFTER}`, "g")
 const STAR_WORDS = /étoiles?|etoiles?|★|⭐|stars?|lucky/gi
 
 function pad(value: number) {
   return String(value).padStart(2, "0")
 }
 
+/** Un vrai jour du calendrier, ou rien : le 31 avril n’existe pas. */
 function isoDay(year: number, month: number, day: number) {
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+  if (month < 1 || month > 12 || day < 1) return null
+  if (day > new Date(Date.UTC(year, month, 0)).getUTCDate()) return null
   return `${year}-${pad(month)}-${pad(day)}`
 }
 
@@ -82,39 +82,79 @@ export function cleanText(raw: string) {
     .trim()
 }
 
-/** Dates au jour près, dans les formats courants français et anglais. */
-export function datesIn(text: string): string[] {
-  const found: string[] = []
-  const push = (value: string | null) => {
-    if (value) found.push(value)
-  }
-  for (const match of text.matchAll(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/g)) {
-    push(isoDay(Number(match[1]), Number(match[2]), Number(match[3])))
-  }
-  for (const match of text.matchAll(/\b(\d{1,2})[/.-](\d{1,2})[/.-](20\d{2})\b/g)) {
-    push(isoDay(Number(match[3]), Number(match[2]), Number(match[1])))
-  }
-  const dayMonth = new RegExp(`\\b(\\d{1,2})(?:er|st|nd|rd|th)?\\s+(${MONTH_PATTERN})\\s+(20\\d{2})\\b`, "gi")
-  for (const match of text.matchAll(dayMonth)) {
-    push(isoDay(Number(match[3]), MONTHS[match[2].toLowerCase()], Number(match[1])))
-  }
-  const monthDay = new RegExp(`\\b(${MONTH_PATTERN})\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(20\\d{2})\\b`, "gi")
-  for (const match of text.matchAll(monthDay)) {
-    push(isoDay(Number(match[3]), MONTHS[match[1].toLowerCase()], Number(match[2])))
-  }
-  return found
+function foldAccents(text: string) {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
 }
 
-/** Mois cités sans jour : « août 2026 ». « le 3 août 2026 » est une date au jour près. */
-export function monthsIn(text: string): string[] {
-  const pattern = new RegExp(`(?<!\\d(?:er|st|nd|rd|th)?\\s+)\\b(${MONTH_PATTERN})\\s+(20\\d{2})\\b`, "gi")
-  return [...text.matchAll(pattern)].map((match) => `${match[2]}-${pad(MONTHS[match[1].toLowerCase()])}`)
+export type CitedDates = {
+  /** Jours cités, AAAA-MM-JJ, du plus ancien au plus récent. */
+  days: string[]
+  /** Mois cités sans jour, AAAA-MM : « août 2026 ». */
+  months: string[]
 }
 
+/**
+ * Toutes les dates qu’un texte cite, dans les formats courants français et anglais :
+ * `2026-09-01`, `2026/09/01` et `2026.09.01` (l’heure peut suivre, collée ou non), `20260901`, `11/09/2026`,
+ * `11-09-26`, `1er sept. 2026`, `30 oct. 2026`, `Aug 14, 2026`, `14 August, 2026`, `août 2026`, `2026-09`.
+ * Une date que l’on peut lire de deux façons (JJ/MM ou MM/JJ) rend ses deux jours : l’un des deux peut être tardif.
+ * Un jour sans année (« vendredi 14 août », « 14/08 ») prend `year`, l’année de la coupure ; sans `year`, il est ignoré.
+ * Chaque motif lit ce qu’il trouve puis le retire du texte : « le 3 août 2026 » est un jour, pas aussi un mois.
+ */
+export function citedDates(text: string, year?: number): CitedDates {
+  const days = new Set<string>()
+  const months = new Set<string>()
+  const addDay = (y: number, month: number, day: number) => {
+    const iso = isoDay(y, month, day)
+    if (iso) days.add(iso)
+  }
+  const addMonth = (y: number, month: number) => {
+    if (month >= 1 && month <= 12) months.add(`${y}-${pad(month)}`)
+  }
+  let rest = foldAccents(text)
+  const read = (pattern: RegExp, use: (found: string[]) => void) => {
+    rest = rest.replace(pattern, (match: string, ...found: string[]) => {
+      use(found)
+      return " ".repeat(match.length)
+    })
+  }
+  /** Un jour et un mois en lettres, avec l’année si elle suit. Deux chiffres : 20 + AA, et aussi un jour sans année. */
+  const dayInWords = (name: string, day: string, after: string | undefined) => {
+    const month = MONTHS.get(name) ?? 0
+    if (after && after.length === 4) return addDay(Number(after), month, Number(day))
+    if (after) addDay(2000 + Number(after), month, Number(day))
+    if (year != null) addDay(year, month, Number(day))
+  }
+
+  read(/(?<!\d)(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)/g, ([y, month, day]) => addDay(+y, +month, +day))
+  read(/(?<!\d)(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?!\d)/g, ([y, month, day]) => addDay(+y, +month, +day))
+  read(/(?<!\d)(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2}|\d{2})(?!\d)/g, ([first, second, y]) => {
+    const full = y.length === 4 ? Number(y) : 2000 + Number(y)
+    addDay(full, +second, +first)
+    addDay(full, +first, +second)
+  })
+  read(/(?<!\d)(20\d{2})[-/](0?[1-9]|1[0-2])(?!\d)/g, ([y, month]) => addMonth(+y, +month))
+  read(/(?<!\d)(0?[1-9]|1[0-2])[-/.](20\d{2})(?!\d)/g, ([month, y]) => addMonth(+y, +month))
+  read(DAY_FIRST, ([day, name, after]) => dayInWords(name, day, after))
+  read(MONTH_YEAR, ([name, y]) => addMonth(+y, MONTHS.get(name) ?? 0))
+  read(MONTH_FIRST, ([name, day, after]) => dayInWords(name, day, after))
+  read(/(?<![\d/.-])(\d{1,2})\/(\d{1,2})(?![\d/])/g, ([first, second]) => {
+    if (year == null) return
+    addDay(year, +second, +first)
+    addDay(year, +first, +second)
+  })
+  return { days: [...days].sort(), months: [...months].sort() }
+}
+
+/** Le texte cite le jour de la coupure ou un jour d’après, ou un mois qui contient la coupure ou vient après. */
 export function citesLateDate(text: string, cutoff: string) {
-  if (datesIn(text).some((date) => date >= cutoff)) return true
-  const month = cutoff.slice(0, 7)
-  return monthsIn(text).some((value) => value >= month)
+  const cited = citedDates(text, Number(cutoff.slice(0, 4)))
+  return cited.days.some((date) => date >= cutoff) || cited.months.some((month) => month >= cutoff.slice(0, 7))
+}
+
+/** Le filtre ne vaut que s’il connaît un tirage au moins aussi récent que la fin de la piste du client. */
+export function knowsThrough(hidden: readonly HiddenDraw[], through: string) {
+  return hidden.some((draw) => draw.date >= through)
 }
 
 type Token = { index: number; value: number }

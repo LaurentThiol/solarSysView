@@ -13,7 +13,7 @@ import {
 import { median, rotate, sliceMs } from "./clock"
 import { buildTrack, type RankPoint } from "./curves"
 import { assignDeparts, droppedBefore, sincePast, type DepartChoice } from "./depart"
-import { examine, passesExam, promptPast, type ExamResult } from "./examen"
+import { examine, examStart, passesExam, promptPast, type ExamResult } from "./examen"
 import { ruleFor } from "./fonctionnel"
 import { buildPrompt, lectureRefusal, parseAction } from "./prompt"
 import { strongestRelation } from "./relation"
@@ -76,7 +76,14 @@ export type IaReply =
   | { ok: true; text: string; latencyMs: number; model: string | null; vision: boolean }
   | { ok: false; error: string; absent?: boolean; aborted?: boolean }
 
-export type BraveRequest = { query: string; from: string; cutoff: string }
+export type BraveRequest = {
+  query: string
+  from: string
+  /** Premier tirage de l’examen, que le prompt ne lit pas : Brave ne cherche rien à cette date ni après. */
+  cutoff: string
+  /** Dernier tirage de la piste. La route refuse si elle ne connaît aucun tirage aussi récent. */
+  through: string
+}
 
 export type BraveReply =
   | { ok: true; results: BraveNote[] }
@@ -160,9 +167,24 @@ type InboxItem = {
   cutoff: string
 }
 
+/** Une recherche Brave qui attend la fin d’un « trop de requêtes » avant de repartir. */
+type BraveRetry = {
+  query: string
+  meta: RequestMeta
+  attempt: number
+  /** Minuterie armée. Vide en pause, ou avant d’être armée. */
+  handle: unknown
+  /** Quand la minuterie armée sonne. */
+  dueAt: number
+  /** Attente qui reste quand la minuterie est gelée. */
+  leftMs: number
+}
+
 type RequestMeta = {
   cutoff: string
   hiddenDate: string
+  /** Premier tirage de la fenêtre d’examen : la coupure de Brave. Sans examen, le premier tirage caché. */
+  braveCutoff: string
   turn: number | null
   observation: string
   lecture: Lecture
@@ -173,6 +195,8 @@ type RequestMeta = {
 export const MIN_SLICE_MS = 700
 const ERROR_COOLDOWN_MS = 2_000
 const BRAVE_RETRIES = 2
+/** Recherches que Brave reçoit par génération : une par tour d’une course de 25 tirages, plus quelques-unes avant. Au-delà, c’est du quota perdu. */
+export const BRAVE_SEARCH_CAP = 40
 /** Essais de variation maison par enfant, au lancement d’une génération. */
 const VARIATION_TRIES = 6
 /** Pas de graine d’une génération à la suivante : sans lui, une archive qui ne bouge pas rejoue les mêmes tirages au sort. */
@@ -269,6 +293,12 @@ export class RunArcadeSession {
   private readonly searching = new Map<string, string>()
   private readonly cooldown = new Map<string, number>()
   private readonly notes = new Map<string, BraveNote[]>()
+  /** Ce que Brave a rendu dans cette génération, par coupure et requête : la même recherche n’est lue qu’une fois. */
+  private readonly braveMemory = new Map<string, BraveNote[]>()
+  /** Recherches parties au réseau dans cette génération. */
+  private braveSearches = 0
+  /** Recherches qui attendent la fin d’un « trop de requêtes », par runner. */
+  private readonly retries = new Map<string, BraveRetry>()
   private readonly added = new Map<string, number>()
   private readonly iaAdded = new Map<string, number>()
   private readonly callCount = new Map<string, number>()
@@ -378,14 +408,17 @@ export class RunArcadeSession {
     if (this.wake != null) this.deps.clearTimer(this.wake)
     this.timer = null
     this.wake = null
+    this.holdRetries()
   }
 
   private abortAll() {
     for (const controller of this.pending.values()) controller.abort()
     for (const controller of this.braving.values()) controller.abort()
+    for (const retry of this.retries.values()) if (retry.handle != null) this.deps.clearTimer(retry.handle)
     this.pending.clear()
     this.braving.clear()
     this.searching.clear()
+    this.retries.clear()
   }
 
   private abortRunner(id: string) {
@@ -394,6 +427,7 @@ export class RunArcadeSession {
     this.pending.delete(id)
     this.braving.delete(id)
     this.searching.delete(id)
+    this.endRetry(id, "ce runner s’est arrêté")
   }
 
   dispose() {
@@ -408,6 +442,8 @@ export class RunArcadeSession {
     this.queue = []
     this.round = 0
     this.notes.clear()
+    this.braveMemory.clear()
+    this.braveSearches = 0
     this.added.clear()
     this.iaAdded.clear()
     this.callCount.clear()
@@ -547,6 +583,7 @@ export class RunArcadeSession {
     this.timer = this.deps.setTimer(() => {
       if (id === this.launchId) this.endSlice()
     }, ms)
+    this.armRetries()
     this.pump()
   }
 
@@ -588,6 +625,7 @@ export class RunArcadeSession {
 
   private finish() {
     this.clearTimers()
+    for (const id of [...this.retries.keys()]) this.endRetry(id, "la course est finie")
     this.abortAll()
     const race = this.snapshot.race
     const track = this.snapshot.track
@@ -644,6 +682,7 @@ export class RunArcadeSession {
       this.timer = this.deps.setTimer(() => {
         if (id === this.launchId) this.startCourse()
       }, pausedLeftMs)
+      this.armRetries()
       this.pump()
     } else if (phase === "course") {
       this.scheduleSlice(pausedLeftMs)
@@ -735,7 +774,8 @@ export class RunArcadeSession {
       this.note(id, "appel", "sauté", "Pas de tirage caché.")
       return false
     }
-    const learned = promptPast(this.readablePast())
+    const readable = this.readablePast()
+    const learned = promptPast(readable)
     const past = sincePast(learned, runner.since)
     if (past.length < 2) {
       this.note(id, "passage", "fait", "Son tour.")
@@ -769,6 +809,7 @@ export class RunArcadeSession {
     const meta: RequestMeta = {
       cutoff,
       hiddenDate,
+      braveCutoff: readable[examStart(readable.length)]?.date ?? hiddenDate,
       turn: this.turnNumber(),
       observation: drawing.observation,
       lecture: drawing.lecture,
@@ -885,6 +926,64 @@ export class RunArcadeSession {
     this.set({ xrayBrave: lines })
   }
 
+  /** Une réponse vide ne remplace pas les notes déjà lues. */
+  private keepNotes(id: string, results: BraveNote[]) {
+    if (results.length > 0) this.notes.set(id, results)
+  }
+
+  /** Cette recherche, à cette coupure, a déjà été lue dans la génération : on la reprend sans appeler Brave. */
+  private searchKnown(id: string, query: string, meta: RequestMeta, key: string) {
+    const known = this.braveMemory.get(key)
+    if (!known) return false
+    this.openBrave(id, query, meta.turn)
+    this.closeBrave(id, "fait", `${braveResultDetail(known.length)} · déjà lue`)
+    this.keepNotes(id, known)
+    const detail = `« ${query} » : ${known.length} résultat(s) lisible(s), déjà lue dans cette génération`
+    this.note(id, "recherche", "fait", detail, meta.turn)
+    this.log(id, "brave", meta.cutoff, detail, meta.turn)
+    this.set({ inFlight: this.pending.size })
+    return true
+  }
+
+  /** Gèle les minuteries des nouvelles tentatives : `armRetries` les remet en route avec le temps qui restait. */
+  private holdRetries() {
+    const now = this.deps.now()
+    for (const retry of this.retries.values()) {
+      if (retry.handle == null) continue
+      this.deps.clearTimer(retry.handle)
+      retry.handle = null
+      retry.leftMs = Math.max(0, retry.dueAt - now)
+    }
+  }
+
+  /** Arme les nouvelles tentatives gelées, tant que la session court : ni en pause, ni finie. */
+  private armRetries() {
+    const { phase, pausedLeftMs } = this.snapshot
+    if ((phase !== "avant" && phase !== "course") || pausedLeftMs != null) return
+    const launch = this.launchId
+    for (const [id, retry] of this.retries) {
+      if (retry.handle != null) continue
+      retry.dueAt = this.deps.now() + retry.leftMs
+      retry.handle = this.deps.setTimer(() => {
+        if (launch !== this.launchId || this.retries.get(id) !== retry) return
+        this.retries.delete(id)
+        this.braving.delete(id)
+        this.searchBrave(id, retry.query, retry.meta, retry.attempt + 1)
+      }, retry.leftMs)
+    }
+  }
+
+  /** Abandonne la nouvelle tentative d’un runner : la course est finie, ou lui-même est arrêté. Ce n’est pas une panne. */
+  private endRetry(id: string, why: string) {
+    const retry = this.retries.get(id)
+    if (!retry) return
+    if (retry.handle != null) this.deps.clearTimer(retry.handle)
+    this.retries.delete(id)
+    this.braving.delete(id)
+    this.closeBrave(id, "erreur", `nouvelle tentative abandonnée : ${why}`)
+    this.note(id, "recherche", "fait", `Nouvelle tentative abandonnée : ${why}.`, retry.meta.turn)
+  }
+
   private searchBrave(id: string, query: string, meta: RequestMeta, attempt: number) {
     if (this.snapshot.brave === "absente") {
       this.openBrave(id, query, meta.turn)
@@ -901,6 +1000,20 @@ export class RunArcadeSession {
       this.set({ inFlight: this.pending.size })
       return
     }
+    const key = `${meta.braveCutoff}|${query}`
+    if (attempt === 0) {
+      if (this.searchKnown(id, query, meta, key)) return
+      if (this.braveSearches >= BRAVE_SEARCH_CAP) {
+        const detail = `plafond de ${BRAVE_SEARCH_CAP} recherches par génération atteint`
+        this.openBrave(id, query, meta.turn)
+        this.closeBrave(id, "erreur", detail)
+        this.note(id, "recherche", "refusé", detail, meta.turn)
+        this.log(id, "refus", meta.cutoff, detail, meta.turn)
+        this.set({ inFlight: this.pending.size })
+        return
+      }
+      this.braveSearches += 1
+    }
     this.note(id, "recherche", "en cours", attempt === 0 ? `« ${query} »` : `nouvel essai : « ${query} »`, meta.turn)
     const year = Number(track[track.length - 1].date.slice(0, 4))
     const controller = new AbortController()
@@ -909,7 +1022,10 @@ export class RunArcadeSession {
     if (attempt === 0) this.updateRunner(id, (item) => ({ ...item, calls: item.calls + 1 }))
     const launch = this.launchId
     this.deps
-      .askBrave({ query, from: `${year - 1}-01-01`, cutoff: meta.hiddenDate }, controller.signal)
+      .askBrave(
+        { query, from: `${year - 1}-01-01`, cutoff: meta.braveCutoff, through: track[track.length - 1].date },
+        controller.signal
+      )
       .catch(
         (error: unknown): BraveReply => ({
           ok: false,
@@ -930,11 +1046,15 @@ export class RunArcadeSession {
           if (reply.retryAfterMs != null && attempt < BRAVE_RETRIES) {
             this.braving.set(id, controller)
             this.set({ inFlight: this.pending.size })
-            this.deps.setTimer(() => {
-              if (launch !== this.launchId) return
-              this.braving.delete(id)
-              this.searchBrave(id, query, meta, attempt + 1)
-            }, Math.max(500, reply.retryAfterMs))
+            this.retries.set(id, {
+              query,
+              meta,
+              attempt,
+              handle: null,
+              dueAt: 0,
+              leftMs: Math.max(500, reply.retryAfterMs),
+            })
+            this.armRetries()
             return
           }
           const detail = `Brave : ${reply.error}`
@@ -943,8 +1063,10 @@ export class RunArcadeSession {
           this.log(id, "erreur", meta.cutoff, detail, meta.turn)
           this.set(reply.absent ? { brave: "absente", braveError: reply.error } : { braveError: reply.error })
         } else {
+          const results = reply.results.slice(0, 5)
+          this.braveMemory.set(key, results)
           this.closeBrave(id, "fait", braveResultDetail(reply.results.length))
-          this.notes.set(id, reply.results.slice(0, 5))
+          this.keepNotes(id, results)
           const detail = `« ${query} » : ${reply.results.length} résultat(s) lisible(s)`
           this.note(id, "recherche", "fait", detail, meta.turn)
           this.log(id, "brave", meta.cutoff, detail, meta.turn)

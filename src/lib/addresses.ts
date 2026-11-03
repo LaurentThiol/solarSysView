@@ -638,7 +638,7 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/brain/decision-tree/{slug}/predict", "POST", "decisionTree · cas", "Classe le dernier état du flux.", "assistants"),
   apiEntry("/api/brain/decision-tree/{slug}/draft", "POST", "decisionTree · brouillon", "Brouillon de spécialiste ou règle chartiste, non enregistré.", "assistants"),
   apiEntry("/api/run-arcade/think", "POST", "runArcade · pensée", "Appel court à l’IA locale : une action JSON, graine fixe.", "assistants"),
-  apiEntry("/api/run-arcade/brave", "POST", "runArcade · Brave", "Recherche web bornée avant le premier tirage caché, filtrée côté serveur.", "assistants", "query, from, cutoff"),
+  apiEntry("/api/run-arcade/brave", "POST", "runArcade · Brave", "Recherche web bornée avant le premier tirage de l’examen, filtrée côté serveur. Refusée (503) si les tirages cachés ne se lisent pas.", "assistants", "query, from, cutoff, through"),
   apiEntry("/api/brain/run-arcade/champion", "GET · POST", "runArcade · champion", "Champion d’un lancement et versions de ses skills, dans Neon.", "assistants"),
   apiEntry("/api/brain/run-arcade/champions", "GET", "runArcade · champions", "Champions déjà écrits, du plus récent au plus ancien.", "assistants"),
   apiEntry("/api/ref/catalog", "GET", "Réf · catalogue", "Cycles physiques candidats, hors lunaire et solaire déjà calculés.", "assistants"),

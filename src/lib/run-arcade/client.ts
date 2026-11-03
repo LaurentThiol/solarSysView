@@ -52,11 +52,13 @@ export async function askBrave(request: BraveRequest, signal: AbortSignal): Prom
     if (response.ok && body?.ok && Array.isArray(body.results)) {
       return { ok: true, results: body.results as BraveNote[] }
     }
+    const wait = Number(body?.retryAfterMs)
     return {
       ok: false,
       error: errorText(body, response.status),
       absent: Boolean(body?.absent),
-      retryAfterMs: response.status === 429 ? Number(body?.retryAfterMs) || 1500 : undefined,
+      // 429 : Brave demande d’attendre. 503 avec une attente : la route ne lit pas encore les tirages cachés.
+      retryAfterMs: response.status === 429 ? wait || 1500 : response.status === 503 && wait > 0 ? wait : undefined,
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "échec", aborted: signal.aborted }

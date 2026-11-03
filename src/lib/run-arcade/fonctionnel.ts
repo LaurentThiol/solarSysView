@@ -16,7 +16,7 @@ export type FonctionnelOp = {
 export const FONCTIONNEL_CHAIN: readonly FonctionnelOp[] = [
   { op: "passage", label: "Passage", rule: "Vivant, pas déjà en appel, délai d’erreur écoulé." },
   { op: "appel", label: "Appel", rule: "IA présente, au moins deux tirages lisibles." },
-  { op: "recherche", label: "Recherche", rule: "Seulement si l’IA la demande, requête d’avant le tirage caché." },
+  { op: "recherche", label: "Recherche", rule: "Seulement si l’IA la demande, requête d’avant l’examen." },
   {
     op: "attente",
     label: "Attente",

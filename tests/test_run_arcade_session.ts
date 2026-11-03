@@ -9,6 +9,7 @@ import { EXAM_WINDOW, promptPast } from "../src/lib/run-arcade/examen.ts"
 import { strongestRelation } from "../src/lib/run-arcade/relation.ts"
 import { lectureFromText } from "../src/lib/run-arcade/prompt.ts"
 import {
+  BRAVE_SEARCH_CAP,
   createSession,
   type BraveReply,
   type BraveRequest,
@@ -287,25 +288,41 @@ test("the race ends on its last draw, saves one champion, and calls nothing more
   assert.equal(ia.length, calls)
 })
 
-test("Brave follows the referee cutoff and waits on a 429", async () => {
+/** Ce que lit la session à son premier appel : le passé du prompt sans la fenêtre d’examen, et la relation qu’il en tire. */
+function openingRead(rows: RankPoint[], draws = 4) {
+  const track = buildTrack(rows)
+  const readable = revealedPast(track, track.length - draws)
+  const learned = promptPast(readable)
+  return { readable, relation: strongestRelation(sincePast(learned, learned[0]?.date ?? "")) }
+}
+
+test("Brave stops at the first draw of the exam, and waits on a 429", async () => {
   const { clock, ia, brave, session } = harness(1)
-  const rows = series(40)
+  const rows = series(80)
   session.launch({ count: 1, draws: 4, minutes: 1, series: rows, champion: null })
   await flush()
   ia[0].resolve(braveReply(ia[0].request, "nombre d’or"))
   await flush()
   assert.equal(brave.length, 1)
-  const track = buildTrack(rows)
-  const learned = promptPast(revealedPast(track, track.length - 4))
-  const relation = strongestRelation(sincePast(learned, learned[0]?.date ?? ""))
+  const { readable, relation } = openingRead(rows)
   assert.ok(relation)
-  assert.deepEqual(brave[0].request, { query: relation.phrase, from: "2024-01-01", cutoff: rows[36].date })
+  const firstExamDraw = readable[readable.length - EXAM_WINDOW].date
+  // Le prompt ne lit pas l’examen : Brave ne lit rien d’aussi tardif. Le premier tirage de la course ne suffit pas.
+  assert.equal(firstExamDraw, rows[51].date)
+  assert.notEqual(firstExamDraw, rows[76].date)
+  assert.deepEqual(brave[0].request, {
+    query: relation.phrase,
+    from: "2024-01-01",
+    cutoff: firstExamDraw,
+    through: rows[79].date,
+  })
   assert.equal(brave[0].request.query.includes("nombre d’or"), false)
   brave[0].resolve({ ok: false, error: "HTTP 429", retryAfterMs: 1000 })
   await flush()
   assert.equal(ia.length, 1)
   await clock.advance(1000)
   assert.equal(brave.length, 2)
+  assert.deepEqual(brave[1].request, brave[0].request)
   const waiting = session.getSnapshot().xrayBrave
   assert.equal(waiting.length, 1)
   assert.equal(waiting[0].state, "cours")
@@ -336,6 +353,232 @@ test("Brave stays quiet when the read series has no relation", async () => {
   const refusal = session.getSnapshot().journal.find((entry) => entry.kind === "refus")
   assert.match(refusal?.detail ?? "", /aucune relation assez nette/)
   session.dispose()
+})
+
+const NOTE = { title: "Suites et φ", url: "https://exemple.fr", snippet: "…" }
+
+/** Une recherche Brave ouverte, puis un « trop de requêtes » : la nouvelle tentative attend 5 secondes. */
+async function waitingOn429() {
+  const context = harness(1)
+  context.session.launch({ count: 1, draws: 4, minutes: 1, series: series(80), champion: null })
+  await flush()
+  context.ia[0].resolve(braveReply(context.ia[0].request, "x"))
+  await flush()
+  context.brave[0].resolve({ ok: false, error: "HTTP 429", retryAfterMs: 5000 })
+  await flush()
+  assert.equal(context.brave.length, 1)
+  return context
+}
+
+test("a retry after a 429 waits out a pause, and leaves at the resume", async () => {
+  const { clock, brave, session } = await waitingOn429()
+  session.pause()
+  await clock.advance(6000)
+  assert.equal(brave.length, 1)
+  const held = session.getSnapshot()
+  assert.equal(held.xrayBrave[0].state, "cours")
+  assert.deepEqual(held.activity.searching.map((entry) => entry.runnerId), ["r1"])
+  assert.equal(held.braveError, null)
+  assert.equal(held.journal.some((entry) => entry.kind === "erreur"), false)
+  assert.equal(held.xraySteps.some((step) => step.op === "recherche" && step.state !== "en cours"), false)
+  session.resume()
+  await clock.advance(4999)
+  assert.equal(brave.length, 1)
+  await clock.advance(1)
+  assert.equal(brave.length, 2)
+  session.dispose()
+})
+
+test("a 429 that arrives during a pause starts its wait at the resume", async () => {
+  const { clock, ia, brave, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(80), champion: null })
+  await flush()
+  ia[0].resolve(braveReply(ia[0].request, "x"))
+  await flush()
+  assert.equal(brave.length, 1)
+  session.pause()
+  brave[0].resolve({ ok: false, error: "HTTP 429", retryAfterMs: 5000 })
+  await flush()
+  await clock.advance(60_000)
+  assert.equal(brave.length, 1)
+  session.resume()
+  await clock.advance(4999)
+  assert.equal(brave.length, 1)
+  await clock.advance(1)
+  assert.equal(brave.length, 2)
+  session.dispose()
+})
+
+test("a retry after a 429 does not leave once the race is over, and it is no panne", async () => {
+  const { clock, brave, saved, session } = await waitingOn429()
+  session.skip()
+  for (let turn = 0; turn < 4; turn += 1) session.skip()
+  await flush()
+  const over = session.getSnapshot()
+  assert.equal(over.phase, "fin")
+  assert.equal(saved.length, 1)
+  const lines = over.journal.length
+  await clock.advance(6000)
+  assert.equal(brave.length, 1)
+  const after = session.getSnapshot()
+  assert.equal(after.journal.length, lines)
+  assert.equal(after.journal.some((entry) => entry.kind === "brave" || entry.kind === "erreur"), false)
+  assert.deepEqual(after.activity.searching, [])
+  assert.equal(after.braveError, null)
+  assert.equal(after.brave, "inconnu")
+  assert.equal(after.xrayBrave[0].state, "erreur")
+  assert.match(after.xrayBrave[0].detail, /nouvelle tentative abandonnée : la course est finie/)
+  const last = after.xraySteps.filter((step) => step.op === "recherche").at(-1)
+  assert.equal(last?.state, "fait")
+  assert.match(last?.result ?? "", /Nouvelle tentative abandonnée : la course est finie/)
+  const board = fonctionnelBoard({
+    phase: after.phase,
+    minutes: after.minutes,
+    paused: false,
+    ia: after.ia,
+    iaError: after.iaError,
+    turn: null,
+    runnerIds: ["r1"],
+    names: { r1: "R1" },
+    steps: after.xraySteps.filter((step) => step.op === "recherche"),
+  })
+  assert.equal(board.rows.some((row) => row.cells.some((cell) => cell.panne)), false)
+  session.dispose()
+})
+
+test("a retry after a 429 keeps its wait when the avant-course is skipped", async () => {
+  const { clock, brave, session } = await waitingOn429()
+  await clock.advance(2000)
+  session.skip()
+  assert.equal(session.getSnapshot().phase, "course")
+  await clock.advance(2999)
+  assert.equal(brave.length, 1)
+  await clock.advance(1)
+  assert.equal(brave.length, 2)
+  session.dispose()
+})
+
+test("a retry after a 429 is dropped when its runner stops", async () => {
+  const { clock, brave, session } = await waitingOn429()
+  session.skip()
+  const race = session.getSnapshot().race
+  assert.ok(race)
+  const internal = session as unknown as { set(patch: object): void }
+  internal.set({ race: { ...race, runners: race.runners.map((runner) => ({ ...runner, cents: 0 })) } })
+  session.skip()
+  await flush()
+  assert.equal(session.getSnapshot().race?.runners[0].alive, false)
+  assert.match(session.getSnapshot().xrayBrave[0].detail, /nouvelle tentative abandonnée : ce runner s’est arrêté/)
+  await clock.advance(6000)
+  assert.equal(brave.length, 1)
+  assert.deepEqual(session.getSnapshot().activity.searching, [])
+  session.dispose()
+})
+
+test("a launch cancels the retry of the generation before", async () => {
+  const { clock, brave, session } = await waitingOn429()
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(80), champion: null })
+  await flush()
+  assert.deepEqual(session.getSnapshot().xrayBrave, [])
+  await clock.advance(6000)
+  assert.equal(brave.length, 1)
+  session.dispose()
+})
+
+test("the same search is read once per generation, and each runner reads the notes", async () => {
+  const { ia, brave, session } = harness(1)
+  session.launch({ count: 2, draws: 4, minutes: 1, series: series(80), champion: null })
+  await flush()
+  ia[0].resolve(braveReply(ia[0].request, "a"))
+  await flush()
+  assert.equal(brave.length, 1)
+  brave[0].resolve({ ok: true, results: [NOTE] })
+  await flush()
+  // R2 pose la même question à la même coupure : la réponse vient de la mémoire, sans appel à Brave.
+  assert.equal(ia[1].request.runnerId, "r2")
+  ia[1].resolve(braveReply(ia[1].request, "b"))
+  await flush()
+  assert.equal(brave.length, 1)
+  const lines = session.getSnapshot().xrayBrave
+  assert.equal(lines.length, 2)
+  assert.equal(lines[1].state, "fait")
+  assert.equal(lines[1].detail, "1 résultat lisible · déjà lue")
+  const noted = session.getSnapshot().journal.filter((entry) => entry.kind === "brave")
+  assert.equal(noted.length, 2)
+  assert.match(noted[1].detail, /déjà lue dans cette génération/)
+  assert.equal((session as unknown as { braveSearches: number }).braveSearches, 1)
+  // Les deux runners lisent la note à leur appel suivant.
+  assert.ok(ia[2].request.user.includes("Suites et φ"))
+  ia[2].resolve(unreadable)
+  await flush()
+  assert.ok(ia[3].request.user.includes("Suites et φ"))
+  assert.notEqual(ia[2].request.runnerId, ia[3].request.runnerId)
+  // Une nouvelle génération repart sans mémoire.
+  session.launch({ count: 2, draws: 4, minutes: 1, series: series(80), champion: null })
+  await flush()
+  const fresh = ia[ia.length - 1]
+  fresh.resolve(braveReply(fresh.request, "c"))
+  await flush()
+  assert.equal(brave.length, 2)
+  session.dispose()
+})
+
+test("an empty Brave answer does not replace the notes already read, and the next turn asks again", async () => {
+  const { ia, brave, session } = harness(1)
+  session.launch({ count: 1, draws: 6, minutes: 1, series: series(80), champion: null })
+  await flush()
+  ia[0].resolve(braveReply(ia[0].request, "a"))
+  await flush()
+  brave[0].resolve({ ok: true, results: [NOTE] })
+  await flush()
+  // Un tour joué fait glisser la fenêtre d’examen, donc la coupure : la recherche suivante part au réseau.
+  session.skip()
+  session.skip()
+  ia[ia.length - 1].resolve(unreadable)
+  await flush()
+  const call = ia[ia.length - 1]
+  call.resolve(braveReply(call.request, "b"))
+  await flush()
+  assert.equal(brave.length, 2)
+  assert.notEqual(brave[1].request.cutoff, brave[0].request.cutoff)
+  brave[1].resolve({ ok: true, results: [] })
+  await flush()
+  assert.equal(session.getSnapshot().xrayBrave[1].detail, "0 résultats lisibles")
+  assert.ok(ia[ia.length - 1].request.user.includes("Suites et φ"))
+  session.dispose()
+})
+
+test("at the cap of searches a new one is refused without a call or an error, but a known one is still read", async () => {
+  const refused = harness(1)
+  refused.session.launch({ count: 1, draws: 4, minutes: 1, series: series(80), champion: null })
+  const counter = refused.session as unknown as { braveSearches: number }
+  counter.braveSearches = BRAVE_SEARCH_CAP
+  await flush()
+  refused.ia[0].resolve(braveReply(refused.ia[0].request, "a"))
+  await flush()
+  assert.equal(refused.brave.length, 0)
+  const snapshot = refused.session.getSnapshot()
+  const refusal = snapshot.journal.find((entry) => entry.kind === "refus")
+  assert.match(refusal?.detail ?? "", new RegExp(`plafond de ${BRAVE_SEARCH_CAP} recherches`))
+  assert.match(snapshot.xrayBrave[0].detail, /plafond/)
+  assert.equal(snapshot.braveError, null)
+  assert.equal(snapshot.brave, "inconnu")
+  assert.equal(snapshot.xraySteps.find((step) => step.op === "recherche")?.state, "refusé")
+  refused.session.dispose()
+
+  const known = harness(1)
+  known.session.launch({ count: 2, draws: 4, minutes: 1, series: series(80), champion: null })
+  await flush()
+  known.ia[0].resolve(braveReply(known.ia[0].request, "a"))
+  await flush()
+  known.brave[0].resolve({ ok: true, results: [NOTE] })
+  await flush()
+  ;(known.session as unknown as { braveSearches: number }).braveSearches = BRAVE_SEARCH_CAP
+  known.ia[1].resolve(braveReply(known.ia[1].request, "b"))
+  await flush()
+  assert.equal(known.brave.length, 1)
+  assert.equal(known.session.getSnapshot().xrayBrave[1].detail, "1 résultat lisible · déjà lue")
+  known.session.dispose()
 })
 
 test("the next generation starts from the champion without its late versions", () => {
@@ -535,15 +778,13 @@ test("a pending call appears in the xray activity, then leaves", async () => {
 
 test("a Brave search appears in the xray activity, then leaves", async () => {
   const { ia, brave, session } = harness(1)
-  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(80), champion: null })
   await flush()
   session.pause()
   ia[0].resolve(braveReply(ia[0].request, "nombre d’or"))
   await flush()
   const live = session.getSnapshot()
-  const track = buildTrack(series(40))
-  const learned = promptPast(revealedPast(track, track.length - 4))
-  const relation = strongestRelation(sincePast(learned, learned[0]?.date ?? ""))
+  const { relation } = openingRead(series(80))
   assert.ok(relation)
   assert.deepEqual(live.activity.searching, [{ runnerId: "r1", query: relation.phrase }])
   assert.deepEqual(live.activity.calling, [])
@@ -565,14 +806,12 @@ test("a Brave search appears in the xray activity, then leaves", async () => {
 
 test("a failed Brave search keeps the query and the error", async () => {
   const { ia, brave, session } = harness(1)
-  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(80), champion: null })
   await flush()
   session.pause()
   ia[0].resolve(braveReply(ia[0].request, "somme et plus petit rang"))
   await flush()
-  const track = buildTrack(series(40))
-  const learned = promptPast(revealedPast(track, track.length - 4))
-  const relation = strongestRelation(sincePast(learned, learned[0]?.date ?? ""))
+  const { relation } = openingRead(series(80))
   assert.ok(relation)
   brave[0]?.resolve({ ok: false, error: "Brave : trop de requêtes" })
   await flush()
