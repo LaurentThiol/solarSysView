@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "La lecture mesurée n’est plus refusée",
   "body": "Dans le journal du runner, une lecture qui recopie la mesure n’est plus refusée. Quand le dessin dit « s’écarte », l’exemple JSON dit la même chose : la skill proposée peut arriver à l’examen. Écrire « correspond » à la place de « s’écarte » reste un refus, et le journal cite les deux mots. L’examen demande toujours un solde plus haut. Le champion reste le solde de course. La variation maison ne change pas.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 349,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/349"
 }
