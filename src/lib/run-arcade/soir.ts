@@ -19,9 +19,6 @@ export type SoirReading = {
   /** Jours entre le soir à jouer et le vis-à-vis. Vide s’il n’y en a pas. */
   days: number | null
   tip: number
-  /** Période commune, en tirages de ce soir. */
-  period: number | null
-  order: number | null
 }
 
 const WEEKDAYS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"] as const
@@ -53,6 +50,11 @@ export function daysBetween(later: string, earlier: string) {
   const ms =
     Date.parse(`${later.slice(0, 10)}T12:00:00Z`) - Date.parse(`${earlier.slice(0, 10)}T12:00:00Z`)
   return Math.round(ms / 86_400_000)
+}
+
+/** Numéro du jour d’une date. L’écart de deux numéros est `daysBetween`, sans refaire de `Date.parse`. */
+function dayNumber(iso: string) {
+  return Math.round(Date.parse(`${iso.slice(0, 10)}T12:00:00Z`) / 86_400_000)
 }
 
 function pearson(left: readonly number[], right: readonly number[]) {
@@ -123,18 +125,28 @@ function nearestOrder(ratio: number) {
   return Math.abs(best - ratio) <= 0.2 ? best : null
 }
 
-/** Décalage en jours, de 1 à 4, qui aligne le mieux les deux soirs, et son r. */
+/**
+ * Décalage en jours, de 1 à 4, qui aligne le mieux les deux soirs, et son r.
+ * L’autre soir est indexé par numéro de jour : un vis-à-vis se trouve sans parcourir la série.
+ * Si deux tirages tombent le même jour, le premier garde la place.
+ */
 export function phaseLink(play: readonly SoirPoint[], other: readonly SoirPoint[]): { days: number; r: number } | null {
+  const byDay = new Map<number, SoirPoint>()
+  for (const item of other) {
+    const day = dayNumber(item.date)
+    if (Number.isFinite(day) && !byDay.has(day)) byDay.set(day, item)
+  }
+  const playDays = play.map((point) => dayNumber(point.date))
   let bestLag: number | null = null
   let best = 0
   let bestR = 0
   for (let lag = 1; lag <= EVENING_GAP_DAYS; lag += 1) {
     const left: number[] = []
     const right: number[] = []
-    for (const point of play) {
-      const match = other.find((item) => daysBetween(point.date, item.date) === lag)
+    for (let index = 0; index < play.length; index += 1) {
+      const match = byDay.get(playDays[index] - lag)
       if (!match) continue
-      left.push(point.value)
+      left.push(play[index].value)
       right.push(match.value)
     }
     const score = pearson(left, right)
@@ -184,6 +196,10 @@ function stepTip(series: readonly SoirPoint[], index: number) {
   return value + (value - previous)
 }
 
+/**
+ * Lecture du soir à jouer. L’harmonique commune n’y est plus calculée : aucun écran ne la montre.
+ * Un écran qui la montrera appellera `sharedHarmonic` à part.
+ */
 export function soirReading(
   past: readonly RankPoint[],
   rows: readonly CurveValues[],
@@ -192,7 +208,7 @@ export function soirReading(
 ): SoirReading {
   const lastDate = past.reduce((latest, point) => (point.date > latest ? point.date : latest), "")
   if (!lastDate || rows.length === 0) {
-    return { evening: "mardi", other: "mardi", days: null, tip: 0, period: null, order: null }
+    return { evening: "mardi", other: "mardi", days: null, tip: 0 }
   }
   const evening = eveningToPlay(lastDate, hiddenDate)
   const other = otherEvening(evening)
@@ -200,40 +216,34 @@ export function soirReading(
   const playSeries = sides[evening]
   const otherSeries = sides[other]
   const target = hiddenDate && weekdayOf(hiddenDate) ? hiddenDate : addDays(lastDate, evening === "vendredi" ? 3 : 4)
-  let match: SoirPoint | null = null
+  const targetDay = dayNumber(target)
+  const otherDays = otherSeries.map((point) => dayNumber(point.date))
+  let match = -1
   let days: number | null = null
   let nearest = EVENING_GAP_DAYS + 1
-  for (const point of otherSeries) {
-    const gap = Math.abs(daysBetween(target, point.date))
+  for (let index = 0; index < otherDays.length; index += 1) {
+    const gap = Math.abs(targetDay - otherDays[index])
     if (gap <= EVENING_GAP_DAYS && gap < nearest) {
-      match = point
+      match = index
       days = gap
       nearest = gap
     }
   }
-  const harmonic = sharedHarmonic(
-    sides.mardi.map((point) => point.value),
-    sides.vendredi.map((point) => point.value)
-  )
   const aligned = phaseDays(playSeries, otherSeries)
-  if (aligned != null && match) {
-    const phased = otherSeries.find((point) => Math.abs(daysBetween(target, point.date)) === aligned)
-    if (phased) {
+  if (aligned != null && match >= 0) {
+    const phased = otherDays.findIndex((day) => Math.abs(targetDay - day) === aligned)
+    if (phased >= 0) {
       match = phased
       days = aligned
     }
   }
   const sameStep = playSeries.length > 0 ? stepTip(playSeries, playSeries.length - 1) : null
-  const tip = match
-    ? stepTip(otherSeries, otherSeries.indexOf(match))
-    : (sameStep ?? rows[rows.length - 1][key])
+  const tip = match >= 0 ? stepTip(otherSeries, match) : (sameStep ?? rows[rows.length - 1][key])
   return {
     evening,
-    other: match ? other : evening,
-    days: match ? days : null,
+    other: match >= 0 ? other : evening,
+    days: match >= 0 ? days : null,
     tip,
-    period: harmonic.period,
-    order: harmonic.order,
   }
 }
 

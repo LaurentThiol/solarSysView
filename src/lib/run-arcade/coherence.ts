@@ -166,11 +166,15 @@ export function placeNumbers(
   return placed
 }
 
-/** Deux étoiles ordonnées dont la somme vaut la cible, au plus près des pointes. */
+/**
+ * Deux étoiles ordonnées dont la somme vaut la cible, au plus près des pointes.
+ * Les pointes se trient d’abord, comme pour les numéros : la plus basse va à e1, la plus haute à e2.
+ */
 export function placeStars(tips: readonly number[], target: number) {
   const goal = clampInt(target, STAR_SUM_MIN, STAR_SUM_MAX)
-  const t1 = Number.isFinite(tips[0]) ? tips[0] : 3
-  const t2 = Number.isFinite(tips[1]) ? tips[1] : 8
+  const first = Number.isFinite(tips[0]) ? tips[0] : 3
+  const second = Number.isFinite(tips[1]) ? tips[1] : 8
+  const [t1, t2] = first <= second ? [first, second] : [second, first]
   let best: [number, number] = [1, 2]
   let bestCost = Number.POSITIVE_INFINITY
   for (let a = 1; a < STAR_POOL; a += 1) {

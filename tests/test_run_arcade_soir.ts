@@ -5,12 +5,18 @@ import { curveValues, type RankPoint } from "../src/lib/run-arcade/curves.ts"
 import { buildPrompt } from "../src/lib/run-arcade/prompt.ts"
 import { describeSkill, newSkill, parseSkillParams, type SkillParams } from "../src/lib/run-arcade/skills.ts"
 import {
+  daysBetween,
+  eveningToPlay,
+  EVENING_GAP_DAYS,
   formatOrder,
   fundamentalPeriod,
+  otherEvening,
   phaseDays,
+  phaseLink,
   sharedHarmonic,
   soirReading,
   weekdayOf,
+  type Evening,
   type SoirPoint,
 } from "../src/lib/run-arcade/soir.ts"
 import { createMinds, think, type RunnerMind } from "../src/lib/run-arcade/thought.ts"
@@ -171,4 +177,142 @@ test("soir is a gesture the runners and the local model can name", () => {
     drawing: null,
   })
   assert.equal(JSON.stringify(prompt).includes('"soir"') || JSON.stringify(prompt).includes("soir"), true)
+})
+
+function lcg(seed: number) {
+  let state = seed >>> 0
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+    return state / 4294967296
+  }
+}
+
+function referencePearson(left: readonly number[], right: readonly number[]) {
+  const count = Math.min(left.length, right.length)
+  if (count < 3) return null
+  const meanLeft = left.slice(0, count).reduce((total, value) => total + value, 0) / count
+  const meanRight = right.slice(0, count).reduce((total, value) => total + value, 0) / count
+  let num = 0
+  let leftSq = 0
+  let rightSq = 0
+  for (let index = 0; index < count; index += 1) {
+    const a = left[index] - meanLeft
+    const b = right[index] - meanRight
+    num += a * b
+    leftSq += a * a
+    rightSq += b * b
+  }
+  if (leftSq === 0 || rightSq === 0) return null
+  return num / Math.sqrt(leftSq * rightSq)
+}
+
+/** Lecture d’origine : chaque vis-à-vis se cherche en parcourant l’autre soir, avec deux `Date.parse` par comparaison. */
+function referenceLink(play: readonly SoirPoint[], other: readonly SoirPoint[]) {
+  let bestLag: number | null = null
+  let best = 0
+  let bestR = 0
+  for (let lag = 1; lag <= EVENING_GAP_DAYS; lag += 1) {
+    const left: number[] = []
+    const right: number[] = []
+    for (const point of play) {
+      const match = other.find((item) => daysBetween(point.date, item.date) === lag)
+      if (!match) continue
+      left.push(point.value)
+      right.push(match.value)
+    }
+    const score = referencePearson(left, right)
+    if (score == null || Math.abs(score) <= best) continue
+    best = Math.abs(score)
+    bestLag = lag
+    bestR = score
+  }
+  return bestLag == null ? null : { days: bestLag, r: bestR }
+}
+
+function referenceReading(
+  past: readonly RankPoint[],
+  rows: readonly ReturnType<typeof curveValues>[],
+  key: "n5",
+  hiddenDate: string
+) {
+  const lastDate = past.reduce((latest, point) => (point.date > latest ? point.date : latest), "")
+  const evening = eveningToPlay(lastDate, hiddenDate)
+  const other = otherEvening(evening)
+  const sides: Record<Evening, SoirPoint[]> = { mardi: [], vendredi: [] }
+  const ordered = past
+    .map((point, index) => ({ point, value: rows[index][key] }))
+    .sort((a, b) => a.point.date.localeCompare(b.point.date))
+  for (const item of ordered) {
+    const side = weekdayOf(item.point.date)
+    if (side) sides[side].push({ date: item.point.date, evening: side, value: item.value })
+  }
+  const playSeries = sides[evening]
+  const otherSeries = sides[other]
+  const target = hiddenDate
+  let match: SoirPoint | null = null
+  let days: number | null = null
+  let nearest = EVENING_GAP_DAYS + 1
+  for (const point of otherSeries) {
+    const gap = Math.abs(daysBetween(target, point.date))
+    if (gap <= EVENING_GAP_DAYS && gap < nearest) {
+      match = point
+      days = gap
+      nearest = gap
+    }
+  }
+  const aligned = referenceLink(playSeries, otherSeries)?.days ?? null
+  if (aligned != null && match) {
+    const phased = otherSeries.find((point) => Math.abs(daysBetween(target, point.date)) === aligned)
+    if (phased) {
+      match = phased
+      days = aligned
+    }
+  }
+  const stepTip = (series: readonly SoirPoint[], index: number) =>
+    series[index].value + (series[index].value - (index > 0 ? series[index - 1].value : series[index].value))
+  const sameStep = playSeries.length > 0 ? stepTip(playSeries, playSeries.length - 1) : null
+  const tip = match ? stepTip(otherSeries, otherSeries.indexOf(match)) : (sameStep ?? rows[rows.length - 1][key])
+  return { evening, other: match ? other : evening, days: match ? days : null, tip }
+}
+
+test("the day-indexed phase link gives the same lag and r as the search in the other evening", () => {
+  const random = lcg(21)
+  for (let round = 0; round < 400; round += 1) {
+    const stamp = (day: number) => new Date(Date.UTC(2026, 0, 1 + day, 12)).toISOString().slice(0, 10)
+    const play: SoirPoint[] = Array.from({ length: 3 + Math.floor(random() * 40) }, () => ({
+      date: stamp(Math.floor(random() * 120)),
+      evening: "vendredi" as const,
+      value: Math.floor(random() * 50),
+    }))
+    const other: SoirPoint[] = Array.from({ length: 3 + Math.floor(random() * 40) }, () => ({
+      date: stamp(Math.floor(random() * 120)),
+      evening: "mardi" as const,
+      value: Math.floor(random() * 50),
+    }))
+    assert.deepEqual(phaseLink(play, other), referenceLink(play, other), `tour ${round}`)
+    assert.equal(phaseDays(play, other), referenceLink(play, other)?.days ?? null)
+  }
+  assert.equal(phaseLink([], []), null)
+})
+
+test("a reading on random archives equals the one that walks the other evening, and carries no harmonic", () => {
+  const random = lcg(5)
+  for (let round = 0; round < 120; round += 1) {
+    const length = 30 + Math.floor(random() * 90)
+    const start = new Date(Date.UTC(2025, 0, 1 + Math.floor(random() * 60), 12))
+    const past: RankPoint[] = []
+    for (let day = new Date(start); past.length < length; day = new Date(day.getTime() + 86_400_000)) {
+      const weekday = day.getUTCDay()
+      if ((weekday === 2 || weekday === 5) && random() > 0.08) {
+        past.push(draw(day.toISOString().slice(0, 10), 1 + Math.floor(random() * 50)))
+      }
+    }
+    const rows = past.map(curveValues)
+    const last = Date.parse(`${past[past.length - 1].date}T12:00:00Z`)
+    const gap = (weekdayOf(past[past.length - 1].date) === "mardi" ? 3 : 4) + (random() < 0.2 ? 7 : 0)
+    const hiddenDate = new Date(last + gap * 86_400_000).toISOString().slice(0, 10)
+    const read = soirReading(past, rows, "n5", hiddenDate)
+    assert.deepEqual(read, referenceReading(past, rows, "n5", hiddenDate), `tour ${round}`)
+    assert.equal("period" in read || "order" in read, false)
+  }
 })

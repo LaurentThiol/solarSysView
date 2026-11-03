@@ -1,6 +1,6 @@
 /**
  * Formes d’une skill. Chaque cran est jugé dans son carré.
- * La pointe du dernier cran est remise entre le bas et le haut de la fenêtre.
+ * La pointe du dernier cran est remise à l’échelle de la fenêtre. Elle la dépasse d’une amplitude au plus.
  */
 
 export const FORMES = [
@@ -149,11 +149,39 @@ function pythagorasY(points: readonly UnitPoint[]) {
   return yAt(xNext) + (mid.y - yAt(mid.x))
 }
 
-function waveY(points: readonly UnitPoint[], forme: Forme, period: number) {
-  const cycle = points.length / period
-  const phase = 2 * Math.PI * (cycle - Math.floor(cycle))
-  const wave = forme === "cos" ? Math.cos(phase) : Math.sin(phase)
-  return 0.5 + 0.5 * wave
+/**
+ * Onde du cran : on lit sa phase φ, par moindres carrés avec sin et cos de période `period`
+ * (φ = atan2 de la corrélation avec cos sur la corrélation avec sin, ordonnées centrées).
+ * La pointe est le point suivant de l’onde 0,5 + 0,5·sin(2π·i/période + φ), dans le carré du cran.
+ * Une onde dont la phase est libre est la même, qu’on l’appelle sinus ou cosinus.
+ * Sans composante à cette période, il n’y a rien à lire : pas de point, le cran glisse.
+ */
+function waveY(points: readonly UnitPoint[], period: number) {
+  const count = points.length
+  const mean = points.reduce((total, point) => total + point.y, 0) / count
+  let sinSin = 0
+  let cosCos = 0
+  let sinCos = 0
+  let ySin = 0
+  let yCos = 0
+  for (let index = 0; index < count; index += 1) {
+    const angle = (2 * Math.PI * index) / period
+    const sin = Math.sin(angle)
+    const cos = Math.cos(angle)
+    const centered = points[index].y - mean
+    sinSin += sin * sin
+    cosCos += cos * cos
+    sinCos += sin * cos
+    ySin += centered * sin
+    yCos += centered * cos
+  }
+  const det = sinSin * cosCos - sinCos * sinCos
+  if (!(det > EPS)) return null
+  const onSin = (ySin * cosCos - yCos * sinCos) / det
+  const onCos = (yCos * sinSin - ySin * sinCos) / det
+  if (Math.hypot(onSin, onCos) <= EPS) return null
+  const phase = Math.atan2(onCos, onSin)
+  return 0.5 + 0.5 * Math.sin((2 * Math.PI * count) / period + phase)
 }
 
 function inverseY(points: readonly UnitPoint[], forme: Forme, period: number) {
@@ -192,7 +220,7 @@ function figureStep(points: readonly UnitPoint[], forme: Forme, n: number | null
   else if (forme === "cercle") y = circleY(points)
   else if (forme === "polygone") y = polygonY(points, n ?? 4)
   else if (forme === "pythagore") y = pythagorasY(points)
-  else if (forme === "sin" || forme === "cos") y = waveY(points, forme, period)
+  else if (forme === "sin" || forme === "cos") y = waveY(points, period)
   else if (forme === "arcsin" || forme === "arccos") y = inverseY(points, forme, period)
   else if (forme === "tan") y = tangentY(points)
   else y = arctanY(points, n ?? 30)
@@ -242,7 +270,7 @@ export function readFigure(values: readonly number[], forme: Forme, n: number | 
       if (Math.abs(pred - values[start + length]) <= tol + 1e-9) matched += 1
     } else {
       tip = place(built, cran, maskLo, maskHi, "tip")
-      if (forme === "arctan" && maskHi - maskLo > EPS) {
+      if (maskHi - maskLo > EPS) {
         const span = maskHi - maskLo
         tip = Math.min(maskHi + span, Math.max(maskLo - span, tip))
       }

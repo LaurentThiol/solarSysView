@@ -2,7 +2,7 @@ import { buildTrack, CURVE_KEYS, type CurveKey, type RankPoint } from "./curves"
 import {
   auditCutoffs,
   baseSkill,
-  parseSkillParams,
+  parseStoredSkillParams,
   rollBack,
   type Skill,
   type SkillOrigin,
@@ -90,7 +90,7 @@ function isoDay(value: unknown): string | null {
 }
 
 function parseVersion(raw: unknown): SkillVersion | null {
-  const params = parseSkillParams(raw)
+  const params = parseStoredSkillParams(raw)
   if (!params || !raw || typeof raw !== "object") return null
   const record = raw as Record<string, unknown>
   const version = Number(record.version)

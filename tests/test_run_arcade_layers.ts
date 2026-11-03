@@ -118,3 +118,18 @@ test("a race cursor keeps the hidden draw out until the cursor moves past it", (
     track.map((item) => item.date)
   )
 })
+
+test("without a cursor, a running race keeps the hidden track out", () => {
+  const series = [
+    point("2025-06-03", 2, 12, 22, 32, 42, 2, 4),
+    point("2026-01-02", 3, 13, 23, 33, 43, 3, 6),
+    point("2026-01-06", 4, 14, 24, 34, 44, 4, 8),
+    point("2026-01-09", 5, 15, 25, 35, 45, 5, 10),
+  ]
+  const track = buildTrack(series)
+  assert.equal(track.length, 4)
+  assert.deepEqual(layerPoints({ series, track, running: true, cursor: null }), [])
+  assert.deepEqual(layerPoints({ series, track, running: true, cursor: 0 }), [])
+  assert.equal(layerPoints({ series, track, running: true, cursor: 2 }).length, 2)
+  assert.equal(layerPoints({ series, track, running: false, cursor: null }).length, track.length)
+})

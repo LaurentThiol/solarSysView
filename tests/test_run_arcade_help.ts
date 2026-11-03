@@ -130,12 +130,36 @@ test("runArcade help names the purse, the exam, the evenings and the curves", ()
   assert.match(nav, /X\(n\+1\)/)
   assert.match(copy, /X\(n\+1\)/)
   assert.match(page, /X\(n\+1\)/)
-  assert.match(RUN_ARCADE_HELP.gestes.items?.[7].text ?? "", /trois points/)
   assert.match(RUN_ARCADE_HELP.gestes.items?.[7].text ?? "", /15, 30 ou 45/)
-  assert.match(RUN_ARCADE_HELP.dessin.items?.[4].text ?? "", /trois points/)
-  assert.match(nav, /trois points/)
-  assert.match(copy, /trois points/)
-  assert.match(page, /trois points/)
+})
+
+test("runArcade texts say that the drawn circle is the golden circle, for every gesture", () => {
+  const circle = /Le cercle dessiné est toujours le cercle d’or, même pour une figure/
+  assert.match(RUN_ARCADE_HELP.gestes.items?.[7].text ?? "", circle)
+  assert.match(RUN_ARCADE_HELP.dessin.items?.[4].text ?? "", circle)
+  assert.match(nav, circle)
+  assert.match(copy, circle)
+  assert.match(page, circle)
+  assert.doesNotMatch(JSON.stringify(RUN_ARCADE_HELP), /trois points/)
+  for (const text of [nav, copy, page]) assert.doesNotMatch(text, /Le cercle de la figure passe par trois points/)
+})
+
+test("runArcade help follows the suite, the waves, the figure window, the evening and the base gestures", () => {
+  const suite = RUN_ARCADE_HELP.gestes.items?.[6].text ?? ""
+  assert.match(suite, /bornes de la courbe, ou entre les lignes/)
+  assert.match(suite, /« du dernier pas » est refusée/)
+  assert.doesNotMatch(suite, /ou dernier pas/)
+  const evening = RUN_ARCADE_HELP.gestes.items?.[5].text ?? ""
+  assert.doesNotMatch(evening, /harmonique/i)
+  const figure = RUN_ARCADE_HELP.gestes.items?.[7].text ?? ""
+  assert.match(figure, /au moins autant de tirages que le calibre/)
+  assert.match(figure, /Sinus et cosinus lisent la phase du dernier cran/)
+  assert.match(figure, /dépasser la fenêtre d’une amplitude au plus/)
+  assert.doesNotMatch(figure, /se place entre le plus bas et le plus haut de la fenêtre/)
+  const runners = RUN_ARCADE_HELP.runners.body
+  assert.match(runners, /Les 18 premiers ont chacun un geste différent/)
+  assert.match(runners, /Au-delà de 18, le geste revient avec un réglage qui change à chaque tour de 18/)
+  assert.match(runners, /Persiste, glisse, miroir et soir n’ont aucun réglage/)
 })
 
 test("runArcade help says the exam window slides, what an empty exam shows, and what chance pays", () => {

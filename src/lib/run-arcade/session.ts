@@ -1102,7 +1102,7 @@ export class RunArcadeSession {
       const candidate = applyParams(
         runner.mind,
         item.params,
-        { cutoff: item.cutoff, origin: "ia", examCents: null, phrase: item.phrase || undefined },
+        { cutoff: item.cutoff, origin: "ia", examCents: null },
         item.name,
         `${runner.mind.id}-g${this.snapshot.generation}-${item.params.curve === "*" ? "tout" : item.params.curve}`
       )

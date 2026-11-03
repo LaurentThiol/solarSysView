@@ -1,4 +1,5 @@
 import { CURVE_KEYS, curveLabel, type CurveKey } from "./curves"
+import { mix } from "./depart"
 import {
   ARCTAN_TURNS,
   defaultFigureN,
@@ -24,8 +25,14 @@ export const LOGISTIC_R = [1, 1.5, 2, 2.8, 3.2] as const
 export type LogisticR = (typeof LOGISTIC_R)[number]
 export const DEFAULT_LOGISTIC_R: LogisticR = 2
 
+/** Ratio d’une skill qui n’en demande pas. Seul le geste « or » le lit ; le cercle d’or du dessin vise ce niveau. */
+const DEFAULT_RATIO: GoldenRatio = 0.618
+
 export const SPANS = ["bande", "lignes", "pas"] as const
 export type SpanKind = (typeof SPANS)[number]
+
+/** Étendues de la suite. Sur « pas », la dernière valeur est au bord de la bande : R ne compterait pas. */
+export const SUITE_SPANS = ["bande", "lignes"] as const
 
 /** Tendance courte, en tirages. */
 export const SHORT_WINDOWS = [3, 5, 10] as const
@@ -249,11 +256,9 @@ export function addVersion(skill: Skill, params: SkillParams, meta: VersionMeta)
   }
 }
 
-function intIn(value: unknown, min: number, max: number) {
-  const n = typeof value === "string" ? Number(value) : value
-  if (typeof n !== "number" || !Number.isFinite(n)) return null
-  const rounded = Math.round(n)
-  return rounded >= min && rounded <= max ? rounded : null
+/** Réglage absent : rien, ou un texte vide. Il prend sa valeur par défaut. */
+function isAbsent(value: unknown) {
+  return value == null || (typeof value === "string" && value.trim() === "")
 }
 
 /** Première valeur autorisée. Une liste copiée du modèle (« a|b ») garde le premier jeton connu. */
@@ -267,21 +272,22 @@ function firstAllowed<T extends string>(value: unknown, allowed: readonly T[]): 
   return null
 }
 
+/** Premier nombre d’un nombre ou d’un texte. Le signe moins compte : « -5 » vaut −5, jamais 5. */
 function firstNumber(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value
   if (typeof value !== "string") return null
-  const match = value.match(/-?\d+(?:[.,]\d+)?/)
+  const match = value.replace(/\u2212/g, "-").match(/-?\d+(?:[.,]\d+)?/)
   if (!match) return null
   const parsed = Number(match[0].replace(",", "."))
   return Number.isFinite(parsed) ? parsed : null
 }
 
+/** Entier de min à max, arrondi de la même façon pour un nombre et pour un texte. Un signe moins refuse. */
 function boundedInt(value: unknown, min: number, max: number) {
-  const direct = typeof value === "string" && /[^\d-]/.test(value) ? null : intIn(value, min, max)
-  if (direct != null) return direct
-  if (typeof value !== "string") return null
-  const match = value.match(/\d+/)
-  return match ? intIn(Number(match[0]), min, max) : null
+  const parsed = firstNumber(value)
+  if (parsed == null || parsed < 0) return null
+  const rounded = Math.round(parsed)
+  return rounded >= min && rounded <= max ? rounded : null
 }
 
 /** R le plus proche, à 0,05 près. Plus loin : refus. */
@@ -294,56 +300,99 @@ export function nearestLogistic(value: number): LogisticR | null {
   return Math.abs(best - value) <= 0.05 ? best : null
 }
 
-/** 0 et « null » : réglage absent. undefined : valeur illisible. */
+/** Vide, 0 et « null » : réglage absent. undefined : valeur illisible. */
 function readFigureN(value: unknown): number | null | undefined {
-  if (value == null || value === "" || value === 0 || value === "0" || value === "null") return null
+  if (isAbsent(value) || value === 0 || value === "0" || value === "null") return null
   const parsed = firstNumber(value)
   if (parsed == null) return undefined
   return Math.round(parsed)
 }
 
-/** 0 et « null » : pas de fenêtre longue. undefined : valeur illisible. */
+/** Vide, 0 et « null » : pas de fenêtre longue. undefined : valeur illisible. */
 function optionalDays(value: unknown): number | null | undefined {
-  if (value == null || value === 0 || value === "0" || value === "null") return null
+  if (isAbsent(value) || value === 0 || value === "0" || value === "null") return null
   const days = boundedInt(value, DAYS_MIN, DAYS_MAX)
   return days == null ? undefined : days
 }
 
-/** Paramètres proposés par l’IA. Une liste copiée garde la première valeur autorisée. Hors bornes : refus. */
-export function parseSkillParams(raw: unknown): SkillParams | null {
+/** Ratio lu dans une proposition « or » ou dans une version relue. Vide : 0,618. Plus de 0,05 d’un niveau d’or : refus. */
+function readRatio(value: unknown) {
+  return isAbsent(value) ? DEFAULT_RATIO : nearestGolden(firstNumber(value) ?? Number.NaN)
+}
+
+/** Jours qui contiennent toujours au moins `count` tirages, au rythme mardi puis vendredi (3 puis 4 jours). */
+function daysHolding(count: number) {
+  const back = Math.max(0, count - 1)
+  return Math.ceil(3.5 * back + (back % 2) * 0.5) + 1
+}
+
+/**
+ * Lit des réglages. `proposal` vrai : une proposition neuve, soumise aux règles de ce geste.
+ * `proposal` faux : une version déjà écrite, relue telle quelle, sans règle de plus qu’avant.
+ */
+function readParams(raw: unknown, proposal: boolean): SkillParams | null {
   if (!raw || typeof raw !== "object") return null
   const record = raw as Record<string, unknown>
   const curve = firstAllowed<SkillTarget>(record.curve, ["*", ...CURVE_KEYS])
   const gesture = firstAllowed(record.gesture, GESTURES)
-  const ratio = record.ratio == null ? 0.618 : nearestGolden(firstNumber(record.ratio) ?? Number.NaN)
-  const span = record.span == null ? "bande" : firstAllowed(record.span, SPANS)
-  const window = record.window == null ? 8 : boundedInt(record.window, WINDOW_MIN, WINDOW_MAX)
+  const ratio = proposal && gesture !== "or" ? DEFAULT_RATIO : readRatio(record.ratio)
+  const span = isAbsent(record.span) ? "bande" : firstAllowed(record.span, SPANS)
+  const window = isAbsent(record.window) ? 8 : boundedInt(record.window, WINDOW_MIN, WINDOW_MAX)
   const days = optionalDays(record.days)
   if (!curve || !gesture || ratio == null || !span || window == null || days === undefined) return null
   if (gesture === "figure") {
-    const forme = record.forme == null || record.forme === "" ? "triangle" : firstAllowed(record.forme, FORMES)
+    const forme = isAbsent(record.forme) ? "triangle" : firstAllowed(record.forme, FORMES)
     if (!forme) return null
     const n = readFigureN(record.n)
     if (n === undefined) return null
     if (n != null && !figureNAllowed(forme, n)) return null
     const resolved = usesFigureN(forme) ? (n ?? defaultFigureN(forme)) : null
-    return { curve, gesture, ratio, span, window, days, forme, n: resolved }
+    const length = figureLength(forme, resolved)
+    return {
+      curve,
+      gesture,
+      ratio,
+      span,
+      window: proposal ? Math.max(window, length) : window,
+      days: proposal && days != null ? Math.max(days, daysHolding(length)) : days,
+      forme,
+      n: resolved,
+    }
   }
   if (gesture !== "suite") return { curve, gesture, ratio, span, window, days }
-  const suite = record.suite == null || record.suite === "" ? "logistique" : firstAllowed(record.suite, SUITES)
-  const r =
-    record.r == null || record.r === ""
-      ? DEFAULT_LOGISTIC_R
-      : nearestLogistic(firstNumber(record.r) ?? Number.NaN)
+  const suite = isAbsent(record.suite) ? "logistique" : firstAllowed(record.suite, SUITES)
+  const r = isAbsent(record.r) ? DEFAULT_LOGISTIC_R : nearestLogistic(firstNumber(record.r) ?? Number.NaN)
   if (!suite || r == null) return null
+  if (proposal && !(SUITE_SPANS as readonly SpanKind[]).includes(span)) return null
   return { curve, gesture, ratio, span, window, days, suite, r }
 }
+
+/**
+ * Paramètres proposés par l’IA. Une liste copiée garde la première valeur autorisée. Hors bornes : refus.
+ * Un réglage vide vaut un réglage absent. Un nombre négatif est refusé.
+ * Le ratio ne compte que pour « or » : ailleurs, il vaut 0,618. Une figure lit son calibre en entier :
+ * sa fenêtre, ou ses jours, le rejoignent. La suite refuse l’étendue « du dernier pas ».
+ */
+export function parseSkillParams(raw: unknown): SkillParams | null {
+  return readParams(raw, true)
+}
+
+/**
+ * Réglages d’une version déjà écrite, venue de Neon ou d’un fichier. Elle se relit telle qu’elle a joué :
+ * ratio gardé pour tous les gestes, suite sur « du dernier pas » permise, fenêtre de figure inchangée.
+ * Un champion écrit avant ces règles reste lisible.
+ */
+export function parseStoredSkillParams(raw: unknown): SkillParams | null {
+  return readParams(raw, false)
+}
+
+type BasePreset = Omit<SkillParams, "curve">
 
 /**
  * Gestes de départ, tous différents. Persiste, glisse, miroir, soir, la suite
  * et la figure ne paraissent qu’une fois. Le nombre d’or et la moyenne varient ensuite.
  */
-const BASE_PRESETS: Omit<SkillParams, "curve">[] = [
+const BASE_PRESETS: BasePreset[] = [
   { gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null },
   { gesture: "glisse", ratio: 0.618, span: "bande", window: 8, days: null },
   { gesture: "miroir", ratio: 0.618, span: "bande", window: 8, days: null },
@@ -364,60 +413,142 @@ const BASE_PRESETS: Omit<SkillParams, "curve">[] = [
   { gesture: "figure", forme: "triangle", n: null, ratio: 0.618, span: "bande", window: 8, days: null },
 ]
 
+/**
+ * Ce qui change la grille jouée par un geste de départ. Les autres réglages ne changent que le dessin.
+ * Persiste, glisse, miroir et soir n’en ont aucun.
+ */
+function gridKeys(params: BasePreset): string[] {
+  const frame = params.span === "lignes" ? params.window : ""
+  if (params.gesture === "or") return [`or|${params.ratio}|${params.span}|${frame}`]
+  if (params.gesture === "suite") return [`suite|${params.r}|${params.span}|${frame}`]
+  if (params.gesture === "moyenne") return drawCounts(params).map((count) => `moyenne|${count}`)
+  if (params.gesture === "figure") {
+    return drawCounts(params).map((count) => `figure|${params.forme}|${params.n}|${count}`)
+  }
+  return [params.gesture]
+}
+
+/**
+ * Tirages que lit la fenêtre. Des jours en donnent deux possibles : à un tirage tous les 3,5 jours
+ * (mardi puis vendredi), le compte dépend du jour du dernier tirage, à un tirage près.
+ */
+function drawCounts(params: BasePreset) {
+  if (!params.days) return [params.window]
+  return [...new Set([Math.floor(params.days / 3.5), Math.ceil(params.days / 3.5)])]
+}
+
+/** Réglages que le geste d’un preset peut prendre au tour suivant, du plus proche au plus lointain. */
+function lapChoices(preset: BasePreset): BasePreset[] {
+  const choices: BasePreset[] = []
+  if (preset.gesture === "or") {
+    const ratio = GOLDEN_RATIOS.indexOf(preset.ratio)
+    const span = SPANS.indexOf(preset.span)
+    for (let shift = 0; shift < SPANS.length; shift += 1) {
+      for (let step = shift === 0 ? 1 : 0; step < GOLDEN_RATIOS.length; step += 1) {
+        choices.push({
+          ...preset,
+          ratio: GOLDEN_RATIOS[(ratio + step) % GOLDEN_RATIOS.length],
+          span: SPANS[(span + shift) % SPANS.length],
+        })
+      }
+    }
+  } else if (preset.gesture === "suite") {
+    const r = LOGISTIC_R.indexOf(preset.r ?? DEFAULT_LOGISTIC_R)
+    const span = SUITE_SPANS.indexOf(preset.span as (typeof SUITE_SPANS)[number])
+    for (let shift = 0; shift < SUITE_SPANS.length; shift += 1) {
+      for (let step = shift === 0 ? 1 : 0; step < LOGISTIC_R.length; step += 1) {
+        choices.push({
+          ...preset,
+          r: LOGISTIC_R[(r + step) % LOGISTIC_R.length],
+          span: SUITE_SPANS[(span + shift) % SUITE_SPANS.length],
+        })
+      }
+    }
+  } else if (preset.gesture === "moyenne" && preset.days) {
+    for (let days = preset.days + 15; days <= DAYS_MAX; days += 15) choices.push({ ...preset, days })
+  } else if (preset.gesture === "moyenne") {
+    for (let window = preset.window + 2; window <= WINDOW_MAX; window += 2) choices.push({ ...preset, window })
+  } else if (preset.gesture === "figure") {
+    const from = FORMES.indexOf(preset.forme ?? "triangle")
+    for (let step = 1; step < FORMES.length; step += 1) {
+      const forme = FORMES[(from + step) % FORMES.length]
+      const n = usesFigureN(forme) ? defaultFigureN(forme) : null
+      choices.push({ ...preset, forme, n, window: Math.max(preset.window, figureLength(forme, n)) })
+    }
+  }
+  return choices
+}
+
+/**
+ * Gestes de départ des `count` premiers runners. Au-delà de 18, le geste revient avec un réglage qui compte
+ * pour lui : le premier encore libre. Deux runners ne jouent donc jamais la même grille, sauf pour persiste,
+ * glisse, miroir et soir, qui n’ont aucun réglage : la fenêtre ne change que leur dessin.
+ */
+function basePresets(count: number): BasePreset[] {
+  const taken = new Set<string>()
+  const out: BasePreset[] = []
+  for (let index = 0; index < count; index += 1) {
+    const preset = BASE_PRESETS[index % BASE_PRESETS.length]
+    const lap = Math.floor(index / BASE_PRESETS.length)
+    const chosen =
+      lap === 0
+        ? preset
+        : (lapChoices(preset).find((choice) => gridKeys(choice).every((key) => !taken.has(key))) ?? {
+            ...preset,
+            window: Math.min(WINDOW_MAX, preset.window + lap * 2),
+          })
+    for (const key of gridKeys(chosen)) taken.add(key)
+    out.push(chosen)
+  }
+  return out
+}
+
 /** Skill de départ d’un runner : un geste pour toutes les courbes. */
 export function baseSkill(runnerId: string, index: number): Skill {
-  const preset = BASE_PRESETS[index % BASE_PRESETS.length]
-  const lap = Math.floor(index / BASE_PRESETS.length)
-  const params: SkillParams = {
-    curve: "*",
-    ...preset,
-    window: Math.min(WINDOW_MAX, preset.window + lap * 2),
-  }
+  const params: SkillParams = { curve: "*", ...basePresets(index + 1)[index] }
   const name = params.gesture === "suite" ? "Suite numérique" : params.gesture === "figure" ? "Figure" : "Geste de base"
   return newSkill(`${runnerId}-base`, name, params, { cutoff: "", origin: "maison", examCents: null })
 }
 
-const CLASSIC_GESTURES = ["persiste", "glisse", "miroir", "or", "moyenne", "soir"] as const
+/** Sel de chaque réglage. Un réglage a son propre hachage : aucun n’est lié à un autre. */
+const SALT = { curve: 1, gesture: 2, ratio: 3, span: 4, window: 5, days: 6, forme: 7, n: 8, r: 9 } as const
 
-/** Même cycle qu’avant la suite. La suite garde son pas sur sept. La figure prend le pas suivant. */
-function variedGesture(base: Gesture, step: number): Gesture {
-  if (step % (CLASSIC_GESTURES.length + 1) === CLASSIC_GESTURES.length) return "suite"
-  if (step % (CLASSIC_GESTURES.length + 2) === CLASSIC_GESTURES.length + 1) return "figure"
-  const origin = CLASSIC_GESTURES.indexOf(base as (typeof CLASSIC_GESTURES)[number])
-  const from = origin < 0 ? 0 : origin
-  return CLASSIC_GESTURES[(from + 1 + (step % (CLASSIC_GESTURES.length - 1))) % CLASSIC_GESTURES.length]
-}
+/** Paliers de fenêtre d’une figure : le plus petit qui contient son calibre. */
+const FIGURE_WINDOWS = [...SHORT_WINDOWS, 16] as const
 
-/** Variation maison : une skill dédiée à une courbe, tirée de la skill de base. Sans IA, elle reste une proposition. */
+/**
+ * Variation maison : une skill dédiée à une courbe, tirée au hasard dans l’espace des réglages.
+ * Chaque réglage vient de `mix(graine, sel)`, donc la courbe, le geste, le ratio, l’étendue, la fenêtre,
+ * les jours, la forme et R se combinent sans lien. Le geste est tiré hors du geste de base.
+ * Une figure a une fenêtre au moins égale à son calibre. La suite n’a pas l’étendue « du dernier pas ».
+ * Sans IA, elle reste une proposition.
+ */
 export function houseVariation(base: SkillParams, seed: number): SkillParams {
   const step = Math.abs(Math.round(seed))
-  const curve = CURVE_KEYS[step % CURVE_KEYS.length]
-  const gesture = variedGesture(base.gesture, step)
-  const ratio = GOLDEN_RATIOS[(GOLDEN_RATIOS.indexOf(base.ratio) + 1 + step) % GOLDEN_RATIOS.length]
-  const span = SPANS[(SPANS.indexOf(base.span) + 1 + step) % SPANS.length]
-  const window = SHORT_WINDOWS[step % SHORT_WINDOWS.length]
-  const days = gesture === "moyenne" ? LONG_DAYS[step % LONG_DAYS.length] : null
+  const pick = <T>(list: readonly T[], salt: number) => list[mix(step, salt) % list.length]
+  const curve = pick(CURVE_KEYS, SALT.curve)
+  const gesture = pick(
+    GESTURES.filter((item) => item !== base.gesture),
+    SALT.gesture
+  )
+  const ratio = pick(GOLDEN_RATIOS, SALT.ratio)
+  const span = pick(gesture === "suite" ? SUITE_SPANS : SPANS, SALT.span)
+  const window = pick(SHORT_WINDOWS, SALT.window)
+  const days = gesture === "moyenne" ? pick(LONG_DAYS, SALT.days) : null
   if (gesture === "figure") {
-    const forme = FORMES[step % FORMES.length]
+    const forme = pick(FORMES, SALT.forme)
     const n =
       forme === "polygone"
-        ? POLYGON_SIDES[step % POLYGON_SIDES.length]
+        ? pick(POLYGON_SIDES, SALT.n)
         : forme === "arctan"
-          ? ARCTAN_TURNS[step % ARCTAN_TURNS.length]
-          : forme === "sin" || forme === "cos" || forme === "tan" || forme === "arcsin" || forme === "arccos"
-            ? WAVE_PERIODS[step % WAVE_PERIODS.length]
+          ? pick(ARCTAN_TURNS, SALT.n)
+          : usesFigureN(forme)
+            ? pick(WAVE_PERIODS, SALT.n)
             : null
-    return { curve, gesture, ratio, span, window, days, forme, n }
+    const needed = Math.max(window, figureLength(forme, n))
+    const fitted = FIGURE_WINDOWS.find((size) => size >= needed) ?? needed
+    return { curve, gesture, ratio, span, window: fitted, days, forme, n }
   }
   if (gesture !== "suite") return { curve, gesture, ratio, span, window, days }
-  return {
-    curve,
-    gesture,
-    ratio,
-    span,
-    window,
-    days,
-    suite: "logistique",
-    r: LOGISTIC_R[step % LOGISTIC_R.length],
-  }
+  return { curve, gesture, ratio, span, window, days, suite: "logistique", r: pick(LOGISTIC_R, SALT.r) }
 }

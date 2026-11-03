@@ -89,7 +89,8 @@ export function droppedLabel(dropped: number) {
   return `${dropped} écarté`
 }
 
-function mix(seed: number, salt: number) {
+/** Mélange deux entiers en un entier de 32 bits sans signe. Une graine et un sel donnent toujours le même nombre. */
+export function mix(seed: number, salt: number) {
   let x = (Math.imul(seed ^ salt, 0x9e3779b1) + 0x85ebca6b) >>> 0
   x = Math.imul(x ^ (x >>> 16), 0x7feb352d) >>> 0
   x = Math.imul(x ^ (x >>> 15), 0x846ca68b) >>> 0

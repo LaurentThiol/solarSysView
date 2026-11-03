@@ -16,7 +16,7 @@ import {
   type RankPoint,
 } from "./curves"
 import { readFigure } from "./figure"
-import { formatRatio, goldenAim, goldenLevel, GOLDEN_RATIOS } from "./golden"
+import { formatRatio, goldenAim, GOLDEN_RATIOS } from "./golden"
 import { soirReading } from "./soir"
 import {
   activeVersion,
@@ -280,7 +280,9 @@ export function tipFor(
   }
   if (params.gesture === "figure") {
     const values = windowValues(params, past, rows, key)
-    return readFigure(values, params.forme ?? "triangle", params.n ?? null).tip
+    const tip = readFigure(values, params.forme ?? "triangle", params.n ?? null).tip
+    const meta = curveMeta(key)
+    return Math.min(meta.hi, Math.max(meta.lo, tip))
   }
   const span = spanFor(params, rows, key)
   if (params.gesture === "suite") {
@@ -495,18 +497,9 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
   const aimY = goldenAim(span.lo, span.hi, params.ratio)
   const levels = GOLDEN_RATIOS.map((ratio) => ({
     ratio,
-    y: ratio === params.ratio ? aimY : goldenLevel(span.lo, span.hi, ratio),
+    y: goldenAim(span.lo, span.hi, ratio),
     chosen: ratio === params.ratio,
-  })).reduce<{ ratio: number; y: number; chosen: boolean }[]>((kept, level) => {
-    const twin = kept.find((item) => Math.abs(item.y - level.y) < 0.05)
-    if (!twin) kept.push(level)
-    else if (level.chosen) {
-      twin.ratio = level.ratio
-      twin.y = level.y
-      twin.chosen = true
-    }
-    return kept
-  }, [])
+  }))
   const rawR = Math.abs(last.y - aimY)
   const radius = Math.min(Math.max(rawR, 0.8), Math.max(1.5, spanWidth * 0.45))
   const reach = 1.25

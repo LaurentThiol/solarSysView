@@ -17,7 +17,7 @@ import {
   type IaRequest,
   type SessionDeps,
 } from "../src/lib/run-arcade/session.ts"
-import { addVersion, newSkill } from "../src/lib/run-arcade/skills.ts"
+import { addVersion, describeSkill, newSkill } from "../src/lib/run-arcade/skills.ts"
 import { fonctionnelBoard } from "../src/lib/run-arcade/fonctionnel.ts"
 import { revealedPast } from "../src/lib/run-arcade/thought.ts"
 import { activityLines, braveHeadline, braveResultDetail, chainHiddenDate, thoughtChain, xrayFeed } from "../src/lib/run-arcade/xray.ts"
@@ -1082,7 +1082,7 @@ test("a house variation at launch does not block one new IA skill, and a second 
       newSkill(
         "champ-base",
         "Geste de base",
-        { curve: "*", gesture: "or", ratio: 0.618, span: "bande", window: 8, days: null },
+        { curve: "*", gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null },
         { cutoff: "", origin: "maison", examCents: null }
       ),
     ],
@@ -1105,6 +1105,7 @@ test("a house variation at launch does not block one new IA skill, and a second 
     text: JSON.stringify({
       action: "skill",
       name: "Somme étoiles",
+      phrase: "Les étoiles font n’importe quoi",
       curve: "sumStars",
       gesture: "glisse",
       window: 5,
@@ -1119,6 +1120,11 @@ test("a house variation at launch does not block one new IA skill, and a second 
   const r2AfterFirst = session.getSnapshot().race?.runners.find((item) => item.mind.id === "r2")
   assert.equal(r2AfterFirst?.added, 2)
   assert.equal(r2AfterFirst?.mind.skills.length, 3)
+  const iaSkill = r2AfterFirst?.mind.skills.find((skill) => skill.versions[0].origin === "ia")
+  assert.ok(iaSkill)
+  const iaVersion = iaSkill.versions[iaSkill.versions.length - 1]
+  assert.equal(iaVersion.phrase, describeSkill(iaVersion))
+  assert.equal(iaVersion.phrase.includes("n’importe quoi"), false)
 
   // Tour suivant dans la file d’avant-course : R2 repasse et tente une deuxième courbe nouvelle.
   while (ia[ia.length - 1]?.request.runnerId !== "r2") {

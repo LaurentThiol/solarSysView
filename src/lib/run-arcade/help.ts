@@ -13,7 +13,7 @@ export type RunArcadeHelpCopy = {
 export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   runners: {
     title: "Runners",
-    body: "De 1 à 50 coureurs, 8 au départ. Chacun commence avec un geste de base différent, le même pour toutes les courbes. R8 part avec la skill Suite numérique, un pas logistique à R = 2. Le premier s’appelle R1.",
+    body: "De 1 à 50 coureurs, 8 au départ. Chacun commence avec un geste de base, le même pour toutes les courbes. Les 18 premiers ont chacun un geste différent. R8 part avec la skill Suite numérique, un pas logistique à R = 2. Le premier s’appelle R1. Au-delà de 18, le geste revient avec un réglage qui change à chaque tour de 18 : ratio d’or, étendue, jours, fenêtre, R ou forme. Persiste, glisse, miroir et soir n’ont aucun réglage : leur copie joue la même grille.",
     items: [
       {
         label: "Sans champion",
@@ -244,7 +244,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Calque cercle d’or",
-        text: "Cercle, trait vers le niveau choisi, et niveaux d’or déjà calculés : 0,382, 0,618, 1,272, 1,618 ou 2,618. Le cercle d’une figure passe par trois points du calibre.",
+        text: "Cercle, trait vers le niveau choisi, et niveaux d’or déjà calculés : 0,382, 0,618, 1,272, 1,618 ou 2,618. Chaque niveau garde sa hauteur, quel que soit le ratio choisi. Le cercle dessiné est toujours le cercle d’or, même pour une figure : il est centré sur le dernier point, et son rayon suit l’écart au niveau choisi.",
       },
       {
         label: "Calque pas d’avant",
@@ -295,15 +295,15 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Suit l’autre soir",
-        text: "Mardi et vendredi sont le même jeu. La flèche recopie l’autre soir, à quatre jours au plus, plus le dernier pas de ce soir. Un vendredi suit le mardi d’il y a trois jours, un mardi suit le vendredi d’il y a quatre jours. Sans vis-à-vis, la flèche reprend le dernier pas du même soir. La phrase nomme le soir et le décalage. Une harmonique se compte en tirages du même soir : deux tirages mélangés font la semaine, retenue seulement si les deux soirs la portent.",
+        text: "Mardi et vendredi sont le même jeu. La flèche recopie l’autre soir, à quatre jours au plus, plus le dernier pas de ce soir. Un vendredi suit le mardi d’il y a trois jours, un mardi suit le vendredi d’il y a quatre jours. Sans vis-à-vis, la flèche reprend le dernier pas du même soir. La phrase nomme le soir et le décalage.",
       },
       {
         label: "Suit la suite logistique",
-        text: "La dernière valeur est ramenée entre 0 et 1 sur la bande du geste : bornes de la courbe, entre les lignes, ou dernier pas. La pensée est un seul pas, X(n+1) = R×Xn×(1−Xn), ramené sur cette bande. R vaut 1, 1,5, 2, 2,8 ou 3,2. Le sommet du pas est R/4 de la bande. 3,5, 3,8 et 4 sont refusés.",
+        text: "La dernière valeur est ramenée entre 0 et 1 sur la bande du geste : bornes de la courbe, ou entre les lignes. L’étendue « du dernier pas » est refusée : la dernière valeur serait toujours au bord de la bande, et R ne compterait pas. La pensée est un seul pas, X(n+1) = R×Xn×(1−Xn), ramené sur cette bande. R vaut 1, 1,5, 2, 2,8 ou 3,2. Le sommet du pas est R/4 de la bande. 3,5, 3,8 et 4 sont refusés.",
       },
       {
         label: "Trace une figure",
-        text: "Un calibre court avance d’un tirage dans la fenêtre. Triangle, cercle et hypoténuse lisent 3 tirages. Le polygone lit 4, 5, 6 ou 8 côtés. Sinus, cosinus, tangente, arcsinus et arccosinus lisent une période de 4, 6, 8 ou 12 tirages. L’arc tangente tourne le dernier pas de 15, 30 ou 45 degrés. Chaque cran est jugé dans son carré. La pensée part du dernier cran et se place entre le plus bas et le plus haut de la fenêtre. Le cercle d’or reste le calque des niveaux. Le cercle de la figure passe par trois points du calibre.",
+        text: "Un calibre court avance d’un tirage dans la fenêtre. Triangle, cercle et hypoténuse lisent 3 tirages. Le polygone lit 4, 5, 6 ou 8 côtés. Sinus, cosinus, tangente, arcsinus et arccosinus lisent une période de 4, 6, 8 ou 12 tirages. L’arc tangente tourne le dernier pas de 15, 30 ou 45 degrés. La fenêtre compte au moins autant de tirages que le calibre : une fenêtre plus courte est relevée, sinon la figure ne se lit pas et la pensée reste sur place. Chaque cran est jugé dans son carré. Sinus et cosinus lisent la phase du dernier cran : la pensée est le point suivant de l’onde qui colle le mieux à ce cran. Les deux donnent la même pensée. La pensée part du dernier cran. Elle peut dépasser la fenêtre d’une amplitude au plus, et ne sort jamais de la bande de la courbe. Le cercle d’or reste le calque des niveaux. Le cercle dessiné est toujours le cercle d’or, même pour une figure.",
       },
     ],
   },

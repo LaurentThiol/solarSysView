@@ -54,6 +54,7 @@ const INTERIOR = ["n2", "n3", "n4"] as const
 /**
  * Tirages que les deux fenêtres ont le droit de lire.
  * Hors course : la piste des années n−1 et n. En course : le passé révélé, sans le tirage caché.
+ * En course sans curseur, on ne sait pas où est le tirage caché : la fenêtre reste fermée.
  */
 export function layerPoints(input: {
   series: readonly RankPoint[]
@@ -61,7 +62,7 @@ export function layerPoints(input: {
   running: boolean
   cursor: number | null
 }): RankPoint[] {
-  if (input.running && input.cursor != null) return revealedPast(input.track, input.cursor)
+  if (input.running) return input.cursor != null ? revealedPast(input.track, input.cursor) : []
   return buildTrack(input.series)
 }
 
