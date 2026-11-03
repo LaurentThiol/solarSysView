@@ -80,7 +80,7 @@ test("the drawing, the capture and the help expose the slider", () => {
 })
 
 test("the image note tells the model it sees the end of the curve", () => {
-  const mind = { name: "R1", skills: [] } as RunnerMind
+  const mind: RunnerMind = { id: "r1", name: "R1", focus: "sumNumbers", skills: [] }
   const base = {
     mind,
     past: [],

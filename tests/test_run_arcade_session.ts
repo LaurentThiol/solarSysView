@@ -105,7 +105,7 @@ function harness(parallel = 1, capture?: SessionDeps["capture"]) {
 
 const unreadable: IaReply = { ok: true, text: "je réfléchis", latencyMs: 4000, model: "test", vision: false }
 
-function skillReply(curve: string, request: IaRequest): IaReply {
+function skillReply(curve: string, request: IaRequest): Extract<IaReply, { ok: true }> {
   return {
     ok: true,
     text: JSON.stringify({

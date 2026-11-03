@@ -145,7 +145,7 @@ export type SessionSnapshot = {
   /** Appels, recherches et propositions encore ouverts. */
   activity: XrayActivity
   /** Observations reconnues pendant la course, la plus ancienne d’abord. */
-  observations: Observation[]
+  observations: readonly Observation[]
   error: string | null
 }
 
@@ -262,7 +262,7 @@ export class RunArcadeSession {
   private readonly callCount = new Map<string, number>()
   private readonly attempts = new Map<string, XrayAttempt[]>()
   private inbox: InboxItem[] = []
-  private seenObservations = new Set<string>()
+  private seenObservations: ReadonlySet<string> = new Set<string>()
   private seed = 1
 
   constructor(deps: SessionDeps) {
