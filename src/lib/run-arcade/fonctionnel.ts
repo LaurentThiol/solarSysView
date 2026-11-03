@@ -171,7 +171,7 @@ function openCell(item: FonctionnelOp, activity: XrayActivity, runnerId: string)
   if (item.op === "appel" && activity.calling.includes(runnerId)) {
     return { state: "en cours" as const, result: "L’appel est parti.", at: null, count: 0, panne: false }
   }
-  if (item.op === "recherche" && activity.searching.includes(runnerId)) {
+  if (item.op === "recherche" && activity.searching.some((entry) => entry.runnerId === runnerId)) {
     return { state: "en cours" as const, result: "Recherche en cours.", at: null, count: 0, panne: false }
   }
   if (item.op === "attente") {
@@ -240,7 +240,7 @@ export function fonctionnelBoard(input: FonctionnelInput): FonctionnelBoard {
     const active =
       liveActivity != null &&
       (liveActivity.calling.includes(runnerId) ||
-        liveActivity.searching.includes(runnerId) ||
+        liveActivity.searching.some((entry) => entry.runnerId === runnerId) ||
         liveActivity.pending.some((entry) => entry.runnerId === runnerId))
     if (mine.length === 0 && !active) continue
     const cells = cellsFor(mine, zeroCall, liveActivity, runnerId)

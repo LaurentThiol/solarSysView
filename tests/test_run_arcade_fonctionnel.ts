@@ -146,6 +146,44 @@ test("a call still in flight shows up before a step is stored", () => {
   assert.equal(board.quietLabel, "1 runner sans pas")
 })
 
+test("a Brave search opened at an earlier turn keeps its runner in the board", () => {
+  const board = boardOf({
+    turn: 2,
+    steps: [step({ op: "appel", state: "fait", result: "demande une recherche", turn: 1 })],
+    activity: {
+      calling: [],
+      searching: [{ runnerId: "r1", query: "n1 et n2, même sens, même pas" }],
+      pending: [],
+    },
+  })
+  assert.equal(board.momentLabel, "Tour 2")
+  assert.equal(board.rows.length, 1)
+  assert.equal(board.rows[0]?.runnerId, "r1")
+  const search = board.rows[0]?.cells.find((cell) => cell.op === "recherche")
+  assert.equal(search?.state, "en cours")
+  assert.equal(search?.result, "Recherche en cours.")
+  assert.equal(search?.panne, false)
+  assert.equal(board.quietLabel, "1 runner sans pas")
+})
+
+test("the Recherche cell is open for the runner who searches, not for the others", () => {
+  const board = boardOf({
+    steps: [
+      step({ op: "appel", state: "fait", result: "demande une recherche" }),
+      step({ runnerId: "r2", op: "appel", state: "fait", result: "propose : suite" }),
+    ],
+    activity: { calling: [], searching: [{ runnerId: "r1", query: "n1 et n2" }], pending: [] },
+  })
+  assert.deepEqual(
+    board.rows.map((row) => row.runnerId),
+    ["r1", "r2"]
+  )
+  const searchOf = (index: number) => board.rows[index]?.cells.find((cell) => cell.op === "recherche")
+  assert.equal(searchOf(0)?.state, "en cours")
+  assert.equal(searchOf(1)?.state, "—")
+  assert.equal(searchOf(1)?.result, null)
+})
+
 test("pause and a missing model are said on the course line", () => {
   const paused = boardOf({ steps: [], paused: true })
   assert.equal(paused.course, "En pause : plus d’appel.")

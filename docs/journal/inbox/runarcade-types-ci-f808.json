@@ -1,0 +1,9 @@
+{
+  "slug": "runarcade-types-ci-f808",
+  "happened_on": "2026-11-03",
+  "area": "runArcade",
+  "title": "Rayons X : le tableau Fonctionnel garde le runner qui cherche",
+  "body": "Dans Rayons X, le tableau Fonctionnel oubliait un runner dont la recherche Brave durait plus d’un tour. Sa ligne disparaissait au tour suivant et il comptait parmi les runners sans pas. La ligne reste maintenant, et la case Recherche dit « Recherche en cours. » tant que la requête est ouverte. « En ce moment » et la carte du runner montraient déjà cette recherche : ils ne changent pas. Les calculs, l’examen et le reste de l’écran sont identiques.",
+  "pr_number": null,
+  "pr_url": null
+}
