@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "Deux fenêtres : n1 à n5, e1 et e2",
   "body": "Deux fenêtres apparaissent sous la légende de runArcade. L’une dessine n1 à n5 ensemble, l’autre e1 et e2. Un curseur glisse les deux sur les mêmes tirages. La phrase sous le dessin donne les écarts entre couches, leur cohérence, et la place d’or dans l’étendue des numéros. Pendant la course, le tirage encore caché reste dehors. Le dessin d’un runner, les skills et le solde ne changent pas.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 339,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/339"
 }
