@@ -1,0 +1,9 @@
+{
+  "slug": "runarcade-examen-honnete-2d76",
+  "happened_on": "2026-11-03",
+  "area": "runArcade",
+  "title": "runArcade : un examen honnête, avec le repère du hasard",
+  "body": "À côté du solde d’examen, la fiche du runner, la carte et la liste des champions écrivent maintenant les tours et les dates rejoués, et « au lancement » tant que le runner n’a pas été réexaminé. Un repère « hasard 29,17 € ± 8 » (la moyenne et l’écart-type d’une grille quelconque) se lit à côté des soldes de course et d’examen, et la ligne du parent dit combien de tirages de la course sont déjà dans sa plage. Une skill gardée par un examen qui avait lu des tirages de course reste de côté à la génération suivante sur la même archive, et le compteur la compte. Un examen sans aucun tour s’affiche « — » et ne garde rien ; le champ « Tirages » suit la piste des années n−1 et n. Le champion s’arrête au dernier tirage réellement joué, et l’IA locale comme les départs « Aléatoire » changent de graine à chaque génération. Les gestes, le coût du ticket et la règle « strictement plus haut » ne changent pas.",
+  "pr_number": null,
+  "pr_url": null
+}
