@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "Brave : la relation entre les valeurs",
   "body": "Quand un runner demande une recherche, la phrase n’est plus libre. Le passé déjà lu est mesuré : deux courbes au même pas ou avec un retard, mardi contre vendredi, ou la même courbe d’une année sur l’autre. Brave reçoit la relation la plus nette, par exemple « n1 et n2, même sens, n2 en retard d’un pas ». S’il n’y en a pas d’assez nette, Brave n’est pas appelé. Le journal du runner cite cette relation.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 344,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/344"
 }
