@@ -72,7 +72,10 @@ export type XrayActivity = {
 /** Opération du schéma fonctionnel, dans l’ordre du tour. */
 export type XrayOp = "passage" | "appel" | "recherche" | "attente" | "examen" | "jeu"
 
-/** Issue d’une opération. « sauté » est une vraie panne seulement si un pas l’a enregistré. */
+/**
+ * Issue d’une opération. « sauté » est une vraie panne seulement si un pas l’a enregistré.
+ * « interrompu » : l’appel ou la recherche a été coupé par la fin de la course, ou par l’arrêt du runner. Ce n’est pas une panne.
+ */
 export type XrayStepState = "en cours" | "fait" | "sauté" | "refusé" | "erreur" | "interrompu"
 
 /** Pas d’une opération, hors du journal du champion. */

@@ -23,6 +23,8 @@ export type JournalEntry = {
 }
 
 export type ChampionRecord = {
+  /** Numéro de la ligne dans Neon. Facultatif : un champion qui vient de finir, ou d’un fichier, n’en a pas. */
+  id?: number
   generation: number
   runner: string
   cents: number
@@ -137,7 +139,9 @@ export function parseChampion(raw: unknown): ChampionRecord | null {
   if (skills.length === 0 || skills.some((skill) => skill == null)) return null
   const examCents = record.examCents == null ? null : Number(record.examCents)
   const examTurns = Number(record.examTurns)
+  const id = record.id
   return {
+    ...(typeof id === "number" && Number.isInteger(id) && id > 0 ? { id } : {}),
     generation,
     runner: typeof record.runner === "string" ? record.runner : "?",
     cents,

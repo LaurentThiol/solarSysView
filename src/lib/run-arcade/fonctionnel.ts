@@ -22,7 +22,7 @@ export const FONCTIONNEL_CHAIN: readonly FonctionnelOp[] = [
     label: "Attente",
     rule: "En avant-course, l’examen part tout de suite. En course, il attend la fin de tranche.",
   },
-  { op: "examen", label: "Examen", rule: "Le solde d’examen monte, une seule skill nouvelle." },
+  { op: "examen", label: "Examen", rule: "Le solde d’examen monte. L’IA ajoute au plus une courbe nouvelle par lancement." },
   { op: "jeu", label: "Jeu", rule: "Le solde paie le ticket de 2,50 €." },
 ]
 
@@ -46,7 +46,7 @@ export type FonctionnelCell = {
   result: string | null
   /** Heure du dernier pas, pour nommer la première panne. */
   at: string | null
-  /** Refus, erreurs, interruptions ou sauts enregistrés pour cette opération. */
+  /** Refus, erreurs ou sauts enregistrés pour cette opération. Une interruption n’est pas comptée. */
   count: number
   /** Dernière issue : la règle n’a pas abouti. */
   panne: boolean
@@ -84,8 +84,12 @@ export type FonctionnelInput = {
   activity?: XrayActivity
 }
 
+/**
+ * « interrompu » n’est pas une panne : la session coupe un appel ou une recherche encore ouverts
+ * à la fin de la course, et quand un runner s’arrête. Le tableau l’écrit dans sa case, sans le nommer en tête.
+ */
 function isRecordedPanne(state: XrayStepState) {
-  return state === "erreur" || state === "refusé" || state === "interrompu" || state === "sauté"
+  return state === "erreur" || state === "refusé" || state === "sauté"
 }
 
 function hasLive(activity: XrayActivity) {

@@ -11,6 +11,8 @@ def test_run_arcade_help_node() -> None:
         [
             "node",
             "--experimental-strip-types",
+            "--import",
+            str(ROOT / "tests" / "node-register.mjs"),
             "--test",
             str(ROOT / "tests" / "test_run_arcade_help.ts"),
         ],

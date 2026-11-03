@@ -141,10 +141,13 @@ test("an error replaces the band and leaves the race controls in place", () => {
 
 test("the lab paints the chrome decisions", () => {
   const lab = readFileSync(new URL("../src/components/brain/run-arcade-lab.tsx", import.meta.url), "utf8")
+  const band = readFileSync(new URL("../src/components/brain/run-arcade-live.tsx", import.meta.url), "utf8")
   assert.match(lab, /raceChrome\(/)
   assert.match(lab, /chrome\.launch\.variant/)
   assert.match(lab, /chrome\.pause\.label/)
   assert.match(lab, /chrome\.step\.label/)
-  assert.match(lab, /chrome\.band\.badge/)
-  assert.match(lab, /role="progressbar"/)
+  assert.match(lab, /<LiveBand /)
+  assert.match(band, /raceChrome\(/)
+  assert.match(band, /band\.badge/)
+  assert.match(band, /role="progressbar"/)
 })

@@ -210,6 +210,10 @@ def test_run_arcade_fonctionnel_node() -> None:
     _node("test_run_arcade_fonctionnel.ts")
 
 
+def test_run_arcade_lab_node() -> None:
+    _node("test_run_arcade_lab.ts")
+
+
 def test_run_arcade_brave_node() -> None:
     _node("test_run_arcade_brave.ts")
 

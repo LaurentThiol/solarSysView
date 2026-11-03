@@ -1,7 +1,24 @@
+/** Le champ « Minutes » : de 0 à 120, par demi-minute, 10 au départ. */
+export const MINUTES_MIN = 0
+export const MINUTES_MAX = 120
+export const MINUTES_DEFAULT = 10
+export const MINUTES_STEP = 0.5
+
 /** Tranche d’un tour de course : Y minutes partagées entre les x tirages. */
 export function sliceMs(minutes: number, draws: number) {
   if (!Number.isFinite(minutes) || minutes <= 0) return 0
   return Math.round((minutes * 60_000) / Math.max(1, Math.round(draws)))
+}
+
+/**
+ * Tranche que la session joue vraiment : celle de `sliceMs`, mais jamais sous le plancher `floor`.
+ * `floored` : le plancher a remplacé la tranche calculée, la course dure alors plus que Y minutes.
+ * À zéro minute : pas de tranche d’appel, les tours s’enchaînent.
+ */
+export function playedSlice(minutes: number, calculatedMs: number, floor: number) {
+  if (!Number.isFinite(minutes) || minutes <= 0) return { ms: 0, floored: false }
+  const floored = calculatedMs < floor
+  return { ms: floored ? floor : calculatedMs, floored }
 }
 
 /** Ordre de passage du tour : il tourne d’un cran à chaque tour. */
@@ -37,4 +54,11 @@ export function formatDuration(ms: number) {
   const hours = Math.floor(minutes / 60)
   const left = minutes % 60
   return left ? `${hours} h ${left} min` : `${hours} h`
+}
+
+/** Une tranche : une décimale sous dix secondes, pour ne pas écrire « 0 s » ou « 1 s » à 0,7 s. */
+export function formatSlice(ms: number) {
+  if (ms >= 10_000) return formatDuration(ms)
+  const tenths = Math.max(0, Math.round(ms / 100))
+  return `${String(tenths / 10).replace(".", ",")} s`
 }

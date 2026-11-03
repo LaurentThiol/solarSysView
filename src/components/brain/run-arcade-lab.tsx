@@ -1,13 +1,13 @@
 "use client"
 
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 
 import { captureDraw } from "@/components/brain/run-arcade-capture"
 import { RunArcadeLayers } from "@/components/brain/run-arcade-layers"
+import { LiveBand } from "@/components/brain/run-arcade-live"
 import { RunnerUniverse } from "@/components/brain/run-arcade-universe"
 import { DrawBalls } from "@/components/draw-balls"
 import { HelpTip, HelpWrap, LabelHelp, TitleHelp } from "@/components/help"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
@@ -20,16 +20,37 @@ import {
   type ChampionRecord,
   type ReplayLastGrid,
 } from "@/lib/run-arcade/champion"
+import { archiveNotice, lastDrawLine, launchReady, trackYears } from "@/lib/run-arcade/archive"
 import { raceChrome } from "@/lib/run-arcade/chrome"
-import { departBounds, droppedBefore, maxRaceDraws, sincePast, snapDepart, type DepartMode } from "@/lib/run-arcade/depart"
+import {
+  departBounds,
+  droppedBefore,
+  maxRaceDraws,
+  RACE_DRAWS_MIN,
+  sincePast,
+  snapDepart,
+  type DepartMode,
+} from "@/lib/run-arcade/depart"
 import { balanceWithChance, championExamLine, runnerExamLine, sharedSentence } from "@/lib/run-arcade/examen"
 import { askBrave, askIa, exportChampion, listChampions, loadChampion, readChampionFile, saveChampion } from "@/lib/run-arcade/client"
-import { formatDuration, raceDurationMs, servedPerSlice } from "@/lib/run-arcade/clock"
+import {
+  formatDuration,
+  formatSlice,
+  MINUTES_DEFAULT,
+  MINUTES_MAX,
+  MINUTES_MIN,
+  MINUTES_STEP,
+  playedSlice,
+  raceDurationMs,
+  servedPerSlice,
+} from "@/lib/run-arcade/clock"
 import { CURVE_KEYS, curveLabel, curveValues, NUMBER_KEYS, STAR_KEYS, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
+import { RUNNER_MIN, settleFields, type FieldDrafts } from "@/lib/run-arcade/fields"
 import { fonctionnelBoard, type FonctionnelCell } from "@/lib/run-arcade/fonctionnel"
 import { RUN_ARCADE_HELP } from "@/lib/run-arcade/help"
 import { layerPoints } from "@/lib/run-arcade/layers"
-import { createSession, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
+import { championKey, lastKnownChampion, parentChampion } from "@/lib/run-arcade/lineage"
+import { createSession, MIN_SLICE_MS, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
 import { currentVersion, targetLabel } from "@/lib/run-arcade/skills"
 import {
   activityLines,
@@ -65,9 +86,6 @@ import {
 import { useDraws } from "@/lib/use-draws"
 import { cn } from "@/lib/utils"
 
-const MINUTES_DEFAULT = 10
-const MINUTES_MAX = 120
-
 function toRankPoints(draws: Draw[]): RankPoint[] {
   return toDrawSeries(draws).map((point) => ({
     date: point.date,
@@ -80,33 +98,6 @@ function toRankPoints(draws: Draw[]): RankPoint[] {
     e2: point.e2,
   }))
 }
-
-const clock = (() => {
-  let value = 0
-  let timer: number | null = null
-  const listeners = new Set<() => void>()
-  return {
-    subscribe(listener: () => void) {
-      listeners.add(listener)
-      if (timer == null) {
-        value = Date.now()
-        timer = window.setInterval(() => {
-          value = Date.now()
-          for (const item of listeners) item()
-        }, 500)
-      }
-      return () => {
-        listeners.delete(listener)
-        if (listeners.size === 0 && timer != null) {
-          window.clearInterval(timer)
-          timer = null
-        }
-      }
-    },
-    get: () => value,
-    server: () => 0,
-  }
-})()
 
 function serviceText(state: ServiceState, error: string | null, ok: string) {
   if (state === "ok") return ok
@@ -144,10 +135,13 @@ function ResultGrids({
   replay,
   proposal,
   ticketHits,
+  archiveLastDate,
 }: {
   replay: ReplayLastGrid
   proposal: Thought
   ticketHits: number | null
+  /** Dernier tirage de l’archive : celui que Persiste recopie. */
+  archiveLastDate: string | null
 }) {
   const drawNumbers = ballValues(replay.draw, NUMBER_KEYS)
   const drawStars = ballValues(replay.draw, STAR_KEYS)
@@ -170,8 +164,8 @@ function ResultGrids({
           <div className="mt-2">
             <DrawBalls numbers={drawNumbers} stars={drawStars} />
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {formatDrawDate(replay.draw.date)}. Persiste recopie ce tirage.
+          <p className="mt-2 text-xs text-muted-foreground" data-testid="run-arcade-result-last">
+            {lastDrawLine(replay.draw.date, archiveLastDate, formatDrawDate)}
           </p>
         </div>
         <div>
@@ -443,7 +437,7 @@ function ObservationLedger({ observations }: { observations: readonly Observatio
 }
 
 export function RunArcadeLab() {
-  const { draws, loading } = useDraws("all")
+  const { draws, source, loading } = useDraws("all")
   const series = useMemo(() => toRankPoints(draws), [draws])
   const [session] = useState(() =>
     createSession({
@@ -458,17 +452,18 @@ export function RunArcadeLab() {
     })
   )
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
-  const now = useSyncExternalStore(clock.subscribe, clock.get, clock.server)
   const [count, setCount] = useState(RUNNER_DEFAULT)
   const [raceDraws, setRaceDraws] = useState(RACE_DRAWS_DEFAULT)
   const [minutes, setMinutes] = useState(MINUTES_DEFAULT)
   const [departMode, setDepartMode] = useState<DepartMode>("fixe")
   const [departDate, setDepartDate] = useState("")
+  const [drafts, setDrafts] = useState<FieldDrafts>({})
   const [xray, setXray] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [focusCurve, setFocusCurve] = useState<CurveKey | null>(null)
   const [nextCurve, setNextCurve] = useState<CurveKey>("sumNumbers")
-  const [stored, setStored] = useState<ChampionRecord | null>(null)
+  const [opened, setOpened] = useState<ChampionRecord | null>(null)
+  const [lastFinished, setLastFinished] = useState<ChampionRecord | null>(null)
   const [imported, setImported] = useState<ChampionRecord | null>(null)
   const [history, setHistory] = useState<ChampionRecord[]>([])
   const [importError, setImportError] = useState<string | null>(null)
@@ -476,42 +471,58 @@ export function RunArcadeLab() {
 
   useEffect(() => () => session.dispose(), [session])
 
+  const listing = useRef(0)
+  const refreshHistory = useCallback(() => {
+    const ticket = (listing.current += 1)
+    void listChampions().then((items) => {
+      if (ticket === listing.current) setHistory(items)
+    })
+  }, [])
+
   useEffect(() => {
     let alive = true
     void loadChampion().then((record) => {
-      if (alive) setStored(record)
+      if (alive) setOpened(record)
     })
-    void listChampions().then((items) => {
-      if (alive) setHistory(items)
-    })
+    refreshHistory()
     return () => {
       alive = false
     }
-  }, [])
+  }, [refreshHistory])
+
+  const saved = snapshot.save.state === "ok"
+  useEffect(() => {
+    if (saved) refreshHistory()
+  }, [saved, refreshHistory])
+
+  // Lancer remet `snapshot.champion` à zéro : la page garde le dernier champion fini pour la course d’après.
+  if (snapshot.champion && snapshot.champion !== lastFinished) setLastFinished(snapshot.champion)
+  const stored = lastKnownChampion(opened, lastFinished)
 
   const race = snapshot.race
   const track = snapshot.track
-  const parent = imported ?? snapshot.champion ?? stored
+  const parent = parentChampion({ imported, finished: snapshot.champion, running: snapshot.parent, stored })
   const running = snapshot.phase === "avant" || snapshot.phase === "course"
-  const remaining =
-    snapshot.pausedLeftMs ?? (snapshot.phaseEndsAt != null && now > 0 ? Math.max(0, snapshot.phaseEndsAt - now) : null)
   const leader = race ? leaderOf(race.runners) : null
-  const reading = loading && series.length < 4
-  const chrome = raceChrome({
+  const reading = loading
+  const notice = archiveNotice({ loading, source, points: series })
+  const chromeInput = {
     phase: snapshot.phase,
     paused: snapshot.pausedLeftMs != null,
     error: snapshot.error,
-    canLaunch: series.length >= 4,
+    canLaunch: launchReady({ loading, points: series.length }),
     generation: snapshot.generation,
     race: race ? { cursor: race.cursor, start: race.start, end: race.end } : null,
     minutes: snapshot.minutes,
-    remainingMs: remaining,
-  })
+  }
+  const chrome = raceChrome({ ...chromeInput, remainingMs: snapshot.pausedLeftMs })
   const focus = race?.runners.find((runner) => runner.mind.id === selected) ?? null
   const hiddenDate = race ? chainHiddenDate(race, track) : null
-  const slice = snapshot.minutes > 0 ? snapshot.sliceMs : 0
+  const { ms: slice, floored } = playedSlice(snapshot.minutes, snapshot.sliceMs, MIN_SLICE_MS)
   const served = servedPerSlice(slice, snapshot.medianMs, 1)
   const maxDraws = useMemo(() => maxRaceDraws(series), [series])
+  // La piste peut raccourcir : le champ ne garde jamais plus de tirages qu’elle n’en porte.
+  if (raceDraws > maxDraws) setRaceDraws(maxDraws)
   const parentTurns = useMemo(
     () => (parent ? drawsInRange(series, parent.raceFrom, parent.raceTo) : 0),
     [parent, series]
@@ -523,7 +534,6 @@ export function RunArcadeLab() {
   const championTurns = snapshot.champion
     ? (race?.runners.find((runner) => runner.mind.name === snapshot.champion?.runner)?.turns ?? 0)
     : 0
-  const newestYear = track.length ? Number(track[track.length - 1].date.slice(0, 4)) : null
   const bounds = useMemo(() => departBounds(series, raceDraws), [series, raceDraws])
   const shownDate = bounds.first ? (snapDepart(bounds.free, departDate || bounds.first) ?? bounds.first) : ""
   const freeArchive = race ? track.slice(0, race.start) : []
@@ -557,16 +567,32 @@ export function RunArcadeLab() {
     }
   }, [focus, focusCurve, race, track])
 
+  function type(field: keyof FieldDrafts, text: string) {
+    setDrafts((current) => ({ ...current, [field]: text }))
+  }
+
+  /** Corrige les quatre champs d’un coup, à la sortie de l’un d’eux ou au lancement. */
+  function settle() {
+    const values = settleFields(series, { count, draws: raceDraws, minutes, date: shownDate }, drafts)
+    setCount(values.count)
+    setRaceDraws(values.draws)
+    setMinutes(values.minutes)
+    setDepartDate(values.date)
+    setDrafts((current) => (Object.keys(current).length === 0 ? current : {}))
+    return values
+  }
+
   function launch() {
-    if (series.length < 4) return
+    if (!chromeInput.canLaunch) return
+    const values = settle()
     setSelected(null)
     setFocusCurve(null)
     setImported(null)
     const depart =
       departMode === "aleatoire"
         ? { mode: "aleatoire" as const }
-        : { mode: "fixe" as const, date: shownDate }
-    session.launch({ count, draws: raceDraws, minutes, series, champion: parent, depart })
+        : { mode: "fixe" as const, date: values.date }
+    session.launch({ count: values.count, draws: values.draws, minutes: values.minutes, series, champion: parent, depart })
   }
 
   const proposal = useMemo(
@@ -612,6 +638,7 @@ export function RunArcadeLab() {
   return (
     <div className="flex flex-col gap-4">
       <form
+        noValidate
         className="flex flex-wrap items-end gap-3"
         onSubmit={(event) => {
           event.preventDefault()
@@ -621,41 +648,35 @@ export function RunArcadeLab() {
         <LabelHelp label="Runners" help={RUN_ARCADE_HELP.runners} className="w-24 sm:w-24">
           <Input
             type="number"
-            min={1}
+            min={RUNNER_MIN}
             max={RUNNER_MAX}
-            value={count}
+            value={drafts.count ?? count}
             aria-label="Nombre de runners"
-            onChange={(event) => {
-              const value = Number(event.target.value)
-              if (Number.isFinite(value)) setCount(Math.min(RUNNER_MAX, Math.max(1, Math.round(value))))
-            }}
+            onChange={(event) => type("count", event.target.value)}
+            onBlur={settle}
           />
         </LabelHelp>
         <LabelHelp label="Tirages" help={RUN_ARCADE_HELP.tirages} className="w-24 sm:w-24">
           <Input
             type="number"
-            min={4}
+            min={RACE_DRAWS_MIN}
             max={maxDraws}
-            value={raceDraws}
+            value={drafts.draws ?? raceDraws}
             aria-label="Tirages de course"
-            onChange={(event) => {
-              const value = Number(event.target.value)
-              if (Number.isFinite(value)) setRaceDraws(Math.min(maxDraws, Math.max(4, Math.round(value))))
-            }}
+            onChange={(event) => type("draws", event.target.value)}
+            onBlur={settle}
           />
         </LabelHelp>
         <LabelHelp label="Minutes" help={RUN_ARCADE_HELP.minutes} className="w-24 sm:w-24">
           <Input
             type="number"
-            min={0}
+            min={MINUTES_MIN}
             max={MINUTES_MAX}
-            step={0.5}
-            value={minutes}
+            step={MINUTES_STEP}
+            value={drafts.minutes ?? minutes}
             aria-label="Minutes d’avant-course"
-            onChange={(event) => {
-              const value = Number(event.target.value)
-              if (Number.isFinite(value)) setMinutes(Math.min(MINUTES_MAX, Math.max(0, Math.round(value * 2) / 2)))
-            }}
+            onChange={(event) => type("minutes", event.target.value)}
+            onBlur={settle}
           />
         </LabelHelp>
         <LabelHelp label="Départ" help={RUN_ARCADE_HELP.depart} className="w-36">
@@ -680,12 +701,10 @@ export function RunArcadeLab() {
               type="date"
               min={bounds.first || undefined}
               max={bounds.last || undefined}
-              value={shownDate}
+              value={drafts.date ?? shownDate}
               aria-label="Date de départ"
-              onChange={(event) => {
-                const snapped = snapDepart(bounds.free, event.target.value)
-                if (snapped) setDepartDate(snapped)
-              }}
+              onChange={(event) => type("date", event.target.value)}
+              onBlur={settle}
             />
           </LabelHelp>
         ) : null}
@@ -753,50 +772,26 @@ export function RunArcadeLab() {
       </form>
 
       <div className="flex flex-col gap-1 text-sm text-muted-foreground" data-testid="run-arcade-status">
+        {notice ? (
+          <p
+            className="rounded-lg border border-chart-5/40 bg-chart-5/15 px-3 py-2 text-foreground"
+            role="status"
+            data-testid="run-arcade-archive-notice"
+          >
+            {notice}
+          </p>
+        ) : null}
         {chrome.band && !reading ? (
-          <div className="flex flex-col gap-2 text-foreground" data-testid="run-arcade-live">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <Badge variant="secondary">{chrome.band.badge}</Badge>
-              <span>Génération {chrome.band.generation}</span>
-              {chrome.band.tour ? <span>{chrome.band.tour}</span> : null}
-              {chrome.band.remaining ? <span className="font-medium tabular-nums">{chrome.band.remaining}</span> : null}
-              {leader && snapshot.phase === "course" ? (
-                <span>
-                  meilleur {leader.mind.name} {balanceWithChance(leader.cents, leader.turns)}
-                </span>
-              ) : null}
-              {snapshot.phase === "fin" && snapshot.champion ? (
-                <span>
-                  champion {snapshot.champion.runner} {balanceWithChance(snapshot.champion.cents, championTurns)}
-                </span>
-              ) : null}
-              <HelpTip {...RUN_ARCADE_HELP.statut} />
-            </div>
-            {chrome.band.fraction != null && chrome.band.barNow != null && chrome.band.barMax != null ? (
-              <div
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={chrome.band.barMax}
-                aria-valuenow={chrome.band.barNow}
-                aria-label={chrome.band.barLabel ?? "Avancement"}
-                className="h-2 overflow-hidden rounded-full bg-muted"
-              >
-                <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${chrome.band.fraction * 100}%` }}
-                />
-              </div>
-            ) : null}
-          </div>
+          <LiveBand snapshot={snapshot} input={chromeInput} leader={leader} championTurns={championTurns} />
         ) : (
           <p className="text-foreground">
             {reading ? "Archive en cours de lecture." : chrome.lead}
             <HelpTip {...RUN_ARCADE_HELP.statut} />
           </p>
         )}
-        {race && newestYear ? (
+        {race && track.length > 0 ? (
           <p>
-            Archive gratuite : années {newestYear - 1} et {newestYear}, du {formatDrawDate(track[0].date)} au{" "}
+            Archive gratuite : {trackYears(track)}, du {formatDrawDate(track[0].date)} au{" "}
             {formatDrawDate(track[race.start - 1].date)}. Course : {race.end - race.start} tirages, du{" "}
             {formatDrawDate(track[race.start].date)} au {formatDrawDate(track[race.end - 1].date)}.
             <HelpTip {...RUN_ARCADE_HELP.archive} />
@@ -806,8 +801,9 @@ export function RunArcadeLab() {
           <p>
             {snapshot.minutes > 0 ? (
               <>
-                Horloge : {formatDuration(snapshot.minutes * 60_000)} d’avant-course, tranche de {formatDuration(slice)}{" "}
-                par tour, course de {formatDuration(raceDurationMs(race.end - race.start, slice))}.
+                Horloge : {formatDuration(snapshot.minutes * 60_000)} d’avant-course, tranche de {formatSlice(slice)}
+                {floored ? " (le plancher)" : ""} par tour, course de{" "}
+                {formatDuration(raceDurationMs(race.end - race.start, slice))}.
                 {snapshot.medianMs != null
                   ? ` Appel médian ${formatDuration(snapshot.medianMs)} : ${served ?? 0} runner(s) servi(s) par tranche. Une réponse arrivée après la tranche joue au tour suivant.`
                   : ""}
@@ -859,7 +855,7 @@ export function RunArcadeLab() {
                 parent.runner === item.runner &&
                 parent.savedAt === item.savedAt
               return (
-                <li key={`${item.generation}-${item.runner}-${item.savedAt}`}>
+                <li key={championKey(item, position)}>
                   <button
                     type="button"
                     onClick={() => {
@@ -900,7 +896,12 @@ export function RunArcadeLab() {
             </p>
           </header>
           {replay ? (
-            <ResultGrids replay={replay} proposal={proposal} ticketHits={paidTicket ? paidTicket.lastHits : null} />
+            <ResultGrids
+              replay={replay}
+              proposal={proposal}
+              ticketHits={paidTicket ? paidTicket.lastHits : null}
+              archiveLastDate={persisted?.date ?? null}
+            />
           ) : null}
           <div className="mb-2 flex flex-wrap items-center gap-1">
             <HelpTip {...RUN_ARCADE_HELP.courbes} />

@@ -2,8 +2,11 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+import type { RankPoint } from "../src/lib/run-arcade/curves.ts"
 import { fonctionnelBoard, type FonctionnelInput } from "../src/lib/run-arcade/fonctionnel.ts"
 import { RUN_ARCADE_HELP } from "../src/lib/run-arcade/help.ts"
+import { lectureFromText } from "../src/lib/run-arcade/prompt.ts"
+import { createSession, type IaReply, type IaRequest, type SessionDeps } from "../src/lib/run-arcade/session.ts"
 import { activityLines, emptyActivity, type XrayStep } from "../src/lib/run-arcade/xray.ts"
 
 function step(partial: Partial<XrayStep> & Pick<XrayStep, "op" | "state" | "result">): XrayStep {
@@ -132,6 +135,130 @@ test("a recorded skip stays a panne, unlike the zero-minute skip", () => {
   assert.equal(cell?.state, "sauté")
   assert.equal(cell?.panne, true)
   assert.match(board.headline, /Panne : R1, Appel, Passé trop court/)
+})
+
+test("a call cut by the end of the race is written interrompu, and is not a panne", () => {
+  const board = boardOf({
+    phase: "fin",
+    turn: 4,
+    steps: [
+      step({ op: "appel", state: "interrompu", result: "Appel interrompu.", turn: 4, at: "2026-11-03T10:01:00.000Z" }),
+      step({ op: "jeu", state: "fait", result: "R1 joue 1 2 3 4 5 ★ 1 2", turn: 4, at: "2026-11-03T10:01:01.000Z" }),
+    ],
+  })
+  const cell = board.rows[0]?.cells.find((item) => item.op === "appel")
+  assert.equal(cell?.state, "interrompu")
+  assert.equal(cell?.panne, false)
+  assert.equal(cell?.count, 0)
+  assert.equal(board.rows[0]?.detail, null)
+  assert.equal(board.headline, "Aucune panne sur ce moment.")
+})
+
+test("a search opened before the race and cut at its end does not become the last panne", () => {
+  const board = boardOf({
+    phase: "fin",
+    turn: 4,
+    steps: [
+      step({ op: "recherche", state: "interrompu", result: "Recherche interrompue.", turn: null, at: "2026-11-03T10:00:02.000Z" }),
+      step({ op: "jeu", state: "fait", result: "R1 joue 1 2 3 4 5 ★ 1 2", turn: 4, at: "2026-11-03T10:01:00.000Z" }),
+    ],
+  })
+  assert.equal(board.momentLabel, "Tour 4")
+  assert.equal(board.headline, "Aucune panne sur ce moment.")
+  assert.equal(/Dernière panne/.test(board.headline), false)
+})
+
+test("an interruption never hides a real panne: the last real one stays in the headline", () => {
+  const board = boardOf({
+    phase: "fin",
+    turn: 4,
+    steps: [
+      step({ op: "appel", state: "erreur", result: "modèle absent", turn: 2, at: "2026-11-03T10:00:30.000Z" }),
+      step({ op: "recherche", state: "interrompu", result: "Recherche interrompue.", turn: 3, at: "2026-11-03T10:00:40.000Z" }),
+      step({ op: "jeu", state: "fait", result: "R1 joue 1 2 3 4 5 ★ 1 2", turn: 4, at: "2026-11-03T10:01:00.000Z" }),
+    ],
+  })
+  assert.equal(board.headline, "Dernière panne : tour 2, R1, Appel, modèle absent.")
+  const live = boardOf({
+    turn: 4,
+    steps: [
+      step({ op: "appel", state: "refusé", result: "réponse illisible", turn: 4, at: "2026-11-03T10:01:00.000Z" }),
+      step({ op: "recherche", state: "interrompu", result: "Recherche interrompue.", turn: 4, at: "2026-11-03T10:01:01.000Z" }),
+    ],
+  })
+  assert.equal(live.headline, "Panne : R1, Appel, réponse illisible.")
+  assert.equal(live.rows[0]?.cells.find((item) => item.op === "recherche")?.state, "interrompu")
+})
+
+const flush = () => new Promise((resolve) => setImmediate(resolve))
+
+function series(length: number): RankPoint[] {
+  return Array.from({ length }, (_, index) => ({
+    date: new Date(Date.UTC(2025, 0, 3 + index * 3, 12)).toISOString().slice(0, 10),
+    n1: 2 + (index % 5),
+    n2: 10 + (index % 4),
+    n3: 20 + (index % 6),
+    n4: 30 + (index % 5),
+    n5: 40 + (index % 7),
+    e1: 1 + (index % 5),
+    e2: 7 + (index % 5),
+  }))
+}
+
+test("a search still open when the race ends is cut, and the board does not call it a panne", async () => {
+  const calls: { request: IaRequest; resolve: (reply: IaReply) => void }[] = []
+  const searches: string[] = []
+  const deps: SessionDeps = {
+    now: () => 0,
+    setTimer: () => 1,
+    clearTimer: () => undefined,
+    askIa: (request) => new Promise((resolve) => calls.push({ request, resolve })),
+    askBrave: (request, signal) =>
+      new Promise((resolve) => {
+        searches.push(request.query)
+        signal.addEventListener("abort", () => resolve({ ok: false, error: "coupé", aborted: true }))
+      }),
+    saveChampion: async () => ({ ok: true, source: "test" }),
+  }
+  const session = createSession(deps)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(80), champion: null })
+  await flush()
+  calls[0].resolve({
+    ok: true,
+    text: JSON.stringify({ action: "brave", query: "", lecture: lectureFromText(calls[0].request.user) }),
+    latencyMs: 3000,
+    model: "t",
+    vision: false,
+  })
+  await flush()
+  assert.equal(searches.length, 1)
+  assert.equal(session.getSnapshot().activity.searching.length, 1)
+
+  session.skip()
+  for (let turn = 0; turn < 4; turn += 1) session.skip()
+  await flush()
+  const snapshot = session.getSnapshot()
+  assert.equal(snapshot.phase, "fin")
+  const cut = snapshot.xraySteps.find((item) => item.op === "recherche" && item.state === "interrompu")
+  assert.ok(cut, "la session coupe la recherche à la fin de la course")
+  assert.equal(cut.turn, null)
+
+  const race = snapshot.race
+  assert.ok(race)
+  const board = fonctionnelBoard({
+    phase: snapshot.phase,
+    minutes: snapshot.minutes,
+    paused: false,
+    ia: snapshot.ia,
+    iaError: snapshot.iaError,
+    turn: race.cursor - race.start + 1,
+    runnerIds: ["r1"],
+    names: { r1: "R1" },
+    steps: snapshot.xraySteps,
+    activity: snapshot.activity,
+  })
+  assert.equal(board.headline, "Aucune panne sur ce moment.")
+  session.dispose()
 })
 
 test("a call still in flight shows up before a step is stored", () => {

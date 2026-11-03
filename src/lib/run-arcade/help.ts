@@ -83,13 +83,13 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Fonctionnel",
-        text: "Six opérations, de Passage à Jeu, avec la règle sous chaque case. La phrase du haut nomme la première panne de ce moment. S’il n’y en a pas, elle garde la dernière de la course. À zéro minute, Appel, Recherche, Attente et Examen sont sautés. La variation maison reste dans Avant.",
+        text: "Six opérations, de Passage à Jeu, avec la règle sous chaque case. La phrase du haut nomme la première panne de ce moment. S’il n’y en a pas, elle garde la dernière de la course. Un appel ou une recherche coupé par la fin de la course, ou par l’arrêt du runner, s’écrit « interrompu » : ce n’est pas une panne. À zéro minute, Appel, Recherche, Attente et Examen sont sautés. La variation maison reste dans Avant.",
       },
     ],
   },
   lancer: {
     title: "Lancer",
-    body: "Ouvre une génération. Le champion de la liste, le fichier importé, ou le dernier déjà écrit, devient le parent. Tant que ce bouton n’est pas pressé, les runners ne courent pas. Pendant l’avant-course ou la course, il s’écrit Relancer et n’est plus le geste mis en avant : Pause, ou Reprendre, l’est.",
+    body: "Ouvre une génération. Le champion de la liste, le fichier importé, ou le dernier déjà écrit, devient le parent. Tant que ce bouton n’est pas pressé, les runners ne courent pas. Il reste éteint pendant la lecture de l’archive. Si la base ne répond pas, la page garde l’extrait embarqué, une ligne le dit, et la course peut partir sur lui. Pendant l’avant-course ou la course, il s’écrit Relancer, repart du parent de la course en cours, et n’est plus le geste mis en avant : Pause, ou Reprendre, l’est. Les champs Runners, Tirages, Minutes et Date se corrigent quand on les quitte, ou au lancement.",
   },
   pause: {
     title: "Pause",
@@ -123,7 +123,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   horloge: {
     title: "Horloge",
-    body: "L’avant-course dure Y minutes. Chaque tour de course a ensuite une tranche : ces mêmes Y minutes, divisées par le nombre de tirages. À zéro minute, il n’y a pas de tranche d’appel : les tours s’enchaînent. Un seul appel local part à la fois. L’ordre de passage tourne d’un cran à chaque tour.",
+    body: "L’avant-course dure Y minutes. Chaque tour de course a ensuite une tranche : ces mêmes Y minutes, divisées par le nombre de tirages, sans descendre sous 0,7 s. Quand ce plancher joue, la ligne l’écrit et la course dure plus que Y minutes. À zéro minute, il n’y a pas de tranche d’appel : les tours s’enchaînent, 0,7 s chacun. Un seul appel local part à la fois. L’ordre de passage tourne d’un cran à chaque tour.",
     items: [
       {
         label: "Appel médian",
@@ -156,7 +156,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   champions: {
     title: "Champions déjà écrits",
-    body: "Les champions écrits dans Neon, les plus récents d’abord, vingt au plus. Un clic choisit le parent du prochain Lancer. La ligne donne la génération, le runner, le solde de course et son repère du hasard, le solde d’examen avec ses tours et ses dates, et les dates de la course.",
+    body: "Les champions écrits dans Neon, les plus récents d’abord, vingt au plus. Un clic choisit le parent du prochain Lancer. La liste se relit quand un champion vient d’être écrit. La ligne donne la génération, le runner, le solde de course et son repère du hasard, le solde d’examen avec ses tours et ses dates, et les dates de la course.",
   },
   suivant: {
     title: "Tirage suivant",
@@ -174,7 +174,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
     items: [
       {
         label: "Dernier tirage",
-        text: "La grille du dernier tirage de course, ou le dernier de l’archive. Persiste recopie cette grille une seule fois, en boules, avec la date.",
+        text: "La grille du dernier tirage de la course du champion, avec sa date. C’est aussi le dernier tirage de l’archive quand la course est allée au bout et que l’archive n’a pas reçu de tirage depuis : Persiste le recopie alors. Sinon la ligne sous la grille donne les deux dates : Persiste recopie le dernier tirage de l’archive, pas celui-ci.",
       },
       {
         label: "Grille du champion",
@@ -339,7 +339,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   skills: {
     title: "Skills et versions",
-    body: "Une skill nomme un geste, une courbe et une fenêtre. Une skill sur une courbe déjà pilotée en devient une nouvelle version. Une seule skill nouvelle est gardée par lancement.",
+    body: "Une skill nomme un geste, une courbe et une fenêtre. Une skill sur une courbe déjà pilotée en devient une nouvelle version. Une courbe nouvelle ajoute une skill, au plus deux par runner et par lancement : une de la variation maison, au lancement, et une de l’IA locale.",
     items: [
       {
         label: "Coupure",
@@ -347,7 +347,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Origine",
-        text: "Maison : le geste de départ ou une variation. IA : proposée par le modèle local et gardée parce que l’examen est monté.",
+        text: "Trois mots s’affichent. maison : le geste de départ. variation : un essai de la variation maison, au lancement, gardé parce que l’examen est monté. ia : proposée par le modèle local et gardée parce que l’examen est monté.",
       },
       {
         label: "Examen de la version",

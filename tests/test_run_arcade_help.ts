@@ -4,6 +4,24 @@ import test from "node:test"
 
 import { TIP_MARGIN } from "../src/lib/run-arcade/figure.ts"
 import { RUN_ARCADE_HELP } from "../src/lib/run-arcade/help.ts"
+import { formatSlice, MINUTES_DEFAULT, MINUTES_MAX, MINUTES_MIN, MINUTES_STEP } from "../src/lib/run-arcade/clock.ts"
+import { RACE_DRAWS_MAX, RACE_DRAWS_MIN } from "../src/lib/run-arcade/depart.ts"
+import { chanceBalance, EXAM_WINDOW } from "../src/lib/run-arcade/examen.ts"
+import { RUNNER_MIN } from "../src/lib/run-arcade/fields.ts"
+import { FONCTIONNEL_CHAIN } from "../src/lib/run-arcade/fonctionnel.ts"
+import { PROMPT_ROWS } from "../src/lib/run-arcade/prompt.ts"
+import { MIN_SLICE_MS } from "../src/lib/run-arcade/session.ts"
+import type { SkillOrigin } from "../src/lib/run-arcade/skills.ts"
+import { EVENING_GAP_DAYS } from "../src/lib/run-arcade/soir.ts"
+import {
+  formatCents,
+  HIT_CENTS,
+  RACE_DRAWS_DEFAULT,
+  RUNNER_DEFAULT,
+  RUNNER_MAX,
+  START_CENTS,
+  TICKET_CENTS,
+} from "../src/lib/run-arcade/thought.ts"
 
 const lab = readFileSync(new URL("../src/components/brain/run-arcade-lab.tsx", import.meta.url), "utf8")
 const nav = readFileSync(new URL("../src/lib/nav.ts", import.meta.url), "utf8")
@@ -47,6 +65,74 @@ const KEYS = [
   "journal",
 ] as const
 
+/** Les nombres que l’aide écrit en toutes lettres. Un nombre absent d’ici fait échouer le test : il faut y ajouter son mot. */
+const WORDS: Record<number, string> = { 4: "quatre", 8: "huit", 12: "douze", 20: "vingt" }
+
+function has(text: string, expected: string) {
+  assert.ok(text.includes(expected), `« ${expected} » est absent de « ${text.slice(0, 160)} »`)
+}
+
+test("the numbers of the help are drawn from the constants of the code", () => {
+  const cents = formatCents
+  const purse = RUN_ARCADE_HELP.solde.body
+  has(purse, `part avec ${cents(START_CENTS)}`)
+  has(purse, `coûte ${cents(TICKET_CENTS)}`)
+  assert.equal(purse.split(`rapporte ${cents(HIT_CENTS)}`).length - 1, 2)
+
+  const exam = RUN_ARCADE_HELP.solde.items?.find((item) => item.label === "Examen")?.text ?? ""
+  has(exam, `sur les ${EXAM_WINDOW} derniers tirages lisibles`)
+  has(exam, `les mêmes ${cents(START_CENTS)}, ${cents(TICKET_CENTS)} et ${cents(HIT_CENTS)}`)
+  has(RUN_ARCADE_HELP.depart.items?.find((item) => item.label === "Examen")?.text ?? "", `rejoue les ${EXAM_WINDOW} derniers tirages gratuits`)
+
+  const chance = RUN_ARCADE_HELP.solde.items?.find((item) => item.label === "Hasard")?.text ?? ""
+  const mark = chanceBalance(EXAM_WINDOW)
+  has(chance, `${cents(mark.cents)} ± ${Math.round(mark.spreadCents / 100)} sur ${EXAM_WINDOW} tours`)
+  assert.equal(Math.round(chanceBalance(6).cents), START_CENTS - 6 * TICKET_CENTS + 5 * HIT_CENTS, "5 trouvés pour 6 tours")
+  has(chance, "5/6")
+  const variance = (chanceBalance(100).spreadCents / HIT_CENTS) ** 2 / 100
+  has(chance, `√(${variance.toFixed(4).replace(".", ",")} × N)`)
+
+  has(RUN_ARCADE_HELP.runners.body, `De ${RUNNER_MIN} à ${RUNNER_MAX} coureurs, ${RUNNER_DEFAULT} au départ`)
+  has(RUN_ARCADE_HELP.tirages.body, `${RACE_DRAWS_DEFAULT} au départ, de ${RACE_DRAWS_MIN} à ${RACE_DRAWS_MAX}`)
+  has(RUN_ARCADE_HELP.minutes.body, `de ${MINUTES_MIN} à ${MINUTES_MAX}, par demi-minute, ${MINUTES_DEFAULT} au départ`)
+  assert.equal(MINUTES_STEP, 0.5)
+  has(RUN_ARCADE_HELP.horloge.body, `sans descendre sous ${formatSlice(MIN_SLICE_MS)}`)
+  has(RUN_ARCADE_HELP.horloge.body, `les tours s’enchaînent, ${formatSlice(MIN_SLICE_MS)} chacun`)
+
+  has(RUN_ARCADE_HELP.services.items?.[0].text ?? "", `les ${WORDS[PROMPT_ROWS]} derniers tirages lisibles`)
+  has(RUN_ARCADE_HELP.gestes.items?.[5].text ?? "", `à ${WORDS[EVENING_GAP_DAYS]} jours au plus`)
+})
+
+test("the help says what a runner can add per launch, and the three origins the screen writes", () => {
+  const body = RUN_ARCADE_HELP.skills.body
+  assert.doesNotMatch(body, /Une seule skill nouvelle est gardée par lancement/)
+  has(body, "au plus deux par runner et par lancement : une de la variation maison, au lancement, et une de l’IA locale")
+  const rule = FONCTIONNEL_CHAIN.find((item) => item.op === "examen")?.rule ?? ""
+  assert.doesNotMatch(rule, /une seule skill nouvelle/)
+  has(rule, "L’IA ajoute au plus une courbe nouvelle par lancement")
+
+  const origins: Record<SkillOrigin, string> = { maison: "le geste de départ", variation: "variation maison", ia: "modèle local" }
+  const origin = RUN_ARCADE_HELP.skills.items?.find((item) => item.label === "Origine")?.text ?? ""
+  for (const [word, meaning] of Object.entries(origins)) {
+    has(origin, `${word} :`)
+    has(origin, meaning)
+  }
+  assert.match(lab, /\{version\.origin\}/)
+})
+
+test("the help says which draw the result shows, how Lancer waits, and that an interruption is not a panne", () => {
+  const last = RUN_ARCADE_HELP.resultat.items?.find((item) => item.label === "Dernier tirage")?.text ?? ""
+  has(last, "dernier tirage de la course du champion")
+  has(last, "Persiste recopie le dernier tirage de l’archive, pas celui-ci")
+  assert.equal(/ou le dernier de l’archive/.test(last), false)
+  has(RUN_ARCADE_HELP.lancer.body, "reste éteint pendant la lecture de l’archive")
+  has(RUN_ARCADE_HELP.lancer.body, "repart du parent de la course en cours")
+  has(RUN_ARCADE_HELP.lancer.body, "se corrigent quand on les quitte, ou au lancement")
+  has(RUN_ARCADE_HELP.champions.body, "La liste se relit quand un champion vient d’être écrit")
+  const board = RUN_ARCADE_HELP.rayons.items?.find((item) => item.label === "Fonctionnel")?.text ?? ""
+  has(board, "s’écrit « interrompu » : ce n’est pas une panne")
+})
+
 test("every runArcade control has online help wired in the lab", () => {
   assert.deepEqual(Object.keys(RUN_ARCADE_HELP).sort(), [...KEYS].sort())
   for (const key of KEYS) {
@@ -75,19 +161,10 @@ test("runArcade help names the purse, the exam, the evenings and the curves", ()
   assert.match(examen, /EXAM_WINDOW = 25/)
   assert.match(prompt, /PROMPT_ROWS = 12/)
   assert.match(soir, /EVENING_GAP_DAYS = 4/)
-  assert.match(lab, /MINUTES_DEFAULT = 10/)
-  assert.match(lab, /MINUTES_MAX = 120/)
 
-  assert.match(RUN_ARCADE_HELP.solde.body, /50,00 €/)
-  assert.match(RUN_ARCADE_HELP.solde.body, /2,50 €/)
-  assert.match(RUN_ARCADE_HELP.solde.body, /2,00 €/)
-  assert.match(RUN_ARCADE_HELP.solde.items?.[1].text ?? "", /25 derniers/)
   assert.match(RUN_ARCADE_HELP.solde.items?.[0].text ?? "", /sans verser/)
-  assert.match(RUN_ARCADE_HELP.tirages.body, /25 au départ/)
   assert.match(RUN_ARCADE_HELP.tirages.body, /n−1 et n/)
-  assert.match(RUN_ARCADE_HELP.minutes.body, /10 au départ/)
   assert.match(RUN_ARCADE_HELP.minutes.items?.[1].text ?? "", /tranche suivante/)
-  assert.match(RUN_ARCADE_HELP.runners.body, /8 au départ/)
   assert.match(RUN_ARCADE_HELP.courbes.items?.[1].text ?? "", /10, 20, 30, 40 ou 50/)
   assert.match(RUN_ARCADE_HELP.courbes.items?.[3].text ?? "", /1–10/)
   assert.match(RUN_ARCADE_HELP.courbes.items?.[3].text ?? "", /41–50/)
@@ -95,7 +172,6 @@ test("runArcade help names the purse, the exam, the evenings and the curves", ()
   assert.match(RUN_ARCADE_HELP.services.items?.[1].text ?? "", /tirage encore caché/)
   assert.match(RUN_ARCADE_HELP.champions.body, /vingt au plus/)
   assert.match(RUN_ARCADE_HELP.journal.body, /huit dernières/)
-  assert.match(RUN_ARCADE_HELP.skills.body, /Une seule skill nouvelle/)
   assert.match(RUN_ARCADE_HELP.gestes.items?.[5].text ?? "", /quatre jours au plus/)
   assert.match(RUN_ARCADE_HELP.gestes.items?.[5].text ?? "", /mardi/)
   assert.match(RUN_ARCADE_HELP.gestes.items?.[5].text ?? "", /vendredi/)
