@@ -1,0 +1,9 @@
+{
+  "slug": "runarcade-ecran-00c1",
+  "happened_on": "2026-11-03",
+  "area": "runArcade",
+  "title": "runArcade : le champion reste à jour, la saisie ne se réécrit plus",
+  "body": "« Relancer » repart du parent de la course en cours : après deux générations, il ne retombe plus sur le champion lu à l’ouverture de la page, et la liste « Champions déjà écrits » se relit quand un champion vient d’être écrit. Lancer reste éteint tant que l’archive se lit ; si la page n’a que l’extrait embarqué, une ligne le dit, et l’année écrite vient des tirages. Les champs Runners, Tirages, Minutes et Date gardent ce qu’on tape et se corrigent quand on les quitte ou au lancement : taper 30 donne 30, et Tirages redescend sous le maximum quand la piste est courte. Seule la bande de la course suit l’horloge, la tranche affichée tient compte du plancher de 0,7 s, et une recherche coupée par la fin de la course ne passe plus pour une panne dans Rayons X. L’aide dit maintenant ce que l’écran écrit : l’origine « variation », le dernier tirage du champion, deux skills nouvelles au plus par runner. Les calculs, l’examen et les gestes ne changent pas.",
+  "pr_number": null,
+  "pr_url": null
+}
