@@ -24,6 +24,7 @@ from synchro.nextdata.panel import Frame
 from synchro.nextdata.persist import NUMBER_POOL, NUMBER_SLOTS, STAR_SLOTS, score_swaps, snap_grid
 from synchro.nextdata.project import beam, compose_ranks, stamp_grid
 from synchro.nextdata.steps import MIN_HISTORY
+from synchro.nextdata.xray import core_trace, public_xray
 from synchro.nextdata.uncertainty import chance_hits, chance_hits_mixed, mean_interval, versus_all
 
 FIELDS = ("sum", "n1", "n2", "n3", "n4", "n5", "star_sum", "e1", "e2", *SHAPE_SERIES)
@@ -236,13 +237,29 @@ def _assemble(
         moments = copy.deepcopy(block["moments"])
         engine = library
         chronos = None
+        darts_names: list[str] = []
         if library == "lightgbm":
             darts = (parts.get("darts") or {}).get(mode)
             if darts:
+                before_mids = {
+                    name: float(band["mid"])
+                    for name, band in moments.items()
+                    if isinstance(band, dict) and "mid" in band
+                }
                 _apply_external(moments, darts, star_pool=pool)
                 engine = "darts"
-            if with_chronos:
-                chronos = _blend_chronos(frame, mode, moments, parts, window, pool)
+                darts_names = [
+                    name
+                    for name, mid in before_mids.items()
+                    if isinstance(moments.get(name), dict) and float(moments[name]["mid"]) != mid
+                ]
+        before_chronos = {
+            name: dict(band)
+            for name, band in moments.items()
+            if isinstance(band, dict) and "mid" in band
+        }
+        if library == "lightgbm" and with_chronos:
+            chronos = _blend_chronos(frame, mode, moments, parts, window, pool)
         composed, trace = compose_ranks(moments, last)
         if trace is not None and chronos and chronos["available"]:
             trace["numbers"][0]["chronos"] = {"value": chronos["n1"], "share": round(1.0 - chronos["weights"]["n1"], 4)}
@@ -253,6 +270,7 @@ def _assemble(
         best = ranked[0]
         packed = _pack(best["numbers"], best["stars"], moments["sum"]["mid"])
         packed["sum_model"] = round(float(moments["sum"]["mid"]), 4)
+        arbitration = None if trace is None else stamp_grid(trace, best["numbers"], best["stars"])
         out["readings"][key] = {
             "mode": mode,
             "library": library,
@@ -260,11 +278,27 @@ def _assemble(
             "moments": composed,
             "view": _rank_view(composed, pool),
             "grid": {"numbers": best["numbers"], "stars": best["stars"], "score": best["score"]},
-            "alternates": ranked[1:],
+            "alternates": [
+                {"numbers": item["numbers"], "stars": item["stars"], "score": item["score"]} for item in ranked[1:]
+            ],
             "packed": packed,
-            "arbitration": None if trace is None else stamp_grid(trace, best["numbers"], best["stars"]),
+            "arbitration": arbitration,
             "chronos": chronos,
             "importance": block.get("importance") or [],
+            "xray_core": core_trace(
+                moments_before=before_chronos,
+                chronos=chronos,
+                window_t=[past_t for past_t, _past in window],
+                library=library,
+                engine=engine,
+                darts_names=darts_names,
+                composed=composed,
+                ranked=ranked,
+                arbitration=arbitration,
+                star_pool=pool,
+                scored_t=t,
+                error=model_error(parts, mode, library),
+            ),
         }
     return out
 
@@ -327,8 +361,9 @@ def assemble(
     `pulse` ajoute au faisceau le log π de chaque numéro choisi. Sans la famille, le terme est absent.
     """
     order = sorted(ready)
-    return {
-        t: _memo(
+    out: dict[int, dict[str, Any]] = {}
+    for index, t in enumerate(order):
+        built = _memo(
             frame,
             t,
             ready[t],
@@ -336,8 +371,12 @@ def assemble(
             with_chronos,
             pulse,
         )
-        for index, t in enumerate(order)
-    }
+        # L’origine est celle de cette réponse. Le mémo, lui, ne la fige pas.
+        stamped = dict(built)
+        stamped["origin"] = dict(ready[t].get("origin") or {})
+        stamped["part_keys"] = dict(ready[t].get("part_keys") or {})
+        out[t] = stamped
+    return out
 
 
 def calibrated_view(
@@ -347,8 +386,11 @@ def calibrated_view(
     star_pool: int,
 ) -> tuple[dict[str, dict[str, float]], dict[str, Any]]:
     """Bandes d’une lecture, calibrées sur les pas d’avant de la même lecture."""
-    pairs = [(past["readings"][key]["view"], past["truth"]) for past in history if key in past["readings"] and past.get("truth")]
-    return calibrate(step["readings"][key]["view"], pairs, star_pool)
+    selected = [past for past in history if key in past["readings"] and past.get("truth")]
+    pairs = [(past["readings"][key]["view"], past["truth"]) for past in selected]
+    moved, info = calibrate(step["readings"][key]["view"], pairs, star_pool)
+    info["history_t"] = [int(past["t"]) for past in selected if past.get("t") is not None]
+    return moved, info
 
 
 def band_report(steps: list[dict[str, Any]], star_pool: int) -> dict[str, Any]:
@@ -565,6 +607,7 @@ def shift_report(
     lags: Iterable[int] | None = None,
     chronos_requested: bool = False,
     persist: dict[str, int] | None = None,
+    xray_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Dix coupures −1…−10 : les dix derniers pas du retour.
 
@@ -602,6 +645,7 @@ def shift_report(
                 side["chronos"] = reading["chronos"]
                 chronos_used = True
             readings[key] = side
+            snapped = None
             if persist:
                 snapped = persist_side(frame, t, reading, persist)
                 twin = _shift_side(snapped, actual, view)
@@ -612,6 +656,17 @@ def shift_report(
                 twin["swaps"] = snapped["swaps"]
                 twin["held"] = snapped["held"]
                 readings[f"{key}_persist"] = twin
+            if xray_context is not None:
+                side["xray"] = public_xray(
+                    frame,
+                    step,
+                    key,
+                    reading,
+                    calibration=info,
+                    moved=view,
+                    persist_snap=snapped,
+                    **xray_context,
+                )
         shifts.append(
             {
                 "x": int(lag),

@@ -162,7 +162,8 @@ def _nudge_sum(
     return out
 
 
-def project_numbers(moments: dict[str, dict[str, float]]) -> tuple[list[int], list[float]]:
+def number_stages(moments: dict[str, dict[str, float]]) -> dict[str, Any]:
+    """Reconstruction, ordre, nudge de somme, nudge d’étendue. Le centre est la dernière liste."""
     _, n1, _ = _band(moments.get("n1"), 8)
     gaps = []
     for name in ("g1", "g2", "g3", "g4"):
@@ -172,16 +173,28 @@ def project_numbers(moments: dict[str, dict[str, float]]) -> tuple[list[int], li
     lo = [bound[0] for bound in NUMBER_BOUNDS]
     hi = [bound[1] for bound in NUMBER_BOUNDS]
     mids, scales, _ = rank_scales(moments)
-    ints = project_increasing(raw, lo, hi)
-    _, sum_mid, _ = _band(moments.get("sum"), float(sum(ints)))
-    ints = _nudge_sum(ints, int(round(sum_mid)), lo, hi, mids, scales)
+    ordered = project_increasing(raw, lo, hi)
+    _, sum_mid, _ = _band(moments.get("sum"), float(sum(ordered)))
+    sum_target = int(round(sum_mid))
+    after_sum = _nudge_sum(ordered, sum_target, lo, hi, mids, scales)
+    spread_target = None
+    after_spread = after_sum
     if moments.get("spread"):
-        _, spread_mid, _ = _band(moments.get("spread"), float(ints[-1] - ints[0]))
-        ints = _nudge_spread(ints, int(round(spread_mid)), lo, hi, mids, scales)
-    return ints, raw
+        _, spread_mid, _ = _band(moments.get("spread"), float(after_sum[-1] - after_sum[0]))
+        spread_target = int(round(spread_mid))
+        after_spread = _nudge_spread(after_sum, spread_target, lo, hi, mids, scales)
+    return {
+        "raw": raw,
+        "ordered": ordered,
+        "after_sum": after_sum,
+        "after_spread": after_spread,
+        "sum_target": sum_target,
+        "spread_target": spread_target,
+    }
 
 
-def project_stars(moments: dict[str, dict[str, float]], star_pool: int) -> list[int]:
+def star_stages(moments: dict[str, dict[str, float]], star_pool: int) -> dict[str, Any]:
+    """Même chemin pour les étoiles : reconstruction, ordre, nudge de somme."""
     pool = max(2, min(12, int(star_pool)))
     _, e1, _ = _band(moments.get("e1"), 2)
     _, gap, _ = _band(moments.get("e_gap"), 3)
@@ -191,9 +204,39 @@ def project_stars(moments: dict[str, dict[str, float]], star_pool: int) -> list[
     bands = rank_bands(moments, pool)
     centers = [bands[name]["mid"] for name in ("e1", "e2")]
     scales = [max(1.0, bands[name]["hi"] - bands[name]["lo"]) for name in ("e1", "e2")]
-    ints = project_increasing(raw, lo, hi)
-    _, sum_mid, _ = _band(moments.get("star_sum"), float(sum(ints)))
-    return _nudge_sum(ints, int(round(sum_mid)), lo, hi, centers, scales)
+    ordered = project_increasing(raw, lo, hi)
+    _, sum_mid, _ = _band(moments.get("star_sum"), float(sum(ordered)))
+    sum_target = int(round(sum_mid))
+    after_sum = _nudge_sum(ordered, sum_target, lo, hi, centers, scales)
+    return {"raw": raw, "ordered": ordered, "after_sum": after_sum, "sum_target": sum_target, "pool": pool}
+
+
+def project_numbers(moments: dict[str, dict[str, float]]) -> tuple[list[int], list[float]]:
+    stages = number_stages(moments)
+    return stages["after_spread"], stages["raw"]
+
+
+def project_stars(moments: dict[str, dict[str, float]], star_pool: int) -> list[int]:
+    return star_stages(moments, star_pool)["after_sum"]
+
+
+def held_center(moments: dict[str, dict[str, float]], star_pool: int) -> dict[str, Any]:
+    """Centre du faisceau : la projection, remise dans l’ordre si elle n’est pas une grille."""
+    numbers = number_stages(moments)
+    stars = star_stages(moments, star_pool)
+    center = list(numbers["after_spread"])
+    if not _valid_numbers(center):
+        center = project_increasing(
+            center,
+            [bound[0] for bound in NUMBER_BOUNDS],
+            [bound[1] for bound in NUMBER_BOUNDS],
+        )
+    return {
+        "numbers": numbers,
+        "stars": stars,
+        "center_numbers": center,
+        "center_stars": list(stars["after_sum"]),
+    }
 
 
 def _valid_numbers(values: list[int]) -> bool:
@@ -320,14 +363,14 @@ def rank_scales(moments: dict[str, dict[str, float]]) -> tuple[list[float], list
     return mids, scales, [max(1.0, band["hi"] - band["mid"]) for band in bands]
 
 
-def score_grid(
+def score_terms(
     numbers: list[int],
     stars: list[int],
     moments: dict[str, dict[str, float]],
     base: dict[str, Any],
     pulse: dict[str, Any] | None = None,
-) -> float:
-    """Plus le score est haut, plus la grille colle aux rangs, à l’étendue, aux consécutifs et à la base.
+) -> dict[str, float]:
+    """Termes du score. Plus le total est haut, plus la grille colle aux rangs, à l’étendue et à la base.
 
     Pulse, s’il est passé, ajoute le log π de chaque numéro de la grille : le sien.
     """
@@ -404,7 +447,26 @@ def score_grid(
         )
     if triples:
         triple_log /= len(triples)
-    return -distance + frequency + couple_log + triple_log + _pulse_log(numbers, stars, pulse)
+    pulse_log = _pulse_log(numbers, stars, pulse)
+    return {
+        "distance": distance,
+        "frequency": frequency,
+        "couples": couple_log,
+        "triples": triple_log,
+        "pulse": pulse_log,
+        "score": -distance + frequency + couple_log + triple_log + pulse_log,
+    }
+
+
+def score_grid(
+    numbers: list[int],
+    stars: list[int],
+    moments: dict[str, dict[str, float]],
+    base: dict[str, Any],
+    pulse: dict[str, Any] | None = None,
+) -> float:
+    """Plus le score est haut, plus la grille colle aux rangs, à l’étendue, aux consécutifs et à la base."""
+    return score_terms(numbers, stars, moments, base, pulse)["score"]
 
 
 def _pulse_log(numbers: list[int], stars: list[int], pulse: dict[str, Any] | None) -> float:
@@ -675,14 +737,9 @@ def beam(
 ) -> list[dict[str, Any]]:
     """Centre projeté, puis voisins à ±1…±3 sur un rang. Le meilleur score d’abord."""
     pool = max(2, min(12, int(star_pool or base.get("star_pool") or 12)))
-    center, _raw = project_numbers(moments)
-    stars = project_stars(moments, pool)
-    if not _valid_numbers(center):
-        center = project_increasing(
-            center,
-            [b[0] for b in NUMBER_BOUNDS],
-            [b[1] for b in NUMBER_BOUNDS],
-        )
+    held = held_center(moments, pool)
+    center = held["center_numbers"]
+    stars = held["center_stars"]
     number_alts = [center]
     number_alts.extend(
         _neighbors(center, [b[0] for b in NUMBER_BOUNDS], [b[1] for b in NUMBER_BOUNDS], radius)
@@ -716,11 +773,16 @@ def beam(
             if key in taken:
                 continue
             taken.add(key)
+            terms = score_terms(nums, star, moments, base, pulse)
             ranked.append(
                 {
                     "numbers": list(nums),
                     "stars": list(star),
-                    "score": round(score_grid(nums, star, moments, base, pulse), 6),
+                    "score": round(terms["score"], 6),
+                    "terms": {
+                        key: round(terms[key], 6)
+                        for key in ("distance", "frequency", "couples", "triples", "pulse")
+                    },
                 }
             )
     ranked.sort(key=lambda item: (-item["score"], item["numbers"], item["stars"]))

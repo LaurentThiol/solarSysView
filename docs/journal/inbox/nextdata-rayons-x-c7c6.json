@@ -1,0 +1,9 @@
+{
+  "slug": "nextdata-rayons-x-c7c6",
+  "happened_on": "2026-11-03",
+  "area": "nextData",
+  "title": "Rayons X",
+  "body": "nextData et nextDataTraining ont un interrupteur Rayons X. Il montre le calcul du réglage affiché, opération par opération : cadre, pas, quantiles, Chronos, arbitrage, projection, calibrage, Persist. Les écarts de règle sont en tête. L’interrupteur ne relance pas le calcul et ne fabrique pas un ticket. Sur l’entraînement, le rayon suit le décalage épinglé. Méga reste dehors.",
+  "pr_number": null,
+  "pr_url": null
+}

@@ -355,11 +355,17 @@ def ensure_steps(
             if data is not None:
                 found[part] = data
         if len(found) == len(keys):
-            ready[t] = {"key": _combined(keys, found), "parts": found}
+            ready[t] = _ready_step(keys, found, {part: "relu" for part in keys})
         else:
             missing.append((t, keys, found))
     batch = missing[: max(0, int(limit))]
     computed = _compute(frame, batch, settings)
-    for t, keys, _found in batch:
-        ready[t] = {"key": _combined(keys, computed[t]), "parts": computed[t]}
+    for t, keys, found in batch:
+        origin = {part: "relu" if part in found else "calculé" for part in keys}
+        ready[t] = _ready_step(keys, computed[t], origin)
     return ready, len(missing) - len(batch)
+
+
+def _ready_step(keys: dict[str, str], parts: dict[str, Any], origin: dict[str, str]) -> dict[str, Any]:
+    """Pas en mémoire. L’origine et les clés ne s’écrivent pas dans le fichier de cache."""
+    return {"key": _combined(keys, parts), "parts": parts, "origin": dict(origin), "part_keys": dict(keys)}

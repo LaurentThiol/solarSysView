@@ -8,6 +8,7 @@ import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { CovariateBlockToken, useCovariateBlock } from "@/components/nextdata/covariate-block"
 import { PersistArchive, PersistControl, PersistPairCard, RecentNote, SwapNote } from "@/components/nextdata/persist-panel"
 import { RankPath } from "@/components/nextdata/rank-path"
+import { XrayPanel } from "@/components/nextdata/xray-panel"
 import { StaleArchiveNote } from "@/components/nextdata/stale-archive-note"
 import { StepMeter } from "@/components/nextdata/step-meter"
 import { Button } from "@/components/ui/button"
@@ -52,6 +53,7 @@ import {
   type RetourId,
 } from "@/lib/nextdata/retour"
 import { seriesRows, type SeriesRow } from "@/lib/nextdata/series"
+import type { Xray } from "@/lib/nextdata/xray"
 import { shapeCaption } from "@/lib/nextdata/shape"
 import {
   chanceOdds,
@@ -134,6 +136,7 @@ type ModePayload = {
   calibration?: Calibration
   persist?: PersistBlock | null
   catboost?: ModePayload | null
+  xray?: Xray | null
 }
 type StepSide = {
   numbers: number[]
@@ -368,6 +371,7 @@ export function NextDataLab() {
   const [families, setFamilies] = useState<string[]>(FAMILIES.map((item) => item.id))
   const [covariateBlock, setCovariateBlock] = useCovariateBlock(families)
   const [withChronos, setWithChronos] = useState(false)
+  const [xray, setXray] = useState(false)
   const [delta, setDelta] = useState(false)
   const [persistSetting, setPersistSetting] = useState<PersistSetting | null>(null)
   const [running, setRunning] = useState(false)
@@ -665,6 +669,18 @@ export function NextDataLab() {
                 {day === "tous" ? "Tous" : day === "mardi" ? "Mardi" : "Vendredi"}
               </Button>
             ))}
+            <HelpWrap help={NEXTDATA_HELP.rayons}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                aria-pressed={xray}
+                className={cn(xray && "border-chart-4 text-chart-4")}
+                onClick={() => setXray((value) => !value)}
+              >
+                Rayons X
+              </Button>
+            </HelpWrap>
             <HelpWrap help={NEXTDATA_HELP.moteur}>
               <Button
                 type="button"
@@ -756,6 +772,8 @@ export function NextDataLab() {
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>
+
+      {xray ? <XrayPanel xray={shownBlock?.xray ?? null} /> : null}
 
       <PillTabs idPrefix="nextdata" label="nextData" value={tab} onValueChange={selectTab} items={TABS} />
 

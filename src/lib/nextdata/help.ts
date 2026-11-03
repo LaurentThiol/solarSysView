@@ -369,6 +369,11 @@ export const NEXTDATA_HELP = {
     title: "Poids des variables",
     body: "Les quinze colonnes les plus utilisées pour la somme et pour n1, une liste pour LightGBM et une pour CatBoost. Le nom dit le décalage : lag:sum:2 est la somme d’il y a deux tirages. La famille regroupe calendrier, lune, forme, décennies, delta, répétitions, couples, triples, pulse ou la série elle-même. Le chiffre est la part du gain, en pour cent : chaque modèle (somme, n1) est ramené à 100 avant la moyenne, pour que la somme, dont l’échelle est plus large, ne couvre pas n1. Une part élevée dit que la colonne a servi à couper les arbres, pas qu’elle annonce le prochain tirage à elle seule.",
   },
+  rayons: {
+    title: "Rayons X",
+    wide: true,
+    body: "Montre le calcul du réglage affiché, opération par opération : cadre, pas, quantiles, Chronos, arbitrage, projection, calibrage, Persist. Les écarts de règle sont en tête. L’interrupteur ne relance pas le calcul et ne fabrique pas un ticket. Méga n’y entre pas : une ligne Méga est un autre réglage, relu du même cache.",
+  },
 } satisfies Record<string, HelpCopy>
 
 export const NEXTDATA_TRAINING_HELP = {

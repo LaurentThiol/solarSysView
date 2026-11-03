@@ -204,6 +204,6 @@ export function schemaTitle(markdown: string) {
 export function schemaShortTitle(id: string, title: string) {
   if (id === "") return "Méthode"
   if (!id.includes("/")) return "Index"
-  const label = title.replace(/^(?:Pronostic|decisionTree) — /, "").trim()
+  const label = title.replace(/^(?:Pronostic|decisionTree|nextData) — /, "").trim()
   return label.charAt(0).toUpperCase() + label.slice(1)
 }

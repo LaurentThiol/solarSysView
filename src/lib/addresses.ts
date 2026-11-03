@@ -328,6 +328,36 @@ const TABS: AddressEntry[] = [
     tabEntry(`/schemas/pronostic/${doc.id}`, `Schémas · ${doc.label}`, doc.text, "systeme")
   ),
   tabEntry(
+    "/schemas/nextdata",
+    "Schémas · nextData",
+    "Cadre, pas, projection et contrôles de nextData et nextDataTraining.",
+    "systeme"
+  ),
+  tabEntry(
+    "/schemas/nextdata/01-contexte",
+    "Schémas · nextData contexte",
+    "Chercheur, archive, cache des pas et Jeux.",
+    "systeme"
+  ),
+  tabEntry(
+    "/schemas/nextdata/02-traitement",
+    "Schémas · nextData traitement",
+    "Les dix opérations, de l’archive filtrée à Persist.",
+    "systeme"
+  ),
+  tabEntry(
+    "/schemas/nextdata/03-flux",
+    "Schémas · nextData flux",
+    "Prochain tirage, puis décalages moins 1 à moins 10.",
+    "systeme"
+  ),
+  tabEntry(
+    "/schemas/nextdata/04-controles",
+    "Schémas · nextData contrôles",
+    "Écarts de règle que le rayon remonte en tête.",
+    "systeme"
+  ),
+  tabEntry(
     "/pronostic?tab=historic",
     "Pronostic · Historique",
     "Notation des 100 derniers tirages, un par un. La marge d’erreur est annoncée à l’avance, ou choisie après les tirages notés ; la partie jouée la fige avant chaque tirage. Un comité de onze têtes propose une autre prévision, comparée à la moyenne. Lecture d’archive : la loi officielle reste uniforme.",

@@ -22,6 +22,7 @@ from synchro.nextdata.panel import Frame, build_frame, normalized_draws
 from synchro.nextdata.persist import base_rates, recent_draws, snap_grid
 from synchro.nextdata.project import rank_bands
 from synchro.nextdata.pulse_features import public_pulse
+from synchro.nextdata.xray import public_xray
 
 # Avant le premier Darts ou Chronos : ce module est importé par l’API et par le pool.
 quiet_optional_model_notices()
@@ -238,6 +239,47 @@ def persist_info(
     }
 
 
+def _xray_context(
+    *,
+    focus_requested: int,
+    families: list[str],
+    block_requested: str | None,
+    excluded: list[str],
+    estimators: int,
+    chronos_requested: bool,
+    persist: dict[str, int] | None,
+) -> dict[str, Any]:
+    return {
+        "focus_requested": focus_requested,
+        "families": families,
+        "block_requested": block_requested,
+        "excluded": excluded,
+        "estimators": estimators,
+        "chronos_requested": chronos_requested,
+        "persist": persist,
+    }
+
+
+def _publish_xray(
+    frame: Frame,
+    step: dict[str, Any],
+    key: str,
+    block: dict[str, Any],
+    moved: dict[str, Any],
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    return public_xray(
+        frame,
+        step,
+        key,
+        step["readings"][key],
+        calibration=block.get("calibration"),
+        moved=moved,
+        persist_snap=block.get("persist"),
+        **context,
+    )
+
+
 def run_forecast(
     draws: list[dict[str, Any]],
     *,
@@ -297,14 +339,25 @@ def run_forecast(
     modes: dict[str, Any] = {}
     views: dict[str, dict[str, dict[str, float]]] = {}
     grids: dict[str, dict[str, Any]] = {}
+    xray_context = _xray_context(
+        focus_requested=int(focus),
+        families=families,
+        block_requested=block if isinstance(block, str) and block else None,
+        excluded=list(excluded),
+        estimators=settings.estimators,
+        chronos_requested=with_chronos,
+        persist=persist,
+    )
     for mode in ("corpus", "fenetre"):
         block, views[mode] = _reading_block(upcoming, mode, history, walked, target_pool)
         block["persist"] = _persist_grid(block["grid"], frame, persist)
+        block["xray"] = _publish_xray(frame, upcoming, mode, block, views[mode], xray_context)
         grids[mode] = block["grid"]
         cat_key = f"{mode}_catboost"
         if cat_key in upcoming["readings"]:
             block["catboost"], views[cat_key] = _reading_block(upcoming, cat_key, history, walked, target_pool)
             block["catboost"]["persist"] = _persist_grid(block["catboost"]["grid"], frame, persist)
+            block["catboost"]["xray"] = _publish_xray(frame, upcoming, cat_key, block["catboost"], views[cat_key], xray_context)
             grids[cat_key] = block["catboost"]["grid"]
         modes[mode] = block
 
@@ -404,7 +457,22 @@ def run_training(
         order = targets + [t for t in retour if t not in targets]
         ready, remaining = ensure_steps(frame, order, settings, parts, limit=chunk or worker_count())
     steps = backtest.assemble(frame, ready, with_chronos=with_chronos, pulse="pulse" in families)
-    report = backtest.shift_report(frame, steps, lags=lags, chronos_requested=with_chronos, persist=persist)
+    report = backtest.shift_report(
+        frame,
+        steps,
+        lags=lags,
+        chronos_requested=with_chronos,
+        persist=persist,
+        xray_context=_xray_context(
+            focus_requested=int(focus),
+            families=families,
+            block_requested=block if isinstance(block, str) and block else None,
+            excluded=list(excluded),
+            estimators=settings.estimators,
+            chronos_requested=with_chronos,
+            persist=persist,
+        ),
+    )
     report["chronos"]["error"] = chronos_problem(with_chronos, report["chronos"]["used"])
     catboost_error = catboost_import_error()
     info = persist_info(draws, frame, persist)

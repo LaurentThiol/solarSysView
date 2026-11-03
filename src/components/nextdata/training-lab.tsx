@@ -6,6 +6,7 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "rec
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { PersistArchive, PersistControl, PersistPairCard } from "@/components/nextdata/persist-panel"
 import { RankPath } from "@/components/nextdata/rank-path"
+import { XrayPanel } from "@/components/nextdata/xray-panel"
 import { StaleArchiveNote } from "@/components/nextdata/stale-archive-note"
 import { StepMeter } from "@/components/nextdata/step-meter"
 import { TrainingCompare } from "@/components/nextdata/training-compare"
@@ -31,6 +32,7 @@ import { COVARIATE_BLOCKS } from "@/lib/nextdata/blocks"
 import { pulseCaption, type PulseReading } from "@/lib/nextdata/pulse"
 import { formatDecimal } from "@/lib/nextdata/compare"
 import { bandCoverage, deltaNumbers, TRAINING_SHIFT_TOTAL, visibleTrainingShift } from "@/lib/nextdata/training-progress"
+import { trainingXray, type Xray } from "@/lib/nextdata/xray"
 import type { SweepPayload, SweepRow } from "@/lib/nextdata/sweep"
 import {
   coverageRange,
@@ -116,6 +118,7 @@ type Side = {
   hits_numbers: number | null
   hits_stars: number | null
   arbitration?: Arbitration | null
+  xray?: Xray | null
   swaps?: PersistSwap[]
   held?: PersistHeld | null
 }
@@ -175,6 +178,7 @@ export function TrainingLab() {
   const [families, setFamilies] = useState<string[]>(FAMILIES.map((item) => item.id))
   const [covariateBlock, setCovariateBlock] = useCovariateBlock(families)
   const [withChronos, setWithChronos] = useState(false)
+  const [xray, setXray] = useState(false)
   const [delta, setDelta] = useState(false)
   const [persistSetting, setPersistSetting] = useState<PersistSetting | null>(null)
   const [reading, setReading] = useState<ReadingId>("corpus")
@@ -406,6 +410,7 @@ export function TrainingLab() {
   const activeShift = visibleTrainingShift(report?.shifts ?? [], pinnedShift)
   const pulseNow = families.includes("pulse") ? (activeShift?.pulse ?? report?.pulse) : undefined
   const pathTrace = activeShift?.readings[reading]?.arbitration
+  const trace = trainingXray(report?.shifts ?? [], pinnedShift, reading)
   const shifts = report?.shifts ?? []
   const calibrationSteps = shifts.flatMap((shift) => {
     const side = shift.readings[reading]
@@ -491,6 +496,18 @@ export function TrainingLab() {
                 {day === "tous" ? "Tous" : day === "mardi" ? "Mardi" : "Vendredi"}
               </Button>
             ))}
+            <HelpWrap help={NEXTDATA_HELP.rayons}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                aria-pressed={xray}
+                className={cn(xray && "border-chart-4 text-chart-4")}
+                onClick={() => setXray((value) => !value)}
+              >
+                Rayons X
+              </Button>
+            </HelpWrap>
             <HelpWrap help={NEXTDATA_TRAINING_HELP.chronos}>
               <Button
                 type="button"
@@ -597,6 +614,8 @@ export function TrainingLab() {
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>
+
+      {xray ? <XrayPanel xray={trace} /> : null}
 
       {mega && sweep?.rows?.length ? <TrainingSweep report={sweep} onApply={applySweepRow} /> : null}
 

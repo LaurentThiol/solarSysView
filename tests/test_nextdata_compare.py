@@ -24,6 +24,7 @@ def test_nextdata_training_table_node() -> None:
             str(ROOT / "tests" / "test_nextdata_uncertainty.ts"),
             str(ROOT / "tests" / "test_nextdata_sweep.ts"),
             str(ROOT / "tests" / "test_nextdata_state.ts"),
+            str(ROOT / "tests" / "test_nextdata_xray.ts"),
         ],
         cwd=ROOT,
         capture_output=True,
