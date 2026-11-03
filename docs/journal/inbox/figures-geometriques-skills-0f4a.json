@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "runArcade : une figure glisse dans la fenêtre",
   "body": "Une skill peut tracer une figure. Un calibre court avance d’un tirage dans la fenêtre : triangle, cercle, polygone, hypoténuse, sinus, cosinus, tangente, et les arcs. La pensée part du dernier cran et se place entre le plus bas et le plus haut de la fenêtre. Le cercle d’or reste le calque des niveaux. Le cercle de la figure passe par trois points. L’examen ne change pas : la skill reste si le solde monte.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 348,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/348"
 }
