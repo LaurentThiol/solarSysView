@@ -542,7 +542,68 @@ test("the same search is read once per generation, and each runner reads the not
   session.dispose()
 })
 
-test("an empty Brave answer does not replace the notes already read, and the next turn asks again", async () => {
+test("two runners asking the same search while it is in flight share one Brave call", async () => {
+  const { ia, brave, session } = harness(2)
+  session.launch({ count: 2, draws: 4, minutes: 1, series: series(80), champion: null })
+  await flush()
+  assert.deepEqual(
+    ia.map((call) => call.request.runnerId),
+    ["r1", "r2"]
+  )
+  ia[0].resolve(braveReply(ia[0].request, "a"))
+  await flush()
+  assert.equal(brave.length, 1)
+  // La première recherche est encore en vol : R2 attend le même résultat, sans second envoi.
+  ia[1].resolve(braveReply(ia[1].request, "b"))
+  await flush()
+  assert.equal(brave.length, 1)
+  assert.equal((session as unknown as { braveSearches: number }).braveSearches, 1)
+  brave[0].resolve({ ok: true, results: [NOTE] })
+  await flush()
+  assert.equal(brave.length, 1)
+  const lines = session.getSnapshot().xrayBrave
+  assert.equal(lines.length, 2)
+  assert.deepEqual(
+    lines.map((line) => line.detail),
+    ["1 résultat lisible", "1 résultat lisible · déjà lue"]
+  )
+  const noted = session.getSnapshot().journal.filter((entry) => entry.kind === "brave")
+  assert.equal(noted.length, 2)
+  assert.match(noted[1].detail, /déjà lue dans cette génération/)
+  // Les notes sont posées pour les deux runners : leur appel suivant les lit.
+  const next = ia.slice(2)
+  assert.deepEqual(
+    next.map((call) => call.request.runnerId).sort(),
+    ["r1", "r2"]
+  )
+  for (const call of next) assert.ok(call.request.user.includes("Suites et φ"), call.request.runnerId)
+  session.dispose()
+})
+
+test("a Brave request made during a pause sends nothing before the resume", async () => {
+  const { clock, ia, brave, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(80), champion: null })
+  await flush()
+  session.pause()
+  ia[0].resolve(braveReply(ia[0].request, "x"))
+  await flush()
+  assert.equal(brave.length, 0)
+  const held = session.getSnapshot()
+  assert.equal(held.xrayBrave.length, 1)
+  assert.equal(held.xrayBrave[0].state, "cours")
+  assert.deepEqual(held.activity.searching.map((entry) => entry.runnerId), ["r1"])
+  await clock.advance(60_000)
+  assert.equal(brave.length, 0)
+  session.resume()
+  await flush()
+  assert.equal(brave.length, 1)
+  brave[0].resolve({ ok: true, results: [NOTE] })
+  await flush()
+  assert.equal(session.getSnapshot().xrayBrave[0].state, "fait")
+  session.dispose()
+})
+
+test("the same search at a later race turn is read from memory, and the notes stay", async () => {
   const { ia, brave, session } = harness(1)
   session.launch({ count: 1, draws: 6, minutes: 1, series: series(80), champion: null })
   await flush()
@@ -550,7 +611,7 @@ test("an empty Brave answer does not replace the notes already read, and the nex
   await flush()
   brave[0].resolve({ ok: true, results: [NOTE] })
   await flush()
-  // Un tour joué fait glisser la fenêtre d’examen, donc la coupure : la recherche suivante part au réseau.
+  // Un tour joué fait glisser la fenêtre d’examen, donc la coupure : la mémoire, par requête seule, sert quand même.
   session.skip()
   session.skip()
   ia[ia.length - 1].resolve(unreadable)
@@ -558,11 +619,13 @@ test("an empty Brave answer does not replace the notes already read, and the nex
   const call = ia[ia.length - 1]
   call.resolve(braveReply(call.request, "b"))
   await flush()
-  assert.equal(brave.length, 2)
-  assert.notEqual(brave[1].request.cutoff, brave[0].request.cutoff)
-  brave[1].resolve({ ok: true, results: [] })
-  await flush()
-  assert.equal(session.getSnapshot().xrayBrave[1].detail, "0 résultats lisibles")
+  assert.equal(brave.length, 1)
+  const lines = session.getSnapshot().xrayBrave
+  assert.equal(lines.length, 2)
+  assert.equal(lines[0].turn, null)
+  assert.notEqual(lines[1].turn, null)
+  assert.equal(lines[1].detail, "1 résultat lisible · déjà lue")
+  assert.equal((session as unknown as { braveSearches: number }).braveSearches, 1)
   assert.ok(ia[ia.length - 1].request.user.includes("Suites et φ"))
   session.dispose()
 })
@@ -799,7 +862,6 @@ test("a Brave search appears in the xray activity, then leaves", async () => {
   const { ia, brave, session } = harness(1)
   session.launch({ count: 1, draws: 4, minutes: 1, series: series(80), champion: null })
   await flush()
-  session.pause()
   ia[0].resolve(braveReply(ia[0].request, "nombre d’or"))
   await flush()
   const live = session.getSnapshot()
@@ -827,7 +889,6 @@ test("a failed Brave search keeps the query and the error", async () => {
   const { ia, brave, session } = harness(1)
   session.launch({ count: 1, draws: 4, minutes: 1, series: series(80), champion: null })
   await flush()
-  session.pause()
   ia[0].resolve(braveReply(ia[0].request, "somme et plus petit rang"))
   await flush()
   const { relation } = openingRead(series(80))

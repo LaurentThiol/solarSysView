@@ -167,6 +167,18 @@ type InboxItem = {
   cutoff: string
 }
 
+type BraveWaiter = { id: string; meta: RequestMeta }
+
+/** Une recherche Brave en vol, partagée par les runners qui demandent la même requête. */
+type BraveFlight = {
+  query: string
+  leaderId: string
+  leaderMeta: RequestMeta
+  waiters: BraveWaiter[]
+  controller: AbortController | null
+  sent: boolean
+}
+
 /** Une recherche Brave qui attend la fin d’un « trop de requêtes » avant de repartir. */
 type BraveRetry = {
   query: string
@@ -299,8 +311,15 @@ export class RunArcadeSession {
   private readonly searching = new Map<string, string>()
   private readonly cooldown = new Map<string, number>()
   private readonly notes = new Map<string, BraveNote[]>()
-  /** Ce que Brave a rendu dans cette génération, par coupure et requête : la même recherche n’est lue qu’une fois. */
+  /**
+   * Ce que Brave a rendu dans cette génération, par requête seule : la même recherche n’est lue qu’une fois.
+   * Les notes gardées ont été filtrées avec la coupure la plus ancienne, donc la plus stricte.
+   */
   private readonly braveMemory = new Map<string, BraveNote[]>()
+  /** Recherches en vol, par requête seule : le deuxième runner attend le même résultat, sans second envoi. */
+  private readonly braveFlights = new Map<string, BraveFlight>()
+  /** Demandes suspendues par la pause, réveillées à la reprise, à la fin ou à l’arrêt. */
+  private readonly pauseWaiters = new Set<() => void>()
   /** Recherches parties au réseau dans cette génération. */
   private braveSearches = 0
   /** Recherches qui attendent la fin d’un « trop de requêtes », par runner. */
@@ -429,6 +448,37 @@ export class RunArcadeSession {
     this.holdRetries()
   }
 
+  private releasePauseWaiters() {
+    const waiters = [...this.pauseWaiters]
+    this.pauseWaiters.clear()
+    for (const waiter of waiters) waiter()
+  }
+
+  /** Attend la reprise tant que la session est en pause. La fin, l’arrêt ou un nouvel lancement réveillent aussi, sans envoi. */
+  private async waitWhilePaused(launch: number, signal?: AbortSignal) {
+    while (
+      launch === this.launchId &&
+      (signal == null || !signal.aborted) &&
+      this.snapshot.pausedLeftMs != null &&
+      (this.snapshot.phase === "avant" || this.snapshot.phase === "course")
+    ) {
+      await new Promise<void>((resolve) => {
+        let done: () => void = () => {}
+        done = () => {
+          this.pauseWaiters.delete(done)
+          signal?.removeEventListener("abort", done)
+          resolve()
+        }
+        this.pauseWaiters.add(done)
+        signal?.addEventListener("abort", done, { once: true })
+      })
+    }
+  }
+
+  private braveFlightOf(id: string) {
+    return [...this.braveFlights.values()].find((flight) => flight.waiters.some((waiter) => waiter.id === id)) ?? null
+  }
+
   private abortAll() {
     for (const controller of this.pending.values()) controller.abort()
     for (const controller of this.braving.values()) controller.abort()
@@ -437,12 +487,55 @@ export class RunArcadeSession {
     this.braving.clear()
     this.searching.clear()
     this.retries.clear()
+    this.braveFlights.clear()
+    this.releasePauseWaiters()
   }
 
   private abortRunner(id: string) {
     this.pending.get(id)?.abort()
-    this.braving.get(id)?.abort()
     this.pending.delete(id)
+    const flight = this.braveFlightOf(id)
+    if (flight && flight.waiters.length > 1) {
+      const retry = this.retries.get(id)
+      const removed = flight.waiters.find((waiter) => waiter.id === id)
+      flight.waiters = flight.waiters.filter((waiter) => waiter.id !== id)
+      this.braving.delete(id)
+      this.closeBrave(id, "erreur", retry ? `nouvelle tentative abandonnée : ce runner s’est arrêté` : "recherche interrompue")
+      this.note(
+        id,
+        "recherche",
+        retry ? "fait" : "interrompu",
+        retry ? "Nouvelle tentative abandonnée : ce runner s’est arrêté." : "Recherche interrompue.",
+        removed?.meta.turn ?? null
+      )
+      if (flight.leaderId === id) {
+        const next = flight.waiters[0]
+        flight.leaderId = next.id
+        flight.leaderMeta = next.meta
+        if (retry) {
+          this.retries.delete(id)
+          if (retry.handle != null) this.deps.clearTimer(retry.handle)
+          this.retries.set(next.id, {
+            ...retry,
+            meta: next.meta,
+            handle: null,
+            leftMs: retry.handle != null ? Math.max(0, retry.dueAt - this.deps.now()) : retry.leftMs,
+          })
+          this.armRetries()
+        }
+      }
+      this.searching.delete(id)
+      return
+    }
+    if (flight && !flight.sent) {
+      this.braveFlights.delete(flight.query)
+      this.braving.delete(id)
+      this.closeBrave(id, "erreur", "recherche interrompue")
+      this.searching.delete(id)
+      this.endRetry(id, "ce runner s’est arrêté")
+      return
+    }
+    this.braving.get(id)?.abort()
     this.braving.delete(id)
     this.searching.delete(id)
     this.endRetry(id, "ce runner s’est arrêté")
@@ -654,6 +747,7 @@ export class RunArcadeSession {
   private finish() {
     this.clearTimers()
     for (const id of [...this.retries.keys()]) this.endRetry(id, "la course est finie")
+    this.dropHeldBraveFlights()
     this.abortAll()
     const race = this.snapshot.race
     const track = this.snapshot.track
@@ -714,6 +808,7 @@ export class RunArcadeSession {
     const { phase, pausedLeftMs } = this.snapshot
     if (pausedLeftMs == null) return
     this.set({ pausedLeftMs: null })
+    this.releasePauseWaiters()
     const id = this.launchId
     if (phase === "avant") {
       this.set({ phaseEndsAt: this.deps.now() + pausedLeftMs })
@@ -874,7 +969,15 @@ export class RunArcadeSession {
           image = shot.image
           if (launch === this.launchId) this.drawingResult(id, shot.reason, meta)
         }
-        reply = controller.signal.aborted
+        // La capture a pu se terminer pendant une pause : l’envoi réel attend la reprise, et ne part pas après la fin.
+        if (launch === this.launchId && !controller.signal.aborted && this.snapshot.pausedLeftMs != null) {
+          await this.waitWhilePaused(launch, controller.signal)
+        }
+        const stopped =
+          controller.signal.aborted ||
+          launch !== this.launchId ||
+          (this.snapshot.phase !== "avant" && this.snapshot.phase !== "course")
+        reply = stopped
           ? { ok: false, error: "appel annulé", aborted: true }
           : await this.deps.askIa(
               { runnerId: id, seed, system: prompt.system, user: prompt.user, image },
@@ -1033,7 +1136,7 @@ export class RunArcadeSession {
     if (results.length > 0) this.notes.set(id, results)
   }
 
-  /** Cette recherche, à cette coupure, a déjà été lue dans la génération : on la reprend sans appeler Brave. */
+  /** Cette recherche a déjà été lue dans la génération : on la reprend sans appeler Brave. */
   private searchKnown(id: string, query: string, meta: RequestMeta, key: string) {
     const known = this.braveMemory.get(key)
     if (!known) return false
@@ -1084,9 +1187,172 @@ export class RunArcadeSession {
     this.braving.delete(id)
     this.closeBrave(id, "erreur", `nouvelle tentative abandonnée : ${why}`)
     this.note(id, "recherche", "fait", `Nouvelle tentative abandonnée : ${why}.`, retry.meta.turn)
+    const flight = this.braveFlights.get(retry.query)
+    if (flight && flight.leaderId === id) {
+      this.braveFlights.delete(retry.query)
+      for (const waiter of flight.waiters) {
+        if (waiter.id === id) continue
+        this.braving.delete(waiter.id)
+        this.closeBrave(waiter.id, "erreur", `nouvelle tentative abandonnée : ${why}`)
+        this.note(waiter.id, "recherche", "fait", `Nouvelle tentative abandonnée : ${why}.`, waiter.meta.turn)
+      }
+    }
+  }
+
+  /** Ferme les recherches encore tenues par la pause quand la course finit : aucun envoi ne partira. */
+  private dropHeldBraveFlights() {
+    for (const flight of [...this.braveFlights.values()]) {
+      if (flight.sent) continue
+      this.braveFlights.delete(flight.query)
+      for (const waiter of flight.waiters) {
+        this.braving.delete(waiter.id)
+        this.closeBrave(waiter.id, "erreur", "recherche interrompue")
+        this.note(waiter.id, "recherche", "interrompu", "Recherche interrompue.", waiter.meta.turn)
+      }
+    }
+  }
+
+  /** Envoi réel d’une recherche partagée. Revérifie pause et fin après l’attente, avant d’appeler Brave. */
+  private async runBraveFlight(flight: BraveFlight, attempt: number) {
+    const launch = this.launchId
+    await this.waitWhilePaused(launch)
+    if (launch !== this.launchId) return
+    if (this.braveFlights.get(flight.query) !== flight) return
+    if (this.snapshot.pausedLeftMs != null) return
+    if (this.snapshot.phase !== "avant" && this.snapshot.phase !== "course") {
+      this.braveFlights.delete(flight.query)
+      for (const waiter of flight.waiters) {
+        this.braving.delete(waiter.id)
+        this.closeBrave(waiter.id, "erreur", "recherche interrompue")
+        this.note(waiter.id, "recherche", "interrompu", "Recherche interrompue.", waiter.meta.turn)
+      }
+      return
+    }
+    const alive = flight.waiters.filter((waiter) => this.runner(waiter.id)?.alive)
+    if (alive.length === 0) {
+      this.braveFlights.delete(flight.query)
+      return
+    }
+    if (alive.length !== flight.waiters.length) {
+      flight.waiters = alive
+      if (!alive.some((waiter) => waiter.id === flight.leaderId)) {
+        flight.leaderId = alive[0].id
+        flight.leaderMeta = alive[0].meta
+      }
+    }
+    const meta = flight.leaderMeta
+    const track = this.snapshot.track
+    if (track.length === 0) return
+    if (this.snapshot.brave === "absente") {
+      this.braveFlights.delete(flight.query)
+      for (const waiter of [...flight.waiters]) {
+        this.braving.delete(waiter.id)
+        this.closeBrave(waiter.id, "erreur", "Brave absente")
+        this.note(waiter.id, "recherche", "refusé", "Brave absente", waiter.meta.turn)
+        this.log(waiter.id, "refus", waiter.meta.cutoff, "Brave absente", waiter.meta.turn)
+      }
+      this.set({ inFlight: this.pending.size })
+      return
+    }
+    const query = flight.query
+    const year = Number(track[track.length - 1].date.slice(0, 4))
+    const controller = new AbortController()
+    flight.controller = controller
+    flight.sent = true
+    for (const waiter of flight.waiters) {
+      this.braving.set(waiter.id, controller)
+      this.openBrave(waiter.id, query, waiter.meta.turn)
+    }
+    if (attempt > 0) {
+      for (const waiter of flight.waiters) {
+        this.note(waiter.id, "recherche", "en cours", `nouvel essai : « ${query} »`, waiter.meta.turn)
+      }
+    }
+    const reply = await this.deps
+      .askBrave(
+        { query, from: `${year - 1}-01-01`, cutoff: meta.braveCutoff, through: track[track.length - 1].date },
+        controller.signal
+      )
+      .catch(
+        (error: unknown): BraveReply => ({
+          ok: false,
+          error: error instanceof Error ? error.message : "échec",
+          aborted: controller.signal.aborted,
+        })
+      )
+    if (launch !== this.launchId) return
+    const waiters = [...flight.waiters]
+    for (const waiter of waiters) {
+      if (this.braving.get(waiter.id) === controller) this.braving.delete(waiter.id)
+    }
+    if (!reply.ok) {
+      if (reply.aborted) {
+        if (this.braveFlights.get(query) === flight) this.braveFlights.delete(query)
+        for (const waiter of waiters) {
+          this.closeBrave(waiter.id, "erreur", "recherche interrompue")
+          this.note(waiter.id, "recherche", "interrompu", "Recherche interrompue.", waiter.meta.turn)
+        }
+        this.set({ inFlight: this.pending.size })
+        return
+      }
+      if (reply.retryAfterMs != null && attempt < BRAVE_RETRIES) {
+        for (const waiter of waiters) this.braving.set(waiter.id, controller)
+        this.set({ inFlight: this.pending.size })
+        this.retries.set(flight.leaderId, {
+          query,
+          meta,
+          attempt,
+          handle: null,
+          dueAt: 0,
+          leftMs: Math.max(500, reply.retryAfterMs),
+        })
+        this.armRetries()
+        return
+      }
+      if (this.braveFlights.get(query) === flight) this.braveFlights.delete(query)
+      const detail = `Brave : ${reply.error}`
+      for (const waiter of waiters) {
+        this.closeBrave(waiter.id, "erreur", reply.error)
+        this.note(waiter.id, "recherche", "erreur", detail, waiter.meta.turn)
+        this.log(waiter.id, "erreur", waiter.meta.cutoff, detail, waiter.meta.turn)
+      }
+      this.set(reply.absent ? { brave: "absente", braveError: reply.error } : { braveError: reply.error })
+      this.pump()
+      return
+    }
+    const results = reply.results.slice(0, 5)
+    this.braveMemory.set(query, results)
+    if (this.braveFlights.get(query) === flight) this.braveFlights.delete(query)
+    waiters.forEach((waiter, index) => {
+      const shared = index > 0
+      this.closeBrave(
+        waiter.id,
+        "fait",
+        shared ? `${braveResultDetail(reply.results.length)} · déjà lue` : braveResultDetail(reply.results.length)
+      )
+      this.keepNotes(waiter.id, results)
+      const detail = shared
+        ? `« ${query} » : ${reply.results.length} résultat(s) lisible(s), déjà lue dans cette génération`
+        : `« ${query} » : ${reply.results.length} résultat(s) lisible(s)`
+      this.note(waiter.id, "recherche", "fait", detail, waiter.meta.turn)
+      this.log(waiter.id, "brave", waiter.meta.cutoff, detail, waiter.meta.turn)
+    })
+    this.set({ brave: "ok", braveError: null })
+    this.pump()
   }
 
   private searchBrave(id: string, query: string, meta: RequestMeta, attempt: number) {
+    if (attempt > 0) {
+      const flight = this.braveFlights.get(query)
+      if (!flight) return
+      flight.leaderId = id
+      flight.leaderMeta = meta
+      if (flight.controller) {
+        for (const waiter of flight.waiters) this.braving.set(waiter.id, flight.controller)
+      }
+      void this.runBraveFlight(flight, attempt)
+      return
+    }
     if (this.snapshot.brave === "absente") {
       this.openBrave(id, query, meta.turn)
       this.closeBrave(id, "erreur", "Brave absente")
@@ -1102,80 +1368,45 @@ export class RunArcadeSession {
       this.set({ inFlight: this.pending.size })
       return
     }
-    const key = `${meta.braveCutoff}|${query}`
-    if (attempt === 0) {
-      if (this.searchKnown(id, query, meta, key)) return
-      if (this.braveSearches >= BRAVE_SEARCH_CAP) {
-        const detail = `plafond de ${BRAVE_SEARCH_CAP} recherches par génération atteint`
+    const key = query
+    if (this.searchKnown(id, query, meta, key)) return
+    const existing = this.braveFlights.get(key)
+    if (existing) {
+      if (existing.waiters.some((waiter) => waiter.id === id)) {
         this.openBrave(id, query, meta.turn)
-        this.closeBrave(id, "erreur", detail)
-        this.note(id, "recherche", "refusé", detail, meta.turn)
-        this.log(id, "refus", meta.cutoff, detail, meta.turn)
-        this.set({ inFlight: this.pending.size })
         return
       }
-      this.braveSearches += 1
+      existing.waiters.push({ id, meta })
+      if (existing.controller) this.braving.set(id, existing.controller)
+      this.openBrave(id, query, meta.turn)
+      this.note(id, "recherche", "en cours", `« ${query} »`, meta.turn)
+      this.updateRunner(id, (item) => ({ ...item, calls: item.calls + 1 }))
+      return
     }
-    this.note(id, "recherche", "en cours", attempt === 0 ? `« ${query} »` : `nouvel essai : « ${query} »`, meta.turn)
-    const year = Number(track[track.length - 1].date.slice(0, 4))
-    const controller = new AbortController()
-    this.braving.set(id, controller)
+    if (this.braveSearches >= BRAVE_SEARCH_CAP) {
+      const detail = `plafond de ${BRAVE_SEARCH_CAP} recherches par génération atteint`
+      this.openBrave(id, query, meta.turn)
+      this.closeBrave(id, "erreur", detail)
+      this.note(id, "recherche", "refusé", detail, meta.turn)
+      this.log(id, "refus", meta.cutoff, detail, meta.turn)
+      this.set({ inFlight: this.pending.size })
+      return
+    }
+    this.braveSearches += 1
+    const flight: BraveFlight = {
+      query,
+      leaderId: id,
+      leaderMeta: meta,
+      waiters: [{ id, meta }],
+      controller: new AbortController(),
+      sent: false,
+    }
+    this.braveFlights.set(key, flight)
+    if (flight.controller) this.braving.set(id, flight.controller)
+    this.note(id, "recherche", "en cours", `« ${query} »`, meta.turn)
     this.openBrave(id, query, meta.turn)
-    if (attempt === 0) this.updateRunner(id, (item) => ({ ...item, calls: item.calls + 1 }))
-    const launch = this.launchId
-    this.deps
-      .askBrave(
-        { query, from: `${year - 1}-01-01`, cutoff: meta.braveCutoff, through: track[track.length - 1].date },
-        controller.signal
-      )
-      .catch(
-        (error: unknown): BraveReply => ({
-          ok: false,
-          error: error instanceof Error ? error.message : "échec",
-          aborted: controller.signal.aborted,
-        })
-      )
-      .then((reply) => {
-        if (launch !== this.launchId) return
-        if (this.braving.get(id) === controller) this.braving.delete(id)
-        if (!reply.ok) {
-          if (reply.aborted) {
-            this.closeBrave(id, "erreur", "recherche interrompue")
-            this.note(id, "recherche", "interrompu", "Recherche interrompue.", meta.turn)
-            this.set({ inFlight: this.pending.size })
-            return
-          }
-          if (reply.retryAfterMs != null && attempt < BRAVE_RETRIES) {
-            this.braving.set(id, controller)
-            this.set({ inFlight: this.pending.size })
-            this.retries.set(id, {
-              query,
-              meta,
-              attempt,
-              handle: null,
-              dueAt: 0,
-              leftMs: Math.max(500, reply.retryAfterMs),
-            })
-            this.armRetries()
-            return
-          }
-          const detail = `Brave : ${reply.error}`
-          this.closeBrave(id, "erreur", reply.error)
-          this.note(id, "recherche", "erreur", detail, meta.turn)
-          this.log(id, "erreur", meta.cutoff, detail, meta.turn)
-          this.set(reply.absent ? { brave: "absente", braveError: reply.error } : { braveError: reply.error })
-        } else {
-          const results = reply.results.slice(0, 5)
-          this.braveMemory.set(key, results)
-          this.closeBrave(id, "fait", braveResultDetail(reply.results.length))
-          this.keepNotes(id, results)
-          const detail = `« ${query} » : ${reply.results.length} résultat(s) lisible(s)`
-          this.note(id, "recherche", "fait", detail, meta.turn)
-          this.log(id, "brave", meta.cutoff, detail, meta.turn)
-          this.set({ brave: "ok", braveError: null })
-        }
-        this.pump()
-      })
+    this.updateRunner(id, (item) => ({ ...item, calls: item.calls + 1 }))
+    void this.runBraveFlight(flight, 0)
   }
 
   /** Réponses arrivées depuis la dernière application : elles jouent au prochain tour, après l’examen. */

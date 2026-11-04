@@ -93,7 +93,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   pause: {
     title: "Pause",
-    body: "Gèle le temps qui reste à l’avant-course ou à la tranche du tour, et n’envoie plus d’appel. Une nouvelle tentative de Brave, après « trop de requêtes », attend aussi : elle repart à la reprise. Un appel déjà parti peut encore répondre. Reprendre rend le temps gelé.",
+    body: "Gèle le temps qui reste à l’avant-course ou à la tranche du tour, et n’envoie plus d’appel. Une recherche Brave demandée pendant la pause attend la reprise, et une nouvelle tentative de Brave, après « trop de requêtes », attend aussi : elle repart à la reprise. Si la capture du dessin se termine pendant la pause, l’appel attend la reprise avant de partir. Un appel déjà parti peut encore répondre. Reprendre rend le temps gelé.",
   },
   tour: {
     title: "Passer à la course, ou jouer le tour",
@@ -142,7 +142,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Brave",
-        text: "La recherche nomme la relation retenue entre les valeurs déjà lues : deux courbes, au même tirage ou l’une en retard d’un ou deux tirages ; mardi et vendredi ; ou d’une année sur l’autre. Elle n’est retenue que si elle dépasse le hasard, une fois comptées toutes celles qu’on a essayées. Deux courbes tirées des mêmes boules, comme n1 et n2, ne comptent pas : elles sont liées d’avance. S’il n’y a pas de relation, Brave n’est pas appelé. La recherche s’arrête avant le premier tirage de l’examen, que le prompt ne lit pas. Les pages de résultats de tirage sont écartées, ainsi qu’un texte qui citerait un tirage encore caché, quelle que soit la façon d’écrire la date. Si l’API des tirages ne répond pas, ou ne connaît pas le dernier tirage de la piste, la recherche est refusée. Une même recherche n’est lue qu’une seule fois par génération. La génération s’arrête à 40 recherches. Les notes qui restent entrent dans le prompt suivant ; une réponse vide ne les remplace pas.",
+        text: "La recherche nomme la relation retenue entre les valeurs déjà lues : deux courbes, au même tirage ou l’une en retard d’un ou deux tirages ; mardi et vendredi ; ou d’une année sur l’autre. Elle n’est retenue que si elle dépasse le hasard, une fois comptées toutes celles qu’on a essayées. Deux courbes tirées des mêmes boules, comme n1 et n2, ne comptent pas : elles sont liées d’avance. S’il n’y a pas de relation, Brave n’est pas appelé. La recherche s’arrête avant le premier tirage de l’examen, que le prompt ne lit pas. Les pages de résultats de tirage sont écartées, ainsi qu’un texte qui citerait un tirage encore caché, dans un des formats de date que le filtre sait lire : date complète, jour et mois en lettres, ou jour sans année écrit 14/08, 14-08 ou 14.08. Si l’API des tirages ne répond pas, ou ne connaît pas le dernier tirage de la piste, la recherche est refusée. Une même recherche n’est lue qu’une seule fois par génération. La génération s’arrête à 40 recherches. Les notes qui restent entrent dans le prompt suivant ; une réponse vide ne les remplace pas.",
       },
       {
         label: "Neon",

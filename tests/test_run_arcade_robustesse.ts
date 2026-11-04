@@ -424,6 +424,31 @@ test("a drawing that works in between starts the count of failures again", async
   session.dispose()
 })
 
+test("a drawing that finishes during a pause does not send the call before the resume", async () => {
+  let release: (image: string | null) => void = () => {}
+  const { ia, session } = harness(
+    1,
+    () =>
+      new Promise<string | null>((resolve) => {
+        release = resolve
+      })
+  )
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  await flush()
+  ia[0].resolve(seeing)
+  await flush()
+  assert.equal(ia.length, 1)
+  session.pause()
+  release(IMAGE)
+  await flush()
+  assert.equal(ia.length, 1)
+  session.resume()
+  await flush()
+  assert.equal(ia.length, 2)
+  assert.equal(ia[1].request.image, IMAGE)
+  session.dispose()
+})
+
 test("a call cancelled while its drawing is taken is never sent", async () => {
   let release: (image: string | null) => void = () => {}
   const { ia, session } = harness(1, () => new Promise<string | null>((resolve) => (release = resolve)))

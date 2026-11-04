@@ -119,7 +119,10 @@ export async function POST(request: NextRequest) {
   if (!response.ok) {
     return NextResponse.json({ ok: false, error: `Brave HTTP ${response.status}` }, { status: 502 })
   }
-  const data = (await response.json().catch(() => null)) as { web?: { results?: BraveItem[] } } | null
-  const results = filterResults(data?.web?.results ?? [], cutoff, hidden)
+  const data = (await response.json().catch(() => null)) as { web?: { results?: unknown } } | null
+  if (!Array.isArray(data?.web?.results)) {
+    return NextResponse.json({ ok: false, error: "Brave : réponse sans liste de résultats" }, { status: 502 })
+  }
+  const results = filterResults(data.web.results as BraveItem[], cutoff, hidden)
   return NextResponse.json({ ok: true, results })
 }

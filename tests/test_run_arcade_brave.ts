@@ -78,6 +78,12 @@ const FORMATS: [string, string, string[], string[]][] = [
   ["JJ/MM sans année", "tirage du 14/08", ["2026-08-14"], []],
   ["MM/JJ sans année", "tirage du 08/14", ["2026-08-14"], []],
   ["JJ/MM ou MM/JJ sans année", "tirage du 03/04", ["2026-03-04", "2026-04-03"], []],
+  ["JJ-MM sans année", "tirage du 14-08", ["2026-08-14"], []],
+  ["MM-JJ sans année", "tirage du 08-14", ["2026-08-14"], []],
+  ["JJ-MM ou MM-JJ sans année", "tirage du 03-04", ["2026-03-04", "2026-04-03"], []],
+  ["JJ.MM sans année", "tirage du 14.08", ["2026-08-14"], []],
+  ["MM.JJ sans année", "tirage du 08.14", ["2026-08-14"], []],
+  ["JJ.MM ou MM.JJ sans année", "tirage du 03.04", ["2026-03-04", "2026-04-03"], []],
   ["mois et année", "résultats d’août 2026", [], ["2026-08"]],
   ["mois abrégé et année", "Résultats de sept. 2026", [], ["2026-09"]],
   ["AAAA-MM", "archive 2026-09", [], ["2026-09"]],
@@ -107,6 +113,8 @@ const LATE_PAGES: [string, string][] = [
   ["sans l’année", "Tirage du vendredi 14 août : 3 gagnants"],
   ["date complète (contrôle)", "Tirage du 14 août 2026 : 3 gagnants"],
   ["JJ/MM sans année", "Tirage du 14/08 : 3 gagnants"],
+  ["JJ-MM sans année", "Tirage du 14-08 : 3 gagnants"],
+  ["JJ.MM sans année", "Tirage du 14.08 : 3 gagnants"],
   ["ISO compact", "tirage 20260901"],
   ["mois en lettres", "Résultats d’octobre 2026"],
 ]
@@ -222,6 +230,8 @@ type Network = {
   api: Response | "cut" | "none"
   /** Ce que Brave rend. */
   pages?: BraveItem[]
+  /** Corps Brave brut, quand il ne porte pas une liste de résultats. */
+  braveBody?: unknown
 }
 
 const SEARCH = { query: "n1 et n2, même sens, même pas", from: "2025-01-01", cutoff: "2026-08-07", through: "2026-10-23" }
@@ -251,7 +261,9 @@ async function ask(body: Record<string, unknown>, network: Network) {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
     calls.push(url)
-    if (url.startsWith("https://api.search.brave.com/")) return Response.json({ web: { results: network.pages ?? [] } })
+    if (url.startsWith("https://api.search.brave.com/")) {
+      return Response.json("braveBody" in network ? network.braveBody : { web: { results: network.pages ?? [] } })
+    }
     if (url.startsWith("http://api.test/api/draws")) {
       if (network.api === "cut" || network.api === "none") throw new TypeError("fetch failed")
       return network.api
@@ -370,6 +382,20 @@ test("the route reads the hidden draws first, then filters what Brave returns", 
   assert.match(decodeURIComponent(search[0]), /freshness=2025-01-01to2026-08-06/)
 })
 
+test("the route answers 502 when Brave returns 200 without a results list, and 200 for a real empty list", async () => {
+  const api = apiDraws([OCTOBER, { draw_date: "2026-08-04", numbers: [9, 10, 11, 12, 13], stars: [4, 5] }])
+  for (const braveBody of [{ web: {} }, {}, { web: { results: "pas une liste" } }, null]) {
+    const broken = await ask(SEARCH, { api: apiDraws([OCTOBER]), braveBody })
+    assert.equal(broken.status, 502, JSON.stringify(braveBody))
+    assert.equal(broken.body.ok, false)
+    assert.equal(broken.body.results, undefined)
+    assert.equal(braveCalls(broken.calls).length, 1)
+  }
+  const empty = await ask(SEARCH, { api, pages: [] })
+  assert.equal(empty.status, 200)
+  assert.deepEqual(empty.body, { ok: true, results: [] })
+})
+
 test("a search without the last date of the track, or with a track that ends before the cutoff, is invalid", async () => {
   const { through, ...withoutThrough } = SEARCH
   assert.equal(through, "2026-10-23")
@@ -428,6 +454,11 @@ test("the help says where Brave stops, what it refuses, and what a pause does to
   assert.match(brave.text, /réponse vide/)
   assert.match(brave.text, /hasard/)
   assert.equal(/s’arrête avant le tirage caché/.test(brave.text), false)
+  assert.equal(/quelle que soit la façon d’écrire la date/.test(brave.text), false)
+  assert.match(brave.text, /formats de date que le filtre sait lire/)
+  assert.match(brave.text, /14\/08, 14-08 ou 14\.08/)
   assert.match(RUN_ARCADE_HELP.pause.body, /n’envoie plus d’appel/)
   assert.match(RUN_ARCADE_HELP.pause.body, /nouvelle tentative de Brave/)
+  assert.match(RUN_ARCADE_HELP.pause.body, /recherche Brave demandée pendant la pause attend la reprise/)
+  assert.match(RUN_ARCADE_HELP.pause.body, /capture du dessin se termine pendant la pause/)
 })

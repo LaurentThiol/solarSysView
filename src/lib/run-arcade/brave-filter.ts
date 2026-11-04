@@ -98,7 +98,7 @@ export type CitedDates = {
  * `2026-09-01`, `2026/09/01` et `2026.09.01` (l’heure peut suivre, collée ou non), `20260901`, `11/09/2026`,
  * `11-09-26`, `1er sept. 2026`, `30 oct. 2026`, `Aug 14, 2026`, `14 August, 2026`, `août 2026`, `2026-09`.
  * Une date que l’on peut lire de deux façons (JJ/MM ou MM/JJ) rend ses deux jours : l’un des deux peut être tardif.
- * Un jour sans année (« vendredi 14 août », « 14/08 ») prend `year`, l’année de la coupure ; sans `year`, il est ignoré.
+ * Un jour sans année (« vendredi 14 août », « 14/08 », « 14-08 », « 14.08 ») prend `year`, l’année de la coupure ; sans `year`, il est ignoré.
  * Chaque motif lit ce qu’il trouve puis le retire du texte : « le 3 août 2026 » est un jour, pas aussi un mois.
  */
 export function citedDates(text: string, year?: number): CitedDates {
@@ -139,6 +139,13 @@ export function citedDates(text: string, year?: number): CitedDates {
   read(MONTH_YEAR, ([name, y]) => addMonth(+y, MONTHS.get(name) ?? 0))
   read(MONTH_FIRST, ([name, day, after]) => dayInWords(name, day, after))
   read(/(?<![\d/.-])(\d{1,2})\/(\d{1,2})(?![\d/])/g, ([first, second]) => {
+    if (year == null) return
+    addDay(year, +second, +first)
+    addDay(year, +first, +second)
+  })
+  // Jour sans année au tiret ou au point, écrit sur deux chiffres (« 14-08 », « 14.08 », « 03-04 ») :
+  // deux chiffres des deux côtés écartent les décimales et les versions (« 3.14 », « 8.6.2 »).
+  read(/(?<![\d/.-])(\d{2})[-.](\d{2})(?![\d/.-])/g, ([first, second]) => {
     if (year == null) return
     addDay(year, +second, +first)
     addDay(year, +first, +second)
