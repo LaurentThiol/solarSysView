@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "Skills : fenêtre et réglage",
   "body": "Avant Lancer, le parent épinglé montre chaque skill : la liste, la fenêtre dessinée sur la courbe, et les seuls champs de son geste. La phrase se réécrit à chaque champ. « Écrire cette version » ajoute une version d’origine main et conserve les précédentes. Lancer reprend ces skills : R1 les garde, les autres peuvent encore varier à la maison. Pendant l’avant-course et la course, le même écran se lit sur le coureur ouvert. Rien n’est effacé dans Neon : la version n’entre dans un champion que s’il est écrit à la fin de la course.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 369,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/369"
 }
