@@ -114,7 +114,7 @@ test("CSV export has a header and one row", () => {
       source: "manuel",
       copies: 1,
     },
-    { date: "2026-09-01", numbers: [1, 2, 3, 4, 5], stars: [8, 9] }
+    { date: "2026-09-01", numbers: [6, 7, 8, 9, 10], stars: [8, 9] }
   )
   const csv = playsToCsv([play])
   assert.match(csv, /^play_date,/)

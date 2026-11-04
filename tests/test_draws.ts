@@ -96,7 +96,7 @@ test("toCsv includes jackpot, winner totals and r2–r13", () => {
     csv,
     /^date,jour,tirage,n1,n2,n3,n4,n5,etoile1,etoile2,jackpot,gagnants_fr,gagnants_eu,r2/
   )
-  assert.match(csv, /,0,10,80,,,,,,,,,,,4\.2\n/)
+  assert.match(csv, /,0,10,80,{12}4\.2\n/)
 })
 
 test("totalWinners sums ranks and does not add FR to EU", () => {
