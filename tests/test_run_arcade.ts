@@ -10,7 +10,7 @@ import {
   replayLastGrid,
   setAsideCount,
 } from "../src/lib/run-arcade/champion.ts"
-import { placeStars, reconcile } from "../src/lib/run-arcade/coherence.ts"
+import { placeNumbers, placeStars, reconcile } from "../src/lib/run-arcade/coherence.ts"
 import { buildTrack, curveMeta, curveValues, CURVE_KEYS, type CurveValues } from "../src/lib/run-arcade/curves.ts"
 import { EXAM_WINDOW, examine, examStart, passesExam, promptPast } from "../src/lib/run-arcade/examen.ts"
 import {
@@ -33,6 +33,7 @@ import {
   LOGISTIC_R,
   newSkill,
   parseSkillParams,
+  parseStoredSkillParams,
   rollBack,
   type SkillParams,
 } from "../src/lib/run-arcade/skills.ts"
@@ -167,7 +168,7 @@ test("n1 to n5 are not pinned to 10, 20, 30, 40 or 50", () => {
   flat.n3 = 31.2
   flat.n4 = 35.6
   flat.n5 = 44.1
-  assert.deepEqual(reconcile(flat).numbers, [11, 21, 30, 35, 43])
+  assert.deepEqual(reconcile(flat).numbers, [11, 20, 30, 35, 44])
 
   const shared = { ...flat, n1: 35.6, n2: 35.6, n3: 35.6, n4: 35.6, n5: 35.6 }
   assert.deepEqual(reconcile(shared).numbers, [26, 27, 28, 29, 30])
@@ -186,7 +187,7 @@ test("n1 to n5 are not pinned to 10, 20, 30, 40 or 50", () => {
     140
   )
   assert.ok(reconcile(lowDecades).numbers[0] < reconcile(flat).numbers[0])
-  assert.ok(reconcile(highDecades).numbers[4] > reconcile(flat).numbers[4])
+  assert.ok(reconcile(highDecades).numbers[3] > reconcile(flat).numbers[3])
 
   const past = series(8)
   const withDecadeSkill = {
@@ -463,12 +464,12 @@ test("an IA answer is one JSON action with known fields", () => {
   assert.equal(parseAction('{"action":"skill","curve":"n9","gesture":"glisse"}'), null)
   assert.equal(parseAction("pas de json"), null)
   const copied = parseAction(
-    '{"action":"skill","name":"x","phrase":"y","curve":"sumNumbers|n1|*","gesture":"persiste|glisse","ratio":"0.382|0.618","span":"bande|lignes","window":"3|5|10 ou 2 à 60","days":"null ou 30|60"}'
+    '{"action":"skill","name":"x","phrase":"y","curve":"sumNumbers|n1|*","gesture":"moyenne|glisse","ratio":"0.382|0.618","span":"bande|lignes","window":"3|5|10 ou 2 à 60","days":"null ou 30|60"}'
   )
   assert.ok(copied && copied.kind === "skill")
   if (copied && copied.kind === "skill") {
     assert.equal(copied.params.curve, "sumNumbers")
-    assert.equal(copied.params.gesture, "persiste")
+    assert.equal(copied.params.gesture, "moyenne")
     assert.equal(copied.params.ratio, 0.618)
     assert.equal(copied.params.span, "bande")
     assert.equal(copied.params.window, 3)
@@ -728,7 +729,7 @@ test("an observation is dated on first sight and counted on the next draw, not t
   assert.equal(noted.observations[1].createdOn, "2026-03-13")
 
   const rows = series(12)
-  let race = previewTurn(createRace(1, rows.length, 4), rows)
+  const race = previewTurn(createRace(1, rows.length, 4), rows)
   const hidden = rows[race.cursor].date
   let raceNotes = noteRace([], new Set(), race, hidden)
   const counts = raceNotes.observations.reduce((total, item) => total + item.count, 0)
@@ -1018,10 +1019,10 @@ test("a house variation or an IA proposal never gives a figure a window shorter 
     if (item.gesture === "figure") assert.ok(item.window >= figureLength(item.forme!, item.n ?? null), `${step}`)
   }
   const wave = parseSkillParams({ curve: "*", gesture: "figure", forme: "sin", n: 12, window: 3 })
-  assert.equal(wave?.window, 12)
+  assert.equal(wave?.window, 14)
   assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "polygone", n: 8, window: 20 })?.window, 20)
-  assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "triangle", window: 2 })?.window, 3)
-  assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "sin", n: 12 })?.window, 12)
+  assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "triangle", window: 2 })?.window, 5)
+  assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "sin", n: 12 })?.window, 14)
   assert.equal(parseSkillParams({ curve: "*", gesture: "figure", forme: "arctan", n: 45, window: 5 })?.window, 5)
   assert.equal(parseSkillParams({ curve: "*", gesture: "or", window: 3 })?.window, 3)
 
@@ -1238,14 +1239,14 @@ test("parseSkillParams reads text and numbers the same way, refuses a minus sign
   assert.equal(read({ window: "-5" }), null)
   assert.equal(read({ window: "−5" }), null)
   assert.equal(read({ window: -5 }), null)
-  assert.equal(read({ days: "-30" }), null)
-  assert.equal(read({ days: -30 }), null)
+  assert.equal(read({ days: "-30" }, "moyenne"), null)
+  assert.equal(read({ days: -30 }, "moyenne"), null)
   assert.equal(read({ window: "8.5" })?.window, 9)
   assert.equal(read({ window: "8,5" })?.window, 9)
   assert.equal(read({ window: 8.5 })?.window, 9)
   assert.equal(read({ window: "8.4" })?.window, 8)
-  assert.equal(read({ days: "30.6" })?.days, 31)
-  assert.equal(read({ days: 30.6 })?.days, 31)
+  assert.equal(read({ days: "30.6" }, "moyenne")?.days, 31)
+  assert.equal(read({ days: 30.6 }, "moyenne")?.days, 31)
   assert.equal(read({ window: " 12 tirages" })?.window, 12)
 
   assert.equal(read({ window: "" })?.window, 8)
@@ -1322,7 +1323,7 @@ test("a champion written before the new rules is read as it played", () => {
   const figure = stored({ curve: "e1", gesture: "figure", forme: "sin", n: 12, ratio: 0.618, span: "bande", window: 3, days: 20 })
   assert.equal(figure?.window, 3)
   assert.equal(figure?.days, 20)
-  assert.equal(parseSkillParams({ curve: "e1", gesture: "figure", forme: "sin", n: 12, window: 3, days: 20 })?.window, 12)
+  assert.equal(parseSkillParams({ curve: "e1", gesture: "figure", forme: "sin", n: 12, window: 3, days: 20 })?.window, 14)
   const cosine = stored({ curve: "e1", gesture: "figure", forme: "cos", n: 12, ratio: 0.618, span: "bande", window: 12, days: null })
   assert.equal(cosine?.forme, "sin")
   assert.equal(cosine?.n, 12)
@@ -1331,4 +1332,114 @@ test("a champion written before the new rules is read as it played", () => {
   assert.equal(plain?.ratio, 1.272)
   assert.equal(parseSkillParams({ curve: "*", gesture: "persiste", ratio: 1.272, span: "lignes" })?.ratio, 0.618)
   assert.equal(stored({ curve: "n9", gesture: "persiste" }), undefined)
+})
+
+test("a proposed figure rises to calibre plus two, so masque can correspond on a perfect sine", () => {
+  const parsed = parseSkillParams({ curve: "n1", gesture: "figure", forme: "sin", n: 12, window: 12 })
+  assert.ok(parsed)
+  assert.equal(parsed.window, 14)
+  const values = Array.from({ length: 16 }, (_, index) =>
+    Math.round((25 + 20 * Math.sin((2 * Math.PI * index) / 12)) * 10) / 10
+  )
+  const thought = think(mindWith(parsed, "n1"), withN1(values))
+  assert.equal(thought.draw.lecture.masque, "correspond")
+  assert.equal(readFigure(values.slice(-14), "sin", 12).correspond, true)
+  // Une version stockée garde la fenêtre telle qu’elle a joué.
+  assert.equal(parseStoredSkillParams({ curve: "n1", gesture: "figure", forme: "sin", n: 12, window: 12 })?.window, 12)
+  assert.equal(parseStoredSkillParams({ curve: "n1", gesture: "figure", forme: "sin", n: 12, window: 3 })?.window, 3)
+})
+
+test("days is refused outside moyenne and figure in a proposal, and kept in a stored version", () => {
+  assert.equal(parseSkillParams({ curve: "n1", gesture: "or", window: 3, days: 90 }), null)
+  assert.equal(parseSkillParams({ curve: "n1", gesture: "suite", days: 90 }), null)
+  assert.equal(parseSkillParams({ curve: "n1", gesture: "persiste", days: 90 }), null)
+  assert.equal(parseSkillParams({ curve: "n1", gesture: "moyenne", days: 90 })?.days, 90)
+  assert.equal(parseSkillParams({ curve: "n1", gesture: "figure", forme: "sin", n: 12, days: 90 })?.days, 90)
+  assert.equal(parseStoredSkillParams({ curve: "n1", gesture: "or", window: 3, days: 90 })?.days, 90)
+  assert.equal(parseStoredSkillParams({ curve: "n1", gesture: "suite", days: 90 })?.days, 90)
+  const prompt = buildPrompt({ mind, past: series(4), hiddenDate: "2099-01-01", examCents: null, notes: [], drawing: null })
+  assert.match(prompt.system, /days ne vaut que pour moyenne et figure/)
+  assert.match(prompt.system, /calibre plus deux/)
+})
+
+test("a stored version out of bounds is clamped, and its champion stays readable", () => {
+  const champion = parseChampion({
+    generation: 3,
+    runner: "R2",
+    cents: 5200,
+    skills: [
+      {
+        id: "r2-base",
+        name: "Base",
+        versions: [
+          {
+            version: 1,
+            parent: null,
+            cutoff: "",
+            origin: "variation",
+            phrase: "",
+            examCents: null,
+            curve: "n1",
+            gesture: "or",
+            ratio: 0.5,
+            span: "bande",
+            window: 100,
+            days: null,
+          },
+          {
+            version: 2,
+            parent: 1,
+            cutoff: "",
+            origin: "variation",
+            phrase: "",
+            examCents: null,
+            curve: "e1",
+            gesture: "figure",
+            forme: "sin",
+            n: 5,
+            ratio: 0.618,
+            span: "bande",
+            window: 100,
+            days: null,
+          },
+        ],
+      },
+    ],
+  })
+  assert.ok(champion)
+  const [golden, figure] = champion.skills[0].versions
+  assert.equal(golden.ratio, 0.382)
+  assert.equal(golden.window, 60)
+  assert.equal(figure.n, 8)
+  assert.equal(figure.window, 60)
+  assert.equal(parseStoredSkillParams({ curve: "n9", gesture: "or" }), null)
+  assert.equal(parseStoredSkillParams({ curve: "n1", gesture: "nope" }), null)
+})
+
+test("flat decade tips push toward one per decade, unlike no thought and unlike a skewed thought", () => {
+  const tips = [12.4, 21.8, 31.2, 35.6, 44.1]
+  const flat = placeNumbers(tips, 140, [1, 1, 1, 1, 1])
+  const none = placeNumbers(tips, 140, undefined)
+  const skewed = placeNumbers(tips, 140, [4, 1, 1, 1, 0])
+  assert.deepEqual(flat, [11, 20, 30, 35, 44])
+  assert.deepEqual(none, [11, 21, 30, 35, 43])
+  assert.notDeepEqual(flat, none)
+  assert.notDeepEqual(flat, skewed)
+  assert.deepEqual(placeNumbers(tips, 140, []), none)
+})
+
+test("a stored figure longer than its window says so in the phrase and stays in place", () => {
+  const params: SkillParams = {
+    curve: "n1",
+    gesture: "figure",
+    forme: "sin",
+    n: 12,
+    ratio: 0.618,
+    span: "bande",
+    window: 3,
+    days: null,
+  }
+  const thought = think(mindWith(params, "n1"), withN1([10, 20, 30, 40]))
+  assert.match(thought.draw.phrase, /figure non lue, reste sur place/)
+  assert.equal(thought.tips.n1, 40)
 })

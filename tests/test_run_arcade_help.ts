@@ -228,8 +228,13 @@ test("runArcade help follows the suite, the waves, the figure window, the evenin
   assert.doesNotMatch(suite, /ou dernier pas/)
   const evening = RUN_ARCADE_HELP.gestes.items?.[5].text ?? ""
   assert.doesNotMatch(evening, /harmonique/i)
+  assert.match(RUN_ARCADE_HELP.gestes.items?.[3].text ?? "", /fenêtre en jours est refusée/)
+  assert.match(suite, /fenêtre en jours est refusée/)
+  assert.match(RUN_ARCADE_HELP.gestes.items?.[4].text ?? "", /ne vaut que pour ce geste et pour la figure/)
+  assert.match(RUN_ARCADE_HELP.courbes.items?.[3].text ?? "", /Cinq pointes égales valent un par décennie/)
   const figure = RUN_ARCADE_HELP.gestes.items?.[7].text ?? ""
-  assert.match(figure, /au moins autant de tirages que le calibre/)
+  assert.match(figure, /calibre plus deux/)
+  assert.match(figure, /figure non lue, reste sur place/)
   assert.match(figure, /Le sinus lit la phase du dernier cran/)
   assert.match(figure, /Sinus, tangente, arcsinus et arccosinus lisent une période/)
   assert.doesNotMatch(figure, /\bcosinus\b/)

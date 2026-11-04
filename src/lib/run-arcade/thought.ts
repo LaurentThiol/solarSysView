@@ -520,10 +520,9 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
   })
   const slopeWord = delta > FLAT_STEP ? "montante" : delta < -FLAT_STEP ? "descendante" : "plate"
   const reading = params.gesture === "soir" ? soirReading(past, rows, focus, hiddenDate) : null
-  const figureRead =
-    params.gesture === "figure"
-      ? readFigure(windowValues(params, past, rows, focus), params.forme ?? "triangle", params.n ?? null)
-      : null
+  const figureValues = params.gesture === "figure" ? windowValues(params, past, rows, focus) : null
+  const figureRead = figureValues ? readFigure(figureValues, params.forme ?? "triangle", params.n ?? null) : null
+  const figureUnread = figureValues != null && figureRead != null && figureValues.length < figureRead.length
   const tol = Math.max(0.5, spanWidth / 4)
   const maskValues = maskPoints.map((point) => point.y)
   const tangentGap = tangentDistance(maskPoints, last, delta)
@@ -562,7 +561,9 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
       ? `reprend le pas du ${reading.evening}`
       : `${reading.evening} suit le ${reading.other} à ${reading.days} ${reading.days > 1 ? "jours" : "jour"}`
     : params.gesture === "figure"
-      ? figureClause(params)
+      ? figureUnread
+        ? `${figureClause(params)}, figure non lue, reste sur place`
+        : figureClause(params)
       : params.gesture === "suite"
         ? `${gesturePhrase(params.gesture)}, R ${formatRatio(params.r ?? DEFAULT_LOGISTIC_R)}`
         : gesturePhrase(params.gesture)

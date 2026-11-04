@@ -58,7 +58,8 @@ function decadeProfile(decadeTips?: readonly number[]) {
   const mean = total(clamped) / DECADE_CENTERS.length
   const variance =
     clamped.reduce((sum, value) => sum + (value - mean) ** 2, 0) / DECADE_CENTERS.length
-  if (variance < 1e-6) return null
+  // Cinq pointes égales disent « un par décennie » : le profil uniforme pousse, il n’est pas une absence d’avis.
+  if (variance < 1e-6) return [1, 1, 1, 1, 1]
   const mass = total(clamped)
   return mass > 0 ? clamped.map((value) => (value / mass) * NUMBER_DRAW) : null
 }

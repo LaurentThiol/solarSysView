@@ -289,6 +289,33 @@ function boundedInt(value: unknown, min: number, max: number) {
   return rounded >= min && rounded <= max ? rounded : null
 }
 
+/** Entier ramené entre min et max, pour relire une version stockée. Une valeur illisible refuse. */
+function clampedInt(value: unknown, min: number, max: number) {
+  const parsed = firstNumber(value)
+  if (parsed == null) return null
+  return Math.min(max, Math.max(min, Math.round(parsed)))
+}
+
+/** Niveau d’or le plus proche, sans tolérance : pour relire une version stockée hors niveaux. */
+function nearestGoldenStored(value: number): GoldenRatio | null {
+  if (!Number.isFinite(value)) return null
+  let best: GoldenRatio = GOLDEN_RATIOS[0]
+  for (const ratio of GOLDEN_RATIOS) {
+    if (Math.abs(ratio - value) < Math.abs(best - value)) best = ratio
+  }
+  return best
+}
+
+/** R le plus proche, sans tolérance : pour relire une version stockée hors liste. */
+function nearestLogisticStored(value: number): LogisticR | null {
+  if (!Number.isFinite(value)) return null
+  let best: LogisticR = LOGISTIC_R[0]
+  for (const r of LOGISTIC_R) {
+    if (Math.abs(r - value) < Math.abs(best - value)) best = r
+  }
+  return best
+}
+
 /** R le plus proche, à 0,05 près. Plus loin : refus. */
 export function nearestLogistic(value: number): LogisticR | null {
   if (!Number.isFinite(value)) return null
@@ -314,9 +341,23 @@ function optionalDays(value: unknown): number | null | undefined {
   return days == null ? undefined : days
 }
 
+/** Jours d’une version stockée, ramenés aux bornes. Vide, 0 et « null » : pas de fenêtre longue. */
+function storedDays(value: unknown): number | null | undefined {
+  if (isAbsent(value) || value === 0 || value === "0" || value === "null") return null
+  const days = clampedInt(value, DAYS_MIN, DAYS_MAX)
+  return days == null ? undefined : days
+}
+
 /** Ratio lu dans une proposition « or » ou dans une version relue. Vide : 0,618. Plus de 0,05 d’un niveau d’or : refus. */
 function readRatio(value: unknown) {
   return isAbsent(value) ? DEFAULT_RATIO : nearestGolden(firstNumber(value) ?? Number.NaN)
+}
+
+/** Ratio d’une version stockée. Vide : 0,618. Sinon le niveau d’or le plus proche. Illisible : refus. */
+function storedRatio(value: unknown) {
+  if (isAbsent(value)) return DEFAULT_RATIO
+  const parsed = firstNumber(value)
+  return parsed == null ? null : nearestGoldenStored(parsed)
 }
 
 /** Forme retirée d’une version déjà écrite : « cos » se relit « sin ». À phase libre, le cosinus était le sinus. */
@@ -339,35 +380,49 @@ function readParams(raw: unknown, proposal: boolean): SkillParams | null {
   const record = raw as Record<string, unknown>
   const curve = firstAllowed<SkillTarget>(record.curve, ["*", ...CURVE_KEYS])
   const gesture = firstAllowed(record.gesture, GESTURES)
-  const ratio = proposal && gesture !== "or" ? DEFAULT_RATIO : readRatio(record.ratio)
+  const ratio =
+    proposal && gesture !== "or" ? DEFAULT_RATIO : proposal ? readRatio(record.ratio) : storedRatio(record.ratio)
   const span = isAbsent(record.span) ? "bande" : firstAllowed(record.span, SPANS)
-  const window = isAbsent(record.window) ? 8 : boundedInt(record.window, WINDOW_MIN, WINDOW_MAX)
-  const days = optionalDays(record.days)
+  const window = isAbsent(record.window)
+    ? 8
+    : proposal
+      ? boundedInt(record.window, WINDOW_MIN, WINDOW_MAX)
+      : clampedInt(record.window, WINDOW_MIN, WINDOW_MAX)
+  const days = proposal ? optionalDays(record.days) : storedDays(record.days)
   if (!curve || !gesture || ratio == null || !span || window == null || days === undefined) return null
+  // Seuls « moyenne » et « figure » lisent les jours. Les autres gestes visent en tirages :
+  // une fenêtre longue y dirait des jours et viserait des tirages, donc la proposition refuse.
+  if (proposal && days != null && gesture !== "moyenne" && gesture !== "figure") return null
   if (gesture === "figure") {
     const forme = isAbsent(record.forme)
       ? "triangle"
       : firstAllowed(proposal ? record.forme : storedForme(record.forme), FORMES)
     if (!forme) return null
-    const n = readFigureN(record.n)
-    if (n === undefined) return null
-    if (n != null && !figureNAllowed(forme, n)) return null
-    const resolved = usesFigureN(forme) ? (n ?? defaultFigureN(forme)) : null
+    const rawN = readFigureN(record.n)
+    if (rawN === undefined && proposal) return null
+    const n = rawN === undefined ? null : rawN
+    if (proposal && n != null && !figureNAllowed(forme, n)) return null
+    const resolved = usesFigureN(forme) ? (n != null && figureNAllowed(forme, n) ? n : defaultFigureN(forme)) : null
     const length = figureLength(forme, resolved)
     return {
       curve,
       gesture,
       ratio,
       span,
-      window: proposal ? Math.max(window, length) : window,
-      days: proposal && days != null ? Math.max(days, daysHolding(length)) : days,
+      // « correspond » juge au moins deux crans suivis d’une valeur : la fenêtre monte au calibre plus deux.
+      window: proposal ? Math.max(window, length + 2) : window,
+      days: proposal && days != null ? Math.max(days, daysHolding(length + 2)) : days,
       forme,
       n: resolved,
     }
   }
   if (gesture !== "suite") return { curve, gesture, ratio, span, window, days }
   const suite = isAbsent(record.suite) ? "logistique" : firstAllowed(record.suite, SUITES)
-  const r = isAbsent(record.r) ? DEFAULT_LOGISTIC_R : nearestLogistic(firstNumber(record.r) ?? Number.NaN)
+  const r = isAbsent(record.r)
+    ? DEFAULT_LOGISTIC_R
+    : proposal
+      ? nearestLogistic(firstNumber(record.r) ?? Number.NaN)
+      : nearestLogisticStored(firstNumber(record.r) ?? Number.NaN)
   if (!suite || r == null) return null
   if (proposal && !(SUITE_SPANS as readonly SpanKind[]).includes(span)) return null
   return { curve, gesture, ratio, span, window, days, suite, r }
@@ -376,8 +431,9 @@ function readParams(raw: unknown, proposal: boolean): SkillParams | null {
 /**
  * Paramètres proposés par l’IA. Une liste copiée garde la première valeur autorisée. Hors bornes : refus.
  * Un réglage vide vaut un réglage absent. Un nombre négatif est refusé.
- * Le ratio ne compte que pour « or » : ailleurs, il vaut 0,618. Une figure lit son calibre en entier :
- * sa fenêtre, ou ses jours, le rejoignent. La suite refuse l’étendue « du dernier pas ».
+ * Le ratio ne compte que pour « or » : ailleurs, il vaut 0,618. Une figure relève sa fenêtre, ou ses jours,
+ * au calibre plus deux, pour que « masque » puisse valoir « correspond ». Une fenêtre longue en jours
+ * ne vaut que pour « moyenne » et « figure » : ailleurs, elle refuse. La suite refuse « du dernier pas ».
  */
 export function parseSkillParams(raw: unknown): SkillParams | null {
   return readParams(raw, true)
@@ -386,7 +442,9 @@ export function parseSkillParams(raw: unknown): SkillParams | null {
 /**
  * Réglages d’une version déjà écrite, venue de Neon ou d’un fichier. Elle se relit telle qu’elle a joué :
  * ratio gardé pour tous les gestes, suite sur « du dernier pas » permise, fenêtre de figure inchangée,
- * forme « cos » relue « sin ». Un champion écrit avant ces règles reste lisible.
+ * forme « cos » relue « sin ». Une valeur hors bornes est ramenée à la borne la plus proche (ratio au
+ * niveau d’or le plus proche, fenêtre et jours ramenés aux bornes, `n` inconnu au défaut de la forme,
+ * R au plus proche) ; une courbe ou un geste inconnu refuse encore. Un champion ancien reste lisible.
  */
 export function parseStoredSkillParams(raw: unknown): SkillParams | null {
   return readParams(raw, false)

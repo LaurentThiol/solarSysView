@@ -213,7 +213,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "d0 à d4",
-        text: "Nombre de numéros joués dans 1–10, 11–20, 21–30, 31–40 et 41–50. Leur somme vaut 5. Une skill sur une décennie pousse doucement les rangs vers la répartition visée, sans les caler sur 10, 20, 30, 40 ou 50.",
+        text: "Nombre de numéros joués dans 1–10, 11–20, 21–30, 31–40 et 41–50. Leur somme vaut 5. Une skill sur une décennie pousse doucement les rangs vers la répartition visée, sans les caler sur 10, 20, 30, 40 ou 50. Cinq pointes égales valent un par décennie : elles poussent doucement vers un numéro par décennie, au lieu de ne rien pousser.",
       },
     ],
   },
@@ -287,11 +287,11 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Vise le nombre d’or",
-        text: "La pensée vise une part de la bande : 0,272, 0,382, 0,618, 0,764 ou 0,854 selon le ratio choisi (1,272, 0,382, 0,618, 1,618 ou 2,618). Bande : les bornes de la courbe. Entre les lignes : du plus bas au plus haut de la fenêtre. Du dernier pas : entre l’avant-dernier point et le dernier.",
+        text: "La pensée vise une part de la bande : 0,272, 0,382, 0,618, 0,764 ou 0,854 selon le ratio choisi (1,272, 0,382, 0,618, 1,618 ou 2,618). Bande : les bornes de la courbe. Entre les lignes : du plus bas au plus haut de la fenêtre. Du dernier pas : entre l’avant-dernier point et le dernier. Une fenêtre en jours est refusée pour ce geste : elle ne vaut que pour la moyenne et la figure.",
       },
       {
         label: "Rejoint sa moyenne",
-        text: "Moyenne des derniers tirages, de 2 à 60, ou des derniers jours, de 7 à 365, quand une fenêtre longue est écrite.",
+        text: "Moyenne des derniers tirages, de 2 à 60, ou des derniers jours, de 7 à 365, quand une fenêtre longue est écrite. La fenêtre longue en jours ne vaut que pour ce geste et pour la figure.",
       },
       {
         label: "Suit l’autre soir",
@@ -299,11 +299,11 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Suit la suite logistique",
-        text: "La dernière valeur est ramenée entre 0 et 1 sur la bande du geste : bornes de la courbe, ou entre les lignes. L’étendue « du dernier pas » est refusée : la dernière valeur serait toujours au bord de la bande, et R ne compterait pas. La pensée est un seul pas, X(n+1) = R×Xn×(1−Xn), ramené sur cette bande. R vaut 1, 1,5, 2, 2,8 ou 3,2. Le sommet du pas est R/4 de la bande. 3,5, 3,8 et 4 sont refusés.",
+        text: "La dernière valeur est ramenée entre 0 et 1 sur la bande du geste : bornes de la courbe, ou entre les lignes. L’étendue « du dernier pas » est refusée : la dernière valeur serait toujours au bord de la bande, et R ne compterait pas. La pensée est un seul pas, X(n+1) = R×Xn×(1−Xn), ramené sur cette bande. R vaut 1, 1,5, 2, 2,8 ou 3,2. Le sommet du pas est R/4 de la bande. 3,5, 3,8 et 4 sont refusés. Une fenêtre en jours est refusée pour ce geste : elle ne vaut que pour la moyenne et la figure.",
       },
       {
         label: "Trace une figure",
-        text: "Un calibre court avance d’un tirage dans la fenêtre. Triangle, cercle et hypoténuse lisent 3 tirages. Le polygone lit 4, 5, 6 ou 8 côtés. Sinus, tangente, arcsinus et arccosinus lisent une période de 4, 6, 8 ou 12 tirages. L’arc tangente tourne le dernier pas de 15, 30 ou 45 degrés. La fenêtre compte au moins autant de tirages que le calibre : une fenêtre plus courte est relevée, sinon la figure ne se lit pas et la pensée reste sur place. Chaque cran est jugé dans son carré. Le sinus lit la phase du dernier cran : la pensée est le point suivant de l’onde qui colle le mieux à ce cran. La pensée part du dernier cran. Elle peut dépasser la fenêtre d’un quart de sa hauteur au plus, et ne sort jamais de la bande de la courbe. Le cercle d’or reste le calque des niveaux. Le cercle dessiné est toujours le cercle d’or, même pour une figure.",
+        text: "Un calibre court avance d’un tirage dans la fenêtre. Triangle, cercle et hypoténuse lisent 3 tirages. Le polygone lit 4, 5, 6 ou 8 côtés. Sinus, tangente, arcsinus et arccosinus lisent une période de 4, 6, 8 ou 12 tirages. L’arc tangente tourne le dernier pas de 15, 30 ou 45 degrés. La fenêtre compte au moins le calibre plus deux tirages : une fenêtre plus courte est relevée à ce niveau, pour que le mot « masque » puisse valoir « correspond ». Une version déjà écrite garde sa fenêtre : si la figure ne tient pas dedans, la phrase dit « figure non lue, reste sur place », et la pensée reste sur place. Chaque cran est jugé dans son carré. Le sinus lit la phase du dernier cran : la pensée est le point suivant de l’onde qui colle le mieux à ce cran. La pensée part du dernier cran. Elle peut dépasser la fenêtre d’un quart de sa hauteur au plus, et ne sort jamais de la bande de la courbe. Le cercle d’or reste le calque des niveaux. Le cercle dessiné est toujours le cercle d’or, même pour une figure.",
       },
     ],
   },
