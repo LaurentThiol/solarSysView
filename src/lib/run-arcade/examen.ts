@@ -51,7 +51,7 @@ export function examine(mind: RunnerMind, past: readonly RankPoint[], size = EXA
     const hidden = past[index]
     const seen = sincePast(past.slice(0, index), since)
     if (seen.length < 2) continue
-    const thought = think(mind, seen, { hiddenDate: hidden.date })
+    const thought = think(mind, seen, { hiddenDate: hidden.date, plain: true })
     const found = countHits(thought.guess, hidden)
     cents = settlePurse(cents, found)
     hits += found

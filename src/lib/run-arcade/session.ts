@@ -23,6 +23,8 @@ import {
   describeSkill,
   houseVariation,
   newSkill,
+  playingVersion,
+  type GestureLife,
   type SkillParams,
   type VersionMeta,
 } from "./skills"
@@ -113,6 +115,8 @@ export type LaunchOptions = {
   seed?: number
   /** Premier tirage lu. Absent : le premier tirage de la piste, pour tous. */
   depart?: DepartChoice
+  /** X des gestes, déjà compté sur les champions écrits. Absent : les versions ne meurent pas. */
+  lives?: GestureLife | null
 }
 
 export type SaveState = { state: "—" | "en cours" | "ok" | "erreur"; detail: string | null }
@@ -158,6 +162,8 @@ export type SessionSnapshot = {
   /** Observations reconnues pendant la course, la plus ancienne d’abord. */
   readonly observations: readonly Observation[]
   readonly error: string | null
+  /** X des gestes de cette course. Absent : les versions ne meurent pas. */
+  readonly lives: GestureLife | null
 }
 
 type InboxItem = {
@@ -253,6 +259,7 @@ function emptySnapshot(): SessionSnapshot {
     activity: emptyActivity(),
     observations: [],
     error: null,
+    lives: null,
   }
 }
 
@@ -592,14 +599,16 @@ export class RunArcadeSession {
     this.seed = options.seed ?? seedFrom(track)
     const choice = options.depart ?? { mode: "fixe" as const, date: free[0]?.date ?? "" }
 
-    let minds = parent ? childrenOf(parent, options.count, hiddenDate) : createMinds(options.count)
+    const lives = options.lives ?? null
+    let minds = parent ? childrenOf(parent, options.count, hiddenDate, lives) : createMinds(options.count)
     const sinces = assignDeparts(free, minds.length, choice, this.seed + generation * GENERATION_SEED_STEP)
     if (parent) {
       minds = minds.map((mind, index) =>
-        index === 0 ? mind : this.tryVariation(mind, free, generation, index, sinces[index] ?? "")
+        index === 0 ? mind : this.tryVariation(mind, free, generation, index, sinces[index] ?? "", hiddenDate, lives)
       )
     }
     let race = createRace(minds, track.length, draws)
+    race = { ...race, life: lives }
     race = {
       ...race,
       runners: race.runners.map((runner, index) => {
@@ -633,6 +642,7 @@ export class RunArcadeSession {
       setAside: parent ? setAsideCount(parent, hiddenDate) : 0,
       sharedWithParent: sharedWithParent(track, race.start, race.end, parent),
       observations: noted.observations,
+      lives,
       xrayPrep: race.runners.map((runner) => ({
         runnerId: runner.mind.id,
         at,
@@ -662,11 +672,14 @@ export class RunArcadeSession {
     free: readonly RankPoint[],
     generation: number,
     index: number,
-    since: string
+    since: string,
+    hiddenDate: string,
+    lives: GestureLife | null
   ): RunnerMind {
     const base = mind.skills.find((skill) => currentVersion(skill).curve === "*") ?? mind.skills[0]
     const read = sincePast(promptPast(free), since)
     if (!base || read.length < 2) return mind
+    const playing = playingVersion(base, hiddenDate, lives) ?? currentVersion(base)
     const meta: VersionMeta = { cutoff: read[read.length - 1].date, origin: "variation", examCents: null }
     const before = examine(mind, free, undefined, since)
     const beforeCents = before.cents
@@ -677,7 +690,7 @@ export class RunArcadeSession {
     }
     for (let attempt = 0; attempt < VARIATION_TRIES; attempt += 1) {
       const params = houseVariation(
-        currentVersion(base),
+        playing,
         this.seed + generation * 997 + index * 31 + attempt * 11
       )
       const candidate = applyParams(mind, params, meta, "Variation maison", `${mind.id}-g${generation}-${params.curve}`)
@@ -951,7 +964,7 @@ export class RunArcadeSession {
       return false
     }
     const cutoff = past[past.length - 1].date
-    const drawing = think(runner.mind, past, { hiddenDate }).draw
+    const drawing = think(runner.mind, past, { hiddenDate, life: this.snapshot.lives }).draw
     const prompt = buildPrompt({
       mind: runner.mind,
       past,

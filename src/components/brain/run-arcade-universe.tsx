@@ -4,7 +4,7 @@ import { memo, useRef, useState } from "react"
 
 import { curveLabel, RAIL_LEFT, RAIL_RIGHT, type CurveKey } from "@/lib/run-arcade/curves"
 import { gesturePhrase } from "@/lib/run-arcade/skills"
-import type { CurveMask, RailMark, ThoughtDraw } from "@/lib/run-arcade/thought"
+import { formatCents, type CurveMask, type RailMark, type ThoughtDraw } from "@/lib/run-arcade/thought"
 import { CURVE_VIEW_SPAN, curveWindow, slideByPointer, windowDraws } from "@/lib/run-arcade/window"
 
 import { cn } from "@/lib/utils"
@@ -229,7 +229,7 @@ function RunnerUniverseView({
                 className={mask.drives ? "fill-chart-4/25 stroke-chart-4" : "fill-chart-1/15 stroke-chart-1"}
                 strokeWidth={mask.drives ? 1 : 0.6}
               >
-                <title>{`${mask.name} · ${gesturePhrase(mask.gesture)} · ${mask.drives ? "pose la pensée" : "autre masque"} · tirages ${mask.x1 + 1}–${mask.x2 + 1}`}</title>
+                <title>{`${mask.name} · ${gesturePhrase(mask.gesture)} · ${mask.drives ? "pose la pensée" : "autre masque"}${mask.cents == null ? "" : ` · ${formatCents(mask.cents)}`} · tirages ${mask.x1 + 1}–${mask.x2 + 1}`}</title>
               </rect>
             )
           })}

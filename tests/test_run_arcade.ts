@@ -38,11 +38,14 @@ import {
   boundSkillDraft,
   describeSkill,
   houseVariation,
+  isBaseVersion,
+  lifeDraws,
   LOGISTIC_R,
   newSkill,
   parseSkillParams,
   parseStoredSkillParams,
   rollBack,
+  versionAlive,
   type SkillParams,
 } from "../src/lib/run-arcade/skills.ts"
 import {
@@ -229,7 +232,7 @@ test("n1 to n5 are not pinned to 10, 20, 30, 40 or 50", () => {
       ),
     ],
   }
-  assert.notDeepEqual(think(withDecadeSkill, past).guess, think(mind, past).guess)
+  assert.notDeepEqual(think(withDecadeSkill, past, { plain: true }).guess, think(mind, past).guess)
 })
 
 test("a number or a star pays 2 € wherever its rank", () => {
@@ -335,6 +338,27 @@ test("the first sixteen runners start from sixteen different gestures", () => {
     .map((runner) => runner.skills[0].versions[0].gesture)
     .filter((gesture) => gesture === "persiste" || gesture === "glisse" || gesture === "miroir")
   assert.equal(new Set(plain).size, plain.length)
+})
+
+test("life draws are the median of kept lives, at least 4, else the race", () => {
+  assert.equal(lifeDraws([10, 30], 25), 20)
+  assert.equal(lifeDraws([2, 2], 25), 4)
+  assert.equal(lifeDraws([], 18), 18)
+  const dates = series(12).map((row) => row.date)
+  const base = newSkill("r1-base", "Base", glide, { cutoff: "", origin: "maison", examCents: null })
+  assert.equal(isBaseVersion(base.versions[0]), true)
+  assert.equal(versionAlive(base.versions[0], dates[11], 4, dates), true)
+  const born = addVersion(base, { ...glide, window: 5 }, { cutoff: dates[1], origin: "ia", examCents: 4800 })
+  assert.equal(versionAlive(born.versions[1], dates[5], 4, dates), true)
+  assert.equal(versionAlive(born.versions[1], dates[6], 4, dates), false)
+  const seen = addVersion(base, { ...glide, window: 5 }, {
+    cutoff: dates[1],
+    origin: "ia",
+    examCents: 4800,
+    examTo: dates[8],
+  })
+  assert.equal(versionAlive(seen.versions[1], dates[8], 40, dates), false)
+  assert.equal(versionAlive(seen.versions[1], dates[9], 40, dates), true)
 })
 
 test("a version written on or after the hidden draw does not play it", () => {
@@ -699,12 +723,46 @@ test("the dedicated skill drives the mask, the wildcard stays lighter", () => {
     { ...glide, curve: "n5" },
     { cutoff: "", origin: "maison", examCents: null }
   )
-  const masks = think({ ...mind, focus: "n1", skills: [wild, slow, other] }, past).draw.masks
+  const masks = think({ ...mind, focus: "n1", skills: [wild, slow, other] }, past, { plain: true }).draw.masks
   assert.equal(masks.length, 2)
   assert.equal(masks.find((mask) => mask.id === "slow")?.drives, true)
   assert.equal(masks.find((mask) => mask.id === "wild")?.drives, false)
   assert.equal(masks.find((mask) => mask.id === "slow")!.x2 - masks.find((mask) => mask.id === "slow")!.x1 + 1, 2)
   assert.equal(masks.find((mask) => mask.id === "wild")!.x2 - masks.find((mask) => mask.id === "wild")!.x1 + 1, 8)
+})
+
+test("two living versions, the weaker one does not place the grid", () => {
+  const past = series(40)
+  const hidden = "2099-01-01"
+  const dates = past.map((row) => row.date)
+  const life = {
+    draws: { glisse: 80, persiste: 80 },
+    measured: { glisse: true, persiste: true },
+    dates,
+  }
+  const strong = newSkill(
+    "strong",
+    "Glisse",
+    { ...glide, curve: "n1" },
+    { cutoff: dates[2], origin: "ia", examCents: 4000 }
+  )
+  const weak = newSkill(
+    "weak",
+    "Persiste",
+    { curve: "n1", gesture: "persiste", ratio: 0.618, span: "bande", window: 8, days: null },
+    { cutoff: dates[1], origin: "ia", examCents: 3000 }
+  )
+  const draw = think({ ...mind, focus: "n1", skills: [strong, weak] }, past, { hiddenDate: hidden, life }).draw
+  const high = draw.masks.find((mask) => mask.id === "strong")
+  const low = draw.masks.find((mask) => mask.id === "weak")
+  assert.ok(high && low)
+  assert.ok(high.cents != null && low.cents != null)
+  assert.notEqual(high.cents, low.cents)
+  const winner = high.cents > low.cents ? "strong" : "weak"
+  const loser = winner === "strong" ? "weak" : "strong"
+  assert.equal(draw.masks.find((mask) => mask.drives)?.id, winner)
+  assert.equal(draw.masks.find((mask) => mask.id === loser)?.drives, false)
+  assert.ok((draw.masks.find((mask) => mask.drives)?.cents ?? 0) > (draw.masks.find((mask) => mask.id === loser)?.cents ?? 0))
 })
 
 test("the five words follow the mask, and a contradicted JSON is refused", () => {

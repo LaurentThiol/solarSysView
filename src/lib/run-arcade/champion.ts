@@ -2,8 +2,15 @@ import { buildTrack, CURVE_KEYS, NUMBER_KEYS, STAR_KEYS, type CurveKey, type Ran
 import {
   auditCutoffs,
   baseSkill,
+  isBaseVersion,
+  lifeDraws,
+  newSkill,
   parseStoredSkillParams,
   rollBack,
+  versionAlive,
+  GESTURES,
+  type Gesture,
+  type GestureLife,
   type Skill,
   type SkillOrigin,
   type SkillVersion,
@@ -15,6 +22,7 @@ import {
   formatCents,
   HIT_CENTS,
   RUNNER_MAX,
+  settlePurse,
   START_CENTS,
   think,
   TICKET_CENTS,
@@ -332,12 +340,154 @@ export function championLineages(champions: readonly ChampionRecord[]): Champion
     .sort((a, b) => writeOrder(b.champions[b.champions.length - 1], a.champions[a.champions.length - 1]))
 }
 
+/** Bloc où l’on regarde si le solde est retombé dans la bande du hasard. */
+const LIFE_BLOCK = 25
+
+function versionKey(version: SkillVersion) {
+  return [
+    version.gesture,
+    version.curve,
+    version.cutoff,
+    version.origin,
+    version.window,
+    version.days ?? "",
+    version.ratio,
+    version.span,
+    version.suite ?? "",
+    version.r ?? "",
+    version.forme ?? "",
+    version.n ?? "",
+  ].join("|")
+}
+
+const durationCache = new Map<string, number | null>()
+
+/**
+ * Durée d’une version : tirages lisibles après sa naissance, jusqu’au premier bloc de 25
+ * dont le solde retombe dans la bande du hasard. Sans bloc, toute la suite rejouée.
+ * Rien à rejouer : pas de durée.
+ */
+function measuredDuration(version: SkillVersion, track: readonly RankPoint[]): number | null {
+  const first = track[0]
+  const last = track[track.length - 1]
+  const mid = track[Math.floor(track.length / 2)]
+  const key = `${versionKey(version)}|${track.length}|${first?.date ?? ""}|${last?.date ?? ""}|${first?.n1 ?? ""}|${mid?.n3 ?? ""}|${last?.n5 ?? ""}`
+  const cached = durationCache.get(key)
+  if (cached !== undefined) return cached
+  const start = track.findIndex((point) => !version.cutoff || point.date > version.cutoff)
+  if (start < 0) {
+    durationCache.set(key, null)
+    return null
+  }
+  const solo = newSkill("vie", "vie", version, { cutoff: "", origin: "maison", examCents: null, phrase: version.phrase })
+  const mind: RunnerMind = {
+    id: "vie",
+    name: "vie",
+    focus: version.curve === "*" ? "n1" : version.curve,
+    skills: [solo],
+  }
+  let cents = START_CENTS
+  let played = 0
+  let duration: number | null = null
+  for (let index = start; index < track.length; index += 1) {
+    if (cents < TICKET_CENTS) break
+    const hidden = track[index]
+    const seen = track.slice(0, index)
+    if (seen.length < 2) continue
+    const thought = think(mind, seen, { hiddenDate: hidden.date, plain: true })
+    cents = settlePurse(cents, countHits(thought.guess, hidden))
+    played += 1
+    if (played % LIFE_BLOCK === 0) {
+      const band = chanceBalance(played)
+      if (Math.abs(cents - band.cents) <= band.spreadCents) {
+        duration = played
+        break
+      }
+    }
+  }
+  if (duration == null && played > 0) duration = played
+  durationCache.set(key, duration)
+  return duration
+}
+
+/** Durées des versions déjà gardées de ce geste, toutes courbes confondues. Le geste de base ne compte pas. */
+export function measuredDurations(
+  gesture: Gesture,
+  champions: readonly ChampionRecord[],
+  series: readonly RankPoint[]
+): number[] {
+  const track = buildTrack(series)
+  const seen = new Set<string>()
+  const durations: number[] = []
+  for (const champion of champions) {
+    for (const skill of champion.skills) {
+      for (const version of skill.versions) {
+        if (version.gesture !== gesture || isBaseVersion(version)) continue
+        const key = versionKey(version)
+        if (seen.has(key)) continue
+        seen.add(key)
+        const duration = measuredDuration(version, track)
+        if (duration != null) durations.push(duration)
+      }
+    }
+  }
+  return durations
+}
+
+/** X de chaque geste, mesuré sur les champions écrits, ou les tirages de la course. */
+export function lifeTable(
+  champions: readonly ChampionRecord[],
+  series: readonly RankPoint[],
+  raceDraws: number
+): GestureLife {
+  const track = buildTrack(series)
+  const dates = track.map((point) => point.date)
+  const draws: Partial<Record<Gesture, number>> = {}
+  const measured: Partial<Record<Gesture, boolean>> = {}
+  for (const gesture of GESTURES) {
+    const durations = measuredDurations(gesture, champions, track)
+    draws[gesture] = lifeDraws(durations, raceDraws)
+    measured[gesture] = durations.length > 0
+  }
+  return { draws, measured, dates }
+}
+
+/**
+ * Skills transmises aux enfants.
+ * Une version vue par l’examen, ou pas encore née, sort.
+ * Une version échue reste : la liste peut dire « échue », et `versionAlive` l’écarte du jeu.
+ */
+export function inheritSkills(
+  skills: readonly Skill[],
+  hiddenDate: string,
+  lives: GestureLife | null
+): Skill[] {
+  return rollBack(skills, hiddenDate)
+    .map((skill) => ({
+      ...skill,
+      versions: skill.versions.filter((version) => {
+        const life = lives ? (lives.draws[version.gesture] ?? null) : null
+        if (versionAlive(version, hiddenDate, life, lives?.dates ?? [])) return true
+        if (version.cutoff >= hiddenDate) return false
+        if (version.examTo && version.examTo >= hiddenDate) return false
+        return true
+      }),
+    }))
+    .filter((skill) => skill.versions.length > 0)
+}
+
 /**
  * Une génération est un lancement. Les enfants reçoivent les skills du champion,
- * dans la dernière version dont la sélection (prompt et examen) a fini avant le premier tirage caché.
+ * dans les versions dont la sélection a fini avant le premier tirage caché.
+ * Une version échue reste dans la liste. `versionAlive` dit ensuite si elle joue.
  */
-export function childrenOf(champion: ChampionRecord, count: number, hiddenDate: string): RunnerMind[] {
-  const inherited = rollBack(champion.skills, hiddenDate)
+export function childrenOf(
+  champion: ChampionRecord,
+  count: number,
+  hiddenDate: string,
+  lives: GestureLife | null = null
+): RunnerMind[] {
+  const inherited = inheritSkills(champion.skills, hiddenDate, lives)
   return Array.from({ length: Math.min(RUNNER_MAX, Math.max(1, Math.round(count))) }, (_, index) => {
     const id = `r${index + 1}`
     const skills = inherited.length
@@ -400,7 +550,8 @@ function dayAfter(iso: string) {
 export function proposeNextDraw(
   champion: ChampionRecord,
   series: readonly RankPoint[],
-  focus: CurveKey = "sumNumbers"
+  focus: CurveKey = "sumNumbers",
+  life: GestureLife | null = null
 ): Thought | null {
   const track = buildTrack(series)
   if (track.length < 2 || champion.skills.length === 0) return null
@@ -410,7 +561,7 @@ export function proposeNextDraw(
     focus,
     skills: champion.skills,
   }
-  return think(mind, track, { hiddenDate: dayAfter(track[track.length - 1].date), focus })
+  return think(mind, track, { hiddenDate: dayAfter(track[track.length - 1].date), focus, life })
 }
 
 /** Prochain mardi ou vendredi après ce jour, en jours réels. Vide si le jour est illisible. */
@@ -558,7 +709,8 @@ export type ReplayLastGrid = {
 export function replayLastGrid(
   champion: ChampionRecord,
   series: readonly RankPoint[],
-  focus: CurveKey = "sumNumbers"
+  focus: CurveKey = "sumNumbers",
+  life: GestureLife | null = null
 ): ReplayLastGrid | null {
   const track = buildTrack(series)
   if (track.length < 3 || champion.skills.length === 0) return null
@@ -575,7 +727,7 @@ export function replayLastGrid(
     focus,
     skills: champion.skills,
   }
-  const thought = think(mind, past, { hiddenDate: draw.date, focus })
+  const thought = think(mind, past, { hiddenDate: draw.date, focus, life })
   return { draw, thought, hits: countHits(thought.guess, draw) }
 }
 

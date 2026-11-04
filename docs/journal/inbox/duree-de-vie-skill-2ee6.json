@@ -1,0 +1,9 @@
+{
+  "slug": "duree-de-vie-skill-2ee6",
+  "happened_on": "2026-11-04",
+  "area": "runArcade",
+  "title": "Skills : une version a une durée de vie",
+  "body": "Chaque version dit sa naissance, combien de tirages elle joue encore, ou qu’elle est échue. Ce nombre vient des versions déjà gardées du même geste. Sans elles, il reprend les tirages de la course. Le geste de base ne s’arrête pas. Une version écrite à la main naît au dernier tirage gratuit depuis le départ. À chaque tour, les versions encore en vie sont rejouées : la plus haute pose la grille, les autres restent en masque.",
+  "pr_number": null,
+  "pr_url": null
+}

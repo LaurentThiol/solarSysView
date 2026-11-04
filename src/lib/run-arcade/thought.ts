@@ -25,10 +25,15 @@ import {
   figureClause,
   figureMark,
   gesturePhrase,
+  isBaseVersion,
+  newSkill,
+  versionAlive,
   type Gesture,
+  type GestureLife,
   type Skill,
   type SkillParams,
   type SkillTarget,
+  type SkillVersion,
 } from "./skills"
 
 export { aimRatio, formatRatio, goldenAim, GOLDEN_RATIOS, type GoldenRatio } from "./golden"
@@ -85,11 +90,15 @@ export const LECTURE_KEYS = ["tangente", "masque", "cercle", "pas", "vecteur"] a
 /** Fenêtre d’une skill sur la courbe affichée. */
 export type CurveMask = {
   id: string
+  /** Numéro de la version qui tient cette fenêtre. */
+  version: number
   name: string
   gesture: Gesture
   curve: SkillTarget
-  /** Cette skill pose la pensée. */
+  /** Cette version pose la pensée. */
   drives: boolean
+  /** Solde d’examen de la version sur ce tour. Vide : pas de concours. */
+  cents: number | null
   x1: number
   x2: number
 }
@@ -147,6 +156,13 @@ export type ThinkOptions = {
   hiddenDate?: string | null
   /** Courbe à dessiner à la place de celle du runner. */
   focus?: CurveKey
+  /**
+   * Une seule passe, sans concours. L’examen s’en sert : rejouer chaque version rappellerait l’examen.
+   * La dédiée pose alors la pensée, sinon la dernière « toutes les courbes ».
+   */
+  plain?: boolean
+  /** X des gestes. Absent : les versions ne meurent pas. */
+  life?: GestureLife | null
 }
 
 const DEFAULT_PARAMS: SkillParams = {
@@ -316,7 +332,7 @@ function masksOn(
   past: readonly RankPoint[],
   rows: readonly CurveValues[]
 ): CurveMask[] {
-  const applicable: { skill: Skill; version: SkillParams }[] = []
+  const applicable: { skill: Skill; version: SkillVersion }[] = []
   let dedicated = -1
   let wildcard = -1
   for (const skill of mind.skills) {
@@ -332,14 +348,163 @@ function masksOn(
     const bounds = windowBounds(item.version, past, rows)
     return {
       id: item.skill.id,
+      version: item.version.version,
       name: item.skill.name,
       gesture: item.version.gesture,
       curve: item.version.curve,
       drives: index === driver,
+      cents: null,
       x1: bounds.x1,
       x2: bounds.x2,
     }
   })
+}
+
+/** Fenêtre d’examen, la même que `examStart` : les 25 derniers tirages, au moins deux de passé. */
+const CONTEST_WINDOW = 25
+
+function contestStart(pastLength: number) {
+  return Math.min(pastLength, Math.max(2, pastLength - CONTEST_WINDOW))
+}
+
+/**
+ * Solde d’examen d’une seule version, sur le passé lisible.
+ * Le penseur est en passe simple : le concours ne se rappelle pas.
+ */
+function replayVersion(version: SkillVersion, past: readonly RankPoint[]): number | null {
+  const focus = version.curve === "*" ? "n1" : version.curve
+  const mind: RunnerMind = {
+    id: "solo",
+    name: "solo",
+    focus,
+    skills: [
+      newSkill("solo", "solo", version, {
+        cutoff: version.cutoff,
+        origin: version.origin === "maison" ? "maison" : "ia",
+        examCents: null,
+        phrase: version.phrase,
+      }),
+    ],
+  }
+  const start = contestStart(past.length)
+  let cents = START_CENTS
+  let turns = 0
+  for (let index = start; index < past.length; index += 1) {
+    if (cents < TICKET_CENTS) break
+    const hidden = past[index]
+    const seen = past.slice(0, index)
+    if (seen.length < 2) continue
+    const thought = think(mind, seen, { hiddenDate: hidden.date, plain: true })
+    cents = settlePurse(cents, countHits(thought.guess, hidden))
+    turns += 1
+  }
+  return turns > 0 ? cents : null
+}
+
+type Contender = {
+  skill: Skill
+  version: SkillVersion
+  order: number
+  cents: number | null
+}
+
+function lifeOf(version: SkillVersion, life: GestureLife | null) {
+  if (!life) return null
+  return life.draws[version.gesture] ?? null
+}
+
+/** Versions qui jouent encore ce tirage. Le geste de base y est toujours. */
+function contenders(mind: RunnerMind, hiddenDate: string | null, life: GestureLife | null): Contender[] {
+  const dates = life?.dates ?? []
+  const found: Contender[] = []
+  let order = 0
+  for (const skill of mind.skills) {
+    for (const version of skill.versions) {
+      if (!versionAlive(version, hiddenDate, lifeOf(version, life), dates)) continue
+      found.push({ skill, version, order, cents: null })
+      order += 1
+    }
+  }
+  return found
+}
+
+/** La plus récente : coupure la plus tardive, puis numéro, puis place dans la liste. */
+function moreRecent(a: Contender, b: Contender) {
+  if (a.version.cutoff !== b.version.cutoff) return a.version.cutoff > b.version.cutoff
+  if (a.version.version !== b.version.version) return a.version.version > b.version.version
+  return a.order > b.order
+}
+
+/** Solde le plus haut. À égalité, ou sans solde des deux côtés, la plus récente. */
+function beats(a: Contender, b: Contender) {
+  if (a.cents == null && b.cents == null) return moreRecent(a, b)
+  if (a.cents == null) return false
+  if (b.cents == null) return true
+  if (a.cents !== b.cents) return a.cents > b.cents
+  return moreRecent(a, b)
+}
+
+function baseParams(mind: RunnerMind): SkillParams {
+  for (const skill of mind.skills) {
+    for (const version of skill.versions) {
+      if (isBaseVersion(version)) return version
+    }
+  }
+  return DEFAULT_PARAMS
+}
+
+function maskId(skill: Skill, version: SkillVersion, shared: boolean) {
+  return shared ? `${skill.id}-v${version.version}` : skill.id
+}
+
+/** Par courbe, la version vivante au solde le plus haut. Les autres restent en masque, avec ce solde. */
+function contest(
+  mind: RunnerMind,
+  past: readonly RankPoint[],
+  rows: readonly CurveValues[],
+  hiddenDate: string | null,
+  life: GestureLife | null
+) {
+  const living = contenders(mind, hiddenDate, life)
+  const scored =
+    living.length >= 2
+      ? living.map((item) => ({ ...item, cents: replayVersion(item.version, past) }))
+      : living
+  const counts = new Map<string, number>()
+  for (const item of scored) counts.set(item.skill.id, (counts.get(item.skill.id) ?? 0) + 1)
+
+  function paramsOf(key: CurveKey): SkillParams {
+    let best: Contender | null = null
+    for (const item of scored) {
+      if (item.version.curve !== key && item.version.curve !== "*") continue
+      if (!best || beats(item, best)) best = item
+    }
+    return best?.version ?? baseParams(mind)
+  }
+
+  function masksOf(key: CurveKey): CurveMask[] {
+    const applicable = scored.filter((item) => item.version.curve === key || item.version.curve === "*")
+    let driver = -1
+    for (let index = 0; index < applicable.length; index += 1) {
+      if (driver < 0 || beats(applicable[index], applicable[driver])) driver = index
+    }
+    return applicable.map((item, index) => {
+      const bounds = windowBounds(item.version, past, rows)
+      return {
+        id: maskId(item.skill, item.version, (counts.get(item.skill.id) ?? 0) > 1),
+        version: item.version.version,
+        name: item.skill.name,
+        gesture: item.version.gesture,
+        curve: item.version.curve,
+        drives: index === driver,
+        cents: item.cents,
+        x1: bounds.x1,
+        x2: bounds.x2,
+      }
+    })
+  }
+
+  return { paramsOf, masksOf }
 }
 
 const FLAT_STEP = 0.05
@@ -483,15 +648,18 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
       if (!Number.isFinite(row[key])) throw new Error("think : valeur non finie dans le passé")
     }
   }
+  const picked = options.plain ? null : contest(mind, past, rows, hiddenDate, options.life ?? null)
   const tips = {} as CurveValues
-  for (const key of CURVE_KEYS) tips[key] = tipFor(paramsFor(mind, key, hiddenDate), past, rows, key, hiddenDate)
+  for (const key of CURVE_KEYS) {
+    tips[key] = tipFor(picked ? picked.paramsOf(key) : paramsFor(mind, key, hiddenDate), past, rows, key, hiddenDate)
+  }
   const reconciled = reconcile(tips)
   const guess = guessOf(reconciled.numbers, reconciled.stars)
 
   const focus = options.focus ?? mind.focus
-  const params = paramsFor(mind, focus, hiddenDate)
+  const params = picked ? picked.paramsOf(focus) : paramsFor(mind, focus, hiddenDate)
   const trail = rows.map((row, index) => ({ x: index, y: row[focus] }))
-  const masks = masksOn(mind, focus, hiddenDate, past, rows)
+  const masks = picked ? picked.masksOf(focus) : masksOn(mind, focus, hiddenDate, past, rows)
   const driver = masks.find((mask) => mask.drives)
   const bounds = driver ? { x1: driver.x1, x2: driver.x2 } : windowBounds(params, past, rows)
   const maskPoints = trail.filter((point) => point.x >= bounds.x1 && point.x <= bounds.x2)
@@ -723,6 +891,8 @@ export type Race = {
   /** Date du dernier tirage lisible au moment du dessin. */
   seenDate: string | null
   done: boolean
+  /** X des gestes pour cette course. Absent : les versions ne meurent pas. */
+  life?: GestureLife | null
 }
 
 export function newRunner(mind: RunnerMind): RunnerLive {
@@ -792,7 +962,7 @@ export function previewTurn(race: Race, series: readonly RankPoint[]): Race {
       if (!runner.alive || runner.cents < TICKET_CENTS) return runner
       const history = sincePast(past, runner.since)
       if (history.length < 2) return runner
-      const thought = think(runner.mind, history, { hiddenDate })
+      const thought = think(runner.mind, history, { hiddenDate, life: race.life ?? null })
       return { ...runner, thought: thought.draw, guess: thought.guess, cases: thought.cases, matched: [], exact: [] }
     }),
   }
@@ -813,7 +983,7 @@ export function playTurn(race: Race, series: readonly RankPoint[]): Race {
     }
     const history = sincePast(past, runner.since)
     if (history.length < 2) return runner
-    const thought = think(runner.mind, history, { hiddenDate: actual.date })
+    const thought = think(runner.mind, history, { hiddenDate: actual.date, life: race.life ?? null })
     const hits = countHits(thought.guess, actual)
     const cents = settlePurse(runner.cents, hits)
     return {

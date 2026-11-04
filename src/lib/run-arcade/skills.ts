@@ -1,3 +1,4 @@
+import { median } from "./clock"
 import { CURVE_KEYS, curveLabel, type CurveKey } from "./curves"
 import { mix } from "./depart"
 import {
@@ -255,6 +256,85 @@ export function boundSkillDraft(draft: SkillDraft): SkillParams & { phrase: stri
 
 export function currentVersion(skill: Skill): SkillVersion {
   return skill.versions[skill.versions.length - 1]
+}
+
+/** Plancher de X quand il est mesuré. Sans expérience, X reprend les tirages de la course tels quels. */
+export const LIFE_MIN = 4
+
+/**
+ * X par geste, et d’où il vient.
+ * `dates` est l’archive lisible, du plus ancien au plus récent.
+ */
+export type GestureLife = {
+  draws: Partial<Record<Gesture, number>>
+  /** Vrai : X est la médiane des versions déjà gardées. Faux : les tirages de la course. */
+  measured: Partial<Record<Gesture, boolean>>
+  dates: readonly string[]
+}
+
+/** Geste de départ : coupure vide, origine maison. Il n’a pas de fin. */
+export function isBaseVersion(version: Pick<SkillVersion, "cutoff" | "origin">) {
+  return version.origin === "maison" && version.cutoff === ""
+}
+
+/**
+ * X d’un geste. Médiane des durées mesurées, au moins 4.
+ * Sans durée, les tirages de la course : c’est l’attente, pas une mesure.
+ */
+export function lifeDraws(durations: readonly number[], raceDraws: number): number {
+  const finite = durations.filter((value) => Number.isFinite(value) && value >= 0)
+  if (finite.length === 0) return Math.max(0, Math.round(Number.isFinite(raceDraws) ? raceDraws : 0))
+  return Math.max(LIFE_MIN, Math.round(median(finite) ?? 0))
+}
+
+/**
+ * Tirages lisibles strictement après la naissance et avant `until`.
+ * `until` vide : toute la liste après la naissance. Naissance vide : depuis le premier tirage.
+ * `dates` est dans l’ordre, du plus ancien au plus récent.
+ */
+export function drawsSinceBirth(dates: readonly string[], birth: string, until: string | null) {
+  let count = 0
+  for (const date of dates) {
+    if (birth && date <= birth) continue
+    if (until && date >= until) break
+    count += 1
+  }
+  return count
+}
+
+/**
+ * La version joue ce tirage caché.
+ * Le geste de base n’a pas de fin.
+ * `examTo` écarte encore une version dont l’examen a vu le tirage, sauf si `respectExam` est faux
+ * (rejouer son propre examen). La durée de vie s’y ajoute : le tirage caché doit être dans les X
+ * tirages lisibles après la naissance. `life` vide : pas d’échéance.
+ */
+export function versionAlive(
+  version: Pick<SkillVersion, "cutoff" | "origin" | "examTo">,
+  hiddenDate: string | null | undefined,
+  life: number | null,
+  dates: readonly string[],
+  respectExam = true
+) {
+  if (isBaseVersion(version)) return true
+  if (hiddenDate && version.cutoff >= hiddenDate) return false
+  if (respectExam && hiddenDate && version.examTo && version.examTo >= hiddenDate) return false
+  if (life == null) return true
+  return drawsSinceBirth(dates, version.cutoff, hiddenDate ?? null) < life
+}
+
+/** Dernière version qui joue encore ce tirage. Une échue reste dans la liste, elle n’est pas choisie. */
+export function playingVersion(
+  skill: Skill,
+  hiddenDate: string | null | undefined,
+  lives: GestureLife | null
+): SkillVersion | null {
+  for (let index = skill.versions.length - 1; index >= 0; index -= 1) {
+    const version = skill.versions[index]
+    const life = lives ? (lives.draws[version.gesture] ?? null) : null
+    if (versionAlive(version, hiddenDate, life, lives?.dates ?? [])) return version
+  }
+  return null
 }
 
 /**

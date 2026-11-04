@@ -274,7 +274,8 @@ export function chainHiddenDate(race: Pick<Race, "revealed" | "cursor">, track: 
 /** Dernier point, geste, pensée, case jouée. */
 export function thoughtChain(mind: RunnerMind, draw: ThoughtDraw | null, hiddenDate?: string | null): ThoughtChain | null {
   if (!draw || draw.trail.length === 0) return null
-  const params = paramsFor(mind, draw.focus, hiddenDate)
+  const driving = draw.masks.find((mask) => mask.drives)
+  const params = driving ?? paramsFor(mind, draw.focus, hiddenDate)
   const last = draw.trail[draw.trail.length - 1]?.y
   if (last == null) return null
   return {

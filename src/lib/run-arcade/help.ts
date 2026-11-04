@@ -347,7 +347,11 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
     items: [
       {
         label: "Coupure",
-        text: "Date du dernier tirage révélé lu pour écrire la version. Vide : la version a été écrite sans lire de tirage. Une version datée du jour du tirage caché, ou d’après, ne joue pas ce tirage.",
+        text: "Date du dernier tirage révélé lu pour écrire la version. C’est la naissance. Vide : le geste de base, écrit sans lire de tirage. Une version datée du jour du tirage caché, ou d’après, ne joue pas ce tirage.",
+      },
+      {
+        label: "Durée",
+        text: "X se compte sur les versions déjà gardées du même geste, toutes courbes confondues, dans les champions écrits. Pour chacune, on rejoue les tirages lisibles après la naissance, avec le même ticket. On s’arrête au premier bloc de 25 dont le solde retombe dans la bande du hasard. X est la médiane de ces durées, au moins 4. Sans version gardée, X reprend les tirages de la course : la ligne dit « course, faute d’expérience ». Sinon elle dit « mesuré ». Le geste de base n’a pas de fin. Une version joue tant que le tirage caché est après sa naissance et dans ces X tirages. La ligne dit la naissance, « joue encore N tirages », ou « échue ». Une version échue reste dans la liste. La précédente reprend, ou le geste de base s’il n’en reste aucune. Une version dont l’examen a vu le tirage caché reste écartée : la durée s’ajoute à cette règle.",
       },
       {
         label: "Origine",
@@ -367,7 +371,11 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Version écrite",
-        text: "Une version écrite à la main part avec le prochain Lancer et ne touche pas les versions déjà dans Neon. Le tirage suivant, les trois grilles et le pronostic la lisent déjà. L’export du champion déjà enregistré garde l’ancienne liste. La version n’entre dans un champion qu’à la fin de la course. Les versions précédentes restent. R1 les garde. Les autres peuvent encore varier à la maison.",
+        text: "Une version écrite à la main naît au dernier tirage de l’archive gratuite depuis le départ. Elle vit ensuite le X de son geste. Elle part avec le prochain Lancer et ne touche pas les versions déjà dans Neon. Le tirage suivant, les trois grilles et le pronostic la lisent déjà. L’export du champion déjà enregistré garde l’ancienne liste. La version n’entre dans un champion qu’à la fin de la course. Les versions précédentes restent. R1 les garde. Les autres peuvent encore varier à la maison.",
+      },
+      {
+        label: "Concours",
+        text: "À chaque tour, chaque version encore en vie est rejouée sur le passé lisible, avec le même examen : 50,00 €, 2,50 € et 2,00 €. Sur chaque courbe, le solde le plus haut pose la grille. À égalité, la plus récente reste. Les autres restent en masque, avec leur solde du tour. Une version échue ne concourt pas. Un seul ticket est joué.",
       },
     ],
   },

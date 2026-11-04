@@ -20,6 +20,7 @@ import {
   forecastBadge,
   forecastLine,
   lastRevealedDraw,
+  lifeTable,
   proposeNextDraw,
   replayLastGrid,
   scoreForecast,
@@ -111,8 +112,13 @@ import {
   boundSkillDraft,
   currentVersion,
   describeSkill,
+  drawsSinceBirth,
   gesturePhrase,
+  isBaseVersion,
+  playingVersion,
   targetLabel,
+  versionAlive,
+  type GestureLife,
   type Skill,
   type SkillDraft,
   type SkillParams,
@@ -1077,13 +1083,39 @@ function SkillSketch({
   )
 }
 
-function versionLine(version: SkillVersion, plays: boolean) {
+function versionLife(version: SkillVersion, hidden: string | null, lives: GestureLife | null) {
+  const measured = lives?.measured[version.gesture] ?? false
+  const source = measured ? "mesuré" : "course, faute d’expérience"
+  const sourceKey = measured ? "mesure" : "course"
+  const life = lives ? (lives.draws[version.gesture] ?? null) : null
+  const dates = lives?.dates ?? []
+  if (isBaseVersion(version)) {
+    return { text: `naissance aucune · sans fin · ${source}`, state: "sans-fin", left: null as number | null, source: sourceKey }
+  }
+  const birth = version.cutoff ? formatShortDate(version.cutoff) : "aucune"
+  const head = `naissance ${birth}`
+  const used = drawsSinceBirth(dates, version.cutoff, hidden)
+  const left = life == null ? null : life - used
+  if (!versionAlive(version, hidden, life, dates)) {
+    const blocked = Boolean(hidden && version.examTo && version.examTo >= hidden && version.cutoff < hidden)
+    const unborn = Boolean(hidden && version.cutoff >= hidden)
+    const word = blocked ? "écartée" : unborn ? "pas encore née" : "échue"
+    const state = blocked ? "ecartee" : unborn ? "pas-nee" : "echue"
+    return { text: `${head} · ${word} · ${source}`, state, left: 0, source: sourceKey }
+  }
+  const encore =
+    left == null ? "" : left <= 1 ? " · joue encore 1 tirage" : ` · joue encore ${left} tirages`
+  return { text: `${head}${encore} · ${source}`, state: "encore", left, source: sourceKey }
+}
+
+function versionLine(version: SkillVersion, plays: boolean, life: string) {
   return (
     <>
       v{version.version} · {version.origin} · coupure {version.cutoff ? formatShortDate(version.cutoff) : "aucune"}
       {version.examCents != null ? ` · examen ${formatCents(version.examCents)}` : ""}
       {version.examCents != null && version.examTo ? ` jusqu’au ${formatShortDate(version.examTo)}` : ""} · {version.phrase}
-      {plays ? " · joue" : ""}
+      {life ? ` · ${life}` : ""}
+      {plays ? " · pose la grille" : ""}
     </>
   )
 }
@@ -1094,6 +1126,7 @@ function SkillPanel({
   drawn,
   displayCurve,
   hiddenDate,
+  lives = null,
   editable,
   compact = false,
   onWrite,
@@ -1103,6 +1136,7 @@ function SkillPanel({
   drawn: ThoughtDraw | null
   displayCurve: CurveKey
   hiddenDate: string | null
+  lives?: GestureLife | null
   editable: boolean
   compact?: boolean
   onWrite?: (skillId: string, params: SkillParams) => void
@@ -1115,7 +1149,11 @@ function SkillPanel({
     setPicked(skills[0]?.id ?? "")
   }
   const skill = skills.find((item) => item.id === picked) ?? skills[0] ?? null
-  const shown = skill ? (editable ? currentVersion(skill) : activeVersion(skill, hiddenDate)) : null
+  const shown = skill
+    ? editable
+      ? currentVersion(skill)
+      : (playingVersion(skill, hiddenDate, lives) ?? activeVersion(skill, hiddenDate))
+    : null
   const token = skill && shown ? `${skill.id}:${shown.version}:${editable ? "edit" : "lu"}` : ""
   const [seenToken, setSeenToken] = useState(token)
   const [draft, setDraft] = useState<SkillDraft>(() => (shown ? draftFrom(shown) : {}))
@@ -1170,13 +1208,13 @@ function SkillPanel({
       </h3>
       <p className="text-[11px] text-muted-foreground">
         {editable
-          ? "La phrase suit les champs. Écrire ajoute une version et garde les précédentes."
-          : "Lecture seule. La version qui joue est marquée."}
+          ? "La phrase suit les champs. Écrire ajoute une version, née au dernier tirage gratuit, et garde les précédentes."
+          : "Lecture seule. La version au solde le plus haut pose la grille. Les autres restent en masque."}
       </p>
       <div className={cn("gap-3", compact ? "flex flex-col" : "grid lg:grid-cols-[16rem_1fr]")}>
         <ul className="flex flex-col gap-1" data-testid="run-arcade-skill-list">
           {skills.map((item) => {
-            const line = editable ? currentVersion(item) : activeVersion(item, hiddenDate)
+            const line = editable ? currentVersion(item) : (playingVersion(item, hiddenDate, lives) ?? activeVersion(item, hiddenDate))
             const on = item.id === skill?.id
             return (
               <li key={item.id}>
@@ -1386,16 +1424,29 @@ function SkillPanel({
               <p className="text-xs text-muted-foreground">Aucune version ne joue ce tirage.</p>
             )}
             <ul className="flex flex-col gap-1 text-xs text-muted-foreground" data-testid="run-arcade-skill-versions">
-              {skill.versions.map((version) => (
-                <li
-                  key={version.version}
-                  data-origin={version.origin}
-                  data-version={version.version}
-                  data-plays={!editable && shown?.version === version.version ? "oui" : "non"}
-                >
-                  {versionLine(version, !editable && shown?.version === version.version)}
-                </li>
-              ))}
+              {skill.versions.map((version) => {
+                const life = versionLife(version, hiddenDate, lives)
+                const mask = drawn?.masks.find(
+                  (item) => item.version === version.version && (item.id === skill.id || item.id === `${skill.id}-v${version.version}`)
+                )
+                return (
+                  <li
+                    key={version.version}
+                    data-origin={version.origin}
+                    data-version={version.version}
+                    data-life={life.state}
+                    data-left={life.left ?? ""}
+                    data-source={life.source}
+                    data-plays={mask?.drives ? "oui" : "non"}
+                    data-cents={mask?.cents ?? ""}
+                  >
+                    {versionLine(version, Boolean(mask?.drives) && life.state !== "pas-nee" && life.state !== "echue" && life.state !== "ecartee", life.text)}
+                    {mask && !mask.drives && mask.cents != null && life.state !== "pas-nee" && life.state !== "echue" && life.state !== "ecartee"
+                      ? ` · masque ${formatCents(mask.cents)}`
+                      : ""}
+                  </li>
+                )
+              })}
             </ul>
           </div>
         ) : null}
@@ -1532,6 +1583,7 @@ export function RunArcadeLab() {
   // La piste peut raccourcir : le champ ne garde jamais plus de tirages qu’elle n’en porte.
   if (raceDraws > maxDraws) setRaceDraws(maxDraws)
   const parentTurns = useMemo(() => (parent ? championRaceTurns(parent, series) : 0), [parent, series])
+  const lives = useMemo(() => lifeTable(parent ? [parent, ...history] : history, series, raceDraws), [parent, history, series, raceDraws])
   const historyTurns = useMemo(() => history.map((item) => championRaceTurns(item, series)), [history, series])
   const championTurns = snapshot.champion
     ? (race?.runners.find((runner) => runner.mind.name === snapshot.champion?.runner)?.turns ?? 0)
@@ -1578,14 +1630,14 @@ export function RunArcadeLab() {
     const shown = race.revealed ? race.cursor - 1 : race.cursor
     const past = sincePast(revealedPast(track, shown), focus.since)
     if (past.length < 2) return { draw: focus.thought, matched: focus.matched, exact: focus.exact }
-    const thought = think(focus.mind, past, { hiddenDate: track[shown]?.date, focus: curve })
+    const thought = think(focus.mind, past, { hiddenDate: track[shown]?.date, focus: curve, life: snapshot.lives ?? lives })
     const revealed = race.revealed
     return {
       draw: thought.draw,
       matched: revealed ? matchedKeys(thought.cases, revealed) : [],
       exact: revealed ? exactKeys(thought.cases, revealed) : [],
     }
-  }, [focus, focusCurve, race, track])
+  }, [focus, focusCurve, race, track, lives, snapshot.lives])
 
   const runnerPast = useMemo(() => {
     if (!focus || !race || track.length === 0) return [] as RankPoint[]
@@ -1625,26 +1677,28 @@ export function RunArcadeLab() {
       series,
       champion: editedParent,
       depart,
+      lives,
     })
   }
 
   function writeSkillVersion(skillId: string, params: SkillParams) {
     if (!parent) return
+    const birth = calendar.past[calendar.past.length - 1]?.date ?? ""
     const key = parentEditKey(parent)
     setSkillEdits((current) => {
       const skills = current[key] ?? parent.skills
       return {
         ...current,
         [key]: skills.map((item) =>
-          item.id === skillId ? addVersion(item, params, { cutoff: "", origin: "main", examCents: null }) : item
+          item.id === skillId ? addVersion(item, params, { cutoff: birth, origin: "main", examCents: null }) : item
         ),
       }
     })
   }
 
   const proposal = useMemo(
-    () => (editedParent && series.length >= 2 ? proposeNextDraw(editedParent, series, nextCurve) : null),
-    [editedParent, series, nextCurve]
+    () => (editedParent && series.length >= 2 ? proposeNextDraw(editedParent, series, nextCurve, lives) : null),
+    [editedParent, series, nextCurve, lives]
   )
   const forecastText = useMemo(
     () => forecastLine(scoreForecasts(editedParent ? [editedParent, ...history] : history, series)),
@@ -1652,8 +1706,8 @@ export function RunArcadeLab() {
   )
   const showResult = snapshot.phase === "idle" || snapshot.phase === "fin"
   const replay = useMemo(
-    () => (showResult && editedParent ? replayLastGrid(editedParent, series) : null),
-    [showResult, editedParent, series]
+    () => (showResult && editedParent ? replayLastGrid(editedParent, series, "sumNumbers", lives) : null),
+    [showResult, editedParent, series, lives]
   )
   const paidTicket =
     snapshot.phase === "fin" && replay && race && parent
@@ -1951,7 +2005,8 @@ export function RunArcadeLab() {
           past={calendar.past}
           drawn={proposal?.draw ?? null}
           displayCurve={nextCurve}
-          hiddenDate={null}
+          hiddenDate={calendar.first?.date ?? null}
+          lives={lives}
           editable
           onWrite={writeSkillVersion}
         />
@@ -2174,6 +2229,7 @@ export function RunArcadeLab() {
                   drawn={focusView.draw}
                   displayCurve={focusCurve ?? focus.mind.focus}
                   hiddenDate={hiddenDate}
+                  lives={snapshot.lives ?? lives}
                   editable={false}
                   compact
                 />
@@ -2188,15 +2244,18 @@ export function RunArcadeLab() {
                         <span className="font-medium">{skill.name}</span>
                         <span className="text-muted-foreground"> · {targetLabel(currentVersion(skill).curve)}</span>
                         <ul className="ml-3">
-                          {skill.versions.map((version) => (
-                            <li key={version.version} className="text-muted-foreground">
-                              v{version.version} · {version.origin} · coupure{" "}
-                              {version.cutoff ? formatShortDate(version.cutoff) : "aucune"}
-                              {version.examCents != null ? ` · examen ${formatCents(version.examCents)}` : ""}
-                              {version.examCents != null && version.examTo ? ` jusqu’au ${formatShortDate(version.examTo)}` : ""} ·{" "}
-                              {version.phrase}
-                            </li>
-                          ))}
+                          {skill.versions.map((version) => {
+                            const life = versionLife(version, hiddenDate, snapshot.lives ?? lives)
+                            return (
+                              <li key={version.version} className="text-muted-foreground" data-life={life.state}>
+                                v{version.version} · {version.origin} · coupure{" "}
+                                {version.cutoff ? formatShortDate(version.cutoff) : "aucune"}
+                                {version.examCents != null ? ` · examen ${formatCents(version.examCents)}` : ""}
+                                {version.examCents != null && version.examTo ? ` jusqu’au ${formatShortDate(version.examTo)}` : ""} ·{" "}
+                                {version.phrase} · {life.text}
+                              </li>
+                            )
+                          })}
                         </ul>
                       </li>
                     ))}
