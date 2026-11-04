@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "runArcade : Brave partagé, mémoire de génération et pause fermée",
   "body": "Dans runArcade, une même recherche Brave demandée par deux runners ne part qu’une fois : le second attend le résultat du premier et reçoit les mêmes notes. En course, la même recherche relue à un tour suivant vient de la mémoire de la génération, sans nouvel appel, et le plafond de 40 compte les recherches différentes. En pause, une recherche demandée attend la reprise, et un appel dont le dessin finit pendant la pause ne part qu’à la reprise. Une réponse Brave sans liste de résultats devient une erreur au lieu d’un zéro, et le filtre écarte aussi les dates sans année écrites 14-08 ou 14.08.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 361,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/361"
 }
