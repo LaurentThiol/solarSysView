@@ -40,7 +40,11 @@ def _int_or_none(value: Any) -> int | None:
 
 
 def normalize_champion(payload: dict[str, Any]) -> dict[str, Any]:
-    """Aplati les versions de skills. Une skill sans identifiant ou sans version refuse le champion."""
+    """Aplati les versions de skills. Une skill sans identifiant ou sans version refuse le champion.
+
+    `examTo` d’une version reste dans le `payload` complet, pas dans la table aplatie :
+    l’audit des versions mises de côté se fait sur le payload, pas sur cette table.
+    """
     skills = payload.get("skills") or []
     if not skills:
         raise ValueError("champion sans skill")

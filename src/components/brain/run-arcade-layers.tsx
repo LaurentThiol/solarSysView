@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { memo, useRef, useState } from "react"
 
 import { TitleHelp, type HelpCopy } from "@/components/help"
 import { type RankKey, type RankPoint } from "@/lib/run-arcade/curves"
@@ -221,7 +221,7 @@ function LayerPlot({
   )
 }
 
-export function RunArcadeLayers({ points, help }: { points: readonly RankPoint[]; help: HelpCopy }) {
+function RunArcadeLayersView({ points, help }: { points: readonly RankPoint[]; help: HelpCopy }) {
   const signature = `${points.length}:${points[0]?.date ?? ""}:${points.at(-1)?.date ?? ""}`
   const [parkedOn, setParkedOn] = useState(signature)
   const [start, setStart] = useState<number | null>(null)
@@ -437,3 +437,5 @@ export function RunArcadeLayers({ points, help }: { points: readonly RankPoint[]
     </section>
   )
 }
+
+export const RunArcadeLayers = memo(RunArcadeLayersView)

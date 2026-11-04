@@ -26,6 +26,9 @@ import { DRAWS, toDrawSeries } from "../src/lib/draws.ts"
 
 const lab = readFileSync(new URL("../src/components/brain/run-arcade-lab.tsx", import.meta.url), "utf8")
 const liveBand = readFileSync(new URL("../src/components/brain/run-arcade-live.tsx", import.meta.url), "utf8")
+const universe = readFileSync(new URL("../src/components/brain/run-arcade-universe.tsx", import.meta.url), "utf8")
+const layersView = readFileSync(new URL("../src/components/brain/run-arcade-layers.tsx", import.meta.url), "utf8")
+const captureView = readFileSync(new URL("../src/components/brain/run-arcade-capture.tsx", import.meta.url), "utf8")
 
 const flush = () => new Promise((resolve) => setImmediate(resolve))
 
@@ -321,6 +324,19 @@ test("the lab is wired to these rules", () => {
   assert.match(lab, /scoreForecasts\(parent \? \[parent, \.\.\.history\] : history, series\)/)
   assert.match(lab, /forecastLine\(scoreForecasts/)
   assert.match(lab, /data-testid="run-arcade-forecast"/)
+})
+
+test("the drawings and the stable panels are memoised, and the capture is bounded without stacking", () => {
+  assert.match(universe, /export const RunnerUniverse = memo\(RunnerUniverseView\)/)
+  assert.match(lab, /const RunnerCard = memo\(/)
+  assert.match(lab, /const ResultGrids = memo\(ResultGridsView\)/)
+  assert.match(lab, /const FonctionnelTable = memo\(FonctionnelTableView, fonctionnelEqual\)/)
+  assert.match(lab, /const XrayPanel = memo\(XrayPanelView, xrayEqual\)/)
+  assert.match(lab, /const ObservationLedger = memo\(ObservationLedgerView\)/)
+  assert.match(layersView, /export const RunArcadeLayers = memo\(RunArcadeLayersView\)/)
+  assert.match(captureView, /if \(!tryCaptureSlot\(\)\) return null/)
+  assert.match(captureView, /waitBounded\(work, CAPTURE_DRAW_TIMEOUT_MS\)/)
+  assert.match(captureView, /host\.remove\(\)/)
 })
 
 test("only the band follows the clock, and only while a countdown runs", () => {

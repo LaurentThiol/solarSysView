@@ -99,7 +99,9 @@ test("the numbers of the help are drawn from the constants of the code", () => {
   has(RUN_ARCADE_HELP.horloge.body, `sans descendre sous ${formatSlice(MIN_SLICE_MS)}`)
   has(RUN_ARCADE_HELP.horloge.body, `les tours s’enchaînent, ${formatSlice(MIN_SLICE_MS)} chacun`)
 
-  has(RUN_ARCADE_HELP.services.items?.[0].text ?? "", `les ${WORDS[PROMPT_ROWS]} derniers tirages lisibles`)
+  assert.equal(PROMPT_ROWS, 12)
+  has(RUN_ARCADE_HELP.services.items?.[0].text ?? "", "jusqu’à douze lignes ; un départ tardif peut n’en laisser que deux")
+  has(RUN_ARCADE_HELP.depart.items?.find((item) => item.label === "Jusqu’à douze lignes")?.text ?? "", "jusqu’à douze lignes ; un départ tardif peut n’en laisser que deux")
   has(RUN_ARCADE_HELP.gestes.items?.[5].text ?? "", `à ${WORDS[EVENING_GAP_DAYS]} jours au plus`)
 })
 
@@ -170,7 +172,7 @@ test("runArcade help names the purse, the exam, the evenings and the curves", ()
   assert.match(RUN_ARCADE_HELP.courbes.items?.[1].text ?? "", /10, 20, 30, 40 ou 50/)
   assert.match(RUN_ARCADE_HELP.courbes.items?.[3].text ?? "", /1–10/)
   assert.match(RUN_ARCADE_HELP.courbes.items?.[3].text ?? "", /41–50/)
-  assert.match(RUN_ARCADE_HELP.services.items?.[0].text ?? "", /douze derniers/)
+  assert.match(RUN_ARCADE_HELP.services.items?.[0].text ?? "", /jusqu’à douze lignes/)
   assert.match(RUN_ARCADE_HELP.services.items?.[1].text ?? "", /tirage encore caché/)
   assert.match(RUN_ARCADE_HELP.champions.body, /vingt au plus/)
   assert.match(RUN_ARCADE_HELP.journal.body, /huit dernières/)
@@ -290,4 +292,13 @@ test("the lab writes the exam window and the chance mark, and bounds the race on
   assert.match(lab, /balanceWithChance\(item\.cents, historyTurns\[position\]\)/)
   assert.match(lab, /sharedSentence\(snapshot\.sharedWithParent/)
   assert.match(lab, /version\.examTo/)
+})
+
+test("the help names the star span, the set-aside count at zero, and Persiste giving way", () => {
+  const or = RUN_ARCADE_HELP.gestes.items?.find((item) => item.label === "Vise le nombre d’or")?.text ?? ""
+  has(or, "pour les étoiles, du plus bas de e1 au plus haut de e2")
+  has(RUN_ARCADE_HELP.persiste.body, "cède la place à « Dernier tirage »")
+  has(RUN_ARCADE_HELP.services.items?.[1].text ?? "", "ne comptent pas au même tirage")
+  assert.match(lab, /snapshot\.setAside\} version\(s\)/)
+  assert.equal(/setAside > 0/.test(lab), false)
 })

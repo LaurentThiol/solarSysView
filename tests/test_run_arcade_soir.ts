@@ -85,6 +85,22 @@ test("the day after a tuesday still plays the friday aligned three days from tha
   assert.equal(reading.tip, 48)
 })
 
+test("a past ending on sunday targets the next tuesday in real days", () => {
+  const past = [
+    draw("2026-05-19", 35),
+    draw("2026-05-22", 30),
+    draw("2026-05-26", 38),
+    draw("2026-05-29", 40),
+    draw("2026-05-31", 99),
+  ]
+  assert.equal(new Date("2026-05-31T12:00:00Z").getUTCDay(), 0)
+  const reading = soirReading(past, past.map(curveValues), "n5")
+  assert.equal(reading.evening, "mardi")
+  assert.equal(reading.other, "vendredi")
+  assert.equal(reading.days, 4)
+  assert.equal(reading.tip, 50)
+})
+
 test("without a counterpart within four days the tip repeats the same evening’s step", () => {
   const past = [
     draw("2026-05-12", 30),

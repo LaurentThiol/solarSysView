@@ -145,7 +145,7 @@ test("a relation phrase never looks like a late date", () => {
     "n1 et n2, même sens, n2 en retard d’un pas",
     "Σn et e1, sens opposé, même pas",
     "d3 et Σ★, même sens, Σ★ en retard de deux pas",
-    "n5, mardi et vendredi, écart de 4 jours",
+    "n5, mardi et vendredi, sens opposé, écart de 4 jours",
     "d0, d’une année sur l’autre, sens opposé, décalage de 11 jours",
     "n3, d’une année sur l’autre, même sens, sans décalage",
   ]

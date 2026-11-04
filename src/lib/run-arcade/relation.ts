@@ -159,7 +159,7 @@ function eveningTrials(ordered: readonly RankPoint[], rows: readonly CurveValues
         const found = measure(
           later.map((index) => rows[index][key]),
           earlier.map((index) => rows[index][key]),
-          () => `${curveLabel(key)}, mardi et vendredi, ${dayCount(gap, "écart")}`
+          (r) => `${curveLabel(key)}, mardi et vendredi, ${sens(r)}, ${dayCount(gap, "écart")}`
         )
         if (found) trials.push(found)
       }

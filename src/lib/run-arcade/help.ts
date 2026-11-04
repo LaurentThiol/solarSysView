@@ -38,8 +38,8 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
         text: "Un jour sans tirage se cale sur le tirage suivant. Une date dans l’examen, ou après, revient au dernier départ qui laisse encore deux tirages lus.",
       },
       {
-        label: "Douze lignes",
-        text: "L’appel montre les douze tirages les plus récents de ce qui est autorisé. Une date plus ancienne ne change pas ces lignes. Elle écarte le passé des gestes longs, moyenne et nombre d’or.",
+        label: "Jusqu’à douze lignes",
+        text: "L’appel montre jusqu’à douze lignes ; un départ tardif peut n’en laisser que deux. Une date plus ancienne ne change pas ces lignes. Elle écarte le passé des gestes longs, moyenne et nombre d’or.",
       },
       {
         label: "Examen",
@@ -138,11 +138,11 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
     items: [
       {
         label: "IA locale",
-        text: "Ollama, graine fixe, réponse courte. Le prompt lit les douze derniers tirages lisibles depuis la date de départ, sans la fenêtre d’examen, et rappelle le solde d’examen, en disant s’il date du lancement ou d’un tour. Une réponse illisible est refusée. Le premier appel part sans image. Quand la ligne dit « le dessin part avec l’appel », les appels suivants joignent le dessin. Le journal nomme l’appel, la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite les deux versions. Si le dessin ne se rend pas en 4 s, le journal écrit « dessin non joint » avec la raison, et l’appel part sans image. Après trois échecs de suite, le dessin n’est plus joint jusqu’au prochain Lancer.",
+        text: "Ollama, graine fixe, réponse courte. Le prompt lit jusqu’à douze lignes ; un départ tardif peut n’en laisser que deux. Il lit depuis la date de départ, sans la fenêtre d’examen, et rappelle le solde d’examen, en disant s’il date du lancement ou d’un tour. Une réponse illisible est refusée. Le premier appel part sans image. Quand la ligne dit « le dessin part avec l’appel », les appels suivants joignent le dessin. Le journal nomme l’appel, la courbe, le masque, les cinq lectures, la date de création et le compte. Une lecture refusée cite les deux versions. Si le dessin ne se rend pas en 4 s, le journal écrit « dessin non joint » avec la raison, et l’appel part sans image. Après trois échecs de suite, le dessin n’est plus joint jusqu’au prochain Lancer.",
       },
       {
         label: "Brave",
-        text: "La recherche nomme la relation retenue entre les valeurs déjà lues : deux courbes, au même tirage ou l’une en retard d’un ou deux tirages ; mardi et vendredi ; ou d’une année sur l’autre. Elle n’est retenue que si elle dépasse le hasard, une fois comptées toutes celles qu’on a essayées. Deux courbes tirées des mêmes boules, comme n1 et n2, ne comptent pas : elles sont liées d’avance. S’il n’y a pas de relation, Brave n’est pas appelé. La recherche s’arrête avant le premier tirage de l’examen, que le prompt ne lit pas. Les pages de résultats de tirage sont écartées, ainsi qu’un texte qui citerait un tirage encore caché, dans un des formats de date que le filtre sait lire : date complète, jour et mois en lettres, ou jour sans année écrit 14/08, 14-08 ou 14.08. Si l’API des tirages ne répond pas, ou ne connaît pas le dernier tirage de la piste, la recherche est refusée. Une même recherche n’est lue qu’une seule fois par génération. La génération s’arrête à 40 recherches. Les notes qui restent entrent dans le prompt suivant ; une réponse vide ne les remplace pas.",
+        text: "La recherche nomme la relation retenue entre les valeurs déjà lues : deux courbes, au même tirage ou l’une en retard d’un ou deux tirages ; mardi et vendredi ; ou d’une année sur l’autre. Elle n’est retenue que si elle dépasse le hasard, une fois comptées toutes celles qu’on a essayées. Deux courbes tirées des mêmes boules, comme n1 et n2, ne comptent pas au même tirage : elles sont liées d’avance. S’il n’y a pas de relation, Brave n’est pas appelé. La recherche s’arrête avant le premier tirage de l’examen, que le prompt ne lit pas. Les pages de résultats de tirage sont écartées, ainsi qu’un texte qui citerait un tirage encore caché, dans un des formats de date que le filtre sait lire : date complète, jour et mois en lettres, ou jour sans année écrit 14/08, 14-08 ou 14.08. Si l’API des tirages ne répond pas, ou ne connaît pas le dernier tirage de la piste, la recherche est refusée. Une même recherche n’est lue qu’une seule fois par génération. La génération s’arrête à 40 recherches. Les notes qui restent entrent dans le prompt suivant ; une réponse vide ne les remplace pas.",
       },
       {
         label: "Neon",
@@ -219,7 +219,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   persiste: {
     title: "Persiste",
-    body: "Le cadre en pointillés recopie le dernier tirage révélé de l’archive : numéros, étoiles, sommes et décennies. C’est le nul gris, à côté de la proposition du champion.",
+    body: "Le cadre en pointillés recopie le dernier tirage révélé de l’archive : numéros, étoiles, sommes et décennies. C’est le nul gris, à côté de la proposition du champion. Dès qu’un champion est relu, ce cadre cède la place à « Dernier tirage » dans Résultat.",
   },
   dessin: {
     title: "Signes du dessin",
@@ -287,7 +287,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Vise le nombre d’or",
-        text: "La pensée vise une part de la bande : 0,272, 0,382, 0,618, 0,764 ou 0,854 selon le ratio choisi (1,272, 0,382, 0,618, 1,618 ou 2,618). Bande : les bornes de la courbe. Entre les lignes : du plus bas au plus haut de la fenêtre. Du dernier pas : entre l’avant-dernier point et le dernier. Une fenêtre en jours est refusée pour ce geste : elle ne vaut que pour la moyenne et la figure.",
+        text: "La pensée vise une part de la bande : 0,272, 0,382, 0,618, 0,764 ou 0,854 selon le ratio choisi (1,272, 0,382, 0,618, 1,618 ou 2,618). Bande : les bornes de la courbe. Entre les lignes : du plus bas au plus haut de la fenêtre ; pour les étoiles, du plus bas de e1 au plus haut de e2. Du dernier pas : entre l’avant-dernier point et le dernier. Une fenêtre en jours est refusée pour ce geste : elle ne vaut que pour la moyenne et la figure.",
       },
       {
         label: "Rejoint sa moyenne",

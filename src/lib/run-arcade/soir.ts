@@ -40,6 +40,15 @@ export function nextEvening(iso: string): Evening {
   return day < 2 || day > 5 ? "mardi" : "vendredi"
 }
 
+/** Date du prochain mardi ou vendredi après `iso`, en jours réels. */
+export function nextEveningDate(iso: string): string {
+  for (let step = 1; step <= 7; step += 1) {
+    const candidate = addDays(iso, step)
+    if (weekdayOf(candidate)) return candidate
+  }
+  return addDays(iso, 3)
+}
+
 export function eveningToPlay(lastDate: string, hiddenDate?: string | null): Evening {
   const hidden = hiddenDate ? weekdayOf(hiddenDate) : null
   if (hidden) return hidden
@@ -215,7 +224,7 @@ export function soirReading(
   const sides = split(past, rows, key)
   const playSeries = sides[evening]
   const otherSeries = sides[other]
-  const target = hiddenDate && weekdayOf(hiddenDate) ? hiddenDate : addDays(lastDate, evening === "vendredi" ? 3 : 4)
+  const target = hiddenDate && weekdayOf(hiddenDate) ? hiddenDate : nextEveningDate(lastDate)
   const targetDay = dayNumber(target)
   const otherDays = otherSeries.map((point) => dayNumber(point.date))
   let match = -1

@@ -117,46 +117,47 @@ export type LaunchOptions = {
 
 export type SaveState = { state: "—" | "en cours" | "ok" | "erreur"; detail: string | null }
 
+/** Snapshot publié aux appelants : lecture seule. La session seule écrit, par `set()`. */
 export type SessionSnapshot = {
-  phase: SessionPhase
-  generation: number
-  race: Race | null
-  track: RankPoint[]
-  draws: number
-  minutes: number
-  sliceMs: number
+  readonly phase: SessionPhase
+  readonly generation: number
+  readonly race: Race | null
+  readonly track: readonly RankPoint[]
+  readonly draws: number
+  readonly minutes: number
+  readonly sliceMs: number
   /** Fin de l’avant-course, ou fin de la tranche du tour. */
-  phaseEndsAt: number | null
-  pausedLeftMs: number | null
-  ia: ServiceState
-  iaError: string | null
-  iaVision: boolean
-  brave: ServiceState
-  braveError: string | null
-  latencies: number[]
-  medianMs: number | null
-  inFlight: number
-  save: SaveState
-  champion: ChampionRecord | null
-  parent: ChampionRecord | null
+  readonly phaseEndsAt: number | null
+  readonly pausedLeftMs: number | null
+  readonly ia: ServiceState
+  readonly iaError: string | null
+  readonly iaVision: boolean
+  readonly brave: ServiceState
+  readonly braveError: string | null
+  readonly latencies: readonly number[]
+  readonly medianMs: number | null
+  readonly inFlight: number
+  readonly save: SaveState
+  readonly champion: ChampionRecord | null
+  readonly parent: ChampionRecord | null
   /** Versions du champion écrites, ou gardées par un examen, le jour du premier tirage caché ou après : laissées de côté. */
-  setAside: number
+  readonly setAside: number
   /** Tirages de cette course déjà dans la plage de course du parent. Vide : pas de parent, ou plage inconnue. */
-  sharedWithParent: number | null
-  journal: JournalEntry[]
+  readonly sharedWithParent: number | null
+  readonly journal: readonly JournalEntry[]
   /** Préparation de chaque runner, hors du journal du champion. */
-  xrayPrep: XrayPrep[]
+  readonly xrayPrep: readonly XrayPrep[]
   /** Reçus des tours joués, hors du journal du champion. */
-  xrayReceipts: XrayReceipt[]
+  readonly xrayReceipts: readonly XrayReceipt[]
   /** Requêtes Brave du lancement, de l’envoi jusqu’à l’issue. */
-  xrayBrave: XrayBrave[]
+  readonly xrayBrave: readonly XrayBrave[]
   /** Pas du schéma fonctionnel, hors du journal du champion. */
-  xraySteps: XrayStep[]
+  readonly xraySteps: readonly XrayStep[]
   /** Appels, recherches et propositions encore ouverts. */
-  activity: XrayActivity
+  readonly activity: XrayActivity
   /** Observations reconnues pendant la course, la plus ancienne d’abord. */
-  observations: readonly Observation[]
-  error: string | null
+  readonly observations: readonly Observation[]
+  readonly error: string | null
 }
 
 type InboxItem = {
@@ -303,6 +304,7 @@ export class RunArcadeSession {
   private launchId = 0
   private timer: unknown = null
   private wake: unknown = null
+  private wakeDueAt: number | null = null
   private round = 0
   private queue: string[] = []
   private readonly pending = new Map<string, AbortController>()
@@ -352,7 +354,7 @@ export class RunArcadeSession {
   getSnapshot = () => this.snapshot
 
   private set(patch: Partial<SessionSnapshot>) {
-    this.snapshot = { ...this.snapshot, ...patch, activity: this.activity() }
+    this.snapshot = { ...this.snapshot, ...patch, inFlight: this.pending.size, activity: this.activity() }
     for (const listener of this.listeners) listener()
   }
 
@@ -445,6 +447,7 @@ export class RunArcadeSession {
     if (this.wake != null) this.deps.clearTimer(this.wake)
     this.timer = null
     this.wake = null
+    this.wakeDueAt = null
     this.holdRetries()
   }
 
@@ -548,6 +551,15 @@ export class RunArcadeSession {
   }
 
   launch(options: LaunchOptions) {
+    const seed = options.seed
+    if (
+      !Number.isFinite(options.draws) ||
+      !Number.isFinite(options.count) ||
+      !Number.isFinite(options.minutes) ||
+      (seed !== undefined && !Number.isFinite(seed))
+    ) {
+      throw new Error("launch : draws, count, minutes et seed doivent être des nombres finis")
+    }
     this.dispose()
     this.inbox = []
     this.queue = []
@@ -888,19 +900,30 @@ export class RunArcadeSession {
 
   /** Réveille la file au prochain cooldown, ou à la prochaine sonde d’une IA absente, quel que soit le nombre d’appels en vol. */
   private scheduleWake() {
-    if (this.wake != null) return
     const now = this.deps.now()
     for (const [runnerId, until] of this.cooldown) {
       if (until <= now) this.cooldown.delete(runnerId)
     }
     const due = [...this.cooldown.values()]
     if (this.snapshot.ia === "absente") due.push(this.iaRetryAt)
-    if (due.length === 0) return
+    if (due.length === 0) {
+      if (this.wake != null) {
+        this.deps.clearTimer(this.wake)
+        this.wake = null
+        this.wakeDueAt = null
+      }
+      return
+    }
+    const earliest = Math.min(...due)
+    if (this.wake != null && this.wakeDueAt != null && this.wakeDueAt <= earliest) return
+    if (this.wake != null) this.deps.clearTimer(this.wake)
     const id = this.launchId
+    this.wakeDueAt = earliest
     this.wake = this.deps.setTimer(() => {
       this.wake = null
+      this.wakeDueAt = null
       if (id === this.launchId) this.pump()
-    }, Math.max(0, Math.min(...due) - now))
+    }, Math.max(0, earliest - now))
   }
 
   /** Le prompt lit le passé lisible moins la fenêtre d’examen. Son dessin vient de ce même passé. */

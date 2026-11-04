@@ -288,6 +288,48 @@ test("an absent local IA is probed again every 15 s, and the race goes on meanwh
   session.dispose()
 })
 
+test("launch rejects non-finite values before disposing, and inFlight follows pending after an absent reply", async () => {
+  const { ia, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  await flush()
+  assert.equal(session.getSnapshot().inFlight, 1)
+  const before = session.getSnapshot()
+  for (const bad of [
+    { count: 1, draws: Number.NaN, minutes: 1, series: series(40), champion: null },
+    { count: Number.POSITIVE_INFINITY, draws: 4, minutes: 1, series: series(40), champion: null },
+    { count: 1, draws: 4, minutes: Number.NaN, series: series(40), champion: null },
+    { count: 1, draws: 4, minutes: 1, series: series(40), champion: null, seed: Number.NaN },
+  ]) {
+    assert.throws(() => session.launch(bad), /nombres finis/)
+  }
+  assert.equal(session.getSnapshot(), before, "un lancement refusé ne démonte pas la session en cours")
+  ia[0].resolve({ ok: false, error: "LLM local injoignable", absent: true })
+  await flush()
+  assert.equal(session.getSnapshot().ia, "absente")
+  assert.equal(session.getSnapshot().inFlight, 0)
+  session.dispose()
+})
+
+test("a wake armed for the probe does not mask a nearer cooldown when the IA is back", async () => {
+  const { clock, ia, session } = harness(2)
+  session.launch({ count: 2, draws: 4, minutes: 5, series: series(40), champion: null })
+  await flush()
+  assert.equal(ia.length, 2)
+  ia[0].resolve({ ok: false, error: "LLM local injoignable", absent: true })
+  await flush()
+  await clock.advance(2_000)
+  ia[1].resolve(unreadable)
+  await flush()
+  assert.equal(session.getSnapshot().ia, "ok")
+  assert.equal(ia.length, 4, "les deux runners repartent dès que l’IA répond")
+  ia[2].resolve({ ok: false, error: "boom" })
+  await flush()
+  assert.equal(ia.length, 4)
+  await clock.advance(2_000)
+  assert.equal(ia.length, 5, "le réveil du cooldown proche part à 2 s, pas à la sonde de 15 s")
+  session.dispose()
+})
+
 test("the race ends on its last draw, saves one champion, and calls nothing more", async () => {
   const { ia, saved, session } = harness(1)
   session.launch({ count: 3, draws: 4, minutes: 1, series: series(40), champion: null })

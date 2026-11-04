@@ -465,6 +465,10 @@ def test_run_arcade_routes_node() -> None:
     _node("test_run_arcade_routes.ts")
 
 
+def test_run_arcade_capture_bound_node() -> None:
+    _node("test_run_arcade_capture_bound.ts")
+
+
 def test_every_run_arcade_ts_test_has_a_wrapper() -> None:
     tests = Path(__file__).resolve().parent
     wrappers = "".join(

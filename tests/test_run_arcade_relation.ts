@@ -104,10 +104,30 @@ test("tuesday and friday four days apart name the evening gap", () => {
   })
   const past = dates.map((date, index) => point(date, 1, 2, values[index]))
   const evenings = measuredRelations(past).filter((item) => item.phrase.includes("mardi et vendredi"))
-  assert.ok(evenings.some((item) => item.phrase === "n5, mardi et vendredi, écart de 4 jours"))
+  assert.ok(
+    evenings.some((item) => /^n5, mardi et vendredi, (même sens|sens opposé), écart de 4 jours$/.test(item.phrase)),
+    evenings.map((item) => item.phrase).join(" · ")
+  )
   assert.equal(
     evenings.some((item) => item.phrase.includes("écart de 3 jours")),
     false
+  )
+})
+
+test("an evening relation against the other evening says sens opposé", () => {
+  const random = generator(17)
+  const dates = drawDates(80, "2026-01-02")
+  let lastTuesday = 25
+  const past = dates.map((date) => {
+    const friday = new Date(`${date}T12:00:00Z`).getUTCDay() === 5
+    if (friday) return point(date, 1, 2, 51 - lastTuesday)
+    lastTuesday = 1 + Math.floor(random() * 50)
+    return point(date, 1, 2, lastTuesday)
+  })
+  const evenings = measuredRelations(past).filter((item) => item.phrase.includes("mardi et vendredi"))
+  assert.ok(
+    evenings.some((item) => item.phrase.includes("sens opposé")),
+    evenings.map((item) => item.phrase).join(" · ")
   )
 })
 

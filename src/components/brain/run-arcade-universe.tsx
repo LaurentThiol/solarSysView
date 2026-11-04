@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { memo, useRef, useState } from "react"
 
 import { curveLabel, RAIL_LEFT, RAIL_RIGHT, type CurveKey } from "@/lib/run-arcade/curves"
 import { gesturePhrase } from "@/lib/run-arcade/skills"
@@ -68,7 +68,7 @@ function railTone(key: CurveKey, matched: readonly CurveKey[], exact: readonly C
   return "fill-foreground"
 }
 
-export function RunnerUniverse({
+function RunnerUniverseView({
   runnerId,
   thought,
   matched = [],
@@ -400,3 +400,9 @@ export function RunnerUniverse({
     </div>
   )
 }
+
+/**
+ * Mémoïsé : un runner ne redessine que quand sa pensée (ou ses cases) change.
+ * Les autres entrées sont des primitives ou des références stables entre événements étrangers.
+ */
+export const RunnerUniverse = memo(RunnerUniverseView)

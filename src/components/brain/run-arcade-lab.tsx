@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 
 import { captureDraw } from "@/components/brain/run-arcade-capture"
 import { RunArcadeLayers } from "@/components/brain/run-arcade-layers"
@@ -66,6 +66,7 @@ import {
   thoughtChain,
   xrayFeed,
   xrayMark,
+  type XrayActivity,
 } from "@/lib/run-arcade/xray"
 import {
   exactKeys,
@@ -135,7 +136,7 @@ function foundLabel(hits: number) {
   return hits === 1 ? "1 trouvé" : `${hits} trouvés`
 }
 
-function ResultGrids({
+function ResultGridsView({
   replay,
   proposal,
   ticketHits,
@@ -204,6 +205,8 @@ function ResultGrids({
   )
 }
 
+const ResultGrids = memo(ResultGridsView)
+
 function ThoughtChain({
   runner,
   draw,
@@ -246,7 +249,52 @@ function cellTone(cell: FonctionnelCell) {
   return "border-border"
 }
 
-function FonctionnelTable({ snapshot }: { snapshot: SessionSnapshot }) {
+function sameActivity(left: XrayActivity, right: XrayActivity) {
+  return (
+    left.calling.join("\n") === right.calling.join("\n") &&
+    left.searching.map((item) => `${item.runnerId}\n${item.query}`).join("\n") ===
+      right.searching.map((item) => `${item.runnerId}\n${item.query}`).join("\n") &&
+    left.pending.map((item) => `${item.runnerId}\n${item.detail}`).join("\n") ===
+      right.pending.map((item) => `${item.runnerId}\n${item.detail}`).join("\n")
+  )
+}
+
+function sameRaceNames(left: SessionSnapshot["race"], right: SessionSnapshot["race"]) {
+  if (!left || !right) return left === right
+  if (left.cursor !== right.cursor || left.start !== right.start || left.runners.length !== right.runners.length) return false
+  return left.runners.every(
+    (runner, index) => runner.mind.id === right.runners[index].mind.id && runner.mind.name === right.runners[index].mind.name
+  )
+}
+
+function fonctionnelEqual(prev: { snapshot: SessionSnapshot }, next: { snapshot: SessionSnapshot }) {
+  const left = prev.snapshot
+  const right = next.snapshot
+  return (
+    left.phase === right.phase &&
+    left.minutes === right.minutes &&
+    left.pausedLeftMs === right.pausedLeftMs &&
+    left.ia === right.ia &&
+    left.iaError === right.iaError &&
+    left.xraySteps === right.xraySteps &&
+    sameActivity(left.activity, right.activity) &&
+    sameRaceNames(left.race, right.race)
+  )
+}
+
+function xrayEqual(prev: { snapshot: SessionSnapshot }, next: { snapshot: SessionSnapshot }) {
+  const left = prev.snapshot
+  const right = next.snapshot
+  return (
+    fonctionnelEqual(prev, next) &&
+    left.xrayPrep === right.xrayPrep &&
+    left.xrayReceipts === right.xrayReceipts &&
+    left.journal === right.journal &&
+    left.xrayBrave === right.xrayBrave
+  )
+}
+
+function FonctionnelTableView({ snapshot }: { snapshot: SessionSnapshot }) {
   const race = snapshot.race
   if (!race) return null
   const names = Object.fromEntries(race.runners.map((runner) => [runner.mind.id, runner.mind.name]))
@@ -326,7 +374,9 @@ function FonctionnelTable({ snapshot }: { snapshot: SessionSnapshot }) {
   )
 }
 
-function XrayPanel({ snapshot }: { snapshot: SessionSnapshot }) {
+const FonctionnelTable = memo(FonctionnelTableView, fonctionnelEqual)
+
+function XrayPanelView({ snapshot }: { snapshot: SessionSnapshot }) {
   const race = snapshot.race
   if (!race) return null
   const names = Object.fromEntries(race.runners.map((runner) => [runner.mind.id, runner.mind.name]))
@@ -418,7 +468,9 @@ function XrayPanel({ snapshot }: { snapshot: SessionSnapshot }) {
   )
 }
 
-function ObservationLedger({ observations }: { observations: readonly Observation[] }) {
+const XrayPanel = memo(XrayPanelView, xrayEqual)
+
+function ObservationLedgerView({ observations }: { observations: readonly Observation[] }) {
   const rows = [...observations].sort(
     (a, b) => b.count - a.count || a.createdOn.localeCompare(b.createdOn) || a.phrase.localeCompare(b.phrase)
   )
@@ -439,6 +491,78 @@ function ObservationLedger({ observations }: { observations: readonly Observatio
     </div>
   )
 }
+
+const ObservationLedger = memo(ObservationLedgerView)
+
+type RunnerCardProps = {
+  runner: RunnerLive
+  active: boolean
+  mark: string | null
+  xray: boolean
+  hiddenDate: string | null
+  freeArchive: readonly RankPoint[]
+  observationReport: string | null
+  onSelect: (id: string) => void
+}
+
+/** Carte d’un runner, mémoïsée : elle ne se redessine que si ce runner (ou sa sélection) change. */
+const RunnerCard = memo(function RunnerCard({
+  runner,
+  active,
+  mark,
+  xray,
+  hiddenDate,
+  freeArchive,
+  observationReport,
+  onSelect,
+}: RunnerCardProps) {
+  const select = () => onSelect(runner.mind.id)
+  return (
+    <div
+      className={cn(
+        "rounded-xl border bg-card p-2 text-left transition-colors hover:border-foreground/30",
+        active ? "border-primary" : "border-border",
+        mark && "ring-1 ring-chart-4",
+        !runner.alive && "opacity-60"
+      )}
+    >
+      <button type="button" onClick={select} className="block w-full cursor-pointer text-left">
+        <span className="flex items-baseline justify-between gap-2 text-xs">
+          <span className="font-medium text-foreground">{runner.mind.name}</span>
+          <span className="text-muted-foreground">
+            {mark ? <span className="text-chart-4">{mark} · </span> : null}
+            {formatCents(runner.cents)}
+          </span>
+        </span>
+        <span className="mt-0.5 block text-[11px] text-muted-foreground">
+          {curveLabel(runner.mind.focus)} · {skillSummary(runner)} · {runnerExamLine(runner)} · {runner.calls} appel(s)
+          {runner.since ? ` · ${departCard(formatDrawDate(runner.since), droppedBefore(freeArchive, runner.since))}` : ""}
+          {runner.alive ? "" : " · arrêté"}
+        </span>
+      </button>
+      <RunnerUniverse
+        runnerId={runner.mind.id}
+        thought={runner.thought}
+        matched={runner.matched}
+        exact={runner.exact}
+        onPress={select}
+        className="mt-1"
+      />
+      <button type="button" onClick={select} className="block w-full cursor-pointer text-left">
+        {xray ? <ThoughtChain runner={runner} draw={runner.thought} hiddenDate={hiddenDate} /> : null}
+        <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">{runner.thought?.phrase ?? "—"}</span>
+        {runner.thought ? (
+          <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">{runner.thought.observation}</span>
+        ) : null}
+        {observationReport ? (
+          <span className="mt-1 block text-[11px] leading-4 text-foreground" data-testid="runner-observation">
+            {observationReport}
+          </span>
+        ) : null}
+      </button>
+    </div>
+  )
+})
 
 export function RunArcadeLab() {
   const { draws, source, loading } = useDraws("all")
@@ -535,7 +659,11 @@ export function RunArcadeLab() {
     : 0
   const bounds = useMemo(() => departBounds(series, raceDraws), [series, raceDraws])
   const shownDate = bounds.first ? (snapDepart(bounds.free, departDate || bounds.first) ?? bounds.first) : ""
-  const freeArchive = race ? track.slice(0, race.start) : []
+  const raceStart = race?.start
+  const freeArchive = useMemo(
+    () => (raceStart == null ? [] : track.slice(0, raceStart)),
+    [track, raceStart]
+  )
 
   const layers = useMemo(
     () =>
@@ -640,6 +768,11 @@ export function RunArcadeLab() {
   const focusJournal = focus
     ? snapshot.journal.filter((entry) => entry.runner === focus.mind.id).slice(-8).reverse()
     : []
+
+  const selectRunner = useCallback((id: string) => {
+    setSelected(id)
+    setFocusCurve(null)
+  }, [])
 
   return (
     <div className="flex flex-col gap-4">
@@ -838,9 +971,7 @@ export function RunArcadeLab() {
           <p>
             Génération {snapshot.generation} : enfants de {snapshot.parent.runner} (génération{" "}
             {snapshot.parent.generation}).
-            {snapshot.setAside > 0
-              ? ` ${snapshot.setAside} version(s) écrite(s), ou gardée(s) par un examen, le jour du premier tirage caché ou après restent de côté.`
-              : ""}
+            {` ${snapshot.setAside} version(s) écrite(s), ou gardée(s) par un examen, le jour du premier tirage caché ou après restent de côté.`}
             {snapshot.sharedWithParent != null
               ? ` ${sharedSentence(snapshot.sharedWithParent, race.end - race.start, snapshot.parent)}`
               : ""}
@@ -1146,65 +1277,19 @@ export function RunArcadeLab() {
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        {race?.runners.map((runner) => {
-          const active = runner.mind.id === selected
-          const mark = xray ? xrayMark(runner.mind.id, snapshot.activity) : null
-          const select = () => {
-            setSelected(runner.mind.id)
-            setFocusCurve(null)
-          }
-          return (
-            <div
-              key={runner.mind.id}
-              className={cn(
-                "rounded-xl border bg-card p-2 text-left transition-colors hover:border-foreground/30",
-                active ? "border-primary" : "border-border",
-                mark && "ring-1 ring-chart-4",
-                !runner.alive && "opacity-60"
-              )}
-            >
-              <button type="button" onClick={select} className="block w-full cursor-pointer text-left">
-                <span className="flex items-baseline justify-between gap-2 text-xs">
-                  <span className="font-medium text-foreground">{runner.mind.name}</span>
-                  <span className="text-muted-foreground">
-                    {mark ? <span className="text-chart-4">{mark} · </span> : null}
-                    {formatCents(runner.cents)}
-                  </span>
-                </span>
-                <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                  {curveLabel(runner.mind.focus)} · {skillSummary(runner)} · {runnerExamLine(runner)} ·{" "}
-                  {runner.calls} appel(s)
-                  {runner.since
-                    ? ` · ${departCard(formatDrawDate(runner.since), droppedBefore(freeArchive, runner.since))}`
-                    : ""}
-                  {runner.alive ? "" : " · arrêté"}
-                </span>
-              </button>
-              <RunnerUniverse
-                runnerId={runner.mind.id}
-                thought={runner.thought}
-                matched={runner.matched}
-                exact={runner.exact}
-                onPress={select}
-                className="mt-1"
-              />
-              <button type="button" onClick={select} className="block w-full cursor-pointer text-left">
-                {xray ? <ThoughtChain runner={runner} draw={runner.thought} hiddenDate={hiddenDate} /> : null}
-                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
-                  {runner.thought?.phrase ?? "—"}
-                </span>
-                {runner.thought ? (
-                  <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">{runner.thought.observation}</span>
-                ) : null}
-                {observationReportFor(snapshot.observations, runner.thought?.observation) ? (
-                  <span className="mt-1 block text-[11px] leading-4 text-foreground" data-testid="runner-observation">
-                    {observationReportFor(snapshot.observations, runner.thought?.observation)}
-                  </span>
-                ) : null}
-              </button>
-            </div>
-          )
-        })}
+        {race?.runners.map((runner) => (
+          <RunnerCard
+            key={runner.mind.id}
+            runner={runner}
+            active={runner.mind.id === selected}
+            mark={xray ? xrayMark(runner.mind.id, snapshot.activity) : null}
+            xray={xray}
+            hiddenDate={hiddenDate}
+            freeArchive={freeArchive}
+            observationReport={observationReportFor(snapshot.observations, runner.thought?.observation)}
+            onSelect={selectRunner}
+          />
+        ))}
       </div>
     </div>
   )

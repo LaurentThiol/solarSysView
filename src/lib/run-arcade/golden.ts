@@ -7,13 +7,6 @@ export function formatRatio(ratio: number) {
   return ratio.toFixed(3).replace(/0+$/, "").replace(/\.$/, "").replace(".", ",")
 }
 
-/** Niveau d’un ratio. En dessous de 1, il est dans le span. Au-dessus, il prolonge au-delà du haut, comme fibLevels. */
-export function goldenLevel(lo: number, hi: number, ratio: number) {
-  const span = hi - lo
-  if (ratio <= 1) return lo + ratio * span
-  return hi + (ratio - 1) * span
-}
-
 /** Part du span visée par le runner : cinq niveaux distincts dans la bande. */
 export function aimRatio(ratio: number) {
   if (ratio <= 1) return ratio

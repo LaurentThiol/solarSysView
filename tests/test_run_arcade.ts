@@ -53,7 +53,7 @@ import {
   drawingText,
   formatObservationDate,
   goldenAim,
-  goldenLevel,
+  leaderOf,
   newRunner,
   noteObservation,
   noteRace,
@@ -62,6 +62,7 @@ import {
   previewTurn,
   revealedPast,
   settlePurse,
+  spanFor,
   think,
   tipFor,
   type RankPoint,
@@ -103,18 +104,36 @@ function mindWith(params: SkillParams, focus: RunnerMind["focus"] = "n5"): Runne
 
 const mind = mindWith(glide)
 
-test("golden ratios land on five distinct levels and five distinct aims", () => {
-  const levels = GOLDEN_RATIOS.map((ratio) => goldenLevel(1, 46, ratio))
-  assert.equal(new Set(levels.map((level) => level.toFixed(4))).size, 5)
+test("golden ratios land on five distinct aims", () => {
   const aims = GOLDEN_RATIOS.map((ratio) => goldenAim(1, 46, ratio))
   assert.equal(new Set(aims.map((aim) => aim.toFixed(4))).size, 5)
-  assert.ok(Math.abs(goldenLevel(0, 10, 0.618) - 6.18) < 1e-9)
-  assert.ok(Math.abs(goldenLevel(0, 10, 1.618) - 16.18) < 1e-9)
   assert.ok(Math.abs(goldenAim(0, 10, 0.382) - 3.82) < 1e-9)
   assert.ok(Math.abs(goldenAim(0, 10, 0.618) - 6.18) < 1e-9)
   assert.ok(Math.abs(goldenAim(0, 10, 1.272) - 2.72) < 1e-9)
   assert.ok(Math.abs(goldenAim(0, 10, 1.618) - 7.64) < 1e-9)
   assert.ok(Math.abs(goldenAim(0, 10, 2.618) - 8.54) < 1e-9)
+})
+
+test("previewTurn has the guards of playTurn, the flat last step is centred, and empty inputs do not crash", () => {
+  const rows = series(12)
+  const race = createRace(1, rows.length, 4)
+  const atEnd = { ...race, cursor: race.end, done: false }
+  assert.equal(previewTurn(atEnd, rows), atEnd)
+  assert.equal(previewTurn(atEnd, rows).runners[0].thought, null)
+  const broke = {
+    ...race,
+    runners: race.runners.map((runner) => ({ ...runner, cents: TICKET_CENTS - 1 })),
+  }
+  assert.equal(previewTurn(broke, rows).runners[0].thought, null)
+  const rowsForSpan = rows.map(curveValues)
+  assert.deepEqual(spanFor({ curve: "*", gesture: "or", ratio: 0.618, span: "pas", window: 8, days: null }, rowsForSpan.slice(0, 2).map((row) => ({ ...row, n1: 24 })), "n1"), {
+    lo: 23.5,
+    hi: 24.5,
+  })
+  assert.equal(leaderOf([]), null)
+  assert.throws(() => think(mind, []), /passé vide/)
+  assert.throws(() => think(mind, [{ ...point(0), n1: Number.NaN }, point(1)]), /non finie/)
+  assert.equal(tipFor(glide, [], [], "n1"), 0)
 })
 
 test("curves add the two sums and five decade counts", () => {
@@ -692,7 +711,7 @@ test("the five words follow the mask, and a contradicted JSON is refused", () =>
   ).draw
   assert.equal(flat.lecture.tangente, "correspond")
   assert.equal(flat.lecture.masque, "correspond")
-  assert.equal(flat.lecture.cercle, "ecarte")
+  assert.equal(flat.lecture.cercle, "correspond")
   assert.equal(flat.lecture.pas, "correspond")
 
   const glideDraw = think(

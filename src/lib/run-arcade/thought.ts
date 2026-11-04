@@ -31,7 +31,7 @@ import {
   type SkillTarget,
 } from "./skills"
 
-export { aimRatio, formatRatio, goldenAim, goldenLevel, GOLDEN_RATIOS, type GoldenRatio } from "./golden"
+export { aimRatio, formatRatio, goldenAim, GOLDEN_RATIOS, type GoldenRatio } from "./golden"
 export {
   buildTrack,
   CURVE_KEYS,
@@ -225,6 +225,7 @@ export function spanFor(params: SkillParams, rows: readonly CurveValues[], key: 
   }
   const last = window[window.length - 1][key]
   const prev = window.length > 1 ? window[window.length - 2][key] : last
+  if (last === prev) return { lo: last - 0.5, hi: last + 0.5 }
   const lo = Math.min(last, prev)
   return { lo, hi: Math.max(last, prev, lo + 1) }
 }
@@ -267,6 +268,7 @@ export function tipFor(
   key: CurveKey,
   hiddenDate?: string | null
 ) {
+  if (rows.length === 0) return 0
   if (params.gesture === "soir") return soirReading(past, rows, key, hiddenDate).tip
   const last = rows[rows.length - 1][key]
   const prev = rows.length > 1 ? rows[rows.length - 2][key] : last
@@ -473,8 +475,14 @@ function guessOf(numbers: readonly number[], stars: readonly number[]): Guess {
 }
 
 export function think(mind: RunnerMind, past: readonly RankPoint[], options: ThinkOptions = {}): Thought {
+  if (past.length === 0) throw new Error("think : passé vide")
   const hiddenDate = options.hiddenDate ?? null
   const rows = past.map(curveValues)
+  for (const row of rows) {
+    for (const key of CURVE_KEYS) {
+      if (!Number.isFinite(row[key])) throw new Error("think : valeur non finie dans le passé")
+    }
+  }
   const tips = {} as CurveValues
   for (const key of CURVE_KEYS) tips[key] = tipFor(paramsFor(mind, key, hiddenDate), past, rows, key, hiddenDate)
   const reconciled = reconcile(tips)
@@ -773,15 +781,15 @@ export function revealedPast(series: readonly RankPoint[], cursor: number): Rank
   }))
 }
 
-/** Pensée de chaque runner vivant pour le tirage caché, sans le jouer. */
+/** Pensée de chaque runner vivant pour le tirage caché, sans le jouer. Mêmes gardes que `playTurn`. */
 export function previewTurn(race: Race, series: readonly RankPoint[]): Race {
-  if (race.done || race.cursor >= series.length || race.cursor < 2) return race
+  if (race.done || race.cursor >= race.end || race.cursor >= series.length || race.cursor < 2) return race
   const past = revealedPast(series, race.cursor)
   const hiddenDate = series[race.cursor].date
   return {
     ...race,
     runners: race.runners.map((runner) => {
-      if (!runner.alive) return runner
+      if (!runner.alive || runner.cents < TICKET_CENTS) return runner
       const history = sincePast(past, runner.since)
       if (history.length < 2) return runner
       const thought = think(runner.mind, history, { hiddenDate })
@@ -833,7 +841,8 @@ export function playTurn(race: Race, series: readonly RankPoint[]): Race {
   }
 }
 
-export function leaderOf(runners: readonly RunnerLive[]) {
+export function leaderOf(runners: readonly RunnerLive[]): RunnerLive | null {
+  if (runners.length === 0) return null
   return runners.reduce((best, runner) => (runner.cents > best.cents ? runner : best))
 }
 
