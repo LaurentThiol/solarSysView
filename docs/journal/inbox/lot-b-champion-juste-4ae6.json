@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "runArcade : un champion départagé et relu juste",
   "body": "Dans runArcade, à solde de course égal, le champion est maintenant celui dont l’examen s’écarte le plus du hasard pour son nombre de tours, et non celui au solde d’examen brut le plus haut. La grille du champion se relit avec le départ de son runner, comme elle a été jouée, et le repère du hasard de la liste et de « Tirage suivant » compte les tours du runner, même arrêté avant la fin de la course. La liste des champions suit la date d’écriture plutôt que l’ordre d’arrivée dans Neon. Un champion aux dates illisibles se relit sans ces dates, et un fichier au journal mal formé est refusé à la lecture au lieu de rester bloqué dans la file d’écriture.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 362,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/362"
 }
