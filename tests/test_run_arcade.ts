@@ -1013,10 +1013,12 @@ test("a house variation draws each setting on its own hash", () => {
   assert.ok(Number.isFinite(houseVariation(fromMoyenne, Number.NaN).curve.length))
 })
 
-test("a house variation or an IA proposal never gives a figure a window shorter than its calibre", () => {
+test("a house variation or an IA proposal never gives a figure a window shorter than its calibre plus two", () => {
   for (let step = 0; step < 6000; step += 1) {
     const item = houseVariation(fromMoyenne, step)
-    if (item.gesture === "figure") assert.ok(item.window >= figureLength(item.forme!, item.n ?? null), `${step}`)
+    if (item.gesture === "figure") {
+      assert.ok(item.window >= figureLength(item.forme!, item.n ?? null) + 2, `${step} ${item.forme} ${item.n} : ${item.window}`)
+    }
   }
   const wave = parseSkillParams({ curve: "*", gesture: "figure", forme: "sin", n: 12, window: 3 })
   assert.equal(wave?.window, 14)

@@ -486,15 +486,15 @@ export function baseSkill(runnerId: string, index: number): Skill {
 /** Sel de chaque réglage. Un réglage a son propre hachage : aucun n’est lié à un autre. */
 const SALT = { curve: 1, gesture: 2, ratio: 3, span: 4, window: 5, days: 6, forme: 7, n: 8, r: 9 } as const
 
-/** Paliers de fenêtre d’une figure : le plus petit qui contient son calibre. */
+/** Paliers de fenêtre d’une figure : le plus petit qui contient son calibre plus deux. */
 const FIGURE_WINDOWS = [...SHORT_WINDOWS, 16] as const
 
 /**
  * Variation maison : une skill dédiée à une courbe, tirée au hasard dans l’espace des réglages.
  * Chaque réglage vient de `mix(graine, sel)`, donc la courbe, le geste, le ratio, l’étendue, la fenêtre,
  * les jours, la forme et R se combinent sans lien. Le geste est tiré hors du geste de base.
- * Une figure a une fenêtre au moins égale à son calibre. La suite n’a pas l’étendue « du dernier pas ».
- * Sans IA, elle reste une proposition.
+ * Une figure a une fenêtre au moins égale à son calibre plus deux, pour que « masque » puisse
+ * valoir « correspond ». La suite n’a pas l’étendue « du dernier pas ». Sans IA, elle reste une proposition.
  */
 export function houseVariation(base: SkillParams, seed: number): SkillParams {
   const step = Math.abs(Math.round(seed))
@@ -518,7 +518,7 @@ export function houseVariation(base: SkillParams, seed: number): SkillParams {
           : usesFigureN(forme)
             ? pick(WAVE_PERIODS, SALT.n)
             : null
-    const needed = Math.max(window, figureLength(forme, n))
+    const needed = Math.max(window, figureLength(forme, n) + 2)
     const fitted = FIGURE_WINDOWS.find((size) => size >= needed) ?? needed
     return { curve, gesture, ratio, span, window: fitted, days, forme, n }
   }
