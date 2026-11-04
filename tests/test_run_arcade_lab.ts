@@ -306,6 +306,8 @@ test("the lab is wired to these rules", () => {
   assert.match(lab, /trackYears\(track\)/)
   assert.equal(/newestYear/.test(lab), false)
   assert.match(lab, /parentChampion\(\{ imported, finished: snapshot\.champion, running: snapshot\.parent, stored \}\)/)
+  assert.match(lab, /championRaceTurns\(parent, series\)/)
+  assert.match(lab, /history\.map\(\(item\) => championRaceTurns\(item, series\)\)/)
   assert.match(lab, /if \(snapshot\.champion && snapshot\.champion !== lastFinished\) setLastFinished\(snapshot\.champion\)/)
   assert.match(lab, /lastKnownChampion\(opened, lastFinished\)/)
   assert.match(lab, /championKey\(item, position\)/)

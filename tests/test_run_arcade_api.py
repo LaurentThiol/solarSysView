@@ -264,6 +264,79 @@ def test_champion_keeps_the_exam_window_and_the_exam_end_of_each_version(monkeyp
     assert client.post("/api/brain/run-arcade/champion", json={**_champion(), "examTurns": -1}).status_code == 422
 
 
+def test_champion_keeps_its_depart_and_its_race_turns(monkeypatch) -> None:
+    stored: dict = {}
+
+    def insert(record: dict) -> dict:
+        stored["row"] = {"id": 10, "payload": record["payload"]}
+        return {"id": 10, "created_at": None, "versions": len(record["versions"])}
+
+    champion = _champion()
+    champion["depart"] = "2026-08-04"
+    champion["raceTurns"] = 12
+    monkeypatch.setattr("synchro.db.database_configured", lambda: True)
+    monkeypatch.setattr("synchro.db.insert_run_arcade_champion", insert)
+    monkeypatch.setattr("synchro.db.latest_run_arcade_champion", lambda: stored.get("row"))
+    client = TestClient(create_app())
+    assert client.post("/api/brain/run-arcade/champion", json=champion).status_code == 200
+    read = client.get("/api/brain/run-arcade/champion").json()["champion"]
+    assert (read["depart"], read["raceTurns"]) == ("2026-08-04", 12)
+
+    stored.clear()
+    assert client.post("/api/brain/run-arcade/champion", json=_champion()).status_code == 200
+    legacy = client.get("/api/brain/run-arcade/champion").json()["champion"]
+    assert (legacy["depart"], legacy["raceTurns"]) == (None, None)
+    assert client.post("/api/brain/run-arcade/champion", json={**_champion(), "raceTurns": -1}).status_code == 422
+
+
+def test_an_old_champion_written_after_a_recent_one_does_not_become_the_latest(monkeypatch) -> None:
+    from contextlib import contextmanager
+
+    from synchro import db
+
+    recent = {
+        "id": 2,
+        "created_at": "2026-10-29T09:00:00",
+        "payload": {**_champion(), "savedAt": "2026-10-30T09:00:00.000Z"},
+    }
+    old = {
+        "id": 3,
+        "created_at": "2026-10-31T09:00:00",
+        "payload": {**_champion(), "savedAt": "2026-10-01T09:00:00.000Z"},
+    }
+    seen: list[str] = []
+
+    class Cursor:
+        def __enter__(self) -> "Cursor":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def execute(self, sql: str, params: object = None) -> None:
+            seen.append(" ".join(sql.split()))
+
+        def fetchall(self) -> list[dict]:
+            # Postgres rend les lignes dans l'ordre du ORDER BY demandé.
+            return [recent, old]
+
+    class Conn:
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    @contextmanager
+    def fake_connection(*, timeout: float | None = None):
+        yield Conn()
+
+    monkeypatch.setattr("synchro.db.connection", fake_connection)
+    rows = db.list_run_arcade_champions()
+    assert [row["id"] for row in rows] == [2, 3]
+    assert db.latest_run_arcade_champion()["id"] == 2
+    assert seen
+    for sql in seen:
+        assert "ORDER BY payload->>'savedAt' DESC NULLS LAST, created_at DESC, id DESC" in sql
+
+
 def test_champions_list_is_newest_first(monkeypatch) -> None:
     older = {"id": 1, "payload": {**_champion(), "generation": 1, "runner": "R1"}}
     newer = {"id": 2, "payload": _champion()}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { championRecord } from "../src/lib/run-arcade/champion.ts"
+import { championRecord, parseChampion, replayLastGrid } from "../src/lib/run-arcade/champion.ts"
 import type { RankPoint } from "../src/lib/run-arcade/curves.ts"
 import {
   assignDeparts,
@@ -186,9 +186,9 @@ test("the race thought ignores draws before the start, and the exam window stays
   assert.equal(clipped.turns, wide.turns)
 })
 
-test("the exported champion does not keep the start date", () => {
+test("the exported champion keeps its start as depart, not as since", () => {
   const mind = createMinds(1)[0]
-  const runner = { ...newRunner(mind), since: "2025-04-04", cents: 5400 }
+  const runner = { ...newRunner(mind), since: "2025-04-04", cents: 5400, turns: 7 }
   const record = championRecord({
     runner,
     generation: 1,
@@ -198,5 +198,47 @@ test("the exported champion does not keep the start date", () => {
     savedAt: "2025-08-02T00:00:00.000Z",
   })
   assert.equal("since" in record, false)
-  assert.equal(JSON.stringify(record).includes("2025-04-04"), false)
+  assert.equal(record.depart, "2025-04-04")
+  assert.equal(record.raceTurns, 7)
+  const reread = parseChampion(JSON.parse(JSON.stringify(record)))
+  assert.equal(reread?.depart, "2025-04-04")
+  assert.equal(reread?.raceTurns, 7)
+})
+
+test("replaying the champion with a late start and a long average returns the grid it played", () => {
+  const rows = series(40)
+  for (let index = 0; index < 12; index += 1) {
+    rows[index] = { ...rows[index], n1: 1, n2: 2, n3: 3, n4: 4, n5: 5 }
+  }
+  const params = {
+    curve: "*" as const,
+    gesture: "moyenne" as const,
+    ratio: 0.618 as const,
+    span: "bande" as const,
+    window: 60,
+    days: null,
+  }
+  const mind = {
+    ...createMinds(1)[0],
+    skills: [newSkill("r1-base", "Base", params, { cutoff: "", origin: "maison", examCents: null })],
+  }
+  const since = rows[12].date
+  const runner = { ...newRunner(mind), since, cents: 5400, turns: 4 }
+  const record = championRecord({
+    runner,
+    generation: 1,
+    raceFrom: rows[36].date,
+    raceTo: rows[39].date,
+    journal: [],
+    savedAt: "2025-08-02T00:00:00.000Z",
+  })
+  const reread = parseChampion(JSON.parse(JSON.stringify(record)))
+  assert.ok(reread)
+  const replay = replayLastGrid(reread, rows)
+  assert.ok(replay)
+  const played = think(mind, sincePast(revealedPast(rows, 39), since), { hiddenDate: rows[39].date })
+  assert.deepEqual(replay.thought.guess, played.guess)
+  assert.equal(replay.thought.draw.trail.length, 39 - 12)
+  const full = think(mind, revealedPast(rows, 39), { hiddenDate: rows[39].date })
+  assert.notEqual(full.draw.trail.length, replay.thought.draw.trail.length)
 })

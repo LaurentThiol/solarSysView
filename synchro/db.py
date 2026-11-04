@@ -1790,7 +1790,7 @@ def list_run_arcade_champions(limit: int = 20) -> list[dict[str, Any]]:
             cur.execute(
                 """
                 SELECT * FROM run_arcade_champions
-                ORDER BY created_at DESC, id DESC
+                ORDER BY payload->>'savedAt' DESC NULLS LAST, created_at DESC, id DESC
                 LIMIT %s
                 """,
                 (capped,),

@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
 import {
-  drawsInRange,
+  championRaceTurns,
   lastRevealedDraw,
   proposeNextDraw,
   replayLastGrid,
@@ -526,14 +526,8 @@ export function RunArcadeLab() {
   const maxDraws = useMemo(() => maxRaceDraws(series), [series])
   // La piste peut raccourcir : le champ ne garde jamais plus de tirages qu’elle n’en porte.
   if (raceDraws > maxDraws) setRaceDraws(maxDraws)
-  const parentTurns = useMemo(
-    () => (parent ? drawsInRange(series, parent.raceFrom, parent.raceTo) : 0),
-    [parent, series]
-  )
-  const historyTurns = useMemo(
-    () => history.map((item) => drawsInRange(series, item.raceFrom, item.raceTo)),
-    [history, series]
-  )
+  const parentTurns = useMemo(() => (parent ? championRaceTurns(parent, series) : 0), [parent, series])
+  const historyTurns = useMemo(() => history.map((item) => championRaceTurns(item, series)), [history, series])
   const championTurns = snapshot.champion
     ? (race?.runners.find((runner) => runner.mind.name === snapshot.champion?.runner)?.turns ?? 0)
     : 0

@@ -341,6 +341,10 @@ class RunArcadeChampionIn(BaseModel):
     calls: int = Field(default=0, ge=0)
     raceFrom: str | None = None
     raceTo: str | None = None
+    # Départ du runner et ses tours de course : champs libres du payload, sans colonne Neon.
+    # Sans ces champs, le modèle les jetterait avant l'écriture du payload dans Neon.
+    depart: str | None = None
+    raceTurns: int | None = Field(default=None, ge=0)
     skills: list[dict[str, Any]] = Field(min_length=1, max_length=40)
     journal: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
     savedAt: str | None = None

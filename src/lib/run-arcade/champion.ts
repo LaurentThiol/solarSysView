@@ -8,6 +8,8 @@ import {
   type SkillOrigin,
   type SkillVersion,
 } from "./skills"
+import { sincePast } from "./depart"
+import { chanceBalance } from "./examen"
 import { countHits, RUNNER_MAX, think, type RunnerLive, type RunnerMind, type Thought } from "./thought"
 
 export type JournalKind = "ia" | "brave" | "skill" | "refus" | "erreur"
@@ -39,6 +41,16 @@ export type ChampionRecord = {
   calls: number
   raceFrom: string | null
   raceTo: string | null
+  /**
+   * Départ du runner (`since`) : premier tirage qu’il a pu lire. Champ libre du payload, sans colonne Neon.
+   * Facultatif : un champion écrit avant ce champ ne le porte pas, et son passé relu n’est pas coupé.
+   */
+  depart?: string | null
+  /**
+   * Tours de course joués par ce runner, pas les tirages de la course entière. Champ libre du payload.
+   * Facultatif : un champion écrit avant ce champ retombe sur le compte des tirages de sa plage.
+   */
+  raceTurns?: number | null
   skills: Skill[]
   journal: JournalEntry[]
   savedAt: string
@@ -46,13 +58,34 @@ export type ChampionRecord = {
 
 export const JOURNAL_KEEP = 200
 
-/** Le solde de course d’abord, puis le solde d’examen, puis le moins d’appels. */
+/** Écart d’un examen au hasard, en écarts-types : comparable entre nombres de tours différents. */
+function examGap(runner: RunnerLive): number | null {
+  if (runner.examCents == null || !(runner.examTurns > 0)) return null
+  const chance = chanceBalance(runner.examTurns)
+  return chance.spreadCents > 0 ? (runner.examCents - chance.cents) / chance.spreadCents : null
+}
+
+/** Négatif si `a` passe devant `b` sur l’examen. Un examen vide reste derrière tout examen joué. */
+function compareExam(a: RunnerLive, b: RunnerLive): number {
+  if (a.examCents == null && b.examCents == null) return 0
+  if (a.examCents == null) return 1
+  if (b.examCents == null) return -1
+  const gapA = examGap(a)
+  const gapB = examGap(b)
+  if (gapA != null && gapB != null) return gapB - gapA
+  // Un seul examen a un nombre de tours connu : lui seul dit un écart au hasard.
+  if (gapA != null) return -1
+  if (gapB != null) return 1
+  return b.examCents - a.examCents
+}
+
+/** Le solde de course d’abord, puis l’écart au hasard de l’examen, puis le moins d’appels. */
 export function pickChampion(runners: readonly RunnerLive[]): RunnerLive | null {
   if (runners.length === 0) return null
   return [...runners].sort(
     (a, b) =>
       b.cents - a.cents ||
-      (b.examCents ?? -1) - (a.examCents ?? -1) ||
+      compareExam(a, b) ||
       a.calls - b.calls ||
       a.mind.id.localeCompare(b.mind.id, "fr", { numeric: true })
   )[0]
@@ -78,6 +111,8 @@ export function championRecord(input: {
     calls: runner.calls,
     raceFrom: input.raceFrom,
     raceTo: input.raceTo,
+    depart: runner.since || null,
+    raceTurns: runner.turns,
     skills: runner.mind.skills.map((skill) => ({ ...skill, versions: skill.versions.map((version) => ({ ...version })) })),
     journal: input.journal.filter((entry) => entry.runner === runner.mind.id).slice(-JOURNAL_KEEP),
     savedAt: input.savedAt,
@@ -86,9 +121,26 @@ export function championRecord(input: {
 
 const ORIGINS: SkillOrigin[] = ["maison", "ia", "variation"]
 
-/** Un jour AAAA-MM-JJ, ou rien. Une date illisible écarterait la version à tort. */
+/**
+ * Un vrai jour AAAA-MM-JJ du calendrier, ou rien. Le motif seul laisserait passer « 2025-13-40 »,
+ * qui fait ensuite jeter le formatage des dates à l’écran. Une date illisible devient donc `null`.
+ */
 function isoDay(value: unknown): string | null {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null
+  if (typeof value !== "string") return null
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?!\d)/.exec(value)
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (month < 1 || month > 12 || day < 1) return null
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]
+  return day <= daysInMonth ? value.slice(0, 10) : null
+}
+
+/** `savedAt` garde son heure quand son jour est un vrai jour ; sinon il vaut vide, comme absent. */
+function savedAtDay(value: unknown): string {
+  return typeof value === "string" && isoDay(value) ? value : ""
 }
 
 function parseVersion(raw: unknown): SkillVersion | null {
@@ -106,7 +158,7 @@ function parseVersion(raw: unknown): SkillVersion | null {
     ...params,
     version,
     parent,
-    cutoff: typeof record.cutoff === "string" ? record.cutoff.slice(0, 10) : "",
+    cutoff: isoDay(record.cutoff) ?? "",
     ...(examTo ? { examTo } : {}),
     origin,
     phrase: typeof record.phrase === "string" ? record.phrase.slice(0, 280) : "",
@@ -127,6 +179,27 @@ function parseSkill(raw: unknown): Skill | null {
   }
 }
 
+const JOURNAL_KINDS: JournalKind[] = ["ia", "brave", "skill", "refus", "erreur"]
+
+/** Une ligne de journal relue, ou rien : un journal mal formé refuse le champion entier. */
+function parseJournalEntry(raw: unknown): JournalEntry | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
+  const record = raw as Record<string, unknown>
+  if (typeof record.runner !== "string" || !record.runner) return null
+  if (!JOURNAL_KINDS.includes(record.kind as JournalKind)) return null
+  if (typeof record.cutoff !== "string") return null
+  if (typeof record.detail !== "string") return null
+  if (record.turn !== null && !Number.isInteger(record.turn)) return null
+  return {
+    at: typeof record.at === "string" ? record.at : "",
+    runner: record.runner,
+    kind: record.kind as JournalKind,
+    cutoff: record.cutoff,
+    turn: record.turn as number | null,
+    detail: record.detail,
+  }
+}
+
 /** Relit un champion venu de Neon ou du navigateur. Un champ invalide l’écarte. */
 export function parseChampion(raw: unknown): ChampionRecord | null {
   if (!raw || typeof raw !== "object") return null
@@ -139,6 +212,10 @@ export function parseChampion(raw: unknown): ChampionRecord | null {
   if (skills.length === 0 || skills.some((skill) => skill == null)) return null
   const examCents = record.examCents == null ? null : Number(record.examCents)
   const examTurns = Number(record.examTurns)
+  const raceTurns = Number(record.raceTurns)
+  if (record.journal != null && !Array.isArray(record.journal)) return null
+  const journal = (record.journal ?? []).map(parseJournalEntry)
+  if (journal.some((entry) => entry == null)) return null
   const id = record.id
   return {
     ...(typeof id === "number" && Number.isInteger(id) && id > 0 ? { id } : {}),
@@ -150,11 +227,13 @@ export function parseChampion(raw: unknown): ChampionRecord | null {
     examTo: isoDay(record.examTo),
     examTurns: record.examTurns != null && Number.isInteger(examTurns) && examTurns >= 0 ? examTurns : null,
     calls: Number.isFinite(Number(record.calls)) ? Number(record.calls) : 0,
-    raceFrom: typeof record.raceFrom === "string" ? record.raceFrom : null,
-    raceTo: typeof record.raceTo === "string" ? record.raceTo : null,
+    raceFrom: isoDay(record.raceFrom),
+    raceTo: isoDay(record.raceTo),
+    depart: isoDay(record.depart),
+    raceTurns: record.raceTurns != null && Number.isInteger(raceTurns) && raceTurns >= 0 ? raceTurns : null,
     skills: skills as Skill[],
-    journal: Array.isArray(record.journal) ? (record.journal as JournalEntry[]).slice(-JOURNAL_KEEP) : [],
-    savedAt: typeof record.savedAt === "string" ? record.savedAt : "",
+    journal: (journal as JournalEntry[]).slice(-JOURNAL_KEEP),
+    savedAt: savedAtDay(record.savedAt),
   }
 }
 
@@ -176,6 +255,17 @@ export function childrenOf(champion: ChampionRecord, count: number, hiddenDate: 
 /** Versions du champion écrites, ou gardées par un examen, le jour du premier tirage caché ou après. */
 export function setAsideCount(champion: ChampionRecord, hiddenDate: string) {
   return auditCutoffs(champion.skills, hiddenDate).length
+}
+
+/**
+ * Tours qui font le repère du hasard d’un champion écrit : ses tours à lui quand ils sont écrits,
+ * sinon les tirages de sa plage de course (champions anciens).
+ */
+export function championRaceTurns(
+  champion: Pick<ChampionRecord, "raceTurns" | "raceFrom" | "raceTo">,
+  points: readonly { date: string }[]
+) {
+  return champion.raceTurns ?? drawsInRange(points, champion.raceFrom, champion.raceTo)
 }
 
 /** Tirages de la liste dont la date tombe dans la plage `from`–`to`, bornes comprises. Plage ouverte : 0. */
@@ -250,7 +340,8 @@ export function replayLastGrid(
   const dated = target ? track.findIndex((point) => point.date.slice(0, 10) === target) : -1
   const at = dated >= 0 ? dated : track.length - 1
   if (at < 2) return null
-  const past = track.slice(0, at)
+  // Comme en course, le passé relu est coupé au départ du runner quand le champion le garde.
+  const past = champion.depart ? sincePast(track.slice(0, at), champion.depart) : track.slice(0, at)
   const draw = track[at]
   const mind: RunnerMind = {
     id: "champion",

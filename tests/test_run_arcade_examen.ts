@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  championRaceTurns,
   championRecord,
   childrenOf,
   drawsInRange,
@@ -621,6 +622,57 @@ test("the champion keeps its exam window, and each version its examTo, through e
   assert.equal(cleaned.examFrom, null)
   assert.equal(cleaned.examTurns, null)
   assert.equal("examTo" in cleaned.skills[0].versions[1], false)
+})
+
+test("unreadable race dates and version cutoffs are read back as empty, never as dates", () => {
+  const dirty = JSON.parse(
+    JSON.stringify(parentRecord({ raceFrom: "demain", raceTo: "2025-13-40", savedAt: "hier" }))
+  ) as Record<string, unknown>
+  dirty.depart = "demain"
+  ;((dirty.skills as { versions: Record<string, unknown>[] }[])[0].versions[0] as Record<string, unknown>).cutoff =
+    "2025-13-40"
+  const cleaned = parseChampion(dirty)
+  assert.ok(cleaned)
+  assert.equal(cleaned.raceFrom, null)
+  assert.equal(cleaned.raceTo, null)
+  assert.equal(cleaned.depart, null)
+  assert.equal(cleaned.savedAt, "")
+  assert.equal(cleaned.skills[0].versions[0].cutoff, "")
+
+  const tomorrow = parseChampion(JSON.parse(JSON.stringify(parentRecord({ raceTo: "demain" }))))
+  assert.equal(tomorrow?.raceTo, null)
+  const impossible = parseChampion(JSON.parse(JSON.stringify(parentRecord({ raceTo: "2025-13-40" }))))
+  assert.equal(impossible?.raceTo, null)
+})
+
+test("a malformed journal refuses the champion at reading, instead of entering the Neon queue", () => {
+  const base = JSON.parse(JSON.stringify(parentRecord())) as Record<string, unknown>
+  assert.equal(parseChampion({ ...base, journal: ["pas un objet", 42] }), null)
+  assert.equal(parseChampion({ ...base, journal: [{ runner: "r1", kind: "ia", cutoff: "", detail: "x" }] }), null)
+  assert.equal(
+    parseChampion({ ...base, journal: [{ runner: "r1", kind: "inconnu", cutoff: "", turn: 1, detail: "x" }] }),
+    null
+  )
+  assert.equal(parseChampion({ ...base, journal: "pas une liste" }), null)
+  const entry = { at: "2026-10-30T09:00:00.000Z", runner: "r1", kind: "ia", cutoff: "", turn: null, detail: "lu" }
+  const kept = parseChampion({ ...base, journal: [entry] })
+  assert.deepEqual(kept?.journal, [entry])
+})
+
+test("the chance mark of a written champion uses its own turns, on both sides of the lab", () => {
+  const rows = series(40)
+  const track = buildTrack(rows)
+  // Course de 25 tirages (15 → 39), champion arrêté après 12 tours : le repère est celui de 12 tours.
+  const stopped = parentRecord({ raceFrom: track[15].date, raceTo: track[39].date, raceTurns: 12 })
+  assert.equal(drawsInRange(track, stopped.raceFrom, stopped.raceTo), 25)
+  assert.equal(championRaceTurns(stopped, track), 12)
+  assert.equal(balanceWithChance(stopped.cents, championRaceTurns(stopped, track)), "43,50 € (hasard 40,00 € ± 6)")
+  // Champion ancien, sans `raceTurns` : repli sur les tirages de la plage.
+  const legacy = parentRecord({ raceFrom: track[15].date, raceTo: track[39].date })
+  assert.equal(championRaceTurns(legacy, track), 25)
+  const reread = parseChampion(JSON.parse(JSON.stringify(stopped)))
+  assert.equal(reread?.raceTurns, 12)
+  assert.equal(championRaceTurns(reread as ChampionRecord, track), 12)
 })
 
 test("the course shares draws with the range where its parent was chosen", async () => {

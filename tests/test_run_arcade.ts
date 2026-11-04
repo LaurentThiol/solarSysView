@@ -350,6 +350,17 @@ test("the champion is the race balance, then the exam, then the fewest calls", (
   assert.equal(pickChampion(runners)?.mind.id, "r4")
 })
 
+test("the champion tie-break compares the gap to chance, not the raw exam balance", () => {
+  const minds = createMinds(3)
+  const runners = minds.map(newRunner)
+  // 46,00 € en 3 tours est sous le hasard de 3 tours (47,50 €) ; 43,00 € en 25 tours est loin au-dessus du sien (29,17 €).
+  runners[0] = { ...runners[0], cents: 5200, examCents: 4600, examTurns: 3, calls: 0 }
+  runners[1] = { ...runners[1], cents: 5200, examCents: 4300, examTurns: 25, calls: 9 }
+  runners[2] = { ...runners[2], cents: 5200, examCents: null, examTurns: 0, calls: 0 }
+  assert.equal(pickChampion(runners)?.mind.id, "r2")
+  assert.equal(pickChampion([runners[2], runners[0]])?.mind.id, "r1", "un examen vide reste derrière un examen joué")
+})
+
 test("a generation is a launch: children inherit the versions written before the hidden draw", () => {
   const base = newSkill("r2-base", "Base", glide, { cutoff: "", origin: "maison", examCents: null })
   const early = addVersion(base, { ...glide, window: 5 }, { cutoff: "2026-05-01", origin: "ia", examCents: 4800 })
