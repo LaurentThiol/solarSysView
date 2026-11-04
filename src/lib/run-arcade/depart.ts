@@ -40,6 +40,53 @@ export function departDates(free: readonly RankPoint[], size = EXAM_WINDOW): str
   return dates
 }
 
+export type CalendarRead = {
+  /** Tirages de l’archive gratuite depuis le départ, jusqu’au premier tirage de course. */
+  read: number
+  /** Tirages de cette archive écartés avant le départ. */
+  dropped: number
+  /** Jours entre la date de départ et le premier tirage de course. */
+  days: number
+}
+
+/** Jours de calendrier entre deux jours. Une date illisible vaut zéro. */
+function calendarDays(from: string, to: string) {
+  if (!from || !to) return 0
+  const start = Date.parse(`${from.slice(0, 10)}T12:00:00Z`)
+  const end = Date.parse(`${to.slice(0, 10)}T12:00:00Z`)
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0
+  return Math.round((end - start) / 86_400_000)
+}
+
+/**
+ * Tirages lus, tirages écartés et jours, pour la phrase à côté de la date.
+ * `free` s’arrête avant la course. `since` vide : tout le gratuit est lu, rien n’est écarté.
+ * `raceOn` est la date du premier tirage de course. Le départ ne la déplace pas.
+ */
+export function calendarRead(free: readonly { date: string }[], since: string, raceOn: string): CalendarRead {
+  const start = since.slice(0, 10)
+  const read = start ? free.filter((point) => point.date.slice(0, 10) >= start).length : free.length
+  const dropped = start ? free.length - read : 0
+  const from = start || free[0]?.date.slice(0, 10) || ""
+  return { read, dropped, days: calendarDays(from, raceOn) }
+}
+
+function compte(count: number, one: string, many: string) {
+  return `${count} ${count > 1 ? many : one}`
+}
+
+/** Phrase à côté de la date. En aléatoire, elle le dit et ne compte pas un seul départ. */
+export function calendarSentence(counts: CalendarRead, raceLabel: string, random: boolean) {
+  const race = `Premier tirage de course : ${raceLabel}.`
+  if (random) {
+    return `Départ aléatoire : une date par runner. ${race} Le schéma lit l’archive gratuite entière, sans les tirages de course.`
+  }
+  const lus = compte(counts.read, "tirage lu depuis le départ", "tirages lus depuis le départ")
+  const ecartes = compte(counts.dropped, "tirage écarté avant", "tirages écartés avant")
+  const jours = compte(counts.days, "jour entre le départ et le début de course", "jours entre le départ et le début de course")
+  return `${race} ${lus}. ${ecartes}. ${jours}.`
+}
+
 /**
  * Cale un jour sur un vrai tirage.
  * Un jour vide prend le tirage suivant.

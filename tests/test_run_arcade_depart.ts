@@ -5,6 +5,8 @@ import { championRecord, parseChampion, replayLastGrid } from "../src/lib/run-ar
 import type { RankPoint } from "../src/lib/run-arcade/curves.ts"
 import {
   assignDeparts,
+  calendarRead,
+  calendarSentence,
   departDates,
   departSentence,
   droppedBefore,
@@ -75,6 +77,44 @@ test("a day without a draw snaps to the next draw, and an exam date snaps back",
   assert.ok(free[60].date > free[last].date)
   assert.equal(droppedBefore(free, free[0].date), 0)
   assert.equal(droppedBefore(free, free[last].date), last)
+})
+
+test("calendarRead counts draws read from the start, draws dropped before it, and days until the race", () => {
+  const free = series(76)
+  const last = examStart(free.length) - 2
+  const raceOn = "2026-06-02"
+  const day = 86_400_000
+  const daysUntil = (from: string) =>
+    Math.round((Date.parse(`${raceOn}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / day)
+  const open = calendarRead(free, free[0].date, raceOn)
+  assert.equal(open.read, free.length)
+  assert.equal(open.dropped, 0)
+  assert.equal(open.days, daysUntil(free[0].date))
+  const cut = calendarRead(free, free[10].date, raceOn)
+  assert.equal(cut.read, free.length - 10)
+  assert.equal(cut.dropped, 10)
+  assert.equal(cut.read + cut.dropped, free.length)
+  assert.equal(cut.days, daysUntil(free[10].date))
+  assert.ok(cut.days < open.days)
+  const late = calendarRead(free, free[last].date, raceOn)
+  assert.equal(late.dropped, droppedBefore(free, free[last].date))
+  assert.equal(late.read, free.length - late.dropped)
+  assert.equal(calendarRead(free, "", raceOn).read, free.length)
+  assert.equal(calendarRead(free, "", raceOn).dropped, 0)
+  assert.equal(calendarRead([], "2025-01-03", "").days, 0)
+  assert.equal(
+    calendarSentence(cut, "mardi 2 juin 2026", false),
+    `Premier tirage de course : mardi 2 juin 2026. ${cut.read} tirages lus depuis le départ. ${cut.dropped} tirages écartés avant. ${cut.days} jours entre le départ et le début de course.`
+  )
+  assert.equal(
+    calendarSentence({ read: 1, dropped: 1, days: 1 }, "lundi 6 janvier 2025", false),
+    "Premier tirage de course : lundi 6 janvier 2025. 1 tirage lu depuis le départ. 1 tirage écarté avant. 1 jour entre le départ et le début de course."
+  )
+  const random = calendarSentence(open, "mardi 2 juin 2026", true)
+  assert.match(random, /Départ aléatoire : une date par runner/)
+  assert.match(random, /Premier tirage de course : mardi 2 juin 2026/)
+  assert.match(random, /archive gratuite entière, sans les tirages de course/)
+  assert.equal(random.includes("tirages lus"), false)
 })
 
 test("the call shows at most the twelve latest draws of the allowed past", () => {

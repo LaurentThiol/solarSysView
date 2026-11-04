@@ -31,10 +31,13 @@ import {
 import { archiveNotice, lastDrawLine, launchReady, trackYears } from "@/lib/run-arcade/archive"
 import { raceChrome } from "@/lib/run-arcade/chrome"
 import {
+  calendarRead,
+  calendarSentence,
   departBounds,
   droppedBefore,
   maxRaceDraws,
   RACE_DRAWS_MIN,
+  raceStartIndex,
   sincePast,
   snapDepart,
   type DepartMode,
@@ -993,8 +996,20 @@ function SkillSketch({
   drawn: ThoughtDraw | null
 }) {
   const key: CurveKey = params.curve === "*" ? displayCurve : params.curve
+  const pastFirst = past[0]?.date ?? ""
+  const pastLast = past[past.length - 1]?.date ?? ""
   if (past.length < 2) {
-    return <p className="text-xs text-muted-foreground">Pas assez de tirages pour montrer la fenêtre.</p>
+    return (
+      <p
+        className="text-xs text-muted-foreground"
+        data-testid="run-arcade-skill-sketch"
+        data-past-count={past.length}
+        data-past-first={pastFirst}
+        data-past-last={pastLast}
+      >
+        Pas assez de tirages pour montrer la fenêtre.
+      </p>
+    )
   }
   const rows = past.map(curveValues)
   const reuse = drawn && drawn.focus === key && drawn.trail.length === past.length ? drawn.trail : null
@@ -1033,6 +1048,9 @@ function SkillSketch({
         aria-label={`Fenêtre sur ${curveLabel(key)}`}
         data-testid="run-arcade-skill-sketch"
         data-curve={key}
+        data-past-count={past.length}
+        data-past-first={pastFirst}
+        data-past-last={pastLast}
         data-window-start={bounds.x1}
         data-window-end={bounds.x2}
         className="h-24 w-full rounded-lg border border-border bg-canvas"
@@ -1488,6 +1506,10 @@ export function RunArcadeLab() {
   const race = snapshot.race
   const track = snapshot.track
   const parent = parentChampion({ imported, finished: snapshot.champion, running: snapshot.parent, stored })
+  const editedParent = useMemo(
+    () => (parent ? withSkillEdits(parent, skillEdits) : null),
+    [parent, skillEdits]
+  )
   const running = snapshot.phase === "avant" || snapshot.phase === "course"
   const leader = race ? leaderOf(race.runners) : null
   const reading = loading
@@ -1516,6 +1538,20 @@ export function RunArcadeLab() {
     : 0
   const bounds = useMemo(() => departBounds(series, raceDraws), [series, raceDraws])
   const shownDate = bounds.first ? (snapDepart(bounds.free, departDate || bounds.first) ?? bounds.first) : ""
+  const previewFields = useMemo(
+    () => settleFields(series, { count, draws: raceDraws, minutes, date: shownDate }, drafts),
+    [series, count, raceDraws, minutes, shownDate, drafts]
+  )
+  const calendar = useMemo(() => {
+    const trackNow = buildTrack(series)
+    const start = raceStartIndex(trackNow.length, previewFields.draws)
+    const free = trackNow.slice(0, start)
+    const first = trackNow[start] ?? null
+    const counts = calendarRead(free, departMode === "fixe" ? previewFields.date : "", first?.date ?? "")
+    const past =
+      departMode === "aleatoire" ? free.map((point) => ({ ...point })) : sincePast(free, previewFields.date)
+    return { first, counts, past }
+  }, [series, previewFields.draws, previewFields.date, departMode])
   const raceStart = race?.start
   const freeArchive = useMemo(
     () => (raceStart == null ? [] : track.slice(0, raceStart)),
@@ -1551,7 +1587,6 @@ export function RunArcadeLab() {
     }
   }, [focus, focusCurve, race, track])
 
-  const parentPast = useMemo(() => buildTrack(series), [series])
   const runnerPast = useMemo(() => {
     if (!focus || !race || track.length === 0) return [] as RankPoint[]
     const shown = race.revealed ? race.cursor - 1 : race.cursor
@@ -1588,7 +1623,7 @@ export function RunArcadeLab() {
       draws: values.draws,
       minutes: values.minutes,
       series,
-      champion: parent ? withSkillEdits(parent, skillEdits) : null,
+      champion: editedParent,
       depart,
     })
   }
@@ -1608,17 +1643,17 @@ export function RunArcadeLab() {
   }
 
   const proposal = useMemo(
-    () => (parent && series.length >= 2 ? proposeNextDraw(parent, series, nextCurve) : null),
-    [parent, series, nextCurve]
+    () => (editedParent && series.length >= 2 ? proposeNextDraw(editedParent, series, nextCurve) : null),
+    [editedParent, series, nextCurve]
   )
   const forecastText = useMemo(
-    () => forecastLine(scoreForecasts(parent ? [parent, ...history] : history, series)),
-    [parent, history, series]
+    () => forecastLine(scoreForecasts(editedParent ? [editedParent, ...history] : history, series)),
+    [editedParent, history, series]
   )
   const showResult = snapshot.phase === "idle" || snapshot.phase === "fin"
   const replay = useMemo(
-    () => (showResult && parent ? replayLastGrid(parent, series) : null),
-    [showResult, parent, series]
+    () => (showResult && editedParent ? replayLastGrid(editedParent, series) : null),
+    [showResult, editedParent, series]
   )
   const paidTicket =
     snapshot.phase === "fin" && replay && race && parent
@@ -1732,6 +1767,19 @@ export function RunArcadeLab() {
             />
           </LabelHelp>
         ) : null}
+        {calendar.first ? (
+          <p
+            className="mb-2 max-w-md self-end text-xs leading-4 text-muted-foreground"
+            data-testid="run-arcade-calendar"
+            data-mode={departMode}
+            data-race-date={calendar.first.date}
+            data-read={calendar.counts.read}
+            data-dropped={calendar.counts.dropped}
+            data-days={calendar.counts.days}
+          >
+            {calendarSentence(calendar.counts, formatDrawDate(calendar.first.date), departMode === "aleatoire")}
+          </p>
+        ) : null}
         <HelpWrap help={RUN_ARCADE_HELP.rayons}>
           <Button
             type="button"
@@ -1770,6 +1818,7 @@ export function RunArcadeLab() {
             variant="outline"
             disabled={!parent}
             onClick={() => {
+              // Le fichier reste le champion déjà enregistré. La version écrite à la main n’y entre pas.
               if (parent) exportChampion(parent)
             }}
           >
@@ -1899,7 +1948,7 @@ export function RunArcadeLab() {
         <SkillPanel
           key={parentEditKey(parent)}
           skills={skillEdits[parentEditKey(parent)] ?? parent.skills}
-          past={parentPast}
+          past={calendar.past}
           drawn={proposal?.draw ?? null}
           displayCurve={nextCurve}
           hiddenDate={null}
@@ -2007,8 +2056,9 @@ export function RunArcadeLab() {
             ) : null}
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            Lu sur toute l’archive révélée, jusqu’au {formatDrawDate(proposal.draw.seenDate)}. Le tirage suivant n’est
-            pas dans la base. Lancer reprend ce champion pour la génération suivante.
+            Lu sur toute l’archive révélée, jusqu’au {formatDrawDate(proposal.draw.seenDate)}, version écrite à la main
+            comprise. Le tirage suivant n’est pas dans la base. Neon n’est pas réécrit. Lancer reprend ce champion pour
+            la génération suivante.
           </p>
         </section>
       ) : null}

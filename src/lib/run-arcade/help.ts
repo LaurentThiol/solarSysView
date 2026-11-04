@@ -45,11 +45,15 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
         label: "Examen",
         text: "Au lancement, l’examen rejoue les 25 derniers tirages gratuits, juste avant la course : les mêmes pour tous. Pendant la course, il est rejoué quand une proposition arrive, sur les 25 derniers tirages lisibles de ce moment : la fenêtre avance d’un tirage par tour. Tant qu’un runner n’a pas été réexaminé, l’écran dit « au lancement ». Le tirage suivant du champion lit toute l’archive révélée.",
       },
+      {
+        label: "Calendrier",
+        text: "La phrase à côté de la date nomme le premier tirage de course et sa date, les tirages lus depuis ce départ, ceux écartés avant, et les jours jusqu’au début de course. Changer la date ne décale pas la course : elle reste les derniers tirages de la piste. En départ aléatoire, la phrase le dit. Le schéma lit alors l’archive gratuite entière, sans les tirages de course.",
+      },
     ],
   },
   minutes: {
     title: "Minutes d’avant-course",
-    body: "Y minutes, de 0 à 120, par demi-minute, 10 au départ. Ce temps est l’avant-course : les runners lisent les années n−1 et n, appellent l’IA locale et Brave. Une skill qui passe l’examen s’applique tout de suite, et le dessin se met à jour.",
+    body: "Y minutes, de 0 à 120, par demi-minute, 10 au départ. Ce temps est l’horloge de l’avant-course : les runners lisent les années n−1 et n, appellent l’IA locale et Brave. Ces minutes ne comptent pas les jours entre le départ et la course. Une skill qui passe l’examen s’applique tout de suite, et le dessin se met à jour.",
     items: [
       {
         label: "Zéro",
@@ -101,7 +105,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   exporter: {
     title: "Exporter le champion",
-    body: "Télécharge le champion en place : celui de la course finie, celui cliqué dans la liste, le fichier importé, ou le dernier déjà écrit. Le JSON porte ses skills, chaque version, et son journal. Le nom du fichier commence par runarcade-generation.",
+    body: "Télécharge le champion en place : celui de la course finie, celui cliqué dans la liste, le fichier importé, ou le dernier déjà écrit. Une version écrite à la main, pas encore courue, n’est pas dans ce fichier. Le JSON porte ses skills, chaque version, et son journal. Le nom du fichier commence par runarcade-generation.",
   },
   importer: {
     title: "Importer le champion",
@@ -160,7 +164,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   suivant: {
     title: "Tirage suivant",
-    body: "Le champion propose la grille d’après, lue sur toute l’archive révélée des années n−1 et n. Ce tirage n’est pas dans la base. La date lue est celle du dernier tirage révélé. Lancer reprend ce champion pour la génération suivante.",
+    body: "Le champion propose la grille d’après, lue sur toute l’archive révélée des années n−1 et n, avec la version écrite à la main quand il y en a une. Ce tirage n’est pas dans la base. La date lue est celle du dernier tirage révélé. Neon n’est pas réécrit. Lancer reprend ce champion pour la génération suivante.",
     items: [
       {
         label: "Courbe",
@@ -178,7 +182,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Grille du champion",
-        text: "Relue avec les skills enregistrées, sur le passé d’avant ce tirage. La ligne compte les trouvés.",
+        text: "Relue avec les skills du parent, version écrite à la main comprise, sur le passé d’avant ce tirage. La ligne compte les trouvés. L’export garde l’ancienne liste.",
       },
       {
         label: "Anneau",
@@ -355,7 +359,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Fenêtre",
-        text: "Le panneau montre la fenêtre sur la courbe : les derniers points, la bande, et la pointe que le geste poserait sur ce passé. Une skill sur toutes les courbes se dessine sur la courbe affichée.",
+        text: "Le panneau montre la fenêtre sur la courbe : les derniers points, la bande, et la pointe que le geste poserait sur ce passé. Avant Lancer, ce passé est l’archive gratuite depuis la date affichée, sans les tirages de course. En course, le schéma du coureur reste les tirages révélés depuis son départ. En départ aléatoire, il lit l’archive gratuite entière, sans la course. Une skill sur toutes les courbes se dessine sur la courbe affichée.",
       },
       {
         label: "Champs",
@@ -363,7 +367,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Version écrite",
-        text: "Une version écrite à la main part avec le prochain Lancer et ne touche pas les versions déjà dans Neon. Les versions précédentes restent. R1 les garde. Les autres peuvent encore varier à la maison.",
+        text: "Une version écrite à la main part avec le prochain Lancer et ne touche pas les versions déjà dans Neon. Le tirage suivant, les trois grilles et le pronostic la lisent déjà. L’export du champion déjà enregistré garde l’ancienne liste. La version n’entre dans un champion qu’à la fin de la course. Les versions précédentes restent. R1 les garde. Les autres peuvent encore varier à la maison.",
       },
     ],
   },

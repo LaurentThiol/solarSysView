@@ -1,0 +1,9 @@
+{
+  "slug": "calendrier-schema-version-57be",
+  "happened_on": "2026-11-04",
+  "area": "runArcade",
+  "title": "Calendrier, schéma et version écrite",
+  "body": "À côté de la date de départ, une phrase nomme le premier tirage de course et sa date, les tirages lus depuis ce départ, ceux écartés avant, et les jours jusqu’au début de course. Les minutes restent l’horloge, et la course ne se décale pas. Avant Lancer, le schéma des skills s’arrête à l’archive gratuite, depuis la date affichée. En départ aléatoire, la phrase le dit et le schéma lit cette archive entière, sans les tirages de course. Le schéma d’un coureur en course ne change pas. Le tirage suivant, les trois grilles et le pronostic suivent la version écrite à la main. Neon n’est pas réécrit, et l’export du champion déjà enregistré garde l’ancienne liste.",
+  "pr_number": null,
+  "pr_url": null
+}
