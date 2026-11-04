@@ -347,11 +347,23 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Origine",
-        text: "Trois mots s’affichent. maison : le geste de départ. variation : un essai de la variation maison, au lancement, gardé parce que l’examen est monté. ia : proposée par le modèle local et gardée parce que l’examen est monté.",
+        text: "Quatre mots s’affichent. maison : le geste de départ. variation : un essai de la variation maison, au lancement, gardé parce que l’examen est monté. ia : proposée par le modèle local et gardée parce que l’examen est monté. main : écrite à la main, avant Lancer.",
       },
       {
         label: "Examen de la version",
         text: "Solde d’examen au moment où cette version a été gardée, et « jusqu’au » : le dernier tirage que cet examen a rejoué. Si ce tirage est le tirage caché de la génération suivante, ou un tirage d’après, la version reste de côté : l’examen l’avait vu. La coupure ne change pas : la version doit rester visible à son propre examen.",
+      },
+      {
+        label: "Fenêtre",
+        text: "Le panneau montre la fenêtre sur la courbe : les derniers points, la bande, et la pointe que le geste poserait sur ce passé. Une skill sur toutes les courbes se dessine sur la courbe affichée.",
+      },
+      {
+        label: "Champs",
+        text: "Les champs n’apparaissent que pour le geste. La fenêtre va de 2 à 60 tirages. Les jours, de 7 à 365, n’apparaissent que pour la moyenne et la figure. Le soir n’a pas de champ libre : le décalage reste quatre jours.",
+      },
+      {
+        label: "Version écrite",
+        text: "Une version écrite à la main part avec le prochain Lancer et ne touche pas les versions déjà dans Neon. Les versions précédentes restent. R1 les garde. Les autres peuvent encore varier à la maison.",
       },
     ],
   },

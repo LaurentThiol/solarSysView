@@ -69,14 +69,53 @@ import {
   raceDurationMs,
   servedPerSlice,
 } from "@/lib/run-arcade/clock"
-import { CURVE_KEYS, curveLabel, curveValues, NUMBER_KEYS, STAR_KEYS, type CurveKey, type RankPoint } from "@/lib/run-arcade/curves"
+import {
+  buildTrack,
+  CURVE_KEYS,
+  curveLabel,
+  curveValues,
+  NUMBER_KEYS,
+  STAR_KEYS,
+  type CurveKey,
+  type RankPoint,
+} from "@/lib/run-arcade/curves"
 import { RUNNER_MIN, settleFields, type FieldDrafts } from "@/lib/run-arcade/fields"
+import {
+  ARCTAN_TURNS,
+  FORMES,
+  POLYGON_SIDES,
+  WAVE_PERIODS,
+  usesFigureN,
+  type Forme,
+} from "@/lib/run-arcade/figure"
+import { formatRatio, GOLDEN_RATIOS } from "@/lib/run-arcade/golden"
 import { fonctionnelBoard, type FonctionnelCell } from "@/lib/run-arcade/fonctionnel"
 import { RUN_ARCADE_HELP } from "@/lib/run-arcade/help"
 import { layerPoints } from "@/lib/run-arcade/layers"
 import { championKey, lastKnownChampion, parentChampion } from "@/lib/run-arcade/lineage"
 import { createSession, MIN_SLICE_MS, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
-import { currentVersion, targetLabel } from "@/lib/run-arcade/skills"
+import {
+  DAYS_MAX,
+  DAYS_MIN,
+  GESTURES,
+  LOGISTIC_R,
+  SPANS,
+  SUITE_SPANS,
+  WINDOW_MAX,
+  WINDOW_MIN,
+  activeVersion,
+  addVersion,
+  boundSkillDraft,
+  currentVersion,
+  describeSkill,
+  gesturePhrase,
+  targetLabel,
+  type Skill,
+  type SkillDraft,
+  type SkillParams,
+  type SkillVersion,
+  type SpanKind,
+} from "@/lib/run-arcade/skills"
 import {
   activityLines,
   attemptLine,
@@ -103,6 +142,7 @@ import {
   RUNNER_MAX,
   TICKET_CENTS,
   think,
+  tipFor,
   type Guess,
   type Observation,
   type RunnerLive,
@@ -858,6 +898,494 @@ function ChampionArchive({
   )
 }
 
+const SKILL_SELECT =
+  "h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+
+const SPAN_LABEL: Record<SpanKind, string> = {
+  bande: "de la bande",
+  lignes: "entre les lignes",
+  pas: "du dernier pas",
+}
+
+const FORME_LABEL: Record<Forme, string> = {
+  triangle: "triangle",
+  cercle: "cercle",
+  polygone: "polygone",
+  pythagore: "hypoténuse",
+  sin: "sinus",
+  tan: "tangente",
+  arcsin: "arcsinus",
+  arccos: "arccosinus",
+  arctan: "arc tangente",
+}
+
+function parentEditKey(parent: ChampionRecord) {
+  return `${parent.id ?? "local"}|${parent.generation}|${parent.runner}|${parent.savedAt}`
+}
+
+/** Copie les skills écrites à la main. Le champion déjà dans Neon n’est pas modifié. */
+function withSkillEdits(parent: ChampionRecord, edits: Readonly<Record<string, Skill[]>>): ChampionRecord {
+  const skills = edits[parentEditKey(parent)]
+  if (!skills) return parent
+  return {
+    ...parent,
+    skills: skills.map((skill) => ({
+      ...skill,
+      versions: skill.versions.map((version) => ({ ...version })),
+    })),
+  }
+}
+
+function shiftIso(iso: string, days: number) {
+  const date = new Date(`${iso.slice(0, 10)}T12:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+/** Même fenêtre que le geste : les derniers tirages, ou les jours demandés. */
+function sketchWindow(params: SkillParams, past: readonly { date: string }[]) {
+  const last = past.length - 1
+  if (last < 0) return { x1: 0, x2: 0 }
+  if (params.days) {
+    const from = shiftIso(past[last].date, -params.days)
+    for (let index = 0; index <= last; index += 1) {
+      if (past[index].date > from) return { x1: index, x2: last }
+    }
+  }
+  const count = Math.min(past.length, Math.max(2, params.window))
+  return { x1: last - count + 1, x2: last }
+}
+
+function draftFrom(version: SkillParams): SkillDraft {
+  return {
+    curve: version.curve,
+    gesture: version.gesture,
+    window: String(version.window),
+    days: version.days == null ? "" : String(version.days),
+    ratio: String(version.ratio),
+    span: version.span,
+    r: version.r == null ? "" : String(version.r),
+    forme: version.forme ?? "",
+    n: version.n == null ? "" : String(version.n),
+  }
+}
+
+function cranChoices(forme: Forme): readonly number[] {
+  if (!usesFigureN(forme)) return []
+  if (forme === "polygone") return POLYGON_SIDES
+  if (forme === "arctan") return ARCTAN_TURNS
+  return WAVE_PERIODS
+}
+
+/**
+ * Derniers points de la courbe, bande de la fenêtre, pointe du geste.
+ * Le trait reprend le dessin déjà calculé quand la courbe est la même. Sinon les points viennent du passé déjà chargé. Pas d’appel à `think`.
+ */
+function SkillSketch({
+  past,
+  params,
+  displayCurve,
+  drawn,
+}: {
+  past: readonly RankPoint[]
+  params: SkillParams
+  displayCurve: CurveKey
+  drawn: ThoughtDraw | null
+}) {
+  const key: CurveKey = params.curve === "*" ? displayCurve : params.curve
+  if (past.length < 2) {
+    return <p className="text-xs text-muted-foreground">Pas assez de tirages pour montrer la fenêtre.</p>
+  }
+  const rows = past.map(curveValues)
+  const reuse = drawn && drawn.focus === key && drawn.trail.length === past.length ? drawn.trail : null
+  const values = reuse ? reuse.map((point) => point.y) : rows.map((row) => row[key])
+  const bounds = sketchWindow(params, past)
+  const tip = tipFor(params, past, rows, key)
+  const from = Math.max(0, Math.min(bounds.x1, bounds.x2 - 35))
+  const xEnd = bounds.x2 + 1
+  const shown = values.slice(from, bounds.x2 + 1)
+  const ys = [...shown, tip].filter((value) => Number.isFinite(value))
+  if (ys.length === 0) {
+    return <p className="text-xs text-muted-foreground">La courbe ne se dessine pas.</p>
+  }
+  let lo = Math.min(...ys)
+  let hi = Math.max(...ys)
+  if (hi - lo < 1) {
+    lo -= 0.5
+    hi += 0.5
+  }
+  const pad = (hi - lo) * 0.08
+  lo -= pad
+  hi += pad
+  const plot = { l: 8, r: 312, t: 10, b: 84 }
+  const X = (x: number) => plot.l + ((x - from) / (xEnd - from || 1)) * (plot.r - plot.l)
+  const Y = (y: number) => plot.b - ((y - lo) / (hi - lo || 1)) * (plot.b - plot.t)
+  const points = shown.map((y, index) => `${X(from + index)},${Y(y)}`).join(" ")
+  const bandX = X(bounds.x1)
+  const bandW = Math.max(4, X(bounds.x2) - bandX)
+  const lastY = values[bounds.x2]
+  const scale = params.days ? `${params.days} jours` : `${params.window} tirages`
+  return (
+    <div>
+      <svg
+        viewBox="0 0 320 96"
+        role="img"
+        aria-label={`Fenêtre sur ${curveLabel(key)}`}
+        data-testid="run-arcade-skill-sketch"
+        data-curve={key}
+        data-window-start={bounds.x1}
+        data-window-end={bounds.x2}
+        className="h-24 w-full rounded-lg border border-border bg-canvas"
+      >
+        <rect x={bandX} y={plot.t} width={bandW} height={plot.b - plot.t} className="fill-chart-4/20 stroke-chart-4" strokeWidth="1">
+          <title>{`fenêtre ${bounds.x1 + 1}–${bounds.x2 + 1}`}</title>
+        </rect>
+        <polyline points={points} className="stroke-foreground" strokeWidth="1.6" fill="none" />
+        {Number.isFinite(lastY) && Number.isFinite(tip) ? (
+          <line x1={X(bounds.x2)} y1={Y(lastY)} x2={X(xEnd)} y2={Y(tip)} className="stroke-chart-4" strokeWidth="1.4" />
+        ) : null}
+        {Number.isFinite(tip) ? (
+          <circle cx={X(xEnd)} cy={Y(tip)} r="2.6" className="fill-chart-4">
+            <title>{`pointe ${tip}`}</title>
+          </circle>
+        ) : null}
+      </svg>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        {params.curve === "*" ? `Toutes les courbes, dessinées sur ${curveLabel(key)}.` : curveLabel(key)}
+        {" · "}
+        {scale}
+      </p>
+    </div>
+  )
+}
+
+function versionLine(version: SkillVersion, plays: boolean) {
+  return (
+    <>
+      v{version.version} · {version.origin} · coupure {version.cutoff ? formatShortDate(version.cutoff) : "aucune"}
+      {version.examCents != null ? ` · examen ${formatCents(version.examCents)}` : ""}
+      {version.examCents != null && version.examTo ? ` jusqu’au ${formatShortDate(version.examTo)}` : ""} · {version.phrase}
+      {plays ? " · joue" : ""}
+    </>
+  )
+}
+
+function SkillPanel({
+  skills,
+  past,
+  drawn,
+  displayCurve,
+  hiddenDate,
+  editable,
+  compact = false,
+  onWrite,
+}: {
+  skills: readonly Skill[]
+  past: readonly RankPoint[]
+  drawn: ThoughtDraw | null
+  displayCurve: CurveKey
+  hiddenDate: string | null
+  editable: boolean
+  compact?: boolean
+  onWrite?: (skillId: string, params: SkillParams) => void
+}) {
+  const roster = skills.map((item) => item.id).join("\0")
+  const [rosterSeen, setRosterSeen] = useState(roster)
+  const [picked, setPicked] = useState(skills[0]?.id ?? "")
+  if (roster !== rosterSeen) {
+    setRosterSeen(roster)
+    setPicked(skills[0]?.id ?? "")
+  }
+  const skill = skills.find((item) => item.id === picked) ?? skills[0] ?? null
+  const shown = skill ? (editable ? currentVersion(skill) : activeVersion(skill, hiddenDate)) : null
+  const token = skill && shown ? `${skill.id}:${shown.version}:${editable ? "edit" : "lu"}` : ""
+  const [seenToken, setSeenToken] = useState(token)
+  const [draft, setDraft] = useState<SkillDraft>(() => (shown ? draftFrom(shown) : {}))
+  if (token !== seenToken) {
+    setSeenToken(token)
+    setDraft(shown ? draftFrom(shown) : {})
+  }
+  const edited = editable ? boundSkillDraft(draft) : null
+  const view = edited ?? shown
+  const phrase = edited?.phrase ?? (shown ? describeSkill(shown) : "")
+  const forme = (view?.forme ?? "triangle") as Forme
+  const crans = view?.gesture === "figure" ? cranChoices(forme) : []
+  const spans = view?.gesture === "suite" ? SUITE_SPANS : SPANS
+
+  function setField(field: keyof SkillDraft, value: string) {
+    setDraft((current) => ({ ...current, [field]: value }))
+  }
+
+  function blurNumber(field: "window" | "days" | "n") {
+    const next = boundSkillDraft(draft)
+    setDraft((current) => {
+      if (field === "window") return { ...current, window: String(next.window) }
+      if (field === "days") return { ...current, days: next.days == null ? "" : String(next.days) }
+      return { ...current, n: next.n == null ? "" : String(next.n) }
+    })
+  }
+
+  function commit() {
+    if (!editable || !skill || !onWrite) return
+    onWrite(skill.id, boundSkillDraft(draft))
+  }
+
+  function hint(raw: unknown, value: number | null) {
+    if (!editable || value == null) return null
+    const text = String(raw ?? "").trim()
+    if (!text || text === String(value)) return null
+    return <span className="text-[10px] text-muted-foreground">ramené à {value}</span>
+  }
+
+  if (skills.length === 0) {
+    return <p className="text-xs text-muted-foreground">Aucune skill.</p>
+  }
+
+  return (
+    <section
+      className={cn("flex flex-col gap-2", !compact && "rounded-xl border bg-card p-3")}
+      data-testid="run-arcade-skill-panel"
+      data-readonly={editable ? "non" : "oui"}
+    >
+      <h3 className="text-xs font-medium text-muted-foreground">
+        <TitleHelp help={RUN_ARCADE_HELP.skills}>{editable ? "Skills du parent" : "Skills et versions"}</TitleHelp>
+      </h3>
+      <p className="text-[11px] text-muted-foreground">
+        {editable
+          ? "La phrase suit les champs. Écrire ajoute une version et garde les précédentes."
+          : "Lecture seule. La version qui joue est marquée."}
+      </p>
+      <div className={cn("gap-3", compact ? "flex flex-col" : "grid lg:grid-cols-[16rem_1fr]")}>
+        <ul className="flex flex-col gap-1" data-testid="run-arcade-skill-list">
+          {skills.map((item) => {
+            const line = editable ? currentVersion(item) : activeVersion(item, hiddenDate)
+            const on = item.id === skill?.id
+            return (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  aria-pressed={on}
+                  data-testid="run-arcade-skill-row"
+                  onClick={() => setPicked(item.id)}
+                  className={cn(
+                    "w-full rounded-md px-1.5 py-1 text-left text-xs",
+                    on ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <span className="font-medium">{item.name}</span>
+                  {line ? (
+                    <span>
+                      {" "}
+                      · {gesturePhrase(line.gesture)} · {targetLabel(line.curve)} · v{line.version}
+                    </span>
+                  ) : (
+                    <span> · ne joue pas</span>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+        {skill ? (
+          <div className="flex flex-col gap-2">
+            {view ? (
+              <>
+                <SkillSketch past={past} params={view} displayCurve={displayCurve} drawn={drawn} />
+                <p className="text-sm leading-5" data-testid="run-arcade-skill-phrase" aria-live="polite">
+                  {phrase}
+                </p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="flex w-36 flex-col gap-1 text-[11px] text-muted-foreground">
+                    <span>Courbe</span>
+                    <select
+                      aria-label="Courbe"
+                      className={SKILL_SELECT}
+                      disabled={!editable}
+                      value={view.curve}
+                      onChange={(event) => setField("curve", event.target.value)}
+                    >
+                      <option value="*">toutes les courbes</option>
+                      {CURVE_KEYS.map((key) => (
+                        <option key={key} value={key}>
+                          {curveLabel(key)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex w-40 flex-col gap-1 text-[11px] text-muted-foreground">
+                    <span>Geste</span>
+                    <select
+                      aria-label="Geste"
+                      className={SKILL_SELECT}
+                      disabled={!editable}
+                      value={view.gesture}
+                      onChange={(event) => setField("gesture", event.target.value)}
+                    >
+                      {GESTURES.map((gesture) => (
+                        <option key={gesture} value={gesture}>
+                          {gesturePhrase(gesture)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {view.gesture === "soir" ? (
+                    <p className="pb-2 text-xs text-muted-foreground" data-testid="run-arcade-skill-soir">
+                      Le décalage reste quatre jours.
+                    </p>
+                  ) : (
+                    <label className="flex w-28 flex-col gap-1 text-[11px] text-muted-foreground">
+                      <span>Fenêtre</span>
+                      <Input
+                        type="number"
+                        aria-label="Fenêtre"
+                        min={WINDOW_MIN}
+                        max={WINDOW_MAX}
+                        disabled={!editable}
+                        value={editable ? String(draft.window ?? "") : String(view.window)}
+                        onChange={(event) => setField("window", event.target.value)}
+                        onBlur={() => blurNumber("window")}
+                      />
+                      {hint(draft.window, edited?.window ?? null)}
+                    </label>
+                  )}
+                  {view.gesture === "moyenne" || view.gesture === "figure" ? (
+                    <label className="flex w-28 flex-col gap-1 text-[11px] text-muted-foreground">
+                      <span>Jours</span>
+                      <Input
+                        type="number"
+                        aria-label="Jours"
+                        min={DAYS_MIN}
+                        max={DAYS_MAX}
+                        placeholder="aucun"
+                        disabled={!editable}
+                        value={editable ? String(draft.days ?? "") : view.days == null ? "" : String(view.days)}
+                        onChange={(event) => setField("days", event.target.value)}
+                        onBlur={() => blurNumber("days")}
+                      />
+                      {hint(draft.days, edited?.days ?? null)}
+                    </label>
+                  ) : null}
+                  {view.gesture === "or" ? (
+                    <label className="flex w-28 flex-col gap-1 text-[11px] text-muted-foreground">
+                      <span>Ratio</span>
+                      <select
+                        aria-label="Ratio"
+                        className={SKILL_SELECT}
+                        disabled={!editable}
+                        value={String(view.ratio)}
+                        onChange={(event) => setField("ratio", event.target.value)}
+                      >
+                        {GOLDEN_RATIOS.map((ratio) => (
+                          <option key={ratio} value={String(ratio)}>
+                            {formatRatio(ratio)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  {view.gesture === "suite" ? (
+                    <label className="flex w-24 flex-col gap-1 text-[11px] text-muted-foreground">
+                      <span>R</span>
+                      <select
+                        aria-label="R"
+                        className={SKILL_SELECT}
+                        disabled={!editable}
+                        value={String(view.r ?? 2)}
+                        onChange={(event) => setField("r", event.target.value)}
+                      >
+                        {LOGISTIC_R.map((r) => (
+                          <option key={r} value={String(r)}>
+                            {formatRatio(r)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  {view.gesture === "or" || view.gesture === "suite" ? (
+                    <label className="flex w-40 flex-col gap-1 text-[11px] text-muted-foreground">
+                      <span>Étendue</span>
+                      <select
+                        aria-label="Étendue"
+                        className={SKILL_SELECT}
+                        disabled={!editable}
+                        value={view.span}
+                        onChange={(event) => setField("span", event.target.value)}
+                      >
+                        {spans.map((span) => (
+                          <option key={span} value={span}>
+                            {SPAN_LABEL[span]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  {view.gesture === "figure" ? (
+                    <label className="flex w-36 flex-col gap-1 text-[11px] text-muted-foreground">
+                      <span>Forme</span>
+                      <select
+                        aria-label="Forme"
+                        className={SKILL_SELECT}
+                        disabled={!editable}
+                        value={forme}
+                        onChange={(event) => setField("forme", event.target.value)}
+                      >
+                        {FORMES.map((item) => (
+                          <option key={item} value={item}>
+                            {FORME_LABEL[item]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  {crans.length > 0 ? (
+                    <label className="flex w-24 flex-col gap-1 text-[11px] text-muted-foreground">
+                      <span>Cran</span>
+                      <select
+                        aria-label="Cran"
+                        className={SKILL_SELECT}
+                        disabled={!editable}
+                        value={String(view.n ?? crans[0])}
+                        onChange={(event) => setField("n", event.target.value)}
+                      >
+                        {crans.map((n) => (
+                          <option key={n} value={String(n)}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                </div>
+                {editable ? (
+                  <div>
+                    <Button type="button" size="sm" data-testid="run-arcade-skill-write" onClick={commit}>
+                      Écrire cette version
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">Aucune version ne joue ce tirage.</p>
+            )}
+            <ul className="flex flex-col gap-1 text-xs text-muted-foreground" data-testid="run-arcade-skill-versions">
+              {skill.versions.map((version) => (
+                <li
+                  key={version.version}
+                  data-origin={version.origin}
+                  data-version={version.version}
+                  data-plays={!editable && shown?.version === version.version ? "oui" : "non"}
+                >
+                  {versionLine(version, !editable && shown?.version === version.version)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
 export function RunArcadeLab() {
   const { draws, source, loading } = useDraws("all")
   const series = useMemo(() => toRankPoints(draws), [draws])
@@ -891,6 +1419,7 @@ export function RunArcadeLab() {
   const [historyMore, setHistoryMore] = useState(false)
   const [pagingMore, setPagingMore] = useState(false)
   const hiddenKeys = useSyncExternalStore(subscribeHiddenChampions, hiddenChampionsSnapshot, hiddenChampionsServerSnapshot)
+  const [skillEdits, setSkillEdits] = useState<Record<string, Skill[]>>({})
   const [importError, setImportError] = useState<string | null>(null)
   const [importOutcome, setImportOutcome] = useState<{ record: ChampionRecord; outcome: ImportOutcome } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -1022,6 +1551,13 @@ export function RunArcadeLab() {
     }
   }, [focus, focusCurve, race, track])
 
+  const parentPast = useMemo(() => buildTrack(series), [series])
+  const runnerPast = useMemo(() => {
+    if (!focus || !race || track.length === 0) return [] as RankPoint[]
+    const shown = race.revealed ? race.cursor - 1 : race.cursor
+    return sincePast(revealedPast(track, shown), focus.since)
+  }, [focus, race, track])
+
   function type(field: keyof FieldDrafts, text: string) {
     setDrafts((current) => ({ ...current, [field]: text }))
   }
@@ -1047,7 +1583,28 @@ export function RunArcadeLab() {
       departMode === "aleatoire"
         ? { mode: "aleatoire" as const }
         : { mode: "fixe" as const, date: values.date }
-    session.launch({ count: values.count, draws: values.draws, minutes: values.minutes, series, champion: parent, depart })
+    session.launch({
+      count: values.count,
+      draws: values.draws,
+      minutes: values.minutes,
+      series,
+      champion: parent ? withSkillEdits(parent, skillEdits) : null,
+      depart,
+    })
+  }
+
+  function writeSkillVersion(skillId: string, params: SkillParams) {
+    if (!parent) return
+    const key = parentEditKey(parent)
+    setSkillEdits((current) => {
+      const skills = current[key] ?? parent.skills
+      return {
+        ...current,
+        [key]: skills.map((item) =>
+          item.id === skillId ? addVersion(item, params, { cutoff: "", origin: "main", examCents: null }) : item
+        ),
+      }
+    })
   }
 
   const proposal = useMemo(
@@ -1338,6 +1895,19 @@ export function RunArcadeLab() {
         />
       ) : null}
 
+      {!running && parent ? (
+        <SkillPanel
+          key={parentEditKey(parent)}
+          skills={skillEdits[parentEditKey(parent)] ?? parent.skills}
+          past={parentPast}
+          drawn={proposal?.draw ?? null}
+          displayCurve={nextCurve}
+          hiddenDate={null}
+          editable
+          onWrite={writeSkillVersion}
+        />
+      ) : null}
+
       {importError ? <p className="text-sm text-destructive">{importError}</p> : null}
       {importOutcome && importOutcome.record === imported ? (
         <p
@@ -1546,28 +2116,43 @@ export function RunArcadeLab() {
           <ObservationLedger observations={snapshot.observations} />
           <div className="mt-3 grid gap-3 lg:grid-cols-2">
             <div>
-              <h3 className="mb-1 text-xs font-medium text-muted-foreground">
-                <TitleHelp help={RUN_ARCADE_HELP.skills}>Skills et versions</TitleHelp>
-              </h3>
-              <ul className="flex flex-col gap-1 text-xs">
-                {focus.mind.skills.map((skill) => (
-                  <li key={skill.id}>
-                    <span className="font-medium">{skill.name}</span>
-                    <span className="text-muted-foreground"> · {targetLabel(currentVersion(skill).curve)}</span>
-                    <ul className="ml-3">
-                      {skill.versions.map((version) => (
-                        <li key={version.version} className="text-muted-foreground">
-                          v{version.version} · {version.origin} · coupure{" "}
-                          {version.cutoff ? formatShortDate(version.cutoff) : "aucune"}
-                          {version.examCents != null ? ` · examen ${formatCents(version.examCents)}` : ""}
-                          {version.examCents != null && version.examTo ? ` jusqu’au ${formatShortDate(version.examTo)}` : ""} ·{" "}
-                          {version.phrase}
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
+              {running ? (
+                <SkillPanel
+                  key={focus.mind.id}
+                  skills={focus.mind.skills}
+                  past={runnerPast}
+                  drawn={focusView.draw}
+                  displayCurve={focusCurve ?? focus.mind.focus}
+                  hiddenDate={hiddenDate}
+                  editable={false}
+                  compact
+                />
+              ) : (
+                <>
+                  <h3 className="mb-1 text-xs font-medium text-muted-foreground">
+                    <TitleHelp help={RUN_ARCADE_HELP.skills}>Skills et versions</TitleHelp>
+                  </h3>
+                  <ul className="flex flex-col gap-1 text-xs">
+                    {focus.mind.skills.map((skill) => (
+                      <li key={skill.id}>
+                        <span className="font-medium">{skill.name}</span>
+                        <span className="text-muted-foreground"> · {targetLabel(currentVersion(skill).curve)}</span>
+                        <ul className="ml-3">
+                          {skill.versions.map((version) => (
+                            <li key={version.version} className="text-muted-foreground">
+                              v{version.version} · {version.origin} · coupure{" "}
+                              {version.cutoff ? formatShortDate(version.cutoff) : "aucune"}
+                              {version.examCents != null ? ` · examen ${formatCents(version.examCents)}` : ""}
+                              {version.examCents != null && version.examTo ? ` jusqu’au ${formatShortDate(version.examTo)}` : ""} ·{" "}
+                              {version.phrase}
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
             <div>
               <h3 className="mb-1 text-xs font-medium text-muted-foreground">

@@ -105,7 +105,7 @@ test("the numbers of the help are drawn from the constants of the code", () => {
   has(RUN_ARCADE_HELP.gestes.items?.[5].text ?? "", `à ${WORDS[EVENING_GAP_DAYS]} jours au plus`)
 })
 
-test("the help says what a runner can add per launch, and the three origins the screen writes", () => {
+test("the help says what a runner can add per launch, and the origins the screen writes", () => {
   const body = RUN_ARCADE_HELP.skills.body
   assert.doesNotMatch(body, /Une seule skill nouvelle est gardée par lancement/)
   has(body, "au plus deux par runner et par lancement : une de la variation maison, au lancement, et une de l’IA locale")
@@ -113,7 +113,12 @@ test("the help says what a runner can add per launch, and the three origins the 
   assert.doesNotMatch(rule, /une seule skill nouvelle/)
   has(rule, "L’IA ajoute au plus une courbe nouvelle par lancement")
 
-  const origins: Record<SkillOrigin, string> = { maison: "le geste de départ", variation: "variation maison", ia: "modèle local" }
+  const origins: Record<SkillOrigin, string> = {
+    maison: "le geste de départ",
+    variation: "variation maison",
+    ia: "modèle local",
+    main: "écrite à la main",
+  }
   const origin = RUN_ARCADE_HELP.skills.items?.find((item) => item.label === "Origine")?.text ?? ""
   for (const [word, meaning] of Object.entries(origins)) {
     has(origin, `${word} :`)

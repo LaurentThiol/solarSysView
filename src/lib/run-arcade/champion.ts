@@ -154,7 +154,7 @@ export function championRecord(input: {
   return record
 }
 
-const ORIGINS: SkillOrigin[] = ["maison", "ia", "variation"]
+const ORIGINS: SkillOrigin[] = ["maison", "ia", "variation", "main"]
 
 /**
  * Un vrai jour AAAA-MM-JJ du calendrier, ou rien. Le motif seul laisserait passer « 2025-13-40 »,

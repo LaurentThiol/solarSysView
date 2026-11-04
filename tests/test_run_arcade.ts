@@ -35,6 +35,7 @@ import {
   activeVersion,
   addVersion,
   auditCutoffs,
+  boundSkillDraft,
   describeSkill,
   houseVariation,
   LOGISTIC_R,
@@ -1602,6 +1603,118 @@ test("two generation-1 champions are two lineages, and generation 1 then 2 is on
   )
   assert.equal(forecastBadge({ notes: [], tickets: 0, hits: 0, netCents: 0 }), null)
   assert.equal(forecastBadge({ notes: [], tickets: 2, hits: 1, netCents: 150 }), "2 tickets notés · 1,50 €")
+})
+
+test("boundSkillDraft clamps a draft to the bounds already written, and the phrase is describeSkill", () => {
+  function check(draft: Parameters<typeof boundSkillDraft>[0]) {
+    const bounded = boundSkillDraft(draft)
+    const { phrase, ...params } = bounded
+    assert.equal(phrase, describeSkill(params))
+    return bounded
+  }
+
+  function onlyParams(bounded: ReturnType<typeof boundSkillDraft>) {
+    const { phrase, ...params } = bounded
+    assert.equal(phrase, describeSkill(params))
+    return params
+  }
+
+  const plain = check({ curve: "n1", gesture: "persiste", window: 8 })
+  assert.equal(plain.gesture, "persiste")
+  assert.equal(plain.days, null)
+  assert.equal(plain.ratio, 0.618)
+  assert.equal(plain.phrase, "n1 reste sur place sur 8 tirages.")
+
+  const wide = check({ curve: "nope", gesture: "nope", window: 400, days: 900 })
+  assert.equal(wide.curve, "*")
+  assert.equal(wide.gesture, "persiste")
+  assert.equal(wide.window, 60)
+  assert.equal(wide.days, null)
+
+  const narrow = check({ window: -4 })
+  assert.equal(narrow.window, 2)
+  assert.equal(check({ window: "1,2", gesture: "glisse" }).window, 2)
+  assert.equal(check({ window: 1 }).window, 2)
+
+  const moyenne = check({ gesture: "moyenne", days: 1, window: "8" })
+  assert.equal(moyenne.days, 7)
+  assert.match(moyenne.phrase, /sur 7 jours/)
+  const longue = check({ gesture: "moyenne", days: 900 })
+  assert.equal(longue.days, 365)
+  assert.equal(check({ gesture: "moyenne", days: "" }).days, null)
+  assert.equal(check({ gesture: "moyenne", days: 0 }).days, null)
+
+  const or = check({ curve: "d2", gesture: "or", ratio: 9, span: "pas", window: 3, days: 90 })
+  assert.equal(or.ratio, 2.618)
+  assert.equal(or.span, "pas")
+  assert.equal(or.window, 3)
+  assert.equal(or.days, null)
+  assert.match(or.phrase, /2,618/)
+  assert.match(or.phrase, /du dernier pas/)
+  assert.doesNotMatch(or.phrase, /jours/)
+  assert.equal(parseSkillParams({ curve: "d2", gesture: "or", ratio: 9 }), null)
+  const near = check({ curve: "d2", gesture: "or", ratio: 1.6, span: "lignes", window: 8 })
+  assert.deepEqual(onlyParams(near), parseSkillParams({ curve: "d2", gesture: "or", ratio: 1.6, span: "lignes", window: 8 }))
+
+  const suite = check({ curve: "sumNumbers", gesture: "suite", span: "pas", r: 4, window: "400", days: 30 })
+  assert.equal(parseSkillParams({ curve: "sumNumbers", gesture: "suite", span: "pas" }), null)
+  assert.equal(suite.span, "bande")
+  assert.equal(suite.r, 3.2)
+  assert.equal(suite.suite, "logistique")
+  assert.equal(suite.window, 60)
+  assert.equal(suite.days, null)
+  assert.equal(suite.phrase, "Σn suit la suite logistique, R 3,2, de la bande, sur 60 tirages.")
+  assert.equal("forme" in suite, false)
+
+  const soir = check({ curve: "*", gesture: "soir", days: 12, window: 99, ratio: 2.618 })
+  assert.equal(soir.days, null)
+  assert.equal(soir.window, 60)
+  assert.equal(soir.ratio, 0.618)
+  assert.equal(soir.phrase, "toutes les courbes suit l’autre soir, à 4 jours au plus.")
+
+  const wave = check({ curve: "*", gesture: "figure", forme: "sin", n: 12, window: 3, days: 7 })
+  const read = parseSkillParams({ curve: "*", gesture: "figure", forme: "sin", n: 12, window: 3, days: 7 })
+  assert.ok(read)
+  assert.equal(wave.window, read.window)
+  assert.equal(wave.days, read.days)
+  assert.equal(wave.n, 12)
+  assert.equal(wave.forme, "sin")
+  const poly = check({ gesture: "figure", forme: "polygone", n: 7, window: 2 })
+  assert.equal(poly.n, 6)
+  assert.equal(poly.window, figureLength("polygone", 6) + 2)
+  const triangle = check({ gesture: "figure", forme: "triangle", n: 8, window: 2 })
+  assert.equal(triangle.n, null)
+  assert.equal(triangle.window, 5)
+  assert.deepEqual(onlyParams(triangle), parseSkillParams({ curve: "*", gesture: "figure", forme: "triangle", window: 2 }))
+  assert.equal(check({ gesture: "figure", forme: "nope" }).forme, "triangle")
+  assert.equal("r" in check({ gesture: "persiste", r: 4 }), false)
+})
+
+test("origin main survives a reread, and an unknown origin still becomes ia", () => {
+  const version = {
+    curve: "*",
+    gesture: "persiste",
+    ratio: 0.618,
+    span: "bande",
+    window: 8,
+    days: null,
+    version: 1,
+    parent: null,
+    cutoff: "",
+    origin: "main",
+    phrase: "à la main",
+    examCents: null,
+  }
+  const skill = { id: "r1-base", name: "Geste de base", versions: [version] }
+  const kept = parseChampion({ generation: 1, runner: "R1", cents: 5000, skills: [skill] })
+  assert.equal(kept?.skills[0].versions[0].origin, "main")
+  const shifted = parseChampion({
+    generation: 1,
+    runner: "R1",
+    cents: 5000,
+    skills: [{ ...skill, versions: [{ ...version, origin: "autre" }] }],
+  })
+  assert.equal(shifted?.skills[0].versions[0].origin, "ia")
 })
 
 test("a stored figure longer than its window says so in the phrase and stays in place", () => {

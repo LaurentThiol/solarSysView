@@ -65,7 +65,8 @@ export type SkillParams = {
   n?: number | null
 }
 
-export type SkillOrigin = "maison" | "ia" | "variation"
+/** maison : geste de départ. variation : essai maison. ia : modèle local. main : écrite à la main, avant Lancer. */
+export type SkillOrigin = "maison" | "ia" | "variation" | "main"
 
 export type SkillVersion = SkillParams & {
   version: number
@@ -159,6 +160,97 @@ export function describeSkill(params: SkillParams) {
       : `sur ${params.window} tirages`
   const golden = params.gesture === "or" ? ` ${formatRatio(params.ratio)} ${SPAN_PHRASE[params.span]}` : ""
   return `${targetLabel(params.curve)} ${GESTURE_PHRASE[params.gesture]}${golden} ${scale}.`
+}
+
+/** Brouillon saisi à la main. Un champ absent reprend sa valeur neutre. */
+export type SkillDraft = {
+  curve?: unknown
+  gesture?: unknown
+  ratio?: unknown
+  span?: unknown
+  window?: unknown
+  days?: unknown
+  suite?: unknown
+  r?: unknown
+  forme?: unknown
+  n?: unknown
+}
+
+function snapAllowed(value: number, allowed: readonly number[]) {
+  let best = allowed[0]
+  for (const item of allowed) {
+    const gap = Math.abs(item - value)
+    const bestGap = Math.abs(best - value)
+    if (gap < bestGap || (gap === bestGap && item < best)) best = item
+  }
+  return best
+}
+
+function draftInt(value: unknown, min: number, max: number, fallback: number) {
+  if (isAbsent(value)) return fallback
+  const parsed = firstNumber(value)
+  if (parsed == null) return fallback
+  return Math.min(max, Math.max(min, Math.round(parsed)))
+}
+
+function draftDays(value: unknown): number | null {
+  if (isAbsent(value) || value === 0 || value === "0" || value === "null") return null
+  const parsed = firstNumber(value)
+  if (parsed == null) return null
+  return Math.min(DAYS_MAX, Math.max(DAYS_MIN, Math.round(parsed)))
+}
+
+function figureNOf(forme: Forme, raw: number | null) {
+  if (!usesFigureN(forme)) return null
+  const allowed = forme === "polygone" ? POLYGON_SIDES : forme === "arctan" ? ARCTAN_TURNS : WAVE_PERIODS
+  if (raw == null || !figureNAllowed(forme, raw)) return raw == null ? defaultFigureN(forme) : snapAllowed(raw, allowed)
+  return raw
+}
+
+/**
+ * Ramène un brouillon aux bornes déjà écrites, puis donne la phrase de `describeSkill`.
+ * Un champ hors liste ou hors intervalle est ramené : rien n’est refusé.
+ * Les champs qui ne comptent pas pour le geste reprennent leur valeur neutre.
+ * Une figure relève sa fenêtre, et ses jours s’il y en a, au calibre plus deux.
+ */
+export function boundSkillDraft(draft: SkillDraft): SkillParams & { phrase: string } {
+  const curve = firstAllowed<SkillTarget>(draft.curve, ["*", ...CURVE_KEYS]) ?? "*"
+  const gesture = firstAllowed(draft.gesture, GESTURES) ?? "persiste"
+  let window = draftInt(draft.window, WINDOW_MIN, WINDOW_MAX, 8)
+  const ratio =
+    gesture === "or"
+      ? isAbsent(draft.ratio)
+        ? DEFAULT_RATIO
+        : (nearestGoldenStored(firstNumber(draft.ratio) ?? Number.NaN) ?? DEFAULT_RATIO)
+      : DEFAULT_RATIO
+  let span: SpanKind = "bande"
+  if (gesture === "suite") {
+    const read = isAbsent(draft.span) ? "bande" : firstAllowed(draft.span, SUITE_SPANS)
+    span = read ?? "bande"
+  } else if (gesture === "or") {
+    const read = isAbsent(draft.span) ? "bande" : firstAllowed(draft.span, SPANS)
+    span = read ?? "bande"
+  }
+  let days: number | null = gesture === "moyenne" || gesture === "figure" ? draftDays(draft.days) : null
+  if (gesture === "figure") {
+    const forme = isAbsent(draft.forme) ? "triangle" : (firstAllowed(draft.forme, FORMES) ?? "triangle")
+    const rawN = readFigureN(draft.n)
+    const n = figureNOf(forme, rawN == null ? null : rawN)
+    const length = figureLength(forme, n)
+    window = Math.max(window, length + 2)
+    if (days != null) days = Math.max(days, daysHolding(length + 2))
+    const params: SkillParams = { curve, gesture, ratio, span, window, days, forme, n }
+    return { ...params, phrase: describeSkill(params) }
+  }
+  if (gesture === "suite") {
+    const r = isAbsent(draft.r)
+      ? DEFAULT_LOGISTIC_R
+      : (nearestLogisticStored(firstNumber(draft.r) ?? Number.NaN) ?? DEFAULT_LOGISTIC_R)
+    const params: SkillParams = { curve, gesture, ratio, span, window, days, suite: "logistique", r }
+    return { ...params, phrase: describeSkill(params) }
+  }
+  const params: SkillParams = { curve, gesture, ratio, span, window, days }
+  return { ...params, phrase: describeSkill(params) }
 }
 
 export function currentVersion(skill: Skill): SkillVersion {
