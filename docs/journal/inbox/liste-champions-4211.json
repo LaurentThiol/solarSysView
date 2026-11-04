@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "Champions : parent épinglé, lignées et détail",
   "body": "Dans runArcade, la liste « Champions déjà écrits » épingle en tête le parent du prochain Lancer, et groupe les générations qui se suivent en lignées : celle du parent est ouverte, les autres sont repliées. La ligne courte donne la génération, le runner, la course et l’examen avec l’écart au hasard, les dates en bout de ligne, et une pastille de hors-échantillon pour la lignée quand elle existe. Le chevron ouvre les skills, le départ, le pronostic écrit et la note de ce champion. « Écarter » masque un champion dans ce navigateur seulement : il reste dans Neon et dans un export, et « Voir les écartés » le remet. Au-delà de vingt, la liste demande la suite, par pages de vingt, jusqu’à cinquante. Un clic sur une ligne choisit toujours le parent.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 368,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/368"
 }
