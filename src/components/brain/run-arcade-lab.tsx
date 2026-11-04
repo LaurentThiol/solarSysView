@@ -15,9 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
 import {
   championRaceTurns,
+  forecastLine,
   lastRevealedDraw,
   proposeNextDraw,
   replayLastGrid,
+  scoreForecasts,
   type ChampionRecord,
   type ReplayLastGrid,
 } from "@/lib/run-arcade/champion"
@@ -596,6 +598,10 @@ export function RunArcadeLab() {
     () => (parent && series.length >= 2 ? proposeNextDraw(parent, series, nextCurve) : null),
     [parent, series, nextCurve]
   )
+  const forecastText = useMemo(
+    () => forecastLine(scoreForecasts(parent ? [parent, ...history] : history, series)),
+    [parent, history, series]
+  )
   const showResult = snapshot.phase === "idle" || snapshot.phase === "fin"
   const replay = useMemo(
     () => (showResult && parent ? replayLastGrid(parent, series) : null),
@@ -910,6 +916,11 @@ export function RunArcadeLab() {
               course {balanceWithChance(parent.cents, parentTurns)} · {championExamLine(parent)}
             </p>
           </header>
+          {forecastText ? (
+            <p className="mb-2 text-xs text-muted-foreground" data-testid="run-arcade-forecast">
+              {forecastText}
+            </p>
+          ) : null}
           {replay ? (
             <ResultGrids
               replay={replay}

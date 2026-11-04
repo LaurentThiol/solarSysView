@@ -4,11 +4,16 @@ import test from "node:test"
 import {
   championRecord,
   childrenOf,
+  forecastFor,
+  forecastLine,
+  nextDrawDate,
   parseChampion,
   pickChampion,
   proposeNextDraw,
   replayLastGrid,
+  scoreForecasts,
   setAsideCount,
+  type ChampionRecord,
 } from "../src/lib/run-arcade/champion.ts"
 import { placeNumbers, placeStars, reconcile } from "../src/lib/run-arcade/coherence.ts"
 import { buildTrack, curveMeta, curveValues, CURVE_KEYS, type CurveValues } from "../src/lib/run-arcade/curves.ts"
@@ -412,6 +417,115 @@ test("the champion proposes the draw after the last one in the archive", () => {
   const otherCurve = proposeNextDraw(record, rows, "n3")
   assert.equal(otherCurve?.draw.focus, "n3")
   assert.deepEqual(otherCurve?.guess, proposal.guess)
+})
+
+test("the next draw date is the next Tuesday or Friday, in real days", () => {
+  assert.equal(nextDrawDate("2026-11-03"), "2026-11-06", "mardi → vendredi")
+  assert.equal(nextDrawDate("2026-11-06"), "2026-11-10", "vendredi → mardi")
+  assert.equal(nextDrawDate("2026-11-02"), "2026-11-03", "lundi → mardi")
+  assert.equal(nextDrawDate("2026-11-08"), "2026-11-10", "dimanche → mardi")
+  assert.equal(nextDrawDate("demain"), null)
+  assert.equal(nextDrawDate("2025-13-40"), null)
+})
+
+test("a written forecast reads back, and the scored grid is the one proposeNextDraw gave at that date", () => {
+  const rows = series(12)
+  const record = championRecord({
+    runner: { ...newRunner(mind), cents: 5400, examCents: 5100 },
+    generation: 2,
+    raceFrom: rows[8].date,
+    raceTo: rows[11].date,
+    journal: [],
+    savedAt: "2026-10-30T12:00:00.000Z",
+    series: rows,
+  })
+  const proposal = proposeNextDraw(record, rows)
+  assert.ok(proposal)
+  assert.ok(record.forecast)
+  assert.deepEqual(record.forecast.numbers, [proposal.guess.n1, proposal.guess.n2, proposal.guess.n3, proposal.guess.n4, proposal.guess.n5])
+  assert.deepEqual(record.forecast.stars, [proposal.guess.e1, proposal.guess.e2])
+  assert.equal(record.forecast.seenDate, rows[11].date)
+  assert.equal(record.forecast.targetDate, nextDrawDate(rows[11].date))
+  assert.deepEqual(forecastFor(record, rows), record.forecast)
+
+  const reread = parseChampion(JSON.parse(JSON.stringify(record)))
+  assert.deepEqual(reread, record, "un pronostic écrit se relit tel quel")
+
+  // Le tirage visé arrive : il reprend la grille du pronostic, donc sept trouvés.
+  const target = record.forecast.targetDate
+  assert.ok(target)
+  const arrived: RankPoint = {
+    date: target,
+    n1: proposal.guess.n1,
+    n2: proposal.guess.n2,
+    n3: proposal.guess.n3,
+    n4: proposal.guess.n4,
+    n5: proposal.guess.n5,
+    e1: proposal.guess.e1,
+    e2: proposal.guess.e2,
+  }
+  const score = scoreForecasts([record], [...rows, arrived])
+  assert.equal(score.tickets, 1)
+  assert.equal(score.hits, 7)
+  assert.equal(score.netCents, 7 * 200 - 250)
+  assert.equal(score.notes[0].generation, 2)
+  assert.equal(forecastLine(score), "Hors échantillon : 1 ticket noté · 7 trouvés · 11,50 € (hasard −0,83 € ± 2)")
+
+  // Tant que le tirage visé n’est pas dans l’archive, rien n’est noté.
+  assert.equal(scoreForecasts([record], rows).tickets, 0)
+  assert.equal(forecastLine(scoreForecasts([record], rows)), null)
+})
+
+test("two champions of a lineage forecasting the same draw count once, and an old champion stays readable", () => {
+  const rows = series(12)
+  const first = championRecord({
+    runner: { ...newRunner(mind), cents: 5400, examCents: 5100 },
+    generation: 2,
+    raceFrom: rows[8].date,
+    raceTo: rows[11].date,
+    journal: [],
+    savedAt: "2026-10-30T12:00:00.000Z",
+    series: rows,
+  })
+  assert.ok(first.forecast?.targetDate)
+  const target = first.forecast.targetDate
+  // Relance sur la même archive : même date visée, une autre grille. Elle ne crée pas de note nouvelle.
+  const second: ChampionRecord = {
+    ...first,
+    generation: 3,
+    savedAt: "2026-10-31T12:00:00.000Z",
+    forecast: { numbers: [1, 2, 3, 4, 5], stars: [1, 2], seenDate: first.forecast.seenDate, targetDate: target },
+  }
+  const proposal = proposeNextDraw(first, rows)
+  assert.ok(proposal)
+  const arrived: RankPoint = {
+    date: target,
+    n1: proposal.guess.n1,
+    n2: proposal.guess.n2,
+    n3: proposal.guess.n3,
+    n4: proposal.guess.n4,
+    n5: proposal.guess.n5,
+    e1: proposal.guess.e1,
+    e2: proposal.guess.e2,
+  }
+  const score = scoreForecasts([second, first], [...rows, arrived])
+  assert.equal(score.tickets, 1, "pas deux notes pour le même tirage visé")
+  assert.equal(score.notes[0].generation, 2, "le pronostic le plus ancien de la lignée compte")
+  assert.equal(score.hits, 7)
+
+  const legacy = parseChampion(
+    JSON.parse(JSON.stringify(first), (key, value) => (key === "forecast" ? undefined : value))
+  )
+  assert.ok(legacy, "un champion ancien sans pronostic reste lisible")
+  assert.equal(legacy.forecast, null)
+  assert.equal(scoreForecasts([legacy], [...rows, arrived]).tickets, 0)
+
+  const dirty = parseChampion({
+    ...JSON.parse(JSON.stringify(first)),
+    forecast: { numbers: [1, 2], stars: [1, 2], seenDate: first.forecast.seenDate, targetDate: target },
+  })
+  assert.ok(dirty, "un pronostic illisible ne refuse pas le champion")
+  assert.equal(dirty.forecast, null)
 })
 
 test("replaying the last race draw returns the grid think played and the countHits total", () => {

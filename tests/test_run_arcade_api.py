@@ -289,6 +289,34 @@ def test_champion_keeps_its_depart_and_its_race_turns(monkeypatch) -> None:
     assert client.post("/api/brain/run-arcade/champion", json={**_champion(), "raceTurns": -1}).status_code == 422
 
 
+def test_champion_keeps_its_forecast(monkeypatch) -> None:
+    stored: dict = {}
+
+    def insert(record: dict) -> dict:
+        stored["row"] = {"id": 11, "payload": record["payload"]}
+        return {"id": 11, "created_at": None, "versions": len(record["versions"])}
+
+    champion = _champion()
+    champion["forecast"] = {
+        "numbers": [3, 12, 14, 17, 37],
+        "stars": [3, 12],
+        "seenDate": "2026-10-27",
+        "targetDate": "2026-10-30",
+    }
+    monkeypatch.setattr("synchro.db.database_configured", lambda: True)
+    monkeypatch.setattr("synchro.db.insert_run_arcade_champion", insert)
+    monkeypatch.setattr("synchro.db.latest_run_arcade_champion", lambda: stored.get("row"))
+    client = TestClient(create_app())
+    assert client.post("/api/brain/run-arcade/champion", json=champion).status_code == 200
+    read = client.get("/api/brain/run-arcade/champion").json()["champion"]
+    assert read["forecast"] == champion["forecast"]
+
+    stored.clear()
+    assert client.post("/api/brain/run-arcade/champion", json=_champion()).status_code == 200
+    legacy = client.get("/api/brain/run-arcade/champion").json()["champion"]
+    assert legacy["forecast"] is None
+
+
 def test_an_old_champion_written_after_a_recent_one_does_not_become_the_latest(monkeypatch) -> None:
     from contextlib import contextmanager
 

@@ -345,6 +345,9 @@ class RunArcadeChampionIn(BaseModel):
     # Sans ces champs, le modèle les jetterait avant l'écriture du payload dans Neon.
     depart: str | None = None
     raceTurns: int | None = Field(default=None, ge=0)
+    # Pronostic hors échantillon : champ libre du payload, sans colonne Neon.
+    # Sans ce champ, le modèle le jetterait avant l'écriture du payload dans Neon.
+    forecast: dict[str, Any] | None = None
     skills: list[dict[str, Any]] = Field(min_length=1, max_length=40)
     journal: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
     savedAt: str | None = None

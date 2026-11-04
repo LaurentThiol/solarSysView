@@ -318,6 +318,9 @@ test("the lab is wired to these rules", () => {
   assert.equal(/setCount\(Math\.min/.test(lab), false)
   assert.match(lab, /playedSlice\(snapshot\.minutes, snapshot\.sliceMs, MIN_SLICE_MS\)/)
   assert.match(lab, /archiveLastDate=\{persisted\?\.date \?\? null\}/)
+  assert.match(lab, /scoreForecasts\(parent \? \[parent, \.\.\.history\] : history, series\)/)
+  assert.match(lab, /forecastLine\(scoreForecasts/)
+  assert.match(lab, /data-testid="run-arcade-forecast"/)
 })
 
 test("only the band follows the clock, and only while a countdown runs", () => {

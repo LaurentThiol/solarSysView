@@ -763,6 +763,7 @@ export class RunArcadeSession {
           raceTo: track[lastPlayed]?.date ?? null,
           journal: this.snapshot.journal,
           savedAt: new Date(this.deps.now()).toISOString(),
+          series: track,
         })
       : null
     this.set({

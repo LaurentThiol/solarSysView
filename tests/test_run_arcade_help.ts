@@ -129,6 +129,8 @@ test("the help says which draw the result shows, how Lancer waits, and that an i
   has(RUN_ARCADE_HELP.lancer.body, "repart du parent de la course en cours")
   has(RUN_ARCADE_HELP.lancer.body, "se corrigent quand on les quitte, ou au lancement")
   has(RUN_ARCADE_HELP.champions.body, "La liste se relit quand un champion vient d’être écrit")
+  has(RUN_ARCADE_HELP.champions.body, "des tirages que la lignée n’avait jamais vus")
+  has(RUN_ARCADE_HELP.champions.body, "relancer sur la même archive ne crée pas de note nouvelle")
   const board = RUN_ARCADE_HELP.rayons.items?.find((item) => item.label === "Fonctionnel")?.text ?? ""
   has(board, "s’écrit « interrompu » : ce n’est pas une panne")
 })

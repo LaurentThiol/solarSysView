@@ -1,4 +1,4 @@
-import { buildTrack, CURVE_KEYS, type CurveKey, type RankPoint } from "./curves"
+import { buildTrack, CURVE_KEYS, NUMBER_KEYS, STAR_KEYS, type CurveKey, type RankPoint } from "./curves"
 import {
   auditCutoffs,
   baseSkill,
@@ -10,7 +10,19 @@ import {
 } from "./skills"
 import { sincePast } from "./depart"
 import { chanceBalance } from "./examen"
-import { countHits, RUNNER_MAX, think, type RunnerLive, type RunnerMind, type Thought } from "./thought"
+import {
+  countHits,
+  formatCents,
+  HIT_CENTS,
+  RUNNER_MAX,
+  START_CENTS,
+  think,
+  TICKET_CENTS,
+  type Guess,
+  type RunnerLive,
+  type RunnerMind,
+  type Thought,
+} from "./thought"
 
 export type JournalKind = "ia" | "brave" | "skill" | "refus" | "erreur"
 
@@ -22,6 +34,19 @@ export type JournalEntry = {
   cutoff: string
   turn: number | null
   detail: string
+}
+
+/**
+ * Pronostic du champion pour le tirage qui suit le dernier lu. Champ libre du `payload`, sans colonne Neon.
+ * `targetDate` est le prochain mardi ou vendredi après `seenDate`. Vide quand il ne se connaît pas.
+ */
+export type ChampionForecast = {
+  numbers: number[]
+  stars: number[]
+  /** Date du dernier tirage lu pour ce pronostic. */
+  seenDate: string
+  /** Date du tirage visé. */
+  targetDate: string | null
 }
 
 export type ChampionRecord = {
@@ -51,6 +76,11 @@ export type ChampionRecord = {
    * Facultatif : un champion écrit avant ce champ retombe sur le compte des tirages de sa plage.
    */
   raceTurns?: number | null
+  /**
+   * Pronostic pour le tirage suivant le dernier lu à la fin de la course. Champ libre du payload.
+   * Facultatif : un champion écrit avant ce champ ne le porte pas, et il n’est pas noté.
+   */
+  forecast?: ChampionForecast | null
   skills: Skill[]
   journal: JournalEntry[]
   savedAt: string
@@ -98,9 +128,11 @@ export function championRecord(input: {
   raceTo: string | null
   journal: readonly JournalEntry[]
   savedAt: string
+  /** Archive connue à la fin de la course. Quand elle est là, le pronostic du tirage suivant est écrit. */
+  series?: readonly RankPoint[]
 }): ChampionRecord {
   const { runner } = input
-  return {
+  const record: ChampionRecord = {
     generation: input.generation,
     runner: runner.mind.name,
     cents: runner.cents,
@@ -113,10 +145,13 @@ export function championRecord(input: {
     raceTo: input.raceTo,
     depart: runner.since || null,
     raceTurns: runner.turns,
+    forecast: null,
     skills: runner.mind.skills.map((skill) => ({ ...skill, versions: skill.versions.map((version) => ({ ...version })) })),
     journal: input.journal.filter((entry) => entry.runner === runner.mind.id).slice(-JOURNAL_KEEP),
     savedAt: input.savedAt,
   }
+  if (input.series) record.forecast = forecastFor(record, input.series)
+  return record
 }
 
 const ORIGINS: SkillOrigin[] = ["maison", "ia", "variation"]
@@ -200,6 +235,25 @@ function parseJournalEntry(raw: unknown): JournalEntry | null {
   }
 }
 
+/** Boules d’un pronostic relu : le bon compte, des entiers dans la borne, sans doublon. Sinon rien. */
+function ballList(raw: unknown, count: number, max: number): number[] | null {
+  if (!Array.isArray(raw) || raw.length !== count) return null
+  if (raw.some((value) => typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > max)) return null
+  const values = raw as number[]
+  return new Set(values).size === count ? [...values].sort((a, b) => a - b) : null
+}
+
+/** Pronostic relu, ou rien : un pronostic illisible laisse le champion lisible, sans note. */
+function parseForecast(raw: unknown): ChampionForecast | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
+  const record = raw as Record<string, unknown>
+  const numbers = ballList(record.numbers, 5, 50)
+  const stars = ballList(record.stars, 2, 12)
+  const seenDate = isoDay(record.seenDate)
+  if (!numbers || !stars || !seenDate) return null
+  return { numbers, stars, seenDate, targetDate: isoDay(record.targetDate) }
+}
+
 /** Relit un champion venu de Neon ou du navigateur. Un champ invalide l’écarte. */
 export function parseChampion(raw: unknown): ChampionRecord | null {
   if (!raw || typeof raw !== "object") return null
@@ -231,6 +285,7 @@ export function parseChampion(raw: unknown): ChampionRecord | null {
     raceTo: isoDay(record.raceTo),
     depart: isoDay(record.depart),
     raceTurns: record.raceTurns != null && Number.isInteger(raceTurns) && raceTurns >= 0 ? raceTurns : null,
+    forecast: parseForecast(record.forecast),
     skills: skills as Skill[],
     journal: (journal as JournalEntry[]).slice(-JOURNAL_KEEP),
     savedAt: savedAtDay(record.savedAt),
@@ -316,6 +371,130 @@ export function proposeNextDraw(
     skills: champion.skills,
   }
   return think(mind, track, { hiddenDate: dayAfter(track[track.length - 1].date), focus })
+}
+
+/** Prochain mardi ou vendredi après ce jour, en jours réels. Vide si le jour est illisible. */
+export function nextDrawDate(seenDate: string): string | null {
+  const seen = isoDay(seenDate)
+  if (!seen) return null
+  const date = new Date(`${seen}T12:00:00Z`)
+  for (let step = 0; step < 7; step += 1) {
+    date.setUTCDate(date.getUTCDate() + 1)
+    const weekday = date.getUTCDay()
+    if (weekday === 2 || weekday === 5) return date.toISOString().slice(0, 10)
+  }
+  return null
+}
+
+/** Le pronostic à écrire dans le champion : la grille de `proposeNextDraw`, le dernier tirage lu et le tirage visé. */
+export function forecastFor(champion: ChampionRecord, series: readonly RankPoint[]): ChampionForecast | null {
+  const proposal = proposeNextDraw(champion, series)
+  if (!proposal) return null
+  const seenDate = isoDay(proposal.draw.seenDate)
+  if (!seenDate) return null
+  return {
+    numbers: NUMBER_KEYS.map((key) => proposal.guess[key]),
+    stars: STAR_KEYS.map((key) => proposal.guess[key]),
+    seenDate,
+    targetDate: nextDrawDate(seenDate),
+  }
+}
+
+export type ForecastNote = {
+  targetDate: string
+  seenDate: string
+  generation: number
+  runner: string
+  numbers: number[]
+  stars: number[]
+  hits: number
+  /** Net du ticket en centimes : −2,50 €, puis 2,00 € par trouvé. */
+  netCents: number
+}
+
+export type ForecastScore = {
+  notes: ForecastNote[]
+  tickets: number
+  hits: number
+  netCents: number
+}
+
+function forecastGuess(forecast: ChampionForecast): Guess {
+  return {
+    n1: forecast.numbers[0],
+    n2: forecast.numbers[1],
+    n3: forecast.numbers[2],
+    n4: forecast.numbers[3],
+    n5: forecast.numbers[4],
+    e1: forecast.stars[0],
+    e2: forecast.stars[1],
+  }
+}
+
+/**
+ * Note du pronostic d’un champion, quand l’archive chargée contient le tirage visé.
+ * Recalculée à la lecture : rien n’est écrit pour la garder.
+ */
+export function scoreForecast(champion: ChampionRecord, series: readonly RankPoint[]): ForecastNote | null {
+  const forecast = champion.forecast
+  if (!forecast?.targetDate) return null
+  const draw = series.find((point) => point.date.slice(0, 10) === forecast.targetDate)
+  if (!draw) return null
+  const hits = countHits(forecastGuess(forecast), draw)
+  return {
+    targetDate: forecast.targetDate,
+    seenDate: forecast.seenDate,
+    generation: champion.generation,
+    runner: champion.runner,
+    numbers: [...forecast.numbers],
+    stars: [...forecast.stars],
+    hits,
+    netCents: hits * HIT_CENTS - TICKET_CENTS,
+  }
+}
+
+/**
+ * Suite des notes hors échantillon d’une lignée : les champions passés en forment une.
+ * Une note par date visée : quand plusieurs champions pronostiquent le même tirage,
+ * le plus ancien compte (génération la plus basse, puis date d’écriture). Les autres ne créent pas de note.
+ */
+export function scoreForecasts(
+  champions: readonly ChampionRecord[],
+  series: readonly RankPoint[]
+): ForecastScore {
+  const byTarget = new Map<string, ChampionRecord>()
+  for (const champion of champions) {
+    const target = champion.forecast?.targetDate
+    if (!target) continue
+    const kept = byTarget.get(target)
+    if (
+      !kept ||
+      champion.generation < kept.generation ||
+      (champion.generation === kept.generation && champion.savedAt < kept.savedAt)
+    ) {
+      byTarget.set(target, champion)
+    }
+  }
+  const notes = [...byTarget.values()]
+    .map((champion) => scoreForecast(champion, series))
+    .filter((note): note is ForecastNote => note != null)
+    .sort((a, b) => a.targetDate.localeCompare(b.targetDate))
+  return {
+    notes,
+    tickets: notes.length,
+    hits: notes.reduce((total, note) => total + note.hits, 0),
+    netCents: notes.reduce((total, note) => total + note.netCents, 0),
+  }
+}
+
+/** Ligne des notes hors échantillon, avec le repère du hasard pour le même nombre de tickets. Vide sans ticket noté. */
+export function forecastLine(score: ForecastScore): string | null {
+  if (score.tickets === 0) return null
+  const chance = chanceBalance(score.tickets)
+  const expectedNet = chance.cents - START_CENTS
+  const tickets = score.tickets === 1 ? "1 ticket noté" : `${score.tickets} tickets notés`
+  const found = score.hits === 1 ? "1 trouvé" : `${score.hits} trouvés`
+  return `Hors échantillon : ${tickets} · ${found} · ${formatCents(score.netCents)} (hasard ${formatCents(expectedNet)} ± ${Math.round(chance.spreadCents / 100)})`
 }
 
 export type ReplayLastGrid = {

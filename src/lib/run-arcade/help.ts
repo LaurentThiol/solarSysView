@@ -156,7 +156,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   champions: {
     title: "Champions déjà écrits",
-    body: "Les champions écrits dans Neon, les plus récents d’abord, vingt au plus. Un clic choisit le parent du prochain Lancer. La liste se relit quand un champion vient d’être écrit. La ligne donne la génération, le runner, le solde de course et son repère du hasard, le solde d’examen avec ses tours et ses dates, et les dates de la course.",
+    body: "Les champions écrits dans Neon, les plus récents d’abord, vingt au plus. Un clic choisit le parent du prochain Lancer. La liste se relit quand un champion vient d’être écrit. La ligne donne la génération, le runner, le solde de course et son repère du hasard, le solde d’examen avec ses tours et ses dates, et les dates de la course. La ligne hors échantillon note les pronostics sur des tirages que la lignée n’avait jamais vus, une fois par date visée : relancer sur la même archive ne crée pas de note nouvelle.",
   },
   suivant: {
     title: "Tirage suivant",

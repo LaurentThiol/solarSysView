@@ -6,7 +6,9 @@ import {
   championRecord,
   childrenOf,
   drawsInRange,
+  nextDrawDate,
   parseChampion,
+  proposeNextDraw,
   setAsideCount,
   sharedWithParent,
   type ChampionRecord,
@@ -425,6 +427,30 @@ test("the champion ends on the last draw played when every runner is ruined befo
   assert.equal(saved[0].raceTo, track[race.cursor - 1].date)
   assert.notEqual(saved[0].raceTo, track[race.end - 1].date)
   assert.equal(saved[0].raceFrom, track[race.start].date)
+  session.dispose()
+})
+
+test("the champion written at the end of a race keeps its forecast for the next draw", async () => {
+  const rows = series(40)
+  const { saved, session } = harness()
+  session.launch({ count: 2, draws: 4, minutes: 0, series: rows, champion: null })
+  for (let step = 0; step < 6 && session.getSnapshot().phase !== "fin"; step += 1) session.skip()
+  await flush()
+  const champion = saved[0]
+  assert.ok(champion.forecast, "le pronostic est écrit à la fin de la course")
+  assert.equal(champion.forecast.seenDate, rows[39].date)
+  assert.equal(champion.forecast.targetDate, nextDrawDate(rows[39].date))
+  assert.equal(champion.forecast.numbers.length, 5)
+  assert.equal(champion.forecast.stars.length, 2)
+  const proposal = proposeNextDraw(champion, rows)
+  assert.ok(proposal)
+  assert.deepEqual(champion.forecast.numbers, [
+    proposal.guess.n1,
+    proposal.guess.n2,
+    proposal.guess.n3,
+    proposal.guess.n4,
+    proposal.guess.n5,
+  ])
   session.dispose()
 })
 

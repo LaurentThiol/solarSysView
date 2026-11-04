@@ -1,0 +1,9 @@
+{
+  "slug": "lot-d-pronostic-hors-echantillon-d2f7",
+  "happened_on": "2026-11-04",
+  "area": "runArcade",
+  "title": "runArcade : le pronostic du champion est noté hors échantillon",
+  "body": "Dans runArcade, le champion écrit maintenant son pronostic pour le tirage suivant, avec le dernier tirage lu et la date visée. Quand ce tirage entre dans l’archive, la bande « Tirage suivant » le note une fois par lignée et par date visée : tickets notés, trouvés et solde net, avec le repère du hasard pour le même nombre de tickets. La note se recalcule à la lecture, sans écriture nouvelle. Relancer sur la même archive ne crée pas de note nouvelle, et la sélection des champions ne change pas.",
+  "pr_number": null,
+  "pr_url": null
+}
