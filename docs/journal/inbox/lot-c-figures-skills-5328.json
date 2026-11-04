@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "runArcade : figures et skills disent ce que le calcul fait",
   "body": "Dans runArcade, une figure proposée voit sa fenêtre relevée au calibre plus deux tirages, pour que le mot « masque » puisse valoir « correspond » sur une figure qui colle, par exemple un sinus parfait de période 12 proposé avec une fenêtre de 12. Une fenêtre en jours n’est plus acceptée que pour la moyenne et la figure : une proposition « or, 90 jours » ou « suite, 90 jours » est refusée, et l’aide et le prompt le disent. Une version déjà écrite hors des bornes actuelles se relit ramenée aux bornes, au lieu de rendre tout son champion illisible ; une courbe ou un geste inconnu refuse encore. Cinq pointes de décennies égales disent « un par décennie » et poussent doucement les rangs, au lieu de ne rien pousser. Quand une figure stockée ne tient pas dans sa fenêtre, la phrase du dessin dit « figure non lue, reste sur place ». Les versions stockées gardent leur fenêtre et leurs jours tels qu’ils ont joué.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 364,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/364"
 }
