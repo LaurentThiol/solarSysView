@@ -1783,17 +1783,25 @@ def latest_run_arcade_champion() -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
-def list_run_arcade_champions(limit: int = 20) -> list[dict[str, Any]]:
-    capped = max(1, min(50, int(limit)))
+# Pages de la liste des champions : vingt par page, cinquante au plus, les plus récents d'abord.
+RUN_ARCADE_CHAMPION_PAGE = 20
+RUN_ARCADE_CHAMPION_CEILING = 50
+
+
+def list_run_arcade_champions(limit: int = RUN_ARCADE_CHAMPION_PAGE, offset: int = 0) -> list[dict[str, Any]]:
+    skipped = max(0, int(offset))
+    if skipped >= RUN_ARCADE_CHAMPION_CEILING:
+        return []
+    capped = max(1, min(RUN_ARCADE_CHAMPION_CEILING - skipped, int(limit)))
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT * FROM run_arcade_champions
                 ORDER BY payload->>'savedAt' DESC NULLS LAST, created_at DESC, id DESC
-                LIMIT %s
+                LIMIT %s OFFSET %s
                 """,
-                (capped,),
+                (capped, skipped),
             )
             return [dict(row) for row in cur.fetchall()]
 

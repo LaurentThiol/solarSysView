@@ -292,6 +292,46 @@ export function parseChampion(raw: unknown): ChampionRecord | null {
   }
 }
 
+export type ChampionLineage = {
+  /** Du plus ancien au plus récent : génération n, puis n+1. */
+  champions: ChampionRecord[]
+}
+
+function writeOrder(
+  a: Pick<ChampionRecord, "savedAt" | "generation" | "id" | "runner">,
+  b: Pick<ChampionRecord, "savedAt" | "generation" | "id" | "runner">
+) {
+  if (a.savedAt !== b.savedAt) return a.savedAt < b.savedAt ? -1 : 1
+  if (a.generation !== b.generation) return a.generation - b.generation
+  const idA = a.id ?? 0
+  const idB = b.id ?? 0
+  if (idA !== idB) return idA - idB
+  return a.runner < b.runner ? -1 : a.runner > b.runner ? 1 : 0
+}
+
+/**
+ * Lignées : chaînes de générations qui se suivent (n, puis n+1) par date d’écriture.
+ * Deux générations 1 font deux lignées. Une génération 1 suivie d’une génération 2 font une lignée.
+ * Un nouveau départ, une génération 1 écrite après, ouvre une autre lignée.
+ * Les champions d’une lignée vont du plus ancien au plus récent. Les lignées, de la plus récente à la plus ancienne.
+ */
+export function championLineages(champions: readonly ChampionRecord[]): ChampionLineage[] {
+  const seen = new Set<string>()
+  const chains: ChampionRecord[][] = []
+  for (const champion of [...champions].sort(writeOrder)) {
+    const key = `${champion.generation}\0${champion.runner}\0${champion.savedAt}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const chain = chains[chains.length - 1]
+    const tip = chain?.[chain.length - 1]
+    if (chain && tip && champion.generation === tip.generation + 1) chain.push(champion)
+    else chains.push([champion])
+  }
+  return chains
+    .map((items) => ({ champions: items }))
+    .sort((a, b) => writeOrder(b.champions[b.champions.length - 1], a.champions[a.champions.length - 1]))
+}
+
 /**
  * Une génération est un lancement. Les enfants reçoivent les skills du champion,
  * dans la dernière version dont la sélection (prompt et examen) a fini avant le premier tirage caché.
@@ -495,6 +535,13 @@ export function forecastLine(score: ForecastScore): string | null {
   const tickets = score.tickets === 1 ? "1 ticket noté" : `${score.tickets} tickets notés`
   const found = score.hits === 1 ? "1 trouvé" : `${score.hits} trouvés`
   return `Hors échantillon : ${tickets} · ${found} · ${formatCents(score.netCents)} (hasard ${formatCents(expectedNet)} ± ${Math.round(chance.spreadCents / 100)})`
+}
+
+/** Pastille d’une lignée : tickets notés et solde net. Vide sans ticket noté. */
+export function forecastBadge(score: ForecastScore): string | null {
+  if (score.tickets === 0) return null
+  const tickets = score.tickets === 1 ? "1 ticket noté" : `${score.tickets} tickets notés`
+  return `${tickets} · ${formatCents(score.netCents)}`
 }
 
 export type ReplayLastGrid = {

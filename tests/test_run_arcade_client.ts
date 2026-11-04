@@ -4,10 +4,13 @@ import test from "node:test"
 import type { ChampionRecord } from "../src/lib/run-arcade/champion.ts"
 import {
   CHAMPION_STORE_KEY,
+  hideChampion,
   importChampion,
   listChampions,
   loadChampion,
+  readHiddenChampions,
   readUnsent,
+  restoreHiddenChampions,
   retryUnsent,
   sameChampion,
   saveChampion,
@@ -386,4 +389,31 @@ test("the list of written champions is empty when Neon does not answer", async (
   assert.deepEqual(await listChampions(), [])
   fakeNeon(() => json({ ok: true, items: [champion(5, HOURS(12)), { generation: "x" }] }))
   assert.equal((await listChampions()).length, 1)
+})
+
+test("the champion list asks for a page, and an import still reads fifty", async () => {
+  installBrowser()
+  const neon = fakeNeon((call) => json({ ok: true, items: call.url.includes("limit=50") ? [champion(4, HOURS(9))] : [] }))
+  await listChampions()
+  await listChampions(2)
+  await importChampion(champion(8, HOURS(13), "R8"))
+  const urls = neon.calls.filter((call) => call.method === "GET").map((call) => call.url)
+  assert.deepEqual(urls, [
+    "/api/brain/run-arcade/champions?page=1",
+    "/api/brain/run-arcade/champions?page=2",
+    "/api/brain/run-arcade/champions?limit=50",
+  ])
+})
+
+test("hiding a champion stays in this browser and does not call Neon", () => {
+  installBrowser()
+  const neon = fakeNeon(() => json({ ok: true }))
+  const row = champion(4, HOURS(9), "R4")
+  assert.equal(hideChampion(row), true)
+  assert.equal(readHiddenChampions().length, 1)
+  assert.equal(hideChampion(row), true)
+  assert.equal(readHiddenChampions().length, 1)
+  assert.equal(neon.calls.length, 0)
+  assert.equal(restoreHiddenChampions(), true)
+  assert.deepEqual(readHiddenChampions(), [])
 })

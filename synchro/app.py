@@ -1868,13 +1868,28 @@ def create_app() -> FastAPI:
             return
 
     @app.get("/api/brain/run-arcade/champions")
-    def run_arcade_champions(limit: int = Query(20, ge=1, le=50)) -> dict[str, Any]:
+    def run_arcade_champions(
+        page: int = Query(1, ge=1),
+        limit: int | None = Query(None, ge=1, le=50),
+    ) -> dict[str, Any]:
+        """Pages de vingt, cinquante au plus, les plus récents d'abord.
+
+        `limit` reste pour un appel qui demande un nombre précis (l'import en relit cinquante).
+        Sans `limit`, `page` découpe : 1 → les vingt premiers, 2 → les vingt suivants, 3 → les dix qui restent.
+        """
         from synchro.run_arcade import champion_from_row
 
         if not db.database_configured():
             raise HTTPException(503, "Neon non configuré")
+        if limit is None:
+            offset = (page - 1) * db.RUN_ARCADE_CHAMPION_PAGE
+            room = db.RUN_ARCADE_CHAMPION_CEILING - offset
+            size = min(db.RUN_ARCADE_CHAMPION_PAGE, room) if room > 0 else 0
+        else:
+            offset = 0
+            size = limit
         try:
-            rows = db.list_run_arcade_champions(limit)
+            rows = db.list_run_arcade_champions(size, offset) if size else []
         except Exception as exc:
             raise HTTPException(503, str(exc)) from exc
         return {"ok": True, "items": [_json(champion_from_row(row)) for row in rows]}

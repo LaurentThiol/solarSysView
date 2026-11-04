@@ -1,6 +1,7 @@
 "use client"
 
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
+import { ChevronDown } from "lucide-react"
 
 import { captureDraw } from "@/components/brain/run-arcade-capture"
 import { RunArcadeLayers } from "@/components/brain/run-arcade-layers"
@@ -14,12 +15,16 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { formatDrawDate, formatShortDate, toDrawSeries, type Draw } from "@/lib/draws"
 import {
+  championLineages,
   championRaceTurns,
+  forecastBadge,
   forecastLine,
   lastRevealedDraw,
   proposeNextDraw,
   replayLastGrid,
+  scoreForecast,
   scoreForecasts,
+  type ChampionLineage,
   type ChampionRecord,
   type ReplayLastGrid,
 } from "@/lib/run-arcade/champion"
@@ -35,7 +40,24 @@ import {
   type DepartMode,
 } from "@/lib/run-arcade/depart"
 import { balanceWithChance, championExamLine, runnerExamLine, sharedSentence } from "@/lib/run-arcade/examen"
-import { askBrave, askIa, exportChampion, listChampions, loadChampion, readChampionFile, saveChampion } from "@/lib/run-arcade/client"
+import {
+  askBrave,
+  askIa,
+  CHAMPION_LIST_CEILING,
+  CHAMPION_PAGE_SIZE,
+  championHideKey,
+  exportChampion,
+  hiddenChampionsServerSnapshot,
+  hiddenChampionsSnapshot,
+  hideChampion,
+  listChampions,
+  loadChampion,
+  readChampionFile,
+  restoreHiddenChampions,
+  sameChampion,
+  saveChampion,
+  subscribeHiddenChampions,
+} from "@/lib/run-arcade/client"
 import {
   formatDuration,
   formatSlice,
@@ -564,6 +586,278 @@ const RunnerCard = memo(function RunnerCard({
   )
 })
 
+function lineageTitle(lineage: ChampionLineage) {
+  const first = lineage.champions[0]
+  const last = lineage.champions[lineage.champions.length - 1]
+  const span =
+    first.generation === last.generation
+      ? `Génération ${first.generation}`
+      : `Générations ${first.generation} à ${last.generation}`
+  const count = lineage.champions.length === 1 ? "1 champion" : `${lineage.champions.length} champions`
+  return `${span} · ${last.runner} · ${count}`
+}
+
+function lineageId(lineage: ChampionLineage) {
+  const first = lineage.champions[0]
+  return championHideKey(first)
+}
+
+function ChampionDetail({ item, series }: { item: ChampionRecord; series: readonly RankPoint[] }) {
+  const note = scoreForecast(item, series)
+  const forecast = item.forecast
+  return (
+    <div className="border-t px-2 py-1 text-[11px] leading-4 text-muted-foreground" data-testid="run-arcade-champion-detail">
+      <ul className="flex flex-col gap-0.5">
+        {item.skills.map((skill) => {
+          const version = currentVersion(skill)
+          return (
+            <li key={skill.id}>
+              {skill.name} · {version.phrase}
+            </li>
+          )
+        })}
+      </ul>
+      <p>{item.depart ? `Départ ${formatShortDate(item.depart)}.` : "Départ non écrit."}</p>
+      <p>
+        {forecast
+          ? `Pronostic ${forecast.numbers.join(" ")} · étoiles ${forecast.stars.join(" ")} · lu le ${formatShortDate(forecast.seenDate)}${forecast.targetDate ? ` · visé le ${formatShortDate(forecast.targetDate)}` : ""}.`
+          : "Pronostic non écrit."}
+      </p>
+      <p>
+        {note
+          ? `Hors échantillon : ${note.hits === 1 ? "1 trouvé" : `${note.hits} trouvés`} · ${formatCents(note.netCents)}.`
+          : forecast?.targetDate
+            ? "Hors échantillon : le tirage visé n’est pas encore dans l’archive."
+            : "Hors échantillon : pas de note."}
+      </p>
+    </div>
+  )
+}
+
+function ChampionLine({
+  item,
+  position,
+  historyTurns,
+  series,
+  active,
+  open,
+  aside,
+  onChoose,
+  onToggle,
+  onHide,
+}: {
+  item: ChampionRecord
+  position: number
+  historyTurns: readonly number[]
+  series: readonly RankPoint[]
+  active: boolean
+  open: boolean
+  aside: boolean
+  onChoose: () => void
+  onToggle: () => void
+  onHide: () => void
+}) {
+  const dates =
+    item.raceFrom && item.raceTo ? `${formatShortDate(item.raceFrom)} – ${formatShortDate(item.raceTo)}` : ""
+  return (
+    <div className={cn("rounded-md border", active ? "border-primary" : "border-border")}>
+      <div className="flex items-start gap-1 px-1 py-1">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={open ? "Fermer le détail" : "Ouvrir le détail"}
+          onClick={onToggle}
+          className="mt-0.5 rounded-md p-0.5 text-muted-foreground hover:text-foreground"
+          data-testid="run-arcade-champion-chevron"
+        >
+          <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={onChoose}
+          aria-current={active ? "true" : undefined}
+          className={cn(
+            "flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 text-left text-xs",
+            active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <span>
+            Génération {item.generation} · {item.runner} · course{" "}
+            {position >= 0
+              ? balanceWithChance(item.cents, historyTurns[position])
+              : balanceWithChance(item.cents, championRaceTurns(item, series))}
+            {` · ${championExamLine(item)}`}
+          </span>
+          {dates ? <span className="ml-auto shrink-0 tabular-nums">{dates}</span> : null}
+        </button>
+        {aside ? (
+          <span className="shrink-0 px-1 text-[11px] text-muted-foreground">écarté</span>
+        ) : (
+          <button
+            type="button"
+            onClick={onHide}
+            className="shrink-0 px-1 text-[11px] text-muted-foreground hover:text-foreground"
+            data-testid="run-arcade-champion-hide"
+          >
+            Écarter
+          </button>
+        )}
+      </div>
+      {open ? <ChampionDetail item={item} series={series} /> : null}
+    </div>
+  )
+}
+
+function ChampionArchive({
+  parent,
+  history,
+  historyTurns,
+  series,
+  hiddenKeys,
+  more,
+  paging,
+  onChoose,
+  onHide,
+  onRestore,
+  onMore,
+}: {
+  parent: ChampionRecord | null
+  history: readonly ChampionRecord[]
+  historyTurns: readonly number[]
+  series: readonly RankPoint[]
+  hiddenKeys: readonly string[]
+  more: boolean
+  paging: boolean
+  onChoose: (item: ChampionRecord) => void
+  onHide: (item: ChampionRecord) => void
+  onRestore: () => void
+  onMore: () => void
+}) {
+  const [opened, setOpened] = useState<string[]>([])
+  const [detail, setDetail] = useState<string | null>(null)
+  const hidden = useMemo(() => new Set(hiddenKeys), [hiddenKeys])
+  const archive = useMemo(() => {
+    if (!parent || history.some((item) => sameChampion(item, parent))) return history
+    return [...history, parent]
+  }, [history, parent])
+  const lineages = useMemo(() => championLineages(archive), [archive])
+  const parentLineage = parent
+    ? lineages.find((lineage) => lineage.champions.some((item) => sameChampion(item, parent)))
+    : undefined
+  const rest = lineages.filter((lineage) => lineage !== parentLineage)
+
+  function positionOf(item: ChampionRecord) {
+    return history.findIndex((row) => sameChampion(row, item))
+  }
+
+  function toggleDetail(token: string) {
+    setDetail((current) => (current === token ? null : token))
+  }
+
+  function renderLine(item: ChampionRecord, place: string, aside: boolean) {
+    const position = positionOf(item)
+    const token = `${place}:${championHideKey(item)}`
+    return (
+      <ChampionLine
+        item={item}
+        position={position}
+        historyTurns={historyTurns}
+        series={series}
+        active={parent != null && sameChampion(parent, item)}
+        open={detail === token}
+        aside={aside}
+        onChoose={() => onChoose(item)}
+        onToggle={() => toggleDetail(token)}
+        onHide={() => onHide(item)}
+      />
+    )
+  }
+
+  function renderLineage(lineage: ChampionLineage, folded: boolean) {
+    const id = lineageId(lineage)
+    const open = !folded || opened.includes(id)
+    const visible = lineage.champions.filter((item) => !hidden.has(championHideKey(item)))
+    if (visible.length === 0) return null
+    const badge = forecastBadge(scoreForecasts(lineage.champions, series))
+    return (
+      <li key={id} data-testid="run-arcade-lineage" data-open={open ? "true" : "false"}>
+        <div className="flex flex-wrap items-center gap-2 px-1 py-0.5">
+          {folded ? (
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-label={open ? "Replier la lignée" : "Ouvrir la lignée"}
+              onClick={() =>
+                setOpened((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
+              }
+              className="rounded-md p-0.5 text-muted-foreground hover:text-foreground"
+            >
+              <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} aria-hidden />
+            </button>
+          ) : null}
+          <span className="text-[11px] text-muted-foreground">{lineageTitle(lineage)}</span>
+          {badge ? (
+            <span className="rounded-full border px-2 py-0.5 text-[11px]" data-testid="run-arcade-lineage-badge">
+              {badge}
+            </span>
+          ) : null}
+        </div>
+        {open ? (
+          <ul className="flex flex-col gap-1">
+            {visible.map((item) => {
+              const position = positionOf(item)
+              return (
+                <li key={championKey(item, position)} data-testid="run-arcade-champion-row">
+                  {renderLine(item, "liste", false)}
+                </li>
+              )
+            })}
+          </ul>
+        ) : null}
+      </li>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h2 className="text-xs font-medium text-muted-foreground">
+        <TitleHelp help={RUN_ARCADE_HELP.champions}>Champions déjà écrits</TitleHelp>
+      </h2>
+      {parent ? (
+        <div data-testid="run-arcade-parent-pin" className="flex flex-col gap-1">
+          <p className="text-xs font-medium">Parent du prochain Lancer</p>
+          {renderLine(parent, "épingle", hidden.has(championHideKey(parent)))}
+        </div>
+      ) : null}
+      <ul className="flex flex-col gap-2" data-testid="run-arcade-history">
+        {parentLineage ? renderLineage(parentLineage, false) : null}
+        {rest.map((lineage) => renderLineage(lineage, true))}
+      </ul>
+      {hiddenKeys.length > 0 ? (
+        <div>
+          <Button type="button" variant="outline" size="xs" onClick={onRestore} data-testid="run-arcade-champion-restore">
+            Voir les écartés
+          </Button>
+        </div>
+      ) : null}
+      {more ? (
+        <div>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={onMore}
+            disabled={paging}
+            data-testid="run-arcade-champion-more"
+          >
+            {paging ? "Lecture…" : "Voir les vingt suivants"}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function RunArcadeLab() {
   const { draws, source, loading } = useDraws("all")
   const series = useMemo(() => toRankPoints(draws), [draws])
@@ -594,6 +888,9 @@ export function RunArcadeLab() {
   const [lastFinished, setLastFinished] = useState<ChampionRecord | null>(null)
   const [imported, setImported] = useState<ChampionRecord | null>(null)
   const [history, setHistory] = useState<ChampionRecord[]>([])
+  const [historyMore, setHistoryMore] = useState(false)
+  const [pagingMore, setPagingMore] = useState(false)
+  const hiddenKeys = useSyncExternalStore(subscribeHiddenChampions, hiddenChampionsSnapshot, hiddenChampionsServerSnapshot)
   const [importError, setImportError] = useState<string | null>(null)
   const [importOutcome, setImportOutcome] = useState<{ record: ChampionRecord; outcome: ImportOutcome } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -601,11 +898,42 @@ export function RunArcadeLab() {
   useEffect(() => () => session.dispose(), [session])
 
   const listing = useRef(0)
+  const historyPage = useRef(1)
+  const paging = useRef(false)
+  const refreshing = useRef(false)
   const refreshHistory = useCallback(() => {
     const ticket = (listing.current += 1)
-    void listChampions().then((items) => {
-      if (ticket === listing.current) setHistory(items)
+    historyPage.current = 1
+    paging.current = false
+    refreshing.current = true
+    void listChampions(1).then((items) => {
+      if (ticket !== listing.current) return
+      refreshing.current = false
+      setHistory(items)
+      setHistoryMore(items.length === CHAMPION_PAGE_SIZE && CHAMPION_PAGE_SIZE < CHAMPION_LIST_CEILING)
     })
+  }, [])
+  const loadMore = useCallback(() => {
+    if (paging.current || refreshing.current) return
+    const ticket = listing.current
+    const next = historyPage.current + 1
+    if ((next - 1) * CHAMPION_PAGE_SIZE >= CHAMPION_LIST_CEILING) return
+    paging.current = true
+    setPagingMore(true)
+    void listChampions(next)
+      .then((items) => {
+        if (ticket !== listing.current) return
+        historyPage.current = next
+        setHistory((current) => {
+          const seen = new Set(current.map((item) => championHideKey(item)))
+          return [...current, ...items.filter((item) => !seen.has(championHideKey(item)))]
+        })
+        setHistoryMore(items.length === CHAMPION_PAGE_SIZE && next * CHAMPION_PAGE_SIZE < CHAMPION_LIST_CEILING)
+      })
+      .finally(() => {
+        paging.current = false
+        setPagingMore(false)
+      })
   }, [])
 
   useEffect(() => {
@@ -759,7 +1087,7 @@ export function RunArcadeLab() {
       setImported(record)
       void importChampion(record).then((outcome) => {
         setImportOutcome({ record, outcome })
-        if (outcome.state === "écrit") void listChampions().then(setHistory)
+        if (outcome.state === "écrit") refreshHistory()
       })
     }
     reader.readAsText(file)
@@ -983,45 +1311,31 @@ export function RunArcadeLab() {
       <UnsentChampions
         onWritten={(written) => {
           for (const record of written) session.confirmSaved(record, "Neon")
-          void listChampions().then(setHistory)
+          refreshHistory()
         }}
       />
 
-      {history.length > 0 ? (
-        <div className="flex flex-col gap-1">
-          <h2 className="text-xs font-medium text-muted-foreground">
-            <TitleHelp help={RUN_ARCADE_HELP.champions}>Champions déjà écrits</TitleHelp>
-          </h2>
-          <ul className="flex flex-col gap-1" data-testid="run-arcade-history">
-            {history.map((item, position) => {
-              const active =
-                parent?.generation === item.generation &&
-                parent.runner === item.runner &&
-                parent.savedAt === item.savedAt
-              return (
-                <li key={championKey(item, position)}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImportError(null)
-                      setImported(item)
-                    }}
-                    className={cn(
-                      "w-full rounded-md border px-2 py-1 text-left text-xs",
-                      active ? "border-primary" : "border-border text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    Génération {item.generation} · {item.runner} · course {balanceWithChance(item.cents, historyTurns[position])}
-                    {` · ${championExamLine(item)}`}
-                    {item.raceFrom && item.raceTo
-                      ? ` · ${formatShortDate(item.raceFrom)} – ${formatShortDate(item.raceTo)}`
-                      : ""}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
+      {parent || history.length > 0 ? (
+        <ChampionArchive
+          parent={parent}
+          history={history}
+          historyTurns={historyTurns}
+          series={series}
+          hiddenKeys={hiddenKeys}
+          more={historyMore}
+          paging={pagingMore}
+          onChoose={(item) => {
+            setImportError(null)
+            setImported(item)
+          }}
+          onHide={(item) => {
+            hideChampion(item)
+          }}
+          onRestore={() => {
+            restoreHiddenChampions()
+          }}
+          onMore={loadMore}
+        />
       ) : null}
 
       {importError ? <p className="text-sm text-destructive">{importError}</p> : null}

@@ -640,7 +640,14 @@ const APIS: AddressEntry[] = [
   apiEntry("/api/run-arcade/think", "POST", "runArcade · pensée", "Appel court à l’IA locale : une action JSON, graine fixe.", "assistants"),
   apiEntry("/api/run-arcade/brave", "POST", "runArcade · Brave", "Recherche web bornée avant le premier tirage de l’examen, filtrée côté serveur. Refusée (503) si les tirages cachés ne se lisent pas.", "assistants", "query, from, cutoff, through"),
   apiEntry("/api/brain/run-arcade/champion", "GET · POST", "runArcade · champion", "Champion d’un lancement et versions de ses skills, dans Neon.", "assistants"),
-  apiEntry("/api/brain/run-arcade/champions", "GET", "runArcade · champions", "Champions déjà écrits, du plus récent au plus ancien.", "assistants"),
+  apiEntry(
+    "/api/brain/run-arcade/champions",
+    "GET",
+    "runArcade · champions",
+    "Champions déjà écrits, du plus récent au plus ancien, par pages de vingt, cinquante au plus.",
+    "assistants",
+    "page, limit"
+  ),
   apiEntry("/api/ref/catalog", "GET", "Réf · catalogue", "Cycles physiques candidats, hors lunaire et solaire déjà calculés.", "assistants"),
   apiEntry("/api/ref/phases", "GET", "Réf · phases", "Cycles à phase locale et séries mesurées (sans horloge inventée).", "assistants"),
   apiEntry(

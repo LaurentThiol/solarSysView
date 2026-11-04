@@ -9,6 +9,20 @@ export const UNSENT_STORE_KEY = "synchro-run-arcade-unsent"
 export const UNSENT_KEEP = 20
 /** Champions relus dans Neon pour reconnaître un doublon à l’import. */
 const KNOWN_LIMIT = 50
+/** Une page de la liste « Champions déjà écrits ». */
+export const CHAMPION_PAGE_SIZE = 20
+/** La liste s’arrête aux cinquante plus récents. */
+export const CHAMPION_LIST_CEILING = 50
+/** Champions masqués dans ce navigateur. Ils restent dans Neon et dans un export. */
+const HIDDEN_STORE_KEY = "synchro-run-arcade-ecartes"
+const HIDDEN_EMPTY: string[] = []
+const hiddenListeners = new Set<() => void>()
+let hiddenCache: string[] | null = null
+
+function invalidateHidden() {
+  hiddenCache = null
+  for (const listener of hiddenListeners) listener()
+}
 
 type ErrorBody = { ok?: boolean; error?: unknown; detail?: unknown; absent?: unknown; retryAfterMs?: unknown }
 
@@ -106,6 +120,69 @@ export function sameChampion(
   right: Pick<ChampionRecord, "generation" | "runner" | "savedAt">
 ) {
   return left.generation === right.generation && left.runner === right.runner && left.savedAt === right.savedAt
+}
+
+/** Identité d’un champion écarté, dans la clé de ce navigateur. */
+export function championHideKey(item: Pick<ChampionRecord, "generation" | "runner" | "savedAt">) {
+  return `${item.generation}\u0000${item.runner}\u0000${item.savedAt}`
+}
+
+/** Champions écartés de la liste dans ce navigateur. Liste vide si le stockage est illisible. */
+export function readHiddenChampions(): string[] {
+  try {
+    const raw = window.localStorage.getItem(HIDDEN_STORE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is string => typeof item === "string" && item.length > 0)
+  } catch {
+    return []
+  }
+}
+
+/** Masque un champion dans ce navigateur. Faux si le stockage refuse l’écriture. Rien n’est effacé dans Neon. */
+export function hideChampion(item: Pick<ChampionRecord, "generation" | "runner" | "savedAt">) {
+  const key = championHideKey(item)
+  const keys = readHiddenChampions()
+  if (keys.includes(key)) return true
+  const wrote = writeLocal(HIDDEN_STORE_KEY, JSON.stringify([...keys, key]))
+  if (wrote) invalidateHidden()
+  return wrote
+}
+
+/** Remet les champions écartés dans la liste de ce navigateur. */
+export function restoreHiddenChampions() {
+  const wrote = writeLocal(HIDDEN_STORE_KEY, null)
+  if (wrote) invalidateHidden()
+  return wrote
+}
+
+/** La liste des écartés, pour l’écran. Le tableau vide est toujours le même objet. */
+export function hiddenChampionsSnapshot() {
+  if (typeof window === "undefined") return HIDDEN_EMPTY
+  if (hiddenCache) return hiddenCache
+  const keys = readHiddenChampions()
+  hiddenCache = keys.length === 0 ? HIDDEN_EMPTY : keys
+  return hiddenCache
+}
+
+export function hiddenChampionsServerSnapshot() {
+  return HIDDEN_EMPTY
+}
+
+export function subscribeHiddenChampions(listener: () => void) {
+  hiddenListeners.add(listener)
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === HIDDEN_STORE_KEY) {
+      hiddenCache = null
+      listener()
+    }
+  }
+  window.addEventListener("storage", onStorage)
+  return () => {
+    hiddenListeners.delete(listener)
+    window.removeEventListener("storage", onStorage)
+  }
 }
 
 function readQueueText() {
@@ -282,9 +359,13 @@ export function retryUnsent(): Promise<RetryResult> {
   })
 }
 
-async function fetchChampions(limit?: number): Promise<ChampionRecord[] | null> {
+async function fetchChampions(options?: { limit?: number; page?: number }): Promise<ChampionRecord[] | null> {
   try {
-    const url = limit ? `/api/brain/run-arcade/champions?limit=${limit}` : "/api/brain/run-arcade/champions"
+    const params = new URLSearchParams()
+    if (options?.limit != null) params.set("limit", String(options.limit))
+    else if (options?.page != null) params.set("page", String(options.page))
+    const query = params.toString()
+    const url = query ? `/api/brain/run-arcade/champions?${query}` : "/api/brain/run-arcade/champions"
     const response = await fetch(url, { cache: "no-store" })
     if (!response.ok) return null
     const body = (await response.json()) as { items?: unknown }
@@ -298,9 +379,13 @@ async function fetchChampions(limit?: number): Promise<ChampionRecord[] | null> 
   }
 }
 
-/** Champions déjà écrits, du plus récent au plus ancien. Liste vide si Neon ne répond pas. */
-export async function listChampions(): Promise<ChampionRecord[]> {
-  return (await fetchChampions()) ?? []
+/**
+ * Une page de champions déjà écrits, du plus récent au plus ancien.
+ * Page 1 : les vingt plus récents. La page 3 s’arrête au plafond de cinquante. Liste vide si Neon ne répond pas.
+ */
+export async function listChampions(page = 1): Promise<ChampionRecord[]> {
+  const safe = Number.isInteger(page) && page > 0 ? page : 1
+  return (await fetchChampions({ page: safe })) ?? []
 }
 
 export type ImportOutcome = { state: "écrit" | "déjà écrit" | "non écrit"; text: string }
@@ -310,7 +395,7 @@ export function importChampion(record: ChampionRecord): Promise<ImportOutcome> {
   return whileSending(async () => {
     const name = `génération ${record.generation} · ${record.runner}`
     const already: ImportOutcome = { state: "déjà écrit", text: `${name} est déjà dans Neon : rien n’est réécrit.` }
-    const known = await fetchChampions(KNOWN_LIMIT)
+    const known = await fetchChampions({ limit: KNOWN_LIMIT })
     if (known?.some((item) => sameChampion(item, record))) {
       dequeue(record)
       return already

@@ -2,8 +2,10 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  championLineages,
   championRecord,
   childrenOf,
+  forecastBadge,
   forecastFor,
   forecastLine,
   nextDrawDate,
@@ -1561,6 +1563,45 @@ test("flat decade tips push toward one per decade, unlike no thought and unlike 
   assert.notDeepEqual(flat, none)
   assert.notDeepEqual(flat, skewed)
   assert.deepEqual(placeNumbers(tips, 140, []), none)
+})
+
+function lineageRow(generation: number, savedAt: string, runner = "R1"): ChampionRecord {
+  return {
+    generation,
+    runner,
+    cents: 0,
+    examCents: null,
+    calls: 0,
+    raceFrom: null,
+    raceTo: null,
+    skills: [],
+    journal: [],
+    savedAt,
+  }
+}
+
+test("two generation-1 champions are two lineages, and generation 1 then 2 is one", () => {
+  const first = lineageRow(1, "2026-11-01T10:00:00.000Z", "R1")
+  const second = lineageRow(2, "2026-11-02T10:00:00.000Z", "R2")
+  const restart = lineageRow(1, "2026-11-03T10:00:00.000Z", "R9")
+
+  const chain = championLineages([second, first])
+  assert.equal(chain.length, 1)
+  assert.deepEqual(
+    chain[0].champions.map((item) => item.generation),
+    [1, 2]
+  )
+
+  assert.equal(championLineages([first, restart]).length, 2)
+  assert.equal(championLineages([first, first]).length, 1)
+
+  const split = championLineages([restart, second, first])
+  assert.deepEqual(
+    split.map((lineage) => lineage.champions.map((item) => item.generation)),
+    [[1], [1, 2]]
+  )
+  assert.equal(forecastBadge({ notes: [], tickets: 0, hits: 0, netCents: 0 }), null)
+  assert.equal(forecastBadge({ notes: [], tickets: 2, hits: 1, netCents: 150 }), "2 tickets notés · 1,50 €")
 })
 
 test("a stored figure longer than its window says so in the phrase and stays in place", () => {

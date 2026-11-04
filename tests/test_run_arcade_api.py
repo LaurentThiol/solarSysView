@@ -363,19 +363,56 @@ def test_an_old_champion_written_after_a_recent_one_does_not_become_the_latest(m
     assert seen
     for sql in seen:
         assert "ORDER BY payload->>'savedAt' DESC NULLS LAST, created_at DESC, id DESC" in sql
+        assert "LIMIT %s OFFSET %s" in sql
 
 
 def test_champions_list_is_newest_first(monkeypatch) -> None:
     older = {"id": 1, "payload": {**_champion(), "generation": 1, "runner": "R1"}}
     newer = {"id": 2, "payload": _champion()}
     monkeypatch.setattr("synchro.db.database_configured", lambda: True)
-    monkeypatch.setattr("synchro.db.list_run_arcade_champions", lambda limit: [newer, older][:limit])
+    monkeypatch.setattr(
+        "synchro.db.list_run_arcade_champions",
+        lambda limit, offset=0: [newer, older][offset : offset + limit],
+    )
     client = TestClient(create_app())
     body = client.get("/api/brain/run-arcade/champions").json()
     assert body["ok"] is True
     assert [item["runner"] for item in body["items"]] == ["R3", "R1"]
     assert body["items"][0]["id"] == 2
     assert client.get("/api/brain/run-arcade/champions?limit=1").json()["items"][0]["generation"] == 2
+
+
+def test_champions_list_pages_of_twenty_stop_at_fifty(monkeypatch) -> None:
+    seen: list[tuple[int, int]] = []
+
+    def fake(limit: int, offset: int = 0) -> list[dict]:
+        seen.append((limit, offset))
+        return []
+
+    monkeypatch.setattr("synchro.db.database_configured", lambda: True)
+    monkeypatch.setattr("synchro.db.list_run_arcade_champions", fake)
+    client = TestClient(create_app())
+    assert client.get("/api/brain/run-arcade/champions").json() == {"ok": True, "items": []}
+    assert client.get("/api/brain/run-arcade/champions?page=2").json()["items"] == []
+    assert client.get("/api/brain/run-arcade/champions?page=3").json()["items"] == []
+    page4 = client.get("/api/brain/run-arcade/champions?page=4")
+    assert page4.status_code == 200
+    assert page4.json()["items"] == []
+    assert client.get("/api/brain/run-arcade/champions?limit=50").json()["items"] == []
+    assert client.get("/api/brain/run-arcade/champions?page=0").status_code == 422
+    # La page 4 est au-delà du plafond : Neon n'est pas lu.
+    assert seen == [(20, 0), (20, 20), (10, 40), (50, 0)]
+
+
+def test_champions_list_does_not_read_past_fifty(monkeypatch) -> None:
+    from synchro import db
+
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Neon ne doit pas être lu au-delà de cinquante")
+
+    monkeypatch.setattr("synchro.db.connection", boom)
+    assert db.list_run_arcade_champions(20, 50) == []
+    assert db.list_run_arcade_champions(20, 80) == []
 
 
 def test_champions_list_needs_neon(monkeypatch) -> None:
