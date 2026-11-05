@@ -4,6 +4,7 @@ import { memo, useRef, useState } from "react"
 
 import { curveLabel, RAIL_LEFT, RAIL_RIGHT, type CurveKey } from "@/lib/run-arcade/curves"
 import { gesturePhrase } from "@/lib/run-arcade/skills"
+import type { VersionStroke } from "@/lib/run-arcade/strokes"
 import { formatCents, type CurveMask, type RailMark, type ThoughtDraw } from "@/lib/run-arcade/thought"
 import { CURVE_VIEW_SPAN, curveWindow, slideByPointer, windowDraws } from "@/lib/run-arcade/window"
 
@@ -68,6 +69,17 @@ function railTone(key: CurveKey, matched: readonly CurveKey[], exact: readonly C
   return "fill-foreground"
 }
 
+/** Élargit le cadre si une pointe de version sort de la série déjà dessinée. */
+function frameThought(thought: ThoughtDraw, versions: readonly VersionStroke[], thoughtTip: number) {
+  const ys = [thought.yMin, thought.yMax, thoughtTip, ...versions.map((item) => item.tip)]
+  const lo = Math.min(...ys)
+  const hi = Math.max(...ys)
+  if (lo >= thought.yMin && hi <= thought.yMax) return thought
+  const span = Math.max(hi - lo, 1)
+  const pad = Math.max(0.8, span * 0.08)
+  return { ...thought, yMin: lo - pad, yMax: hi + pad }
+}
+
 function RunnerUniverseView({
   runnerId,
   thought,
@@ -76,6 +88,8 @@ function RunnerUniverseView({
   className,
   pan = true,
   onPress,
+  versions = null,
+  thoughtTip = null,
 }: {
   runnerId: string
   thought: ThoughtDraw | null
@@ -86,6 +100,10 @@ function RunnerUniverseView({
   pan?: boolean
   /** Clic sur le trait, sans compter un glisser. */
   onPress?: () => void
+  /** Une ligne par version encore en vie. Absent : le vecteur unique. */
+  versions?: readonly VersionStroke[] | null
+  /** Pensée : moyenne pondérée de ces pointes. */
+  thoughtTip?: number | null
 }) {
   const focusKey = `${runnerId}:${thought?.focus ?? ""}`
   const [parkedOn, setParkedOn] = useState(focusKey)
@@ -111,9 +129,12 @@ function RunnerUniverseView({
     )
   }
 
-  const view = curveWindow(thought.xMax, start)
-  const { X, Y, radiusPx } = scales(thought, view.x0, view.x1)
-  const trail = thought.trail.map((point) => `${X(point.x)},${Y(point.y)}`).join(" ")
+  const versionList = versions ?? []
+  const blended = versionList.length > 0 && thoughtTip != null && Number.isFinite(thoughtTip) ? thoughtTip : null
+  const framed = blended != null ? frameThought(thought, versionList, blended) : thought
+  const view = curveWindow(framed.xMax, start)
+  const { X, Y, radiusPx } = scales(framed, view.x0, view.x1)
+  const trail = framed.trail.map((point) => `${X(point.x)},${Y(point.y)}`).join(" ")
   const lines = observationLines(thought.observation)
   const markerId = `run-arcade-${runnerId}-head`
   const cx = X(thought.radius.cx)
@@ -215,7 +236,7 @@ function RunnerUniverseView({
         <g clipPath={`url(#${markerId}-plot)`}>
           <polyline points={trail} className="stroke-foreground" strokeWidth="1.6" fill="none" data-testid="runner-curve" />
           {[...thought.masks].sort((a, b) => Number(a.drives) - Number(b.drives)).map((mask) => {
-            const box = maskBox(mask, X, Y, thought.yMin, thought.yMax)
+            const box = maskBox(mask, X, Y, framed.yMin, framed.yMax)
             if (!box) return null
             return (
               <rect
@@ -287,28 +308,103 @@ function RunnerUniverseView({
             ) : null}
           </g>
           <g data-calque="vecteur">
-            <line
-              x1={X(thought.vector.x1)}
-              y1={Y(thought.vector.y1)}
-              x2={X(thought.vector.x2)}
-              y2={Y(thought.vector.y2)}
-              className="stroke-chart-4"
-              strokeWidth="1.6"
-              markerEnd={`url(#${markerId})`}
-              data-testid="runner-vector"
-            />
-            {thought.recall ? (
-              <line
-                x1={X(thought.recall.x1)}
-                y1={Y(thought.recall.y1)}
-                x2={X(thought.recall.x2)}
-                y2={Y(thought.recall.y2)}
-                className="stroke-muted-foreground"
-                strokeWidth="0.9"
-                strokeDasharray="2 2"
-                data-testid="runner-recall"
-              />
-            ) : null}
+            {blended != null ? (
+              <g data-testid="runner-version-strokes">
+                {versionList.map((item) => {
+                  const dashed = item.weight <= 0
+                  const tipText = `pointe ${formatValue(item.tip)} · poids ${item.label}`
+                  return (
+                    <g key={item.id}>
+                      <line
+                        x1={X(thought.vector.x1)}
+                        y1={Y(thought.vector.y1)}
+                        x2={X(thought.vector.x2)}
+                        y2={Y(item.tip)}
+                        stroke="transparent"
+                        strokeWidth="6"
+                      >
+                        <title>{tipText}</title>
+                      </line>
+                      <line
+                        x1={X(thought.vector.x1)}
+                        y1={Y(thought.vector.y1)}
+                        x2={X(thought.vector.x2)}
+                        y2={Y(item.tip)}
+                        className={dashed ? "stroke-muted-foreground" : "stroke-chart-4"}
+                        strokeWidth="0.9"
+                        strokeDasharray={dashed ? "3 2" : undefined}
+                        data-testid="runner-version-stroke"
+                        data-name={item.name}
+                        data-gesture={item.gesture}
+                        data-tip={item.tip}
+                        data-weight={item.weight}
+                        data-dashed={dashed ? "oui" : "non"}
+                      >
+                        <title>{tipText}</title>
+                      </line>
+                      <circle
+                        cx={X(thought.vector.x2)}
+                        cy={Y(item.tip)}
+                        r="2.2"
+                        className={dashed ? "fill-muted-foreground" : "fill-chart-4"}
+                      >
+                        <title>{tipText}</title>
+                      </circle>
+                    </g>
+                  )
+                })}
+                <line
+                  x1={X(thought.vector.x1)}
+                  y1={Y(thought.vector.y1)}
+                  x2={X(thought.vector.x2)}
+                  y2={Y(blended)}
+                  className="stroke-chart-4"
+                  strokeWidth="2.6"
+                  markerEnd={`url(#${markerId})`}
+                  data-testid="runner-thought-stroke"
+                  data-tip={blended}
+                >
+                  <title>{`pensée ${formatValue(blended)}`}</title>
+                </line>
+                {Math.abs(thought.projection.y - blended) >= 0.5 ? (
+                  <line
+                    x1={X(thought.vector.x2)}
+                    y1={Y(blended)}
+                    x2={X(thought.projection.x)}
+                    y2={Y(thought.projection.y)}
+                    className="stroke-muted-foreground"
+                    strokeWidth="0.9"
+                    strokeDasharray="2 2"
+                    data-testid="runner-recall"
+                  />
+                ) : null}
+              </g>
+            ) : (
+              <>
+                <line
+                  x1={X(thought.vector.x1)}
+                  y1={Y(thought.vector.y1)}
+                  x2={X(thought.vector.x2)}
+                  y2={Y(thought.vector.y2)}
+                  className="stroke-chart-4"
+                  strokeWidth="1.6"
+                  markerEnd={`url(#${markerId})`}
+                  data-testid="runner-vector"
+                />
+                {thought.recall ? (
+                  <line
+                    x1={X(thought.recall.x1)}
+                    y1={Y(thought.recall.y1)}
+                    x2={X(thought.recall.x2)}
+                    y2={Y(thought.recall.y2)}
+                    className="stroke-muted-foreground"
+                    strokeWidth="0.9"
+                    strokeDasharray="2 2"
+                    data-testid="runner-recall"
+                  />
+                ) : null}
+              </>
+            )}
           </g>
           {caseX > PLOT.l && caseX < PLOT.r ? (
             <line x1={caseX} y1={caseY} x2={PLOT.r} y2={caseY} className="stroke-chart-4/50" strokeWidth="0.8" strokeDasharray="1 3" />
@@ -345,7 +441,7 @@ function RunnerUniverseView({
             const focus = key === thought.focus
             return (
               <g key={key} data-rail={key}>
-                <title>{`${curveLabel(key)} : pensée ${formatValue(mark.thought)} · case ${mark.value}`}</title>
+                <title>{`${curveLabel(key)} : pensée ${formatValue(blended != null && key === thought.focus ? blended : mark.thought)} · case ${mark.value}`}</title>
                 <text
                   x={column.label}
                   y={y}

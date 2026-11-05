@@ -98,6 +98,7 @@ import { RUN_ARCADE_HELP } from "@/lib/run-arcade/help"
 import { layerPoints } from "@/lib/run-arcade/layers"
 import { championKey, lastKnownChampion, parentChampion } from "@/lib/run-arcade/lineage"
 import { createSession, MIN_SLICE_MS, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
+import { curveStrokes, type CurveStrokes } from "@/lib/run-arcade/strokes"
 import {
   DAYS_MAX,
   DAYS_MIN,
@@ -1083,6 +1084,33 @@ function SkillSketch({
   )
 }
 
+function formatTip(value: number) {
+  const rounded = Math.round(value * 10) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(".", ",")
+}
+
+/** Nom, geste et poids sous le dessin du runner ouvert. Le trait fort est la pensée. */
+function VersionLines({ strokes }: { strokes: CurveStrokes }) {
+  return (
+    <ul className="mt-2 flex flex-col gap-0.5 text-[11px] leading-4" data-testid="run-arcade-version-lines">
+      {strokes.versions.map((item) => (
+        <li key={item.id} data-testid="run-arcade-version-line" data-dashed={item.weight <= 0 ? "oui" : "non"}>
+          <span className="text-foreground">{item.name}</span>
+          <span className="text-muted-foreground">
+            {" · "}
+            {item.gestureLabel}
+            {" · "}
+            {item.label}
+          </span>
+        </li>
+      ))}
+      <li className="font-medium text-chart-4" data-testid="run-arcade-thought-line" data-tip={strokes.thought}>
+        Pensée · {formatTip(strokes.thought)}
+      </li>
+    </ul>
+  )
+}
+
 function versionLife(version: SkillVersion, hidden: string | null, lives: GestureLife | null) {
   const measured = lives?.measured[version.gesture] ?? false
   const source = measured ? "mesuré" : "course, faute d’expérience"
@@ -1644,6 +1672,17 @@ export function RunArcadeLab() {
     const shown = race.revealed ? race.cursor - 1 : race.cursor
     return sincePast(revealedPast(track, shown), focus.since)
   }, [focus, race, track])
+
+  const focusStrokes = useMemo(() => {
+    if (!running || !focus || runnerPast.length < 2) return null
+    return curveStrokes({
+      mind: focus.mind,
+      past: runnerPast,
+      curve: focusCurve ?? focus.mind.focus,
+      hiddenDate,
+      life: snapshot.lives ?? lives,
+    })
+  }, [running, focus, runnerPast, focusCurve, hiddenDate, snapshot.lives, lives])
 
   function type(field: keyof FieldDrafts, text: string) {
     setDrafts((current) => ({ ...current, [field]: text }))
@@ -2207,7 +2246,10 @@ export function RunArcadeLab() {
             matched={focusView.matched}
             exact={focusView.exact}
             className="h-72"
+            versions={running ? focusStrokes?.versions : null}
+            thoughtTip={running ? (focusStrokes?.thought ?? null) : null}
           />
+          {running && focusStrokes && focusStrokes.versions.length > 0 ? <VersionLines strokes={focusStrokes} /> : null}
           {xray ? <ThoughtChain runner={focus} draw={focusView.draw} hiddenDate={hiddenDate} /> : null}
           {focusView.draw ? (
             <div className="mt-2 text-sm leading-5">

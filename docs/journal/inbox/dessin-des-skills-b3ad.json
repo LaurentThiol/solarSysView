@@ -1,0 +1,9 @@
+{
+  "slug": "dessin-des-skills-b3ad",
+  "happened_on": "2026-11-05",
+  "area": "runArcade",
+  "title": "Dessin : un trait par version vivante",
+  "body": "Sur le dessin du runner ouvert, pendant l’avant-course et la course, chaque version encore en vie de la courbe affichée a son trait. La ligne donne le nom, le geste et le poids, l’écart au hasard depuis la naissance, ou 0. Le trait fort est la pensée, moyenne pondérée, puis le rappel vers la case jouée. Une version échue n’a pas de trait. Un poids nul ou négatif est en pointillés. Le survol dit la pointe et le poids. Le panneau Skills du parent, avant Lancer, reste le même.",
+  "pr_number": null,
+  "pr_url": null
+}

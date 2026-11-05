@@ -228,7 +228,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   dessin: {
     title: "Signes du dessin",
     wide: true,
-    body: "Chaque runner dessine la série révélée de sa courbe. Une skill qui la vise pose un masque : la fenêtre du geste. Tangente, cercle d’or, pas d’avant et vecteur sont quatre calques, toujours visibles. Quand la série est longue, le cadre montre vingt tirages : un curseur le glisse le long du trait, calé au départ sur le bout. La phrase sous le dessin dit le geste, la lecture, puis « Observation du …, vue N fois ».",
+    body: "Chaque runner dessine la série révélée de sa courbe. Une skill qui la vise pose un masque : la fenêtre du geste. Sur le runner ouvert, pendant l’avant-course et la course, chaque version encore en vie de la courbe a un trait fin jusqu’à sa pointe. Le trait fort est la pensée. Un trait en pointillés ne pèse pas. Tangente, cercle d’or, pas d’avant et vecteur sont quatre calques, toujours visibles. Quand la série est longue, le cadre montre vingt tirages : un curseur le glisse le long du trait, calé au départ sur le bout. La phrase sous le dessin dit le geste, la lecture, puis « Observation du …, vue N fois ».",
     items: [
       {
         label: "Trait",
@@ -256,7 +256,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Calque vecteur",
-        text: "Flèche du dernier point vers la pensée, avant le rappel aux sommes.",
+        text: "Flèche du dernier point vers la pensée, avant le rappel aux sommes. Sur le runner ouvert, pendant l’avant-course et la course, ce trait est le plus fort : il porte la moyenne pondérée des versions encore en vie.",
       },
       {
         label: "Rappel",
@@ -269,6 +269,10 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       {
         label: "Rail",
         text: "À gauche, les sommes et les décennies. À droite, n1 à n5, e1 et e2. Le survol d’une case dit la pensée et la valeur jouée.",
+      },
+      {
+        label: "Versions",
+        text: "Sur le dessin du runner ouvert, pendant l’avant-course et la course, un trait fin par version encore en vie de la courbe affichée. La ligne sous le dessin donne le nom, le geste et le poids. Le poids est l’écart au hasard depuis la naissance, ou 0 s’il est nul ou négatif. Le trait fort est la pensée : la moyenne des pointes, pondérée par ces poids, puis le rappel vers la case jouée. Une version échue n’a pas de trait. Un poids nul ou négatif est en pointillés : il est dessiné, il ne pèse pas. Le survol dit la pointe et le poids.",
       },
     ],
   },
