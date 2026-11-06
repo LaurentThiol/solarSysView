@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "Mélanger : les pointes se moyennent",
   "body": "Un bouton Mélanger se place à côté de Lancer. Il est éteint au départ, et il se fige pendant l’avant-course et la course. Éteint, une seule version pose la grille, celle au solde le plus haut. Allumé, les pointes encore en vie se moyennent : le poids est l’écart au hasard depuis la naissance, un écart nul ne tire pas, et si tous les poids sont nuls la plus récente joue seule. Les sommes ramènent les cases une fois, un seul ticket est joué, et le trait fort suit ce choix. Le panneau Skills du parent, avant Lancer, reste le même.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 373,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/373"
 }
