@@ -3,6 +3,8 @@
  * Chaque entrée est le texte du point d’exclamation.
  */
 
+import { TUNNEL_MAX_DAYS, TUNNEL_MIN_DAYS } from "./tunnel"
+
 export type RunArcadeHelpCopy = {
   title: string
   body: string
@@ -232,7 +234,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   dessin: {
     title: "Signes du dessin",
     wide: true,
-    body: "Chaque runner dessine la série révélée de sa courbe. Une skill qui la vise pose un masque : la fenêtre du geste. Sur le runner ouvert, pendant l’avant-course et la course, chaque version encore en vie de la courbe a un trait fin jusqu’à sa pointe. Le trait fort est la pensée : la gagnante seule, ou la moyenne si Mélanger est allumé. Un trait en pointillés ne pèse pas. Tangente, cercle d’or, pas d’avant et vecteur sont quatre calques, toujours visibles. Quand la série est longue, le cadre montre vingt tirages : un curseur le glisse le long du trait, calé au départ sur le bout. La phrase sous le dessin dit le geste, la lecture, puis « Observation du …, vue N fois ».",
+    body: `Chaque runner dessine la série révélée de sa courbe. Une skill qui la vise pose un masque : la fenêtre du geste. Sur le runner ouvert, pendant l’avant-course et la course, chaque version encore en vie de la courbe a un trait fin jusqu’à sa pointe. Le trait fort est la pensée : la gagnante seule, ou la moyenne si Mélanger est allumé. Un trait en pointillés ne pèse pas. Tangente, cercle d’or, pas d’avant et vecteur sont quatre calques, toujours visibles. Quand la série est longue, le cadre montre vingt tirages : un curseur le glisse le long du trait, calé au départ sur le bout. La phrase sous le dessin dit le geste, la lecture, puis « Observation du …, vue N fois ». Un tunnel se lit entre ${TUNNEL_MIN_DAYS} et ${TUNNEL_MAX_DAYS} jours. Il ne joue pas le ticket.`,
     items: [
       {
         label: "Trait",
@@ -277,6 +279,10 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       {
         label: "Versions",
         text: "Sur le dessin du runner ouvert, pendant l’avant-course et la course, un trait fin par version encore en vie de la courbe affichée. La ligne sous le dessin donne le nom, le geste et le poids. Le poids est l’écart au hasard depuis la naissance, ou 0 s’il est nul ou négatif. Le trait fort est la pensée. Éteint, Mélanger laisse la gagnante seule. Allumé, la pensée est la moyenne des pointes, pondérée par ces poids, puis le rappel vers la case jouée. Une version échue n’a pas de trait. Un poids nul ou négatif est en pointillés : il est dessiné, il ne pèse pas. Le survol dit la pointe et le poids.",
+      },
+      {
+        label: "Tunnel",
+        text: `La plus longue durée de ${TUNNEL_MIN_DAYS} à ${TUNNEL_MAX_DAYS} jours qui finit au dernier point révélé. Tous les points de cette durée tiennent dans la bande haut-bas des ${TUNNEL_MIN_DAYS} derniers jours. Le dernier point ne pose pas cette bande : s’il en est déjà sorti, l’écran dit « pas de tunnel ». S’il y en a une, l’écran dit « tunnel N jours, de A à B » et dessine la bande, du premier jour du tunnel au dernier point. Au-delà de ${TUNNEL_MAX_DAYS} jours, on coupe. Le tunnel ne joue pas le ticket.`,
       },
     ],
   },

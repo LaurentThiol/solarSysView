@@ -1,0 +1,9 @@
+{
+  "slug": "tunnel-moyen-terme-5fec",
+  "happened_on": "2026-11-06",
+  "area": "runArcade",
+  "title": "Tunnel de 10 à 30 jours",
+  "body": "Sur chaque courbe affichée, une phrase dit si le moyen terme tient encore. S’il tient, elle écrit « tunnel N jours, de A à B », et une bande va du plus bas au plus haut, du premier jour de ce tunnel au dernier point révélé. N est la plus longue durée entre 10 et 30 jours qui finit à ce point et dont tous les points restent dans cette bande. S’il ne tient pas, même sur 10 jours, la phrase écrit « pas de tunnel ». Au-delà de 30 jours, la durée est coupée. La bande ne joue pas le ticket.",
+  "pr_number": null,
+  "pr_url": null
+}

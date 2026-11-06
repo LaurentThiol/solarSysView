@@ -6,6 +6,7 @@ import { curveLabel, RAIL_LEFT, RAIL_RIGHT, type CurveKey } from "@/lib/run-arca
 import { gesturePhrase } from "@/lib/run-arcade/skills"
 import type { VersionStroke } from "@/lib/run-arcade/strokes"
 import { formatCents, type CurveMask, type RailMark, type ThoughtDraw } from "@/lib/run-arcade/thought"
+import type { Tunnel, TunnelHit } from "@/lib/run-arcade/tunnel"
 import { CURVE_VIEW_SPAN, curveWindow, slideByPointer, windowDraws } from "@/lib/run-arcade/window"
 
 import { cn } from "@/lib/utils"
@@ -63,6 +64,17 @@ function maskBox(mask: CurveMask, X: (x: number) => number, Y: (y: number) => nu
   return { left, width: right - left, top, height }
 }
 
+/** Rectangle de la bande. Une bande plate garde un trait visible, sans changer l’échelle. */
+function tunnelBox(hit: TunnelHit, X: (x: number) => number, Y: (y: number) => number) {
+  const left = Math.min(X(hit.from), X(hit.to))
+  const right = Math.max(X(hit.from), X(hit.to))
+  const top = Y(hit.hi)
+  const bottom = Y(hit.lo)
+  const height = Math.max(1.5, bottom - top)
+  const y = bottom - top < 1.5 ? (top + bottom) / 2 - height / 2 : top
+  return { x: left, width: Math.max(2, right - left), y, height }
+}
+
 function railTone(key: CurveKey, matched: readonly CurveKey[], exact: readonly CurveKey[]) {
   if (matched.includes(key)) return "fill-[var(--ok)] font-medium"
   if (exact.includes(key)) return "fill-chart-2 font-medium"
@@ -90,6 +102,7 @@ function RunnerUniverseView({
   onPress,
   versions = null,
   thoughtTip = null,
+  tunnel = null,
 }: {
   runnerId: string
   thought: ThoughtDraw | null
@@ -104,6 +117,8 @@ function RunnerUniverseView({
   versions?: readonly VersionStroke[] | null
   /** Pensée : la gagnante seule, ou la moyenne si Mélanger est allumé. */
   thoughtTip?: number | null
+  /** Bande de moyen terme. Absente : le dessin ne la nomme pas. Elle ne pose pas la grille. */
+  tunnel?: Tunnel | null
 }) {
   const focusKey = `${runnerId}:${thought?.focus ?? ""}`
   const [parkedOn, setParkedOn] = useState(focusKey)
@@ -234,6 +249,13 @@ function RunnerUniverseView({
         </defs>
         <rect x="0" y="0" width={VIEW_W} height={VIEW_H} className="fill-canvas" rx="8" />
         <g clipPath={`url(#${markerId}-plot)`}>
+          {tunnel?.hit ? (
+            <rect
+              {...tunnelBox(tunnel.hit, X, Y)}
+              className="fill-chart-5/30"
+              pointerEvents="none"
+            />
+          ) : null}
           <polyline points={trail} className="stroke-foreground" strokeWidth="1.6" fill="none" data-testid="runner-curve" />
           {[...thought.masks].sort((a, b) => Number(a.drives) - Number(b.drives)).map((mask) => {
             const box = maskBox(mask, X, Y, framed.yMin, framed.yMax)
@@ -254,6 +276,22 @@ function RunnerUniverseView({
               </rect>
             )
           })}
+          {tunnel?.hit ? (
+            <rect
+              {...tunnelBox(tunnel.hit, X, Y)}
+              data-testid="runner-tunnel"
+              data-days={tunnel.hit.days}
+              data-lo={tunnel.hit.lo}
+              data-hi={tunnel.hit.hi}
+              data-from={tunnel.hit.from}
+              data-to={tunnel.hit.to}
+              className="fill-transparent stroke-chart-5"
+              strokeWidth="1.4"
+              pointerEvents="none"
+            >
+              <title>{tunnel.phrase}</title>
+            </rect>
+          ) : null}
           <g data-calque="tangente">
             <line
               x1={X(thought.tangent.x1)}
@@ -457,6 +495,15 @@ function RunnerUniverseView({
           })
         )}
       </svg>
+      {tunnel ? (
+        <p
+          className="mt-1 text-sm leading-5 text-chart-5"
+          data-testid="run-arcade-tunnel"
+          data-days={tunnel.hit ? String(tunnel.hit.days) : ""}
+        >
+          {tunnel.phrase}
+        </p>
+      ) : null}
       {canPan ? (
         <div
           className="mt-1 flex items-center gap-2"

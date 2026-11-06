@@ -506,6 +506,18 @@ def test_run_arcade_capture_bound_node() -> None:
     _node("test_run_arcade_capture_bound.ts")
 
 
+def test_run_arcade_strokes_node() -> None:
+    _node("test_run_arcade_strokes.ts")
+
+
+def test_run_arcade_blend_node() -> None:
+    _node("test_run_arcade_blend.ts")
+
+
+def test_run_arcade_tunnel_node() -> None:
+    _node("test_run_arcade_tunnel.ts")
+
+
 def test_every_run_arcade_ts_test_has_a_wrapper() -> None:
     tests = Path(__file__).resolve().parent
     wrappers = "".join(

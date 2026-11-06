@@ -99,6 +99,7 @@ import { layerPoints } from "@/lib/run-arcade/layers"
 import { championKey, lastKnownChampion, parentChampion } from "@/lib/run-arcade/lineage"
 import { createSession, MIN_SLICE_MS, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
 import { curveStrokes, type CurveStrokes } from "@/lib/run-arcade/strokes"
+import { TUNNEL_MAX_DAYS, TUNNEL_MIN_DAYS, tunnelOf, type Tunnel } from "@/lib/run-arcade/tunnel"
 import {
   DAYS_MAX,
   DAYS_MIN,
@@ -575,6 +576,7 @@ type RunnerCardProps = {
   freeArchive: readonly RankPoint[]
   observationReport: string | null
   onSelect: (id: string) => void
+  tunnel?: Tunnel | null
 }
 
 /** Carte d’un runner, mémoïsée : elle ne se redessine que si ce runner (ou sa sélection) change. */
@@ -587,6 +589,7 @@ const RunnerCard = memo(function RunnerCard({
   freeArchive,
   observationReport,
   onSelect,
+  tunnel = null,
 }: RunnerCardProps) {
   const select = () => onSelect(runner.mind.id)
   return (
@@ -619,6 +622,7 @@ const RunnerCard = memo(function RunnerCard({
         exact={runner.exact}
         onPress={select}
         className="mt-1"
+        tunnel={tunnel}
       />
       <button type="button" onClick={select} className="block w-full cursor-pointer text-left">
         {xray ? <ThoughtChain runner={runner} draw={runner.thought} hiddenDate={hiddenDate} /> : null}
@@ -1488,6 +1492,14 @@ function SkillPanel({
   )
 }
 
+/** La phrase suit la courbe. L’indice de la bande ne vaut que si le trait a les mêmes points. */
+function tunnelOnDraw(past: readonly RankPoint[], key: CurveKey, trailLength: number): Tunnel | null {
+  if (past.length < 2) return null
+  const read = tunnelOf(past, key)
+  if (read.hit && past.length !== trailLength) return { phrase: read.phrase, hit: null }
+  return read
+}
+
 export function RunArcadeLab() {
   const { draws, source, loading } = useDraws("all")
   const series = useMemo(() => toRankPoints(draws), [draws])
@@ -1695,6 +1707,25 @@ export function RunArcadeLab() {
     })
   }, [running, focus, runnerPast, focusCurve, hiddenDate, snapshot.lives, lives])
 
+  const focusTunnel = useMemo(() => {
+    if (!focus || !focusView?.draw) return null
+    return tunnelOnDraw(runnerPast, focusCurve ?? focus.mind.focus, focusView.draw.trail.length)
+  }, [focus, focusView, runnerPast, focusCurve])
+
+  const runnerTunnels = useMemo(() => {
+    const map = new Map<string, Tunnel>()
+    if (!race || track.length === 0) return map
+    const shown = race.revealed ? race.cursor - 1 : race.cursor
+    const revealed = revealedPast(track, shown)
+    for (const runner of race.runners) {
+      if (!runner.thought) continue
+      const past = sincePast(revealed, runner.since)
+      const read = tunnelOnDraw(past, runner.mind.focus, runner.thought.trail.length)
+      if (read) map.set(runner.mind.id, read)
+    }
+    return map
+  }, [race, track])
+
   function type(field: keyof FieldDrafts, text: string) {
     setDrafts((current) => ({ ...current, [field]: text }))
   }
@@ -1751,6 +1782,10 @@ export function RunArcadeLab() {
     () => (editedParent && series.length >= 2 ? proposeNextDraw(editedParent, series, nextCurve, lives) : null),
     [editedParent, series, nextCurve, lives]
   )
+  const nextTunnel = useMemo(() => {
+    if (!proposal?.draw) return null
+    return tunnelOnDraw(buildTrack(series), nextCurve, proposal.draw.trail.length)
+  }, [proposal, series, nextCurve])
   const forecastText = useMemo(
     () => forecastLine(scoreForecasts(editedParent ? [editedParent, ...history] : history, series)),
     [editedParent, history, series]
@@ -2132,7 +2167,7 @@ export function RunArcadeLab() {
           </div>
           <div className={cn("grid gap-3", !replay && "lg:grid-cols-[minmax(0,1.4fr)_minmax(16rem,0.8fr)]")}>
             <div>
-              <RunnerUniverse runnerId="champion-next" thought={proposal.draw} className="h-64" />
+              <RunnerUniverse runnerId="champion-next" thought={proposal.draw} className="h-64" tunnel={nextTunnel} />
               <p className="mt-2 text-lg tracking-wide">
                 {proposal.guess.n1} {proposal.guess.n2} {proposal.guess.n3} {proposal.guess.n4} {proposal.guess.n5}
                 <span className="text-muted-foreground">
@@ -2190,6 +2225,9 @@ export function RunArcadeLab() {
         <li>Trait : courbe fondamentale</li>
         <li>Curseur : vingt tirages, du plus ancien au bout</li>
         <li>Bande : masque</li>
+        <li className="text-chart-5">
+          Tunnel : {TUNNEL_MIN_DAYS} à {TUNNEL_MAX_DAYS} jours
+        </li>
         <li className="text-chart-2">Calque tangente</li>
         <li className="text-chart-1">Calque cercle d’or</li>
         <li className="text-chart-3">Calque pas d’avant</li>
@@ -2273,6 +2311,7 @@ export function RunArcadeLab() {
             className="h-72"
             versions={running ? focusStrokes?.versions : null}
             thoughtTip={running && focusStrokes && focusView.draw ? focusView.draw.thoughtValue : null}
+            tunnel={focusTunnel}
           />
           {running && focusStrokes && focusStrokes.versions.length > 0 && focusView.draw ? (
             <VersionLines strokes={focusStrokes} thought={focusView.draw.thoughtValue} />
@@ -2366,6 +2405,7 @@ export function RunArcadeLab() {
             freeArchive={freeArchive}
             observationReport={observationReportFor(snapshot.observations, runner.thought?.observation)}
             onSelect={selectRunner}
+            tunnel={runnerTunnels.get(runner.mind.id) ?? null}
           />
         ))}
       </div>
