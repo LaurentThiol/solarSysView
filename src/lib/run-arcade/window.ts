@@ -6,6 +6,13 @@
 
 export const CURVE_VIEW_SPAN = 20
 
+/**
+ * Les derniers tirages de la fenêtre, en pas d’abscisse, prennent plus de largeur.
+ * Le début garde la moitié de sa place linéaire : le reste va au bout.
+ */
+export const CURVE_TAIL = 6
+export const CURVE_TAIL_GAIN = 0.5
+
 const PAD_LEFT = 0.35
 const PAD_RIGHT = 0.6
 
@@ -42,6 +49,24 @@ export function windowDraws(x0: number, x1: number, total: number) {
   const firstIndex = Math.min(total - 1, Math.max(0, Math.ceil(x0 - 1e-9)))
   const lastIndex = Math.min(total - 1, Math.max(firstIndex, Math.floor(x1 + 1e-9)))
   return { first: firstIndex + 1, last: lastIndex + 1, total }
+}
+
+/**
+ * Part de la largeur, de 0 au bord gauche à 1 au bord droit.
+ * Les derniers tirages s’étalent. Le début reste plus serré.
+ * Hors fenêtre, le même rythme continue : les calques qui dépassent restent alignés.
+ */
+export function curveFocus(x: number, x0: number, x1: number): number {
+  const span = x1 - x0
+  if (!(span > 0)) return 0
+  const t = (x - x0) / span
+  const tailIndex = Math.min(CURVE_TAIL, span) / span
+  const headIndex = 1 - tailIndex
+  const headWidth = headIndex * (1 - CURVE_TAIL_GAIN)
+  if (headIndex <= 1e-9 || t <= headIndex) {
+    return headIndex <= 1e-9 ? t : (t / headIndex) * headWidth
+  }
+  return headWidth + ((t - headIndex) / tailIndex) * (1 - headWidth)
 }
 
 /**

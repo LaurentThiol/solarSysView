@@ -242,7 +242,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Curseur",
-        text: "Vingt tirages tiennent dans le cadre quand la série est plus longue. Le curseur va du plus ancien au bout. Le trait se laisse aussi glisser. Les calques restent au bout : ils sortent du cadre si l’on recule, et Au bout les ramène. Une série courte s’affiche entière, sans curseur.",
+        text: "Vingt tirages tiennent dans le cadre quand la série est plus longue. Les derniers sont plus larges que le début, pour que le bout, les traits et le point ne recouvrent pas le rail. Le curseur va du plus ancien au bout. Le trait se laisse aussi glisser. Les calques restent au bout : ils sortent du cadre si l’on recule, et Au bout les ramène. Une série courte s’affiche entière, sans curseur.",
       },
       {
         label: "Masque",
@@ -274,7 +274,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Rail",
-        text: "À gauche, les sommes et les décennies. À droite, n1 à n5, e1 et e2. Le survol d’une case dit la pensée et la valeur jouée.",
+        text: "À gauche, les sommes et les décennies. À droite, n1 à n5, e1 et e2. Le rail est à côté du dessin, ou en dessous si la place manque. Il ne recouvre pas le trait. Le survol d’une case dit la pensée et la valeur jouée.",
       },
       {
         label: "Versions",

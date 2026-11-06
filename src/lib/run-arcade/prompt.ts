@@ -158,7 +158,7 @@ export function buildPrompt(input: PromptInput) {
     ...(input.drawing
       ? [
           `Ton dessin : ${input.drawing}`,
-          "L’image montre le bout de la courbe, vingt tirages au plus, là où sont les calques.",
+          "L’image montre le bout de la courbe, vingt tirages au plus, là où sont les calques. Les derniers tirages y sont plus espacés que le début.",
         ]
       : []),
     ...(notes.length ? ["Notes Brave :", ...notes] : []),

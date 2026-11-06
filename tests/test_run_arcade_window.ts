@@ -5,7 +5,7 @@ import test from "node:test"
 import { buildPrompt } from "../src/lib/run-arcade/prompt.ts"
 import { RUN_ARCADE_HELP } from "../src/lib/run-arcade/help.ts"
 import type { RunnerMind } from "../src/lib/run-arcade/thought.ts"
-import { CURVE_VIEW_SPAN, curveWindow, slideByPointer, windowDraws } from "../src/lib/run-arcade/window.ts"
+import { CURVE_VIEW_SPAN, curveFocus, curveWindow, slideByPointer, windowDraws } from "../src/lib/run-arcade/window.ts"
 
 const universe = readFileSync(new URL("../src/components/brain/run-arcade-universe.tsx", import.meta.url), "utf8")
 const capture = readFileSync(new URL("../src/components/brain/run-arcade-capture.tsx", import.meta.url), "utf8")
@@ -67,8 +67,27 @@ test("dragging one frame width moves about twenty draws toward the past", () => 
   )
 })
 
+test("the end of the frame is wider than the start", () => {
+  const x0 = 180.6
+  const x1 = 200.6
+  assert.equal(curveFocus(x0, x0, x1), 0)
+  assert.ok(Math.abs(curveFocus(x1, x0, x1) - 1) < 1e-9)
+  const early = curveFocus(x0 + 6, x0, x1) - curveFocus(x0, x0, x1)
+  const late = curveFocus(x1, x0, x1) - curveFocus(x1 - 6, x0, x1)
+  assert.ok(late > early * 2, `bout ${late} contre début ${early}`)
+  let prev = -1
+  for (let x = x0; x <= x1 + 1e-9; x += 0.5) {
+    const share = curveFocus(x, x0, x1)
+    assert.ok(share >= prev - 1e-12)
+    prev = share
+  }
+  assert.equal(curveFocus(0, 0, 4), 0)
+  assert.equal(curveFocus(4, 0, 4), 1)
+})
+
 test("the drawing, the capture and the help expose the slider", () => {
   assert.match(universe, /curveWindow\(/)
+  assert.match(universe, /curveFocus\(/)
   assert.match(universe, /type="range"/)
   assert.match(universe, /clipPath/)
   assert.match(capture, /pan=\{false\}/)

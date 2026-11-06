@@ -7,27 +7,24 @@ import { gesturePhrase } from "@/lib/run-arcade/skills"
 import type { VersionStroke } from "@/lib/run-arcade/strokes"
 import { formatCents, type CurveMask, type RailMark, type ThoughtDraw } from "@/lib/run-arcade/thought"
 import type { Tunnel, TunnelHit } from "@/lib/run-arcade/tunnel"
-import { CURVE_VIEW_SPAN, curveWindow, slideByPointer, windowDraws } from "@/lib/run-arcade/window"
+import { CURVE_VIEW_SPAN, curveFocus, curveWindow, slideByPointer, windowDraws } from "@/lib/run-arcade/window"
 
 import { cn } from "@/lib/utils"
 
-const PLOT = { l: 28, r: 258, t: 16, b: 168 }
-const VIEW_W = 380
-const VIEW_H = 224
+const PLOT = { l: 16, r: 624, t: 16, b: 224 }
+/** Jour à droite du trait : le libellé du point joué ne touche pas le bord. */
+const LABEL_LANE = 40
+const AXIS_R = PLOT.r - LABEL_LANE
+const VIEW_W = 640
+const VIEW_H = 240
 const MASK_MIN = 12
-const RAIL_TOP = 22
-const RAIL_STEP = 24
-const COLUMNS = [
-  { keys: RAIL_LEFT, label: 268, value: 296 },
-  { keys: RAIL_RIGHT, label: 324, value: 350 },
-] as const
 
 function scales(thought: ThoughtDraw, x0: number, x1: number) {
   const y0 = thought.yMin
   const y1 = thought.yMax
-  const xSpan = x1 - x0 || 1
   const ySpan = y1 - y0 || 1
-  const X = (x: number) => PLOT.l + ((x - x0) / xSpan) * (PLOT.r - PLOT.l)
+  const width = AXIS_R - PLOT.l
+  const X = (x: number) => PLOT.l + curveFocus(x, x0, x1) * width
   const Y = (y: number) => PLOT.b - ((y - y0) / ySpan) * (PLOT.b - PLOT.t)
   const radiusPx = Math.abs(Y(thought.radius.cy) - Y(thought.radius.cy + thought.radius.r))
   return { X, Y, radiusPx }
@@ -48,7 +45,7 @@ function observationLines(observation: string) {
 function maskBox(mask: CurveMask, X: (x: number) => number, Y: (y: number) => number, yMin: number, yMax: number) {
   const rawLeft = Math.min(X(mask.x1), X(mask.x2))
   const rawRight = Math.max(X(mask.x1), X(mask.x2))
-  if (rawRight < PLOT.l || rawLeft > PLOT.r) return null
+  if (rawRight < PLOT.l || rawLeft > AXIS_R) return null
   let left = rawLeft
   let right = rawRight
   if (right - left < MASK_MIN) {
@@ -57,7 +54,7 @@ function maskBox(mask: CurveMask, X: (x: number) => number, Y: (y: number) => nu
     right = mid + MASK_MIN / 2
   }
   left = Math.max(PLOT.l, left)
-  right = Math.min(PLOT.r, right)
+  right = Math.min(AXIS_R, right)
   if (right - left < 1) return null
   const top = Y(yMax)
   const height = Math.max(1, Y(yMin) - top)
@@ -76,9 +73,53 @@ function tunnelBox(hit: TunnelHit, X: (x: number) => number, Y: (y: number) => n
 }
 
 function railTone(key: CurveKey, matched: readonly CurveKey[], exact: readonly CurveKey[]) {
-  if (matched.includes(key)) return "fill-[var(--ok)] font-medium"
-  if (exact.includes(key)) return "fill-chart-2 font-medium"
-  return "fill-foreground"
+  if (matched.includes(key)) return "font-medium text-[var(--ok)]"
+  if (exact.includes(key)) return "font-medium text-chart-2"
+  return "text-foreground"
+}
+
+function Rail({
+  marks,
+  focus,
+  matched,
+  exact,
+  blended,
+}: {
+  marks: ReadonlyMap<CurveKey, RailMark>
+  focus: CurveKey
+  matched: readonly CurveKey[]
+  exact: readonly CurveKey[]
+  blended: number | null
+}) {
+  const columns = [RAIL_LEFT, RAIL_RIGHT]
+  return (
+    <div
+      className="grid w-[15rem] shrink-0 grid-cols-2 gap-x-3 self-start pt-1 text-[11px] leading-4"
+      data-testid="runner-rail"
+    >
+      {columns.map((keys) => (
+        <div key={keys[0]} className="flex min-w-0 flex-col gap-0.5">
+          {keys.map((key) => {
+            const mark = marks.get(key)
+            if (!mark) return null
+            const thought = blended != null && key === focus ? blended : mark.thought
+            const on = key === focus
+            return (
+              <span
+                key={key}
+                data-rail={key}
+                title={`${curveLabel(key)} : pensée ${formatValue(thought)} · case ${mark.value}`}
+                className="flex items-baseline justify-between gap-1.5"
+              >
+                <span className={on ? "font-medium text-chart-4" : "text-muted-foreground"}>{curveLabel(key)}</span>
+                <span className={cn("tabular-nums", railTone(key, matched, exact))}>{mark.value}</span>
+              </span>
+            )
+          })}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 /** Élargit le cadre si une pointe de version sort de la série déjà dessinée. */
@@ -189,7 +230,7 @@ function RunnerUniverseView({
     if (Math.abs(dx) <= 4) return
     session.moved = true
     const width = event.currentTarget.getBoundingClientRect().width
-    const plotPx = (width * (PLOT.r - PLOT.l)) / VIEW_W
+    const plotPx = (width * (AXIS_R - PLOT.l)) / VIEW_W
     park(
       slideByPointer({
         start: session.start,
@@ -209,8 +250,12 @@ function RunnerUniverseView({
     if (!session.moved) onPress?.()
   }
 
+  const labelRoom = AXIS_R - caseX
+  const labelAtEnd = labelRoom < 36
+
   return (
-    <div className="w-full">
+    <div className={cn("w-full", className)}>
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
       <svg
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         role="img"
@@ -226,7 +271,7 @@ function RunnerUniverseView({
           drag.current = null
         }}
         onClick={canPan ? undefined : onPress}
-        className={cn("h-40 w-full", canPan && "cursor-grab touch-none select-none", className)}
+        className={cn("aspect-[8/3] h-auto min-w-[18rem] flex-1", canPan && "cursor-grab touch-none select-none")}
       >
         <defs>
           <marker id={markerId} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
@@ -244,7 +289,7 @@ function RunnerUniverseView({
             <path d="M0 0 L8 4 L0 8 Z" className="fill-chart-3" />
           </marker>
           <clipPath id={`${markerId}-plot`}>
-            <rect x={PLOT.l} y={4} width={PLOT.r - PLOT.l} height={172} />
+            <rect x={PLOT.l} y={4} width={PLOT.r - PLOT.l} height={VIEW_H - 8} />
           </clipPath>
         </defs>
         <rect x="0" y="0" width={VIEW_W} height={VIEW_H} className="fill-canvas" rx="8" />
@@ -308,7 +353,7 @@ function RunnerUniverseView({
               <g key={level.ratio}>
                 <line
                   x1={PLOT.l}
-                  x2={PLOT.r}
+                  x2={AXIS_R}
                   y1={Y(level.y)}
                   y2={Y(level.y)}
                   className={level.chosen ? "stroke-chart-1" : "stroke-border"}
@@ -444,57 +489,30 @@ function RunnerUniverseView({
               </>
             )}
           </g>
-          {caseX > PLOT.l && caseX < PLOT.r ? (
-            <line x1={caseX} y1={caseY} x2={PLOT.r} y2={caseY} className="stroke-chart-4/50" strokeWidth="0.8" strokeDasharray="1 3" />
+          {caseX > PLOT.l && caseX < AXIS_R ? (
+            <line x1={caseX} y1={caseY} x2={AXIS_R} y2={caseY} className="stroke-chart-4/50" strokeWidth="0.8" strokeDasharray="1 3" />
           ) : null}
           <circle cx={caseX} cy={caseY} r="3.6" className="fill-canvas stroke-chart-4" strokeWidth="1.6" />
           <circle cx={caseX} cy={caseY} r="1.6" className="fill-chart-4" />
           {caseX > PLOT.l && caseX < PLOT.r ? (
-            <text x={Math.min(caseX, PLOT.r - 2)} y={caseY - 4} textAnchor="end" className="fill-chart-4 text-[9px]">
+            <text
+              x={labelAtEnd ? caseX - 6 : caseX + 8}
+              y={caseY - 6}
+              textAnchor={labelAtEnd ? "end" : "start"}
+              className="fill-chart-4 text-[11px]"
+            >
               {formatValue(thought.projection.y)}
             </text>
           ) : null}
           <circle cx={cx} cy={cy} r="2.4" className="fill-foreground" />
         </g>
-        <rect x="0" y="176" width={VIEW_W} height="48" className="fill-canvas" />
-        <text x="8" y="192" className="fill-foreground text-[8px]" data-testid="runner-lecture">
-          {lines[0]}
-        </text>
-        {lines[1] ? (
-          <text
-            x="8"
-            y="208"
-            className="fill-muted-foreground text-[7px]"
-            textLength={lines[1].length > 78 ? 364 : undefined}
-            lengthAdjust="spacingAndGlyphs"
-          >
-            {lines[1]}
-          </text>
-        ) : null}
-        {COLUMNS.map((column) =>
-          column.keys.map((key, index) => {
-            const mark = marks.get(key)
-            if (!mark) return null
-            const y = RAIL_TOP + index * RAIL_STEP
-            const focus = key === thought.focus
-            return (
-              <g key={key} data-rail={key}>
-                <title>{`${curveLabel(key)} : pensée ${formatValue(blended != null && key === thought.focus ? blended : mark.thought)} · case ${mark.value}`}</title>
-                <text
-                  x={column.label}
-                  y={y}
-                  className={cn("text-[10px]", focus ? "fill-chart-4 font-medium" : "fill-muted-foreground")}
-                >
-                  {curveLabel(key)}
-                </text>
-                <text x={column.value} y={y} className={cn("text-[11px]", railTone(key, matched, exact))}>
-                  {mark.value}
-                </text>
-              </g>
-            )
-          })
-        )}
       </svg>
+      <Rail marks={marks} focus={thought.focus} matched={matched} exact={exact} blended={blended} />
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-foreground" data-testid="runner-lecture">
+        {lines[0]}
+      </p>
+      {lines[1] ? <p className="text-[10px] leading-4 text-muted-foreground">{lines[1]}</p> : null}
       {tunnel ? (
         <p
           className="mt-1 text-sm leading-5 text-chart-5"

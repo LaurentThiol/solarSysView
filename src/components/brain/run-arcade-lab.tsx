@@ -2187,7 +2187,7 @@ export function RunArcadeLab() {
           </div>
           <div className={cn("grid gap-3", !replay && "lg:grid-cols-[minmax(0,1.4fr)_minmax(16rem,0.8fr)]")}>
             <div>
-              <RunnerUniverse runnerId="champion-next" thought={proposal.draw} className="h-64" tunnel={nextTunnel} />
+              <RunnerUniverse runnerId="champion-next" thought={proposal.draw} tunnel={nextTunnel} />
               <p className="mt-2 text-lg tracking-wide">
                 {proposal.guess.n1} {proposal.guess.n2} {proposal.guess.n3} {proposal.guess.n4} {proposal.guess.n5}
                 <span className="text-muted-foreground">
@@ -2243,7 +2243,7 @@ export function RunArcadeLab() {
           <HelpTip {...RUN_ARCADE_HELP.gestes} />
         </li>
         <li>Trait : courbe fondamentale</li>
-        <li>Curseur : vingt tirages, du plus ancien au bout</li>
+        <li>Curseur : vingt tirages, du plus ancien au bout, plus larges vers la fin</li>
         <li>Bande : masque</li>
         <li className="text-chart-5">
           Tunnel : {TUNNEL_MIN_DAYS} à {TUNNEL_MAX_DAYS} jours
@@ -2254,7 +2254,7 @@ export function RunArcadeLab() {
         <li className="text-chart-4">Calque vecteur</li>
         <li>Trait fin : rappel à la somme</li>
         <li className="text-chart-4">Point : la case jouée</li>
-        <li>Rail : sommes et décennies à gauche, rangs à droite</li>
+        <li>Rail : sommes et décennies à gauche, rangs à droite, à l’écart du trait</li>
         <li className="inline-flex items-center gap-1 text-[var(--ok)]">
           Numéro ou étoile trouvé : +2 €
           <HelpTip {...RUN_ARCADE_HELP.solde} />
@@ -2328,7 +2328,6 @@ export function RunArcadeLab() {
             thought={focusView.draw}
             matched={focusView.matched}
             exact={focusView.exact}
-            className="h-72"
             versions={running ? focusStrokes?.versions : null}
             thoughtTip={running && focusStrokes && focusView.draw ? focusView.draw.thoughtValue : null}
             tunnel={focusTunnel}
