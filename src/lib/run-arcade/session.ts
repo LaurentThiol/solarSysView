@@ -117,6 +117,8 @@ export type LaunchOptions = {
   depart?: DepartChoice
   /** X des gestes, déjà compté sur les champions écrits. Absent : les versions ne meurent pas. */
   lives?: GestureLife | null
+  /** Allumé : les pointes encore en vie se moyennent. Absent ou faux : la plus haute pose la grille. */
+  blend?: boolean
 }
 
 export type SaveState = { state: "—" | "en cours" | "ok" | "erreur"; detail: string | null }
@@ -608,7 +610,7 @@ export class RunArcadeSession {
       )
     }
     let race = createRace(minds, track.length, draws)
-    race = { ...race, life: lives }
+    race = { ...race, life: lives, blend: options.blend === true }
     race = {
       ...race,
       runners: race.runners.map((runner, index) => {
@@ -964,7 +966,11 @@ export class RunArcadeSession {
       return false
     }
     const cutoff = past[past.length - 1].date
-    const drawing = think(runner.mind, past, { hiddenDate, life: this.snapshot.lives }).draw
+    const drawing = think(runner.mind, past, {
+      hiddenDate,
+      life: this.snapshot.lives,
+      blend: this.snapshot.race?.blend === true,
+    }).draw
     const prompt = buildPrompt({
       mind: runner.mind,
       past,

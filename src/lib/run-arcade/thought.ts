@@ -1,5 +1,6 @@
 import { reconcile } from "./coherence"
 import { sincePast } from "./depart"
+import { chanceBalance } from "./examen"
 import {
   CURVE_KEYS,
   DECADE_KEYS,
@@ -163,6 +164,12 @@ export type ThinkOptions = {
   plain?: boolean
   /** X des gestes. Absent : les versions ne meurent pas. */
   life?: GestureLife | null
+  /**
+   * Allumé : chaque version encore en vie pose sa pointe.
+   * Le poids est l’écart au hasard depuis la naissance. Éteint : la plus haute pose la grille.
+   * Ignoré en passe simple, pour que l’examen ne se mélange pas.
+   */
+  blend?: boolean
 }
 
 const DEFAULT_PARAMS: SkillParams = {
@@ -444,6 +451,138 @@ function beats(a: Contender, b: Contender) {
   return moreRecent(a, b)
 }
 
+export type BlendTip = {
+  tip: number
+  /** Écart au hasard depuis la naissance. Nul ou négatif : cette pointe ne pèse pas. */
+  weight: number
+  cutoff: string
+  version: number
+  order: number
+}
+
+/** La plus récente : coupure la plus tardive, puis numéro, puis place dans la liste. */
+function laterBlend(a: BlendTip, b: BlendTip) {
+  if (a.cutoff !== b.cutoff) return a.cutoff > b.cutoff
+  if (a.version !== b.version) return a.version > b.version
+  return a.order > b.order
+}
+
+/**
+ * Pensée : moyenne des pointes, pondérée par l’écart au hasard depuis la naissance.
+ * Un écart nul ou négatif ne pèse pas. Si tous les poids sont nuls, la plus récente joue seule.
+ */
+export function blendTips(rows: readonly BlendTip[]): number {
+  let mass = 0
+  let sum = 0
+  for (const row of rows) {
+    if (!(row.weight > 0) || !Number.isFinite(row.tip)) continue
+    mass += row.weight
+    sum += row.tip * row.weight
+  }
+  if (mass > 0) return sum / mass
+  let best: BlendTip | null = null
+  for (const row of rows) {
+    if (!Number.isFinite(row.tip)) continue
+    if (!best || laterBlend(row, best)) best = row
+  }
+  return best ? best.tip : Number.NaN
+}
+
+function versionKey(version: SkillVersion) {
+  return [
+    version.curve,
+    version.gesture,
+    version.window,
+    version.days ?? "",
+    version.ratio,
+    version.span,
+    version.r ?? "",
+    version.forme ?? "",
+    version.n ?? "",
+    version.cutoff,
+    version.origin,
+  ].join("|")
+}
+
+function pastStamp(past: readonly RankPoint[]) {
+  const mid = past[Math.floor(past.length / 2)]
+  const last = past[past.length - 1]
+  return [
+    past.length,
+    past[0]?.date ?? "",
+    mid?.date ?? "",
+    mid?.n1 ?? "",
+    last?.date ?? "",
+    last?.n1 ?? "",
+    last?.e2 ?? "",
+  ].join("|")
+}
+
+const gapCache = new Map<string, number>()
+
+function soloMind(version: SkillVersion): RunnerMind {
+  const focus: CurveKey = version.curve === "*" ? "n1" : version.curve
+  return {
+    id: "poids",
+    name: "poids",
+    focus,
+    skills: [
+      newSkill(
+        "poids",
+        "poids",
+        {
+          curve: version.curve,
+          gesture: version.gesture,
+          ratio: version.ratio,
+          span: version.span,
+          window: version.window,
+          days: version.days,
+          suite: version.suite,
+          r: version.r,
+          forme: version.forme,
+          n: version.n,
+        },
+        {
+          cutoff: version.cutoff,
+          origin: version.origin,
+          examCents: null,
+          phrase: version.phrase,
+        }
+      ),
+    ],
+  }
+}
+
+/**
+ * Écart entre le solde de cette version et le hasard, sur les tirages révélés depuis sa naissance.
+ * Le tirage caché n’est pas dans `past`. Sans tour joué, l’écart est nul.
+ * En dessous du hasard, l’écart est négatif : il ne pèse pas.
+ */
+export function gapSinceBirth(version: SkillVersion, past: readonly RankPoint[]) {
+  const key = `${versionKey(version)}|${pastStamp(past)}`
+  const cached = gapCache.get(key)
+  if (cached != null) return cached
+  let cents = START_CENTS
+  let turns = 0
+  if (past.length >= 2) {
+    const mind = soloMind(version)
+    for (let index = 0; index < past.length; index += 1) {
+      const hidden = past[index]
+      if (version.cutoff && hidden.date <= version.cutoff) continue
+      if (cents < TICKET_CENTS) break
+      const seen = past.slice(0, index)
+      if (seen.length < 2) continue
+      const thought = think(mind, seen, { hiddenDate: hidden.date, plain: true })
+      cents = settlePurse(cents, countHits(thought.guess, hidden))
+      turns += 1
+    }
+  }
+  const raw = turns > 0 ? cents - chanceBalance(turns).cents : 0
+  const gap = Math.round(raw)
+  gapCache.set(key, gap)
+  return gap
+}
+
 function baseParams(mind: RunnerMind): SkillParams {
   for (const skill of mind.skills) {
     for (const version of skill.versions) {
@@ -505,6 +644,68 @@ function contest(
   }
 
   return { paramsOf, masksOf }
+}
+
+type MixSole = { skillId: string; version: number; params: SkillParams }
+
+type CurveMix = {
+  tips: CurveValues
+  /** Version qui joue seule sur la courbe affichée. Vide : la pensée est une moyenne. */
+  sole: MixSole | null
+  averaged: boolean
+}
+
+function maskPlays(mask: CurveMask, sole: MixSole | null) {
+  if (!sole || mask.version !== sole.version) return false
+  return mask.id === sole.skillId || mask.id === `${sole.skillId}-v${sole.version}`
+}
+
+/** Pointes encore en vie, une moyenne par courbe. Le poids est l’écart déjà compté depuis la naissance. */
+function blendedTips(
+  mind: RunnerMind,
+  past: readonly RankPoint[],
+  curveRows: readonly CurveValues[],
+  hiddenDate: string | null,
+  life: GestureLife | null,
+  focus: CurveKey
+): CurveMix {
+  const living = contenders(mind, hiddenDate, life)
+  const weightOf = new Map<number, number>()
+  for (const item of living) {
+    const gap = gapSinceBirth(item.version, past)
+    weightOf.set(item.order, gap > 0 ? gap : 0)
+  }
+  const tips = {} as CurveValues
+  let focusRows: (BlendTip & MixSole)[] = []
+  for (const key of CURVE_KEYS) {
+    const ranked: (BlendTip & MixSole)[] = []
+    for (const item of living) {
+      if (item.version.curve !== key && item.version.curve !== "*") continue
+      ranked.push({
+        tip: tipFor(item.version, past, curveRows, key, hiddenDate),
+        weight: weightOf.get(item.order) ?? 0,
+        cutoff: item.version.cutoff,
+        version: item.version.version,
+        order: item.order,
+        skillId: item.skill.id,
+        params: item.version,
+      })
+    }
+    tips[key] =
+      ranked.length > 0
+        ? blendTips(ranked)
+        : tipFor(baseParams(mind), past, curveRows, key, hiddenDate)
+    if (key === focus) focusRows = ranked
+  }
+  const pulling = focusRows.filter((row) => row.weight > 0 && Number.isFinite(row.tip))
+  if (pulling.length === 1) return { tips, sole: pulling[0], averaged: false }
+  if (pulling.length > 1) return { tips, sole: null, averaged: true }
+  let best: (BlendTip & MixSole) | null = null
+  for (const row of focusRows) {
+    if (!Number.isFinite(row.tip)) continue
+    if (!best || laterBlend(row, best)) best = row
+  }
+  return { tips, sole: best, averaged: false }
 }
 
 const FLAT_STEP = 0.05
@@ -649,17 +850,26 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
     }
   }
   const picked = options.plain ? null : contest(mind, past, rows, hiddenDate, options.life ?? null)
+  const focus = options.focus ?? mind.focus
+  const mix =
+    options.blend === true && !options.plain
+      ? blendedTips(mind, past, rows, hiddenDate, options.life ?? null, focus)
+      : null
   const tips = {} as CurveValues
-  for (const key of CURVE_KEYS) {
-    tips[key] = tipFor(picked ? picked.paramsOf(key) : paramsFor(mind, key, hiddenDate), past, rows, key, hiddenDate)
+  if (mix) {
+    for (const key of CURVE_KEYS) tips[key] = mix.tips[key]
+  } else {
+    for (const key of CURVE_KEYS) {
+      tips[key] = tipFor(picked ? picked.paramsOf(key) : paramsFor(mind, key, hiddenDate), past, rows, key, hiddenDate)
+    }
   }
   const reconciled = reconcile(tips)
   const guess = guessOf(reconciled.numbers, reconciled.stars)
 
-  const focus = options.focus ?? mind.focus
-  const params = picked ? picked.paramsOf(focus) : paramsFor(mind, focus, hiddenDate)
+  const params = mix?.sole ? mix.sole.params : picked ? picked.paramsOf(focus) : paramsFor(mind, focus, hiddenDate)
   const trail = rows.map((row, index) => ({ x: index, y: row[focus] }))
-  const masks = picked ? picked.masksOf(focus) : masksOn(mind, focus, hiddenDate, past, rows)
+  const rawMasks = picked ? picked.masksOf(focus) : masksOn(mind, focus, hiddenDate, past, rows)
+  const masks = mix ? rawMasks.map((mask) => ({ ...mask, drives: maskPlays(mask, mix.sole) })) : rawMasks
   const driver = masks.find((mask) => mask.drives)
   const bounds = driver ? { x1: driver.x1, x2: driver.x2 } : windowBounds(params, past, rows)
   const maskPoints = trail.filter((point) => point.x >= bounds.x1 && point.x <= bounds.x2)
@@ -732,28 +942,32 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
     pas,
     vecteur: word(Math.abs(projected - tip) < 0.5),
   }
-  const clause = reading
-    ? reading.days == null
-      ? `reprend le pas du ${reading.evening}`
-      : `${reading.evening} suit le ${reading.other} à ${reading.days} ${reading.days > 1 ? "jours" : "jour"}`
-    : params.gesture === "figure"
-      ? figureUnread
-        ? `${figureClause(params)}, figure non lue, reste sur place`
-        : figureClause(params)
-      : params.gesture === "suite"
-        ? `${gesturePhrase(params.gesture)}, R ${formatRatio(params.r ?? DEFAULT_LOGISTIC_R)}`
-        : gesturePhrase(params.gesture)
+  const clause = mix?.averaged
+    ? "moyenne les pointes encore en vie"
+    : reading
+      ? reading.days == null
+        ? `reprend le pas du ${reading.evening}`
+        : `${reading.evening} suit le ${reading.other} à ${reading.days} ${reading.days > 1 ? "jours" : "jour"}`
+      : params.gesture === "figure"
+        ? figureUnread
+          ? `${figureClause(params)}, figure non lue, reste sur place`
+          : figureClause(params)
+        : params.gesture === "suite"
+          ? `${gesturePhrase(params.gesture)}, R ${formatRatio(params.r ?? DEFAULT_LOGISTIC_R)}`
+          : gesturePhrase(params.gesture)
   const words = lectureClause(lecture)
   const windowText =
     params.gesture === "suite"
       ? `R ${formatRatio(params.r ?? DEFAULT_LOGISTIC_R)} · ${windowLabel(params)}`
       : windowLabel(params)
-  const observation =
-    params.gesture === "figure"
+  const observation = mix?.averaged
+    ? `${curveLabel(focus)} · mélange · ${windowLabel(params)} · ${words}`
+    : params.gesture === "figure"
       ? `${curveLabel(focus)} · ${figureMark(params)} · ${windowLabel(params)} · ${words}`
       : `${curveLabel(focus)} · ${params.gesture} · ${windowText} · ${words}`
-  const phrase =
-    params.gesture === "figure"
+  const phrase = mix?.averaged
+    ? `${curveLabel(focus)} moyenne les pointes encore en vie : tangente ${slopeWord}, vecteur ${formatNum(tip)}, projection ${projected}${recalled ? ", ramenée par les totales" : ""}. Lecture : ${words}.`
+    : params.gesture === "figure"
       ? `${curveLabel(focus)} ${clause} : vecteur ${formatNum(tip)}, projection ${projected}${recalled ? ", ramenée par les totales" : ""}. Lecture : ${words}.`
       : `${curveLabel(focus)} ${clause} : tangente ${slopeWord}, rayon ${formatNum(radius)} vers ${formatRatio(params.ratio)}, vecteur ${formatNum(tip)}, projection ${projected}${recalled ? ", ramenée par les totales" : ""}. Lecture : ${words}.`
   const ys = [
@@ -893,6 +1107,8 @@ export type Race = {
   done: boolean
   /** X des gestes pour cette course. Absent : les versions ne meurent pas. */
   life?: GestureLife | null
+  /** Allumé au lancement : les pointes encore en vie se moyennent. */
+  blend: boolean
 }
 
 export function newRunner(mind: RunnerMind): RunnerLive {
@@ -933,6 +1149,7 @@ export function createRace(field: number | RunnerMind[], trackLength: number, x:
     revealed: null,
     seenDate: null,
     done: start >= end,
+    blend: false,
   }
 }
 
@@ -962,7 +1179,7 @@ export function previewTurn(race: Race, series: readonly RankPoint[]): Race {
       if (!runner.alive || runner.cents < TICKET_CENTS) return runner
       const history = sincePast(past, runner.since)
       if (history.length < 2) return runner
-      const thought = think(runner.mind, history, { hiddenDate, life: race.life ?? null })
+      const thought = think(runner.mind, history, { hiddenDate, life: race.life ?? null, blend: race.blend })
       return { ...runner, thought: thought.draw, guess: thought.guess, cases: thought.cases, matched: [], exact: [] }
     }),
   }
@@ -983,7 +1200,7 @@ export function playTurn(race: Race, series: readonly RankPoint[]): Race {
     }
     const history = sincePast(past, runner.since)
     if (history.length < 2) return runner
-    const thought = think(runner.mind, history, { hiddenDate: actual.date, life: race.life ?? null })
+    const thought = think(runner.mind, history, { hiddenDate: actual.date, life: race.life ?? null, blend: race.blend })
     const hits = countHits(thought.guess, actual)
     const cents = settlePurse(runner.cents, hits)
     return {

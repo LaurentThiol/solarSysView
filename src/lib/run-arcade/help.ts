@@ -65,6 +65,10 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
     ],
   },
+  melanger: {
+    title: "Mélanger",
+    body: "Choisi avant Lancer, il reste figé pendant l’avant-course et la course. Éteint, une seule version pose la grille : celle au solde le plus haut, comme aujourd’hui. Allumé, chaque version encore en vie calcule sa pointe, et les pointes se moyennent. Le poids est l’écart déjà compté entre son solde et le hasard, sur les tirages révélés depuis sa naissance. Le tirage caché n’entre pas. Un écart nul ou négatif ne tire pas : la pointe est dessinée, elle ne pèse pas. Si tous les poids sont nuls, la plus récente joue seule. Les sommes ramènent les cases une fois. Un seul ticket. Le trait fort suit ce choix : la gagnante seule, ou la moyenne.",
+  },
   rayons: {
     title: "Rayons X",
     body: "Choisi avant Lancer, il reste figé pendant l’avant-course et la course. À l’arrêt ou à la fin, on peut le rouvrir pour relire, ou le couper avant le lancement suivant.",
@@ -228,7 +232,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   dessin: {
     title: "Signes du dessin",
     wide: true,
-    body: "Chaque runner dessine la série révélée de sa courbe. Une skill qui la vise pose un masque : la fenêtre du geste. Sur le runner ouvert, pendant l’avant-course et la course, chaque version encore en vie de la courbe a un trait fin jusqu’à sa pointe. Le trait fort est la pensée. Un trait en pointillés ne pèse pas. Tangente, cercle d’or, pas d’avant et vecteur sont quatre calques, toujours visibles. Quand la série est longue, le cadre montre vingt tirages : un curseur le glisse le long du trait, calé au départ sur le bout. La phrase sous le dessin dit le geste, la lecture, puis « Observation du …, vue N fois ».",
+    body: "Chaque runner dessine la série révélée de sa courbe. Une skill qui la vise pose un masque : la fenêtre du geste. Sur le runner ouvert, pendant l’avant-course et la course, chaque version encore en vie de la courbe a un trait fin jusqu’à sa pointe. Le trait fort est la pensée : la gagnante seule, ou la moyenne si Mélanger est allumé. Un trait en pointillés ne pèse pas. Tangente, cercle d’or, pas d’avant et vecteur sont quatre calques, toujours visibles. Quand la série est longue, le cadre montre vingt tirages : un curseur le glisse le long du trait, calé au départ sur le bout. La phrase sous le dessin dit le geste, la lecture, puis « Observation du …, vue N fois ».",
     items: [
       {
         label: "Trait",
@@ -256,7 +260,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Calque vecteur",
-        text: "Flèche du dernier point vers la pensée, avant le rappel aux sommes. Sur le runner ouvert, pendant l’avant-course et la course, ce trait est le plus fort : il porte la moyenne pondérée des versions encore en vie.",
+        text: "Flèche du dernier point vers la pensée, avant le rappel aux sommes. Sur le runner ouvert, pendant l’avant-course et la course, ce trait est le plus fort : la gagnante seule, ou la moyenne si Mélanger est allumé.",
       },
       {
         label: "Rappel",
@@ -272,7 +276,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Versions",
-        text: "Sur le dessin du runner ouvert, pendant l’avant-course et la course, un trait fin par version encore en vie de la courbe affichée. La ligne sous le dessin donne le nom, le geste et le poids. Le poids est l’écart au hasard depuis la naissance, ou 0 s’il est nul ou négatif. Le trait fort est la pensée : la moyenne des pointes, pondérée par ces poids, puis le rappel vers la case jouée. Une version échue n’a pas de trait. Un poids nul ou négatif est en pointillés : il est dessiné, il ne pèse pas. Le survol dit la pointe et le poids.",
+        text: "Sur le dessin du runner ouvert, pendant l’avant-course et la course, un trait fin par version encore en vie de la courbe affichée. La ligne sous le dessin donne le nom, le geste et le poids. Le poids est l’écart au hasard depuis la naissance, ou 0 s’il est nul ou négatif. Le trait fort est la pensée. Éteint, Mélanger laisse la gagnante seule. Allumé, la pensée est la moyenne des pointes, pondérée par ces poids, puis le rappel vers la case jouée. Une version échue n’a pas de trait. Un poids nul ou négatif est en pointillés : il est dessiné, il ne pèse pas. Le survol dit la pointe et le poids.",
       },
     ],
   },
@@ -379,7 +383,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
       },
       {
         label: "Concours",
-        text: "À chaque tour, chaque version encore en vie est rejouée sur le passé lisible, avec le même examen : 50,00 €, 2,50 € et 2,00 €. Sur chaque courbe, le solde le plus haut pose la grille. À égalité, la plus récente reste. Les autres restent en masque, avec leur solde du tour. Une version échue ne concourt pas. Un seul ticket est joué.",
+        text: "À chaque tour, chaque version encore en vie est rejouée sur le passé lisible, avec le même examen : 50,00 €, 2,50 € et 2,00 €. Sur chaque courbe, le solde le plus haut pose la grille. À égalité, la plus récente reste. Les autres restent en masque, avec leur solde du tour. Une version échue ne concourt pas. Un seul ticket est joué. Mélanger, allumé au lancement, remplace ce choix par la moyenne des pointes, pondérée par l’écart au hasard depuis la naissance. Un écart nul ou négatif ne tire pas. Si tous les poids sont nuls, la plus récente joue seule. Éteint, une seule version pose la grille.",
       },
     ],
   },

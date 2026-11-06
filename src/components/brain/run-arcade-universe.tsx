@@ -102,7 +102,7 @@ function RunnerUniverseView({
   onPress?: () => void
   /** Une ligne par version encore en vie. Absent : le vecteur unique. */
   versions?: readonly VersionStroke[] | null
-  /** Pensée : moyenne pondérée de ces pointes. */
+  /** Pensée : la gagnante seule, ou la moyenne si Mélanger est allumé. */
   thoughtTip?: number | null
 }) {
   const focusKey = `${runnerId}:${thought?.focus ?? ""}`

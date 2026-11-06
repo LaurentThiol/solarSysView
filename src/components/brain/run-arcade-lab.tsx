@@ -1090,7 +1090,7 @@ function formatTip(value: number) {
 }
 
 /** Nom, geste et poids sous le dessin du runner ouvert. Le trait fort est la pensée. */
-function VersionLines({ strokes }: { strokes: CurveStrokes }) {
+function VersionLines({ strokes, thought }: { strokes: CurveStrokes; thought: number }) {
   return (
     <ul className="mt-2 flex flex-col gap-0.5 text-[11px] leading-4" data-testid="run-arcade-version-lines">
       {strokes.versions.map((item) => (
@@ -1104,8 +1104,8 @@ function VersionLines({ strokes }: { strokes: CurveStrokes }) {
           </span>
         </li>
       ))}
-      <li className="font-medium text-chart-4" data-testid="run-arcade-thought-line" data-tip={strokes.thought}>
-        Pensée · {formatTip(strokes.thought)}
+      <li className="font-medium text-chart-4" data-testid="run-arcade-thought-line" data-tip={thought}>
+        Pensée · {formatTip(thought)}
       </li>
     </ul>
   )
@@ -1157,6 +1157,7 @@ function SkillPanel({
   lives = null,
   editable,
   compact = false,
+  blend = false,
   onWrite,
 }: {
   skills: readonly Skill[]
@@ -1167,6 +1168,8 @@ function SkillPanel({
   lives?: GestureLife | null
   editable: boolean
   compact?: boolean
+  /** Course avec Mélanger allumé. Le panneau du parent, avant Lancer, ne le reçoit pas. */
+  blend?: boolean
   onWrite?: (skillId: string, params: SkillParams) => void
 }) {
   const roster = skills.map((item) => item.id).join("\0")
@@ -1237,7 +1240,9 @@ function SkillPanel({
       <p className="text-[11px] text-muted-foreground">
         {editable
           ? "La phrase suit les champs. Écrire ajoute une version, née au dernier tirage gratuit, et garde les précédentes."
-          : "Lecture seule. La version au solde le plus haut pose la grille. Les autres restent en masque."}
+          : blend
+            ? "Lecture seule. Mélanger est allumé : la pensée est la moyenne des pointes. Un écart nul ne tire pas. Si tous les poids sont nuls, la plus récente pose la grille."
+            : "Lecture seule. La version au solde le plus haut pose la grille. Les autres restent en masque."}
       </p>
       <div className={cn("gap-3", compact ? "flex flex-col" : "grid lg:grid-cols-[16rem_1fr]")}>
         <ul className="flex flex-col gap-1" data-testid="run-arcade-skill-list">
@@ -1506,6 +1511,7 @@ export function RunArcadeLab() {
   const [departDate, setDepartDate] = useState("")
   const [drafts, setDrafts] = useState<FieldDrafts>({})
   const [xray, setXray] = useState(false)
+  const [blend, setBlend] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [focusCurve, setFocusCurve] = useState<CurveKey | null>(null)
   const [nextCurve, setNextCurve] = useState<CurveKey>("sumNumbers")
@@ -1658,7 +1664,12 @@ export function RunArcadeLab() {
     const shown = race.revealed ? race.cursor - 1 : race.cursor
     const past = sincePast(revealedPast(track, shown), focus.since)
     if (past.length < 2) return { draw: focus.thought, matched: focus.matched, exact: focus.exact }
-    const thought = think(focus.mind, past, { hiddenDate: track[shown]?.date, focus: curve, life: snapshot.lives ?? lives })
+    const thought = think(focus.mind, past, {
+      hiddenDate: track[shown]?.date,
+      focus: curve,
+      life: snapshot.lives ?? lives,
+      blend: race.blend,
+    })
     const revealed = race.revealed
     return {
       draw: thought.draw,
@@ -1717,6 +1728,7 @@ export function RunArcadeLab() {
       champion: editedParent,
       depart,
       lives,
+      blend,
     })
   }
 
@@ -1883,6 +1895,19 @@ export function RunArcadeLab() {
             onClick={() => setXray((value) => !value)}
           >
             Rayons X
+          </Button>
+        </HelpWrap>
+        <HelpWrap help={RUN_ARCADE_HELP.melanger}>
+          <Button
+            type="button"
+            variant="outline"
+            aria-pressed={blend}
+            disabled={running}
+            data-testid="run-arcade-blend"
+            className={cn(blend && "border-chart-4 text-chart-4")}
+            onClick={() => setBlend((value) => !value)}
+          >
+            Mélanger
           </Button>
         </HelpWrap>
         <HelpWrap help={RUN_ARCADE_HELP.lancer}>
@@ -2247,9 +2272,11 @@ export function RunArcadeLab() {
             exact={focusView.exact}
             className="h-72"
             versions={running ? focusStrokes?.versions : null}
-            thoughtTip={running ? (focusStrokes?.thought ?? null) : null}
+            thoughtTip={running && focusStrokes && focusView.draw ? focusView.draw.thoughtValue : null}
           />
-          {running && focusStrokes && focusStrokes.versions.length > 0 ? <VersionLines strokes={focusStrokes} /> : null}
+          {running && focusStrokes && focusStrokes.versions.length > 0 && focusView.draw ? (
+            <VersionLines strokes={focusStrokes} thought={focusView.draw.thoughtValue} />
+          ) : null}
           {xray ? <ThoughtChain runner={focus} draw={focusView.draw} hiddenDate={hiddenDate} /> : null}
           {focusView.draw ? (
             <div className="mt-2 text-sm leading-5">
@@ -2274,6 +2301,7 @@ export function RunArcadeLab() {
                   lives={snapshot.lives ?? lives}
                   editable={false}
                   compact
+                  blend={race?.blend === true}
                 />
               ) : (
                 <>

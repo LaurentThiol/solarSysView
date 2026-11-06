@@ -39,6 +39,7 @@ const KEYS = [
   "minutes",
   "depart",
   "rayons",
+  "melanger",
   "lancer",
   "pause",
   "tour",
