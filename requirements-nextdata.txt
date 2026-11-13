@@ -14,7 +14,7 @@ pytorch-lightning>=2.0
 lightgbm>=4.3
 catboost>=1.2
 # Chronos-2 et ses covariables arrivent avec la 2.0.
-chronos-forecasting>=2.0
+chronos-forecasting>=2.3.2
 torch>=2.6
 # TimesFM 3.0, dépôt Google. Les poids (google/timesfm-3.0-pytorch) ne partent
 # pas en CI : le premier appel local les télécharge. Licence non commerciale.
