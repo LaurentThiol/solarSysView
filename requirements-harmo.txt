@@ -9,5 +9,5 @@
 #
 # librosa tire numba / soundfile : poste confortable seulement.
 PyWavelets>=1.6
-ssqueezepy>=0.6.5
+ssqueezepy>=0.6.6
 librosa>=0.10
