@@ -8,6 +8,6 @@
 # Installation : ./launch install-harmo
 #
 # librosa tire numba / soundfile : poste confortable seulement.
-PyWavelets>=1.6
+PyWavelets>=1.10.0
 ssqueezepy>=0.6.5
 librosa>=0.10
