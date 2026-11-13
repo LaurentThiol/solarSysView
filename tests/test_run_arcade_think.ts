@@ -4,6 +4,7 @@ import test from "node:test"
 
 import { estimateTokens } from "../src/lib/ia/usage.ts"
 import { RUN_ARCADE_HELP } from "../src/lib/run-arcade/help.ts"
+import { iaUsedLabel } from "../src/lib/run-arcade/ia-label.ts"
 import {
   actionSchema,
   localReflectionFilled,
@@ -271,4 +272,15 @@ test("the think route journals the provider token counts", () => {
   assert.match(src, /completionTokens: tokens\.completionTokens/)
   assert.match(src, /estimated: tokens\.estimated/)
   assert.doesNotMatch(src, /openaiDeltaText/)
+  assert.match(src, /error: message, latencyMs, model/)
+})
+
+test("the banner names the model, including an empty reply", () => {
+  assert.equal(iaUsedLabel("qwen3", "prête"), "IA utilisée : qwen3. prête")
+  assert.equal(iaUsedLabel(null, null), "IA utilisée : pas encore d’appel.")
+  assert.equal(iaUsedLabel("", "en attente"), "IA utilisée : pas encore d’appel.")
+  assert.equal(
+    iaUsedLabel("qwen3", "en attente (réponse vide)"),
+    "IA utilisée : qwen3. en attente (réponse vide)"
+  )
 })

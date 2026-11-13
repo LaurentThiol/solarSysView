@@ -94,10 +94,10 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     // Le navigateur a coupé l’appel (relance, fin de course) : ce n’est pas un échec du modèle.
-    if (request.signal.aborted) return NextResponse.json({ ok: false, error: "appel annulé" }, { status: 499 })
+    if (request.signal.aborted) return NextResponse.json({ ok: false, error: "appel annulé", model }, { status: 499 })
     const latencyMs = Date.now() - started
     const message = error instanceof Error ? error.message : "échec"
     void recordLlmUsage({ surface: "brain", provider: "local", model, ok: false, error: message, latencyMs })
-    return NextResponse.json({ ok: false, error: message, latencyMs }, { status: 502 })
+    return NextResponse.json({ ok: false, error: message, latencyMs, model }, { status: 502 })
   }
 }

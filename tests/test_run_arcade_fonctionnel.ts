@@ -343,6 +343,8 @@ test("two identical waiting lines keep distinct keys", () => {
 
 test("the functional window is wired into Rayons X and its help", () => {
   const lab = readFileSync(new URL("../src/components/brain/run-arcade-lab.tsx", import.meta.url), "utf8")
+  assert.match(lab, /data-testid="run-arcade-ia-banner"/)
+  assert.match(lab, /iaUsedLabel/)
   assert.match(lab, /data-testid="run-arcade-fonctionnel"/)
   assert.match(lab, /FonctionnelTable/)
   assert.match(lab, /<li key=\{line\.key\}>\{line\.text\}<\/li>/)

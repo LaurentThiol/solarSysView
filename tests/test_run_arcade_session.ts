@@ -181,6 +181,20 @@ test("the avant-course prompt skips the exam window, and each pass starts one ru
   session.dispose()
 })
 
+test("an empty reply keeps the called model on the snapshot", async () => {
+  const { ia, session } = harness(1)
+  session.launch({ count: 1, draws: 4, minutes: 1, series: series(40), champion: null })
+  assert.equal(session.getSnapshot().iaModel, null)
+  await flush()
+  ia[0].resolve({ ok: false, error: "réponse vide", model: "qwen3" })
+  await flush()
+  const after = session.getSnapshot()
+  assert.equal(after.iaModel, "qwen3")
+  assert.equal(after.iaError, "réponse vide")
+  assert.equal(after.ia, "inconnu")
+  session.dispose()
+})
+
 test("a late reply plays at the next turn, after the exam", async () => {
   const { clock, ia, session } = harness(1)
   session.launch({ count: 2, draws: 4, minutes: 1, series: series(40), champion: null })

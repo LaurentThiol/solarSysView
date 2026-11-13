@@ -76,7 +76,7 @@ export type IaRequest = {
 
 export type IaReply =
   | { ok: true; text: string; latencyMs: number; model: string | null; vision: boolean }
-  | { ok: false; error: string; absent?: boolean; aborted?: boolean }
+  | { ok: false; error: string; absent?: boolean; aborted?: boolean; model?: string | null }
 
 export type BraveRequest = {
   query: string
@@ -137,6 +137,8 @@ export type SessionSnapshot = {
   readonly pausedLeftMs: number | null
   readonly ia: ServiceState
   readonly iaError: string | null
+  /** Dernier modèle réellement appelé. Vide avant le premier appel. */
+  readonly iaModel: string | null
   readonly iaVision: boolean
   readonly brave: ServiceState
   readonly braveError: string | null
@@ -229,6 +231,11 @@ const VARIATION_TRIES = 6
 /** Pas de graine d’une génération à la suivante : sans lui, une archive qui ne bouge pas rejoue les mêmes tirages au sort. */
 const GENERATION_SEED_STEP = 7919
 
+/** Ne remplace le nom affiché que si l’appel en a renvoyé un. */
+function keptModel(model: string | null | undefined): { iaModel: string } | Record<string, never> {
+  return model ? { iaModel: model } : {}
+}
+
 function emptySnapshot(): SessionSnapshot {
   return {
     phase: "idle",
@@ -242,6 +249,7 @@ function emptySnapshot(): SessionSnapshot {
     pausedLeftMs: null,
     ia: "inconnu",
     iaError: null,
+    iaModel: null,
     iaVision: false,
     brave: "inconnu",
     braveError: null,
@@ -1088,14 +1096,17 @@ export class RunArcadeSession {
     if (!reply.ok) {
       if (reply.aborted) {
         this.note(id, "appel", "interrompu", "Appel interrompu.", meta.turn)
-        this.set({ inFlight: this.pending.size })
+        this.set({ inFlight: this.pending.size, ...keptModel(reply.model) })
         return
       }
       this.note(id, "appel", "erreur", reply.error, meta.turn)
       this.log(id, "erreur", meta.cutoff, reply.error, meta.turn)
       this.cooldown.set(id, this.deps.now() + ERROR_COOLDOWN_MS)
       if (reply.absent) this.iaRetryAt = this.deps.now() + IA_PROBE_MS
-      this.set(reply.absent ? { ia: "absente", iaError: reply.error } : { iaError: reply.error })
+      this.set({
+        ...(reply.absent ? { ia: "absente" as const, iaError: reply.error } : { iaError: reply.error }),
+        ...keptModel(reply.model),
+      })
       return
     }
     const latencies = [...this.snapshot.latencies, reply.latencyMs].slice(-200)
@@ -1103,6 +1114,7 @@ export class RunArcadeSession {
       ia: "ok",
       iaError: null,
       iaVision: reply.vision && !this.captureOff,
+      ...keptModel(reply.model),
       latencies,
       medianMs: median(latencies),
     })

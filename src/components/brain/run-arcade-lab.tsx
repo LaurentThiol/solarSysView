@@ -95,6 +95,7 @@ import {
 import { formatRatio, GOLDEN_RATIOS } from "@/lib/run-arcade/golden"
 import { fonctionnelBoard, type FonctionnelCell } from "@/lib/run-arcade/fonctionnel"
 import { RUN_ARCADE_HELP } from "@/lib/run-arcade/help"
+import { iaUsedLabel } from "@/lib/run-arcade/ia-label"
 import { layerPoints } from "@/lib/run-arcade/layers"
 import { championKey, lastKnownChampion, parentChampion } from "@/lib/run-arcade/lineage"
 import { createSession, MIN_SLICE_MS, type ServiceState, type SessionSnapshot } from "@/lib/run-arcade/session"
@@ -349,6 +350,7 @@ function fonctionnelEqual(prev: { snapshot: SessionSnapshot }, next: { snapshot:
     left.pausedLeftMs === right.pausedLeftMs &&
     left.ia === right.ia &&
     left.iaError === right.iaError &&
+    left.iaModel === right.iaModel &&
     left.xraySteps === right.xraySteps &&
     sameActivity(left.activity, right.activity) &&
     sameRaceNames(left.race, right.race)
@@ -2038,6 +2040,24 @@ export function RunArcadeLab() {
               "Lecture : les tours s’enchaînent, sans appel."
             )}
             <HelpTip {...RUN_ARCADE_HELP.horloge} />
+          </p>
+        ) : null}
+        {race ? (
+          <p
+            className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-foreground"
+            role="status"
+            data-testid="run-arcade-ia-banner"
+          >
+            {iaUsedLabel(
+              snapshot.iaModel,
+              snapshot.iaModel
+                ? serviceText(
+                    snapshot.ia,
+                    snapshot.iaError,
+                    snapshot.iaVision ? "prête, le dessin part avec l’appel" : "prête"
+                  )
+                : null
+            )}
           </p>
         ) : null}
         {race ? (

@@ -51,16 +51,17 @@ export async function askIa(request: IaRequest, signal: AbortSignal): Promise<Ia
       { system: request.system, user: request.user, seed: request.seed, image: request.image },
       signal
     )
+    const model = typeof body?.model === "string" && body.model ? body.model : null
     if (response.ok && body?.ok && typeof body.text === "string") {
       return {
         ok: true,
         text: body.text,
         latencyMs: Number(body.latencyMs) || 0,
-        model: typeof body.model === "string" ? body.model : null,
+        model,
         vision: Boolean(body.vision),
       }
     }
-    return { ok: false, error: errorText(body, response.status), absent: Boolean(body?.absent) }
+    return { ok: false, error: errorText(body, response.status), absent: Boolean(body?.absent), model }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "échec", aborted: signal.aborted }
   }
