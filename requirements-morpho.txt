@@ -7,7 +7,7 @@
 # HfMoondream du hub (rév. 2025-06-21) n'appelle pas post_init.
 # device_map CUDA/MPS exige accelerate (transformers le refuse sinon).
 # Photon (Ampere / Apple Silicon) : pip install moondream
-transformers>=5.10.0
+transformers>=5.22.2
 torch>=2.6.0
 accelerate>=1.0.0
 einops>=0.8.0
