@@ -4,6 +4,6 @@
   "area": "runArcade",
   "title": "Bandeau : quelle IA est appelée",
   "body": "runArcade affiche un bandeau avec le nom du modèle local réellement appelé. Avant le premier appel, le bandeau dit qu’il n’y a pas encore d’appel. Dès qu’une réponse arrive, le nom reste affiché, même si le texte est vide. La ligne Brave et Neon ne change pas. Ce n’est pas un ticket.",
-  "pr_number": null,
-  "pr_url": null
+  "pr_number": 380,
+  "pr_url": "https://github.com/LaurentThiol/Synchro/pull/380"
 }
