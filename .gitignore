@@ -1,0 +1,8 @@
+node_modules/
+web/dist/
+.node-red/
+flows/*_cred.json
+.netlify/
+.playwright-mcp/
+*.log
+.DS_Store

@@ -1,0 +1,192 @@
+[
+  {
+    "id": "tab-solar",
+    "type": "tab",
+    "label": "Système solaire",
+    "disabled": false,
+    "info": "Horloge partagée du planétarium. Le module ephemeris/solar.js calcule le catalogue et les positions. La scène Three.js réévalue la même formule à chaque image."
+  },
+  {
+    "id": "ws-solar",
+    "type": "websocket-listener",
+    "path": "/ws/solar",
+    "wholemsg": "false"
+  },
+  {
+    "id": "note-solar",
+    "type": "comment",
+    "z": "tab-solar",
+    "name": "L'horloge vit ici. La scène ne fait que dessiner la date reçue.",
+    "info": "",
+    "x": 360,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "inj-tick",
+    "type": "inject",
+    "z": "tab-solar",
+    "name": "Horloge",
+    "props": [
+      {
+        "p": "topic",
+        "v": "tick",
+        "vt": "str"
+      }
+    ],
+    "repeat": "0.1",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 0.2,
+    "topic": "tick",
+    "x": 150,
+    "y": 140,
+    "wires": [
+      [
+        "fn-clock"
+      ]
+    ]
+  },
+  {
+    "id": "ws-in-cmd",
+    "type": "websocket in",
+    "z": "tab-solar",
+    "name": "Commandes",
+    "server": "ws-solar",
+    "client": "",
+    "x": 160,
+    "y": 220,
+    "wires": [
+      [
+        "fn-clock"
+      ]
+    ]
+  },
+  {
+    "id": "fn-clock",
+    "type": "function",
+    "z": "tab-solar",
+    "name": "Éphémérides",
+    "func": "const solar = global.get('solar');\nlet state = flow.get('sim');\nif (!state) state = solar.initialState(Date.now());\nconst command = msg.topic === 'tick' ? { type: 'tick' } : solar.parseCommand(msg.payload);\nconst next = solar.reduce(state, command, Date.now());\nflow.set('sim', next.state);\nmsg.payload = next.tick;\nnode.status({\n  fill: next.state.playing ? 'green' : 'grey',\n  shape: 'dot',\n  text: next.label\n});\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 180,
+    "wires": [
+      [
+        "ws-out-tick"
+      ]
+    ]
+  },
+  {
+    "id": "ws-out-tick",
+    "type": "websocket out",
+    "z": "tab-solar",
+    "name": "Vers la scène",
+    "server": "ws-solar",
+    "client": "",
+    "x": 640,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "http-catalog",
+    "type": "http in",
+    "z": "tab-solar",
+    "name": "Catalogue",
+    "url": "/catalog",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 320,
+    "wires": [
+      [
+        "fn-catalog"
+      ]
+    ]
+  },
+  {
+    "id": "fn-catalog",
+    "type": "function",
+    "z": "tab-solar",
+    "name": "Catalogue JSON",
+    "func": "const solar = global.get('solar');\nmsg.payload = solar.catalog();\nmsg.headers = {\n  'Content-Type': 'application/json; charset=utf-8',\n  'Cache-Control': 'no-store'\n};\nmsg.statusCode = 200;\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 320,
+    "wires": [
+      [
+        "http-catalog-res"
+      ]
+    ]
+  },
+  {
+    "id": "http-catalog-res",
+    "type": "http response",
+    "z": "tab-solar",
+    "name": "",
+    "statusCode": "",
+    "headers": {},
+    "x": 610,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "http-health",
+    "type": "http in",
+    "z": "tab-solar",
+    "name": "Santé",
+    "url": "/health",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 140,
+    "y": 400,
+    "wires": [
+      [
+        "fn-health"
+      ]
+    ]
+  },
+  {
+    "id": "fn-health",
+    "type": "function",
+    "z": "tab-solar",
+    "name": "Santé JSON",
+    "func": "msg.payload = { ok: true, editor: global.get('editorEnabled') === true };\nmsg.headers = {\n  'Content-Type': 'application/json; charset=utf-8',\n  'Cache-Control': 'no-store'\n};\nmsg.statusCode = 200;\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 380,
+    "y": 400,
+    "wires": [
+      [
+        "http-health-res"
+      ]
+    ]
+  },
+  {
+    "id": "http-health-res",
+    "type": "http response",
+    "z": "tab-solar",
+    "name": "",
+    "statusCode": "",
+    "headers": {},
+    "x": 600,
+    "y": 400,
+    "wires": []
+  }
+]

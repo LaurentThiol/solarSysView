@@ -1,0 +1,30 @@
+{
+  "name": "solarsim",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Système solaire en rotation : Node-RED tient l'horloge, Three.js dessine les orbites.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "vite build --config web/vite.config.ts",
+    "prestart": "npm run build",
+    "start": "ENABLE_NODE_RED_EDITOR=1 node server/index.cjs",
+    "dev": "concurrently -k \"ENABLE_NODE_RED_EDITOR=1 node server/index.cjs\" \"vite --config web/vite.config.ts\"",
+    "test": "node --test ephemeris/solar.test.cjs",
+    "typecheck": "tsc -p web/tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "node-red": "^4.1.3",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@fontsource/fraunces": "^5.2.5",
+    "@fontsource/outfit": "^5.2.5",
+    "@types/three": "^0.170.0",
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

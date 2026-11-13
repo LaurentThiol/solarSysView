@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Système solaire</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <canvas id="scene" aria-hidden="true"></canvas>
+    <div id="labels" aria-hidden="true"></div>
+    <p id="live" class="sr-only" aria-live="polite"></p>
+    <p id="gl-error" class="gl-error" hidden>
+      WebGL est indisponible dans ce navigateur. La scène ne peut pas s’afficher.
+    </p>
+
+    <header>
+      <div class="brand">
+        <p class="kicker">Observatoire</p>
+        <h1>Système solaire</h1>
+      </div>
+      <div class="when">
+        <time id="date-label"></time>
+        <span id="jd-label"></span>
+      </div>
+      <p id="clock-pill" class="pill">Connexion à Node-RED…</p>
+    </header>
+
+    <aside id="rail">
+      <ol id="body-list"></ol>
+      <article id="fiche">
+        <p id="fiche-empty">Choisissez un astre dans la liste ou dans la scène.</p>
+        <div id="fiche-body" hidden>
+          <h2 id="fiche-name"></h2>
+          <p id="fiche-fact"></p>
+          <dl id="fiche-facts"></dl>
+          <p id="fiche-server" class="server-line" hidden></p>
+          <button type="button" id="frame-body">Cadrer</button>
+        </div>
+      </article>
+      <p id="footnote" class="footnote">
+        Éléments képlériens moyens, époque J2000. La précision se dégrade loin de l’an 2000.
+        <a id="editor-link" href="/red" hidden>Éditeur des flux</a>
+      </p>
+    </aside>
+
+    <form id="transport" autocomplete="off">
+      <button type="button" id="play-toggle" aria-pressed="false">Pause</button>
+      <div class="rates" role="group" aria-label="Vitesse">
+        <button type="button" data-rate="1" aria-pressed="true">1 j</button>
+        <button type="button" data-rate="7" aria-pressed="false">7 j</button>
+        <button type="button" data-rate="30" aria-pressed="false">30 j</button>
+        <button type="button" data-rate="365" aria-pressed="false">1 an</button>
+      </div>
+      <label class="date-field">
+        <span>Date, heure de Paris</span>
+        <input id="date-input" type="datetime-local" />
+      </label>
+      <p id="rate-label" class="rate-label"></p>
+      <p id="date-error" class="date-error" hidden>Choisissez une année entre −3000 et 3000.</p>
+      <p class="hint"><kbd>espace</kbd> pause</p>
+    </form>
+
+    <details id="view" open>
+      <summary>Vue</summary>
+      <div class="view-body">
+        <label class="slider" for="opt-exponent">
+          <span>Distances</span>
+          <input id="opt-exponent" type="range" min="0.35" max="1" step="0.01" value="0.55" />
+        </label>
+        <p id="exponent-note" class="note"></p>
+        <label class="slider" for="opt-size">
+          <span>Tailles</span>
+          <input id="opt-size" type="range" min="6" max="36" step="1" value="16" />
+        </label>
+        <label class="check"><input id="opt-orbits" type="checkbox" checked /> Orbites</label>
+        <label class="check"><input id="opt-names" type="checkbox" checked /> Noms</label>
+        <label class="check"><input id="opt-belt" type="checkbox" checked /> Ceinture</label>
+        <div class="presets" role="group" aria-label="Cadrage">
+          <button type="button" id="preset-inner">Intérieur</button>
+          <button type="button" id="preset-full">Système</button>
+          <button type="button" id="preset-follow" aria-pressed="false">Suivre</button>
+        </div>
+      </div>
+    </details>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
