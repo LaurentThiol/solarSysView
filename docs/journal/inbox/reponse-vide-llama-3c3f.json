@@ -1,0 +1,9 @@
+{
+  "slug": "reponse-vide-llama-3c3f",
+  "happened_on": "2026-11-13",
+  "area": "runArcade",
+  "title": "IA locale : la réflexion n’est pas l’action",
+  "body": "L’appel court de runArcade demande au modèle local de ne pas réfléchir. Ollama reçoit think faux, y compris quand l’essai au schéma repart en JSON libre. Sur llama-server et LM Studio, seul un modèle qui réfléchit reçoit enable_thinking faux. Si la réponse n’a que de la réflexion, l’écran dit « réflexion sans JSON », après un seul second essai. L’action tient toujours dans 320 jetons, avec la même graine, et le choix du modèle ne change pas.",
+  "pr_number": null,
+  "pr_url": null
+}

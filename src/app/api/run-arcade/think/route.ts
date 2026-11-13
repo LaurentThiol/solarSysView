@@ -6,7 +6,7 @@ import { llmFetch } from "@/lib/ia/loopback-fetch"
 import { pickLocalTextModel, pickLocalVisionModel } from "@/lib/ia/models"
 import { probeLocalLlm } from "@/lib/ia/providers"
 import { recordLlmUsage } from "@/lib/ia/record-usage"
-import { localThinkText, localThinkTokens, requestLocalThink } from "@/lib/run-arcade/local-call"
+import { localReflectionFilled, localThinkText, localThinkTokens, requestLocalThink } from "@/lib/run-arcade/local-call"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       return { ok: response.ok, status: response.status, text: await response.text() }
     })
     const text = localThinkText(native, parsed)
-    if (!text) throw new Error("réponse vide")
+    if (!text) throw new Error(localReflectionFilled(parsed) ? "réflexion sans JSON" : "réponse vide")
     const latencyMs = Date.now() - started
     const tokens = localThinkTokens(parsed, text, `${system}\n${user}`, started, started + latencyMs)
     void recordLlmUsage({

@@ -1,4 +1,5 @@
 import { ollamaNumCtx } from "@/lib/ia/local-options"
+import { supportsLocalThink } from "@/lib/ia/models"
 import { ollamaDeltaText, openaiCompletionText } from "@/lib/ia/sse"
 import { estimateTokens, usageFromPayload } from "@/lib/ia/usage"
 
@@ -61,6 +62,7 @@ export function localThinkPayload(input: {
     return {
       model: input.model,
       stream: false as const,
+      think: false as const,
       format: input.schema ? actionSchema() : "json",
       keep_alive: "30m",
       messages: input.messages,
@@ -80,6 +82,7 @@ export function localThinkPayload(input: {
     max_tokens: PREDICT,
     response_format: { type: "json_object" as const },
     messages: input.messages,
+    ...(supportsLocalThink(input.model) ? { chat_template_kwargs: { enable_thinking: false as const } } : {}),
   }
 }
 
@@ -88,27 +91,76 @@ function schemaRejected(status: number, body: string) {
   return status === 500 && /format|schema|grammar|structured/i.test(body)
 }
 
+function httpFailure(response: { status: number; text: string }) {
+  const raw = response.text
+  return new Error(`LLM local HTTP ${response.status}${raw ? ` · ${raw.slice(0, 160)}` : ""}`)
+}
+
+function parseLocal(text: string) {
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    throw new Error("réponse Ollama illisible")
+  }
+}
+
+function reflectionText(value: unknown) {
+  if (typeof value === "string") return value.trim()
+  if (!Array.isArray(value)) return ""
+  return value
+    .map((part) => (typeof part === "string" ? part : ""))
+    .join("")
+    .trim()
+}
+
+/** Vrai si thinking ou reasoning_content porte du texte. Ce texte n’est pas l’action. */
+export function localReflectionFilled(payload: unknown) {
+  if (!payload || typeof payload !== "object") return false
+  const record = payload as {
+    message?: { thinking?: unknown; reasoning_content?: unknown }
+    choices?: Array<{
+      message?: { thinking?: unknown; reasoning_content?: unknown }
+      thinking?: unknown
+      reasoning_content?: unknown
+    }>
+  }
+  const choice = record.choices?.[0]
+  const bags = [record.message, choice?.message, choice]
+  for (const bag of bags) {
+    if (!bag) continue
+    if (reflectionText(bag.thinking) || reflectionText(bag.reasoning_content)) return true
+  }
+  return false
+}
+
+function reflectionWithoutAction(native: boolean, payload: unknown) {
+  return localThinkText(native, payload).trim() === "" && localReflectionFilled(payload)
+}
+
 /**
- * Ollama reçoit le schéma. Une grammaire refusée repart une fois en JSON libre.
- * llama-server et LM Studio restent sur l’objet JSON OpenAI.
+ * Ollama reçoit le schéma, avec la réflexion coupée. Une grammaire refusée repart une fois en JSON libre.
+ * Un 200 sans action et avec une réflexion repart une fois, le même corps. S’il est déjà coupé, on ne boucle pas.
+ * llama-server et LM Studio restent sur l’objet JSON. Un modèle qui réfléchit reçoit enable_thinking faux.
  */
 export async function requestLocalThink(
   input: { native: boolean; model: string; messages: unknown; seed: number },
   post: LocalPost
 ) {
-  let response = await post(localThinkPayload({ ...input, schema: input.native }))
+  let schema = input.native
+  const send = () => post(localThinkPayload({ ...input, schema }))
+  let response = await send()
   if (!response.ok && input.native && schemaRejected(response.status, response.text)) {
-    response = await post(localThinkPayload({ ...input, schema: false }))
+    schema = false
+    response = await send()
   }
-  if (!response.ok) {
-    const raw = response.text
-    throw new Error(`LLM local HTTP ${response.status}${raw ? ` · ${raw.slice(0, 160)}` : ""}`)
+  if (!response.ok) throw httpFailure(response)
+  let parsed = parseLocal(response.text)
+  if (reflectionWithoutAction(input.native, parsed)) {
+    response = await send()
+    if (!response.ok) throw httpFailure(response)
+    parsed = parseLocal(response.text)
   }
-  try {
-    return JSON.parse(response.text) as unknown
-  } catch {
-    throw new Error("réponse Ollama illisible")
-  }
+  return parsed
 }
 
 function objectContent(payload: unknown) {
@@ -122,7 +174,7 @@ function objectContent(payload: unknown) {
   }
 }
 
-/** Texte de l’action. Natif : message.content. Compatible : choices[0].message.content. */
+/** Texte de l’action. Natif : message.content, puis le format OpenAI. Un objet est sérialisé. thinking et reasoning_content ne comptent pas. */
 export function localThinkText(native: boolean, payload: unknown) {
   const primary = (native ? ollamaDeltaText(payload) : openaiCompletionText(payload)).trim()
   if (primary) return primary
