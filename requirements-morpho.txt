@@ -10,5 +10,5 @@
 transformers>=5.10.0
 torch>=2.6.0
 accelerate>=1.0.0
-einops>=0.8.0
+einops>=0.8.2
 pillow>=13.0.0
