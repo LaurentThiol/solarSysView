@@ -18,11 +18,18 @@ from synchro.nextdata.conformal import calibrate, coverage, truth_of
 from synchro.nextdata.covariates import SHAPE_SERIES, grid_shape
 from synchro.nextdata.empirical import recount
 from synchro.nextdata.forecast import _apply_external, _rank_view, blend_mid, blend_weight
-from synchro.nextdata.models import CHRONOS_SERIES, _clip, star_pool_of
+from synchro.nextdata.models import (
+    CHRONOS_SERIES,
+    RANK_SERIES,
+    _clip,
+    pas_du_decalage,
+    star_pool_of,
+    timesfm_point,
+)
 from synchro.nextdata.pulse_features import public_pulse, pulse_of
 from synchro.nextdata.panel import Frame
 from synchro.nextdata.persist import NUMBER_POOL, NUMBER_SLOTS, STAR_SLOTS, score_swaps, snap_grid
-from synchro.nextdata.project import beam, compose_ranks, stamp_grid
+from synchro.nextdata.project import beam, compose_ranks, project_under_sums, stamp_grid
 from synchro.nextdata.steps import MIN_HISTORY
 from synchro.nextdata.xray import core_trace, public_xray
 from synchro.nextdata.uncertainty import chance_hits, chance_hits_mixed, mean_interval, versus_all
@@ -38,8 +45,31 @@ READINGS = (
 SHIFT_MAX = 10
 SHIFT_FIELDS = FIELDS
 CHRONOS_WINDOW = 10
-# n1 rejoint le niveau : c’est lui qui fait le centre du rang, la chaîne n’y pèse plus.
-CHRONOS_TARGETS = {"sum": "sum", "star_sum": "star_sum", "n1": "level:n1"}
+# Le mélange ne porte que sur les deux sommes. Aucun rang n’y entre.
+CHRONOS_TARGETS = {"sum": "sum", "star_sum": "star_sum"}
+RANK_FIELDS = RANK_SERIES
+SUM_READINGS = ("lightgbm", "chronos", "timesfm")
+
+
+def _mean_reading(prefix: list[dict[str, Any]]) -> dict[str, Any]:
+    """Moyenne des tirages d’avant, puis projection sur ces deux sommes. Pas une grille jouée."""
+    if not prefix:
+        return {"sum": 0.0, "star_sum": 0.0}
+    def avg(name: str) -> float:
+        return sum(float(row[name]) for row in prefix) / len(prefix)
+    numbers, stars = project_under_sums(
+        [avg(name) for name in ("n1", "n2", "n3", "n4", "n5")],
+        [avg("e1"), avg("e2")],
+        avg("sum"),
+        avg("star_sum"),
+    )
+    packed = _pack(numbers, stars, avg("sum"))
+    packed["sum"] = avg("sum")
+    packed["star_sum"] = avg("star_sum")
+    # La moyenne n’est pas une grille jouée : les rangs projetés servent aux écarts.
+    packed["numbers"] = []
+    packed["stars"] = []
+    return packed
 
 
 def _pack(numbers: list[int], stars: list[int], fallback_sum: float | None = None) -> dict[str, Any]:
@@ -145,29 +175,99 @@ def _lightgbm_mids(parts: dict[str, Any], mode: str, star_pool: int) -> dict[str
     return {name: float(moments[target]["mid"]) for name, target in CHRONOS_TARGETS.items()}
 
 
-def _chronos_weights(
+def assert_no_rank_weight(weights: dict[str, float]) -> None:
+    """Un poids non nul sur n1…n5 ou e1, e2 est refusé. Seules les sommes se mélangent."""
+    leaked = [name for name in (*RANK_FIELDS, "g1", "g2", "g3", "g4", "e_gap") if abs(float(weights.get(name, 0.0))) > 0]
+    if leaked:
+        raise ValueError("Un rang ne reçoit pas de poids : " + ", ".join(leaked) + ".")
+
+
+def sum_weights(errors: dict[str, float], ready: int) -> dict[str, float]:
+    """Poids d’une somme. Moins de dix pas : TimesFM dehors, Chronos moitié-moitié avec LightGBM.
+
+    À dix pas, le poids va à la lecture la moins trompée. Une lecture dont l’erreur
+    n’est pas plus basse reste à 0. À erreur égale, LightGBM garde le poids.
+    """
+    assert_no_rank_weight(errors)
+    present = {name: float(value) for name, value in errors.items() if value is not None and name in SUM_READINGS}
+    held_out = ready < CHRONOS_WINDOW and "timesfm" in present
+    if held_out:
+        present.pop("timesfm")
+    weights = {name: 0.0 for name in present}
+    if held_out:
+        weights["timesfm"] = 0.0
+    if ready < CHRONOS_WINDOW:
+        if "lightgbm" in present and "chronos" in present:
+            weights["lightgbm"] = 0.5
+            weights["chronos"] = 0.5
+        elif "lightgbm" in present:
+            weights["lightgbm"] = 1.0
+        elif "chronos" in present:
+            weights["chronos"] = 1.0
+        return weights
+    if not present:
+        return weights
+    best = min(present.values())
+    tied = [name for name, err in present.items() if err <= best + 1e-12]
+    winner = "lightgbm" if "lightgbm" in tied else sorted(tied)[0]
+    for name in weights:
+        weights[name] = 1.0 if name == winner else 0.0
+    return weights
+
+
+def _timesfm_bands(parts: dict[str, Any], mode: str, index: int = 0) -> dict[str, dict[str, float]] | None:
+    block = (parts.get("timesfm") or {}).get(mode) or {}
+    horizon = block.get("horizon")
+    if isinstance(horizon, list) and 0 <= index < len(horizon):
+        step = horizon[index]
+        if isinstance(step, dict) and all(isinstance(step.get(name), dict) for name in CHRONOS_SERIES):
+            return step
+    if all(isinstance(block.get(name), dict) for name in CHRONOS_SERIES):
+        return {name: block[name] for name in CHRONOS_SERIES}
+    return None
+
+
+def _sum_record(
     frame: Frame,
     mode: str,
     window: list[tuple[int, dict[str, Any]]],
-) -> tuple[dict[str, float], dict[str, tuple[float, float]] | None, int]:
-    """Poids de LightGBM par série, sur les erreurs moyennes des pas d’avant. Moitié-moitié tant qu’il en manque."""
-    totals = {name: [0.0, 0.0] for name in CHRONOS_SERIES}
+) -> tuple[int, dict[str, dict[str, float]]]:
+    """Erreurs moyennes de sum et star_sum, par lecture, sur les pas d’avant. Jamais le tirage noté."""
+    totals: dict[str, dict[str, list[float]]] = {name: {} for name in CHRONOS_SERIES}
     count = 0
     for t, step in window:
+        if t >= len(frame.rows):
+            continue
         mids = _lightgbm_mids(step["parts"], mode, _target_pool(frame, t))
-        bands = _chronos_bands(step["parts"], mode)
-        if mids is None or bands is None or t >= len(frame.rows):
+        chronos = _chronos_bands(step["parts"], mode)
+        times = _timesfm_bands(step["parts"], mode, 0)
+        if mids is None:
             continue
         row = frame.rows[t]
+        count += 1
+        sources = {"lightgbm": mids}
+        if chronos is not None:
+            sources["chronos"] = {name: float(chronos[name]["mid"]) for name in CHRONOS_SERIES}
+        if times is not None:
+            sources["timesfm"] = {name: float(times[name]["mid"]) for name in CHRONOS_SERIES}
         for name in CHRONOS_SERIES:
             truth = float(row[name])
-            totals[name][0] += abs(mids[name] - truth)
-            totals[name][1] += abs(float(bands[name]["mid"]) - truth)
-        count += 1
-    if count < CHRONOS_WINDOW:
-        return {name: 0.5 for name in CHRONOS_SERIES}, None, count
-    mae = {name: (lgb / count, chronos / count) for name, (lgb, chronos) in totals.items()}
-    return {name: blend_weight(*pair) for name, pair in mae.items()}, mae, count
+            bucket = totals[name]
+            for reading, values in sources.items():
+                bucket.setdefault(reading, []).append(abs(float(values[name]) - truth))
+    mae = {
+        name: {reading: sum(errs) / len(errs) for reading, errs in groups.items() if errs}
+        for name, groups in totals.items()
+    }
+    return count, mae
+
+
+def _mix_quantile(pieces: dict[str, float], weights: dict[str, float]) -> float:
+    used = {name: value for name, value in pieces.items() if weights.get(name, 0.0) > 0}
+    if not used:
+        return float(next(iter(pieces.values())))
+    total = sum(weights[name] for name in used)
+    return sum(weights[name] * value for name, value in used.items()) / total
 
 
 def _blend_chronos(
@@ -177,33 +277,125 @@ def _blend_chronos(
     parts: dict[str, Any],
     window: list[tuple[int, dict[str, Any]]],
     star_pool: int,
+    *,
+    with_timesfm: bool = False,
 ) -> dict[str, Any]:
-    """Chronos rejoint LightGBM sur la somme, la somme des étoiles et le niveau de n1, bornes 10–90 comprises.
+    """Mélange seulement sum et star_sum. Les rangs ne reçoivent pas de poids.
 
-    Chaque série a son poids, réglé sur les pas d’avant (`window`), jamais sur
-    le tirage noté. CatBoost n’est pas mélangé.
+    Moins de dix pas prêts : TimesFM reste dehors, Chronos reste moitié-moitié
+    avec LightGBM. CatBoost n’est pas mélangé.
     """
     bands = _chronos_bands(parts, mode)
-    if bands is None:
+    times = _timesfm_bands(parts, mode, 0) if with_timesfm else None
+    if bands is None and times is None:
         return {"available": False, "weight": 1.0}
-    weights, mae, count = _chronos_weights(frame, mode, window)
+    count, mae = _sum_record(frame, mode, window)
+    per_series: dict[str, dict[str, float]] = {}
+    for name in CHRONOS_SERIES:
+        errors: dict[str, float] = {}
+        known = mae.get(name) or {}
+        if count >= CHRONOS_WINDOW and "lightgbm" in known:
+            errors["lightgbm"] = known["lightgbm"]
+        else:
+            errors["lightgbm"] = 0.0
+        if bands is not None and (count < CHRONOS_WINDOW or "chronos" in known):
+            errors["chronos"] = 0.0 if count < CHRONOS_WINDOW else known["chronos"]
+        if times is not None and (count < CHRONOS_WINDOW or "timesfm" in known):
+            errors["timesfm"] = 0.0 if count < CHRONOS_WINDOW else known["timesfm"]
+        per_series[name] = sum_weights(errors, count if bands is not None or times is not None else 0)
     for name, target in CHRONOS_TARGETS.items():
         if target not in moments:
             continue
-        moments[target] = {
-            key: _clip(target, blend_mid(moments[target][key], bands[name][key], weights[name]), star_pool)
-            for key in ("lo", "mid", "hi")
+        pieces = {
+            edge: {
+                "lightgbm": float(moments[target][edge]),
+                **({} if bands is None else {"chronos": float(bands[name][edge])}),
+                **({} if times is None else {"timesfm": float(times[name][edge])}),
+            }
+            for edge in ("lo", "mid", "hi")
         }
-    return {
-        "available": True,
-        "weight": round(weights["sum"], 4),
-        "weights": {name: round(value, 4) for name, value in weights.items()},
+        weights = per_series[name]
+        moments[target] = {
+            edge: _clip(target, _mix_quantile(pieces[edge], weights), star_pool) for edge in ("lo", "mid", "hi")
+        }
+    lgb_sum = per_series["sum"].get("lightgbm", 1.0)
+    sum_mae = mae.get("sum") or {}
+    note = {
+        "available": bands is not None,
+        "weight": round(float(lgb_sum), 4),
+        "weights": {name: round(float(per_series[name].get("lightgbm", 1.0)), 4) for name in CHRONOS_SERIES},
+        "shares": {name: {reading: round(float(share), 4) for reading, share in per_series[name].items()} for name in CHRONOS_SERIES},
         "window": count,
-        "holdout_mae_lgb": None if mae is None else round(mae["sum"][0], 4),
-        "holdout_mae_chronos": None if mae is None else round(mae["sum"][1], 4),
+        "holdout_mae_lgb": None if count < CHRONOS_WINDOW or "lightgbm" not in sum_mae else round(sum_mae["lightgbm"], 4),
+        "holdout_mae_chronos": None if count < CHRONOS_WINDOW or "chronos" not in sum_mae else round(sum_mae["chronos"], 4),
         "covariates": (parts.get("chronos") or {}).get("covariates"),
-        **{name: round(float(bands[name]["mid"]), 4) for name in CHRONOS_SERIES},
+        "shape": _shape_owner(per_series["sum"]),
+        "star_shape": _shape_owner(per_series["star_sum"]),
     }
+    if bands is not None:
+        note.update({name: round(float(bands[name]["mid"]), 4) for name in CHRONOS_SERIES})
+    if times is not None:
+        note["timesfm"] = {
+            "available": True,
+            "sum": round(float(times["sum"]["mid"]), 4),
+            "star_sum": round(float(times["star_sum"]["mid"]), 4),
+            "lo": {"sum": round(float(times["sum"]["lo"]), 4), "star_sum": round(float(times["star_sum"]["lo"]), 4)},
+            "hi": {"sum": round(float(times["sum"]["hi"]), 4), "star_sum": round(float(times["star_sum"]["hi"]), 4)},
+            "weights": {name: round(float(per_series[name].get("timesfm", 0.0)), 4) for name in CHRONOS_SERIES},
+        }
+    assert_no_rank_weight({name: 0.0 for name in RANK_FIELDS})
+    return note
+
+
+def _shape_owner(weights: dict[str, float]) -> str:
+    """La forme retenue est celle de la lecture qui a le poids. À égalité, LightGBM."""
+    if not weights:
+        return "lightgbm"
+    best = max(weights.values())
+    tied = [name for name, weight in weights.items() if weight >= best - 1e-12 and weight > 0]
+    if not tied or "lightgbm" in tied:
+        return "lightgbm"
+    return sorted(tied)[0]
+
+
+def _forme(source: dict[str, Any] | None, names: tuple[str, ...]) -> list[float] | None:
+    if not source:
+        return None
+    values: list[float] = []
+    for name in names:
+        raw = source.get(name)
+        if isinstance(raw, dict) and "mid" in raw:
+            values.append(float(raw["mid"]))
+        elif isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            values.append(float(raw))
+        else:
+            return None
+    return values
+
+
+def _winner_forme(parts: dict[str, Any], mode: str, moments: dict[str, Any], owner: str, names: tuple[str, ...]) -> list[float] | None:
+    if owner == "chronos":
+        block = ((parts.get("chronos") or {}).get(mode) or {}).get("stage2")
+        found = _forme(block, names)
+        if found is not None:
+            return found
+    if owner == "timesfm":
+        block = (parts.get("timesfm") or {}).get(mode) or {}
+        found = _forme(block.get("stage2"), names)
+        if found is not None:
+            return found
+    if owner == "darts":
+        block = (parts.get("darts") or {}).get(mode) or {}
+        found = _forme(block.get("stage2") if isinstance(block, dict) else None, names)
+        if found is not None:
+            return found
+    levels = []
+    for name in names:
+        band = moments.get(f"level:{name}") or moments.get(name)
+        if not isinstance(band, dict) or "mid" not in band:
+            return None
+        levels.append(float(band["mid"]))
+    return levels
 
 
 def _assemble(
@@ -213,6 +405,7 @@ def _assemble(
     window: list[tuple[int, dict[str, Any]]],
     with_chronos: bool,
     pulse: bool,
+    with_timesfm: bool = False,
 ) -> dict[str, Any]:
     rows = frame.rows
     parts = step["parts"]
@@ -224,7 +417,7 @@ def _assemble(
         "date": rows[t]["date"] if t < len(rows) else frame.next_date,
         "star_pool": pool,
         "persistence": _actual(last),
-        "mean": {"sum": sum(float(row["sum"]) for row in rows[:t]) / t},
+        "mean": _mean_reading(rows[:t]),
         "readings": {},
     }
     if t < len(rows):
@@ -246,7 +439,7 @@ def _assemble(
                     for name, band in moments.items()
                     if isinstance(band, dict) and "mid" in band
                 }
-                _apply_external(moments, darts, star_pool=pool)
+                _apply_external(moments, darts, names=("sum", "star_sum"), star_pool=pool)
                 engine = "darts"
                 darts_names = [
                     name
@@ -258,15 +451,37 @@ def _assemble(
             for name, band in moments.items()
             if isinstance(band, dict) and "mid" in band
         }
-        if library == "lightgbm" and with_chronos:
-            chronos = _blend_chronos(frame, mode, moments, parts, window, pool)
+        timesfm_note = None
+        if library == "lightgbm" and (with_chronos or with_timesfm):
+            chronos = _blend_chronos(
+                frame, mode, moments, parts, window, pool, with_timesfm=with_timesfm
+            )
+            timesfm_note = chronos.get("timesfm")
         composed, trace = compose_ranks(moments, last)
-        if trace is not None and chronos and chronos["available"]:
-            trace["numbers"][0]["chronos"] = {"value": chronos["n1"], "share": round(1.0 - chronos["weights"]["n1"], 4)}
         source = rows[t] if t < len(rows) else frame.horizon[0]
         ranked = beam(composed, base, star_pool=pool, pulse=pulse_of(source) if pulse else None)
         if not ranked:
             continue
+        owner = (chronos or {}).get("shape") or "lightgbm"
+        star_owner = (chronos or {}).get("star_shape") or owner
+        number_shape = _winner_forme(parts, mode, moments, owner, ("n1", "n2", "n3", "n4", "n5"))
+        star_shape = _winner_forme(parts, mode, moments, star_owner, ("e1", "e2"))
+        if number_shape is None:
+            number_shape = [float(value) for value in ranked[0]["numbers"]]
+        if star_shape is None:
+            star_shape = [float(value) for value in ranked[0]["stars"]]
+        projected_numbers, projected_stars = project_under_sums(
+            number_shape,
+            star_shape,
+            float(moments["sum"]["mid"]),
+            float(moments["star_sum"]["mid"]),
+            pool,
+        )
+        ranked[0] = {
+            **ranked[0],
+            "numbers": projected_numbers,
+            "stars": projected_stars,
+        }
         best = ranked[0]
         packed = _pack(best["numbers"], best["stars"], moments["sum"]["mid"])
         packed["sum_model"] = round(float(moments["sum"]["mid"]), 4)
@@ -284,6 +499,9 @@ def _assemble(
             "packed": packed,
             "arbitration": arbitration,
             "chronos": chronos,
+            "timesfm": timesfm_note,
+            "timesfm_horizon": ((parts.get("timesfm") or {}).get(mode) or {}).get("horizon"),
+            "timesfm_rank_horizon": ((parts.get("timesfm") or {}).get(mode) or {}).get("rank_horizon"),
             "importance": block.get("importance") or [],
             "xray_core": core_trace(
                 moments_before=before_chronos,
@@ -323,14 +541,16 @@ def _memo(
     window: list[tuple[int, dict[str, Any]]],
     with_chronos: bool,
     pulse: bool,
+    with_timesfm: bool = False,
 ) -> dict[str, Any]:
-    """Un pas assemblé ne change pas tant que ses morceaux et ceux des pas qui règlent Chronos ne changent pas. Lecture seule."""
-    used = window if with_chronos else []
+    """Un pas assemblé ne change pas tant que ses morceaux et ceux des pas qui règlent le mélange ne changent pas."""
+    used = window if with_chronos or with_timesfm else []
     target = None if t >= len(frame.rows) else (tuple(frame.rows[t]["numbers"]), tuple(frame.rows[t]["stars"]))
     key = (
         step["key"],
         tuple(past["key"] for _t, past in used),
         bool(with_chronos),
+        bool(with_timesfm),
         frame.focus,
         frame.star_pool,
         target,
@@ -341,7 +561,7 @@ def _memo(
         if hit is not None:
             _MEMO.move_to_end(key)
             return hit
-    built = _assemble(frame, t, step, used, with_chronos, pulse)
+    built = _assemble(frame, t, step, used, with_chronos, pulse, with_timesfm)
     with _MEMO_LOCK:
         _MEMO[key] = built
         while len(_MEMO) > _MEMO_LIMIT:
@@ -355,9 +575,11 @@ def assemble(
     *,
     with_chronos: bool = False,
     pulse: bool = False,
+    with_timesfm: bool = False,
 ) -> dict[int, dict[str, Any]]:
-    """Les pas prêts, assemblés. Les poids de Chronos se règlent sur les CHRONOS_WINDOW pas prêts d’avant.
+    """Les pas prêts, assemblés. Les poids des sommes se règlent sur les dix pas prêts d’avant.
 
+    Ordre : étage 1, mélange des deux sommes, étage 2, projection, puis la grille.
     `pulse` ajoute au faisceau le log π de chaque numéro choisi. Sans la famille, le terme est absent.
     """
     order = sorted(ready)
@@ -370,6 +592,7 @@ def assemble(
             [(p, ready[p]) for p in order[max(0, index - CHRONOS_WINDOW) : index]],
             with_chronos,
             pulse,
+            with_timesfm,
         )
         # L’origine est celle de cette réponse. Le mémo, lui, ne la fige pas.
         stamped = dict(built)
@@ -606,6 +829,7 @@ def shift_report(
     *,
     lags: Iterable[int] | None = None,
     chronos_requested: bool = False,
+    timesfm_requested: bool = False,
     persist: dict[str, int] | None = None,
     xray_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -631,7 +855,7 @@ def shift_report(
         history = [past for past in retour if past["t"] < t]
         readings: dict[str, Any] = {
             "persistence": _shift_side(step["persistence"], actual, None),
-            "mean": _shift_side({"sum": step["mean"]["sum"]}, actual, None),
+            "mean": _shift_side(step["mean"], actual, None),
         }
         for key, reading in step["readings"].items():
             view, info = calibrated_view(step, key, history, int(step.get("star_pool") or frame.star_pool))
@@ -678,10 +902,31 @@ def shift_report(
                 "readings": readings,
             }
         )
+    origin = steps.get(len(rows) - SHIFT_MAX)
+    shared_horizon = None
+    shared_ranks = None
+    if origin:
+        for reading in (origin.get("readings") or {}).values():
+            if isinstance(reading.get("timesfm_horizon"), list):
+                shared_horizon = reading["timesfm_horizon"]
+                shared_ranks = reading.get("timesfm_rank_horizon")
+                break
+    if shared_horizon:
+        for shift in shifts:
+            pas = pas_du_decalage(int(shift["x"]))
+            band = timesfm_point(shared_horizon, pas)
+            ranks = timesfm_point(shared_ranks, pas) if isinstance(shared_ranks, list) else None
+            shift["timesfm_pas"] = {"pas": pas, "sum": band.get("sum"), "star_sum": band.get("star_sum"), "rangs": ranks}
+    timesfm_used = any(shift.get("timesfm_pas") for shift in shifts) or any(
+        (reading.get("timesfm") or {}).get("available")
+        for step in steps.values()
+        for reading in (step.get("readings") or {}).values()
+    )
     return {
         "shifts": shifts,
         "summary": _shift_summary(shifts, frame.star_pool),
         "chronos": {"requested": chronos_requested, "used": chronos_used},
+        "timesfm": {"requested": timesfm_requested, "used": bool(timesfm_used)},
     }
 
 
@@ -718,6 +963,10 @@ def _shift_side(
         "numbers": numbers,
         "stars": stars,
         "errors": errors,
+        "ecarts": {
+            "sommes": {name: errors.get(name) for name in ("sum", "star_sum")},
+            "rangs": {name: errors.get(name) for name in RANK_FIELDS},
+        },
         "in_band": in_band,
         "hits_numbers": _hits(numbers, actual.get("numbers") or []) if numbers else None,
         "hits_stars": _hits(stars, actual.get("stars") or []) if stars else None,
@@ -750,9 +999,20 @@ def _shift_summary(shifts: list[dict[str, Any]], star_pool: int = 12) -> dict[st
             for shift in shifts
             if key in shift["readings"] and shift["readings"][key].get("hits_stars") is not None
         ]
+        sommes = {}
+        rangs = {}
+        for name in ("sum", "star_sum"):
+            values = [((side.get("ecarts") or {}).get("sommes") or {}).get(name) for side in sides]
+            kept_values = [value for value in values if value is not None]
+            sommes[name] = None if not kept_values else round(sum(abs(value) for value in kept_values) / len(kept_values), 4)
+        for name in RANK_FIELDS:
+            values = [((side.get("ecarts") or {}).get("rangs") or {}).get(name) for side in sides]
+            kept_values = [value for value in values if value is not None]
+            rangs[name] = None if not kept_values else round(sum(abs(value) for value in kept_values) / len(kept_values), 4)
         summary[key] = {
             "mae_sum": None if not sum_errors else round(sum(abs(value) for value in sum_errors) / len(sum_errors), 4),
             "mae_sum_ci": mean_interval((abs(value) for value in sum_errors), floor=0.0),
+            "etages": {"sommes": sommes, "rangs": rangs},
             "hits_numbers": None
             if not number_hits
             else round(sum(float(value) for value in number_hits) / len(number_hits), 4),

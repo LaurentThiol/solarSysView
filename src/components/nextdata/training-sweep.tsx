@@ -4,7 +4,8 @@ import { HelpTip, TitleHelp } from "@/components/help"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { NEXTDATA_SWEEP_HELP } from "@/lib/nextdata/help"
-import { formatHits, maeInterval, versusText } from "@/lib/nextdata/uncertainty"
+import { formatDecimal } from "@/lib/nextdata/compare"
+import { maeInterval, versusText } from "@/lib/nextdata/uncertainty"
 import {
   anchorVerdict,
   covariateCaption,
@@ -100,7 +101,7 @@ export function TrainingSweep({
                 ) : null}
                 <th className="px-2 py-2 font-medium" scope="col">
                   <TitleHelp help={NEXTDATA_SWEEP_HELP.communs} className="whitespace-nowrap">
-                    Communs
+                    Étoiles
                   </TitleHelp>
                 </th>
                 <th className="px-2 py-2 font-medium" scope="col">
@@ -155,7 +156,11 @@ export function TrainingSweep({
                         {aside ? "—" : maeCell(row.summary, "corpus_persist")}
                       </td>
                     ) : null}
-                    <td className="px-2 py-2 tabular-nums">{aside ? "—" : formatHits(corpus?.hits_numbers)}</td>
+                    <td className="px-2 py-2 tabular-nums">
+                      {aside || corpus?.etages?.sommes?.star_sum == null
+                        ? "—"
+                        : formatDecimal(corpus.etages.sommes.star_sum)}
+                    </td>
                     <td className="px-2 py-2 tabular-nums">
                       {aside || !row.shifts_total ? "—" : `${row.shifts_ready}/${row.shifts_total}`}
                     </td>

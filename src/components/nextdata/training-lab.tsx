@@ -1,11 +1,13 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
 import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { PersistArchive, PersistControl, PersistPairCard } from "@/components/nextdata/persist-panel"
 import { RankPath } from "@/components/nextdata/rank-path"
+import type { ReliefStep } from "@/components/nextdata/relief-pas"
 import { XrayPanel } from "@/components/nextdata/xray-panel"
 import { StaleArchiveNote } from "@/components/nextdata/stale-archive-note"
 import { StepMeter } from "@/components/nextdata/step-meter"
@@ -37,7 +39,6 @@ import type { SweepPayload, SweepRow } from "@/lib/nextdata/sweep"
 import {
   coverageRange,
   formatCoverage,
-  hitsWord,
   maeInterval,
   versusText,
   type HitsChance,
@@ -47,6 +48,8 @@ import {
 } from "@/lib/nextdata/uncertainty"
 import { useDraws } from "@/lib/use-draws"
 import { cn } from "@/lib/utils"
+
+const ReliefPas = dynamic(() => import("@/components/nextdata/relief-pas").then((mod) => mod.ReliefPas), { ssr: false })
 
 const FAMILIES: { id: string; label: string }[] = [
   { id: "calendrier", label: "Calendrier" },
@@ -137,6 +140,7 @@ type Summary = Record<
   {
     mae_sum: number | null
     mae_sum_ci?: MeanInterval
+    etages?: { sommes?: { sum?: number | null; star_sum?: number | null }; rangs?: Record<string, number | null> }
     hits_numbers: number | null
     hits_stars?: number | null
     hits_chance?: HitsChance
@@ -161,6 +165,8 @@ type TrainingPayload = {
   compute?: ComputeState
   persist?: PersistInfo | null
   darts?: { error?: string | null }
+  timesfm?: { requested?: boolean; used?: boolean; error?: string | null; license?: string }
+  relief?: { open?: boolean; steps?: ReliefStep[] }
 }
 
 function tone(value: number | null | undefined) {
@@ -178,6 +184,7 @@ export function TrainingLab() {
   const [families, setFamilies] = useState<string[]>(FAMILIES.map((item) => item.id))
   const [covariateBlock, setCovariateBlock] = useCovariateBlock(families)
   const [withChronos, setWithChronos] = useState(false)
+  const [withTimesfm, setWithTimesfm] = useState(false)
   const [xray, setXray] = useState(false)
   const [delta, setDelta] = useState(false)
   const [persistSetting, setPersistSetting] = useState<PersistSetting | null>(null)
@@ -201,10 +208,11 @@ export function TrainingLab() {
         covariates: [...families].sort(),
         block: covariateBlock,
         withChronos,
+        withTimesfm,
         persist: persistSetting,
         draws: draws.map((draw) => [draw.date, draw.numbers, draw.stars, draw.star_pool]),
       }),
-    [covariateBlock, draws, families, focus, persistSetting, weekday, withChronos, years]
+    [covariateBlock, draws, families, focus, persistSetting, weekday, withChronos, withTimesfm, years]
   )
 
   useEffect(() => {
@@ -279,6 +287,7 @@ export function TrainingLab() {
       covariates: families,
       block: covariateBlock,
       with_chronos: withChronos,
+      with_timesfm: withTimesfm,
       persist: persistSetting,
       draws: draws.map((draw) => ({
         date: draw.date,
@@ -352,6 +361,7 @@ export function TrainingLab() {
       covariates: families,
       block: covariateBlock,
       with_chronos: withChronos,
+      with_timesfm: withTimesfm,
       persist: persistSetting,
       draws: draws.map((draw) => ({
         date: draw.date,
@@ -519,12 +529,28 @@ export function TrainingLab() {
                 {withChronos ? "Chronos inclus" : "Sans Chronos"}
               </Button>
             </HelpWrap>
+            <HelpWrap help={NEXTDATA_TRAINING_HELP.chronos}>
+              <Button
+                type="button"
+                size="sm"
+                variant={withTimesfm ? "secondary" : "ghost"}
+                disabled={busy}
+                aria-pressed={withTimesfm}
+                onClick={() => setWithTimesfm((value) => !value)}
+              >
+                {withTimesfm ? "TimesFM inclus" : "Sans TimesFM"}
+              </Button>
+            </HelpWrap>
             <HelpWrap help={NEXTDATA_TRAINING_HELP.delta}>
               <Button type="button" size="sm" variant={delta ? "secondary" : "ghost"} onClick={() => setDelta((value) => !value)}>
                 {delta ? "DeltaEvol" : "Niveaux"}
               </Button>
             </HelpWrap>
           </div>
+          <p className="text-sm text-muted-foreground" data-timesfm-license>
+            TimesFM 3.0 : licence non commerciale, hors production. Recherche locale. Ce n’est pas un ticket.
+            {report?.timesfm?.error ? ` ${report.timesfm.error}` : ""}
+          </p>
           <PersistControl value={persistSetting} onChange={setPersistSetting} help={NEXTDATA_HELP.persist} disabled={busy} />
           <div className="flex flex-wrap items-center gap-2" data-mega-switch>
             <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -629,6 +655,7 @@ export function TrainingLab() {
 
       {report?.shifts && (
         <>
+          <ReliefPas steps={report.relief?.steps ?? null} />
           {chronosBanner(report.chronos) && <p className="text-sm text-muted-foreground">{chronosBanner(report.chronos)}</p>}
           {report.darts?.error ? <p className="text-sm text-muted-foreground">{report.darts.error}</p> : null}
           <div className="flex flex-wrap items-start gap-3">
@@ -641,9 +668,10 @@ export function TrainingLab() {
                   <span className="block text-xs text-muted-foreground">{item.label}</span>
                   <span className="text-lg font-semibold tabular-nums">{mae == null ? "—" : formatDecimal(mae)}</span>
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    MAE somme{interval ? ` · ${interval}` : ""}
+                    Écarts des sommes {mae == null ? "—" : formatDecimal(mae)}
+                    {entry?.etages?.sommes?.star_sum != null ? ` · étoiles ${formatDecimal(entry.etages.sommes.star_sum)}` : ""}
+                    {interval ? ` · ${interval}` : ""}
                     {report?.chronos?.used && (item.id === "corpus" || item.id === "fenetre") ? " · Chronos" : ""}
-                    {entry?.hits_numbers != null ? ` · ${hitsWord(entry.hits_numbers, "numéro", "numéros")}` : ""}
                   </span>
                   {BENCHMARKS.filter((rival) => rival.id !== item.id).map((rival) => {
                     const gap = entry?.versus?.[rival.id]
@@ -721,7 +749,7 @@ export function TrainingLab() {
             <CardHeader>
               <CardTitle className="text-base">
                 <TitleHelp help={NEXTDATA_TRAINING_HELP.somme}>
-                  {delta ? "Écart de somme · Δ" : "Écart de somme"}
+                  {delta ? "Écarts des sommes · Δ" : "Écarts des sommes"}
                 </TitleHelp>
               </CardTitle>
             </CardHeader>
@@ -766,7 +794,7 @@ export function TrainingLab() {
             <CardHeader>
               <CardTitle className="text-base">
                 <TitleHelp help={NEXTDATA_TRAINING_HELP.rangs}>
-                  Rangs · {READINGS.find((item) => item.id === reading)?.label}
+                  Écarts des rangs · {READINGS.find((item) => item.id === reading)?.label}
                 </TitleHelp>
               </CardTitle>
             </CardHeader>

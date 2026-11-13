@@ -25,6 +25,7 @@ export type SweepSummaryEntry = {
   mae_sum: number | null
   mae_sum_ci?: { value: number | null; lo: number | null; hi: number | null; count: number }
   hits_numbers: number | null
+  etages?: { sommes?: { sum?: number | null; star_sum?: number | null }; rangs?: Record<string, number | null> }
   versus?: Record<string, PairedGap>
   count: number
 }

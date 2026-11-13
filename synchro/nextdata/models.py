@@ -1,16 +1,18 @@
-"""Ce qui fait un morceau de pas : LightGBM et CatBoost à lags, Darts, Chronos-2.
+"""Ce qui fait un morceau de pas : LightGBM et CatBoost à lags, Darts, Chronos-2, TimesFM.
 
 Un morceau ne dépend que des tirages d’avant, du réglage et de ce module : son
 code entre tout entier dans la clé du cache (`steps`). L’assemblage des
 lectures, le retour et l’écran vivent ailleurs et peuvent changer sans faire
 recalculer un seul pas.
 
-Darts `LightGBMModel`, quand le paquet est là, prévoit la médiane temporelle
-du prochain pas. La chaîne n1 → écarts reste en LightGBM direct : chaque écart
-voit la prévision du rang d'avant, apprise sur des prévisions passées, pas la
-valeur sortie du même tirage. Chronos-2, s’il est installé, lit les mêmes
-covariables. Les niveaux n1…n5, e1, e2 et leurs deltas, prévus à part, donnent
-le centre de chaque rang.
+Deux étages. L’étage 1 ne sort que `sum` et `star_sum`. L’étage 2, les rangs,
+ne part que si cette médiane existe : sa covariable future est cette médiane,
+jamais le tirage caché. La chaîne décompose ces sommes. Les quatre formes
+(étendue, consécutifs) restent un à-côté de LightGBM.
+
+Darts, Chronos-2 et TimesFM 3.0 suivent le même ordre, en zéro-shot pour les
+deux modèles de fondation. TimesFM fait deux appels par mode, horizon 10, sans
+ajuster les poids. Un échec reste noté jusqu’au redémarrage de l’API.
 """
 
 from __future__ import annotations
@@ -44,7 +46,12 @@ from synchro.nextdata.pulse_features import FUTURE_PULSE, PULSE_AHEAD, shifted_p
 MODES = ("corpus", "fenetre")
 QUANTILES = (0.1, 0.5, 0.9)
 MODEL_PARTS = ("lightgbm", "catboost")
-CHRONOS_SERIES = ("sum", "star_sum", "n1")
+# Étage 1 : rien d’autre. n1 n’y entre pas, même pour Chronos.
+STAGE1_SERIES = ("sum", "star_sum")
+CHRONOS_SERIES = STAGE1_SERIES
+RANK_SERIES = ("n1", "n2", "n3", "n4", "n5", "e1", "e2")
+STAGE1_FORBIDDEN = ("n1", "n2", "e1")
+SCHEMA = "two-stage"
 
 
 @dataclass(frozen=True)
@@ -485,6 +492,31 @@ def _moments_from_alphas(found: dict[float, float], name: str, star_pool: int = 
     return {"lo": lo, "mid": mid, "hi": hi}
 
 
+def reject_stage1(payload: dict[str, Any]) -> None:
+    """Refuse un étage 1 qui contient un rang. Seules `sum` et `star_sum` passent."""
+    leaked = [name for name in STAGE1_FORBIDDEN if name in payload]
+    if leaked:
+        raise ValueError("L’étage 1 ne contient que sum et star_sum : " + ", ".join(leaked) + ".")
+
+
+def stage1_payload(moments: dict[str, Any]) -> dict[str, Any]:
+    """Les deux sommes, et rien d’autre. Les formes et les rangs restent dehors."""
+    payload = {name: moments[name] for name in STAGE1_SERIES if name in moments}
+    reject_stage1(payload)
+    return payload
+
+
+def context_before(rows: list[dict[str, Any]], t: int) -> list[dict[str, Any]]:
+    """Tirages strictement avant la coupure. L’index t et la suite n’y entrent pas."""
+    return list(rows[: max(0, int(t))])
+
+
+def future_rank_covariate(name: str, median: float, horizon: list[dict[str, Any]]) -> float:
+    """Covariable future d’un rang : la médiane retenue. Le tirage de l’horizon n’est pas lu."""
+    del name, horizon
+    return float(median)
+
+
 def predict_moments(
     rows: list[dict[str, Any]],
     horizon: list[dict[str, Any]],
@@ -556,42 +588,31 @@ def predict_moments(
 
     moments: dict[str, dict[str, float]] = {}
     importance_models: list[tuple[Any, list[str]]] = []
-    for name in TEMPORAL_TARGETS:
+
+    def fit_target(name: str, x: np.ndarray, x_row: np.ndarray, binned: _Binned | None) -> tuple[dict[float, float], Any]:
         y = np.asarray([float(rows[t][name]) for t in used], dtype=float)
-        found, median_model = fit_quantiles(x_time, y, weights, x_next_arr, time_bins)
+        return fit_quantiles(x, y, weights, x_row, binned)
+
+    for name in STAGE1_SERIES:
+        found, median_model = fit_target(name, x_time, x_next_arr, time_bins)
         moments[name] = _moments_from_alphas(found, name, pool)
         if name == "sum" and median_model is not None:
             importance_models.append((median_model, feat_names))
 
-    levels = {
-        name: fit_quantiles(
-            x_time,
-            np.asarray([float(rows[t][name]) for t in used], dtype=float),
-            weights,
-            x_next_arr,
-            time_bins,
-        )
-        for name in RANK_LEVELS
-    }
+    # Étendue et consécutifs : à-côté de LightGBM, hors étage 1 et hors TimesFM.
+    if library == "lightgbm":
+        for name in TEMPORAL_TARGETS:
+            if name in STAGE1_SERIES:
+                continue
+            found, _model = fit_target(name, x_time, x_next_arr, time_bins)
+            moments[name] = _moments_from_alphas(found, name, pool)
 
     carried: dict[str, dict[str, float]] = {}
     past_hat: dict[str, dict[int, float]] = {}
-    for name, lowers in CHAIN:
-        lookup = {t: {key: past_hat[key][t] for key in lowers} for t in used}
-        x_chain, chain_names = _with_lowers(x_time, used, feat_names, rows, lowers, lookup)
-        lower_now = np.asarray([float(carried[key]["mid"]) for key in lowers], dtype=float)
-        x_vec = np.concatenate([x_next_arr, np.nan_to_num(lower_now, nan=0.0)])
+    for name in STAGE1_SERIES:
         y = np.asarray([float(rows[t][name]) for t in used], dtype=float)
-        if lowers:
-            chain_bins = _Binned(x_chain, weights) if library == "lightgbm" else None
-            found, median_model = fit_quantiles(x_chain, y, weights, x_vec, chain_bins)
-        else:
-            # Sans rang d’avant, la chaîne lit la matrice, la cible et les poids du niveau : mêmes arbres.
-            found, median_model = levels[name]
-        moments[name] = _moments_from_alphas(found, name, pool)
-        carried[name] = moments[name]
         column = _past_only_column(
-            x_chain,
+            x_time,
             y,
             weights,
             library=library,
@@ -600,16 +621,70 @@ def predict_moments(
             quantiles=alphas,
         )
         past_hat[name] = {t: float(column[index]) for index, t in enumerate(used)}
-        if name == "n1" and median_model is not None:
-            importance_models.append((median_model, chain_names))
+        carried[name] = moments[name]
 
-    for name in RANK_LEVELS:
-        moments[f"level:{name}"] = _moments_from_alphas(levels[name][0], f"level:{name}", pool)
+    # L’étage 2 n’est appelé que si les deux médianes sont là.
+    ready = all(np.isfinite(float(moments[name]["mid"])) for name in STAGE1_SERIES)
+    if ready:
+        def rank_now(lowers: tuple[str, ...]) -> np.ndarray:
+            values = []
+            for key in lowers:
+                mid = float(carried[key]["mid"])
+                if key in STAGE1_SERIES:
+                    mid = future_rank_covariate(key, mid, horizon)
+                values.append(mid)
+            return np.asarray(values, dtype=float)
 
-    for name in RANK_LEVELS:
-        y = np.asarray([float(rows[t][f"d_{name}"]) for t in used], dtype=float)
-        found, _model = fit_quantiles(x_time, y, weights, x_next_arr, time_bins)
-        moments[f"delta:{name}"] = _moments_from_alphas(found, f"delta:{name}", pool)
+        x_rank, rank_names, = _with_lowers(
+            x_time,
+            used,
+            feat_names,
+            rows,
+            STAGE1_SERIES,
+            {t: {key: past_hat[key][t] for key in STAGE1_SERIES} for t in used},
+        )
+        del rank_names
+        x_rank_next = np.concatenate([x_next_arr, np.nan_to_num(rank_now(STAGE1_SERIES), nan=0.0)])
+        rank_bins = _Binned(x_rank, weights) if library == "lightgbm" else None
+
+        levels = {
+            name: fit_quantiles(
+                x_rank,
+                np.asarray([float(rows[t][name]) for t in used], dtype=float),
+                weights,
+                x_rank_next,
+                rank_bins,
+            )
+            for name in RANK_LEVELS
+        }
+        for name, lowers in CHAIN:
+            lookup = {t: {key: past_hat[key][t] for key in lowers} for t in used}
+            x_chain, chain_names = _with_lowers(x_time, used, feat_names, rows, lowers, lookup)
+            x_vec = np.concatenate([x_next_arr, np.nan_to_num(rank_now(lowers), nan=0.0)])
+            y = np.asarray([float(rows[t][name]) for t in used], dtype=float)
+            chain_bins = _Binned(x_chain, weights) if library == "lightgbm" else None
+            found, median_model = fit_quantiles(x_chain, y, weights, x_vec, chain_bins)
+            moments[name] = _moments_from_alphas(found, name, pool)
+            carried[name] = moments[name]
+            column = _past_only_column(
+                x_chain,
+                y,
+                weights,
+                library=library,
+                estimators=estimators,
+                prior=prior_means(rows, name, used),
+                quantiles=alphas,
+            )
+            past_hat[name] = {t: float(column[index]) for index, t in enumerate(used)}
+            if name == "n1" and median_model is not None:
+                importance_models.append((median_model, chain_names))
+
+        for name in RANK_LEVELS:
+            moments[f"level:{name}"] = _moments_from_alphas(levels[name][0], f"level:{name}", pool)
+        for name in RANK_LEVELS:
+            y = np.asarray([float(rows[t][f"d_{name}"]) for t in used], dtype=float)
+            found, _model = fit_quantiles(x_rank, y, weights, x_rank_next, rank_bins)
+            moments[f"delta:{name}"] = _moments_from_alphas(found, f"delta:{name}", pool)
 
     return moments, _importance(importance_models), library
 
@@ -731,7 +806,8 @@ def try_darts_medians(
     lags, past_lags = lag_choice(n)
     past_names = past_columns(families, excluded)
     future_names = future_columns(families, excluded)
-    target_names = ["sum", "star_sum", "n1", "parity", "spread", "consecutive", "star_consecutive"]
+    # Étage 1 seulement. Les formes restent à LightGBM. Les rangs sont un second appel.
+    target_names = ["sum", "star_sum"]
     pool = star_pool_of(horizon[0] if horizon else None)
     try:
         try:
@@ -796,7 +872,31 @@ def try_darts_medians(
         values = np.asarray(pred.values(), dtype=float).reshape(-1)
         if values.size < len(target_names):
             raise ValueError(f"{values.size} valeurs prévues pour {len(target_names)} cibles")
-        return {name: _clip(name, float(values[i]), pool) for i, name in enumerate(target_names)}
+        sums = {name: _clip(name, float(values[i]), pool) for i, name in enumerate(target_names)}
+        if all(np.isfinite(sums[name]) for name in target_names):
+            try:
+                rank_names = list(RANK_SERIES)
+                rank_target = series(window, rank_names)
+                rank_model = LightGBMModel(**kwargs)
+                rank_fit = dict(fit_args)
+                rank_fit["series"] = rank_target
+                try:
+                    rank_model.fit(**rank_fit)
+                except TypeError:
+                    rank_fit.pop("sample_weight", None)
+                    rank_model.fit(**rank_fit)
+                rank_pred = rank_model.predict(
+                    n=1, series=rank_target, past_covariates=past, future_covariates=future
+                )
+                rank_values = np.asarray(rank_pred.values(), dtype=float).reshape(-1)
+                if rank_values.size >= len(rank_names):
+                    sums["stage2"] = {
+                        name: _clip(name, float(rank_values[i]), pool) for i, name in enumerate(rank_names)
+                    }
+            except Exception:
+                # L'étage 1 reste. L'étage 2 manquant ne note pas une panne de Darts.
+                pass
+        return sums
     except Exception as exc:
         note_darts_error(_short_error(exc))
         return None
@@ -875,6 +975,145 @@ def chronos_quantiles(items: list[dict[str, Any]]) -> list[list[dict[str, float]
     return bands
 
 
+TIMESFM_MODEL = "google/timesfm-3.0-pytorch"
+TIMESFM_HORIZON = 10
+# Quantiles TimesFM 3.0 : 0,1 … 0,9. L’indice 0 est 0,1, l’indice 4 la médiane, l’indice 8 est 0,9.
+TIMESFM_LO = 0
+TIMESFM_MID = 4
+TIMESFM_HI = 8
+TIMESFM_LICENSE = (
+    "TimesFM 3.0 : licence non commerciale, hors production. "
+    "Recherche locale. L’usage commercial passerait par BigQuery, hors de ce dépôt. "
+    "Ce n’est pas un ticket."
+)
+
+_TIMESFM: Any = None
+_TIMESFM_ERROR: str | None = None
+_TIMESFM_LOCK = threading.Lock()
+
+
+def timesfm_error() -> str | None:
+    """Pourquoi TimesFM n’a pas répondu dans ce processus. Il n’est retenté qu’au redémarrage de l’API."""
+    return _TIMESFM_ERROR
+
+
+def timesfm_point(horizon: list[Any], k: int) -> Any:
+    """Le pas k de l’horizon déjà calculé, de 1 à 10. Aucun second appel."""
+    index = int(k)
+    if index < 1 or index > TIMESFM_HORIZON or len(horizon) < index:
+        raise ValueError("Le décalage lit un pas de 1 à 10.")
+    return horizon[index - 1]
+
+
+def pas_du_decalage(lag: int, horizon: int = TIMESFM_HORIZON) -> int:
+    """Pas de l’horizon qui vise le même tirage que le décalage −lag.
+
+    L’horizon part de la coupure la plus ancienne (dix tirages avant la fin).
+    Le décalage −1 cache le dernier tirage et lit le pas 10. Le décalage −10 lit le pas 1.
+    """
+    return int(horizon) - int(lag) + 1
+
+
+def _timesfm_bands(output: Any, names: tuple[str, ...], star_pool: int) -> list[dict[str, dict[str, float]]]:
+    forecast = np.asarray(output.forecast, dtype=float)
+    quantiles = np.asarray(output.quantiles, dtype=float)
+    if forecast.ndim == 1:
+        forecast = forecast.reshape(1, -1)
+    if quantiles.ndim == 2:
+        quantiles = quantiles.reshape(1, quantiles.shape[0], -1)
+    steps: list[dict[str, dict[str, float]]] = []
+    width = int(forecast.shape[-1])
+    for step in range(width):
+        row: dict[str, dict[str, float]] = {}
+        for index, name in enumerate(names):
+            column = quantiles[index, step]
+            row[name] = {
+                "lo": _clip(name, float(column[TIMESFM_LO]), star_pool),
+                "mid": _clip(name, float(column[TIMESFM_MID]), star_pool),
+                "hi": _clip(name, float(column[TIMESFM_HI]), star_pool),
+            }
+        steps.append(row)
+    return steps[:TIMESFM_HORIZON]
+
+
+def timesfm_predict(
+    context: np.ndarray,
+    *,
+    horizon: int = TIMESFM_HORIZON,
+    past_future: np.ndarray | None = None,
+) -> Any:
+    """Un appel zéro-shot. Les poids ne sont pas ajustés. Un échec reste noté jusqu’au redémarrage."""
+    global _TIMESFM, _TIMESFM_ERROR
+    with _TIMESFM_LOCK:
+        if _TIMESFM_ERROR is not None:
+            raise RuntimeError(_TIMESFM_ERROR)
+        try:
+            if _TIMESFM is None:
+                from timesfm3 import TimesFM3Forecaster
+
+                _TIMESFM = TimesFM3Forecaster.from_pretrained(TIMESFM_MODEL)
+            kwargs: dict[str, Any] = {
+                "context": np.asarray(context, dtype=np.float32),
+                "horizon": int(horizon),
+                "return_quantiles": True,
+            }
+            if past_future is not None:
+                kwargs["past_future_covariates"] = np.asarray(past_future, dtype=np.float32)
+            return _TIMESFM.predict(**kwargs)
+        except Exception as exc:
+            _TIMESFM_ERROR = _short_error(exc)
+            raise RuntimeError(_TIMESFM_ERROR) from exc
+
+
+def _timesfm_part(prefix: list[dict[str, Any]], horizon: list[dict[str, Any]], settings: StepSettings) -> dict[str, Any]:
+    """Deux appels par mode : les sommes, puis les rangs si la médiane existe. Horizon 10.
+
+    Le pronostic lit le pas 1. Un décalage relit un pas de cet horizon, il ne
+    rappelle pas le modèle. Le bouton qui demande ce morceau est éteint par défaut.
+    """
+    pool = star_pool_of(horizon[0] if horizon else None)
+    windows = {"corpus": prefix, "fenetre": prefix[-settings.focus :]}
+    out: dict[str, Any] = {"schema": SCHEMA, "horizon": TIMESFM_HORIZON, "license": TIMESFM_LICENSE}
+    try:
+        for mode in MODES:
+            window = windows[mode]
+            sums_context = np.asarray([[float(row[name]) for row in window] for name in STAGE1_SERIES], dtype=np.float32)
+            sums = _timesfm_bands(timesfm_predict(sums_context, horizon=TIMESFM_HORIZON), STAGE1_SERIES, pool)
+            step = sums[0]
+            reject_stage1(step)
+            block: dict[str, Any] = {name: step[name] for name in STAGE1_SERIES}
+            block["horizon"] = sums
+            ready = all(np.isfinite(float(step[name]["mid"])) for name in STAGE1_SERIES)
+            if ready:
+                observed_sum = np.asarray([float(row["sum"]) for row in window], dtype=np.float32)
+                observed_stars = np.asarray([float(row["star_sum"]) for row in window], dtype=np.float32)
+                future_sum = np.asarray(
+                    [future_rank_covariate("sum", float(item["sum"]["mid"]), horizon) for item in sums],
+                    dtype=np.float32,
+                )
+                future_stars = np.asarray(
+                    [future_rank_covariate("star_sum", float(item["star_sum"]["mid"]), horizon) for item in sums],
+                    dtype=np.float32,
+                )
+                past_future = np.stack(
+                    [np.concatenate([observed_sum, future_sum]), np.concatenate([observed_stars, future_stars])]
+                )
+                ranks_context = np.asarray(
+                    [[float(row[name]) for row in window] for name in RANK_SERIES], dtype=np.float32
+                )
+                ranks = _timesfm_bands(
+                    timesfm_predict(ranks_context, horizon=TIMESFM_HORIZON, past_future=past_future),
+                    RANK_SERIES,
+                    pool,
+                )
+                block["stage2"] = ranks[0]
+                block["rank_horizon"] = ranks
+            out[mode] = block
+    except RuntimeError as exc:
+        return {"error": str(exc)}
+    return json.loads(json.dumps(out))
+
+
 def compute_part(
     prefix: list[dict[str, Any]],
     horizon: list[dict[str, Any]],
@@ -906,7 +1145,8 @@ def compute_part(
                 # Mémoire, bibliothèque : le prochain calcul peut réussir, la fiche ne se range pas sur disque.
                 out[mode] = {"error": str(exc) or type(exc).__name__, "transient": True}
             else:
-                out[mode] = {"moments": moments, "importance": importance}
+                stage1 = stage1_payload(moments)
+                out[mode] = {"moments": moments, "importance": importance, "stage1": stage1}
         elif part == "darts":
             out[mode] = try_darts_medians(
                 prefix,
@@ -919,6 +1159,9 @@ def compute_part(
             )
     if part == "darts" and darts_error() is not None:
         return {"error": darts_error()}
+    if part == "timesfm":
+        return _timesfm_part(prefix, horizon, settings)
+    out["schema"] = SCHEMA
     # Même structure qu’un morceau relu du cache.
     return json.loads(json.dumps(out))
 
@@ -930,11 +1173,12 @@ def chronos_inputs(
     families: Iterable[str],
     excluded: Iterable[str] = (),
 ) -> list[dict[str, Any]]:
-    """Entrées Chronos-2 des deux modes, dans l’ordre de MODES : trois cibles et les covariables cochées.
+    """Entrées Chronos-2 de l’étage 1, deux modes : `sum` et `star_sum` seulement.
 
     Les horloges et Pulse sont connus pour le tirage prévu, `horizon[0]` ;
     Chronos-2 lit aussi leur historique. Les autres familles s’arrêtent au
     dernier tirage sorti. Pulse sur ce tirage n’utilise que les sorties d’avant.
+    `n1` n’est pas une cible de cet étage.
     """
     past = past_columns(families, excluded)
     future = future_columns(families, excluded)
@@ -951,8 +1195,43 @@ def chronos_inputs(
     return items
 
 
+def chronos_rank_inputs(
+    prefix: list[dict[str, Any]],
+    horizon: list[dict[str, Any]],
+    focus: int,
+    families: Iterable[str],
+    medians: dict[str, dict[str, float]],
+    excluded: Iterable[str] = (),
+) -> list[dict[str, Any]]:
+    """Étage 2 de Chronos : les sept rangs. La covariable future est la médiane retenue.
+
+    L’historique des sommes est celui des tirages déjà sortis. Le pas prévu
+    reçoit la médiane de l’étage 1, pas la somme du tirage caché dans `horizon`.
+    """
+    past = past_columns(families, excluded)
+    future = future_columns(families, excluded)
+    windows = {"corpus": prefix, "fenetre": prefix[-focus:]}
+    items: list[dict[str, Any]] = []
+    for mode in MODES:
+        window = windows[mode]
+        held = medians[mode]
+        item: dict[str, Any] = {
+            "target": np.asarray([[float(row[name]) for row in window] for name in RANK_SERIES]),
+        }
+        past_cov = {col: np.asarray([float(row[col]) for row in window]) for col in past + future}
+        past_cov["retained_sum"] = np.asarray([float(row["sum"]) for row in window])
+        past_cov["retained_star_sum"] = np.asarray([float(row["star_sum"]) for row in window])
+        item["past_covariates"] = past_cov
+        future_cov = {col: np.asarray([float(horizon[0][col])]) for col in future}
+        future_cov["retained_sum"] = np.asarray([future_rank_covariate("sum", held["sum"], horizon)])
+        future_cov["retained_star_sum"] = np.asarray([future_rank_covariate("star_sum", held["star_sum"], horizon)])
+        item["future_covariates"] = future_cov
+        items.append(item)
+    return items
+
+
 def _chronos_part(prefix: list[dict[str, Any]], horizon: list[dict[str, Any]], settings: StepSettings) -> dict[str, Any]:
-    """Bandes 10–90 de Chronos-2 pour les deux modes, en un appel, et les covariables lues. Un échec rend son message.
+    """Étage 1 puis, si la médiane est là, étage 2. Un échec rend son message.
 
     Un pas par appel : sur processeur, Chronos-2 lit un lot de dix pas plus
     lentement que dix appels, et refuse un lot dont les covariables diffèrent.
@@ -963,7 +1242,25 @@ def _chronos_part(prefix: list[dict[str, Any]], horizon: list[dict[str, Any]], s
         )
     except RuntimeError as exc:
         return {"error": str(exc)}
-    out: dict[str, Any] = {mode: dict(zip(CHRONOS_SERIES, mode_bands)) for mode, mode_bands in zip(MODES, bands)}
+    out: dict[str, Any] = {"schema": SCHEMA}
+    medians: dict[str, dict[str, float]] = {}
+    for mode, mode_bands in zip(MODES, bands):
+        block = dict(zip(CHRONOS_SERIES, mode_bands))
+        reject_stage1(block)
+        out[mode] = block
+        medians[mode] = {name: float(block[name]["mid"]) for name in CHRONOS_SERIES}
+    ready = all(np.isfinite(medians[mode][name]) for mode in MODES for name in CHRONOS_SERIES)
+    if ready:
+        try:
+            rank_bands = chronos_quantiles(
+                chronos_rank_inputs(
+                    prefix, horizon, settings.focus, settings.families, medians, settings.excluded
+                )
+            )
+        except RuntimeError as exc:
+            return {"error": str(exc)}
+        for mode, mode_bands in zip(MODES, rank_bands):
+            out[mode]["stage2"] = dict(zip(RANK_SERIES, mode_bands))
     out["covariates"] = {
         "past": len(past_columns(settings.families, settings.excluded)),
         "future": len(future_columns(settings.families, settings.excluded)),

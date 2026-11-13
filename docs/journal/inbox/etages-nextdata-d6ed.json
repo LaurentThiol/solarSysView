@@ -1,0 +1,9 @@
+{
+  "slug": "etages-nextdata-d6ed",
+  "happened_on": "2026-11-13",
+  "area": "nextData",
+  "title": "Deux étages : sommes, puis rangs",
+  "body": "nextData et nextDataTraining lisent d’abord la somme des numéros et la somme des étoiles, puis les rangs calés sur ces médianes. Chronos ne mélange plus n1 à l’étage 1. TimesFM 3.0 peut suivre le même ordre, en deux appels et sur dix pas, mais son bouton reste éteint. Le bandeau rappelle la licence non commerciale : ce n’est pas un ticket. Le relief du pas montre les deux étages dès qu’une somme est là, sans attendre TimesFM.",
+  "pr_number": null,
+  "pr_url": null
+}

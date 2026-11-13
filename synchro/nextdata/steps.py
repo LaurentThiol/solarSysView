@@ -30,7 +30,17 @@ from typing import Any, Iterable
 
 from synchro.config import ROOT
 from synchro.nextdata.forecast import _installed, catboost_import_error
-from synchro.nextdata.models import MODEL_PARTS, StepSettings, chronos_error, compute_part, darts_error
+from synchro.nextdata.covariates import CHAIN
+from synchro.nextdata.models import (
+    MODEL_PARTS,
+    SCHEMA,
+    StepSettings,
+    chronos_error,
+    compute_part,
+    context_before,
+    darts_error,
+    timesfm_error,
+)
 from synchro.nextdata.notices import quiet_optional_model_notices
 from synchro.nextdata.panel import Frame
 
@@ -57,6 +67,7 @@ _LIBRARIES: dict[str, tuple[str, ...]] = {
     "catboost": ("numpy", "catboost"),
     "darts": ("numpy", "lightgbm", "scikit-learn", "u8darts", "darts"),
     "chronos": ("numpy", "torch", "chronos-forecasting"),
+    "timesfm": ("numpy", "torch", "timesfm"),
 }
 
 
@@ -75,7 +86,7 @@ def worker_count() -> int:
     return max(1, min(4, (os.cpu_count() or 2) - 1))
 
 
-def parts_needed(with_chronos: bool) -> tuple[str, ...]:
+def parts_needed(with_chronos: bool, with_timesfm: bool = False) -> tuple[str, ...]:
     parts = ["lightgbm"]
     if catboost_import_error() is None:
         parts.append("catboost")
@@ -83,7 +94,26 @@ def parts_needed(with_chronos: bool) -> tuple[str, ...]:
         parts.append("darts")
     if with_chronos and _installed("chronos") and chronos_error() is None:
         parts.append("chronos")
+    # Éteint par défaut : TimesFM ne part que si le bouton est allumé.
+    if with_timesfm and _installed("timesfm") and timesfm_error() is None:
+        parts.append("timesfm")
     return tuple(parts)
+
+
+def is_two_stage_part(data: Any) -> bool:
+    """Un morceau à deux étages. Un pas d’avant ce changement ne compte pas."""
+    if not isinstance(data, dict) or data.get("schema") != SCHEMA:
+        return False
+    if "error" in data and len(data) == 1:
+        return False
+    return True
+
+
+def stale_part(data: Any) -> bool:
+    """Morceau relu qui n’est pas un pas à deux étages. Une erreur notée, elle, se relit."""
+    if not isinstance(data, dict) or "error" in data:
+        return False
+    return not is_two_stage_part(data)
 
 
 def _borrowed() -> str:
@@ -150,6 +180,9 @@ def step_key(digest: str, horizon: list[dict[str, Any]], settings: StepSettings,
         payload["estimators"] = int(settings.estimators)
     if part in MODEL_PARTS:
         payload["quantiles"] = [float(value) for value in settings.quantiles]
+    # La clé change avec models.py (empreinte des sources) et avec la chaîne.
+    payload["schema"] = SCHEMA
+    payload["chain"] = [[name, list(lowers)] for name, lowers in CHAIN]
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
@@ -218,7 +251,7 @@ _POOL_LOCK = threading.Lock()
 _POOL_RESTARTS = 2
 _POOL_DEATHS = 0
 # Le plus long d’abord : un CatBoost lancé en dernier tiendrait seul la tranche.
-_PART_ORDER = {"catboost": 0, "lightgbm": 1, "darts": 2, "chronos": 3}
+_PART_ORDER = {"catboost": 0, "lightgbm": 1, "darts": 2, "chronos": 3, "timesfm": 4}
 
 
 def _pool() -> ProcessPoolExecutor | None:
@@ -291,7 +324,7 @@ def _compute(
     for job in jobs:
         t, part, _key = job
         if pool is not None and part in MODEL_PARTS:
-            futures.append((pool.submit(_part_job, frame.rows[:t], horizon_of(frame, t), part, shared), job))
+            futures.append((pool.submit(_part_job, context_before(frame.rows, t), horizon_of(frame, t), part, shared), job))
         else:
             inline.append(job)
 
@@ -299,7 +332,7 @@ def _compute(
         t, part, key = job
         # Un échec de Chronos ou de Darts tient à l’installation ou au réseau, un échec transitoire de LightGBM ou de
         # CatBoost à la mémoire : rangé sur disque, il ne serait jamais retenté. Un historique trop court, lui, se range.
-        if part in ("chronos", "darts") and "error" in data:
+        if part in ("chronos", "darts", "timesfm") and "error" in data:
             pass
         elif is_transient(data):
             remember_transient(key, data)
@@ -309,16 +342,16 @@ def _compute(
 
     for job in inline:
         t, part, _key = job
-        keep(job, compute_part(frame.rows[:t], horizon_of(frame, t), part, settings))
+        keep(job, compute_part(context_before(frame.rows, t), horizon_of(frame, t), part, settings))
     for future, job in futures:
         t, part, _key = job
         try:
             data = future.result()
         except BrokenProcessPool:
             _drop_pool(pool)
-            data = compute_part(frame.rows[:t], horizon_of(frame, t), part, settings)
+            data = compute_part(context_before(frame.rows, t), horizon_of(frame, t), part, settings)
         except Exception:
-            data = compute_part(frame.rows[:t], horizon_of(frame, t), part, settings)
+            data = compute_part(context_before(frame.rows, t), horizon_of(frame, t), part, settings)
         keep(job, data)
     return done
 
@@ -352,6 +385,8 @@ def ensure_steps(
             data = load_part(key)
             if data is None:
                 data = _TRANSIENT.get(key)
+            if data is not None and stale_part(data):
+                data = None
             if data is not None:
                 found[part] = data
         if len(found) == len(keys):

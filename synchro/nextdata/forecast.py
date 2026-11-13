@@ -1,12 +1,10 @@
 """Pronostic et banc nextData : les pas des modèles, assemblés en lectures.
 
-Les morceaux d’un pas (LightGBM, CatBoost, Darts, Chronos) se calculent dans
-`models` et se rangent dans le cache (`steps`). Ici, Darts remplace la médiane
-temporelle de LightGBM ; Chronos-2 ne mélange que la somme, la somme des
-étoiles et le niveau de n1, bornes 10–90 comprises. Les niveaux n1…n5, e1, e2
-et leurs deltas donnent le centre de chaque rang ; la chaîne n’y pèse plus et
-borne seulement les écarts. Le pronostic, le retour et les décalages lisent
-les mêmes pas, au même réglage.
+Les morceaux d’un pas se calculent dans `models` et se rangent dans le cache.
+L’assemblage suit l’étage 1 (somme et somme des étoiles), le mélange de ces
+deux sommes, l’étage 2 (rangs), la projection, puis Persist. TimesFM reste
+éteint tant que son bouton n’est pas allumé. Le pronostic, le retour et les
+décalages lisent les mêmes pas, au même réglage.
 """
 
 from __future__ import annotations
@@ -16,7 +14,15 @@ from typing import Any, Iterable
 
 from synchro.nextdata.covariates import SHAPE_SERIES, TEMPORAL_TARGETS, active_block, grid_shape, normalize_families
 from synchro.nextdata.empirical import public_base, recount
-from synchro.nextdata.models import _clamp_span, _clip, chronos_error, darts_error, star_pool_of
+from synchro.nextdata.models import (
+    TIMESFM_LICENSE,
+    _clamp_span,
+    _clip,
+    chronos_error,
+    darts_error,
+    star_pool_of,
+    timesfm_error,
+)
 from synchro.nextdata.notices import quiet_optional_model_notices
 from synchro.nextdata.panel import Frame, build_frame, normalized_draws
 from synchro.nextdata.persist import base_rates, recent_draws, snap_grid
@@ -67,6 +73,9 @@ def dependency_status() -> dict[str, Any]:
         "darts_error": darts_error(),
         "chronos": _installed("chronos"),
         "chronos_error": chronos_error(),
+        "timesfm": _installed("timesfm"),
+        "timesfm_error": timesfm_error(),
+        "timesfm_license": TIMESFM_LICENSE,
         "torch": _installed("torch"),
         "matplotlib": _installed("matplotlib"),
         "catboost": _installed("catboost"),
@@ -93,6 +102,18 @@ def chronos_problem(requested: bool, used: bool) -> str | None:
     if error is None:
         return None
     return f"Chronos n’a pas répondu ({error}) ; il sera retenté au prochain démarrage de l’API."
+
+
+def timesfm_problem(requested: bool, used: bool) -> str | None:
+    """Ce que la page dit quand TimesFM est demandé et n’a rien donné à l’étage 1."""
+    if not requested or used:
+        return None
+    if not _installed("timesfm"):
+        return "TimesFM n’est pas installé : ./launch install-nextdata."
+    error = timesfm_error()
+    if error is None:
+        return None
+    return f"TimesFM n’a pas répondu ({error}) ; il sera retenté au prochain démarrage de l’API."
 
 
 def darts_problem() -> str | None:
@@ -247,6 +268,7 @@ def _xray_context(
     excluded: list[str],
     estimators: int,
     chronos_requested: bool,
+    timesfm_requested: bool,
     persist: dict[str, int] | None,
 ) -> dict[str, Any]:
     return {
@@ -256,6 +278,7 @@ def _xray_context(
         "excluded": excluded,
         "estimators": estimators,
         "chronos_requested": chronos_requested,
+        "timesfm_requested": timesfm_requested,
         "persist": persist,
     }
 
@@ -280,6 +303,97 @@ def _publish_xray(
     )
 
 
+def _plain(value: Any) -> Any:
+    """Résumé HTTP : nombres, textes, listes. Pas de tenseur."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _plain(item) for key, item in value.items() if key != "tensor"}
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    return None
+
+
+def relief_of(steps: dict[int, dict[str, Any]], limit: int = 10) -> dict[str, Any]:
+    """Dix pas au plus : sommes par lecture, rangs projetés, tirage sorti. La coque TimesFM si elle a répondu."""
+    chosen = [steps[t] for t in sorted(steps) if isinstance(steps[t], dict) and steps[t].get("readings")]
+    chosen = chosen[-limit:]
+    ranks = ("n1", "n2", "n3", "n4", "n5", "e1", "e2")
+    out_steps = []
+    opened = False
+    for step in chosen:
+        sommes: dict[str, Any] = {}
+        rangs: dict[str, Any] = {}
+        shell = None
+        for key, reading in (step.get("readings") or {}).items():
+            packed = reading.get("packed") or {}
+            sommes[key] = {"sum": packed.get("sum"), "star_sum": packed.get("star_sum")}
+            rangs[key] = [packed.get(name) for name in ranks]
+            if packed.get("sum") is not None:
+                opened = True
+            note = reading.get("timesfm") or {}
+            if note.get("available") and note.get("lo") and note.get("hi"):
+                shell = {"lo": note["lo"], "hi": note["hi"]}
+        actual = step.get("actual") or {}
+        out_steps.append(
+            {
+                "label": step.get("date"),
+                "sommes": sommes,
+                "rangs": rangs,
+                "sorti": [*(actual.get("numbers") or []), *(actual.get("stars") or [])],
+                "timesfm": shell,
+            }
+        )
+    return {"open": opened, "steps": out_steps}
+
+
+def nodered_summary(report: dict[str, Any]) -> dict[str, Any]:
+    """Ce que Node-RED affiche. Familles, sommes, mélange, rangs, projection, coupure. Pas les tenseurs."""
+    modes = report.get("modes") or {}
+    first = next(iter(modes.values()), {}) if isinstance(modes, dict) else {}
+    chronos = (first.get("chronos") or {}) if isinstance(first, dict) else {}
+    grid = (first.get("grid") or {}) if isinstance(first, dict) else {}
+    shifts = report.get("shifts") or []
+    return _plain(
+        {
+            "familles": report.get("covariates") or [],
+            "coupure": report.get("next_date") or (shifts[0].get("date") if shifts else None),
+            "etage1": {
+                key: {"sum": (block.get("quantiles") or {}).get("sum"), "star_sum": (block.get("quantiles") or {}).get("star_sum")}
+                for key, block in modes.items()
+                if isinstance(block, dict)
+            },
+            "melange": chronos.get("shares") or chronos.get("weights"),
+            "etage2": {"numbers": grid.get("numbers"), "stars": grid.get("stars")},
+            "projection": {"numbers": grid.get("numbers"), "stars": grid.get("stars")},
+            "decalages": [
+                {"k": shift.get("x"), "pas": (shift.get("timesfm_pas") or {}).get("pas"), "date": shift.get("date")}
+                for shift in shifts
+            ],
+        }
+    )
+
+
+def publish_nodered(summary: dict[str, Any]) -> bool:
+    """POST le résumé si Node-RED écoute. S’il est arrêté, nextData continue sans lui."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    payload = json.dumps(summary).encode("utf-8")
+    request = urllib.request.Request(
+        "http://127.0.0.1:1880/nextdata/pas",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=0.2) as response:
+            return 200 <= int(response.status) < 300
+    except (OSError, urllib.error.URLError, TimeoutError, ValueError):
+        return False
+
+
 def run_forecast(
     draws: list[dict[str, Any]],
     *,
@@ -289,6 +403,7 @@ def run_forecast(
     weekday: str | None = None,
     covariates: Iterable[str] | None = None,
     with_chronos: bool = False,
+    with_timesfm: bool = False,
     estimators: int = 32,
     chunk: int | None = None,
     persist: dict[str, int] | None = None,
@@ -321,12 +436,14 @@ def run_forecast(
         estimators=int(estimators),
         excluded=excluded,
     )
-    parts = parts_needed(with_chronos)
+    parts = parts_needed(with_chronos, with_timesfm)
     n = len(frame.rows)
     target_pool = star_pool_of(frame.horizon[0] if frame.horizon else None, frame.star_pool)
     order = [n, *reversed(backtest.retour_indices(frame))]
     ready, remaining = ensure_steps(frame, order, settings, parts, limit=chunk or worker_count())
-    steps = backtest.assemble(frame, ready, with_chronos=with_chronos, pulse="pulse" in families)
+    steps = backtest.assemble(
+        frame, ready, with_chronos=with_chronos, with_timesfm=with_timesfm, pulse="pulse" in families
+    )
     upcoming = steps[n]
     for mode in ("corpus", "fenetre"):
         if mode not in upcoming["readings"]:
@@ -346,6 +463,7 @@ def run_forecast(
         excluded=list(excluded),
         estimators=settings.estimators,
         chronos_requested=with_chronos,
+        timesfm_requested=with_timesfm,
         persist=persist,
     )
     for mode in ("corpus", "fenetre"):
@@ -366,7 +484,7 @@ def run_forecast(
         catboost_error = backtest.model_error(ready[n]["parts"], "corpus", "catboost")
     chronos_used = any((modes[mode].get("chronos") or {}).get("available") for mode in modes)
     base = recount(frame.rows[frame.focus_start :], star_pool=target_pool)
-    return {
+    report = {
         "ok": True,
         "focus": frame.focus,
         "focus_requested": int(focus),
@@ -388,6 +506,7 @@ def run_forecast(
         "modes": modes,
         "base": public_base(base),
         "backtest": walked,
+        "relief": relief_of({t: step for t, step in steps.items() if t < n}),
         "chart": _chart(frame, walked["rows"], views, grids),
         "best_mae_sum": walked["best_mae_sum"],
         "chronos": {
@@ -395,11 +514,21 @@ def run_forecast(
             "used": chronos_used,
             "error": chronos_problem(with_chronos, chronos_used),
         },
+        "timesfm": {
+            "requested": with_timesfm,
+            "used": any((modes[mode].get("timesfm") or {}).get("available") for mode in modes),
+            "error": timesfm_problem(
+                with_timesfm, any((modes[mode].get("timesfm") or {}).get("available") for mode in modes)
+            ),
+            "license": TIMESFM_LICENSE,
+        },
         "darts": {"error": darts_problem()},
         "progress": {"ready": len(ready), "total": len(order), "complete": remaining == 0},
         "compute": compute_state(),
         "persist": persist_info(draws, frame, persist),
     }
+    publish_nodered(nodered_summary(report))
+    return report
 
 
 def run_training(
@@ -412,6 +541,7 @@ def run_training(
     estimators: int = 32,
     shift: int | None = None,
     with_chronos: bool = False,
+    with_timesfm: bool = False,
     chunk: int | None = None,
     persist: dict[str, int] | None = None,
     block: str | None = None,
@@ -442,7 +572,7 @@ def run_training(
         estimators=int(estimators),
         excluded=excluded,
     )
-    parts = parts_needed(with_chronos)
+    parts = parts_needed(with_chronos, with_timesfm)
     n = len(frame.rows)
     retour = list(reversed(backtest.retour_indices(frame)))
     lags = [int(shift)] if shift is not None else list(range(1, backtest.SHIFT_MAX + 1))
@@ -456,12 +586,15 @@ def run_training(
     else:
         order = targets + [t for t in retour if t not in targets]
         ready, remaining = ensure_steps(frame, order, settings, parts, limit=chunk or worker_count())
-    steps = backtest.assemble(frame, ready, with_chronos=with_chronos, pulse="pulse" in families)
+    steps = backtest.assemble(
+        frame, ready, with_chronos=with_chronos, with_timesfm=with_timesfm, pulse="pulse" in families
+    )
     report = backtest.shift_report(
         frame,
         steps,
         lags=lags,
         chronos_requested=with_chronos,
+        timesfm_requested=with_timesfm,
         persist=persist,
         xray_context=_xray_context(
             focus_requested=int(focus),
@@ -470,15 +603,19 @@ def run_training(
             excluded=list(excluded),
             estimators=settings.estimators,
             chronos_requested=with_chronos,
+            timesfm_requested=with_timesfm,
             persist=persist,
         ),
     )
     report["chronos"]["error"] = chronos_problem(with_chronos, report["chronos"]["used"])
+    report["timesfm"]["error"] = timesfm_problem(with_timesfm, report["timesfm"]["used"])
+    report["timesfm"]["license"] = TIMESFM_LICENSE
     catboost_error = catboost_import_error()
     info = persist_info(draws, frame, persist)
     if info:
         info.pop("recent", None)
-    return {
+    report["relief"] = relief_of(steps)
+    published = {
         "ok": True,
         "focus": frame.focus,
         "focus_requested": int(focus),
@@ -504,6 +641,8 @@ def run_training(
         "compute": compute_state(),
         "persist": info,
     }
+    publish_nodered(nodered_summary(published))
+    return published
 
 
 def _chart(

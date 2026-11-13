@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
@@ -8,6 +9,7 @@ import { HelpTip, HelpWrap, TitleHelp } from "@/components/help"
 import { CovariateBlockToken, useCovariateBlock } from "@/components/nextdata/covariate-block"
 import { PersistArchive, PersistControl, PersistPairCard, RecentNote, SwapNote } from "@/components/nextdata/persist-panel"
 import { RankPath } from "@/components/nextdata/rank-path"
+import type { ReliefStep } from "@/components/nextdata/relief-pas"
 import { XrayPanel } from "@/components/nextdata/xray-panel"
 import { StaleArchiveNote } from "@/components/nextdata/stale-archive-note"
 import { StepMeter } from "@/components/nextdata/step-meter"
@@ -74,6 +76,8 @@ import { defaultStoredSpec, writeStoredSpec } from "@/lib/jeux"
 import { useDraws } from "@/lib/use-draws"
 import { useLabTab } from "@/lib/use-lab-tab"
 import { cn } from "@/lib/utils"
+
+const ReliefPas = dynamic(() => import("@/components/nextdata/relief-pas").then((mod) => mod.ReliefPas), { ssr: false })
 
 const TABS = [
   { id: "pronostic", label: "Pronostic", help: NEXTDATA_HELP.tabPronostic },
@@ -221,6 +225,8 @@ type ForecastPayload = {
   compute?: ComputeState
   persist?: PersistInfo | null
   chronos?: ChronosStatus
+  timesfm?: { requested?: boolean; used?: boolean; error?: string | null; license?: string }
+  relief?: { open?: boolean; steps?: ReliefStep[] }
   darts?: { error?: string | null }
 }
 
@@ -371,6 +377,7 @@ export function NextDataLab() {
   const [families, setFamilies] = useState<string[]>(FAMILIES.map((item) => item.id))
   const [covariateBlock, setCovariateBlock] = useCovariateBlock(families)
   const [withChronos, setWithChronos] = useState(false)
+  const [withTimesfm, setWithTimesfm] = useState(false)
   const [xray, setXray] = useState(false)
   const [delta, setDelta] = useState(false)
   const [persistSetting, setPersistSetting] = useState<PersistSetting | null>(null)
@@ -388,10 +395,11 @@ export function NextDataLab() {
         covariates: [...families].sort(),
         block: covariateBlock,
         withChronos,
+        withTimesfm,
         persist: persistSetting,
         draws: draws.map((draw) => [draw.date, draw.numbers, draw.stars, draw.star_pool]),
       }),
-    [covariateBlock, draws, families, focus, persistSetting, weekday, withChronos, years]
+    [covariateBlock, draws, families, focus, persistSetting, weekday, withChronos, withTimesfm, years]
   )
 
   useEffect(() => {
@@ -471,6 +479,7 @@ export function NextDataLab() {
       covariates: families,
       block: covariateBlock,
       with_chronos: withChronos,
+      with_timesfm: withTimesfm,
       persist: persistSetting,
       draws: draws.map((draw) => ({
         date: draw.date,
@@ -692,12 +701,29 @@ export function NextDataLab() {
                 {withChronos ? "Chronos inclus" : "Sans Chronos"}
               </Button>
             </HelpWrap>
+            <HelpWrap help={NEXTDATA_HELP.moteur}>
+              <Button
+                type="button"
+                size="sm"
+                variant={withTimesfm ? "secondary" : "ghost"}
+                disabled={running}
+                aria-pressed={withTimesfm}
+                onClick={() => setWithTimesfm((value) => !value)}
+              >
+                {withTimesfm ? "TimesFM inclus" : "Sans TimesFM"}
+              </Button>
+            </HelpWrap>
             <HelpWrap help={NEXTDATA_HELP.delta}>
               <Button type="button" size="sm" variant={delta ? "secondary" : "ghost"} onClick={() => setDelta((value) => !value)}>
                 {delta ? "DeltaEvol" : "Niveaux"}
               </Button>
             </HelpWrap>
           </div>
+          <ReliefPas steps={report?.relief?.steps ?? null} />
+          <p className="text-sm text-muted-foreground" data-timesfm-license>
+            TimesFM 3.0 : licence non commerciale, hors production. Recherche locale. Ce n’est pas un ticket.
+            {report?.timesfm?.error ? ` ${report.timesfm.error}` : ""}
+          </p>
 
           <PersistControl value={persistSetting} onChange={setPersistSetting} help={NEXTDATA_HELP.persist} disabled={running} />
 

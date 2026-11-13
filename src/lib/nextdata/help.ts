@@ -102,15 +102,15 @@ export const NEXTDATA_HELP = {
       },
       {
         label: "Chronos inclus",
-        text: "Chronos-2 prévoit ensemble la somme, la somme des étoiles et n1, avec leurs bandes 10–90, sans être entraîné sur l’archive : il lit les tirages d’avant et les covariables cochées. Les horloges (calendrier, lune) et Pulse sont connus pour le tirage prévu ; les autres familles s’arrêtent au dernier tirage sorti. Ces bandes se mélangent à celles de LightGBM ; n1 rejoint son niveau. Chaque série a son poids, réglé sur les dix tirages d’avant : il penche vers la lecture qui s’y est le moins trompée, et reste à moitié-moitié tant que ces tirages ne sont pas calculés. CatBoost reste seul. ./launch install-nextdata télécharge autogluon/chronos-2-small. Si Chronos ne répond pas, un bandeau dit pourquoi ; il est retenté au prochain démarrage de l’API.",
+        text: "L’étage 1 ne prévoit que la somme et la somme des étoiles. n1 n’y entre pas. L’étage 2 prévoit les rangs sous la médiane retenue, jamais sous le tirage caché. Chronos-2 suit cet ordre, sans être entraîné sur l’archive. Moins de dix pas prêts : il reste moitié-moitié avec LightGBM sur ces deux sommes. À dix pas, le poids va à la lecture la moins trompée ; une erreur qui n’est pas plus basse reste à 0. Les rangs ne se mélangent pas. CatBoost reste seul. Si Chronos ne répond pas, un bandeau dit pourquoi ; il est retenté au prochain démarrage de l’API.",
       },
       {
         label: "Darts",
-        text: "S’il est installé, il remplace la médiane temporelle LightGBM du prochain pas, avec les mêmes arbres. La chaîne des rangs reste LightGBM. Darts n’est pas chargé à l’ouverture de la page ; s’il échoue, la page dit pourquoi et LightGBM garde sa médiane.",
+        text: "S’il est installé, il lit les deux sommes, puis les rangs si la médiane est là. Il ne remplace pas LightGBM. Darts n’est pas chargé à l’ouverture de la page ; s’il échoue, la page dit pourquoi.",
       },
       {
         label: "Étendue et consécutifs",
-        text: "Même définition que la page Évolution. Étendue = max − min : 4 à 49 pour les numéros, 1 à 11 pour les étoiles. Consécutifs = paires n, n+1 : 0 à 4 pour les numéros, 0 ou 1 pour les étoiles. Ces quatre lectures sont prévues avec la somme et la parité. L’étendue des numéros rapproche la grille projetée de cette cible, un pas à la fois, sans changer la somme. Les voisines sont ensuite classées sur l’étendue et les consécutifs.",
+        text: "Même définition que la page Évolution. Ces quatre lectures restent un à-côté de LightGBM. Elles ne sont pas une cible de l’étage 1, ni une cible TimesFM.",
       },
     ],
   },
@@ -188,7 +188,7 @@ export const NEXTDATA_HELP = {
   chemin: {
     title: "Comment n1…n5 et e1, e2 sont obtenus",
     wide: true,
-    body: "Chaque rang est prévu directement, deux fois. Le niveau est le quantile prévu pour ce rang, seul. Le delta ajoute au dernier rang sorti le pas n − n−1. Le barreau donne leur poids : l’inverse de la largeur de bande, un peu moins pour le delta. Avec Chronos, le niveau de n1 mélange celui de LightGBM et celui de Chronos : la figure donne la médiane de Chronos et sa part.\n\nLa chaîne part de n1 et ajoute les écarts g1 à g4 ; pour les étoiles, e1 puis l’écart e2 − e1. Elle reste affichée, sans poids : la médiane d’une somme n’est pas la somme des médianes, et additionner des médianes d’écarts tirait n2…n5 vers le bas (n5 vers 39 quand sa médiane est 44). Ses bandes d’écarts tiennent encore l’espacement : un écart du mélange qui en sort est ramené au bord.\n\nLa somme, puis l’étendue, rapprochent ensuite la grille de leurs cibles, un pas à la fois, sur le rang que ce pas éloigne le moins de son centre, à l’échelle de sa bande. La correction se répartit au lieu de pousser n5 puis n4. La boule est le voisin retenu.",
+    body: "L’étage 1 retient la somme et la somme des étoiles. L’étage 2 prévoit les rangs sous cette médiane, jamais sous le tirage caché. La chaîne part de ces deux sommes : n1 n’est plus libre. Après projection, n1+…+n5 égale la somme retenue, e1+e2 égale la somme des étoiles, l’ordre tient, les numéros restent dans 1–50 et les étoiles dans 1–12.\n\nLe niveau est le quantile prévu pour ce rang. Le delta ajoute au dernier rang sorti le pas n − n−1. Les rangs ne reçoivent pas de poids. La forme retenue est celle de la lecture qui a le poids sur la somme, puis elle est projetée sur les sommes déjà mélangées. Ce n’est pas un ticket.",
   },
   grille: {
     title: "Grille 5+2",
@@ -398,7 +398,7 @@ export const NEXTDATA_TRAINING_HELP = {
   chronos: {
     title: "Chronos inclus",
     wide: true,
-    body: "Même interrupteur que nextData. Sans Chronos, LightGBM et CatBoost partent seuls. Chronos inclus mélange les bandes 10–90 de Chronos-2 à celles de LightGBM, sur la somme, la somme des étoiles et le niveau de n1. Chronos-2 lit les mêmes covariables cochées : les horloges du tirage prévu, le reste jusqu’au tirage d’avant. Chaque série a son poids, réglé sur les dix tirages d’avant le décalage, jamais sur le tirage noté ; moitié-moitié tant qu’ils ne sont pas calculés. CatBoost reste seul. Si Chronos ne répond pas, le bandeau dit pourquoi.",
+    body: "Même interrupteur que nextData. L’étage 1 ne mélange que la somme et la somme des étoiles. n1 n’y entre pas. Moins de dix pas : Chronos reste moitié-moitié avec LightGBM. À dix pas, le poids va à la lecture la moins trompée. Les rangs ne se mélangent pas : la forme du gagnant est projetée sur les sommes mélangées. TimesFM, s’il est allumé, lit le pas k du même horizon 10, sans second appel. Ce n’est pas un ticket.",
   },
   delta: {
     title: "Niveaux ou DeltaEvol",
@@ -436,7 +436,7 @@ export const NEXTDATA_TRAINING_HELP = {
       },
       {
         label: "Chronos",
-        text: "S’il est inclus, il se mélange à LightGBM sur la somme, la somme des étoiles et le niveau de n1, moitié-moitié : les dix tirages d’avant qui règlent ses poids ne sont pas calculés dans ce parcours. Il tourne dans l’API, un pas à la fois, pendant que les arbres avancent. CatBoost garde sa somme. La MAE du réglage affiché peut donc s’écarter de celle d’Entraîner.",
+        text: "S’il est inclus, l’étage 1 le mélange à LightGBM sur la somme et la somme des étoiles seulement, moitié-moitié : les dix tirages d’avant ne sont pas calculés dans ce parcours. n1 n’entre pas dans ce mélange. CatBoost garde sa somme. La MAE du réglage affiché peut donc s’écarter de celle d’Entraîner.",
       },
       {
         label: "Tirets",
@@ -569,7 +569,7 @@ export const NEXTDATA_SWEEP_HELP = {
       },
       {
         label: "Darts et Chronos",
-        text: "S’il est installé, Darts remplace la médiane temporelle LightGBM du pas, sur la somme et la somme des étoiles. La chaîne des rangs reste LightGBM. Si Chronos est inclus, ses bandes se mélangent à celles de LightGBM, sur la somme, la somme des étoiles et le niveau de n1. Dans ce tableau le poids reste moitié-moitié : les dix tirages d’avant qui le règlent ne sont pas calculés. La somme, donc la MAE, peut s’écarter de celle du bouton Entraîner.",
+        text: "S’il est installé, Darts lit les deux sommes puis les rangs. Il ne remplace pas LightGBM. Si Chronos est inclus, le mélange de l’étage 1 ne porte que sur la somme et la somme des étoiles, moitié-moitié dans ce tableau. La MAE peut s’écarter de celle du bouton Entraîner.",
       },
     ],
   },
@@ -607,9 +607,9 @@ export const NEXTDATA_SWEEP_HELP = {
     body: "MAE de somme de la jumelle Persist de la lecture Corpus, sur les mêmes décalages, avec une décimale. Le modèle ne change pas. Après la grille, un numéro prévu à ±1, ±2 ou ±3 d’une boule de n−1 ou de n−2 cède sa place à cette boule, dans le rayon et le nombre d’échanges des boutons Persist. La somme de la grille jumelle peut donc bouger, et son erreur aussi.\n\nLa colonne apparaît quand Persist est armé et qu’une ligne a pu noter sa jumelle. Le mot « retenu » se décide dans « vs affiché », sur la grille sans ces échanges. Le coût boule à boule, gagné si la boule reprise sort et pas celle qu’elle remplace, se lit sur la carte Avec et sans Persist.",
   },
   communs: {
-    title: "Numéros communs",
+    title: "Somme des étoiles",
     wide: true,
-    body: "Moyenne, sur les décalages déjà prêts, du nombre de numéros de la grille Corpus qui figurent dans les cinq numéros sortis. Le compte de chaque tirage va de 0 à 5. La case a deux décimales : 0,58 est un peu plus d’un demi-numéro par tirage.\n\nLa grille est celle de LightGBM · trois ans, la même que la ligne Prévu de l’entraînement. Une boule compte quand son numéro est sorti, quel que soit le rang. Les étoiles ne sont pas dans cette case. Une grille prise au hasard en partage 0,50 : cinq numéros prévus et cinq sortis parmi cinquante, soit 5×5/50.\n\nLe mot « retenu » se décide sur l’erreur de somme. Une ligne peut avoir plus de communs et une erreur de somme plus haute. Le bandeau suit la somme.",
+    body: "Écart moyen sur la somme des étoiles, lecture Corpus, sur les décalages déjà prêts. C’est le second chiffre des sommes, à côté de la MAE des numéros. Les écarts de chaque rang projeté sont sur la page d’entraînement. Il n’y a plus un score de grille unique.\n\nUne grille prise au hasard en partage 0,50 numéro : cinq numéros prévus et cinq sortis parmi cinquante, soit 5×5/50. Le mot « retenu » se décide sur l’erreur de somme. Ce n’est pas un ticket.",
   },
   decalages: {
     title: "Décalages prêts",

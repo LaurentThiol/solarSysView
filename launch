@@ -59,7 +59,8 @@ Usage:
   ./launch install-vlm     Installe Moondream via torch (optionnel si ollama pull moondream)
   ./launch install-chartisme  Installe les réseaux du chartisme (torch + torch-geometric)
   ./launch install-harmo      Installe les extras Harmo (PyWavelets, ssqueezepy, librosa)
-  ./launch install-nextdata   Installe nextData (LightGBM / Darts, Chronos, torch, matplotlib)
+  ./launch install-nextdata   Installe nextData (LightGBM / Darts, Chronos, TimesFM, torch, matplotlib)
+  ./launch nodered            Node-RED local, port 1880, flux flows/nextdata.json
   ./launch install-decision-tree  Répare decisionTree (scikit-learn, dtreeviz, dot). Le démarrage l'installe déjà.
   ./launch chartisme-train    Entraîne les réseaux du chartisme (options passées au CLI)
   ./launch brain-specialist-train  Entraîne un spécialiste Brain (options passées au CLI)
@@ -1105,11 +1106,24 @@ cmd_install_decision_tree() {
   ensure_decision_tree
 }
 
+cmd_nodered() {
+  local port=1880
+  local runtime="$ROOT/.run/nodered"
+  if ! command -v npx >/dev/null 2>&1; then
+    die "npx est absent. Node-RED ne peut pas démarrer."
+  fi
+  mkdir -p "$runtime"
+  cp "$ROOT/flows/nextdata.json" "$runtime/flows.json"
+  info "Node-RED sur le port ${port}. Flux : flows/nextdata.json"
+  info "nextData publie le résumé du pas s’il écoute. Arrêté, nextData l’ignore."
+  exec npx --yes node-red --port "$port" --userDir "$runtime"
+}
+
 cmd_install_nextdata() {
   local venv="$ROOT/.venv"
   SKIP_INSTALL=0
   ensure_install
-  info "Installation nextData (LightGBM, CatBoost, Darts, Chronos, torch, matplotlib)…"
+  info "Installation nextData (LightGBM, CatBoost, Darts, Chronos, TimesFM, torch, matplotlib)…"
   if ! "$venv/bin/python" -m pip install -r "$ROOT/requirements-nextdata.txt"; then
     die "pip install -r requirements-nextdata.txt a échoué. Voir ./launch doctor"
   fi
@@ -1908,7 +1922,7 @@ CMD="start"
 PASSTHROUGH=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    start|stop|status|update|shortcut|help|doctor|install|install-vlm|install-chartisme|install-harmo|install-nextdata|install-decision-tree|restart|-h|--help)
+    start|stop|status|update|shortcut|help|doctor|install|install-vlm|install-chartisme|install-harmo|install-nextdata|install-decision-tree|nodered|restart|-h|--help)
       CMD="$1"
       shift
       ;;
@@ -1946,6 +1960,7 @@ case "$CMD" in
   install-chartisme) cmd_install_chartisme ;;
   install-harmo) cmd_install_harmo ;;
   install-nextdata) cmd_install_nextdata ;;
+  nodered) cmd_nodered ;;
   install-decision-tree) cmd_install_decision_tree ;;
   chartisme-train) cmd_chartisme_train "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" ;;
   brain-specialist-train) cmd_brain_specialist_train "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" ;;

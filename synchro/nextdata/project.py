@@ -211,6 +211,31 @@ def star_stages(moments: dict[str, dict[str, float]], star_pool: int) -> dict[st
     return {"raw": raw, "ordered": ordered, "after_sum": after_sum, "sum_target": sum_target, "pool": pool}
 
 
+def project_under_sums(
+    numbers: list[float],
+    stars: list[float],
+    target_sum: float,
+    target_star_sum: float,
+    star_pool: int = 12,
+) -> tuple[list[int], list[int]]:
+    """Remet l’ordre, les bornes, puis la somme retenue.
+
+    Un rang hors de 1–50, ou une étoile hors de 1–12, est ramené. Un ordre
+    cassé est rétabli. La somme des cinq égale la somme retenue, celle des
+    deux étoiles égale `star_sum`, tant que la cible tient dans les bornes.
+    """
+    lo = [bound[0] for bound in NUMBER_BOUNDS]
+    hi = [bound[1] for bound in NUMBER_BOUNDS]
+    ordered = project_increasing([float(value) for value in numbers], lo, hi)
+    fixed = _nudge_sum(ordered, int(round(float(target_sum))), lo, hi)
+    pool = max(2, min(12, int(star_pool)))
+    star_lo = [1, 2]
+    star_hi = [pool - 1, pool]
+    star_ordered = project_increasing([float(value) for value in stars], star_lo, star_hi)
+    star_fixed = _nudge_sum(star_ordered, int(round(float(target_star_sum))), star_lo, star_hi)
+    return fixed, star_fixed
+
+
 def project_numbers(moments: dict[str, dict[str, float]]) -> tuple[list[int], list[float]]:
     stages = number_stages(moments)
     return stages["after_spread"], stages["raw"]

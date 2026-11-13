@@ -2880,6 +2880,12 @@ def create_app() -> FastAPI:
             raise HTTPException(400, "Chronos s’active avec un booléen.")
         return raw
 
+    def _nextdata_timesfm(payload: dict[str, Any]) -> bool:
+        raw = payload.get("with_timesfm", False)
+        if not isinstance(raw, bool):
+            raise HTTPException(400, "TimesFM s’active avec un booléen.")
+        return raw
+
     def _nextdata_block(payload: dict[str, Any]) -> str | None:
         from synchro.nextdata.covariates import known_block
 
@@ -2929,6 +2935,7 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         with_chronos = _nextdata_chronos(payload)
+        with_timesfm = _nextdata_timesfm(payload)
         draws = payload.get("draws")
         if not isinstance(draws, list) or not draws:
             try:
@@ -2947,6 +2954,7 @@ def create_app() -> FastAPI:
                 weekday=weekday if isinstance(weekday, str) else None,
                 covariates=covariates,
                 with_chronos=with_chronos,
+                with_timesfm=with_timesfm,
                 estimators=_nextdata_estimators(),
                 persist=persist,
                 block=_nextdata_block(payload),
@@ -2986,6 +2994,7 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         with_chronos = _nextdata_chronos(payload)
+        with_timesfm = _nextdata_timesfm(payload)
         draws = payload.get("draws")
         if not isinstance(draws, list) or not draws:
             try:
@@ -3005,6 +3014,7 @@ def create_app() -> FastAPI:
                 estimators=_nextdata_estimators(),
                 shift=shift,
                 with_chronos=with_chronos,
+                with_timesfm=with_timesfm,
                 persist=persist,
                 block=_nextdata_block(payload),
             )

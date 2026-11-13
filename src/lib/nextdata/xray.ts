@@ -167,7 +167,7 @@ export const XRAY_CARDS: XrayCard[] = [
     id: "chronos",
     title: "Chronos",
     event: "Mélange",
-    rule: "Chronos rejoint LightGBM sur la somme, la somme des étoiles et le niveau de n1. CatBoost reste seul. Les poids se règlent sur les pas d’avant, jamais sur le tirage noté.",
+    rule: "L’étage 1 mélange seulement la somme et la somme des étoiles. n1 n’y entre pas. CatBoost reste seul. Une lecture demandée qui n’a rien donné à l’étage 1 est signalée.",
   },
   {
     id: "arbitrage",

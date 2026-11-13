@@ -2,38 +2,41 @@
 
 - Module : `/nextdata`
 - Niveau : Flux
-- Révision : 1
-- Code : `synchro/nextdata/forecast.py`, `synchro/nextdata/backtest.py`
+- Révision : 2
+- Code : `synchro/nextdata/forecast.py`, `synchro/nextdata/backtest.py`, `synchro/nextdata/models.py`
 
-Les deux flux lisent les mêmes pas, au même réglage. Seul l’horizon change.
+Les deux flux lisent les mêmes pas, au même réglage, dans le même ordre. Seul l’horizon affiché change.
 
 ```mermaid
 flowchart TB
-  boutons["boutons du pronostic"]
-  prochain["pas du prochain tirage"]
-  retour["retour, du plus récent au plus ancien"]
-  bandes["bandes du prochain, sur les pas déjà prêts"]
-  grille["grille, puis Persist, puis Jeux"]
-  memes["mêmes boutons"]
-  decalages["décalages moins 1 à moins 10"]
-  avant["tirages d’avant, pour les bandes"]
-  note["écart prévu moins sorti"]
-  boutons --> prochain
-  prochain --> retour
-  retour --> bandes
-  bandes --> grille
-  memes --> decalages
-  decalages --> avant
-  avant --> note
-  prochain -->|mêmes pas| decalages
+  archive[Archive coupee]
+  cov[Covariables cochees]
+  sommes[Etage 1 sommes]
+  blend[Melange des deux sommes]
+  rangs[Etage 2 rangs]
+  proj[Projection]
+  ecran[Grille puis Persist]
+  archive --> cov
+  cov --> sommes
+  sommes --> blend
+  blend --> rangs
+  rangs --> proj
+  proj --> ecran
 ```
 
-Moins 1 cache le dernier tirage et le prévoit. Moins 10 se place dix tirages plus tôt. La fenêtre de Chronos et le calibrage s’arrêtent avant le tirage noté. Tant que les dix pas d’avant manquent, Chronos reste moitié-moitié : la MAE de l’entraînement peut s’écarter de celle du pronostic.
+L’étage 1 ne sort que `sum` et `star_sum`. Chronos n’y met pas `n1`. L’étage 2 ne part que si cette médiane existe. Sa covariable future est cette médiane, jamais le tirage caché.
 
-Méga compare d’autres réglages sur les dix mêmes décalages. Le rayon ne les montre pas. Il montre le réglage des boutons.
+TimesFM 3.0, bouton éteint par défaut, fait deux appels par mode : les sommes, puis les rangs. Horizon 10, zéro-shot, sans ajuster les poids. Les poids téléchargés sont sous licence non commerciale, hors production. L’usage ici est la recherche locale. Ce n’est pas un ticket.
+
+Le pronostic lit le pas 1. Les dix décalages relisent cet horizon, sans second appel. Le décalage −1 cache le dernier tirage et lit le pas 10. Le décalage −10 lit le pas 1. L’apprentissage s’arrête avant le tirage noté.
+
+Moins de dix pas prêts : TimesFM reste dehors, Chronos reste moitié-moitié avec LightGBM sur les deux sommes. Les rangs ne reçoivent pas de poids.
+
+Méga compare d’autres réglages sur les dix mêmes décalages et lit les deux étages. Le rayon aussi. Il signale une lecture demandée qui n’a rien donné à l’étage 1.
 
 ## Journal
 
 | Révision | Changement |
 | --- | --- |
 | 1 | Flux du prochain tirage et des dix décalages. |
+| 2 | Deux étages : sommes, puis rangs. TimesFM en horizon 10, licence non commerciale. |

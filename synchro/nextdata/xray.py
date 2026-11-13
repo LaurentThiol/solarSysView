@@ -26,7 +26,7 @@ from synchro.nextdata.project import _valid_numbers, _valid_stars, held_center
 
 # Même fenêtre et mêmes cibles que l’assemblage. Un test les compare.
 CHRONOS_WINDOW = 10
-CHRONOS_TARGETS = {"sum": "sum", "star_sum": "star_sum", "n1": "level:n1"}
+CHRONOS_TARGETS = {"sum": "sum", "star_sum": "star_sum"}
 CALIBRATION_NEED = 9
 OPERATIONS = (
     "cadre",
@@ -128,7 +128,7 @@ def core_trace(
             "window": int(note.get("window") or 0),
             "holdout_mae_lgb": note.get("holdout_mae_lgb"),
             "holdout_mae_chronos": note.get("holdout_mae_chronos"),
-            "medians": {name: note[name] for name in ("sum", "star_sum", "n1") if note.get(name) is not None},
+            "medians": {name: note[name] for name in ("sum", "star_sum") if note.get(name) is not None},
             "window_t": [int(value) for value in window_t],
             "scored_t": int(scored_t),
         },
@@ -232,6 +232,7 @@ def public_xray(
     excluded: list[str],
     estimators: int,
     chronos_requested: bool,
+    timesfm_requested: bool = False,
     persist: dict[str, int] | None,
     calibration: dict[str, Any] | None,
     moved: dict[str, Any] | None,
@@ -251,6 +252,7 @@ def public_xray(
     present = [name for name in ("lightgbm", "catboost", "darts", "chronos") if name in parts]
     keys = step.get("part_keys") or {}
     chrono = dict(core.get("chronos") or {})
+    times_note = reading.get("timesfm") if isinstance(reading.get("timesfm"), dict) else {}
     applies = library == "lightgbm" and chronos_requested
     window = int(chrono.get("window") or 0)
     available = bool(chrono.get("available"))
@@ -298,6 +300,7 @@ def public_xray(
             "excluded": list(excluded),
             "estimators": int(estimators),
             "chronos": bool(chronos_requested),
+            "timesfm": bool(timesfm_requested),
             "persist": None if persist is None else {"radius": int(persist["radius"]), "limit": int(persist["limit"])},
             "mode": mode,
             "library": library,
@@ -326,6 +329,12 @@ def public_xray(
             "targets": dict(CHRONOS_TARGETS),
             "window_t": [int(value) for value in chrono.get("window_t") or []],
             "scored_t": int(chrono.get("scored_t") if chrono.get("scored_t") is not None else scored_t),
+        },
+        "timesfm": {
+            "requested": bool(timesfm_requested),
+            "available": bool(times_note.get("available")),
+            "sum": times_note.get("sum"),
+            "star_sum": times_note.get("star_sum"),
         },
         "arbitrage": core.get("arbitration"),
         "projection": {**projection, "neighbors": neighbors, "valid": _valid_numbers(numbers) and _valid_stars(stars, pool)},
@@ -412,6 +421,16 @@ def controles(payload: dict[str, Any]) -> list[dict[str, Any]]:
     else:
         _check(items, "chronos.fenetre", True, "La fenêtre des poids s’arrête avant le tirage noté.")
         _check(items, "chronos.moitie", not chronos["half"], _half_detail(chronos))
+
+    missing = []
+    if payload["reglage"].get("chronos") and not payload["chronos"].get("available"):
+        missing.append("Chronos")
+    if payload["reglage"].get("timesfm") and not (payload.get("timesfm") or {}).get("available"):
+        missing.append("TimesFM")
+    if missing:
+        _check(items, "etage1.vide", False, "Demandé, rien à l’étage 1 : " + ", ".join(missing) + ".")
+    else:
+        _check(items, "etage1.vide", True, "L’étage 1 a répondu, ou aucune lecture de fondation n’est demandée.")
 
     arbitration = payload.get("arbitrage")
     if not arbitration:

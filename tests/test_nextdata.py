@@ -933,8 +933,9 @@ def test_shift_scores_the_mean_of_earlier_sums(monkeypatch) -> None:
     prefix = frame.rows[:-3]
     expected = sum(row["sum"] for row in prefix) / len(prefix) - frame.rows[-3]["sum"]
     assert mean["errors"]["sum"] == round(expected, 4)
-    assert mean["errors"]["n1"] is None
-    assert mean["hits_numbers"] is None
+    assert mean["ecarts"]["sommes"]["sum"] == round(expected, 4)
+    assert mean["ecarts"]["rangs"]["n1"] is not None
+    assert set(mean["ecarts"]) == {"sommes", "rangs"}
     assert report["summary"]["mean"]["mae_sum"] == round(abs(expected), 4)
 
 
@@ -1059,7 +1060,8 @@ def test_chronos_blends_lightgbm_and_leaves_catboost(monkeypatch) -> None:
     assert note["available"] is True
     # Aucun pas d’avant dans le cache : moitié-moitié.
     assert note["window"] == 0
-    assert note["weights"] == {"sum": 0.5, "star_sum": 0.5, "n1": 0.5}
+    assert note["weights"] == {"sum": 0.5, "star_sum": 0.5}
+    assert "n1" not in note["weights"]
     assert mixed["chronos"] == {"requested": True, "used": True, "error": None}
     assert plain["chronos"]["requested"] is False
     # Le pas noté sort du cache : Chronos n’ajuste aucun pas de plus.
@@ -1139,16 +1141,19 @@ def test_shift_chronos_is_weighted_on_the_ten_draws_before(monkeypatch) -> None:
     assert note["available"] is True
     assert note["window"] == 10
     assert note["sum"] == rows[-2]["sum"]
-    assert note["n1"] == rows[-2]["n1"]
+    assert "n1" not in note
     window = range(n - 11, n - 1)
     assert note["holdout_mae_chronos"] == round(sum(abs(rows[t - 1]["sum"] - rows[t]["sum"]) for t in window) / 10, 4)
     # La fausse somme LightGBM suit le nombre de tirages lus.
     assert note["holdout_mae_lgb"] == round(sum(abs(100 + t % 30 - rows[t]["sum"]) for t in window) / 10, 4)
-    # Poids nul pour LightGBM : la somme visée et le niveau de n1 sont ceux de Chronos.
-    assert reading["arbitration"]["sum_target"] == round(rows[-2]["sum"], 4)
-    first = reading["arbitration"]["numbers"][0]
-    assert first["level"] == round(rows[-2]["n1"], 4)
-    assert first["chronos"] == {"value": rows[-2]["n1"], "share": 1.0}
+    # Le poids va à la lecture la moins trompée. L’autre somme reste à 0 si son erreur n’est pas plus basse.
+    if note["holdout_mae_chronos"] < note["holdout_mae_lgb"]:
+        assert note["shares"]["sum"]["chronos"] == 1.0
+        assert note["shares"]["sum"]["lightgbm"] == 0.0
+    else:
+        assert note["shares"]["sum"]["chronos"] == 0.0
+        assert note["shares"]["sum"]["lightgbm"] == 1.0
+    assert "n1" not in (note.get("weights") or {})
 
 
 def test_forecast_chronos_is_half_and_half_until_ten_draws_are_ready(monkeypatch) -> None:
@@ -1195,10 +1200,11 @@ def test_chronos_blends_the_three_quantiles_and_leaves_the_chain() -> None:
     }
     note = backtest._blend_chronos(frame, "corpus", moments, {"chronos": {"corpus": bands}}, [], frame.star_pool)
     assert note["window"] == 0
-    assert note["weights"] == {"sum": 0.5, "star_sum": 0.5, "n1": 0.5}
+    assert note["weights"] == {"sum": 0.5, "star_sum": 0.5}
+    assert "n1" not in note["weights"]
     assert moments["sum"] == {"lo": 100.0, "mid": 115.0, "hi": 130.0}
     assert moments["star_sum"] == {"lo": 9.0, "mid": 12.0, "hi": 15.0}
-    assert moments["level:n1"] == {"lo": 3.0, "mid": 7.0, "hi": 11.0}
+    assert moments["level:n1"] == {"lo": 4.0, "mid": 6.0, "hi": 8.0}
     assert moments["n1"] == {"lo": 3.0, "mid": 5.0, "hi": 7.0}
     failed = backtest._blend_chronos(frame, "corpus", moments, {"chronos": {"error": "OSError: hub"}}, [], frame.star_pool)
     assert failed == {"available": False, "weight": 1.0}
@@ -1252,13 +1258,16 @@ def test_chronos_2_reads_both_modes_and_their_covariates_in_one_call(monkeypatch
     frame = build_frame(_draws(40, seed=23), focus=24)
     settings = StepSettings(focus=24, families=FAMILIES, estimators=2)
     part = compute_part(frame.rows, frame.horizon, "chronos", settings)
-    assert len(seen["calls"]) == 1
+    assert [len(call["inputs"][0]["target"]) for call in seen["calls"]] == [2, 7]
     call = seen["calls"][0]
     assert call["prediction_length"] == 1
     assert list(call["quantile_levels"]) == [0.1, 0.5, 0.9]
     corpus, window = call["inputs"]
-    assert corpus["target"].shape == (3, len(frame.rows))
-    assert window["target"].shape == (3, 24)
+    assert corpus["target"].shape == (2, len(frame.rows))
+    assert window["target"].shape == (2, 24)
+    ranks = seen["calls"][1]
+    assert ranks["inputs"][0]["target"].shape[0] == 7
+    assert "n1" not in part["corpus"] or "stage2" in part["corpus"]
     clocks = future_columns(FAMILIES)
     assert sorted(corpus["past_covariates"]) == sorted(past_columns(FAMILIES) + clocks)
     assert sorted(corpus["future_covariates"]) == sorted(clocks)
@@ -1377,7 +1386,7 @@ def test_a_transient_model_failure_is_not_stored_on_disk(monkeypatch) -> None:
     assert "moments" in ready[fine_at]["parts"]["lightgbm"]["corpus"]
     # Un historique trop court se range ; la panne passagère, non.
     assert len(saved()) == 2
-    assert not any(block.get("transient") for part in saved() for block in part.values())
+    assert not any(isinstance(block, dict) and block.get("transient") for part in saved() for block in part.values())
 
     # Le sondage suivant ne reboucle pas sur le pas en panne : il reste prêt, en mémoire.
     again, left = steps.ensure_steps(frame, order, settings, ("lightgbm",), limit=0)
@@ -1469,10 +1478,10 @@ def test_the_installed_chronos_2_accepts_our_inputs() -> None:
     items = chronos_inputs(frame.rows, frame.horizon, 24, FAMILIES)
     dataset = Chronos2Dataset(items, context_length=8192, prediction_length=1, batch_size=256, output_patch_size=16, mode=DatasetMode.TEST)
     batch = next(iter(dataset))
-    # Deux entrées de 3 cibles et les covariables ; les futures (horloges et Pulse) sont connues pour le tirage prévu.
-    width = 3 + len(past_columns(FAMILIES)) + len(future_columns(FAMILIES))
+    # Deux entrées de 2 cibles (sum, star_sum) et les covariables ; les futures sont connues pour le tirage prévu.
+    width = 2 + len(past_columns(FAMILIES)) + len(future_columns(FAMILIES))
     assert batch["context"].shape[0] == 2 * width
-    assert batch["target_idx_ranges"] == [(0, 3), (width, width + 3)]
+    assert batch["target_idx_ranges"] == [(0, 2), (width, width + 2)]
     assert int(batch["future_covariates"].isfinite().sum()) == 2 * len(future_columns(FAMILIES))
 
 
@@ -1742,10 +1751,12 @@ def test_catboost_leaves_first_and_chronos_reads_one_step_per_call(monkeypatch) 
     )
     assert remaining == 0
     assert pool.parts == ["catboost"] * 3 + ["lightgbm"] * 3
-    assert seen == [2, 2, 2]
+    assert seen == [2, 2, 2, 2, 2, 2]
     for t in ready:
         chronos = ready[t]["parts"]["chronos"]
-        assert set(chronos) == {"corpus", "fenetre", "covariates"}
+        assert chronos["schema"] == "two-stage"
+        assert "n1" not in chronos["corpus"]
+        assert "stage2" in chronos["corpus"]
         assert chronos["corpus"]["sum"]["mid"] == frame.rows[t - 1]["sum"]
 
 
@@ -1991,8 +2002,13 @@ def test_shared_bins_and_the_level_chain_keep_every_moment(monkeypatch) -> None:
     frame = build_frame(_draws(90, seed=12), focus=24)
     kwargs = {"mode": "corpus", "focus": 24, "families": ("forme", "delta", "pulse"), "estimators": 4}
     shared, importance, _engine = models.predict_moments(frame.rows, frame.horizon, **kwargs)
-    assert shared["n1"] == shared["level:n1"]
-    assert shared["e1"] == shared["level:e1"]
+    from synchro.nextdata.covariates import CHAIN
+    from synchro.nextdata.models import stage1_payload
+
+    payload = stage1_payload(shared)
+    assert set(payload) == {"sum", "star_sum"}
+    assert CHAIN[0] == ("n1", ("sum",))
+    assert "star_sum" in CHAIN[5][1]
 
     built: list[int] = []
 
@@ -2025,7 +2041,10 @@ def test_catboost_fits_its_quantiles_in_one_model(monkeypatch) -> None:
         frame.rows, frame.horizon, mode="corpus", focus=24, families=("forme",), estimators=4, library="catboost"
     )
     multi = [loss for loss in losses if loss.startswith("MultiQuantile")]
-    full_models = len(TEMPORAL_TARGETS) + 5 + 2 * len(models.RANK_LEVELS)
+    # Étage 1 : sum et star_sum. Passé seul de ces deux sommes : 3 coupes.
+    # Étage 2 : 7 niveaux, 7 deltas, 7 maillons de chaîne, et 3 coupes par maillon.
+    # Les formes ne sont pas une cible CatBoost.
+    full_models = 2 + 6 + 2 * len(models.RANK_LEVELS) + len(models.CHAIN)
     assert len(multi) == full_models + 3 * len(models.CHAIN)
     assert set(multi) == {"MultiQuantile:alpha=0.1,0.5,0.9"}
     assert set(losses) == set(multi)

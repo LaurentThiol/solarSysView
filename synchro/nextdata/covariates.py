@@ -43,15 +43,16 @@ TARGETS: tuple[str, ...] = (
     "e_gap",
 )
 
-# Chaîne : chaque écart reçoit les rangs déjà prévus du même tirage.
+# Chaîne : décomposition des deux sommes déjà retenues. n1 n’est plus libre.
+# `sum` et `star_sum` sont les médianes de l’étage 1, pas le tirage caché.
 CHAIN: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("n1", ()),
-    ("g1", ("n1",)),
-    ("g2", ("n1", "g1")),
-    ("g3", ("n1", "g1", "g2")),
-    ("g4", ("n1", "g1", "g2", "g3")),
-    ("e1", ()),
-    ("e_gap", ("e1",)),
+    ("n1", ("sum",)),
+    ("g1", ("sum", "n1")),
+    ("g2", ("sum", "n1", "g1")),
+    ("g3", ("sum", "n1", "g1", "g2")),
+    ("g4", ("sum", "n1", "g1", "g2", "g3")),
+    ("e1", ("star_sum",)),
+    ("e_gap", ("star_sum", "e1")),
 )
 
 # Étendue et consécutifs : mêmes comptes que la page Évolution.
