@@ -69,7 +69,7 @@ export const RUN_ARCADE_HELP: Record<string, RunArcadeHelpCopy> = {
   },
   melanger: {
     title: "Mélanger",
-    body: "Choisi avant Lancer, il reste figé pendant l’avant-course et la course. Éteint, une seule version pose la grille : celle au solde le plus haut, comme aujourd’hui. Allumé, chaque version encore en vie calcule sa pointe, et les pointes se moyennent. Le poids est l’écart déjà compté entre son solde et le hasard, sur les tirages révélés depuis sa naissance. Le tirage caché n’entre pas. Un écart nul ou négatif ne tire pas : la pointe est dessinée, elle ne pèse pas. Si tous les poids sont nuls, la plus récente joue seule. Les sommes ramènent les cases une fois. Un seul ticket. Le trait fort suit ce choix : la gagnante seule, ou la moyenne.",
+    body: "Choisi avant Lancer, il reste figé pendant l’avant-course et la course. Éteint, une seule version pose la grille : celle au solde le plus haut, comme aujourd’hui. Allumé, chaque version encore en vie calcule sa pointe, et les pointes se moyennent. Le poids est l’écart déjà compté entre son solde et le hasard, sur les tirages révélés depuis sa naissance. Le tirage caché n’entre pas. Un écart nul ou négatif ne tire pas : la pointe est dessinée, elle ne pèse pas. Si tous les poids sont nuls, la plus récente joue seule. La moyenne porte sur les deux sommes, la forme vient d’une version, et la projection pose la grille. Les sommes ramènent les cases une fois. Un seul ticket. Le trait fort suit ce choix : la gagnante seule, ou la moyenne.",
   },
   rayons: {
     title: "Rayons X",

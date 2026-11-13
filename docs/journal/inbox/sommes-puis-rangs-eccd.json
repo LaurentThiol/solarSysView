@@ -1,0 +1,9 @@
+{
+  "slug": "sommes-puis-rangs-eccd",
+  "happened_on": "2026-11-13",
+  "area": "runArcade",
+  "title": "Mélanger : sommes d’abord, puis la forme",
+  "body": "Mélanger, quand il est allumé, moyenne la somme des numéros et la somme des étoiles. La forme des rangs et des décennies vient d’une seule version : la plus lourde sur la courbe affichée, ou la plus récente si aucun poids n’est positif. La projection pose ensuite une seule grille. La flèche du dessin reste la pointe de la courbe, avant ce rappel. L’aide de Mélanger le dit, et la phrase « elles passent en premier » sur Σn et Σ★ reste.",
+  "pr_number": null,
+  "pr_url": null
+}

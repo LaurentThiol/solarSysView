@@ -7,6 +7,7 @@ import {
   NUMBER_KEYS,
   RANK_KEYS,
   STAR_KEYS,
+  SUM_KEYS,
   curveLabel,
   curveMeta,
   curveValues,
@@ -165,9 +166,9 @@ export type ThinkOptions = {
   /** X des gestes. Absent : les versions ne meurent pas. */
   life?: GestureLife | null
   /**
-   * Allumé : chaque version encore en vie pose sa pointe.
-   * Le poids est l’écart au hasard depuis la naissance. Éteint : la plus haute pose la grille.
-   * Ignoré en passe simple, pour que l’examen ne se mélange pas.
+   * Allumé : les deux sommes se moyennent. Le poids est l’écart au hasard depuis la naissance.
+   * La forme des rangs et des décennies vient d’une seule version.
+   * Éteint : la plus haute pose la grille. Ignoré en passe simple, pour que l’examen ne se mélange pas.
    */
   blend?: boolean
 }
@@ -467,9 +468,31 @@ function laterBlend(a: BlendTip, b: BlendTip) {
   return a.order > b.order
 }
 
+type WeightedTip = BlendTip & { skillId: string; params: SkillParams }
+
+/** À poids égal, la plus récente. */
+function heaviestTip(rows: readonly WeightedTip[]) {
+  let best: WeightedTip | null = null
+  for (const row of rows) {
+    if (!(row.weight > 0) || !Number.isFinite(row.tip)) continue
+    if (!best || row.weight > best.weight || (row.weight === best.weight && laterBlend(row, best))) best = row
+  }
+  return best
+}
+
+function mostRecentTip(rows: readonly WeightedTip[]) {
+  let best: WeightedTip | null = null
+  for (const row of rows) {
+    if (!Number.isFinite(row.tip)) continue
+    if (!best || laterBlend(row, best)) best = row
+  }
+  return best
+}
+
 /**
- * Pensée : moyenne des pointes, pondérée par l’écart au hasard depuis la naissance.
+ * Moyenne des pointes, pondérée par l’écart au hasard depuis la naissance.
  * Un écart nul ou négatif ne pèse pas. Si tous les poids sont nuls, la plus récente joue seule.
+ * Le ticket ne s’en sert que pour Σn et Σ★.
  */
 export function blendTips(rows: readonly BlendTip[]): number {
   let mass = 0
@@ -649,8 +672,11 @@ function contest(
 type MixSole = { skillId: string; version: number; params: SkillParams }
 
 type CurveMix = {
-  tips: CurveValues
-  /** Version qui joue seule sur la courbe affichée. Vide : la pensée est une moyenne. */
+  /** Étage 1 : Σn et Σ★, déjà moyennées, ou posées par la plus récente. */
+  sums: { sumNumbers: number; sumStars: number }
+  /** Étage 2 : une seule version pose la forme des rangs et des décennies. */
+  form: SkillParams
+  /** Version qui joue seule sur la courbe affichée. Vide : la pensée affichée est une moyenne. */
   sole: MixSole | null
   averaged: boolean
 }
@@ -660,7 +686,7 @@ function maskPlays(mask: CurveMask, sole: MixSole | null) {
   return mask.id === sole.skillId || mask.id === `${sole.skillId}-v${sole.version}`
 }
 
-/** Pointes encore en vie, une moyenne par courbe. Le poids est l’écart déjà compté depuis la naissance. */
+/** Sommes moyennées, forme d’une version. Le poids est l’écart déjà compté depuis la naissance. */
 function blendedTips(
   mind: RunnerMind,
   past: readonly RankPoint[],
@@ -675,37 +701,57 @@ function blendedTips(
     const gap = gapSinceBirth(item.version, past)
     weightOf.set(item.order, gap > 0 ? gap : 0)
   }
-  const tips = {} as CurveValues
-  let focusRows: (BlendTip & MixSole)[] = []
-  for (const key of CURVE_KEYS) {
-    const ranked: (BlendTip & MixSole)[] = []
-    for (const item of living) {
-      if (item.version.curve !== key && item.version.curve !== "*") continue
-      ranked.push({
-        tip: tipFor(item.version, past, curveRows, key, hiddenDate),
-        weight: weightOf.get(item.order) ?? 0,
-        cutoff: item.version.cutoff,
-        version: item.version.version,
-        order: item.order,
-        skillId: item.skill.id,
-        params: item.version,
-      })
+  const base = baseParams(mind)
+
+  function rowOf(item: Contender, key: CurveKey): WeightedTip {
+    return {
+      tip: tipFor(item.version, past, curveRows, key, hiddenDate),
+      weight: weightOf.get(item.order) ?? 0,
+      cutoff: item.version.cutoff,
+      version: item.version.version,
+      order: item.order,
+      skillId: item.skill.id,
+      params: item.version,
     }
-    tips[key] =
-      ranked.length > 0
-        ? blendTips(ranked)
-        : tipFor(baseParams(mind), past, curveRows, key, hiddenDate)
-    if (key === focus) focusRows = ranked
+  }
+
+  function sumTip(key: "sumNumbers" | "sumStars") {
+    const ranked = living
+      .filter((item) => item.version.curve === key || item.version.curve === "*")
+      .map((item) => rowOf(item, key))
+    if (ranked.length === 0) return tipFor(base, past, curveRows, key, hiddenDate)
+    return blendTips(ranked)
+  }
+
+  const applies = (item: Contender) => item.version.curve === focus || item.version.curve === "*"
+  const focusRows = living.filter(applies).map((item) => rowOf(item, focus))
+  const anyPositive = living.some((item) => (weightOf.get(item.order) ?? 0) > 0)
+  const recent = mostRecentTip(living.map((item) => rowOf(item, focus)))
+
+  if (!anyPositive) {
+    const params = recent?.params ?? base
+    return {
+      sums: {
+        sumNumbers: tipFor(params, past, curveRows, "sumNumbers", hiddenDate),
+        sumStars: tipFor(params, past, curveRows, "sumStars", hiddenDate),
+      },
+      form: params,
+      sole: recent,
+      averaged: false,
+    }
+  }
+
+  const sums = { sumNumbers: sumTip("sumNumbers"), sumStars: sumTip("sumStars") }
+  const form = (heaviestTip(focusRows) ?? mostRecentTip(focusRows))?.params ?? base
+  const sumFocus = focus === "sumNumbers" || focus === "sumStars"
+  if (!sumFocus) {
+    const shape = heaviestTip(focusRows) ?? mostRecentTip(focusRows)
+    return { sums, form, sole: shape, averaged: false }
   }
   const pulling = focusRows.filter((row) => row.weight > 0 && Number.isFinite(row.tip))
-  if (pulling.length === 1) return { tips, sole: pulling[0], averaged: false }
-  if (pulling.length > 1) return { tips, sole: null, averaged: true }
-  let best: (BlendTip & MixSole) | null = null
-  for (const row of focusRows) {
-    if (!Number.isFinite(row.tip)) continue
-    if (!best || laterBlend(row, best)) best = row
-  }
-  return { tips, sole: best, averaged: false }
+  if (pulling.length === 1) return { sums, form, sole: pulling[0], averaged: false }
+  if (pulling.length > 1) return { sums, form, sole: null, averaged: true }
+  return { sums, form, sole: mostRecentTip(focusRows), averaged: false }
 }
 
 const FLAT_STEP = 0.05
@@ -840,6 +886,45 @@ function guessOf(numbers: readonly number[], stars: readonly number[]): Guess {
   }
 }
 
+/** Rangs et décennies : la forme, après les deux sommes. */
+const FORM_KEYS: readonly CurveKey[] = [...RANK_KEYS, ...DECADE_KEYS]
+
+/**
+ * Compose le ticket en deux étages, puis rappelle la grille.
+ * Étage 1 : pointes de Σn et Σ★. Une skill * s’y applique, une dédiée passe devant.
+ * Étage 2 : pointes de n1…n5, e1, e2 et d0…d4. Elles ne réécrivent pas les sommes.
+ * Mélanger remplace l’étage 1 par la moyenne, et l’étage 2 par une seule version.
+ */
+function composeTicket(
+  mind: RunnerMind,
+  past: readonly RankPoint[],
+  rows: readonly CurveValues[],
+  hiddenDate: string | null,
+  picked: { paramsOf: (key: CurveKey) => SkillParams } | null,
+  mix: CurveMix | null
+) {
+  function paramsOn(key: CurveKey) {
+    return picked ? picked.paramsOf(key) : paramsFor(mind, key, hiddenDate)
+  }
+  function stageTip(params: SkillParams, key: CurveKey) {
+    return tipFor(params, past, rows, key, hiddenDate)
+  }
+  const tips = {} as CurveValues
+  if (mix) {
+    tips.sumNumbers = mix.sums.sumNumbers
+    tips.sumStars = mix.sums.sumStars
+  } else {
+    for (const key of SUM_KEYS) tips[key] = stageTip(paramsOn(key), key)
+  }
+  for (const key of FORM_KEYS) tips[key] = stageTip(mix ? mix.form : paramsOn(key), key)
+  const reconciled = reconcile(tips)
+  return {
+    tips,
+    guess: guessOf(reconciled.numbers, reconciled.stars),
+    cases: reconciled.cases,
+  }
+}
+
 export function think(mind: RunnerMind, past: readonly RankPoint[], options: ThinkOptions = {}): Thought {
   if (past.length === 0) throw new Error("think : passé vide")
   const hiddenDate = options.hiddenDate ?? null
@@ -855,16 +940,10 @@ export function think(mind: RunnerMind, past: readonly RankPoint[], options: Thi
     options.blend === true && !options.plain
       ? blendedTips(mind, past, rows, hiddenDate, options.life ?? null, focus)
       : null
-  const tips = {} as CurveValues
-  if (mix) {
-    for (const key of CURVE_KEYS) tips[key] = mix.tips[key]
-  } else {
-    for (const key of CURVE_KEYS) {
-      tips[key] = tipFor(picked ? picked.paramsOf(key) : paramsFor(mind, key, hiddenDate), past, rows, key, hiddenDate)
-    }
-  }
-  const reconciled = reconcile(tips)
-  const guess = guessOf(reconciled.numbers, reconciled.stars)
+  const ticket = composeTicket(mind, past, rows, hiddenDate, picked, mix)
+  const tips = ticket.tips
+  const guess = ticket.guess
+  const reconciled = { cases: ticket.cases }
 
   const params = mix?.sole ? mix.sole.params : picked ? picked.paramsOf(focus) : paramsFor(mind, focus, hiddenDate)
   const trail = rows.map((row, index) => ({ x: index, y: row[focus] }))
@@ -1107,7 +1186,7 @@ export type Race = {
   done: boolean
   /** X des gestes pour cette course. Absent : les versions ne meurent pas. */
   life?: GestureLife | null
-  /** Allumé au lancement : les pointes encore en vie se moyennent. */
+  /** Allumé au lancement : les deux sommes se moyennent, la forme vient d’une version. */
   blend: boolean
 }
 
