@@ -17,6 +17,7 @@ import {
 } from "./format";
 import { defaultView, type ViewSettings } from "./view";
 import type { ClockMode } from "./clock";
+import { mountNodeRedStudio } from "./nodered";
 
 export type EventPresetId =
   | "iss-live"
@@ -66,6 +67,8 @@ export function mountUi(handlers: Handlers): {
   setEditor: (enabled: boolean) => void;
   setShutdown: (enabled: boolean) => void;
   isQuitDialogOpen: () => boolean;
+  isNodeRedOpen: () => boolean;
+  closeNodeRed: () => void;
   view: () => ViewSettings;
   selectedId: () => string | null;
   selectBody: (id: string | null) => void;
@@ -78,6 +81,7 @@ export function mountUi(handlers: Handlers): {
   let selectedId: string | null = null;
   let renderedSelection: string | null | undefined;
   let currentRate = 1;
+  const nodeRed = mountNodeRedStudio();
 
   const list = need<HTMLOListElement>("#body-list");
   const empty = need<HTMLElement>("#fiche-empty");
@@ -538,6 +542,8 @@ export function mountUi(handlers: Handlers): {
     setCockpit,
     enableCrafts,
     isQuitDialogOpen: () => quitDialog.open,
+    isNodeRedOpen: () => nodeRed.isOpen(),
+    closeNodeRed: () => nodeRed.close(),
     clearSelection() {
       if (!selectedId && !view.follow && !view.cockpit) return;
       selectedId = null;
@@ -547,6 +553,7 @@ export function mountUi(handlers: Handlers): {
     },
     setEditor(enabled: boolean) {
       editorLink.hidden = !enabled;
+      nodeRed.setEditorAvailable(enabled);
     },
     setShutdown(enabled: boolean) {
       quitButton.hidden = !enabled;
@@ -590,6 +597,12 @@ export function mountUi(handlers: Handlers): {
         issListMeta.textContent = liveNow ? "EN DIRECT" : formatKm(415);
         issListMeta.classList.toggle("is-live", liveNow);
       }
+      nodeRed.syncStatus({
+        mode: snapshot.mode,
+        jdLabel: jdLabel.textContent ?? "",
+        rateLabel: rateLabel.textContent ?? "",
+        liveIss: issPoint?.source === "live",
+      });
 
       if (document.activeElement !== dateInput) dateInput.value = parisInputValue(snapshot.jd);
       if (snapshot.selectedId !== selectedId) selectedId = snapshot.selectedId;

@@ -170,6 +170,37 @@ h1 {
 .pill.is-live { color: var(--ok); }
 .pill.is-local { color: var(--warn); }
 
+.nodered-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  border: 1px solid rgba(212, 180, 131, 0.42);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--brass-strong);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  backdrop-filter: blur(16px);
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.nodered-btn:hover {
+  background: rgba(212, 180, 131, 0.18);
+  border-color: var(--brass-strong);
+}
+
+.nodered-btn[aria-pressed="true"] {
+  background: var(--brass);
+  border-color: var(--brass);
+  color: var(--ink-deep);
+}
+
+.nodered-icon {
+  flex: 0 0 auto;
+}
+
 .quit-btn {
   padding: 8px 13px;
   border: 1px solid rgba(224, 132, 114, 0.38);
@@ -687,10 +718,283 @@ kbd {
   justify-content: flex-start;
 }
 
+.nr-studio {
+  position: fixed;
+  top: 86px;
+  right: 16px;
+  bottom: 108px;
+  width: min(60vw, calc(100vw - 360px));
+  min-width: 480px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(212, 180, 131, 0.28);
+  border-radius: 20px;
+  background: rgba(11, 12, 17, 0.92);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(22px);
+  overflow: hidden;
+}
+
+.nr-studio.is-wide {
+  left: 16px;
+  right: 16px;
+  top: 82px;
+  bottom: 16px;
+  width: auto;
+  min-width: 0;
+}
+
+.nr-studio[hidden] { display: none; }
+
+body.has-nr-split #view { display: none; }
+
+.nr-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(16, 17, 24, 0.88);
+}
+
+.nr-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.nr-brand h2 {
+  margin: 1px 0 0;
+  font-family: "Fraunces", "Iowan Old Style", serif;
+  font-weight: 500;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+
+.nr-status {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.nr-status.is-live { color: var(--ok); }
+
+.nr-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(8, 9, 13, 0.65);
+}
+
+.nr-tabs button {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.nr-tabs button:hover { color: var(--ink); }
+
+.nr-tabs button[aria-selected="true"] {
+  background: var(--brass);
+  color: var(--ink-deep);
+  font-weight: 500;
+}
+
+.nr-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nr-actions button,
+.nr-ext,
+.nr-jump-btn {
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(235, 228, 214, 0.05);
+  color: var(--ink);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.nr-actions button:hover,
+.nr-ext:hover,
+.nr-jump-btn:hover {
+  background: rgba(235, 228, 214, 0.12);
+  border-color: rgba(212, 180, 131, 0.5);
+}
+
+.nr-actions button[aria-pressed="true"] {
+  border-color: var(--brass);
+  color: var(--brass-strong);
+}
+
+.nr-ext[hidden],
+.nr-jump-btn[hidden] { display: none; }
+
+.nr-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.nr-pane[hidden] { display: none; }
+
+.nr-pane-editor {
+  display: flex;
+  flex-direction: column;
+}
+
+#nr-iframe {
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  border: 0;
+  background: #ffffff;
+}
+
+#nr-iframe[hidden] { display: none; }
+
+.nr-disabled-note {
+  margin: auto;
+  max-width: 460px;
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.nr-disabled-note[hidden] { display: none; }
+
+.nr-pane-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  overflow: auto;
+}
+
+.nr-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.nr-canvas-wrap {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background-color: #0d0f16;
+  background-image: radial-gradient(rgba(235, 228, 214, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+  padding: 8px;
+  overflow: auto;
+}
+
+#nr-svg {
+  display: block;
+  width: 100%;
+  min-width: 680px;
+  height: auto;
+  max-height: 44vh;
+}
+
+.nr-node {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.nr-node:hover rect:first-of-type {
+  stroke: #f0d7a8;
+  stroke-width: 2px;
+}
+
+.nr-wire-pulse {
+  animation: nrPulse 1.4s linear infinite;
+}
+
+@keyframes nrPulse {
+  from { stroke-dashoffset: 31; }
+  to { stroke-dashoffset: 0; }
+}
+
+.nr-inspector {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(16, 18, 26, 0.84);
+}
+
+.nr-inspector-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.nr-inspector-titles {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nr-badge {
+  padding: 2px 9px;
+  border: 1px solid var(--brass);
+  border-radius: 999px;
+  color: var(--brass-strong);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.nr-inspector h3 {
+  margin: 0;
+  font-family: "Fraunces", "Iowan Old Style", serif;
+  font-weight: 500;
+  font-size: 18px;
+}
+
+.nr-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.nr-code-wrap {
+  margin-top: 2px;
+  border: 1px solid rgba(235, 228, 214, 0.1);
+  border-radius: 10px;
+  background: #08090d;
+  overflow: auto;
+  max-height: 190px;
+}
+
+.nr-code-wrap[hidden] { display: none; }
+
+.nr-code-wrap pre {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #e9dfd0;
+}
+
 body.is-shutdown header,
 body.is-shutdown #rail,
 body.is-shutdown #transport,
 body.is-shutdown #view,
+body.is-shutdown #nodered-studio,
 body.is-shutdown #scene,
 body.is-shutdown #labels {
   display: none;
@@ -708,8 +1012,19 @@ body.is-shutdown #labels {
   .brand { grid-area: brand; }
   .when { grid-area: when; text-align: left; }
   .header-actions { grid-area: pill; justify-self: end; }
+  .header-actions .pill { display: none; }
   h1 { font-size: 24px; }
   #date-label { font-size: 16px; }
+
+  .nr-studio {
+    left: 10px;
+    right: 10px;
+    top: 66px;
+    bottom: 10px;
+    width: auto;
+    min-width: 0;
+  }
+  #nr-size-toggle { display: none; }
 
   #rail {
     top: auto;

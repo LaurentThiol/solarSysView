@@ -27,6 +27,28 @@
         <p id="clock-pill" class="pill">Connexion à Node-RED…</p>
         <button
           type="button"
+          id="nodered-toggle"
+          class="nodered-btn"
+          aria-pressed="false"
+          aria-controls="nodered-studio"
+          title="Ouvrir l’atelier visuel de programmation Node-RED"
+        >
+          <svg class="nodered-icon" viewBox="0 0 18 14" width="15" height="12" aria-hidden="true">
+            <path
+              d="M4.2 3.5 C8.5 3.5, 8.5 7, 13.8 7 M4.2 10.5 C8.5 10.5, 8.5 7, 13.8 7"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+            <circle cx="3.2" cy="3.5" r="2.1" fill="currentColor" />
+            <circle cx="3.2" cy="10.5" r="2.1" fill="currentColor" />
+            <circle cx="14.6" cy="7" r="2.3" fill="currentColor" />
+          </svg>
+          <span>Node-RED</span>
+        </button>
+        <button
+          type="button"
           id="quit-app"
           class="quit-btn"
           hidden
@@ -58,7 +80,7 @@
       </article>
       <p id="footnote" class="footnote">
         Éphémérides JPL (−3000 à 3000), comète de Halley, JWST (L2), cabriolet Tesla et ISS hybride (temps réel Node-RED / théorique).
-        <a id="editor-link" href="/red" hidden>Éditeur des flux</a>
+        <a id="editor-link" href="/red/" hidden>Éditeur des flux</a>
       </p>
     </aside>
 
@@ -137,6 +159,96 @@
         </div>
       </div>
     </details>
+
+    <aside id="nodered-studio" class="nr-studio" hidden aria-label="Atelier de programmation Node-RED">
+      <div class="nr-bar">
+        <div class="nr-brand">
+          <span class="kicker">Programmation visuelle</span>
+          <div class="nr-title-row">
+            <h2>Atelier Node-RED</h2>
+            <span id="nr-live-status" class="nr-status">Connexion…</span>
+          </div>
+        </div>
+        <div class="nr-tabs" role="tablist" aria-label="Mode d’affichage Node-RED">
+          <button type="button" id="nr-tab-editor" role="tab" aria-selected="true">
+            Éditeur visuel (/red)
+          </button>
+          <button type="button" id="nr-tab-diagram" role="tab" aria-selected="false">
+            Schéma &amp; code
+          </button>
+        </div>
+        <div class="nr-actions">
+          <button
+            type="button"
+            id="nr-size-toggle"
+            aria-pressed="false"
+            title="Basculer entre la vue côte à côte avec la scène 3D et le plein cadre"
+          >
+            Plein cadre
+          </button>
+          <button type="button" id="nr-reload" title="Recharger les flux Node-RED">↻</button>
+          <a
+            id="nr-ext-link"
+            class="nr-ext"
+            href="/red/"
+            target="_blank"
+            rel="noopener"
+            hidden
+            title="Ouvrir l’éditeur Node-RED complet dans un nouvel onglet"
+          >
+            Nouvel onglet ↗
+          </a>
+          <button
+            type="button"
+            id="nr-close"
+            class="nr-close"
+            aria-label="Fermer l’atelier Node-RED"
+            title="Fermer (Échap)"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <div id="nr-pane-editor" class="nr-pane nr-pane-editor">
+        <div id="nr-editor-disabled" class="nr-disabled-note" hidden>
+          <p>
+            L’éditeur d’administration <code>/red</code> est verrouillé sur cet hébergement distant pour éviter toute exécution de code non autorisée.
+          </p>
+          <p>
+            Ouvrez l’onglet <strong>Schéma &amp; code</strong> ci-dessus pour inspecter visuellement les 17 nœuds du flux et lire leur code JavaScript.
+          </p>
+        </div>
+        <iframe id="nr-iframe" title="Éditeur visuel Node-RED"></iframe>
+      </div>
+
+      <div id="nr-pane-diagram" class="nr-pane nr-pane-diagram" hidden>
+        <p id="nr-tab-summary" class="nr-summary"></p>
+        <div class="nr-canvas-wrap">
+          <svg
+            id="nr-svg"
+            viewBox="0 0 940 640"
+            role="img"
+            aria-label="Graphe interactif des nœuds et liaisons Node-RED"
+          ></svg>
+        </div>
+        <div id="nr-inspector" class="nr-inspector">
+          <div class="nr-inspector-head">
+            <div class="nr-inspector-titles">
+              <span id="nr-node-badge" class="nr-badge">function</span>
+              <h3 id="nr-node-title">Éphémérides</h3>
+            </div>
+            <button type="button" id="nr-open-in-red" class="nr-jump-btn" hidden>
+              Éditer dans /red
+            </button>
+          </div>
+          <p id="nr-node-meta" class="nr-meta"></p>
+          <div id="nr-code-wrap" class="nr-code-wrap">
+            <pre><code id="nr-node-code"></code></pre>
+          </div>
+        </div>
+      </div>
+    </aside>
 
     <dialog id="quit-dialog" class="quit-dialog" aria-labelledby="quit-title">
       <div class="quit-card">

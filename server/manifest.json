@@ -19,6 +19,7 @@
     "web/src/format.ts",
     "web/src/textures.ts",
     "web/src/view.ts",
+    "web/src/nodered.ts",
     "web/src/style.css"
   ],
   "requiredPackages": [
