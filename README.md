@@ -73,9 +73,10 @@ Les photographies viennent de [Solar System Scope](https://www.solarsystemscope.
 
 ## Raccourcis et sortie
 
+- **Bouton « Node-RED »** (en haut à droite, avec icône de flux) : ouvre l’**Atelier Node-RED** directement par-dessus ou **côte à côte** avec la scène 3D — avec l’éditeur visuel Node-RED complet (`/red`, déploiement en direct vers le système solaire), un onglet **Schéma & code** (graphe SVG interactif des 17 nœuds et inspecteur JavaScript) et un bouton **Nouvel onglet ↗**.
 - **Bouton « Quitter »** (en haut à droite) : ferme proprement le WebSocket et la scène WebGL, puis arrête les flux Node-RED (`RED.stop()`) et le serveur local (`POST /api/shutdown`). Désactivé automatiquement sur un hébergement distant.
 - **Espace** : pause ou lecture
-- **Échap** : quitte le mode **À bord** (ou relâche l’astre suivi)
+- **Échap** : ferme l’Atelier Node-RED, quitte le mode **À bord** ou relâche l’astre suivi
 - **Clic** dans la scène : sélectionne un corps, une comète ou un engin
 - **Glisser en mode À bord** : tourne le regard à 360° autour du hublot ou de l’horizon
 - **Double-clic** dans la scène : cadre et suit l’objet visé

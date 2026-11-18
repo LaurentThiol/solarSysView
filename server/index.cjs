@@ -49,7 +49,7 @@ const settings = {
     projects: { enabled: false },
     tours: false,
     page: { title: "Système solaire — Node-RED" },
-    header: { title: "Système solaire" },
+    header: { title: "Système solaire · Retour à l'Observatoire", url: "/" },
   },
 };
 
@@ -106,6 +106,50 @@ app.post("/api/shutdown", (req, res) => {
   res.once("finish", () => {
     setTimeout(() => void gracefulShutdown("interface"), 60);
   });
+});
+
+app.get("/api/flow-map", (_req, res) => {
+  try {
+    const raw = JSON.parse(fs.readFileSync(settings.flowFile, "utf8"));
+    const list = Array.isArray(raw) ? raw : [];
+    const tab = list.find((item) => item && item.type === "tab") || null;
+    const nodes = list
+      .filter(
+        (item) =>
+          item &&
+          item.type !== "tab" &&
+          item.type !== "websocket-listener" &&
+          !String(item.type).includes("config"),
+      )
+      .map((item) => ({
+        id: String(item.id || ""),
+        type: String(item.type || ""),
+        name: String(item.name || item.label || item.type || ""),
+        x: Number(item.x) || 0,
+        y: Number(item.y) || 0,
+        wires: Array.isArray(item.wires) ? item.wires : [],
+        url: typeof item.url === "string" && item.url ? item.url : undefined,
+        method: typeof item.method === "string" && item.method ? item.method.toUpperCase() : undefined,
+        repeat: item.repeat ? String(item.repeat) : undefined,
+        func: typeof item.func === "string" && item.func.trim() ? item.func : undefined,
+        info: typeof item.info === "string" && item.info.trim() ? item.info : undefined,
+      }));
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({
+      ok: true,
+      editor: enableEditor,
+      tab: tab
+        ? {
+            id: String(tab.id),
+            label: String(tab.label || "Système solaire"),
+            info: String(tab.info || ""),
+          }
+        : { id: "tab-solar", label: "Système solaire", info: "" },
+      nodes,
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
 });
 
 app.use("/api", RED.httpNode);

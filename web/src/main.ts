@@ -165,6 +165,10 @@ const ui = mountUi({
 window.addEventListener("keydown", (event) => {
   if (appStopped || ui.isQuitDialogOpen()) return;
   if (event.code === "Escape") {
+    if (ui.isNodeRedOpen()) {
+      ui.closeNodeRed();
+      return;
+    }
     if (ui.view().cockpit) {
       ui.setCockpit(false);
       return;
