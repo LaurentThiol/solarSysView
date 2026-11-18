@@ -121,6 +121,16 @@ export function formatEccentricity(value: number): string {
   return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 4 }).format(value);
 }
 
+export function formatGeoCoord(latDeg: number, lonDeg: number): string {
+  const fmt = new Intl.NumberFormat("fr-FR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  const ns = latDeg >= 0 ? "N" : "S";
+  const eo = lonDeg >= 0 ? "E" : "O";
+  return `${fmt.format(Math.abs(latDeg))}° ${ns}, ${fmt.format(Math.abs(lonDeg))}° ${eo}`;
+}
+
 export function parisInputValue(jd: number): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: PARIS,

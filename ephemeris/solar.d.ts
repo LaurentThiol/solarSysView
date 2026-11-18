@@ -4,8 +4,9 @@ export interface Vec3 {
   z: number;
 }
 
-export type BodyKind = "star" | "planet" | "moon" | "craft";
+export type BodyKind = "star" | "planet" | "moon" | "comet" | "craft";
 export type OrbitFrame = "ecliptic" | "equatorial";
+export type OrbitMode = "kepler" | "l2Halo";
 
 export interface BodyInfo {
   id: string;
@@ -13,6 +14,7 @@ export interface BodyInfo {
   kind: BodyKind;
   parent: string | null;
   frame: OrbitFrame;
+  orbitMode: OrbitMode;
   radiusKm: number;
   spanMeters: number | null;
   altitudeKm: number | null;
@@ -37,12 +39,30 @@ export interface Catalog {
   bodies: BodyInfo[];
 }
 
+export interface IssTelemetry {
+  latDeg: number;
+  lonDeg: number;
+  altitudeKm: number;
+  velocityKmS: number;
+  jd: number;
+  dLatPerDay?: number;
+  dLonPerDay?: number;
+}
+
+export interface EphemerisOptions {
+  issTelemetry?: IssTelemetry | null;
+}
+
 export interface BodyPosition extends Vec3 {
   id: string;
   spin: number;
   rAu: number;
   speedKmS: number;
   active: boolean;
+  source?: "live" | "theoretical";
+  liveLatDeg?: number;
+  liveLonDeg?: number;
+  liveAltitudeKm?: number;
 }
 
 export interface SimState {
@@ -59,6 +79,7 @@ export interface Tick {
   rateDaysPerSec: number;
   serverTimeMs: number;
   bodies: BodyPosition[];
+  issLive?: IssTelemetry;
 }
 
 export interface ReduceResult {
@@ -84,10 +105,10 @@ declare const solar: {
   MIN_RATE: number;
   MAX_RATE: number;
   catalog(): Catalog;
-  positions(jd: number): BodyPosition[];
+  positions(jd: number, options?: EphemerisOptions): BodyPosition[];
   sampleOrbit(id: string, count: number, jd?: number): Vec3[];
   initialState(nowMs: number): SimState;
-  reduce(state: SimState, command: unknown, nowMs: number): ReduceResult;
+  reduce(state: SimState, command: unknown, nowMs: number, options?: EphemerisOptions): ReduceResult;
   parseCommand(payload: unknown): SolarCommand | null;
   unixToJd(ms: number): number;
   jdToUnix(jd: number): number;
@@ -95,6 +116,8 @@ declare const solar: {
   solveKepler(meanAnomaly: number, eccentricity: number): number;
   equatorialToEcliptic(vec: Vec3, obliquityDeg?: number): Vec3;
   eclipticToEquatorial(vec: Vec3, obliquityDeg?: number): Vec3;
+  geographicToEcliptic(latDeg: number, lonDeg: number, altitudeKm: number, jd: number): Vec3;
+  isLiveIssActive(jd: number, telemetry?: IssTelemetry | null): boolean;
 };
 
 export default solar;

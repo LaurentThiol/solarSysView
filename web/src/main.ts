@@ -6,7 +6,7 @@ import "./style.css";
 import solar from "../../ephemeris/solar.js";
 import { ObservatoryClock } from "./clock";
 import { createScene } from "./scene";
-import { mountUi } from "./ui";
+import { mountUi, type EventPresetId } from "./ui";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#scene");
 const labels = document.querySelector<HTMLElement>("#labels");
@@ -19,13 +19,13 @@ if (!canvas || !labels || !glError) {
 const scene = createScene(canvas, labels);
 if (!scene) glError.hidden = false;
 
-const clock = new ObservatoryClock(() => undefined);
+const clock = new ObservatoryClock(() => queue());
 let follow = false;
 let frameQueued = false;
 let pendingFrameId: string | null = null;
 
 function requestFrameBody(id: string): void {
-  if (id === "iss" || id === "roadster") {
+  if (id === "iss" || id === "roadster" || id === "jwst") {
     ui.enableCrafts();
   }
   if (id === "iss" && Math.abs(clock.rate()) > 0.1) {
@@ -36,6 +36,63 @@ function requestFrameBody(id: string): void {
   queue();
 }
 
+function runEventPreset(preset: EventPresetId): void {
+  if (preset === "iss-live") {
+    ui.enableCrafts();
+    ui.setCockpit(false);
+    clock.command({ type: "setDate", jd: solar.unixToJd(Date.now()) });
+    clock.command({ type: "setRate", rateDaysPerSec: 1 / 86400 });
+    if (!clock.playing()) clock.command({ type: "play" });
+    ui.focusBody("iss");
+    return;
+  }
+  if (preset === "starman-launch") {
+    ui.enableCrafts();
+    ui.setCockpit(false);
+    clock.command({ type: "setDate", jd: solar.unixToJd(Date.UTC(2018, 1, 7, 2, 45, 0)) });
+    clock.command({ type: "setRate", rateDaysPerSec: 1 / 24 });
+    if (!clock.playing()) clock.command({ type: "play" });
+    ui.focusBody("roadster");
+    return;
+  }
+  if (preset === "starman-mars") {
+    ui.enableCrafts();
+    ui.setCockpit(false);
+    clock.command({ type: "setDate", jd: solar.unixToJd(Date.UTC(2020, 9, 7, 6, 25, 0)) });
+    clock.command({ type: "setRate", rateDaysPerSec: 1 });
+    if (!clock.playing()) clock.command({ type: "play" });
+    ui.focusBody("roadster");
+    return;
+  }
+  if (preset === "jwst-l2") {
+    ui.enableCrafts();
+    ui.setCockpit(false);
+    clock.command({ type: "setDate", jd: solar.unixToJd(Date.UTC(2022, 0, 24, 19, 0, 0)) });
+    clock.command({ type: "setRate", rateDaysPerSec: 1 });
+    if (!clock.playing()) clock.command({ type: "play" });
+    ui.focusBody("jwst");
+    return;
+  }
+  if (preset === "halley-1986") {
+    ui.setCockpit(false);
+    clock.command({ type: "setDate", jd: solar.unixToJd(Date.UTC(1986, 1, 9, 11, 0, 0)) });
+    clock.command({ type: "setRate", rateDaysPerSec: 1 });
+    if (!clock.playing()) clock.command({ type: "play" });
+    ui.focusBody("halley");
+    return;
+  }
+  if (preset === "voyager-1977") {
+    ui.setCockpit(false);
+    follow = false;
+    pendingFrameId = null;
+    ui.clearSelection();
+    clock.command({ type: "setDate", jd: solar.unixToJd(Date.UTC(1977, 7, 20, 14, 29, 0)) });
+    clock.command({ type: "setRate", rateDaysPerSec: 30 });
+    if (!clock.playing()) clock.command({ type: "play" });
+    scene?.showFull();
+  }
+}
+
 const ui = mountUi({
   onToggle: () => clock.command({ type: "toggle" }),
   onRate: (rateDaysPerSec) => clock.command({ type: "setRate", rateDaysPerSec }),
@@ -44,11 +101,19 @@ const ui = mountUi({
     clock.command({ type: "setDate", jd: solar.unixToJd(Date.now()) });
     if (!clock.playing()) clock.command({ type: "play" });
   },
+  onEvent: (preset) => runEventPreset(preset),
   onSelect: (id) => {
     if (!id) follow = false;
   },
   onFrame: (id) => {
     requestFrameBody(id);
+  },
+  onCockpit: (cockpit) => {
+    if (cockpit) {
+      pendingFrameId = null;
+      scene?.resetCockpitLook();
+    }
+    queue();
   },
   onInner: () => {
     follow = false;
@@ -67,43 +132,90 @@ const ui = mountUi({
 
 window.addEventListener("keydown", (event) => {
   if (event.code === "Escape") {
+    if (ui.view().cockpit) {
+      ui.setCockpit(false);
+      return;
+    }
     follow = false;
     pendingFrameId = null;
     ui.clearSelection();
     return;
   }
   if (event.code !== "Space") return;
-  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+  if (
+    event.target instanceof HTMLInputElement ||
+    event.target instanceof HTMLTextAreaElement ||
+    event.target instanceof HTMLSelectElement
+  ) {
+    return;
+  }
   event.preventDefault();
   clock.command({ type: "toggle" });
 });
 
-let pointer: { x: number; y: number } | null = null;
+let pointer: {
+  id: number;
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+} | null = null;
+
 canvas.addEventListener("pointerdown", (event) => {
-  pointer = { x: event.clientX, y: event.clientY };
+  pointer = {
+    id: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    lastX: event.clientX,
+    lastY: event.clientY,
+  };
+  if (ui.view().cockpit) {
+    canvas.setPointerCapture(event.pointerId);
+    canvas.style.cursor = "grabbing";
+  }
 });
+
 canvas.addEventListener("pointerup", (event) => {
   if (!pointer || !scene) return;
-  const dx = event.clientX - pointer.x;
-  const dy = event.clientY - pointer.y;
+  const dx = event.clientX - pointer.startX;
+  const dy = event.clientY - pointer.startY;
+  if (ui.view().cockpit && canvas.hasPointerCapture(pointer.id)) {
+    canvas.releasePointerCapture(pointer.id);
+  }
   pointer = null;
+  canvas.style.cursor = "grab";
   if (dx * dx + dy * dy > 16) return;
   const id = scene.pick(event.clientX, event.clientY);
   const current = ui.selectedId();
   if (id) {
     ui.selectBody(id === current ? null : id);
-  } else if (current) {
+  } else if (current && !ui.view().cockpit) {
     ui.clearSelection();
   }
 });
+
+canvas.addEventListener("pointercancel", () => {
+  pointer = null;
+});
+
 canvas.addEventListener("dblclick", (event) => {
   if (!scene) return;
   const id = scene.pick(event.clientX, event.clientY) ?? ui.selectedId();
   if (!id) return;
   ui.focusBody(id);
 });
+
 canvas.addEventListener("pointermove", (event) => {
   if (!scene) return;
+  if (pointer && ui.view().cockpit) {
+    const dx = event.clientX - pointer.lastX;
+    const dy = event.clientY - pointer.lastY;
+    pointer.lastX = event.clientX;
+    pointer.lastY = event.clientY;
+    scene.adjustCockpitLook(dx * 0.0045, dy * 0.0045);
+    queue();
+    return;
+  }
   const id = scene.pick(event.clientX, event.clientY);
   canvas.style.cursor = id ? "pointer" : "grab";
 });
@@ -116,7 +228,7 @@ function snapshot() {
     playing: clock.playing(),
     rate: clock.rate(),
     selectedId: ui.selectedId(),
-    positions: solar.positions(jd),
+    positions: solar.positions(jd, { issTelemetry: clock.issLive }),
     serverBodies: clock.serverBodies,
     follow,
   };
@@ -126,8 +238,8 @@ function frame(): void {
   frameQueued = false;
   const state = snapshot();
   const view = { ...ui.view(), follow };
-  scene?.update(state.jd, view, state.selectedId);
-  if (pendingFrameId) {
+  scene?.update(state.jd, view, state.selectedId, clock.issLive);
+  if (pendingFrameId && !view.cockpit) {
     const target = pendingFrameId;
     pendingFrameId = null;
     scene?.frame(target);

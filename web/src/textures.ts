@@ -77,6 +77,10 @@ function shade(info: BodyInfo, x: number, y: number, width: number, height: numb
   }
   if (info.id === "ganymede") return mix([120, 104, 86], [176, 160, 140], n);
   if (info.id === "callisto") return mix([72, 64, 58], [120, 108, 96], n);
+  if (info.id === "halley") {
+    const jet = n > 0.68;
+    return jet ? [184, 222, 242] : mix([42, 46, 54], [94, 106, 120], n);
+  }
   const gray = 150 + n * 70;
   return [gray, gray * 0.98, gray * 0.94];
 }

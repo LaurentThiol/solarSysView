@@ -6,6 +6,7 @@ export interface ViewSettings {
   belt: boolean;
   crafts: boolean;
   follow: boolean;
+  cockpit: boolean;
 }
 
 export const defaultView: ViewSettings = {
@@ -16,4 +17,5 @@ export const defaultView: ViewSettings = {
   belt: true,
   crafts: true,
   follow: false,
+  cockpit: false,
 };

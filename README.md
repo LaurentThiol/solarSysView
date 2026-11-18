@@ -40,7 +40,8 @@ Vite écoute alors sur le port 47121 et relaie `/api` et `/red` vers Node-RED.
 L’onglet **Système solaire** dans [flows/flows.json](flows/flows.json) :
 
 - un injecteur à 10 Hz et le WebSocket des commandes entrent dans le nœud **Éphémérides** ;
-- ce nœud appelle [ephemeris/solar.js](ephemeris/solar.js), avance la date et renvoie un tick ;
+- un pipeline HTTP conditionnel toutes les 5 s interroge `api.wheretheiss.at` lorsque l’horloge simulée est à moins de 5 minutes du temps réel, et replie automatiquement vers l’orbite théorique hors ligne ou à une autre époque ;
+- le nœud **Éphémérides** appelle [ephemeris/solar.js](ephemeris/solar.js), avance la date et renvoie un tick ;
 - `GET /api/catalog` et `GET /api/health` exposent le catalogue et l’état de l’éditeur ;
 - la date simulée s’affiche sur le nœud.
 
@@ -50,26 +51,31 @@ La scène réévalue la même formule à chaque image, pour que Mercure ou l’I
 
 Si le WebSocket manque, la scène continue avec la même formule (« Horloge locale ») et tente automatiquement de se reconnecter à Node-RED.
 
-## Objets représentés
+## Objets et expériences
 
 - **Soleil, 8 planètes et 5 lunes** (Lune, Io, Europe, Ganymède, Callisto) regroupées sous leur planète parente.
-- **Cabriolet Tesla (Starman, `2018-017A`)** : orbite héliocentrique elliptique du JPL (`a = 1,325 UA`, `e = 0,256`, période `557 j`) croisant l’orbite de Mars. Masqué avant son éjection du 7 février 2018, avec un bouton **Aller au lancement** dans sa fiche.
-- **ISS (théorique)** : orbite basse terrestre circulaire permanente à `415 km` d’altitude, inclinée à `51,64°` sur l’équateur terrestre (période `92,9 min`, précession nodale J2). Cadrer l’ISS ramène automatiquement une vitesse trop rapide à `1 min/s` pour suivre sa révolution.
+- **Comète de Halley (`1P/Halley`)** : orbite rétrograde très excentrique (`a = 17,83 UA`, `e = 0,967`, `i = 162,26°`, période `75,3 ans`). Sa chevelure et sa double queue (ions bleutés et poussières dorées) s’allongent à l’approche du Soleil et pointent toujours à l’opposé de l’étoile.
+- **Télescope James Webb (`JWST`)** : orbite halo à `1,5 million de km` de la Terre autour du point de Lagrange L2 côté nuit, avec bouclier Kapton à 5 couches et miroir primaire doré à 18 segments hexagonaux (actif depuis le 25 décembre 2021).
+- **Cabriolet Tesla (Starman, `2018-017A`)** : orbite héliocentrique elliptique du JPL (`a = 1,325 UA`, `e = 0,256`, période `557 j`) croisant l’orbite de Mars (actif depuis le 7 février 2018).
+- **ISS hybride (temps réel Node-RED / théorique)** : position géographique réelle (`latitude`, `longitude`, `altitude`) convertie en coordonnées écliptiques J2000 autour de l’instant présent, et bascule automatique sur l’orbite circulaire théorique (`415 km`, `51,64°`, précession nodale J2) dès qu’on explore le passé ou le futur.
+- **Menu « Grandes dates »** : saut immédiat (date, vitesse et cadrage) vers l’ISS en direct, l’éjection de Starman (2018), son survol de Mars (2020), l’arrivée de James Webb en L2 (2022), le périhélie de Halley (1986) ou l’alignement Voyager 2 (1977).
+- **Mode « À bord » (caméra embarquée 360°)** : vue depuis le hublot de la Cupola de l’ISS, le siège passager à côté de Starman, le miroir doré du JWST, le sillage de la comète de Halley ou la surface d’une planète ou d’une lune.
 
 ## Limites
 
-Les planètes utilisent les éléments képlériens approchés du JPL avec leurs dérives séculaires (−3000 à 3000, tables Standish & Williams). Les lunes, l’ISS théorique (sans traînée atmosphérique ni rehaussements) et le cabriolet Tesla suivent des orbites képlériennes à deux corps. Ce n’est pas une éphéméride de navigation.
+Les planètes utilisent les éléments képlériens approchés du JPL avec leurs dérives séculaires (−3000 à 3000, tables Standish & Williams). Les lunes, la comète de Halley, l’ISS théorique et le cabriolet Tesla suivent des orbites képlériennes à deux corps, et le JWST suit un modèle géométrique d’orbite halo autour de L2. Ce n’est pas une éphéméride de navigation.
 
-Les distances à l’écran sont compressées par défaut (exposant 0,55). Le curseur **Distances** à 1 rétablit les proportions en unités astronomiques. Les tailles des corps et les rayons visuels des orbites basses ou lunaires sont amplifiés pour éviter toute collision visuelle avec leur planète.
+Les distances à l’écran sont compressées par défaut (exposant 0,55). Le curseur **Distances** à 1 rétablit les proportions en unités astronomiques. Les tailles des corps et les rayons visuels des orbites basses, lunaires ou L2 sont amplifiés pour éviter toute collision visuelle avec leur planète.
 
 ## Textures
 
-Les photographies viennent de [Solar System Scope](https://www.solarsystemscope.com/textures/), licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), avec masquage jour/nuit des lumières terrestres côté éclairé. Si un fichier manque, une texture procédurale prend le relais. La couronne du Soleil, les anneaux de Saturne, la ceinture d’astéroïdes, l’ISS et le cabriolet Tesla sont générés en 3D dans la scène.
+Les photographies viennent de [Solar System Scope](https://www.solarsystemscope.com/textures/), licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), avec masquage jour/nuit des lumières terrestres côté éclairé. Si un fichier manque, une texture procédurale prend le relais. La couronne du Soleil, les anneaux de Saturne, la ceinture d’astéroïdes, la double queue de Halley, l’ISS, le JWST et le cabriolet Tesla sont générés en 3D dans la scène.
 
 ## Raccourcis
 
 - **Espace** : pause ou lecture
-- **Échap** : relâche l’astre suivi
-- **Clic** dans la scène : sélectionne un corps ou un engin
+- **Échap** : quitte le mode **À bord** (ou relâche l’astre suivi)
+- **Clic** dans la scène : sélectionne un corps, une comète ou un engin
+- **Glisser en mode À bord** : tourne le regard à 360° autour du hublot ou de l’horizon
 - **Double-clic** dans la scène : cadre et suit l’objet visé
 - **± / Maintenant** : inverse le sens du temps ou revient à l’instant présent
