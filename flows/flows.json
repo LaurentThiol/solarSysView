@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "Système solaire",
     "disabled": false,
-    "info": "Horloge partagée du planétarium. Le module ephemeris/solar.js calcule le catalogue et les positions. La scène Three.js réévalue la même formule à chaque image."
+    "info": "Horloge partagée du planétarium et télémétrie hybride de l'ISS. Le module ephemeris/solar.js calcule le catalogue et les positions ; près du présent, Node-RED interroge l'API publique de l'ISS et bascule automatiquement sur l'orbite théorique hors ligne ou loin du présent."
   },
   {
     "id": "ws-solar",
@@ -67,7 +67,7 @@
     "type": "function",
     "z": "tab-solar",
     "name": "Éphémérides",
-    "func": "const solar = global.get('solar');\nlet state = flow.get('sim');\nif (!state) state = solar.initialState(Date.now());\nconst command = msg.topic === 'tick' ? { type: 'tick' } : solar.parseCommand(msg.payload);\nconst next = solar.reduce(state, command, Date.now());\nflow.set('sim', next.state);\ndelete msg._session;\nmsg.payload = next.tick;\nnode.status({\n  fill: next.state.playing ? 'green' : 'grey',\n  shape: 'dot',\n  text: next.label\n});\nreturn msg;\n",
+    "func": "const solar = global.get('solar');\nconst now = Date.now();\nlet state = flow.get('sim');\nif (!state) state = solar.initialState(now);\nconst issTelemetry = flow.get('issLive') || null;\nconst command = msg.topic === 'tick' ? { type: 'tick' } : solar.parseCommand(msg.payload);\nconst next = solar.reduce(state, command, now, { issTelemetry });\nflow.set('sim', next.state);\ndelete msg._session;\nmsg.payload = next.tick;\nconst liveIss = solar.isLiveIssActive(next.state.jd, issTelemetry);\nnode.status({\n  fill: next.state.playing ? 'green' : 'grey',\n  shape: 'dot',\n  text: liveIss ? `${next.label} · ISS direct` : next.label\n});\nreturn msg;\n",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -187,6 +187,118 @@
     "headers": {},
     "x": 600,
     "y": 400,
+    "wires": []
+  },
+  {
+    "id": "note-iss",
+    "type": "comment",
+    "z": "tab-solar",
+    "name": "ISS hybride : interroge l'API temps réel près du présent, sinon repli sur l'orbite théorique.",
+    "info": "",
+    "x": 420,
+    "y": 470,
+    "wires": []
+  },
+  {
+    "id": "inj-iss-live",
+    "type": "inject",
+    "z": "tab-solar",
+    "name": " Sondage ISS (5 s)",
+    "props": [
+      {
+        "p": "topic",
+        "v": "iss-poll",
+        "vt": "str"
+      }
+    ],
+    "repeat": "5",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 0.5,
+    "topic": "iss-poll",
+    "x": 170,
+    "y": 520,
+    "wires": [
+      [
+        "fn-iss-gate"
+      ]
+    ]
+  },
+  {
+    "id": "fn-iss-gate",
+    "type": "function",
+    "z": "tab-solar",
+    "name": "Près du présent ?",
+    "func": "const solar = global.get('solar');\nconst sim = flow.get('sim');\nconst nowJd = solar.unixToJd(Date.now());\nif (sim && Math.abs(sim.jd - nowJd) > 5 / 1440) {\n  node.status({ fill: 'grey', shape: 'ring', text: 'En veille (hors présent)' });\n  return null;\n}\nmsg.requestTimeout = 3500;\nnode.status({ fill: 'blue', shape: 'dot', text: 'Lecture ISS…' });\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 380,
+    "y": 520,
+    "wires": [
+      [
+        "http-iss-live"
+      ]
+    ]
+  },
+  {
+    "id": "http-iss-live",
+    "type": "http request",
+    "z": "tab-solar",
+    "name": "API ISS (25544)",
+    "method": "GET",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "https://api.wheretheiss.at/v1/satellites/25544",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": true,
+    "headers": [],
+    "x": 580,
+    "y": 520,
+    "wires": [
+      [
+        "fn-iss-store"
+      ]
+    ]
+  },
+  {
+    "id": "catch-iss-live",
+    "type": "catch",
+    "z": "tab-solar",
+    "name": "Repli hors ligne",
+    "scope": [
+      "http-iss-live"
+    ],
+    "uncaught": false,
+    "x": 580,
+    "y": 580,
+    "wires": [
+      [
+        "fn-iss-store"
+      ]
+    ]
+  },
+  {
+    "id": "fn-iss-store",
+    "type": "function",
+    "z": "tab-solar",
+    "name": "Télémétrie ISS",
+    "func": "const solar = global.get('solar');\nif (msg.error || msg.statusCode !== 200 || !msg.payload || typeof msg.payload !== 'object') {\n  node.status({ fill: 'grey', shape: 'ring', text: 'Hors ligne — orbite théorique' });\n  return null;\n}\nconst latDeg = Number(msg.payload.latitude);\nconst lonDeg = Number(msg.payload.longitude);\nconst altitudeKm = Number(msg.payload.altitude);\nconst velocityKmH = Number(msg.payload.velocity);\nconst tsSec = Number(msg.payload.timestamp);\nif (!Number.isFinite(latDeg) || !Number.isFinite(lonDeg) || !Number.isFinite(altitudeKm)) {\n  node.status({ fill: 'yellow', shape: 'ring', text: 'Réponse API incomplète' });\n  return null;\n}\nconst sampleMs = Number.isFinite(tsSec) && tsSec > 1e8 ? tsSec * 1000 : Date.now();\nconst jd = solar.unixToJd(sampleMs);\nconst velocityKmS = Number.isFinite(velocityKmH) ? velocityKmH / 3600 : 7.66;\nconst prev = flow.get('issLive');\nlet dLatPerDay = 0;\nlet dLonPerDay = 0;\nif (prev && Number.isFinite(prev.jd)) {\n  const dtDays = jd - prev.jd;\n  if (dtDays > 0.5 / 86400 && dtDays < 30 / 86400) {\n    dLatPerDay = (latDeg - prev.latDeg) / dtDays;\n    let dLon = lonDeg - prev.lonDeg;\n    if (dLon > 180) dLon -= 360;\n    if (dLon < -180) dLon += 360;\n    dLonPerDay = dLon / dtDays;\n  }\n}\nflow.set('issLive', { latDeg, lonDeg, altitudeKm, velocityKmS, jd, dLatPerDay, dLonPerDay });\nconst latTxt = `${latDeg.toFixed(1).replace('.', ',')}°`;\nconst lonTxt = `${lonDeg.toFixed(1).replace('.', ',')}°`;\nnode.status({\n  fill: 'green',\n  shape: 'dot',\n  text: `${latTxt}, ${lonTxt} · ${Math.round(altitudeKm)} km`\n});\nreturn null;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 800,
+    "y": 520,
     "wires": []
   }
 ]

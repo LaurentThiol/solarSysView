@@ -426,8 +426,29 @@ const BODIES = [
     periodDays: 16.6890184,
   },
   {
+    id: "halley",
+    name: "Comète de Halley",
+    kind: "comet",
+    parent: null,
+    frame: "ecliptic",
+    radiusKm: 5.5,
+    spanMeters: null,
+    altitudeKm: null,
+    obliquityDeg: 0,
+    spinHours: -52.8,
+    color: "#7fd4e6",
+    fact: "Comète périodique rétrograde (1P/Halley) qui revient frôler le Soleil à 0,59 UA tous les 75 ans en déployant une double queue de gaz ionisé et de poussières.",
+    aAu: 17.83414,
+    e: 0.9671429,
+    iDeg: 162.2627,
+    OmegaDeg: 58.4201,
+    wDeg: 111.3325,
+    M0Deg: 66.399956,
+    periodDays: 27510.0,
+  },
+  {
     id: "iss",
-    name: "ISS (théorique)",
+    name: "ISS",
     kind: "craft",
     parent: "earth",
     frame: "equatorial",
@@ -437,7 +458,7 @@ const BODIES = [
     obliquityDeg: 0,
     spinHours: 92.9 / 60,
     color: "#f2be6b",
-    fact: "Orbite basse théorique circulaire à 415 km d'altitude, inclinée à 51,64° sur l'équateur terrestre et bouclée en 93 minutes.",
+    fact: "Station spatiale internationale : position temps réel via Node-RED autour de l'instant présent, et orbite circulaire théorique (415 km, 51,64°) à toute autre date.",
     aAu: (6371 + 415) / AU_KM,
     e: 0,
     iDeg: 51.64,
@@ -446,6 +467,29 @@ const BODIES = [
     wDeg: 0,
     M0Deg: 0,
     periodDays: 92.9 / 1440,
+  },
+  {
+    id: "jwst",
+    name: "James Webb (L2)",
+    kind: "craft",
+    parent: "earth",
+    frame: "ecliptic",
+    orbitMode: "l2Halo",
+    radiusKm: 0.0105,
+    spanMeters: 21,
+    altitudeKm: null,
+    obliquityDeg: 0,
+    spinHours: 4320,
+    color: "#e8b84b",
+    fact: "Observatoire infrarouge à miroir doré déployé autour du point de Lagrange L2, à 1,5 million de km derrière la Terre, protégé du Soleil par cinq écrans thermiques.",
+    aAu: 1496000 / AU_KM,
+    e: 0,
+    iDeg: 0,
+    OmegaDeg: 0,
+    wDeg: 0,
+    M0Deg: 0,
+    periodDays: 180,
+    sinceJd: 2459573.5 + (12 + 20 / 60) / 24,
   },
   {
     id: "roadster",
@@ -472,6 +516,7 @@ const BODIES = [
 ];
 
 const BY_ID = new Map(BODIES.map((body) => [body.id, body]));
+const LIVE_ISS_WINDOW_DAYS = 2.5 / 1440;
 
 function rad(deg) {
   return (deg * Math.PI) / 180;
@@ -483,23 +528,20 @@ function solveKepler(meanAnomaly, eccentricity) {
   if (M > Math.PI) M -= twoPi;
   if (M < -Math.PI) M += twoPi;
   const e = eccentricity;
-  let E = e < 0.8 ? M : Math.PI * Math.sign(M || 1);
-  for (let i = 0; i < 40; i += 1) {
+  let E;
+  if (e < 0.8) {
+    E = M;
+  } else if (Math.abs(M) < 0.25) {
+    E = Math.cbrt(6 * M);
+  } else {
+    E = Math.PI * Math.sign(M || 1);
+  }
+  for (let i = 0; i < 60; i += 1) {
     const delta = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
     E -= delta;
     if (Math.abs(delta) < 1e-12) break;
   }
   return E;
-}
-
-function trueAnomaly(eccentricAnomaly, eccentricity) {
-  const e = eccentricity;
-  const cosE = Math.cos(eccentricAnomaly);
-  const sinE = Math.sin(eccentricAnomaly);
-  const denom = 1 - e * cosE;
-  const cosNu = (cosE - e) / denom;
-  const sinNu = (Math.sqrt(1 - e * e) * sinE) / denom;
-  return Math.atan2(sinNu, cosNu);
 }
 
 function equatorialToEcliptic(vec, obliquityDeg = EARTH_OBLIQUITY_DEG) {
@@ -529,7 +571,7 @@ function elementsAt(body, jd) {
     const T = (jd - J2000) / JULIAN_CENTURY;
     const s = body.secular;
     const aAu = s.a0 + s.da * T;
-    const e = Math.max(0, Math.min(0.99, s.e0 + s.de * T));
+    const e = Math.max(0, Math.min(0.995, s.e0 + s.de * T));
     const iDeg = s.i0 + s.di * T;
     const OmegaDeg = s.O0 + s.dO * T;
     const varpiDeg = s.p0 + s.dp * T;
@@ -553,13 +595,10 @@ function elementsAt(body, jd) {
   };
 }
 
-function orbitalPoint(elements, meanAnomaly, frame, parentObliquityDeg) {
+function orbitalPointFromEccentric(elements, eccentricAnomaly, frame, parentObliquityDeg) {
   const e = elements.e;
-  const E = solveKepler(meanAnomaly, e);
-  const nu = trueAnomaly(E, e);
-  const radius = elements.aAu * (1 - e * Math.cos(E));
-  const xOrb = radius * Math.cos(nu);
-  const yOrb = radius * Math.sin(nu);
+  const xOrb = elements.aAu * (Math.cos(eccentricAnomaly) - e);
+  const yOrb = elements.aAu * Math.sqrt(Math.max(0, 1 - e * e)) * Math.sin(eccentricAnomaly);
   const cosw = Math.cos(rad(elements.wDeg));
   const sinw = Math.sin(rad(elements.wDeg));
   const cosi = Math.cos(rad(elements.iDeg));
@@ -576,7 +615,40 @@ function orbitalPoint(elements, meanAnomaly, frame, parentObliquityDeg) {
   return frame === "equatorial" ? equatorialToEcliptic(point, parentObliquityDeg) : point;
 }
 
+function orbitalPoint(elements, meanAnomaly, frame, parentObliquityDeg) {
+  const E = solveKepler(meanAnomaly, elements.e);
+  return orbitalPointFromEccentric(elements, E, frame, parentObliquityDeg);
+}
+
+function l2HaloPoint(earthVec, phaseRad) {
+  const rEarth = Math.hypot(earthVec.x, earthVec.y, earthVec.z) || 1;
+  const ux = earthVec.x / rEarth;
+  const uy = earthVec.y / rEarth;
+  const uz = earthVec.z / rEarth;
+  const tLen = Math.hypot(-uy, ux) || 1;
+  const tx = -uy / tLen;
+  const ty = ux / tLen;
+  const tz = 0;
+  const nx = uy * tz - uz * ty;
+  const ny = uz * tx - ux * tz;
+  const nz = ux * ty - uy * tx;
+
+  const l2CenterAu = 1496000 / AU_KM;
+  const ax = 220000 / AU_KM;
+  const ay = 650000 / AU_KM;
+  const az = 420000 / AU_KM;
+  const du = l2CenterAu + ax * Math.sin(phaseRad);
+  const dt = ay * Math.cos(phaseRad);
+  const dn = az * Math.sin(phaseRad + 0.5);
+  return {
+    x: ux * du + tx * dt + nx * dn,
+    y: uy * du + ty * dt + ny * dn,
+    z: uz * du + tz * dt + nz * dn,
+  };
+}
+
 function orbitalSpeedKmS(body, aAu, localRadiusAu) {
+  if (body.orbitMode === "l2Halo") return 0.86;
   if (!body.periodDays || aAu <= 0 || localRadiusAu <= 0) return 0;
   const mu = MU_KM3_S2[body.parent || "sun"] || MU_KM3_S2.sun;
   const rKm = localRadiusAu * AU_KM;
@@ -593,19 +665,91 @@ function spinAngle(body, jd) {
   return (offset + frac * Math.PI * 2) % (Math.PI * 2);
 }
 
-function positions(jd) {
+function geographicToEcliptic(latDeg, lonDeg, altitudeKm, jd) {
+  const earth = BY_ID.get("earth");
+  const gmst = spinAngle(earth, jd);
+  const ra = gmst + rad(lonDeg);
+  const dec = rad(latDeg);
+  const rAu = (earth.radiusKm + altitudeKm) / AU_KM;
+  const cosDec = Math.cos(dec);
+  return equatorialToEcliptic(
+    {
+      x: rAu * cosDec * Math.cos(ra),
+      y: rAu * cosDec * Math.sin(ra),
+      z: rAu * Math.sin(dec),
+    },
+    earth.obliquityDeg,
+  );
+}
+
+function normalizeIssTelemetry(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const latDeg = Number(raw.latDeg);
+  const lonDeg = Number(raw.lonDeg);
+  const altitudeKm = Number(raw.altitudeKm);
+  const jd = Number(raw.jd);
+  if (
+    !Number.isFinite(latDeg) ||
+    Math.abs(latDeg) > 90 ||
+    !Number.isFinite(lonDeg) ||
+    Math.abs(lonDeg) > 360 ||
+    !Number.isFinite(altitudeKm) ||
+    altitudeKm < 150 ||
+    altitudeKm > 1500 ||
+    !Number.isFinite(jd)
+  ) {
+    return null;
+  }
+  const velocityKmS = Number.isFinite(Number(raw.velocityKmS)) ? Number(raw.velocityKmS) : 7.66;
+  const dLatPerDay = Number.isFinite(Number(raw.dLatPerDay))
+    ? Math.max(-7000, Math.min(7000, Number(raw.dLatPerDay)))
+    : 0;
+  const dLonPerDay = Number.isFinite(Number(raw.dLonPerDay))
+    ? Math.max(-14000, Math.min(14000, Number(raw.dLonPerDay)))
+    : 0;
+  return { latDeg, lonDeg, altitudeKm, velocityKmS, jd, dLatPerDay, dLonPerDay };
+}
+
+function isLiveIssActive(jd, telemetry) {
+  const valid = normalizeIssTelemetry(telemetry);
+  if (!valid) return false;
+  return Math.abs(jd - valid.jd) <= LIVE_ISS_WINDOW_DAYS;
+}
+
+function positions(jd, options) {
+  const issLive = normalizeIssTelemetry(options && options.issTelemetry);
+  const useLiveIss = issLive != null && Math.abs(jd - issLive.jd) <= LIVE_ISS_WINDOW_DAYS;
   const placed = new Map();
   const list = [];
+
   for (const body of BODIES) {
     let rel = { x: 0, y: 0, z: 0 };
     let aAu = body.aAu;
-    if (body.periodDays) {
+    let source = undefined;
+    let liveMeta = null;
+
+    if (body.id === "iss" && useLiveIss) {
+      const dtDays = Math.max(-90 / 86400, Math.min(90 / 86400, jd - issLive.jd));
+      const lat = Math.max(-89.9, Math.min(89.9, issLive.latDeg + issLive.dLatPerDay * dtDays));
+      const rawLon = issLive.lonDeg + issLive.dLonPerDay * dtDays;
+      const lon = ((((rawLon + 180) % 360) + 360) % 360) - 180;
+      rel = geographicToEcliptic(lat, lon, issLive.altitudeKm, jd);
+      source = "live";
+      liveMeta = { latDeg: lat, lonDeg: lon, altitudeKm: issLive.altitudeKm };
+    } else if (body.orbitMode === "l2Halo") {
+      const parent = body.parent ? placed.get(body.parent) : null;
+      const earthVec = parent || { x: 1, y: 0, z: 0 };
+      const phase = ((jd - J2000) / body.periodDays) * Math.PI * 2;
+      rel = l2HaloPoint(earthVec, phase);
+    } else if (body.periodDays) {
       const elements = elementsAt(body, jd);
       aAu = elements.aAu;
       const parentBody = body.parent ? BY_ID.get(body.parent) : null;
       const obliquity = parentBody ? parentBody.obliquityDeg : EARTH_OBLIQUITY_DEG;
       rel = orbitalPoint(elements, elements.meanAnomaly, body.frame, obliquity);
+      if (body.id === "iss") source = "theoretical";
     }
+
     const localRadiusAu = Math.hypot(rel.x, rel.y, rel.z);
     const parent = body.parent ? placed.get(body.parent) : null;
     const x = rel.x + (parent ? parent.x : 0);
@@ -618,8 +762,19 @@ function positions(jd) {
       z,
       spin: spinAngle(body, jd),
       rAu: Math.hypot(x, y, z),
-      speedKmS: orbitalSpeedKmS(body, aAu, localRadiusAu),
+      speedKmS:
+        source === "live" && issLive
+          ? issLive.velocityKmS
+          : orbitalSpeedKmS(body, aAu, localRadiusAu),
       active: body.sinceJd == null || jd >= body.sinceJd,
+      ...(source ? { source } : {}),
+      ...(liveMeta
+        ? {
+            liveLatDeg: liveMeta.latDeg,
+            liveLonDeg: liveMeta.lonDeg,
+            liveAltitudeKm: liveMeta.altitudeKm,
+          }
+        : {}),
     };
     placed.set(body.id, point);
     list.push(point);
@@ -632,12 +787,24 @@ function sampleOrbit(id, count, jd = J2000) {
   if (!body || !body.periodDays) return [];
   const safe = Math.max(24, Math.min(720, count | 0));
   const atJd = Number.isFinite(jd) ? jd : J2000;
+
+  if (body.orbitMode === "l2Halo") {
+    const earth = BY_ID.get("earth");
+    const earthEl = elementsAt(earth, atJd);
+    const earthVec = orbitalPoint(earthEl, earthEl.meanAnomaly, earth.frame, EARTH_OBLIQUITY_DEG);
+    const points = [];
+    for (let i = 0; i < safe; i += 1) {
+      points.push(l2HaloPoint(earthVec, (i / safe) * Math.PI * 2));
+    }
+    return points;
+  }
+
   const elements = elementsAt(body, atJd);
   const parentBody = body.parent ? BY_ID.get(body.parent) : null;
   const obliquity = parentBody ? parentBody.obliquityDeg : EARTH_OBLIQUITY_DEG;
   const points = [];
   for (let i = 0; i < safe; i += 1) {
-    points.push(orbitalPoint(elements, (i / safe) * Math.PI * 2, body.frame, obliquity));
+    points.push(orbitalPointFromEccentric(elements, (i / safe) * Math.PI * 2, body.frame, obliquity));
   }
   return points;
 }
@@ -649,6 +816,7 @@ function publicBody(body) {
     kind: body.kind,
     parent: body.parent,
     frame: body.frame || "ecliptic",
+    orbitMode: body.orbitMode || "kepler",
     radiusKm: body.radiusKm,
     spanMeters: body.spanMeters ?? null,
     altitudeKm: body.altitudeKm ?? null,
@@ -671,7 +839,7 @@ function catalog() {
     epoch: "J2000",
     epochJd: J2000,
     auKm: AU_KM,
-    note: "Planètes : éléments képlériens JPL avec dérives séculaires (−3000 à 3000). Lunes, ISS théorique et cabriolet Tesla : orbites képlériennes approchées.",
+    note: "Planètes : éléments képlériens JPL avec dérives séculaires (−3000 à 3000). Comète de Halley, lunes, JWST (L2), cabriolet Tesla et ISS hybride (temps réel Node-RED / théorique).",
     bodies: BODIES.map(publicBody),
   };
 }
@@ -816,18 +984,20 @@ function formatLabel(state) {
   return `${when} · ${rate}`;
 }
 
-function makeTick(state, nowMs) {
+function makeTick(state, nowMs, options) {
+  const issLive = normalizeIssTelemetry(options && options.issTelemetry);
   return {
     type: "tick",
     jd: state.jd,
     playing: state.playing,
     rateDaysPerSec: state.rateDaysPerSec,
     serverTimeMs: nowMs,
-    bodies: positions(state.jd),
+    bodies: positions(state.jd, options),
+    ...(issLive ? { issLive } : {}),
   };
 }
 
-function reduce(state, command, nowMs) {
+function reduce(state, command, nowMs, options) {
   const now = Number.isFinite(nowMs) ? nowMs : Date.now();
   let next = advance(
     {
@@ -850,7 +1020,7 @@ function reduce(state, command, nowMs) {
   }
   return {
     state: next,
-    tick: makeTick(next, now),
+    tick: makeTick(next, now, options),
     label: formatLabel(next),
     accepted,
   };
@@ -867,6 +1037,8 @@ module.exports = {
   solveKepler,
   equatorialToEcliptic,
   eclipticToEquatorial,
+  geographicToEcliptic,
+  isLiveIssActive,
   positions,
   sampleOrbit,
   catalog,

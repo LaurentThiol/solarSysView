@@ -40,7 +40,12 @@
     "http-catalog-res": "http response",
     "http-health": "http in",
     "fn-health": "function",
-    "http-health-res": "http response"
+    "http-health-res": "http response",
+    "inj-iss-live": "inject",
+    "fn-iss-gate": "function",
+    "http-iss-live": "http request",
+    "catch-iss-live": "catch",
+    "fn-iss-store": "function"
   },
   "requiredBodies": [
     "sun",
@@ -57,7 +62,9 @@
     "europa",
     "ganymede",
     "callisto",
+    "halley",
     "iss",
+    "jwst",
     "roadster"
   ],
   "assets": {

@@ -34,16 +34,19 @@
           <h2 id="fiche-name"></h2>
           <p id="fiche-fact"></p>
           <p id="fiche-inactive" class="inactive-note" hidden></p>
+          <p id="fiche-iss-mode" class="iss-mode" hidden></p>
           <dl id="fiche-facts"></dl>
           <p id="fiche-server" class="server-line" hidden></p>
           <div class="fiche-actions">
             <button type="button" id="jump-launch" hidden>Aller au lancement</button>
+            <button type="button" id="iss-live-btn" hidden title="Passer à Maintenant en vitesse 1×">Direct (1×)</button>
             <button type="button" id="frame-body">Cadrer</button>
+            <button type="button" id="cockpit-body" aria-pressed="false" title="Vue caméra embarquée depuis l’objet">À bord</button>
           </div>
         </div>
       </article>
       <p id="footnote" class="footnote">
-        Éléments képlériens JPL avec dérives séculaires (−3000 à 3000), orbites approchées des lunes, de l’ISS théorique et du cabriolet Tesla.
+        Éphémérides JPL (−3000 à 3000), comète de Halley, JWST (L2), cabriolet Tesla et ISS hybride (temps réel Node-RED / théorique).
         <a id="editor-link" href="/red" hidden>Éditeur des flux</a>
       </p>
     </aside>
@@ -71,10 +74,22 @@
         <span>Date, heure de Paris</span>
         <input id="date-input" type="datetime-local" />
       </label>
+      <label class="date-field event-field">
+        <span>Grandes dates</span>
+        <select id="event-select">
+          <option value="">Choisir un moment…</option>
+          <option value="iss-live">ISS en direct (temps réel 1×)</option>
+          <option value="starman-launch">Éjection de Starman · 7 fév. 2018</option>
+          <option value="starman-mars">Starman frôle Mars · 7 oct. 2020</option>
+          <option value="jwst-l2">James Webb en L2 · 24 janv. 2022</option>
+          <option value="halley-1986">Périhélie de Halley · 9 fév. 1986</option>
+          <option value="voyager-1977">Alignement Voyager 2 · 20 août 1977</option>
+        </select>
+      </label>
       <button type="button" id="now-button" title="Revenir à l’instant présent">Maintenant</button>
       <p id="rate-label" class="rate-label"></p>
       <p id="date-error" class="date-error" hidden>Choisissez une année entre −3000 et 3000.</p>
-      <p class="hint"><kbd>espace</kbd> pause · double-clic : cadrer</p>
+      <p id="transport-hint" class="hint"><kbd>espace</kbd> pause · double-clic : cadrer</p>
     </form>
 
     <details id="view" open>

@@ -159,7 +159,60 @@ test("l'ISS théorique reste à ~415 km d'altitude et inclinée à 51,64° sur l
   assert.ok(maxLatDeg > 51.4 && maxLatDeg < 51.7, `latitude équatoriale max = ${maxLatDeg}°`);
 });
 
-test("le catalogue expose le Soleil, huit planètes, les lunes et les deux engins", () => {
+test("la comète de Halley passe à ~0,59 UA au périhélie de février 1986 et s'éloigne au-delà de 30 UA", () => {
+  const perihelionJd = solar.unixToJd(Date.UTC(1986, 1, 9, 11, 0, 0));
+  const atPeri = body(perihelionJd, "halley");
+  assert.ok(atPeri.rAu > 0.58 && atPeri.rAu < 0.6, `périhélie Halley = ${atPeri.rAu} UA`);
+  assert.ok(atPeri.speedKmS > 52 && atPeri.speedKmS < 56, `vitesse périhélie = ${atPeri.speedKmS}`);
+
+  const aphelionJd = solar.unixToJd(Date.UTC(2023, 11, 9, 0, 0, 0));
+  const atAph = body(aphelionJd, "halley");
+  assert.ok(atAph.rAu > 34 && atAph.rAu < 36, `aphélie Halley = ${atAph.rAu} UA`);
+});
+
+test("James Webb est inactif avant Noël 2021 puis orbite autour de L2 à ~1,5 M km derrière la Terre", () => {
+  const beforeJd = solar.unixToJd(Date.UTC(2021, 10, 1));
+  assert.equal(body(beforeJd, "jwst").active, false);
+
+  const l2Jd = solar.unixToJd(Date.UTC(2022, 5, 1, 0, 0, 0));
+  const earth = body(l2Jd, "earth");
+  const jwst = body(l2Jd, "jwst");
+  assert.equal(jwst.active, true);
+  const rel = { x: jwst.x - earth.x, y: jwst.y - earth.y, z: jwst.z - earth.z };
+  const distKm = Math.hypot(rel.x, rel.y, rel.z) * solar.AU_KM;
+  assert.ok(distKm > 1_250_000 && distKm < 1_850_000, `distance JWST-Terre = ${distKm} km`);
+  // Vérifie que JWST est bien du côté anti-solaire de la Terre (produit scalaire > 0)
+  const dotAntiSun = earth.x * rel.x + earth.y * rel.y + earth.z * rel.z;
+  assert.ok(dotAntiSun > 0, `JWST doit être à l'opposé du Soleil (${dotAntiSun})`);
+});
+
+test("l'ISS hybride utilise la télémétrie temps réel près de l'échantillon puis bascule en théorique", () => {
+  const sampleJd = solar.unixToJd(Date.UTC(2026, 10, 18, 12, 0, 0));
+  const telemetry = {
+    latDeg: 48.8566,
+    lonDeg: 2.3522,
+    altitudeKm: 421,
+    velocityKmS: 7.65,
+    jd: sampleJd,
+    dLatPerDay: 1200,
+    dLonPerDay: 5100,
+  };
+
+  const liveList = solar.positions(sampleJd + 10 / 86400, { issTelemetry: telemetry });
+  const liveIss = liveList.find((p) => p.id === "iss");
+  const earth = liveList.find((p) => p.id === "earth");
+  assert.equal(liveIss.source, "live");
+  const liveAltKm =
+    Math.hypot(liveIss.x - earth.x, liveIss.y - earth.y, liveIss.z - earth.z) * solar.AU_KM - 6371;
+  assert.ok(Math.abs(liveAltKm - 421) < 1, `altitude live = ${liveAltKm}`);
+
+  // 1 heure plus tard : bascule automatique sur l'orbite théorique à 415 km
+  const futureList = solar.positions(sampleJd + 1 / 24, { issTelemetry: telemetry });
+  const theoIss = futureList.find((p) => p.id === "iss");
+  assert.equal(theoIss.source, "theoretical");
+});
+
+test("le catalogue expose le Soleil, huit planètes, les lunes, Halley et les trois engins", () => {
   const ids = solar.catalog().bodies.map((item) => item.id);
   assert.deepEqual(ids, [
     "sun",
@@ -176,7 +229,9 @@ test("le catalogue expose le Soleil, huit planètes, les lunes et les deux engin
     "europa",
     "ganymede",
     "callisto",
+    "halley",
     "iss",
+    "jwst",
     "roadster",
   ]);
 });

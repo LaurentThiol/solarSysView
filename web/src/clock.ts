@@ -1,5 +1,6 @@
 import solar, {
   type BodyPosition,
+  type IssTelemetry,
   type SimState,
   type SolarCommand,
   type Tick,
@@ -10,6 +11,7 @@ export type ClockMode = "connecting" | "node-red" | "local";
 export class ObservatoryClock {
   mode: ClockMode = "connecting";
   serverBodies: BodyPosition[] | null = null;
+  issLive: IssTelemetry | null = null;
   private state: SimState;
   private anchorJd: number;
   private anchorPerf: number;
@@ -44,7 +46,7 @@ export class ObservatoryClock {
       jd: this.jdNow(),
       updatedAtMs: now,
     };
-    const next = solar.reduce(folded, command, now);
+    const next = solar.reduce(folded, command, now, { issTelemetry: this.issLive });
     if (!next.accepted) return;
     this.adopt(next.state);
     this.holdUntil = performance.now() + 700;
@@ -101,6 +103,7 @@ export class ObservatoryClock {
       }
       if (!tick || tick.type !== "tick" || !Number.isFinite(tick.jd)) return;
       this.serverBodies = tick.bodies;
+      if (tick.issLive) this.issLive = tick.issLive;
       this.mode = "node-red";
       if (performance.now() < this.holdUntil) {
         this.onChange();

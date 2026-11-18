@@ -4,6 +4,7 @@ import {
   formatDay,
   formatDegrees,
   formatEccentricity,
+  formatGeoCoord,
   formatJulian,
   formatKm,
   formatMeters,
@@ -17,13 +18,23 @@ import {
 import { defaultView, type ViewSettings } from "./view";
 import type { ClockMode } from "./clock";
 
+export type EventPresetId =
+  | "iss-live"
+  | "starman-launch"
+  | "starman-mars"
+  | "jwst-l2"
+  | "halley-1986"
+  | "voyager-1977";
+
 interface Handlers {
   onToggle: () => void;
   onRate: (rate: number) => void;
   onDate: (jd: number) => void;
   onNow: () => void;
+  onEvent: (id: EventPresetId) => void;
   onSelect: (id: string | null) => void;
   onFrame: (id: string) => void;
+  onCockpit: (cockpit: boolean) => void;
   onInner: () => void;
   onFull: () => void;
   onFollow: (follow: boolean) => void;
@@ -56,6 +67,7 @@ export function mountUi(handlers: Handlers): {
   selectedId: () => string | null;
   selectBody: (id: string | null) => void;
   focusBody: (id: string) => void;
+  setCockpit: (cockpit: boolean) => void;
   enableCrafts: () => void;
   clearSelection: () => void;
 } {
@@ -70,10 +82,13 @@ export function mountUi(handlers: Handlers): {
   const name = need<HTMLElement>("#fiche-name");
   const fact = need<HTMLElement>("#fiche-fact");
   const inactiveNote = need<HTMLElement>("#fiche-inactive");
+  const issModeLine = need<HTMLElement>("#fiche-iss-mode");
   const facts = need<HTMLDListElement>("#fiche-facts");
   const serverLine = need<HTMLElement>("#fiche-server");
   const jumpLaunch = need<HTMLButtonElement>("#jump-launch");
+  const issLiveBtn = need<HTMLButtonElement>("#iss-live-btn");
   const frameButton = need<HTMLButtonElement>("#frame-body");
+  const cockpitButton = need<HTMLButtonElement>("#cockpit-body");
   const dateLabel = need<HTMLElement>("#date-label");
   const jdLabel = need<HTMLElement>("#jd-label");
   const pill = need<HTMLElement>("#clock-pill");
@@ -82,7 +97,9 @@ export function mountUi(handlers: Handlers): {
   const nowButton = need<HTMLButtonElement>("#now-button");
   const rateLabel = need<HTMLElement>("#rate-label");
   const dateInput = need<HTMLInputElement>("#date-input");
+  const eventSelect = need<HTMLSelectElement>("#event-select");
   const dateError = need<HTMLElement>("#date-error");
+  const transportHint = need<HTMLElement>("#transport-hint");
   const live = need<HTMLElement>("#live");
   const editorLink = need<HTMLAnchorElement>("#editor-link");
   const exponent = need<HTMLInputElement>("#opt-exponent");
@@ -93,18 +110,26 @@ export function mountUi(handlers: Handlers): {
   const belt = need<HTMLInputElement>("#opt-belt");
   const crafts = need<HTMLInputElement>("#opt-crafts");
   const followButton = need<HTMLButtonElement>("#preset-follow");
+  let issListMeta: HTMLElement | null = null;
 
   function appendBodyItem(info: BodyInfo): void {
     const item = document.createElement("li");
     if (info.kind === "moon") item.classList.add("is-moon");
     if (info.kind === "craft") item.classList.add("is-craft");
+    if (info.kind === "comet") item.classList.add("is-comet");
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.id = info.id;
     button.setAttribute("aria-pressed", "false");
     const swatch = document.createElement("span");
     swatch.className =
-      info.id === "sun" ? "swatch sun" : info.kind === "craft" ? "swatch craft" : "swatch";
+      info.id === "sun"
+        ? "swatch sun"
+        : info.kind === "craft"
+          ? "swatch craft"
+          : info.kind === "comet"
+            ? "swatch comet"
+            : "swatch";
     swatch.style.background = info.color;
     const label = document.createElement("span");
     label.className = "body-name";
@@ -113,11 +138,14 @@ export function mountUi(handlers: Handlers): {
     meta.className = "body-meta";
     if (info.altitudeKm != null) {
       meta.textContent = formatKm(info.altitudeKm);
+    } else if (info.orbitMode === "l2Halo") {
+      meta.textContent = "L2 · 1,5 M km";
     } else if (info.aAu > 0.05) {
       meta.textContent = formatAu(info.aAu);
     } else {
       meta.textContent = "";
     }
+    if (info.id === "iss") issListMeta = meta;
     button.append(swatch, label, meta);
     button.addEventListener("click", () => toggleSelect(info.id));
     item.append(button);
@@ -132,6 +160,16 @@ export function mountUi(handlers: Handlers): {
         appendBodyItem(moon);
       }
     }
+  }
+
+  const cometBodies = bodies.filter((item) => item.kind === "comet");
+  if (cometBodies.length > 0) {
+    const heading = document.createElement("li");
+    heading.className = "list-section";
+    heading.setAttribute("aria-hidden", "true");
+    heading.textContent = "Comètes";
+    list.append(heading);
+    for (const comet of cometBodies) appendBodyItem(comet);
   }
 
   const craftBodies = bodies.filter((item) => item.kind === "craft");
@@ -152,6 +190,13 @@ export function mountUi(handlers: Handlers): {
   nowButton.addEventListener("click", () => {
     dateError.hidden = true;
     handlers.onNow();
+  });
+  eventSelect.addEventListener("change", () => {
+    const value = eventSelect.value as EventPresetId | "";
+    if (!value) return;
+    dateError.hidden = true;
+    handlers.onEvent(value);
+    eventSelect.value = "";
   });
   document.querySelectorAll<HTMLButtonElement>(".rates button").forEach((button) => {
     button.addEventListener("click", () => {
@@ -177,9 +222,25 @@ export function mountUi(handlers: Handlers): {
   });
   frameButton.addEventListener("click", () => {
     if (!selectedId) return;
+    if (view.cockpit) setCockpit(false);
     setFollow(true);
     handlers.onFollow(true);
     handlers.onFrame(selectedId);
+  });
+  cockpitButton.addEventListener("click", () => {
+    if (!selectedId) return;
+    const info = byId.get(selectedId);
+    if (info?.kind === "craft") enableCrafts();
+    const next = !view.cockpit;
+    if (next) {
+      setFollow(true);
+      handlers.onFollow(true);
+    }
+    setCockpit(next);
+  });
+  issLiveBtn.addEventListener("click", () => {
+    dateError.hidden = true;
+    handlers.onEvent("iss-live");
   });
   jumpLaunch.addEventListener("click", () => {
     if (!selectedId) return;
@@ -190,13 +251,15 @@ export function mountUi(handlers: Handlers): {
     handlers.onDate(info.sinceJd + 0.02);
     setFollow(true);
     handlers.onFollow(true);
-    handlers.onFrame(info.id);
+    if (!view.cockpit) handlers.onFrame(info.id);
   });
   document.querySelector<HTMLButtonElement>("#preset-inner")?.addEventListener("click", () => {
+    if (view.cockpit) setCockpit(false);
     setFollow(false);
     handlers.onInner();
   });
   document.querySelector<HTMLButtonElement>("#preset-full")?.addEventListener("click", () => {
+    if (view.cockpit) setCockpit(false);
     setFollow(false);
     handlers.onFull();
   });
@@ -223,6 +286,9 @@ export function mountUi(handlers: Handlers): {
   });
   crafts.addEventListener("change", () => {
     view.crafts = crafts.checked;
+    if (!view.crafts && view.cockpit && selectedId && byId.get(selectedId)?.kind === "craft") {
+      setCockpit(false);
+    }
   });
   document.querySelector("#transport")?.addEventListener("submit", (event) => event.preventDefault());
   const viewPanel = document.querySelector<HTMLDetailsElement>("details#view");
@@ -239,6 +305,17 @@ export function mountUi(handlers: Handlers): {
     followButton.setAttribute("aria-pressed", follow ? "true" : "false");
   }
 
+  function setCockpit(cockpit: boolean): void {
+    if (view.cockpit === cockpit) return;
+    view.cockpit = cockpit;
+    cockpitButton.setAttribute("aria-pressed", cockpit ? "true" : "false");
+    cockpitButton.textContent = cockpit ? "Quitter" : "À bord";
+    transportHint.innerHTML = cockpit
+      ? "glisser : regarder à 360° · <kbd>échap</kbd> quitter à bord"
+      : "<kbd>espace</kbd> pause · double-clic : cadrer";
+    handlers.onCockpit(cockpit);
+  }
+
   function paintExponent(): void {
     exponentNote.textContent =
       view.exponent > 0.98
@@ -252,7 +329,12 @@ export function mountUi(handlers: Handlers): {
 
   function selectBody(id: string | null): void {
     selectedId = id;
-    if (!selectedId) setFollow(false);
+    if (!selectedId) {
+      if (view.cockpit) setCockpit(false);
+      setFollow(false);
+    } else if (view.cockpit && byId.get(selectedId)?.kind === "craft") {
+      enableCrafts();
+    }
     handlers.onSelect(selectedId);
   }
 
@@ -261,6 +343,7 @@ export function mountUi(handlers: Handlers): {
     handlers.onSelect(id);
     const info = byId.get(id);
     if (info?.kind === "craft") enableCrafts();
+    if (view.cockpit) setCockpit(false);
     setFollow(true);
     handlers.onFollow(true);
     handlers.onFrame(id);
@@ -312,11 +395,13 @@ export function mountUi(handlers: Handlers): {
         info.hasOrbit ? formatDegrees(info.iDeg) : "—",
       ],
       [
-        info.kind === "craft" ? "Rotation" : "Jour",
+        info.kind === "craft" || info.kind === "comet" ? "Rotation" : "Jour",
         formatDay(info.spinHours, info.retrograde),
       ],
     ];
-    if (info.altitudeKm == null) {
+    if (info.orbitMode === "l2Halo") {
+      rows.push(["Rayon halo L2", formatKm(info.aAu * solar.AU_KM)]);
+    } else if (info.altitudeKm == null) {
       rows.push(["Demi-grand axe", info.aAu > 0 ? formatAu(info.aAu) : "—"]);
     }
 
@@ -334,14 +419,16 @@ export function mountUi(handlers: Handlers): {
     dtDist.textContent =
       info.id === "iss"
         ? "Rayon orbital"
-        : info.parent
-          ? "Distance au corps parent"
-          : "Distance au Soleil";
+        : info.id === "jwst"
+          ? "Distance à la Terre"
+          : info.parent
+            ? "Distance au corps parent"
+            : "Distance au Soleil";
     const ddDist = document.createElement("dd");
     ddDist.id = "distance-value";
     facts.append(dtDist, ddDist);
 
-    if (info.id === "roadster") {
+    if (info.id === "roadster" || info.id === "halley") {
       const dtEarth = document.createElement("dt");
       dtEarth.textContent = "Distance à la Terre";
       const ddEarth = document.createElement("dd");
@@ -363,10 +450,12 @@ export function mountUi(handlers: Handlers): {
     selectedId: () => selectedId,
     selectBody,
     focusBody,
+    setCockpit,
     enableCrafts,
     clearSelection() {
-      if (!selectedId && !view.follow) return;
+      if (!selectedId && !view.follow && !view.cockpit) return;
       selectedId = null;
+      if (view.cockpit) setCockpit(false);
       setFollow(false);
       handlers.onSelect(null);
     },
@@ -404,6 +493,13 @@ export function mountUi(handlers: Handlers): {
         button.classList.toggle("is-inactive", !active);
       });
 
+      const issPoint = snapshot.positions.find((point) => point.id === "iss");
+      if (issListMeta) {
+        const liveNow = issPoint?.source === "live";
+        issListMeta.textContent = liveNow ? "EN DIRECT" : formatKm(415);
+        issListMeta.classList.toggle("is-live", liveNow);
+      }
+
       if (document.activeElement !== dateInput) dateInput.value = parisInputValue(snapshot.jd);
       if (snapshot.selectedId !== selectedId) selectedId = snapshot.selectedId;
       if (renderedSelection !== selectedId) {
@@ -419,14 +515,41 @@ export function mountUi(handlers: Handlers): {
       const isActive = selfPoint?.active ?? true;
 
       if (info && !isActive && info.sinceJd != null) {
+        if (view.cockpit) setCockpit(false);
         inactiveNote.hidden = false;
         inactiveNote.textContent = `Pas encore dans l’espace à cette date (départ le ${formatParisDate(info.sinceJd)}).`;
         jumpLaunch.hidden = false;
         frameButton.hidden = true;
+        cockpitButton.hidden = true;
       } else {
         inactiveNote.hidden = true;
         jumpLaunch.hidden = true;
         frameButton.hidden = false;
+        cockpitButton.hidden = false;
+      }
+
+      if (info?.id === "iss") {
+        issModeLine.hidden = false;
+        if (
+          selfPoint?.source === "live" &&
+          selfPoint.liveLatDeg != null &&
+          selfPoint.liveLonDeg != null
+        ) {
+          issModeLine.classList.add("is-live");
+          const alt =
+            selfPoint.liveAltitudeKm != null ? ` · ${formatKm(selfPoint.liveAltitudeKm)}` : "";
+          issModeLine.textContent = `En direct (Node-RED) : ${formatGeoCoord(selfPoint.liveLatDeg, selfPoint.liveLonDeg)}${alt}`;
+          const isRealTime =
+            snapshot.playing && Math.abs(snapshot.rate - 1 / 86400) / (1 / 86400) < 0.08;
+          issLiveBtn.hidden = isRealTime;
+        } else {
+          issModeLine.classList.remove("is-live");
+          issModeLine.textContent = "Mode : orbite théorique circulaire (415 km, 51,64°)";
+          issLiveBtn.hidden = false;
+        }
+      } else {
+        issModeLine.hidden = true;
+        issLiveBtn.hidden = true;
       }
 
       const distance = document.querySelector<HTMLElement>("#distance-value");
