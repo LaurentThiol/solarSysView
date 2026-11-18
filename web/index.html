@@ -23,7 +23,18 @@
         <time id="date-label"></time>
         <span id="jd-label"></span>
       </div>
-      <p id="clock-pill" class="pill">Connexion à Node-RED…</p>
+      <div class="header-actions">
+        <p id="clock-pill" class="pill">Connexion à Node-RED…</p>
+        <button
+          type="button"
+          id="quit-app"
+          class="quit-btn"
+          hidden
+          title="Arrêter proprement l’observatoire et le serveur Node-RED"
+        >
+          Quitter
+        </button>
+      </div>
     </header>
 
     <aside id="rail">
@@ -126,6 +137,34 @@
         </div>
       </div>
     </details>
+
+    <dialog id="quit-dialog" class="quit-dialog" aria-labelledby="quit-title">
+      <div class="quit-card">
+        <p class="kicker">Fermeture propre</p>
+        <h2 id="quit-title">Quitter Planètes et Node-RED ?</h2>
+        <p id="quit-desc">
+          Les flux Node-RED, le WebSocket temps réel et le serveur local seront arrêtés proprement.
+        </p>
+        <div class="quit-actions">
+          <button type="button" id="quit-cancel">Continuer</button>
+          <button type="button" id="quit-confirm" class="is-danger">Arrêter Planètes</button>
+        </div>
+      </div>
+    </dialog>
+
+    <section id="shutdown-screen" class="shutdown-screen" hidden aria-live="polite">
+      <div class="shutdown-card">
+        <p class="kicker">Observatoire hors tension</p>
+        <h2>Planètes et Node-RED sont arrêtés</h2>
+        <p id="shutdown-detail">
+          Les flux Node-RED, la connexion WebSocket et le serveur local ont été fermés proprement. Vous pouvez fermer cet onglet.
+        </p>
+        <div class="quit-actions">
+          <button type="button" id="shutdown-close" class="is-primary">Fermer l’onglet</button>
+          <button type="button" id="shutdown-reload">Reconnecter</button>
+        </div>
+      </div>
+    </section>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

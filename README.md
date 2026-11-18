@@ -71,8 +71,9 @@ Les distances à l’écran sont compressées par défaut (exposant 0,55) et le 
 
 Les photographies viennent de [Solar System Scope](https://www.solarsystemscope.com/textures/), licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), avec masquage jour/nuit des lumières terrestres côté éclairé. Si un fichier manque, une texture procédurale prend le relais. La couronne du Soleil, les anneaux de Saturne, la ceinture d’astéroïdes, la double queue de Halley, l’ISS, le JWST et le cabriolet Tesla sont générés en 3D dans la scène.
 
-## Raccourcis
+## Raccourcis et sortie
 
+- **Bouton « Quitter »** (en haut à droite) : ferme proprement le WebSocket et la scène WebGL, puis arrête les flux Node-RED (`RED.stop()`) et le serveur local (`POST /api/shutdown`). Désactivé automatiquement sur un hébergement distant.
 - **Espace** : pause ou lecture
 - **Échap** : quitte le mode **À bord** (ou relâche l’astre suivi)
 - **Clic** dans la scène : sélectionne un corps, une comète ou un engin

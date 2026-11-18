@@ -6,7 +6,7 @@ import solar, {
   type Tick,
 } from "../../ephemeris/solar.js";
 
-export type ClockMode = "connecting" | "node-red" | "local";
+export type ClockMode = "connecting" | "node-red" | "local" | "stopped";
 
 export class ObservatoryClock {
   mode: ClockMode = "connecting";
@@ -18,6 +18,7 @@ export class ObservatoryClock {
   private ws: WebSocket | null = null;
   private holdUntil = 0;
   private reconnectTimer: number | null = null;
+  private stopped = false;
 
   constructor(private readonly onChange: () => void) {
     this.state = solar.initialState(Date.now());
@@ -40,6 +41,7 @@ export class ObservatoryClock {
   }
 
   command(command: SolarCommand): void {
+    if (this.stopped) return;
     const now = Date.now();
     const folded: SimState = {
       ...this.state,
@@ -57,20 +59,43 @@ export class ObservatoryClock {
   }
 
   useLocal(): void {
+    if (this.stopped) return;
     this.mode = "local";
     this.adopt({ ...this.state, jd: this.jdNow(), updatedAtMs: Date.now() });
     this.onChange();
   }
 
-  startAutoReconnect(onEditor: (enabled: boolean) => void): void {
+  stop(): void {
+    this.stopped = true;
+    this.mode = "stopped";
+    this.adopt({ ...this.state, jd: this.jdNow(), playing: false, updatedAtMs: Date.now() });
+    if (this.reconnectTimer != null) {
+      window.clearInterval(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.ws) {
+      const socket = this.ws;
+      this.ws = null;
+      try {
+        socket.close(1000, "Arrêt propre");
+      } catch {
+        // Fermeture silencieuse
+      }
+    }
+  }
+
+  startAutoReconnect(onSync: (info: { editor: boolean; shutdown: boolean }) => void): void {
     if (this.reconnectTimer != null) return;
     this.reconnectTimer = window.setInterval(() => {
-      if (this.mode !== "local" || this.ws || document.hidden) return;
+      if (this.stopped || this.mode !== "local" || this.ws || document.hidden) return;
       void fetch("/api/health", { cache: "no-store" })
         .then(async (response) => {
-          if (!response.ok) return;
-          const health = (await response.json()) as { editor?: boolean };
-          onEditor(health.editor === true);
+          if (!response.ok || this.stopped) return;
+          const health = (await response.json()) as { editor?: boolean; shutdown?: boolean };
+          onSync({
+            editor: health.editor === true,
+            shutdown: health.shutdown === true,
+          });
           this.connectSocket();
         })
         .catch(() => undefined);
@@ -78,11 +103,12 @@ export class ObservatoryClock {
   }
 
   connectSocket(): void {
-    if (this.ws) return;
+    if (this.stopped || this.ws) return;
     const protocol = location.protocol === "https:" ? "wss" : "ws";
     const socket = new WebSocket(`${protocol}//${location.host}/api/ws/solar`);
     this.ws = socket;
     const giveUp = window.setTimeout(() => {
+      if (this.stopped) return;
       if (this.mode === "connecting" || socket.readyState !== WebSocket.OPEN) {
         socket.close();
         if (this.mode !== "local") this.useLocal();
@@ -90,11 +116,12 @@ export class ObservatoryClock {
     }, 2500);
     socket.addEventListener("open", () => {
       window.clearTimeout(giveUp);
+      if (this.stopped) return;
       this.mode = "node-red";
       this.onChange();
     });
     socket.addEventListener("message", (event) => {
-      if (typeof event.data !== "string") return;
+      if (this.stopped || typeof event.data !== "string") return;
       let tick: Tick;
       try {
         tick = JSON.parse(event.data) as Tick;
@@ -115,7 +142,7 @@ export class ObservatoryClock {
     socket.addEventListener("close", () => {
       window.clearTimeout(giveUp);
       this.ws = null;
-      if (this.mode !== "local") this.useLocal();
+      if (!this.stopped && this.mode !== "local") this.useLocal();
     });
     socket.addEventListener("error", () => socket.close());
   }
