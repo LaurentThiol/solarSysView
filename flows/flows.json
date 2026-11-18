@@ -67,7 +67,7 @@
     "type": "function",
     "z": "tab-solar",
     "name": "Éphémérides",
-    "func": "const solar = global.get('solar');\nlet state = flow.get('sim');\nif (!state) state = solar.initialState(Date.now());\nconst command = msg.topic === 'tick' ? { type: 'tick' } : solar.parseCommand(msg.payload);\nconst next = solar.reduce(state, command, Date.now());\nflow.set('sim', next.state);\nmsg.payload = next.tick;\nnode.status({\n  fill: next.state.playing ? 'green' : 'grey',\n  shape: 'dot',\n  text: next.label\n});\nreturn msg;\n",
+    "func": "const solar = global.get('solar');\nlet state = flow.get('sim');\nif (!state) state = solar.initialState(Date.now());\nconst command = msg.topic === 'tick' ? { type: 'tick' } : solar.parseCommand(msg.payload);\nconst next = solar.reduce(state, command, Date.now());\nflow.set('sim', next.state);\ndelete msg._session;\nmsg.payload = next.tick;\nnode.status({\n  fill: next.state.playing ? 'green' : 'grey',\n  shape: 'dot',\n  text: next.label\n});\nreturn msg;\n",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,

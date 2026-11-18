@@ -4,6 +4,7 @@ export interface ViewSettings {
   orbits: boolean;
   names: boolean;
   belt: boolean;
+  crafts: boolean;
   follow: boolean;
 }
 
@@ -13,5 +14,6 @@ export const defaultView: ViewSettings = {
   orbits: true,
   names: true,
   belt: true,
+  crafts: true,
   follow: false,
 };

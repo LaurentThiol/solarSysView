@@ -33,32 +33,48 @@
         <div id="fiche-body" hidden>
           <h2 id="fiche-name"></h2>
           <p id="fiche-fact"></p>
+          <p id="fiche-inactive" class="inactive-note" hidden></p>
           <dl id="fiche-facts"></dl>
           <p id="fiche-server" class="server-line" hidden></p>
-          <button type="button" id="frame-body">Cadrer</button>
+          <div class="fiche-actions">
+            <button type="button" id="jump-launch" hidden>Aller au lancement</button>
+            <button type="button" id="frame-body">Cadrer</button>
+          </div>
         </div>
       </article>
       <p id="footnote" class="footnote">
-        Éléments képlériens moyens, époque J2000. La précision se dégrade loin de l’an 2000.
+        Éléments képlériens JPL avec dérives séculaires (−3000 à 3000), orbites approchées des lunes, de l’ISS théorique et du cabriolet Tesla.
         <a id="editor-link" href="/red" hidden>Éditeur des flux</a>
       </p>
     </aside>
 
     <form id="transport" autocomplete="off">
       <button type="button" id="play-toggle" aria-pressed="false">Pause</button>
+      <button
+        type="button"
+        id="reverse-toggle"
+        aria-pressed="false"
+        aria-label="Inverser le sens du temps"
+        title="Inverser le sens du temps"
+      >
+        ±
+      </button>
       <div class="rates" role="group" aria-label="Vitesse">
-        <button type="button" data-rate="1" aria-pressed="true">1 j</button>
-        <button type="button" data-rate="7" aria-pressed="false">7 j</button>
-        <button type="button" data-rate="30" aria-pressed="false">30 j</button>
-        <button type="button" data-rate="365" aria-pressed="false">1 an</button>
+        <button type="button" data-rate="0.000011574074074" aria-pressed="false" title="Temps réel">1×</button>
+        <button type="button" data-rate="0.00069444444444" aria-pressed="false" title="1 minute par seconde">1 min</button>
+        <button type="button" data-rate="0.041666666667" aria-pressed="false" title="1 heure par seconde">1 h</button>
+        <button type="button" data-rate="1" aria-pressed="true" title="1 jour par seconde">1 j</button>
+        <button type="button" data-rate="30" aria-pressed="false" title="30 jours par seconde">30 j</button>
+        <button type="button" data-rate="365" aria-pressed="false" title="1 an par seconde">1 an</button>
       </div>
       <label class="date-field">
         <span>Date, heure de Paris</span>
         <input id="date-input" type="datetime-local" />
       </label>
+      <button type="button" id="now-button" title="Revenir à l’instant présent">Maintenant</button>
       <p id="rate-label" class="rate-label"></p>
       <p id="date-error" class="date-error" hidden>Choisissez une année entre −3000 et 3000.</p>
-      <p class="hint"><kbd>espace</kbd> pause</p>
+      <p class="hint"><kbd>espace</kbd> pause · double-clic : cadrer</p>
     </form>
 
     <details id="view" open>
@@ -76,6 +92,7 @@
         <label class="check"><input id="opt-orbits" type="checkbox" checked /> Orbites</label>
         <label class="check"><input id="opt-names" type="checkbox" checked /> Noms</label>
         <label class="check"><input id="opt-belt" type="checkbox" checked /> Ceinture</label>
+        <label class="check"><input id="opt-crafts" type="checkbox" checked /> Engins</label>
         <div class="presets" role="group" aria-label="Cadrage">
           <button type="button" id="preset-inner">Intérieur</button>
           <button type="button" id="preset-full">Système</button>

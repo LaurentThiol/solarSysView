@@ -32,19 +32,60 @@ export function formatAu(value: number): string {
 }
 
 export function formatKm(value: number): string {
-  return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(value)} km`;
+  const digits = value > 0 && value < 10 ? 1 : 0;
+  return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: digits }).format(value)} km`;
+}
+
+export function formatMeters(value: number): string {
+  return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(value)} m`;
+}
+
+export function formatSpeed(kmPerSec: number): string {
+  const digits = kmPerSec < 10 ? 2 : 1;
+  return `${new Intl.NumberFormat("fr-FR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: digits,
+  }).format(kmPerSec)} km/s`;
 }
 
 export function formatRate(rate: number): string {
-  if (Math.abs(rate - 365) < 0.05) return "1 an / s";
+  const abs = Math.abs(rate);
+  if (abs < 1e-8) return "0 jour / s";
+  const sign = rate < 0 ? "−" : "";
+  if (Math.abs(abs - 1 / 86400) / (1 / 86400) < 0.04) {
+    return rate < 0 ? "Temps réel inversé (−1×)" : "Temps réel (1×)";
+  }
+  if (abs < 1 / 24 - 1e-5) {
+    const minutes = abs * 1440;
+    const text = new Intl.NumberFormat("fr-FR", {
+      maximumFractionDigits: minutes >= 10 ? 0 : 1,
+    }).format(minutes);
+    return `${sign}${text} min / s`;
+  }
+  if (abs < 0.95) {
+    const hours = abs * 24;
+    const text = new Intl.NumberFormat("fr-FR", {
+      maximumFractionDigits: hours >= 10 ? 0 : 1,
+    }).format(hours);
+    return `${sign}${text} h / s`;
+  }
+  if (Math.abs(abs - 365) < 0.5) return `${sign}1 an / s`;
   const text = new Intl.NumberFormat("fr-FR", {
-    maximumFractionDigits: rate >= 10 ? 0 : 1,
-  }).format(rate);
-  return rate >= 2 ? `${text} jours / s` : `${text} jour / s`;
+    maximumFractionDigits: abs >= 10 ? 0 : 1,
+  }).format(abs);
+  return abs >= 2 ? `${sign}${text} jours / s` : `${sign}${text} jour / s`;
 }
 
 export function formatPeriod(days: number | null): string {
   if (days == null) return "—";
+  if (days < 0.2) {
+    const minutes = days * 1440;
+    return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(minutes)} min`;
+  }
+  if (days < 1) {
+    const hours = days * 24;
+    return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(hours)} h`;
+  }
   if (days >= 800) {
     const years = days / 365.25;
     return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(years)} ans`;
@@ -54,10 +95,17 @@ export function formatPeriod(days: number | null): string {
 
 export function formatDay(hours: number, retrograde: boolean): string {
   const abs = Math.abs(hours);
-  const text =
-    abs >= 48
-      ? `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(abs / 24)} j`
-      : `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(abs)} h`;
+  let text: string;
+  if (abs < 1) {
+    const totalSec = Math.round(abs * 3600);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    text = sec > 0 ? `${min} min ${sec} s` : `${min} min`;
+  } else if (abs >= 48) {
+    text = `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(abs / 24)} j`;
+  } else {
+    text = `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(abs)} h`;
+  }
   return retrograde ? `${text}, rétrograde` : text;
 }
 

@@ -34,24 +34,32 @@ L’onglet **Système solaire** dans [flows/flows.json](flows/flows.json) :
 - `GET /api/catalog` et `GET /api/health` exposent le catalogue et l’état de l’éditeur ;
 - la date simulée s’affiche sur le nœud.
 
-Les commandes acceptées sont `pause`, `play`, `toggle`, `setRate` (0 à 4 000 jours par seconde) et `setDate` (années −3000 à 3000). Toute autre charge est ignorée.
+Les commandes acceptées sont `pause`, `play`, `toggle`, `setRate` (−4 000 à 4 000 jours par seconde, du temps réel `1×` au rebours) et `setDate` (années −3000 à 3000). Toute autre charge est ignorée, et chaque commande est diffusée à tous les onglets connectés.
 
-La scène réévalue la même formule à chaque image, pour que Mercure reste lisible quand on accélère. Le tick Node-RED reste la référence : la fiche d’un astre affiche la distance qu’il a calculée.
+La scène réévalue la même formule à chaque image, pour que Mercure ou l’ISS restent fluides quand on change d’échelle de temps. Le tick Node-RED reste la référence : la fiche d’un astre affiche la distance qu’il a calculée.
 
-Si le WebSocket manque, la scène continue avec la même formule et l’indique : « Horloge locale ».
+Si le WebSocket manque, la scène continue avec la même formule (« Horloge locale ») et tente automatiquement de se reconnecter à Node-RED.
+
+## Objets représentés
+
+- **Soleil, 8 planètes et 5 lunes** (Lune, Io, Europe, Ganymède, Callisto) regroupées sous leur planète parente.
+- **Cabriolet Tesla (Starman, `2018-017A`)** : orbite héliocentrique elliptique du JPL (`a = 1,325 UA`, `e = 0,256`, période `557 j`) croisant l’orbite de Mars. Masqué avant son éjection du 7 février 2018, avec un bouton **Aller au lancement** dans sa fiche.
+- **ISS (théorique)** : orbite basse terrestre circulaire permanente à `415 km` d’altitude, inclinée à `51,64°` sur l’équateur terrestre (période `92,9 min`, précession nodale J2). Cadrer l’ISS ramène automatiquement une vitesse trop rapide à `1 min/s` pour suivre sa révolution.
 
 ## Limites
 
-Les planètes utilisent les éléments képlériens moyens du JPL à l’époque J2000, sans les dérivées séculaires. Les lunes sont des orbites képlériennes simplifiées. Ce n’est pas une éphéméride de navigation : loin de l’an 2000, l’écart grandit.
+Les planètes utilisent les éléments képlériens approchés du JPL avec leurs dérives séculaires (−3000 à 3000, tables Standish & Williams). Les lunes, l’ISS théorique (sans traînée atmosphérique ni rehaussements) et le cabriolet Tesla suivent des orbites képlériennes à deux corps. Ce n’est pas une éphéméride de navigation.
 
-Les distances à l’écran sont compressées par défaut (exposant 0,55). Le curseur **Distances** à 1 rétablit les proportions en unités astronomiques. Les tailles des corps sont exagérées, sinon la Terre disparaît.
+Les distances à l’écran sont compressées par défaut (exposant 0,55). Le curseur **Distances** à 1 rétablit les proportions en unités astronomiques. Les tailles des corps et les rayons visuels des orbites basses ou lunaires sont amplifiés pour éviter toute collision visuelle avec leur planète.
 
 ## Textures
 
-Les photographies viennent de [Solar System Scope](https://www.solarsystemscope.com/textures/), licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Si un fichier manque, une texture dessinée prend le relais. La couronne du Soleil, les anneaux de Saturne et la ceinture d’astéroïdes sont générés dans la scène.
+Les photographies viennent de [Solar System Scope](https://www.solarsystemscope.com/textures/), licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), avec masquage jour/nuit des lumières terrestres côté éclairé. Si un fichier manque, une texture procédurale prend le relais. La couronne du Soleil, les anneaux de Saturne, la ceinture d’astéroïdes, l’ISS et le cabriolet Tesla sont générés en 3D dans la scène.
 
 ## Raccourcis
 
-- Espace : pause ou lecture
-- Échap : relâche l’astre suivi
-- Clic dans la scène : sélectionne un corps
+- **Espace** : pause ou lecture
+- **Échap** : relâche l’astre suivi
+- **Clic** dans la scène : sélectionne un corps ou un engin
+- **Double-clic** dans la scène : cadre et suit l’objet visé
+- **± / Maintenant** : inverse le sens du temps ou revient à l’instant présent

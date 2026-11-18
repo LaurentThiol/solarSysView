@@ -22,24 +22,42 @@ if (!scene) glError.hidden = false;
 const clock = new ObservatoryClock(() => undefined);
 let follow = false;
 let frameQueued = false;
+let pendingFrameId: string | null = null;
+
+function requestFrameBody(id: string): void {
+  if (id === "iss" || id === "roadster") {
+    ui.enableCrafts();
+  }
+  if (id === "iss" && Math.abs(clock.rate()) > 0.1) {
+    const sign = clock.rate() < 0 ? -1 : 1;
+    clock.command({ type: "setRate", rateDaysPerSec: sign * (1 / 1440) });
+  }
+  pendingFrameId = id;
+  queue();
+}
 
 const ui = mountUi({
   onToggle: () => clock.command({ type: "toggle" }),
   onRate: (rateDaysPerSec) => clock.command({ type: "setRate", rateDaysPerSec }),
   onDate: (jd) => clock.command({ type: "setDate", jd }),
+  onNow: () => {
+    clock.command({ type: "setDate", jd: solar.unixToJd(Date.now()) });
+    if (!clock.playing()) clock.command({ type: "play" });
+  },
   onSelect: (id) => {
     if (!id) follow = false;
   },
-  onFrame: () => {
-    const id = ui.selectedId();
-    if (id) scene?.frame(id);
+  onFrame: (id) => {
+    requestFrameBody(id);
   },
   onInner: () => {
     follow = false;
+    pendingFrameId = null;
     scene?.showInner();
   },
   onFull: () => {
     follow = false;
+    pendingFrameId = null;
     scene?.showFull();
   },
   onFollow: (next) => {
@@ -50,6 +68,7 @@ const ui = mountUi({
 window.addEventListener("keydown", (event) => {
   if (event.code === "Escape") {
     follow = false;
+    pendingFrameId = null;
     ui.clearSelection();
     return;
   }
@@ -71,9 +90,17 @@ canvas.addEventListener("pointerup", (event) => {
   if (dx * dx + dy * dy > 16) return;
   const id = scene.pick(event.clientX, event.clientY);
   const current = ui.selectedId();
-  const target = id ?? current;
-  if (!target) return;
-  document.querySelector<HTMLButtonElement>(`#body-list button[data-id="${target}"]`)?.click();
+  if (id) {
+    ui.selectBody(id === current ? null : id);
+  } else if (current) {
+    ui.clearSelection();
+  }
+});
+canvas.addEventListener("dblclick", (event) => {
+  if (!scene) return;
+  const id = scene.pick(event.clientX, event.clientY) ?? ui.selectedId();
+  if (!id) return;
+  ui.focusBody(id);
 });
 canvas.addEventListener("pointermove", (event) => {
   if (!scene) return;
@@ -100,6 +127,11 @@ function frame(): void {
   const state = snapshot();
   const view = { ...ui.view(), follow };
   scene?.update(state.jd, view, state.selectedId);
+  if (pendingFrameId) {
+    const target = pendingFrameId;
+    pendingFrameId = null;
+    scene?.frame(target);
+  }
   ui.sync(state);
   queue();
 }
@@ -115,6 +147,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 async function connect(): Promise<void> {
+  clock.startAutoReconnect((enabled) => ui.setEditor(enabled));
   try {
     const response = await fetch("/api/health", { cache: "no-store" });
     if (!response.ok) {

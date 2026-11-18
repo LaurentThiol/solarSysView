@@ -1,4 +1,9 @@
-import solar, { type BodyPosition, type SimState, type Tick } from "../../ephemeris/solar.js";
+import solar, {
+  type BodyPosition,
+  type SimState,
+  type SolarCommand,
+  type Tick,
+} from "../../ephemeris/solar.js";
 
 export type ClockMode = "connecting" | "node-red" | "local";
 
@@ -10,6 +15,7 @@ export class ObservatoryClock {
   private anchorPerf: number;
   private ws: WebSocket | null = null;
   private holdUntil = 0;
+  private reconnectTimer: number | null = null;
 
   constructor(private readonly onChange: () => void) {
     this.state = solar.initialState(Date.now());
@@ -31,7 +37,7 @@ export class ObservatoryClock {
     return this.state.rateDaysPerSec;
   }
 
-  command(command: { type: string; rateDaysPerSec?: number; jd?: number }): void {
+  command(command: SolarCommand): void {
     const now = Date.now();
     const folded: SimState = {
       ...this.state,
@@ -54,15 +60,30 @@ export class ObservatoryClock {
     this.onChange();
   }
 
+  startAutoReconnect(onEditor: (enabled: boolean) => void): void {
+    if (this.reconnectTimer != null) return;
+    this.reconnectTimer = window.setInterval(() => {
+      if (this.mode !== "local" || this.ws || document.hidden) return;
+      void fetch("/api/health", { cache: "no-store" })
+        .then(async (response) => {
+          if (!response.ok) return;
+          const health = (await response.json()) as { editor?: boolean };
+          onEditor(health.editor === true);
+          this.connectSocket();
+        })
+        .catch(() => undefined);
+    }, 5000);
+  }
+
   connectSocket(): void {
     if (this.ws) return;
     const protocol = location.protocol === "https:" ? "wss" : "ws";
     const socket = new WebSocket(`${protocol}//${location.host}/api/ws/solar`);
     this.ws = socket;
     const giveUp = window.setTimeout(() => {
-      if (this.mode === "connecting") {
+      if (this.mode === "connecting" || socket.readyState !== WebSocket.OPEN) {
         socket.close();
-        this.useLocal();
+        if (this.mode !== "local") this.useLocal();
       }
     }, 2500);
     socket.addEventListener("open", () => {
@@ -100,7 +121,8 @@ export class ObservatoryClock {
     const localJd = this.jdNow();
     const error = tick.jd - localJd;
     const tolerance = Math.max(0.05, Math.abs(tick.rateDaysPerSec) * 0.45);
-    if (Math.abs(error) > tolerance || tick.playing !== this.state.playing) {
+    const rateChanged = Math.abs(tick.rateDaysPerSec - this.state.rateDaysPerSec) > 1e-9;
+    if (Math.abs(error) > tolerance || tick.playing !== this.state.playing || rateChanged) {
       this.adopt({
         jd: tick.jd,
         playing: tick.playing,
