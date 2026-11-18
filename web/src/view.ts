@@ -1,6 +1,7 @@
 export interface ViewSettings {
   exponent: number;
   size: number;
+  exactSize: boolean;
   orbits: boolean;
   names: boolean;
   belt: boolean;
@@ -12,6 +13,7 @@ export interface ViewSettings {
 export const defaultView: ViewSettings = {
   exponent: 0.55,
   size: 16,
+  exactSize: false,
   orbits: true,
   names: true,
   belt: true,

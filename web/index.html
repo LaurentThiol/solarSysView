@@ -100,10 +100,21 @@
           <input id="opt-exponent" type="range" min="0.35" max="1" step="0.01" value="0.55" />
         </label>
         <p id="exponent-note" class="note"></p>
-        <label class="slider" for="opt-size">
-          <span>Tailles</span>
+        <div class="slider">
+          <div class="slider-head">
+            <label for="opt-size">Tailles</label>
+            <button
+              type="button"
+              id="exact-size"
+              aria-pressed="false"
+              title="Afficher les vraies proportions des astres par rapport au Soleil"
+            >
+              Exact
+            </button>
+          </div>
           <input id="opt-size" type="range" min="6" max="36" step="1" value="16" />
-        </label>
+        </div>
+        <p id="size-note" class="note"></p>
         <label class="check"><input id="opt-orbits" type="checkbox" checked /> Orbites</label>
         <label class="check"><input id="opt-names" type="checkbox" checked /> Noms</label>
         <label class="check"><input id="opt-belt" type="checkbox" checked /> Ceinture</label>
