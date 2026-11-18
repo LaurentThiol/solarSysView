@@ -23,6 +23,7 @@ const settings = {
   userDir: path.join(root, ".node-red"),
   flowFile: path.join(root, "flows", "flows.json"),
   flowFilePretty: true,
+  credentialSecret: false,
   functionGlobalContext: {
     solar,
     editorEnabled: enableEditor,

@@ -4,7 +4,17 @@ Une scène plein écran du système solaire en révolution. Node-RED tient l’h
 
 La date d’ouverture est celle du moment, à l’heure de Paris. Le temps avance tout de suite, à un jour simulé par seconde. On peut mettre en pause, changer la vitesse, choisir une date, cadrer un astre et compresser les distances pour voir Mercure et Neptune dans le même cadre.
 
-## Lancer
+## Lancer (« Planètes »)
+
+Le lanceur **Planètes** contrôle l’intégrité du projet (version de Node.js, présence des sources, empreintes SHA-256 et en-têtes des textures, structure des flux Node-RED, dépendances `npm`, tests unitaires des éphémérides et fraîcheur du bundle Vite) avant d’ouvrir l’observatoire :
+
+```bash
+./planetes
+```
+
+- Sur **macOS**, vous pouvez aussi double-cliquer sur **`planètes.command`** dans le Finder.
+- Pour vérifier uniquement l’intégrité sans démarrer le serveur : `./planetes --check` (ou `npm run check`).
+- Lancement classique via `npm` :
 
 ```bash
 npm install

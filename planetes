@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Enrichit le PATH pour les lancements depuis le Finder macOS (Homebrew Apple Silicon/Intel, Volta, fnm, nvm)
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.volta/bin:$HOME/.local/share/fnm:$PATH"
+if ! command -v node >/dev/null 2>&1 && [ -s "$HOME/.nvm/nvm.sh" ]; then
+  # shellcheck disable=SC1090
+  . "$HOME/.nvm/nvm.sh"
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "✖ Node.js est introuvable. Installez Node.js (>= 20) depuis https://nodejs.org ou via Homebrew (brew install node)." >&2
+  exit 1
+fi
+
+exec node "$ROOT/server/launcher.cjs" "$@"
