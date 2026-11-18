@@ -105,6 +105,8 @@ export function mountUi(handlers: Handlers): {
   const exponent = need<HTMLInputElement>("#opt-exponent");
   const exponentNote = need<HTMLElement>("#exponent-note");
   const size = need<HTMLInputElement>("#opt-size");
+  const exactSizeButton = need<HTMLButtonElement>("#exact-size");
+  const sizeNote = need<HTMLElement>("#size-note");
   const orbits = need<HTMLInputElement>("#opt-orbits");
   const names = need<HTMLInputElement>("#opt-names");
   const belt = need<HTMLInputElement>("#opt-belt");
@@ -274,6 +276,18 @@ export function mountUi(handlers: Handlers): {
   });
   size.addEventListener("input", () => {
     view.size = Number(size.value);
+    if (view.exactSize) {
+      view.exactSize = false;
+      exactSizeButton.setAttribute("aria-pressed", "false");
+      size.classList.remove("is-overridden");
+    }
+    paintSize();
+  });
+  exactSizeButton.addEventListener("click", () => {
+    view.exactSize = !view.exactSize;
+    exactSizeButton.setAttribute("aria-pressed", view.exactSize ? "true" : "false");
+    size.classList.toggle("is-overridden", view.exactSize);
+    paintSize();
   });
   orbits.addEventListener("change", () => {
     view.orbits = orbits.checked;
@@ -294,6 +308,7 @@ export function mountUi(handlers: Handlers): {
   const viewPanel = document.querySelector<HTMLDetailsElement>("details#view");
   if (viewPanel && window.matchMedia("(max-width: 800px)").matches) viewPanel.open = false;
   paintExponent();
+  paintSize();
 
   function enableCrafts(): void {
     view.crafts = true;
@@ -321,6 +336,12 @@ export function mountUi(handlers: Handlers): {
       view.exponent > 0.98
         ? "Les distances à l’écran suivent les unités astronomiques."
         : "Les distances à l’écran sont compressées pour tenir dans le cadre.";
+  }
+
+  function paintSize(): void {
+    sizeNote.textContent = view.exactSize
+      ? "Proportions réelles face au Soleil (109 Terres, 10 Jupiters)."
+      : `Rayons amplifiés (×${view.size}) pour voir les planètes de loin.`;
   }
 
   function toggleSelect(id: string): void {

@@ -65,7 +65,7 @@ Si le WebSocket manque, la scène continue avec la même formule (« Horloge loc
 
 Les planètes utilisent les éléments képlériens approchés du JPL avec leurs dérives séculaires (−3000 à 3000, tables Standish & Williams). Les lunes, la comète de Halley, l’ISS théorique et le cabriolet Tesla suivent des orbites képlériennes à deux corps, et le JWST suit un modèle géométrique d’orbite halo autour de L2. Ce n’est pas une éphéméride de navigation.
 
-Les distances à l’écran sont compressées par défaut (exposant 0,55). Le curseur **Distances** à 1 rétablit les proportions en unités astronomiques. Les tailles des corps et les rayons visuels des orbites basses, lunaires ou L2 sont amplifiés pour éviter toute collision visuelle avec leur planète.
+Les distances à l’écran sont compressées par défaut (exposant 0,55) et le curseur **Distances** à 1 rétablit les proportions en unités astronomiques. De même, les tailles des astres sont amplifiées par défaut (`×16`), mais le bouton **Exact** à côté de **Tailles** applique les rayons physiques réels des planètes et des lunes face au Soleil (`109 Terres` ou `10 Jupiters` dans le diamètre solaire, Ganymède plus grand que Mercure) ainsi que l’échelle exacte des rayons orbitaux lunaires et de l’ISS.
 
 ## Textures
 

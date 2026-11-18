@@ -71,6 +71,8 @@ export class SolarScene {
   private view: ViewSettings | null = null;
   private exponent = -1;
   private size = -1;
+  private exactSize = false;
+  private corona: THREE.Sprite | null = null;
   private lastIssOrbitJd = Number.NaN;
   private lastJwstOrbitJd = Number.NaN;
   private wasCockpit = false;
@@ -97,11 +99,11 @@ export class SolarScene {
     this.scene.add(new THREE.HemisphereLight(0x243044, 0x1a120c, 0.22));
     const sunLight = new THREE.PointLight(0xfff4e0, 8, 0, 0);
     this.scene.add(sunLight);
-    this.camera = new THREE.PerspectiveCamera(42, 1, 0.01, 2000);
+    this.camera = new THREE.PerspectiveCamera(42, 1, 0.0006, 2000);
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
-    this.controls.minDistance = 0.05;
+    this.controls.minDistance = 0.003;
     this.controls.maxDistance = 420;
     this.controls.minPolarAngle = 0.08;
     this.controls.maxPolarAngle = Math.PI - 0.08;
@@ -129,6 +131,7 @@ export class SolarScene {
     this.addCorona();
     this.exponent = 0.55;
     this.size = 16;
+    this.exactSize = false;
     this.applySizes();
     this.rebuildPlanetOrbits();
     this.rebuildMoonOrbits(solar.J2000);
@@ -168,7 +171,23 @@ export class SolarScene {
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const hits = this.raycaster.intersectObjects(this.pickables, false);
     const id = hits[0]?.object.userData.bodyId;
-    return typeof id === "string" ? id : null;
+    if (typeof id === "string") return id;
+
+    let bestId: string | null = null;
+    let bestDistSq = 14 * 14;
+    for (const actor of this.actors.values()) {
+      if (!actor.root.visible) continue;
+      const projected = this.tmpLook.copy(actor.root.position).project(this.camera);
+      if (projected.z < -1 || projected.z > 1) continue;
+      const sx = rect.left + (projected.x * 0.5 + 0.5) * rect.width;
+      const sy = rect.top + (-projected.y * 0.5 + 0.5) * rect.height;
+      const dSq = (sx - clientX) * (sx - clientX) + (sy - clientY) * (sy - clientY);
+      if (dSq < bestDistSq) {
+        bestDistSq = dSq;
+        bestId = actor.info.id;
+      }
+    }
+    return bestId;
   }
 
   showInner(): void {
@@ -197,7 +216,17 @@ export class SolarScene {
     if (direction.lengthSq() < 1e-6) direction.set(0.7, 0.45, 1);
     direction.normalize();
     let distance: number;
-    if (id === "iss") {
+    if (this.exactSize) {
+      if (id === "saturn") {
+        distance = Math.max(radius * 9.5, 0.012);
+      } else if (id === "halley") {
+        distance = Math.max(radius * 18, 0.04);
+      } else if (actor.info.kind === "craft") {
+        distance = Math.max(radius * 6.5, 0.006);
+      } else {
+        distance = Math.max(radius * 7.5, 0.008);
+      }
+    } else if (id === "iss") {
       distance = Math.max(radius * 6.5, 0.12);
     } else if (id === "roadster" || id === "jwst") {
       distance = Math.max(radius * 5.2, 0.15);
@@ -230,8 +259,9 @@ export class SolarScene {
       this.rebuildPlanetOrbits();
       this.placeBelt();
     }
-    if (this.size !== view.size) {
+    if (this.size !== view.size || this.exactSize !== view.exactSize) {
       this.size = view.size;
+      this.exactSize = view.exactSize;
       this.applySizes();
       this.rebuildMoonOrbits(jd);
     } else {
@@ -950,6 +980,7 @@ export class SolarScene {
     );
     sprite.scale.set(SUN_RADIUS * 7.5, SUN_RADIUS * 7.5, 1);
     sprite.raycast = () => undefined;
+    this.corona = sprite;
     this.scene.add(sprite);
   }
 
@@ -1132,7 +1163,7 @@ export class SolarScene {
 
   private applySizes(): void {
     for (const actor of this.actors.values()) {
-      const radius = shownRadius(actor.info, this.size, this.earthInfo);
+      const radius = shownRadius(actor.info, this.size, this.exactSize, this.earthInfo);
       actor.radius = radius;
       if (actor.info.kind === "craft") {
         actor.visual.scale.setScalar(radius);
@@ -1142,6 +1173,13 @@ export class SolarScene {
       }
       if (actor.clouds) actor.clouds.scale.setScalar(radius * 1.015);
       if (actor.rings) actor.rings.scale.setScalar(radius);
+    }
+    if (this.corona) {
+      const coronaScale = SUN_RADIUS * (this.exactSize ? 3.1 : 7.5);
+      this.corona.scale.set(coronaScale, coronaScale, 1);
+      if (this.corona.material instanceof THREE.SpriteMaterial) {
+        this.corona.material.opacity = this.exactSize ? 0.55 : 1;
+      }
     }
     this.placeMarker(this.selectedId);
   }
@@ -1270,7 +1308,12 @@ export class SolarScene {
     actor.root.add(this.marker);
     const radius = actor.radius;
     const factor = selectedId === "saturn" ? 2.85 : actor.info.kind === "craft" ? 2.1 : 1.85;
-    const minMarker = actor.info.kind === "craft" ? 0.045 : 0.12;
+    const camDist = this.camera.position.distanceTo(actor.root.position);
+    const minMarker = this.exactSize
+      ? Math.min(0.14, Math.max(0.0025, camDist * 0.0075))
+      : actor.info.kind === "craft"
+        ? 0.045
+        : 0.12;
     this.marker.scale.setScalar(Math.max(radius * factor, minMarker));
   }
 
@@ -1433,11 +1476,14 @@ export class SolarScene {
       this.cockpitPitch = 0;
       this.tween = null;
       this.controls.enabled = false;
-      this.camera.near = 0.0015;
-      this.camera.updateProjectionMatrix();
       if (actor.info.kind !== "craft" && id !== "halley") {
         this.initSurfaceCockpit(actor);
       }
+    }
+    const wantedNear = this.exactSize ? 0.00015 : 0.0015;
+    if (this.camera.near !== wantedNear) {
+      this.camera.near = wantedNear;
+      this.camera.updateProjectionMatrix();
     }
 
     actor.root.updateWorldMatrix(true, true);
@@ -1514,7 +1560,7 @@ export class SolarScene {
     this.cockpitTargetId = null;
     this.cockpitYaw = 0;
     this.cockpitPitch = 0;
-    this.camera.near = 0.01;
+    this.camera.near = 0.0006;
     this.camera.up.set(0, 1, 0);
     this.camera.updateProjectionMatrix();
     this.controls.enabled = true;
@@ -1523,7 +1569,7 @@ export class SolarScene {
       if (actor && actor.root.visible) {
         const offset = new THREE.Vector3(0.55, 0.35, 0.75)
           .normalize()
-          .multiplyScalar(Math.max(actor.radius * 6.5, 0.18));
+          .multiplyScalar(Math.max(actor.radius * 6.5, this.exactSize ? 0.008 : 0.18));
         this.controls.target.copy(actor.root.position);
         this.camera.position.copy(actor.root.position).add(offset);
         this.frame(selectedId);
@@ -1598,11 +1644,20 @@ export class SolarScene {
     if (rAu < 1e-12 || !info.parent) return new THREE.Vector3();
     const parentActor = this.actors.get(info.parent);
     const parentRadius = parentActor
-      ? shownRadius(parentActor.info, this.size, this.earthInfo)
+      ? shownRadius(parentActor.info, this.size, this.exactSize, this.earthInfo)
       : 0.2;
 
     let visualDist: number;
-    if (info.id === "iss") {
+    if (this.exactSize) {
+      const exactDist = ((rAu * solar.AU_KM) / 695700) * SUN_RADIUS;
+      if (info.id === "iss") {
+        visualDist = Math.max(exactDist, parentRadius * 1.065);
+      } else if (info.id === "jwst") {
+        visualDist = Math.min(exactDist, 1.15);
+      } else {
+        visualDist = exactDist;
+      }
+    } else if (info.id === "iss") {
       visualDist = Math.max(parentRadius * 1.26, parentRadius + 0.032);
     } else if (info.id === "jwst") {
       const base = Math.max(0.68, parentRadius * 3.6);
@@ -1620,11 +1675,30 @@ export class SolarScene {
   }
 }
 
-function shownRadius(info: BodyInfo, size: number, earthInfo?: BodyInfo): number {
+function shownRadius(
+  info: BodyInfo,
+  size: number,
+  exactSize = false,
+  earthInfo?: BodyInfo,
+): number {
   if (info.id === "sun") return SUN_RADIUS;
+  const real = (info.radiusKm / 695700) * SUN_RADIUS;
+  if (exactSize) {
+    if (info.id === "iss") {
+      const earthRadius = earthInfo ? shownRadius(earthInfo, size, true) : 0.01053;
+      return earthRadius * 0.12;
+    }
+    if (info.id === "roadster" || info.id === "jwst") {
+      return 0.0055;
+    }
+    if (info.id === "halley") {
+      return 0.0038;
+    }
+    return real;
+  }
   const safeSize = size > 0 ? size : 16;
   if (info.id === "iss") {
-    const earthRadius = earthInfo ? shownRadius(earthInfo, safeSize) : 0.17;
+    const earthRadius = earthInfo ? shownRadius(earthInfo, safeSize, false) : 0.17;
     return Math.min(0.045, Math.max(0.015, earthRadius * 0.16));
   }
   if (info.id === "roadster" || info.id === "jwst") {
@@ -1633,7 +1707,6 @@ function shownRadius(info: BodyInfo, size: number, earthInfo?: BodyInfo): number
   if (info.id === "halley") {
     return 0.032 + (safeSize / 36) * 0.034;
   }
-  const real = (info.radiusKm / 695700) * SUN_RADIUS;
   const boosted = real * safeSize;
   const minimum = info.kind === "moon" ? 0.028 : 0.05;
   const cap = info.kind === "moon" ? 0.16 : info.id === "jupiter" || info.id === "saturn" ? 0.86 : 0.4;
