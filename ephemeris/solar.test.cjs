@@ -63,16 +63,21 @@ test("une orbite échantillonnée de la Terre ne s'écrase pas sur un point", ()
   assert.ok(spread > 0.5, spread);
 });
 
-test("une vitesse hors bornes est refusée et n'altère pas l'état reçu", () => {
+test("une vitesse hors bornes est refusée et les vitesses lentes ou rétrogrades sont acceptées", () => {
   const now = Date.UTC(2026, 10, 13, 12, 0, 0);
   const state = solar.initialState(now);
-  const rejected = solar.reduce(state, { type: "setRate", rateDaysPerSec: 1e12 }, now);
-  assert.equal(rejected.accepted, false);
-  assert.equal(rejected.state.rateDaysPerSec, 1);
+  for (const invalid of [1e12, 5000, -5000, NaN]) {
+    const rejected = solar.reduce(state, { type: "setRate", rateDaysPerSec: invalid }, now);
+    assert.equal(rejected.accepted, false);
+    assert.equal(rejected.state.rateDaysPerSec, 1);
+  }
   assert.equal(state.rateDaysPerSec, 1);
-  const accepted = solar.reduce(state, { type: "setRate", rateDaysPerSec: 30 }, now);
-  assert.equal(accepted.accepted, true);
-  assert.equal(accepted.state.rateDaysPerSec, 30);
+
+  for (const valid of [1 / 86400, 1 / 1440, 1 / 24, 30, -1, -30, -365]) {
+    const accepted = solar.reduce(state, { type: "setRate", rateDaysPerSec: valid }, now);
+    assert.equal(accepted.accepted, true);
+    assert.equal(accepted.state.rateDaysPerSec, valid);
+  }
 });
 
 test("une date hors de l'intervalle −3000 à 3000 est refusée", () => {
@@ -98,7 +103,63 @@ test("la pause fige la date, et un long trou de temps est borné", () => {
   assert.ok(advancedDays > 19 && advancedDays < 21, advancedDays);
 });
 
-test("le catalogue expose le Soleil, huit planètes et les lunes demandées", () => {
+test("le cabriolet Tesla est inactif avant le 7 février 2018 puis suit son ellipse héliocentrique", () => {
+  const beforeJd = solar.unixToJd(Date.UTC(2018, 1, 5, 0, 0, 0));
+  assert.equal(body(beforeJd, "roadster").active, false);
+
+  const escapeJd = solar.unixToJd(Date.UTC(2018, 1, 7, 2, 30, 0));
+  const roadsterAtEscape = body(escapeJd, "roadster");
+  const earthAtEscape = body(escapeJd, "earth");
+  assert.equal(roadsterAtEscape.active, true);
+  const earthDistAu = Math.hypot(
+    roadsterAtEscape.x - earthAtEscape.x,
+    roadsterAtEscape.y - earthAtEscape.y,
+    roadsterAtEscape.z - earthAtEscape.z,
+  );
+  assert.ok(earthDistAu < 0.002, `distance Terre au départ = ${earthDistAu} UA`);
+
+  const aphelionJd = solar.unixToJd(Date.UTC(2018, 10, 9, 12, 0, 0));
+  const atAphelion = body(aphelionJd, "roadster");
+  assert.ok(atAphelion.rAu > 1.65 && atAphelion.rAu < 1.68, `aphélie = ${atAphelion.rAu} UA`);
+  assert.ok(atAphelion.speedKmS > 19 && atAphelion.speedKmS < 35, `vitesse = ${atAphelion.speedKmS}`);
+
+  const marsFlybyJd = solar.unixToJd(Date.UTC(2020, 9, 7, 6, 0, 0));
+  const roadsterFlyby = body(marsFlybyJd, "roadster");
+  const marsFlyby = body(marsFlybyJd, "mars");
+  const marsDistKm =
+    Math.hypot(
+      roadsterFlyby.x - marsFlyby.x,
+      roadsterFlyby.y - marsFlyby.y,
+      roadsterFlyby.z - marsFlyby.z,
+    ) * solar.AU_KM;
+  assert.ok(marsDistKm < 10_000_000, `approche de Mars = ${marsDistKm} km`);
+});
+
+test("l'ISS théorique reste à ~415 km d'altitude et inclinée à 51,64° sur l'équateur terrestre", () => {
+  const jd0 = solar.unixToJd(Date.UTC(2026, 5, 21, 12, 0, 0));
+  let maxLatDeg = 0;
+  const steps = 72;
+  const periodDays = 92.9 / 1440;
+
+  for (let i = 0; i < steps; i += 1) {
+    const jd = jd0 + (i / steps) * periodDays;
+    const earth = body(jd, "earth");
+    const iss = body(jd, "iss");
+    assert.equal(iss.active, true);
+    const relEcl = { x: iss.x - earth.x, y: iss.y - earth.y, z: iss.z - earth.z };
+    const distKm = Math.hypot(relEcl.x, relEcl.y, relEcl.z) * solar.AU_KM;
+    const altitudeKm = distKm - 6371;
+    assert.ok(Math.abs(altitudeKm - 415) < 5, `altitude = ${altitudeKm} km`);
+    assert.ok(Math.abs(iss.speedKmS - 7.66) < 0.1, `vitesse ISS = ${iss.speedKmS} km/s`);
+
+    const eq = solar.eclipticToEquatorial(relEcl);
+    const latDeg = (Math.asin(eq.z / Math.hypot(eq.x, eq.y, eq.z)) * 180) / Math.PI;
+    if (Math.abs(latDeg) > maxLatDeg) maxLatDeg = Math.abs(latDeg);
+  }
+  assert.ok(maxLatDeg > 51.4 && maxLatDeg < 51.7, `latitude équatoriale max = ${maxLatDeg}°`);
+});
+
+test("le catalogue expose le Soleil, huit planètes, les lunes et les deux engins", () => {
   const ids = solar.catalog().bodies.map((item) => item.id);
   assert.deepEqual(ids, [
     "sun",
@@ -115,6 +176,8 @@ test("le catalogue expose le Soleil, huit planètes et les lunes demandées", ()
     "europa",
     "ganymede",
     "callisto",
+    "iss",
+    "roadster",
   ]);
 });
 
