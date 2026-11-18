@@ -10,6 +10,8 @@
     "build": "vite build --config web/vite.config.ts",
     "prestart": "npm run build",
     "start": "ENABLE_NODE_RED_EDITOR=1 node server/index.cjs",
+    "planetes": "node server/launcher.cjs",
+    "check": "node server/launcher.cjs --check",
     "dev": "concurrently -k \"ENABLE_NODE_RED_EDITOR=1 node server/index.cjs\" \"vite --config web/vite.config.ts\"",
     "test": "node --test ephemeris/solar.test.cjs",
     "typecheck": "tsc -p web/tsconfig.json --noEmit"
