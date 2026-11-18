@@ -22,6 +22,8 @@ if (!scene) glError.hidden = false;
 const clock = new ObservatoryClock(() => queue());
 let follow = false;
 let frameQueued = false;
+let rafId = 0;
+let appStopped = false;
 let pendingFrameId: string | null = null;
 
 function requestFrameBody(id: string): void {
@@ -93,6 +95,35 @@ function runEventPreset(preset: EventPresetId): void {
   }
 }
 
+async function shutdownObservatory(): Promise<boolean> {
+  appStopped = true;
+  if (frameQueued) {
+    cancelAnimationFrame(rafId);
+    frameQueued = false;
+  }
+  clock.stop();
+
+  let serverStopped = false;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 3000);
+  try {
+    const response = await fetch("/api/shutdown", {
+      method: "POST",
+      headers: { "X-Solar-Shutdown": "1" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    serverStopped = response.ok;
+  } catch {
+    serverStopped = false;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+
+  scene?.dispose();
+  return serverStopped;
+}
+
 const ui = mountUi({
   onToggle: () => clock.command({ type: "toggle" }),
   onRate: (rateDaysPerSec) => clock.command({ type: "setRate", rateDaysPerSec }),
@@ -128,9 +159,11 @@ const ui = mountUi({
   onFollow: (next) => {
     follow = next;
   },
+  onQuit: () => shutdownObservatory(),
 });
 
 window.addEventListener("keydown", (event) => {
+  if (appStopped || ui.isQuitDialogOpen()) return;
   if (event.code === "Escape") {
     if (ui.view().cockpit) {
       ui.setCockpit(false);
@@ -236,6 +269,7 @@ function snapshot() {
 
 function frame(): void {
   frameQueued = false;
+  if (appStopped) return;
   const state = snapshot();
   const view = { ...ui.view(), follow };
   scene?.update(state.jd, view, state.selectedId, clock.issLive);
@@ -249,27 +283,38 @@ function frame(): void {
 }
 
 function queue(): void {
-  if (frameQueued || document.hidden) return;
+  if (appStopped || frameQueued || document.hidden) return;
   frameQueued = true;
-  requestAnimationFrame(frame);
+  rafId = requestAnimationFrame(frame);
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) queue();
+  if (!appStopped && !document.hidden) queue();
 });
 
+const isLocalHost =
+  location.hostname === "127.0.0.1" ||
+  location.hostname === "localhost" ||
+  location.hostname === "::1";
+
 async function connect(): Promise<void> {
-  clock.startAutoReconnect((enabled) => ui.setEditor(enabled));
+  clock.startAutoReconnect(({ editor, shutdown }) => {
+    ui.setEditor(editor);
+    ui.setShutdown(shutdown);
+  });
   try {
     const response = await fetch("/api/health", { cache: "no-store" });
     if (!response.ok) {
+      if (isLocalHost) ui.setShutdown(true);
       clock.useLocal();
       return;
     }
-    const health = (await response.json()) as { editor?: boolean };
+    const health = (await response.json()) as { editor?: boolean; shutdown?: boolean };
     ui.setEditor(health.editor === true);
+    ui.setShutdown(health.shutdown === true);
     clock.connectSocket();
   } catch {
+    if (isLocalHost) ui.setShutdown(true);
     clock.useLocal();
   }
 }

@@ -83,6 +83,7 @@ export class SolarScene {
   private readonly cockpitForwardLocal = new THREE.Vector3(0, 0, 1);
   private tween: Tween | null = null;
   private selectedId: string | null = null;
+  private readonly onResize = () => this.resize();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -153,7 +154,7 @@ export class SolarScene {
       };
     }
     void this.loadPhotos();
-    window.addEventListener("resize", () => this.resize());
+    window.addEventListener("resize", this.onResize);
   }
 
   resize(): void {
@@ -243,6 +244,29 @@ export class SolarScene {
       position: actor.root.position.clone().add(direction.multiplyScalar(distance)),
       target: actor.root.position.clone(),
     });
+  }
+
+  dispose(): void {
+    window.removeEventListener("resize", this.onResize);
+    this.controls.dispose();
+    this.scene.traverse((object) => {
+      if (
+        object instanceof THREE.Mesh ||
+        object instanceof THREE.Line ||
+        object instanceof THREE.Points
+      ) {
+        object.geometry.dispose();
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of materials) {
+          material.dispose();
+        }
+      }
+    });
+    this.renderer.dispose();
+    for (const label of this.labels.values()) {
+      label.remove();
+    }
+    this.labels.clear();
   }
 
   update(

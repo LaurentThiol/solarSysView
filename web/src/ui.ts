@@ -38,6 +38,7 @@ interface Handlers {
   onInner: () => void;
   onFull: () => void;
   onFollow: (follow: boolean) => void;
+  onQuit: () => Promise<boolean>;
 }
 
 export interface UiSnapshot {
@@ -63,6 +64,8 @@ function need<T extends Element>(selector: string): T {
 export function mountUi(handlers: Handlers): {
   sync: (snapshot: UiSnapshot) => void;
   setEditor: (enabled: boolean) => void;
+  setShutdown: (enabled: boolean) => void;
+  isQuitDialogOpen: () => boolean;
   view: () => ViewSettings;
   selectedId: () => string | null;
   selectBody: (id: string | null) => void;
@@ -92,6 +95,15 @@ export function mountUi(handlers: Handlers): {
   const dateLabel = need<HTMLElement>("#date-label");
   const jdLabel = need<HTMLElement>("#jd-label");
   const pill = need<HTMLElement>("#clock-pill");
+  const quitButton = need<HTMLButtonElement>("#quit-app");
+  const quitDialog = need<HTMLDialogElement>("#quit-dialog");
+  const quitCancel = need<HTMLButtonElement>("#quit-cancel");
+  const quitConfirm = need<HTMLButtonElement>("#quit-confirm");
+  const quitDesc = need<HTMLElement>("#quit-desc");
+  const shutdownScreen = need<HTMLElement>("#shutdown-screen");
+  const shutdownDetail = need<HTMLElement>("#shutdown-detail");
+  const shutdownClose = need<HTMLButtonElement>("#shutdown-close");
+  const shutdownReload = need<HTMLButtonElement>("#shutdown-reload");
   const play = need<HTMLButtonElement>("#play-toggle");
   const reverseToggle = need<HTMLButtonElement>("#reverse-toggle");
   const nowButton = need<HTMLButtonElement>("#now-button");
@@ -304,6 +316,58 @@ export function mountUi(handlers: Handlers): {
       setCockpit(false);
     }
   });
+  quitButton.addEventListener("click", () => {
+    quitDesc.textContent = editorLink.hidden
+      ? "Les flux Node-RED, la connexion WebSocket temps réel et le serveur local seront arrêtés proprement."
+      : "Les flux Node-RED, l’éditeur /red, la connexion WebSocket et le serveur local seront arrêtés proprement.";
+    if (typeof quitDialog.showModal === "function") {
+      quitDialog.showModal();
+    } else {
+      quitDialog.setAttribute("open", "");
+    }
+  });
+  quitCancel.addEventListener("click", () => {
+    quitDialog.close();
+  });
+  quitDialog.addEventListener("click", (event) => {
+    if (event.target === quitDialog) quitDialog.close();
+  });
+  quitConfirm.addEventListener("click", () => {
+    quitConfirm.disabled = true;
+    quitCancel.disabled = true;
+    quitConfirm.textContent = "Arrêt en cours…";
+    void handlers.onQuit().then((serverStopped) => {
+      quitDialog.close();
+      document.body.classList.add("is-shutdown");
+      shutdownDetail.textContent = serverStopped
+        ? "Les flux Node-RED, la connexion WebSocket et le serveur local ont été fermés proprement. Vous pouvez fermer cet onglet."
+        : "La scène WebGL et les connexions locales ont été fermées proprement. Vous pouvez fermer cet onglet.";
+      shutdownScreen.hidden = false;
+      window.setTimeout(() => {
+        try {
+          window.close();
+        } catch {
+          // Le navigateur peut refuser window.close() sur un onglet ouvert manuellement
+        }
+      }, 180);
+    });
+  });
+  shutdownClose.addEventListener("click", () => {
+    try {
+      window.close();
+    } catch {
+      // Ignoré
+    }
+    window.setTimeout(() => {
+      if (!document.hidden) {
+        shutdownDetail.textContent =
+          "Le serveur et Node-RED sont bien arrêtés. Utilisez Cmd+W (ou Ctrl+W) pour fermer cet onglet.";
+      }
+    }, 150);
+  });
+  shutdownReload.addEventListener("click", () => {
+    window.location.reload();
+  });
   document.querySelector("#transport")?.addEventListener("submit", (event) => event.preventDefault());
   const viewPanel = document.querySelector<HTMLDetailsElement>("details#view");
   if (viewPanel && window.matchMedia("(max-width: 800px)").matches) viewPanel.open = false;
@@ -473,6 +537,7 @@ export function mountUi(handlers: Handlers): {
     focusBody,
     setCockpit,
     enableCrafts,
+    isQuitDialogOpen: () => quitDialog.open,
     clearSelection() {
       if (!selectedId && !view.follow && !view.cockpit) return;
       selectedId = null;
@@ -482,6 +547,9 @@ export function mountUi(handlers: Handlers): {
     },
     setEditor(enabled: boolean) {
       editorLink.hidden = !enabled;
+    },
+    setShutdown(enabled: boolean) {
+      quitButton.hidden = !enabled;
     },
     sync(snapshot: UiSnapshot) {
       currentRate = snapshot.rate;
@@ -496,7 +564,9 @@ export function mountUi(handlers: Handlers): {
           ? "Horloge Node-RED"
           : snapshot.mode === "local"
             ? "Horloge locale"
-            : "Connexion à Node-RED…";
+            : snapshot.mode === "stopped"
+              ? "Observatoire arrêté"
+              : "Connexion à Node-RED…";
       pill.classList.toggle("is-live", snapshot.mode === "node-red");
       pill.classList.toggle("is-local", snapshot.mode === "local");
 

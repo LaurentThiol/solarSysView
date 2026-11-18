@@ -163,7 +163,7 @@
     "type": "function",
     "z": "tab-solar",
     "name": "Santé JSON",
-    "func": "msg.payload = { ok: true, editor: global.get('editorEnabled') === true };\nmsg.headers = {\n  'Content-Type': 'application/json; charset=utf-8',\n  'Cache-Control': 'no-store'\n};\nmsg.statusCode = 200;\nreturn msg;\n",
+    "func": "msg.payload = {\n  ok: true,\n  editor: global.get('editorEnabled') === true,\n  shutdown: global.get('shutdownEnabled') === true\n};\nmsg.headers = {\n  'Content-Type': 'application/json; charset=utf-8',\n  'Cache-Control': 'no-store'\n};\nmsg.statusCode = 200;\nreturn msg;\n",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,

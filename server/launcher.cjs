@@ -447,13 +447,10 @@ async function main() {
   console.log(`${C.dim}Démarrage de Node-RED et de l'observatoire sur le port ${port}…${C.reset}\n`);
   const env = {
     ...process.env,
+    PLANETES_LOCAL: "1",
+    PORT: String(port),
     ENABLE_NODE_RED_EDITOR: process.env.ENABLE_NODE_RED_EDITOR ?? "1",
   };
-  if (port !== 47120 && !process.env.PORT) {
-    // Attention : dans server/index.cjs, définir PORT désactive l'éditeur Node-RED comme sur un hébergement.
-    // On ne passe PORT que si le port par défaut 47120 était indisponible.
-    env.PORT = String(port);
-  }
 
   const serverProc = spawn(process.execPath, [path.join(ROOT, "server", "index.cjs")], {
     cwd: ROOT,
@@ -468,7 +465,11 @@ async function main() {
   process.on("SIGTERM", () => forwardSignal("SIGTERM"));
 
   serverProc.on("exit", (code) => {
-    process.exit(code ?? 0);
+    const exitCode = code ?? 0;
+    if (exitCode === 0) {
+      console.log(`${C.green}✦${C.reset} Session Planètes terminée.`);
+    }
+    process.exit(exitCode);
   });
 
   // Attend que /api/health et /api/catalog répondent 200 avant d'ouvrir le navigateur
@@ -487,7 +488,7 @@ async function main() {
     ) {
       const url = `http://127.0.0.1:${port}`;
       console.log(
-        `\n${C.green}✦ Prêt :${C.reset} ${C.bold}${url}${C.reset} (${catalog.json.bodies.length} objets chargés — Ctrl+C pour arrêter)\n`,
+        `\n${C.green}✦ Prêt :${C.reset} ${C.bold}${url}${C.reset} (${catalog.json.bodies.length} objets chargés — bouton « Quitter » ou Ctrl+C pour arrêter)\n`,
       );
       if (opts.openBrowser) openBrowser(url);
       break;
